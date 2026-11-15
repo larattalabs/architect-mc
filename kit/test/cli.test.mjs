@@ -65,14 +65,15 @@ test('build: bad usage and unknown designs exit 2', () => {
 });
 
 test('build --json keeps stdout to one line when the design logs', () => {
-  const file = path.join(KIT, 'designs', 'zzlogtest.mjs');
+  // '_'-prefixed: listDesigns() skips it, so tests that walk every design (copies.test) never race this temporary file
+  const file = path.join(KIT, 'designs', '_zzlogtest.mjs');
   fs.writeFileSync(file, `import build0 from './cabin.mjs';
 console.log('top-level chatter');
-export const id = 'zzlogtest';
+export const id = '_zzlogtest';
 export default function build() { console.log('design chatter'); console.info('more'); const bp = build0(); bp.id = id; return bp; }
 `);
   try {
-    const r = run('build.mjs', ['zzlogtest', '--out', tmp, '--json']);
+    const r = run('build.mjs', ['_zzlogtest', '--out', tmp, '--json']);
     assert.equal(r.status, 0, r.stderr);
     const lines = r.stdout.trim().split('\n');
     assert.equal(lines.length, 1, r.stdout);

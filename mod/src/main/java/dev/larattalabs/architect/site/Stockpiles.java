@@ -888,7 +888,10 @@ public final class Stockpiles {
 		Map<String, Construction.Crate> crates = new LinkedHashMap<>();
 		List<Site> sites = new ArrayList<>();
 		for (Site s : Sites.all()) {
-			if (s.building() && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension.equals(s.dimension())) {
+			// (SAD) a BUILT site whose crate still stands (a shared crate another site of its group still builds from) joins too: the crate's
+			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped
+			if ((s.building() || crateStands(level, s) || joinedBefore(p, s)) && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension
+				.equals(s.dimension())) {
 				sites.add(s);
 				crates.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
 			}
@@ -930,6 +933,17 @@ public final class Stockpiles {
 			}
 			Builder.restoreCrateCell(level, c);
 			SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+		}
+		// (SAD, SAC1) the ledger joined and the crate cells restored are saved together first (with the world: a crate's stock lives in its
+		// block entity), and only then do the records lose their crates (Sites' writes save architect-sites.json at once). Before, the records
+		// were saved first: a crash before the ledger's save left the crate standing in the reverted world with no record naming it, its stock
+		// and placed counts lost. A crash between the two saves (SAC2) is repaired by the next adoptCrates: its crate keys are credited, so a
+		// record that still names a gone crate is cleared without crediting the crate twice
+		Builder.dropItems(level, drop, dropped, null);
+		changed(p);
+		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		for (var e : crates.entrySet()) {
 			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX)) {
 				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
 				if (g != null) {
@@ -937,13 +951,16 @@ public final class Stockpiles {
 				}
 			}
 		}
+		WorldJournal.kill("SAC2"); // (SAD, test) the ledger saved, the groups' crates cleared, the sites' crate references not yet
 		List<Object> joined = new ArrayList<>();
 		for (Site s : sites) {
 			Site cur = Sites.get(s.id());
 			if (cur != null && cur.construction() != null) {
 				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				Builder.forgetRun(s.id());
-				joined.add(Sites.get(s.id()));
+				if (cur.building()) {
+					joined.add(Sites.get(s.id())); // (SAD) a BUILT one is fully paid: it joins no feed
+				}
 			}
 		}
 		for (Infra i : roads) {
@@ -960,12 +977,100 @@ public final class Stockpiles {
 				p.order.add(idOf(t));
 			}
 		}
-		Builder.dropItems(level, drop, dropped, null);
 		changed(p);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		saveWithWorld(srv); // the feed order
 		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
 			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
+	}
+
+	/**
+	 * (SAD, SAC2) At the world's start: a site's, road's or group's crate reference that names a crate its owner's stockpile ledger already
+	 * joined (the adoption key credited: adoptCrates' first save happened, its second, the records', did not) is cleared, as adoptCrates'
+	 * second half would have; a building target joins the feed order at the end. So no feed, refund or undo ever follows a reference to a
+	 * crate whose stock and placed counts are the stockpile's. Saved once (with the world) when anything moved. Server thread.
+	 */
+	static void repairJoinedCrates(MinecraftServer srv) {
+		boolean any = false;
+		for (Pile p : List.copyOf(PILES.values())) {
+			List<Object> joined = new ArrayList<>();
+			for (Site s : Sites.all()) {
+				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s)) {
+					Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
+					Builder.forgetRun(s.id());
+					any = true;
+					if (s.building()) {
+						joined.add(Sites.get(s.id()));
+					}
+					Architect.LOGGER.warn("Stockpile {}: site {} named a crate the stockpile had joined (adoptCrates stopped between its saves); reference cleared",
+						p.owner, s.id());
+				}
+			}
+			for (Infra i : Infras.all()) {
+				Construction c = i.construction();
+				if (c != null && c.crate() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && i.group() != null && namesJoined(
+					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z())) {
+					Infras.put(srv, i.withConstruction(c.withCrate(null)));
+					any = true;
+					if (i.building()) {
+						joined.add(Infras.get(i.id()));
+					}
+				}
+			}
+			for (SiteGroupRec g : Sites.groups()) {
+				Construction.Crate c = g.crate();
+				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z())) {
+					Sites.putGroup(srv, g.withCrate(null));
+					any = true;
+				}
+			}
+			joined.sort(java.util.Comparator.comparingLong(Stockpiles::placedAt));
+			for (Object t : joined) {
+				if (t != null && !p.order.contains(idOf(t))) {
+					p.order.add(idOf(t));
+				}
+			}
+			if (!joined.isEmpty()) {
+				changed(p);
+				any = true;
+			}
+		}
+		if (any) {
+			saveWithWorld(srv);
+		}
+	}
+
+	/**
+	 * (SAD, SAC2, the pure seam) Whether a crate reference at (x, y, z) of target {@code id} (in {@code group}) names a crate whose
+	 * adoption key the ledger credited: its own crate's key, or its group's shared one (the group's crate may be cleared already, then
+	 * {@link Builder#crateOwner} names the target). With no adoption key credited (every ordinary world start) it is never true, so the
+	 * start's repair writes and saves nothing.
+	 */
+	static boolean namesJoined(java.util.function.Predicate<String> credited, String id, @Nullable String group, int x, int y, int z) {
+		String at = "@" + new BlockPos(x, y, z).asLong();
+		return credited.test("adopt:" + id + at) || group != null && credited.test("adopt:" + SiteGroupRec.CRATE_PREFIX + group + at);
+	}
+
+	/** (SAD, SAC2) Whether a site's crate reference names a crate this stockpile's ledger already joined (its key credited, its block gone). */
+	private static boolean joinedBefore(Pile p, Site s) {
+		Construction c = s.construction();
+		if (c == null || c.crate() == null) {
+			return false;
+		}
+		return namesJoined(p.ledger::credited, s.id(), s.group(), c.crate().x(), c.crate().y(), c.crate().z());
+	}
+
+	/**
+	 * (SAD) Whether a construction site's crate block still stands with its owner id (its own crate, or its group's shared crate): a
+	 * crate-fed site whose crate is gone (a legacy site's crate taken down at its completion) is not crate-fed any more.
+	 */
+	public static boolean crateStands(@Nullable ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (level == null || c == null || c.crate() == null) {
+			return false;
+		}
+		BlockPos cp = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
+		return level.isLoaded(cp) && level.getBlockEntity(cp) instanceof CrateBlockEntity be && Builder.crateOwner(s).equals(be.siteId());
 	}
 
 	/**
@@ -2200,6 +2305,7 @@ public final class Stockpiles {
 	 * ({@link #reconcile}). Then the file is saved once (the books now say what stands). Server thread.
 	 */
 	static void reconcileAtStart(MinecraftServer srv) {
+		repairJoinedCrates(srv); // (SAD, SAC2) first: no reader below follows a reference to a crate the ledger already joined
 		LAST_RECONCILE.clear();
 		long t0 = System.nanoTime();
 		boolean unclean = SiteDeltas.lastStartUnclean;
