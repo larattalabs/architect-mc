@@ -32240,3 +32240,20 @@ No API surface change.
   in the air inside the box no longer blocks; a named mob anywhere in the box (in a cell the removal leaves unchanged) still blocks.
 - **Item 2's code waits until FK-b and SS merge** (accepted); items 1, 3 and 4 build now. **UC** as proposed (accepted).
 - **Steward RC areas (added):** an undo with the steward standing near the box, and an undo with a bee in the air inside it.
+
+### Slice J2 as built (in progress: items 1, 3b and 4 coded, unrun in game; item 2 waits for FK-b and SS; recorded 2026-11-15)
+
+- **Item 1:** `Sites.removalBlockersOf`: an unnamed `LIVING` animal blocks only when `wildHarmed` (the removal changes a cell its box overlaps or the
+  cell under its feet: journal top layer this site's, the world not holding its before; `removalChanges`). Named animals, pets, players unchanged.
+  Units `RemovalWildJ2Test` (6). apitest survival: a named bee in an air cell of B's box refuses, an unnamed one doesn't and is still there after.
+- **Item 4:** F9 (production): `Sites.reconcile` releases the RELEASEd groups only after every pending site and road settled (a road's
+  evidence read a site's later restore that an earlier release had taken away). DPT (production): `JournalStore.ptOf` takes the D3 create's PT
+  records into D7's rewrite (SiteDeltas; DeltaJob in memory, so a delta job resumed after a stop carries none). PTS (production): after an
+  undo's writes, `Placed.restoreUnchanged` gives an expected block that no write changed (an upper entry wrote the same block first) its record
+  (`SiteJournal.restoresUnchanged`, shared with UMT). F10: a model gap (UMT now writes a template in `StructureTemplate.load`'s order). The five
+  repros moved to `UmtPropertiesTest`; `umtFindings` keeps F2, F3, F5, F7, F8 and both UC (UC tagged for SS, as accepted). UMT's CI baseline:
+  seed 207's F5 changed its hash (the same finding; the model's template order), rebaselined.
+- **Item 3:** (b) `ru-crash-mid` (gatem5ru `rumid`: two growths, the middle still building, the undo halted at RVU1 and RVC1). (a) crash + swap
+  and (c) a halted terrain target: not yet coded (they need an in-game version install and an rs world: built with the ports).
+- **Checks so far:** Gradle build 1284 tests (after the rebaseline: 0 failures, 1 skipped); `step-inputs check` 419 clean; `api-compat --baselines`
+  8/8 clean; gitleaks clean. In game: none yet (no ports until FK-b merges).
