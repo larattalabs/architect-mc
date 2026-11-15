@@ -101,11 +101,17 @@ export async function registerBC(steps, h) {
     // (QL-b D'') a fresh growth with rv3's request (Steward's spec, read from the copy's plan): its plan keeps the lot's ground (lotGround), so the
     // quote prices the lot over the pads' grass: 10 pairs 5 s apart (5 near, 5 away) bill the template's 205 + the shell's 5 dirt, none moves
     const old = JSON.parse(fs.readFileSync(path.join(dst, 'architect-regions', 'plans', `${PLANS[1].planId}.json`), 'utf8'));
+    // Steward's flow plans its growths in survival; the copy's toggle was left off at the e2e's end: on (and the default game mode survival)
+    await call('dev.survival.set', { on: true }, 30_000);
+    await L.cmd('/defaultgamemode survival');
+    await L.settle(1000);
+    out.survival = await call('dev.survival.state', {}, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
     const grow = old.ir?.params?.spec?.grow;
     const ext = Object.fromEntries(Object.entries(old.ext ?? {}).filter(([k]) => !k.startsWith('architect_mc:'))); // Architect's own keys are refused
     const g = await call('dev.rv.plan', { region: 'rg1', program: 'plan_v0', params: { grow }, ext }, 900_000);
     out.fresh = { planId: g.planId, refused: g.refused ?? null, lots: (g.lots ?? []).map((l) => l.id) };
-    check(!g.refused && !!g.planId, `a fresh growth with rv3's request planned: ${g.refused ?? g.planId}`, out.fresh);
+    out.fresh.survival = g.planId ? JSON.parse(fs.readFileSync(path.join(dst, 'architect-regions', 'plans', `${g.planId}.json`), 'utf8')).ir?.survival != null : null;
+    check(!g.refused && !!g.planId && out.fresh.survival, `a fresh growth with rv3's request planned in survival: ${g.refused ?? g.planId} (survival ${out.fresh.survival})`, out.fresh);
     if (g.refused) { await L.leaveWorld(); spendZero(); return out; }
     const P = { planId: g.planId, lot: (g.lots ?? [])[0]?.id ?? PLANS[1].lot, entry: PLANS[1].entry };
     for (let i = 0; i < 10; i++) {
@@ -114,7 +120,7 @@ export async function registerBC(steps, h) {
       await sleep(5000);
       const b = await call('dev.qlb.lotBill', { planId: P.planId, lotEntries: { [P.lot]: P.entry } }, 120_000);
       const da = a.bom?.['minecraft:dirt'], db = b.bom?.['minecraft:dirt'];
-      const pair = { i, where: i < 5 ? 'near' : 'away', dirt: [da, db], moved: da !== db, ground: lotOf(a, P)?.groundCells ?? 0, lotDirt: lotOf(a, P)?.template?.['minecraft:dirt'],
+      const pair = { i, where: i < 5 ? 'near' : 'away', dirt: [da, db], refused: a.refused ?? b.refused ?? undefined, moved: da !== db, ground: lotOf(a, P)?.groundCells ?? 0, lotDirt: lotOf(a, P)?.template?.['minecraft:dirt'],
         a: brief(lotOf(a, P)), b: da !== db ? brief(lotOf(b, P)) : undefined, parts: da !== db ? [a.bomParts, b.bomParts] : undefined, notes: i === 0 ? a.notes : undefined };
       out.pairs.push(pair);
       log(`pair ${i} (${pair.where}): dirt ${da} -> ${db}${pair.moved ? ' MOVED' : ''}; lot dirt ${pair.lotDirt}, ground cells ${pair.ground}; changed ${JSON.stringify(pair.a?.changed ?? []).slice(0, 400)}`);
