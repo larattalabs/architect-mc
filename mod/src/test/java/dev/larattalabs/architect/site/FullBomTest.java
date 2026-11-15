@@ -195,4 +195,20 @@ class FullBomTest {
 		assertTrue(r.inexactBecause().contains("a cell the plan writes is not loaded"), r.inexactBecause().toString());
 		assertFalse(r.inexactBecause().contains("an updateShape threw"), r.inexactBecause().toString());
 	}
+
+	@Test
+	void aCellTheWorldAlreadyHoldsIsStillBilled() {
+		// (QL-b, Steward's crop-farm-067 209 -> 210) a template dirt over the land's own dirt: the conversion queues and pays it, so the bill has it
+		// whether the land under it is dirt or grass (grass spreading onto it changed the quote by one)
+		int[] xyz = {0, 9, 0, 1, 9, 0};
+		BlockState[] st = {Blocks.DIRT.defaultBlockState(), Blocks.DIRT.defaultBlockState()};
+		java.util.Map<Long, BlockState> dirt = new java.util.HashMap<>(), grass = new java.util.HashMap<>();
+		dirt.put(net.minecraft.core.BlockPos.asLong(0, 9, 0), Blocks.DIRT.defaultBlockState());
+		grass.put(net.minecraft.core.BlockPos.asLong(0, 9, 0), Blocks.GRASS_BLOCK.defaultBlockState());
+		FullBom.Result a = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> dirt.getOrDefault(p, air()));
+		FullBom.Result b = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> grass.getOrDefault(p, air()));
+		assertEquals(2, a.items().get("minecraft:dirt"), a.items().toString());
+		assertEquals(a.items(), b.items());
+		assertEquals(2, a.states().size());
+	}
 }

@@ -218,7 +218,9 @@ final class FullBom {
 		Map<Long, BlockState> finalStates = new java.util.LinkedHashMap<>();
 		LongFunction<@Nullable BlockState> at = sim::at;
 		for (long p : queued) {
-			BlockState s = sim.writes.get(p);
+			// (QL-b) a queued cell the world already held is still paid: the conversion queues and clears every non-air cell the placement
+			// wrote (Builder.planConvert), so its state is the sim's (the world's when the write changed nothing), never "not written"
+			BlockState s = sim.writes.containsKey(p) ? sim.writes.get(p) : sim.at(p);
 			if (s == null || s.isAir()) {
 				continue;
 			}
