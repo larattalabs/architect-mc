@@ -26,7 +26,8 @@ export const PREFER_PENALTY = 600;
 /**
  * The look parameters per connector type and their ranges (each tightens the generator's own limits, never widens them):
  *   rope_bridge.maxSpan     8..40   the longest rope span (deck cells; ROPE.spanMin..spanMax): a part's `span.max` when it sets none
- *   rope_bridge.sagRatio    12..64  the sag d = floor(n / sagRatio) (12 = today's; a larger ratio sags less). Carried, not read yet
+ *   rope_bridge.sagRatio    12..64  the sag d = floor(n / sagRatio) (12 = today's; a larger ratio sags less): (SP2) a plan's rope parts'
+ *                                   route move, emit (ropeGeom ropeBridge, its meta record) and M10:rope read it alike
  *   rope_bridge.light       a role of the Style, or 'none': the rope bridge's lamps (default the light role)
  *   ladder.landingEvery     8..24   rungs between rest landings (CLIMB.restMin..restMax): a ladder part's `rest` when it sets none
  *   aqueduct.maxSpan        2..7    (SP2) the longest clear run between an aqueduct's piers (lib/fluids/course.mjs aqueductEvery: piers

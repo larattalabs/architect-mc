@@ -27,8 +27,10 @@ export const ROPE = Object.freeze({
   ropeEvery: 4,
 });
 
-/** §3: d = floor(n / 12), the sag in blocks (spans 8-11 are flat). */
-export const sagOf = (n) => Math.floor(n / 12);
+/** §3: d = floor(n / 12), the sag in blocks (spans 8-11 are flat). (SP2) `ratio`: a format 3 Style's rope_bridge.sagRatio (12..64; 12 = §3's). */
+export const sagOf = (n, ratio = 12) => Math.floor(n / ratio);
+/** (SP2) A sag ratio as given (a format 3 Style's rope_bridge.sagRatio, 12..64), else §3's 12. */
+export const sagRatioOf = (v) => (Number.isInteger(v) && v >= 12 && v <= 64 ? v : 12);
 /** §3: the largest |rise| a span of n takes (else TOO_STEEP). */
 export const maxRiseOf = (n) => Math.floor(n / 8);
 
@@ -82,11 +84,11 @@ export const SITE_SOLID = Object.freeze(['ROCK', 'SOIL']);
  * written(x, y, z) -> true when this plan writes a full block there that M3 grounds (a walk's fill, a pad)}.
  * Returns {ok, code?, evidence?, gap, ys}: the first failing check in order SPAN, TOO_STEEP, NO_GAP, HEADROOM, ANCHOR.
  */
-export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDepth } = {}) {
+export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDepth, sagRatio = 12 } = {}) {
   const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
   if (n < ROPE.spanMin || n > ROPE.spanMax) return { ok: false, code: 'SPAN', evidence: { span: n, min: ROPE.spanMin, max: ROPE.spanMax } };
   if (Math.abs(rise) > maxRiseOf(n)) return { ok: false, code: 'TOO_STEEP', evidence: { span: n, rise, max: maxRiseOf(n) } };
-  const ys = profile(n, y0, rise);
+  const ys = profile(n, y0, rise, sagOf(n, sagRatio));
   // the gap: a deck column of the centre line whose ground is more than gapDepth below the deck, or water (frozen included)
   let gap = null;
   for (let i = 1; i <= n && !gap; i++) {
@@ -156,9 +158,9 @@ const axisOf = ([dx]) => (dx !== 0 ? 'x' : 'z');
  * `lampEvery` (W's: floor(12 * level / 15)), `chains` (rope decoration), `whole` (the whole-block profile: every odd y2 rounds up to
  * a full block; the player-only fallback and the `_unsafe.wholeBlockDeck` variant), `postDepth` (2; the broken variant 1).
  */
-export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = true, whole = false, postDepth = 2 } = {}) {
+export function ropeCells(a, dir, n, rise, width, { lampEvery = 12, chains = true, whole = false, postDepth = 2, sagRatio = 12 } = {}) {
   const [x0, y0, z0] = a, [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(width, dir);
-  const ys = profile(n, y0, rise).map((y2) => (whole && isSlab(y2) ? y2 + 1 : y2));
+  const ys = profile(n, y0, rise, sagOf(n, sagRatio)).map((y2) => (whole && isSlab(y2) ? y2 + 1 : y2));
   const deck = [], beds = [], rails = [], ropes = [], posts = [], lamps = [], clear = [];
   for (let i = 1; i <= n; i++) {
     const y2 = ys[i], y = deckY(y2), slab = isSlab(y2);
@@ -223,7 +225,9 @@ export function ropeBridge(r, a, b, opts = {}) {
   const ropeRole = opts.rope !== undefined ? opts.rope : cr.rope === 'none' ? null : cr.rope ?? 'minecraft:iron_chain';
   const rope = ropeRole === null ? null : r.material(ropeRole, `${what} rope`);
   const u = opts._unsafe ?? {};
-  const g = ropeCells([a[0], a[1], a[2]], dir, n, rise, width, { lampEvery, chains: !!rope, whole, postDepth: u.postDepth ?? 2 });
+  // ((SP2) `opts.sagRatio`: a format 3 Style's rope_bridge.sagRatio for a plan's rope parts (12, §3's, else); recorded when not 12)
+  const sagRatio = sagRatioOf(opts.sagRatio);
+  const g = ropeCells([a[0], a[1], a[2]], dir, n, rise, width, { lampEvery, chains: !!rope, whole, postDepth: u.postDepth ?? 2, sagRatio });
   const part = opts.part ?? 'links';
   const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: opts.stage, set: 'path' });
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
@@ -260,6 +264,7 @@ export function ropeBridge(r, a, b, opts = {}) {
     cells: g.deck.filter((c) => c[4]).map((c) => [c[0], c[1], c[2]]),
     posts: g.posts.map((q) => ({ x: q.x, z: q.z, y0: q.y0, y1: q.y1, landing: q.landing, end: q.end, side: q.side })),
     lamps: g.lamps.map((c) => [c[0], c[1], c[2]]), bom,
+    ...(sagRatio !== 12 ? { sagRatio } : {}),
     ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(u.postDepth !== undefined || u.noRails ? { _unsafe: { ...u } } : {}),
   };

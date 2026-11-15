@@ -211,8 +211,22 @@ test('the look parameters change only what they name', async () => {
   // each names one connector type: the ladder's parameter leaves the rope plan byte-identical, the rope's the ladder plan
   assert.equal((await check(GAP, { ladder: { landingEvery: 8 } })).res.irSha, base.res.irSha);
   assert.equal((await check(LADDER, { rope_bridge: { maxSpan: 12, light: 'none' }, prefer: ['bridge'] })).res.irSha, ladder.res.irSha);
-  // sagRatio is carried, not read yet (the route, the generator and the checker share one profile): no change
-  assert.equal((await check(GAP, { rope_bridge: { sagRatio: 24 } })).res.irSha, base.res.irSha);
+  // ((SP2) sagRatio is read: the route's rope move, the emit and M10:rope share it) 12 is today's; 24 flattens the 14-cell rope (d 1 -> 0)
+  assert.equal((await check(GAP, { rope_bridge: { sagRatio: 12 } })).res.irSha, base.res.irSha);
+  const flat = await check(GAP, { rope_bridge: { sagRatio: 24 } });
+  assert.deepEqual(crossing(flat), crossing(base));
+  assert.notEqual(flat.res.irSha, base.res.irSha);
+  const rec = flat.res.meta.ropes.find((m) => m.n === 14);
+  assert.equal(rec.sagRatio, 24);
+  assert.equal(new Set(rec.y2.slice(1, -1)).size, 1, `a flat deck: ${rec.y2.join(',')}`);
+  assert.equal(base.res.meta.ropes.find((m) => m.n === 14).sagRatio, undefined, 'recorded only when not 12');
+  assert.ok(new Set(base.res.meta.ropes.find((m) => m.n === 14).y2).size > 1, 'the default sags');
+  // M10:rope reads the record's ratio: the flat deck passes, and the same deck judged at 12 does not
+  const { checkRegion } = await import('../lib/region/check.mjs');
+  const s = flatSurvey(GAP.terrain);
+  const rep = (meta) => checkRegion({ ir: flat.res.ir, survey: s.bytes, blobs: (sha) => flat.res.blobs.get(sha) ?? null, meta });
+  assert.deepEqual(rep(flat.res.meta).findings.filter((f) => f.rule === 'M10:rope'), []);
+  assert.ok(rep({ ...flat.res.meta, ropes: flat.res.meta.ropes.map(({ sagRatio, ...m }) => m) }).findings.some((f) => f.rule === 'M10:rope'));
 });
 
 test('roleShares (tools/lib/scenario-metrics.mjs): role shares over the written cells outside lots, shape variants as their role, the row only with bands', async () => {
