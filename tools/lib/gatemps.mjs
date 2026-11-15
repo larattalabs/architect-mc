@@ -62,9 +62,18 @@ export async function registerPS(steps, h) {
   }
 
   // ---------------------------------------------------------------- hopper: deliveries and a crash (F4 b)
-  async function hopperPart(out) {
+  async function hopperPart(out, probe = false) {
     const name = 'G6B PS hopper';
     const W = await survivalWorld(name);
+    if (probe) {
+      // (slice SS, the GPT review's finding 3) the region-file durability rules with the mixins applied: real RegionFiles in the world's
+      // architect/ss-probe, forces counted as successful ones, coverage read as the ledger's check reads it (the hopper cases follow with
+      // their own /save-all flush baseline)
+      const pr = await call('dev.stockpile.ss', { probe: true }, 180_000);
+      for (const c of pr.cases ?? []) check(c.ok, `SS probe ${c.case}: ${c.detail}`);
+      check(pr.ok === true && (pr.cases ?? []).length === 9, `SS probe: ${(pr.cases ?? []).filter((c) => c.ok).length} of 9 cases hold`);
+      out.ssprobe = pr;
+    }
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
     await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...W.at);
@@ -252,15 +261,7 @@ export async function registerPS(steps, h) {
     await ensure();
     const out = {};
     const parts = (process.env.GATE_PS_PARTS ?? 'ssprobe,hopper,k5end,single').split(',');
-    if (parts.includes('ssprobe')) {
-      // (slice SS, the GPT review's finding 3) the region-file durability rules with the mixins applied: real RegionFiles in the world's
-      // architect/ss-probe, forces counted as successful ones, coverage read as the ledger's check reads it
-      const pr = await call('dev.stockpile.ss', { probe: true }, 180_000);
-      for (const c of pr.cases ?? []) check(c.ok, `SS probe ${c.case}: ${c.detail}`);
-      check(pr.ok === true && (pr.cases ?? []).length === 9, `SS probe: ${(pr.cases ?? []).filter((c) => c.ok).length} of 9 cases hold`);
-      out.ssprobe = pr;
-    }
-    if (parts.includes('hopper')) await hopperPart(out);
+    if (parts.includes('hopper')) await hopperPart(out, parts.includes('ssprobe'));
     if (parts.includes('k5end')) await k5endPart(out);
     if (parts.includes('single')) {
       await singlePart(out);
