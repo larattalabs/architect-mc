@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { archTmpDir } from './arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-/** What a kit mutation's scratch tree holds (paths under ROOT, each an APFS clone). */
-export const SCRATCH_DIRS = ['kit', 'scenarios', 'tools/lib'];
+/** This module's directory, tools/lib (taken from the URL so step-inputs doesn't read a tools/lib/** input into every step reaching this file). */
+const LIB = path.dirname(fileURLToPath(import.meta.url));
 
 export const MUTATIONS = [
   {
@@ -81,13 +81,15 @@ async function one(m) {
   try {
     if (m.kind === 'kit') {
       scratch = archTmpDir(`lint-mut-${m.id}`);
-      // (kit/ and scenarios/: the kit's test helpers read the scenario goldens from the kit's parent; tools/lib/: since slice TS
-      // the kit's test helpers import ../../tools/lib/arch-tmp.mjs (and its ram-tmp deps), so the scratch kit needs it beside it)
-      fs.mkdirSync(path.join(scratch, 'tools'), { recursive: true });
-      for (const d of SCRATCH_DIRS) {
+      // (kit/ and scenarios/: the kit's test helpers read the scenario goldens from the kit's parent)
+      for (const d of ['kit', 'scenarios']) {
         const r = spawnSync('cp', ['-c', '-R', path.join(ROOT, d), path.join(scratch, d)]);
         if (r.status !== 0) spawnSync('cp', ['-R', path.join(ROOT, d), path.join(scratch, d)]);
       }
+      // ((chore GRB) since slice TS the kit's test helpers import ../../tools/lib/arch-tmp.mjs (and its ram-tmp deps): the scratch kit
+      // reaches this checkout's own tools/lib through a link (no mutation edits it; the trace records what is read))
+      fs.mkdirSync(path.join(scratch, 'tools'));
+      fs.symlinkSync(LIB, path.join(scratch, 'tools', path.basename(LIB)), 'dir');
       for (const [file, find, rep] of m.edits) {
         const f = path.join(scratch, 'kit', file);
         const src = fs.readFileSync(f, 'utf8');

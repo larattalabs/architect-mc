@@ -144,7 +144,8 @@ steps.unit = async () => {
   // the Java side: the plan check's tunnel gate, the load option's key, the rock comparison (PlanChecksT3Test)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
   // ((chore GRB) unit-mod's XML when exact, else gradle under the checkout's lock (it ran unlocked beside b-unit's and both exited 1): javaClasses)
-  const g = javaClasses(root, ['*PlanChecksT3Test*', '*ApiT3Test*'], ['region.PlanChecksT3Test'], { env, log, quiet: true, timeout: 1_800_000 });
+  const g = javaClasses(root, ['*PlanChecksT3Test*', '*ApiT3Test*'], ['region.PlanChecksT3Test'],
+    () => spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*PlanChecksT3Test*', '--tests', '*ApiT3Test*'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }), { log });
   const m = g.classes['region.PlanChecksT3Test'];
   out.java = { code: g.code, tests: m ? m.tests : 0, failures: m ? m.failures : -1, ...(g.reused ? { reused: g.reused } : {}) };
   check(g.code === 0 && out.java.tests >= 4 && out.java.failures === 0, `items 5, 6 (Java): only a plan with a tunnel part asks for volumes; load "loaded" keeps the key's body; the rock comparison names the tunnel and the cells, PLANT as AIR, MISSING not judged, at most 16 named: ${out.java.tests} tests, ${out.java.failures} failures`);

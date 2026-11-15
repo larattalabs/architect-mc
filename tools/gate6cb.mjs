@@ -99,7 +99,9 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: the tile goldens hold (mega_bench, the 6b families, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   // ((chore GRB) unit-mod's XML when exact, else gradle under the checkout's lock with the XML read inside it: tools/lib/junit-reuse.mjs javaClasses)
-  const g = javaClasses(root, ['*ApiBTest', '*BrushesTest', '*ArvxBlocksTest', '*ArvxTest'], ['api.ApiBTest', 'region.BrushesTest', 'region.volume.ArvxBlocksTest', 'region.volume.ArvxTest'], { env, log });
+  const g = javaClasses(root, ['*ApiBTest', '*BrushesTest', '*ArvxBlocksTest', '*ArvxTest'], ['api.ApiBTest', 'region.BrushesTest', 'region.volume.ArvxBlocksTest', 'region.volume.ArvxTest'],
+    () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],
+      { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }), { log });
   const xml = (n) => g.classes[n];
   out.java = { code: g.code, api: xml('api.ApiBTest'), brushes: xml('region.BrushesTest'), arvx2: xml('region.volume.ArvxBlocksTest'), arvx: xml('region.volume.ArvxTest') };
   check(g.code === 0 && Object.values(out.java).filter((v) => v && typeof v === 'object').every((v) => v.tests > 0 && v.failures === 0) && out.java.api && out.java.brushes && out.java.arvx2,
