@@ -468,7 +468,7 @@ final class TileCheck {
 				}
 				default -> {
 					ok = true;
-					if (treeLog(s)) {
+					if (fellsFrom(treeLog(s), ours.contains(q))) {
 						logs.add(q);
 					}
 					target.put(q, p.states()[cursor]);
@@ -595,8 +595,10 @@ final class TileCheck {
 						// (C31) never another owner's cell, a protected cell, or a log the voxel table calls a player's block; (6c PT) never a
 						// player's build cell (an incidental log may be felled)
 						String bdn = dev.larattalabs.architect.placed.Placed.build(level, null, nx, ny, nz);
-						String why = others.contains(np) ? "owned" : bdn != null && !consent.allows(bdn) ? "build" : inArea(nx, nz) ? "protected" : !treeLog(s)
-							? "player" : null;
+						String why = fellStops(others.contains(np), ours.contains(np), bdn != null && !consent.allows(bdn), inArea(nx, nz), treeLog(s));
+						if (OURS.equals(why)) {
+							continue; // (RT) a log the region built (a retaining wall) is no tree: neither felled nor flooded through, not counted
+						}
 						if (why != null) {
 							kept(why);
 							continue;
@@ -639,6 +641,27 @@ final class TileCheck {
 			}
 		}
 		return false;
+	}
+
+	/** (RT) {@link #fellStops}'s answer for a log the region's own tile entries wrote: no tree, and no {@code tree_kept} count. */
+	static final String OURS = "ours";
+
+	/**
+	 * (RT) Whether a write over a cell starts a felling: it holds a tree log ({@link #treeLog}) the region did not build ({@code ours}, a cell
+	 * of the region's own tile entries, is a log it placed: a retaining wall, a post). The voxel table alone cannot tell them apart,
+	 * so a later tile writing over one of the region's own logs felled the whole connected wall (PAY P2 S3's terrace front).
+	 */
+	static boolean fellsFrom(boolean treeLog, boolean ours) {
+		return treeLog && !ours;
+	}
+
+	/**
+	 * (C31, RT) Why a log next to a felled one stays, or null when it goes with the tree: another owner's cell ({@code owned},
+	 * checked first: a cell both ours and another's is theirs), the region's own cell ({@link #OURS}: not counted), a player's build
+	 * cell ({@code build}), a protected area ({@code protected}), or a log the voxel table calls a player's block ({@code player}).
+	 */
+	static @Nullable String fellStops(boolean other, boolean ours, boolean build, boolean area, boolean treeLog) {
+		return other ? "owned" : ours ? OURS : build ? "build" : area ? "protected" : !treeLog ? "player" : null;
 	}
 
 	/**
