@@ -366,6 +366,7 @@ export class Regions {
     let patterns: Record<string, unknown> | undefined;
     // (7a K1) the bible's connectors member ({wall?, gate?, rope_bridge?}: role names), passed to the kit's plan with its roles
     let connectors: Record<string, unknown> | undefined;
+    let connectorsFormat: number | undefined;
     // (6c H) the bible's fluids member ({bed?, rim?, coping?, spout?, quay?, mooring?}: role names), passed like connectors
     let fluids: Record<string, unknown> | undefined;
     // (6c VOC) the bible's rarity budget (format 2): to the kit's plan with its roles (ctx.rarity; the plan meta's style for M26)
@@ -375,9 +376,11 @@ export class Regions {
       bible = r.pin;
       roles = { ...r.info.roles };
       try {
-        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown; connectors?: unknown; fluids?: unknown; rarity?: unknown };
+        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown; connectors?: unknown; fluids?: unknown; rarity?: unknown; format?: unknown };
         if (j.patterns && typeof j.patterns === 'object' && !Array.isArray(j.patterns)) patterns = j.patterns as Record<string, unknown>;
         if (j.connectors && typeof j.connectors === 'object' && !Array.isArray(j.connectors)) connectors = j.connectors as Record<string, unknown>;
+        // ((SP2) the Style's format with its connectors: below 3 the kit's plan reads them as format 2's, never their look parameters)
+        if (connectors) connectorsFormat = j.format === 3 ? 3 : j.format === 2 ? 2 : 1;
         if (j.fluids && typeof j.fluids === 'object' && !Array.isArray(j.fluids)) fluids = j.fluids as Record<string, unknown>;
         if (j.rarity && typeof j.rarity === 'object' && !Array.isArray(j.rarity)) rarity = j.rarity as Record<string, unknown>;
       } catch {
@@ -445,7 +448,7 @@ export class Regions {
       for (const v of volumes) fs.writeFileSync(path.join(dir, 'volumes', `${v.sha}.bin`), v.gz);
     }
     const hasBible = !!bible || Object.keys(roles).length > 0;
-    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}) }));
+    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors, ...(connectorsFormat !== undefined ? { format: connectorsFormat } : {}) } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}) }));
     if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     if (beside) fs.writeFileSync(path.join(dir, 'beside.json'), JSON.stringify(beside));
     // (6c D3, §2.4) the reach inputs kept with the plan: reach-survey.bin, held.json, standing.json, named by beside-reach.json (a plan

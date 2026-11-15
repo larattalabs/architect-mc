@@ -241,3 +241,19 @@ test('roleShares (tools/lib/scenario-metrics.mjs): role shares over the written 
   assert.match(row.value, /foundation 0\.250 \[0, 0\.1\] OUTSIDE/);
   assert.equal(M.bars({ palette: { share: 1, adherent: 1, cells: 1 } }).some((x) => x.id === 'roleShares'), false);
 });
+
+test('(SP2) planRegion knows the Style\'s format: below 3 a prefer list or a look parameter is refused as validateBible refuses it; 3 or absent reads them', async () => {
+  const { planRegion } = await import('../lib/region/plan.mjs');
+  const s = flatSurvey(GAP.terrain);
+  const plan = (format, connectors) => planRegion({ programFile: path.join(ROOT, 'kit', 'regions', 'plan_v0.mjs'), params: { plan: GAP.plan, anchors: { anchors: { ...stewardAnchors(s.claim), ...GAP.anchors } }, protected: { areas: [] }, regions: { regions: [] }, builds: { builds: [] }, budget: {}, bible: null, fingerprint: null }, survey: s.bytes, claim: s.claim, roles: {}, connectors, ...(format !== undefined ? { format } : {}) });
+  for (const f of [1, 2]) {
+    await assert.rejects(plan(f, { rope_bridge: { maxSpan: 12 } }), /connectors\.rope_bridge: unknown slot 'maxSpan'/, `format ${f}`);
+    await assert.rejects(plan(f, { prefer: ['bridge'] }), /connectors: unknown member 'prefer'/, `format ${f}`);
+    // format 2's slots plan as before
+    assert.equal((await plan(f, { rope_bridge: { deck: 'floor' } })).irSha, (await plan(undefined, { rope_bridge: { deck: 'floor' } })).irSha);
+  }
+  // format 3 and an absent format (today's callers): the look parameter is read (no rope span under 12: the arch)
+  const three = await plan(3, { rope_bridge: { maxSpan: 12 } }), none = await plan(undefined, { rope_bridge: { maxSpan: 12 } });
+  assert.equal(three.irSha, none.irSha);
+  assert.notEqual(three.irSha, (await plan(3, { rope_bridge: { deck: 'floor' } })).irSha);
+});

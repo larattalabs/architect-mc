@@ -316,6 +316,8 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object} [o.roles] extra / bible roles {role: blockState}
  * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
  * @param {object} [o.connectors] (7a K1) the bible's connectors member {wall?, gate?, rope_bridge?} (role names; lib/connectors/style.mjs)
+ * @param {number} [o.format] (SP2) the bible's format (1, 2 or 3): below 3 its connectors are format 2's (no prefer, no look parameters);
+ *   absent, read as format 3's
  * @param {object} [o.fluids] (6c H) the bible's fluids member {bed?, rim?, coping?, spout?, quay?, mooring?} (role names; lib/fluids/place.mjs)
  * @param {object} [o.rarity] (6c VOC) the bible's rarity member (lib/vocab/rarity.mjs): ctx.rarity (its defaults filled in) and the plan
  *   meta's `vocab` (the style's own blocks, the resolved roles; the region checker's M26 and M27 read it)
@@ -409,11 +411,14 @@ export async function planRegion(o) {
     // (7a K1) the bible's connector roles (each slot a role the plan resolves, else its default chain)
     // ((7c SF) a format 3 Style's connectors: its slots as format 2's; its prefer list and look parameters, checked here, go to
     // ctx.connectorLook only when it has any, so a format 2 Style's plan is unchanged)
-    const split = splitConnectors(o.connectors ?? undefined);
-    const ce = connectorsError(split.slots ?? undefined, roles) ?? connectors3Errors(o.connectors ?? undefined, roles)[0] ?? null;
+    // ((SP2) `o.format`, the Style's format (the sidecar's bible.json carries it with the connectors): below 3 the connectors are format
+    // 2's, so a prefer list or a look parameter is refused with validateBible's own message; absent, read as today, format 3's rules)
+    const f3 = o.format === undefined || o.format === null || o.format === 3;
+    const split = f3 ? splitConnectors(o.connectors ?? undefined) : { slots: o.connectors ?? undefined, prefer: null, look: {} };
+    const ce = connectorsError(split.slots ?? undefined, roles) ?? (f3 ? connectors3Errors(o.connectors ?? undefined, roles)[0] : null) ?? null;
     if (ce) throw new Error(ce);
     const connectors = Object.freeze(connectorRoles(roles, split.slots ?? null));
-    const connectorLook = hasConnectors3(o.connectors) ? Object.freeze({ prefer: Object.freeze(split.prefer ?? []), look: Object.freeze(split.look) }) : null;
+    const connectorLook = f3 && hasConnectors3(o.connectors) ? Object.freeze({ prefer: Object.freeze(split.prefer ?? []), look: Object.freeze(split.look) }) : null;
     // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring; lib/fluids/place.mjs)
     const fe = fluidsError(o.fluids ?? undefined, roles);
     if (fe) throw new Error(fe);
