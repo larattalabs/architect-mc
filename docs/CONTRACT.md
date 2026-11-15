@@ -32090,8 +32090,8 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
   Switches (TEST): `dev.stockpile.ps {forceAll, waitAll}`, `-Darchitect.regionForceAll`, `-Darchitect.chunkWaitAll`.
 - **Why skipping a force can never leave a chunk write unforced when the ledger is written:**
   - **Every write is counted.** A RegionFile's channel is written only by `writeHeader` (each call is one write generation), by `write`'s sector
-    writes. Those are followed by `writeHeader` on every path that returns; a `write` that throws before it wrote nothing
-    durable to force: vanilla reports the chunk save failure, and a force could not save it, with SS or without (a failure inside the
+    writes. Those are followed by `writeHeader` on every path that returns; a `write` that throws before `writeHeader` left
+    nothing a force could make durable: vanilla reports the chunk save failure, and a force could not save it, with SS or without (a failure inside the
     save's own `synchronize(true)` fails it, and no ledger is written). by `padToFullSector` (only in `close`, which forces), and by
     `writeToExternalFile` (an oversized chunk's own `.mcc`). `RegionFileFlushSSTest` pins this against this version's bytecode.
   - **Only a returned force covers.** A force records the generation it read at its start, and only when `flush` returns normally. A force
@@ -32130,19 +32130,30 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
   |---|---|---|
   | before (run 1, 41fc9168) | 326 saves: p50 37.1, p90 95.5, max 997.8 ms | 29 / 61 |
   | after (run 2, 5fea7bd2) | 302 saves: p50 20.6, p90 92.5, max 376.4 ms | 67 / 128 |
+  | after the review (runs 4-5, 94a2b371 / adb7329b) | 327 saves: p50 15.0, p90 44.7, max 896.1 ms | 27 / 81, 43 / 75 |
 
   - The rest of run 2, under more than twice run 1's load:
     - region forces: 1001 made, 1651 skipped;
     - `Stockpiles.create` max 998.8 → 376.9 ms (the chunks part 920 → 10 ms; what remains is the wait for unsaved chunks still promoting, up to 315 ms);
     - feed saves max 560 → 98 ms;
     - removals (`Groups.credit`) max 338 → 306 ms, p50 29 → 22 ms.
+  - Runs 4-5: 0 ledger refusals, 36 device barriers, 1172 forces made and 1793 skipped. The 896 ms max is a jr-crash removal credit that saved 925
+    chunks and spent 735 ms waiting on unsaved chunks not yet ready, a wait SS keeps on purpose.
   - Removals stay bound by their real writes. Leftover: unflushed saves while a removal runs, so its final flush is small.
   - Vanilla `/save-all flush` world saves still reach 1.3 s under that load (io on files the eager saves wrote).
   - RL's book refresh (the 10 s periodic save's refresh): max 9.2 ms over every logged save, including sad-crash; report-only, not a spike source.
   - J1's autosave IO wait: 14.3 ms (2 autosaves).
 - **Steward RC:** no API change. A ledger save over a region write that is not durable is refused (an explicit save throws, as a failed
   flush did). The mixins change vanilla's save behaviour: the force skip and the one barrier on every world save, the wait skip inside Architect's saves with the world. Expect shorter stalls at crate, feed and credit saves.
-- **Checks** (rule 11 scope, `--out artifacts/gate-runs-ss`, 8906:8907): run 1 (41fc9168, before) rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0; run 2 (5fea7bd2) jr-crash 24/0, hf-crash 38/0 (HF1, AS1), ps-crash 45/0, sad-crash 24/0 (SAC1/SAC2), rs-survival-smoke 36/1 (item 10: its check ran out of the 120 s budget under load 128, no artifact sha; not the save path); run 3 (5fea7bd2, rs-survival-smoke only) 40/0. Gradle build 1275 tests, 0 failures (1 skipped); unit-scope PASS; kit 1426/1426; step-inputs 418 clean; api-compat `--baselines` 8/8; gitleaks clean. jr-crash-v063, rl-crash and sad-survival not run (rule 11, deferred to the release).
+- **Checks** (rule 11 scope, `--out artifacts/gate-runs-ss`, 8906:8907):
+  - Run 1 (41fc9168, before): rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0.
+  - Run 2 (5fea7bd2): jr-crash 24/0, hf-crash 38/0, ps-crash 45/0, sad-crash 24/0, rs-survival-smoke 36/1 (item 10's plan check ran out of
+    its 120 s budget under load 128; not the save path). Run 3: rs-survival-smoke 40/0.
+  - After the review, run 4 (94a2b371): rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0 (HF1, AS1), sad-crash 24/0 (SAC1/SAC2). Its
+    ps-crash failed at once: the probe ran before a world was open. Run 5 (the probe moved into the hopper world): ps-crash 55/0, all 9 probe
+    cases held.
+  - Gradle build 1284 tests, 0 failures (1 skipped); unit-scope PASS; kit 1426/1426 (before the review); step-inputs 418 clean; api-compat
+    `--baselines` 8/8; gitleaks clean. jr-crash-v063, rl-crash and sad-survival not run (rule 11, deferred to the release).
 
 ## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
 
