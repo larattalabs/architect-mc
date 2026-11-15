@@ -133,7 +133,8 @@ steps.unit = async () => {
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);
   out.asks = { moved, malformedBefore: before.malformed, malformedAfter: after.malformed, parts: la.size };
-  check(vocc(before.text) === vocc(cb) && vocc(after.text) === vocc(ca) && after.malformed === 0 && moved.length === 0 && la.size > 0, `item 3: the 59 asks on the merge base and on this head equal fixtures/plan/kc/asks-before.md and asks-after.md: ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}${moved.length ? ` (${moved.join(', ')})` : ''}`);
+  // ((chore AR) the base may already be past KC (KC moved no part), so its table may equal either committed one, as F3's §9 reads them)
+  check((vocc(before.text) === vocc(cb) || vocc(before.text) === vocc(ca)) && vocc(after.text) === vocc(ca) && after.malformed === 0 && moved.length === 0 && la.size > 0, `item 3: the 59 asks on the merge base and on this head equal fixtures/plan/kc/asks-before.md and asks-after.md: ${after.malformed} malformed, ${moved.length} part(s) moved class of ${la.size}${moved.length ? ` (${moved.join(', ')})` : ''}`);
   // item 7
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6ckc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
   out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };

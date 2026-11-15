@@ -30,8 +30,19 @@ public final class SliceCoDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.region.compose", 1_800_000, "{brief, claim: [x0,z0,x1,z1], style?, images?: false, budgetUsd?, opKey?, ext?: {...}, wait?: true}"
-			+ " - (7c CO) Regions.compose (the claim in the Overworld); with wait (default) the answer comes when the settlement design ended and, for a"
+		DevBridge.register("dev.region.designKinds", 10_000, "{} - (7c CP) the designs this session's helper holds, counted by kind -> {kinds: {REGION: n, SETTLEMENT: n, ...}}",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				JsonObject k = new JsonObject();
+				for (dev.larattalabs.architect.api.Design d : ArchitectApi.get().designs().list(null)) {
+					String n = d.kind().name();
+					k.addProperty(n, (k.has(n) ? k.get(n).getAsInt() : 0) + 1);
+				}
+				JsonObject o = new JsonObject();
+				o.add("kinds", k);
+				return o;
+			}));
+		DevBridge.register("dev.region.compose", 1_800_000, "{brief, claim: [x0,z0,x1,z1], style?, images?: false, budgetUsd?, opKey?, ext?: {...}, dimension?, owner?, wait?: true}"
+			+ " - (7c CO) Regions.compose (the claim in the Overworld, or (7c CP) in dimension, with owner); with wait (default) the answer comes when the settlement design ended and, for a"
 			+ " PICKED one, its plan is accepted or failed -> {designId, status, kind, error?, result, costUsd, ms} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String brief = f.nonBlank("brief");
@@ -45,10 +56,18 @@ public final class SliceCoDev {
 				String opKey = f.optStr("opKey", null);
 				JsonObject ext = req.get("ext") instanceof JsonObject e ? e.deepCopy() : new JsonObject();
 				boolean wait = f.optBool("wait", true);
+				String dim = f.optStr("dimension", null);
+				String owner = f.optStr("owner", null);
 				long t0 = System.nanoTime();
-				CompletableFuture<String> id = ServerTasks.callOnServer(s -> ArchitectApi.get().regions().compose(new ComposeRequest(brief, new BoundingBox(c.get(0)
-					.getAsInt(), s.overworld().getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), s.overworld().getMaxY(), c.get(3).getAsInt()), style, images,
-					budget, opKey == null ? "dev.compose." + Long.toString(System.nanoTime(), 36) : opKey, ext))).thenCompose(x -> x);
+				CompletableFuture<String> id = ServerTasks.callOnServer(s -> {
+					net.minecraft.server.level.ServerLevel lv = dim == null ? s.overworld() : dev.larattalabs.architect.site.Sites.levelOf(s, dim);
+					if (lv == null) {
+						throw new DevBridge.DevException("no loaded dimension " + dim);
+					}
+					return ArchitectApi.get().regions().compose(new ComposeRequest(brief, new BoundingBox(c.get(0).getAsInt(), lv.getMinY(), c.get(1).getAsInt(), c.get(2)
+						.getAsInt(), lv.getMaxY(), c.get(3).getAsInt()), style, images, budget, opKey == null ? "dev.compose." + Long.toString(System.nanoTime(), 36)
+							: opKey, ext, dim == null ? null : lv, owner));
+				}).thenCompose(x -> x);
 				return id.thenCompose(designId -> wait ? RegionDev6b.waitDesign(designId, t0) : CompletableFuture.completedFuture(RegionDev6b.designJson(designId,
 					null, t0))).exceptionally(e -> {
 						JsonObject o = new JsonObject();
