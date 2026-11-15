@@ -263,11 +263,13 @@ steps.kinds = async () => {
     await call('dev.cx.key', { kind }, 10_000);
     await call('dev.plot.corner', { x: a[0], y: a[1], z: a[2], confirm: true }, 10_000);
     await call('dev.plot.corner', { x: b[0], y: b[1], z: b[2], confirm: true }, 10_000);
-    const r1 = await waitMarker((st) => st.lastConnector?.placed === true || (st.lastConnector && st.phase === 'second_corner'));
+    // (this kind's answer: the marker keeps the previous kind's lastConnector until the new one comes back)
+    const mine = (st) => st.lastConnector?.kind === kind && JSON.stringify(st.lastConnector?.from) === JSON.stringify(a) && JSON.stringify(st.lastConnector?.to) === JSON.stringify(b);
+    const r1 = await waitMarker((st) => mine(st) && (st.lastConnector.placed === true || (!!st.lastConnector.refused && st.phase === 'second_corner')));
     const lc = r1.lastConnector;
     o.placed = lc;
-    check(lc?.placed === true && /^\S+$/.test(lc.siteId ?? '') && !r1.active, `a ${kind} marked between ${json(a)} and ${json(b)}: placed by the player's path (${lc?.siteId ?? lc?.refused})`, lc);
-    if (!lc?.placed) continue;
+    check(mine(r1) && lc?.placed === true && /^\S+$/.test(lc.siteId ?? '') && !r1.active, `a ${kind} marked between ${json(a)} and ${json(b)}: placed by the player's path (${lc?.siteId ?? lc?.refused})`, lc);
+    if (!mine(r1) || !lc?.placed) continue;
     const region = lc.siteId;
     const st = await L.waitRegion(region, 3_600_000);
     o.state = st.view.state;
