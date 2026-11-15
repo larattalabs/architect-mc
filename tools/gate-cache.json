@@ -207,6 +207,7 @@
   "uncacheable": {
   "$comment": "Steps never served from the cache (their PASS is not recorded): fresh-seed fuzz, inputs outside git that the key can't see, probes that read other steps' evidence of the same run.",
   "umt-long": "fresh clock seeds every run: the point is new seeds",
+  "unit-scope": "(GI2) its pick is the range's changed files, not in the key",
   "apijars": "runs the archived apitest jars under artifacts/ (outside git)",
   "6b-versionc": "runs an archived release jar (outside git)",
   "p3-probe-water": "reads h-ingame, hy-ingame and h-probe's evidence of the same run",

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.placement.TerrainFit;
 import dev.larattalabs.architect.survival.ScaffoldBlock;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,6 +85,17 @@ class ScaffoldBlockTest {
 		assertFalse(Builder.anchorState(st), "never an anchor for the support order or the attach gate");
 		assertFalse(Builder.anchorState(Blocks.SCAFFOLDING.defaultBlockState()));
 		assertTrue(Builder.anchorState(Blocks.STONE.defaultBlockState()));
+	}
+
+	/** (GI2, A32) The player's hopper chain (it feeds the crate) is no attach face, whichever way the hopper points. */
+	@Test
+	void aHopperIsNoAnchor() {
+		for (BlockState st : Blocks.HOPPER.getStateDefinition().getPossibleStates()) {
+			assertFalse(Builder.anchorState(st), st.toString());
+		}
+		assertTrue(SiteFit.siteSolid(TerrainFit.flags(Blocks.HOPPER.defaultBlockState())), "site-solid by the terrain flags: the rule is the anchor's own");
+		assertTrue(Builder.anchorState(Blocks.COBBLESTONE.defaultBlockState()));
+		assertTrue(Builder.SCAFFOLD_RETRY_TICKS > 0);
 	}
 
 	@Test

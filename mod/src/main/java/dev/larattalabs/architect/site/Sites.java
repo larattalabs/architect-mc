@@ -795,7 +795,7 @@ public final class Sites {
 		}
 		{
 			Blueprints.Entry fe = Blueprints.entry(bp.id());
-			String no = fe == null ? null : Fills.refusal(fe.json());
+			String no = fe == null ? null : Fills.refusal(fe); // (FK-b) the template's blocks too
 			if (no != null) {
 				out.add(Reason.NOT_ALLOWED, "Not placed: " + bp.id() + ": " + no); // (M5 FK) a fill only on a given-program entry, and a sound one
 			}

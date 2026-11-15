@@ -530,7 +530,8 @@ export class Sidecar {
         const pd = prior ? this.designs.get(prior) : undefined;
         if (pd) {
           this.log.info(`design ${pd.id}: adopted by opKey ${key} (${pd.status})`);
-          return ack(pd, true);
+          // (CH) one that ended is sent again (another world's, or older than the snapshot's last 20): the mod's reader finds it
+          return ack(this.designs.announce(pd), true);
         }
         return ack(this.requestDesign(msg.request), false);
       }

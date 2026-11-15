@@ -302,6 +302,12 @@ public interface ArchitectApi {
 	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
 	 * as construction; {@code SITE_BUILT} comes after the unlock. A checker refusal of a fill is {@link Reason#PROGRAM_REFUSED} with detail
 	 * {@code fill}. No new method or reason.
+	 * (FK-b, since NEXT) {@code "fillProvided"} is advertised when the helper's kit takes module-provided fill items (its
+	 * {@code design.fillProvided}): a fill's item may carry {@code provided: true} when it is in {@link Limits#FILL_PROVIDED_ITEMS} (and must,
+	 * for those). A provided item is written with the fill unbilled: it is left out of the quote, the bill, the outstanding and
+	 * {@code nextNeeded}, and a removal or undo takes it back with no refund. It never reaches survival: a break of its declared container
+	 * destroys it, and a non-creative player, a hopper or the Fabric Transfer API can't take it from one (docs/CONTRACT.md "### FK-b
+	 * contract"). Refusals are checker findings of rule {@code fill}. No new method, record field or reason.
 	 * (7c PF, since 1.61.0) {@code "shapePromotion"} is advertised when the helper's kit plans promoted forms (its
 	 * {@code plan.shapePromotion}): generators that passed the kit's promotion pipeline (kit/lib/forms/CANDIDATES.md) are ordinary plan/0
 	 * {@code form.<name>} catalogue entries with their {@code sinceApi}; the first is {@code form.arch_span} (the archSpan module: an arcade

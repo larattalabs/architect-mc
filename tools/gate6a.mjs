@@ -16,6 +16,7 @@ import { fromOwnTime as ownTick, ownPctOk, describePct as tickText } from './lib
 import { DevClient } from './lib/devclient.mjs';
 import { gameWait as sprintWait } from './lib/sprint.mjs';
 import { createClearer, createWatcher } from './lib/clearBox.mjs';
+import { runJarWithRetry } from './lib/apijars-judge.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -823,41 +824,47 @@ steps.apijars = async () => {
       await connect(10_000).catch(() => null);
       await stopClient();
     }
-    fs.mkdirSync(mods, { recursive: true });
-    fs.copyFileSync(path.join(r.dir, r.jar), path.join(mods, r.jar));
     const tag = r.key ?? r.api.replace(/\./g, '');
-    const outDir = path.join(OUT, `api${tag}jar`);
-    let code = 0;
-    let text = '';
-    try {
-      fs.rmSync(path.join(SAVES, r.world), { recursive: true, force: true });
-      await startClient(r.world, { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
-      try {
-        text = execFileSync('node', [path.join(r.dir, 'tools', 'apitest.mjs'), 'survival'], {
-          env: { ...process.env, APITEST_API_VERSION: r.api, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir,
-            APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
-      } catch (e) {
-        code = e.status ?? 1;
-        text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    const name = r.key ? `${r.jar.replace(/^architect_apitest-|\.jar$/g, '')} (API ${r.api})` : r.api;
+    // (GI2) one run of the jar in a fresh world; a failed jar runs once more, logged as a retry (tools/lib/apijars-judge.mjs)
+    const attempt = async (n) => {
+      if (n > 1 && clientPids().length) {
+        await connect(10_000).catch(() => null);
+        await stopClient();
       }
-    } finally {
-      await stopClient();
-      fs.rmSync(path.join(mods, r.jar), { force: true });
-    }
-    fs.writeFileSync(path.join(OUT, `api${tag}jar.log`), text);
-    const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
-    const oks = text.split('\n').filter((l) => l.startsWith('ok')).length;
+      fs.mkdirSync(mods, { recursive: true });
+      fs.copyFileSync(path.join(r.dir, r.jar), path.join(mods, r.jar));
+      const outDir = path.join(OUT, `api${tag}jar${n > 1 ? `-try${n}` : ''}`);
+      let code = 0;
+      let text = '';
+      try {
+        fs.rmSync(path.join(SAVES, r.world), { recursive: true, force: true });
+        await startClient(r.world, { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
+        try {
+          text = execFileSync('node', [path.join(r.dir, 'tools', 'apitest.mjs'), 'survival'], {
+            env: { ...process.env, APITEST_API_VERSION: r.api, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir,
+              APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+        } catch (e) {
+          code = e.status ?? 1;
+          text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+        }
+      } finally {
+        await stopClient();
+        fs.rmSync(path.join(mods, r.jar), { force: true });
+      }
+      fs.writeFileSync(path.join(OUT, `api${tag}jar${n > 1 ? `-try${n}` : ''}.log`), text);
+      return { code, text };
+    };
+    const res = await runJarWithRetry(name, attempt, { log: (m) => console.log(m) });
+    const { code } = res;
+    const { oks, fails, hard, timing } = res.judged;
     // apitest prints its timing bars as `FAIL BAR ...`: those are recorded here (a BAR line), the rest judge
     // The archived apitest.mjs (the old tag's, not this checkout's) prints the SITE_PROGRESS gap check without the BAR prefix, as
     // `FAIL SITE_PROGRESS Nx, at most 1/s (min gap G ms), ...`: with N >= 2 and G < 950 that is the quiet-dependent gap (timing); the same
     // old line also folds in built <= queued, so a count/ordering failure with a short gap is recorded too (documented in GATES.md).
-    const isTiming = (l) => l.startsWith('FAIL BAR') || /^FAIL SITE_PROGRESS (\d+)x, at most 1\/s \(min gap (\d+) ms\)/.test(l) && Number(RegExp.$1) >= 2 && Number(RegExp.$2) < 950;
-    const hard = fails.filter((l) => !isTiming(l));
-    const total = Number(text.match(/(\d+) FAILED ->/)?.[1] ?? -1); // apitest's own total must account for every FAIL line
-    const name = r.key ? `${r.jar.replace(/^architect_apitest-|\.jar$/g, '')} (API ${r.api})` : r.api;
-    check(hard.length === 0 && (code === 0 || (total === fails.length && fails.length > hard.length)) && oks > 0, `apijars: the ${name} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL)`, hard);
-    bar(fails.length === hard.length, `apijars: the ${name} jar's timing bars (${fails.length - hard.length} missed)`, fails.filter(isTiming));
-    out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length };
+    check(res.judged.pass, `apijars: the ${name} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL${res.retried ? '; RETRIED once, the first run failed' : ''})`, hard);
+    bar(fails.length === hard.length, `apijars: the ${name} jar's timing bars (${fails.length - hard.length} missed)`, timing);
+    out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length, ...(res.retried ? { retried: res.retried.first } : {}) };
   }
   await startClient('G6A Flat Base');
   return out;

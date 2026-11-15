@@ -69,3 +69,54 @@ test('off: idleMs 0, and the step/config/default minutes', () => {
   assert.equal(stallMinutes({ stallAfterFailMin: false }, {}), 0);
   assert.equal(stallMinutes({ stallAfterFailMin: 0 }, {}), 0);
 });
+
+// (GI2 D3) the wiring: gate-run's runProcess polls the step's log through watchLogFile; here a real child process (its own group, its
+// output into a log file, as the runner spawns a step) prints a FAIL and goes silent, and the watch kills its group
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { watchLogFile } from '../../tools/lib/stall-watch.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
+
+function step(script) {
+  const log = path.join(archTmpDir('stall-wire'), 'step.log');
+  fs.writeFileSync(log, '# header\n');
+  const fd = fs.openSync(log, 'a');
+  const child = spawn(process.execPath, ['-e', script], { detached: true, stdio: ['ignore', fd, fd] });
+  fs.closeSync(fd);
+  const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
+  return { log, child, exited };
+}
+
+test('wiring: a real step that prints a FAIL and goes silent is killed by the log watch (its group, SIGTERM)', async () => {
+  const s = step("console.log('ok   one'); console.log('FAIL two: stuck'); setTimeout(() => {}, 60_000);");
+  let stall = null;
+  const w = watchLogFile({ logFile: s.log, watch: stallWatch({ idleMs: 400 }), pollMs: 50, onStall: (st) => { stall = st; process.kill(-s.child.pid, 'SIGTERM'); } });
+  const end = await Promise.race([s.exited, new Promise((r) => setTimeout(() => r('timeout'), 15_000))]);
+  w.stop();
+  if (end === 'timeout') process.kill(-s.child.pid, 'SIGKILL');
+  assert.notEqual(end, 'timeout', 'the watch ended the step');
+  assert.equal(end.signal, 'SIGTERM');
+  assert.match(stall.failLine, /FAIL two: stuck/);
+  assert.ok(stall.idleMs >= 400);
+});
+
+test('wiring: a step that keeps printing after a FAIL, and one with no FAIL, are not killed', async () => {
+  for (const script of [
+    "console.log('FAIL early'); let i = 0; const t = setInterval(() => { console.log('ok   ' + i); if (++i > 12) { clearInterval(t); } }, 100);",
+    "console.log('ok   quiet'); setTimeout(() => {}, 1500);",
+  ]) {
+    const s = step(script);
+    let stall = null;
+    const w = watchLogFile({ logFile: s.log, watch: stallWatch({ idleMs: 600 }), pollMs: 50, onStall: (st) => { stall = st; process.kill(-s.child.pid, 'SIGTERM'); } });
+    const end = await s.exited;
+    w.stop();
+    assert.equal(stall, null, script);
+    assert.equal(end.code, 0);
+  }
+});
+
+test('wiring: the watch off (null) never polls', () => {
+  const w = watchLogFile({ logFile: '/nonexistent', watch: null, onStall: () => assert.fail('no') });
+  w.stop();
+});

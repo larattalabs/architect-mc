@@ -69,6 +69,16 @@ public final class StockLedger {
 	 * puts them back.
 	 */
 	private final Map<String, Map<String, Integer>> custody = new TreeMap<>();
+	/**
+	 * (FK-b) Per target (credit key), the fill's module-provided items, written with its commit marker: written unbilled (never in
+	 * {@code paid}), never refunded. Dropped with the key's credit.
+	 */
+	private final Map<String, Map<String, Integer>> provided = new TreeMap<>();
+	/**
+	 * (FK-b) Per target, the provided items a removal took out of its declared containers (beside {@link #custody}, in the same change):
+	 * written back if the removal ends unwritten, else dropped at the key's credit, refunding nothing.
+	 */
+	private final Map<String, Map<String, Integer>> heldProvided = new TreeMap<>();
 
 	/**
 	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
@@ -359,6 +369,9 @@ public final class StockLedger {
 		// (M5 FK) the declared containers' contents in custody refund with the blocks, under the same cap (the fill is in the record)
 		Map<String, Integer> held = custody.remove(key);
 		filled.remove(key);
+		// (FK-b) the provided items leave the game: never refunded, never merged into the refund (they can't reach the records' caps)
+		provided.remove(key);
+		heldProvided.remove(key);
 		if (held != null && !held.isEmpty()) {
 			Map<String, Integer> all = new TreeMap<>(items);
 			held.forEach((k, v) -> all.merge(k, v, Integer::sum));
@@ -384,6 +397,56 @@ public final class StockLedger {
 	/** (M5 FK) The fill of target {@code key} is paid (its commit point, saved with the charge). */
 	public void markFilled(String key) {
 		filled.add(key);
+	}
+
+	/** (FK-b) {@link #markFilled(String)} with the fill's provided items (written unbilled), in the same ledger change. */
+	public void markFilled(String key, Map<String, Integer> providedItems) {
+		filled.add(key);
+		putCounts(provided, key, providedItems);
+	}
+
+	/** (FK-b) The provided items the fill of {@code key} wrote (empty: none). */
+	public Map<String, Integer> provided(String key) {
+		Map<String, Integer> m = provided.get(key);
+		return m == null ? Map.of() : Map.copyOf(m);
+	}
+
+	/** (FK-b) Takes provided {@code items} back under {@code key} (a removal's custody take; added to what it holds). */
+	public void holdProvided(String key, Map<String, Integer> items) {
+		items.forEach((k, v) -> {
+			if (v > 0) {
+				heldProvided.computeIfAbsent(key, x -> new TreeMap<>()).merge(k, v, Integer::sum);
+			}
+		});
+	}
+
+	/** (FK-b) The provided items {@code key} holds from a removal (empty: none). */
+	public Map<String, Integer> heldProvided(String key) {
+		Map<String, Integer> m = heldProvided.get(key);
+		return m == null ? Map.of() : Map.copyOf(m);
+	}
+
+	/** (FK-b) Every key holding provided items from a removal. */
+	public java.util.Set<String> heldProvidedKeys() {
+		return java.util.Set.copyOf(heldProvided.keySet());
+	}
+
+	/** (FK-b) Drops and returns {@code key}'s held provided items (written back into its containers). */
+	public Map<String, Integer> releaseProvided(String key) {
+		Map<String, Integer> m = heldProvided.remove(key);
+		return m == null ? Map.of() : m;
+	}
+
+	private static void putCounts(Map<String, Map<String, Integer>> into, String key, Map<String, Integer> items) {
+		Map<String, Integer> m = new TreeMap<>();
+		items.forEach((k, v) -> {
+			if (v > 0) {
+				m.put(k, v);
+			}
+		});
+		if (!m.isEmpty()) {
+			into.put(key, m);
+		}
 	}
 
 	/** (M5 FK) Whether the saved ledger had the fill of {@code key} paid. */
@@ -704,7 +767,32 @@ public final class StockLedger {
 			custody.forEach((key, m) -> cu.add(key, counts(m)));
 			o.add("custody", cu); // (M5 FK) additive (format 2)
 		}
+		if (!provided.isEmpty()) {
+			JsonObject pr = new JsonObject();
+			provided.forEach((key, m) -> pr.add(key, counts(m)));
+			o.add("provided", pr); // (FK-b) additive (format 2)
+		}
+		if (!heldProvided.isEmpty()) {
+			JsonObject hp = new JsonObject();
+			heldProvided.forEach((key, m) -> hp.add(key, counts(m)));
+			o.add("heldProvided", hp); // (FK-b) additive (format 2)
+		}
 		return o;
+	}
+
+	/** (FK-b) A {key: {item: count}} member, if present. */
+	private static void readKeyed(JsonObject o, String name, Map<String, Map<String, Integer>> into) {
+		if (o.has(name) && o.get(name).isJsonObject()) {
+			o.getAsJsonObject(name).entrySet().forEach(e -> {
+				if (e.getValue().isJsonObject()) {
+					Map<String, Integer> m = new TreeMap<>();
+					read(e.getValue().getAsJsonObject(), m);
+					if (!m.isEmpty()) {
+						into.put(e.getKey(), m);
+					}
+				}
+			});
+		}
 	}
 
 	public static StockLedger fromJson(@Nullable JsonObject o) {
@@ -774,6 +862,8 @@ public final class StockLedger {
 				}
 			});
 		}
+		readKeyed(o, "provided", l.provided); // (FK-b)
+		readKeyed(o, "heldProvided", l.heldProvided); // (FK-b)
 		if (o.has("cells") && o.get("cells").isJsonObject()) {
 			o.getAsJsonObject("cells").entrySet().forEach(e -> {
 				Book b = e.getValue().isJsonObject() ? Book.fromJson(e.getValue().getAsJsonObject()) : null;

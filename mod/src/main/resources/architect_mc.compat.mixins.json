@@ -1,0 +1,12 @@
+{
+	"required": false,
+	"package": "dev.larattalabs.architect.compatmixin",
+	"plugin": "dev.larattalabs.architect.compat.TransferGuardPlugin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"ContainerSlotWrapperMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

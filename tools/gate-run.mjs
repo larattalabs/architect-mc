@@ -103,7 +103,9 @@ import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/
 import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
-import { stallMinutes, stallWatch } from './lib/stall-watch.mjs';
+import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
+import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
+import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
@@ -339,6 +341,8 @@ function select() {
       for (const s of t.fallback) addW(s, 'unmapped files: the safe default');
       info.notes.push(`unmapped files: the safe default added ${t.fallback.join(' ')}`);
     }
+    // (GI2) the change tier's unit step is unit-scope; the full suites only for a step that waits for one (tools/lib/change-units.mjs)
+    scopeChangeUnits({ want, why, steps: cfg.steps, addW });
   } else if (chainName === 'slice') {
     // slice = the unit suites + apijars (api-compat) + the impact map's change and slice steps (the slice's own gate steps, found by
     // the impact rule of its driver). No `quick`. A diff of only ignored paths (docs) runs nothing, as for change.
@@ -971,6 +975,9 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   if (runShared.sidecarJunit) Object.assign(env, { GATE_SIDECAR_RESULTS: runShared.sidecarJunit, GATE_SIDECAR_TREE: runShared.sidecarTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
+  // (GI2) the frozen source's classes, built at setup from this head: api-compat's fallback where no build ran (an offline lane)
+  if (FROZEN && DRV !== SRC) env.GATE_FROZEN_SOURCE = DRV;
+  if (CHANGED_FILES) env.GATE_CHANGED_FILES = CHANGED_FILES;
   // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
   // a probe's verdict once per run (tools/lib/probe-reuse.mjs): the evidence dirs of the steps that passed so far
   if (Object.keys(runShared.evidence).length) env.GATE_STEP_EVIDENCE = JSON.stringify(runShared.evidence);
@@ -1351,6 +1358,14 @@ if (!steps.length) {
     .filter((p) => !p.startsWith('no step ran'));
   if (!PLAN && bad.length) die(`nothing to run, but: ${bad.join('; ')}`);
   printSelection();
+  // (GI2) an all-CACHED run still leaves its summary.json (state done: a waiter wakes) and SUMMARY.md (tools/lib/cached-summary.mjs)
+  if (!PLAN && tierInfo.cached?.length) {
+    const st = new Date().toISOString();
+    const dir = path.join(RUNS_ROOT, `${st.replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')}-${chainName}`);
+    const w = writeAllCachedSummary(dir, { chain: chainName, head: git(SRC, 'rev-parse', 'HEAD'), range: tierInfo.range ?? null, startedAt: st,
+      cached: tierInfo.cached, explicit: !!tierInfo.cache?.explicit, worktree: SRC });
+    console.log(`summary: ${w.md}`);
+  }
   console.log(`${chainName}: nothing to run (${tierInfo.cached?.length ? 'every selected step is CACHED, listed above' : tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
 }
@@ -1431,6 +1446,12 @@ for (const sh of shards) {
   fs.mkdirSync(path.join(sh.ev, 'shots'), { recursive: true });
 }
 fs.writeFileSync(path.join(OUT, 'runner.pid'), String(process.pid));
+// (GI2) the range's changed files for unit-scope (NUL-separated; the step reads GATE_CHANGED_FILES): only a tier run with a range has them
+const CHANGED_FILES = tierInfo?.changedFiles?.length ? path.join(RUN_SHARED_DIR, 'changed-files.nul') : null;
+if (CHANGED_FILES) {
+  fs.mkdirSync(RUN_SHARED_DIR, { recursive: true });
+  fs.writeFileSync(CHANGED_FILES, tierInfo.changedFiles.join('\0'));
+}
 const t0 = Date.now();
 const LOGF = path.join(OUT, 'runner.log');
 const log = (m, sh) => {
@@ -1769,31 +1790,14 @@ function runProcess(sh, step, logFile) {
     // nothing for stallAfterFailMin minutes is killed now, not at its timeout; the failed-step path below stops the client by PID
     let stalled = null;
     const stallMin = stallMinutes(step, cfg);
-    const watch = stallWatch({ idleMs: stallMin * 60_000, barsRecorded: recordsTiming(step) });
-    let readAt = fs.statSync(logFile).size;
-    const stallTimer = stallMin > 0 ? setInterval(() => {
-      try {
-        const size = fs.statSync(logFile).size;
-        if (size > readAt) {
-          const rfd = fs.openSync(logFile, 'r');
-          const buf = Buffer.alloc(Math.min(size - readAt, 4 << 20));
-          fs.readSync(rfd, buf, 0, buf.length, size - buf.length);
-          fs.closeSync(rfd);
-          readAt = size;
-          watch.feed(buf.toString('utf8'));
-        }
-      } catch {
-        // the log is read again next tick
-      }
-      const st = stalled ? null : watch.check();
-      if (st) {
-        stalled = st;
-        log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
-        killGroup(child.pid, 'SIGTERM');
-        clearTimeout(killTimer);
-        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
-      }
-    }, Number(process.env.GATE_STALL_POLL_MS ?? 10_000)) : null;
+    const watch = stallMin > 0 ? stallWatch({ idleMs: stallMin * 60_000, barsRecorded: recordsTiming(step) }) : null;
+    const stallTimer = watchLogFile({ logFile, watch, pollMs: Number(process.env.GATE_STALL_POLL_MS ?? 10_000), fsImpl: fs, onStall: (st) => {
+      stalled = st;
+      log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
+      killGroup(child.pid, 'SIGTERM');
+      clearTimeout(killTimer);
+      killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
+    } });
     const timer = setTimeout(() => {
       timedOut = true;
       log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
@@ -1803,14 +1807,14 @@ function runProcess(sh, step, logFile) {
     }, step.effTimeoutMin * 60_000);
     child.on('error', (e) => {
       clearTimeout(timer);
-      clearInterval(stallTimer);
+      stallTimer.stop();
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
       resolve({ code: 127, timedOut: false });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       clearTimeout(killTimer);
-      clearInterval(stallTimer);
+      stallTimer.stop();
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
@@ -2038,10 +2042,7 @@ function summaryMd() {
   if (summary.cache) {
     const c = summary.cache;
     lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
-    if (summary.cached.length) {
-      lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key${c.explicit ? ' (an explicit list: own steps always ran, strict-tier steps took exact keys only)' : ''}`, '', '| step | key | PASS at | head | source run | evidence |', '|---|---|---|---|---|---|');
-      for (const h of summary.cached) lines.push(`| ${h.id} | ${String(h.key).slice(0, 12)} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${path.basename(String(h.run ?? '?'))}\` | \`${h.log ?? h.run}\` |`);
-    }
+    lines.push(...cachedTableLines(summary.cached, { explicit: !!c.explicit }));
     if (c.explicit && Object.keys(c.explicit.own).length) lines.push('', `Own steps (always run; ${c.explicit.base}): ${Object.entries(c.explicit.own).map(([id, w]) => `${id} (${w})`).join('; ')}.`);
     if (summary.inputsMisses.length) {
       lines.push('', `### Inputs-map misses (${summary.inputsMisses.length}): these PASSes were not cached`, '', `A step read source files outside its set in tools/step-inputs.json. Widen it: \`node tools/step-inputs.mjs merge ${OUT}\`, review, commit.`, '');

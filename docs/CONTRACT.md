@@ -27778,7 +27778,7 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
 | a finding | `{rule, severity: 'error' or 'warning', m?: 'M21' or 'M15', count, cells: [[x, y, z]] (at most 8, design cells), message}`; `message` starts `<rule>: ` and is also one line of `errors`/`warnings` (fit:on_pad's line is the `floating:` warning, not repeated) |
 | rule ids (`SITE_RULE_IDS`, report order) | `site_bound` (error), `site_keep` (error), `fit:on_pad`, `fit:carve_into`, `fit:attach_to_cliff`, `fit:span`, `fit:wrap_trunk`, `fit:suspend` (M21), `ports_met`, `floors_reachable`, `site_breach`, `cut_volume`, `cantilever`, `neck` (M15); plus `site_unchecked` (`SITE_UNCHECKED`, a warning, never a finding). `SITE_UNFIT`'s detail (DS) is one of these ids |
 | `metrics` | `fit, volumeSha, lotId, bearing` (cells touching the site's solid); keep fits add `connected, loose, portsMet[], reached, breach, cave, cut {rock, logs, allowance}, cantileverMax, cantileverLimit, cantileverPortCells [{cell, dist}], cantileverHeld, necks`; per fit `bearings` (attach), `span, spanEnds [{u0, u1, cells, square, cell}]` (span), `chainMax` (suspend) |
-| `lib/siteCheck.mjs` | `siteGrid(cells, size, groundY, site)`, `siteFindings(ctx)`, `SITE_CHECK_LIMITS` (`cantilever 4, neckMass 200, bearCells 2, endBearing [2, 2], portWithin 2, breachWithin 1`), `siteLimits(fit, overrides)` (adds the fit row's limits; a `'bible'` limit is `null` = unbounded), `SITE_RULE_IDS`, `SITE_RULE_M`, `SITE_UNTOUCHABLE` (`PLAYER, BLOCK_ENTITY, OWNED`), `SITE_UNCHECKED` |
+| `lib/siteCheck.mjs` | `siteGrid(cells, size, groundY, site)`, `siteFindings(ctx)`, `SITE_CHECK_LIMITS` (`cantilever 4, neckMass 200, bearCells 2, endBearing [2, 2], portWithin 2, breachWithin 1, walkLevel 0`; walkLevel since 7b WL), `siteLimits(fit, overrides)` (adds the fit row's limits; a `'bible'` limit is `null` = unbounded), `SITE_RULE_IDS`, `SITE_RULE_M`, `SITE_UNTOUCHABLE` (`PLAYER, BLOCK_ENTITY, OWNED`), `SITE_UNCHECKED` |
 | CLIs | `kit/check.mjs ... --site <volume> [--lot <site.json>]` (the lot defaults to the sidecar's `site`; a volume that is not the spec's exits 2); `build.mjs --site --lot` now checks on the composite; both `--json` print `site` |
 
 **Built:**
@@ -27801,7 +27801,8 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
     (the first and last run, along the span axis, of cells bearing on the solid below) are two, each with a 2x2 of bearing cells, and the
     longest gap between runs is within `span`; suspend's chain runs within `chain`. `fit:on_pad` is today's `floating`.
   - `ports_met`: every site port has a design port of its name, kind and facing, within `portWithin` of the hint, facing out (the cell
-    beyond it is outside on the composite) and standable or climbable; at least the fit row's `ports` walk or door ports.
+    beyond it is outside on the composite) and standable or climbable; at least the fit row's `ports` walk or door ports. Since 7b WL a
+    horizontal walk port's y is held to the hint's within `walkLevel` (0), an error (Slice WL as built).
   - `floors_reachable` (port fits): every interior floor level reached from the ports (check.mjs's own entrance rule keeps on_pad and the
     door rule).
   - `site_breach` (keep fits): a free cell the design writes beside the site's unwritten water or lava (within `breachWithin`); a room whose
@@ -28514,7 +28515,7 @@ the BRIEF's Ports line only (5 lines, one per fixture with ports; its `comment` 
 
 **Leftovers:**
 - Installed entries designed before WL keep their off-level ports; their realise still refuses `NO_LINK LEVEL` (typed, nothing written).
-- The CONTRACT's 7b SC table (`SITE_CHECK_LIMITS`, the `ports_met` row) is not edited; this as-built is the record.
+- The CONTRACT's 7b SC table (`SITE_CHECK_LIMITS`, the `ports_met` row) is not edited; this as-built is the record (edited 2026-11-15, DX-a).
 
 ### 7b phase close (2026-11-13)
 
@@ -28618,7 +28619,7 @@ symbolic: the coordinator numbers them at merge, and slices stamp `NEXT`.
 | §13: shape promotion into `kit/forms/` | The generator library lives in `kit/lib/forms/` (`floatingIsland`, `giantTree`, `giantMushroom`, `iceSpike`, `rockSpire`, `coral`, `cave`, `forest`). There is no `CANDIDATES.md`. Byte checks on Linux need OrbStack's docker socket (LEFTOVERS: voc-unit's Linux leg) | PM writes the pipeline at `kit/lib/forms/CANDIDATES.md`. Its determinism step depends on the Linux leg working |
 | M15 at region scale is 7a/7c | Building-scale M15 shipped in SC, for site-aware designs only. CW has its own bracket rule (`M10:catwalk`). Region M15, which judges the joint where a link lands on a lot's port, is promised to 7c (`kit/lib/siteCheck.mjs:325`; 7b row 49; 7a's M15 row) | RM, as a warning first |
 | The catalogue has no 7c block | Catalogue 16 reserves **five** ids `until: "7c"`: `channel.aqueduct` (HY's course router answers it, `kit/lib/fluids/course.mjs:979`), `form.crater`, `form.hollow_mountain`, `form.hidden_room` (also the waterfall's hollow, `kit/lib/fluids/waterfall.mjs:227`) and `rule.suspended`. N-7b-1 also moved `Sites.placeConnector` here. `form.floating_island` is held under N-P0-1 (the template is exposed; the free-standing form "stays reserved"). LP may re-reserve `tunnel.under` to 7c *(contingent)* | Each one gets a row in §1 |
-| Reference images: Noah generates GPT Image 2.5 references and is asked when a phase is ready for them (2026-10-08) | N-7b-7 deferred style references (§16.5 use 3) to 7c, so 7b asked Noah for nothing | 7c asks Noah once, **when SF merges** (format 3's `references` is what uses them), for 2-3 images each for two scenarios (N-7c-4) |
+| Reference images: Noah generates GPT Image 2.5 references and is asked when a phase is ready for them (2026-10-08) | N-7b-7 deferred style references (§16.5 use 3) to 7c, so 7b asked Noah for nothing | 7c asks Noah once, **when SF merges** (format 3's `references` is what uses them), for 2-3 images each for two scenarios (N-7c-4; made with gpt-image-2, N-7c-4's answer) |
 | The gallery and metrics exist from 6b | `tools/scenarios.mjs` with the 6b metrics. 7b's SB adds Fit and disturbance *(contingent)*. `roleShares` (theme fit: role shares) waits on format 3 (VOC, S3 rows: "7c") | SF adds `settlement.roleShares`, and BR turns on the role-share bars |
 | Vocabulary has room | Three bounds. (1) The compact plan/0 (the sidecar's expansion of `plan/0#compact` through system refs, measured by the gates' `compactOf`) has the coordinator's **100,000-character bound** (2026-10-23); SL shortened `layout.elevated` to stay under it (LEFTOVERS: "near its cap"). Steward's copy, which lags the kit schema, is already 96,944 bytes, so the real figure is likely higher. (2) A **structured** job's system prompt is capped at 120,000 (`JOB_SYSTEM_MAX`): the plan writer and CO's composer. (3) An **agent** job's is 50,000 (`JOB_SYSTEM_AGENT_MAX`): AU's authoring session, which must carry the catalogue on demand, not whole | **7c adds about eight catalogue kinds, so 7cF must make room first** (§3, row 1): each kind's long text is loaded on demand (by the kinds a plan uses or a check answers), and the compact copy carries one line per kind. Without this, BF's first kind breaks the bound |
 | The gap map ranks what to build next | `node ../steward-mc/tools/strange-asks.mjs` still reads "4 built, 13 nearest, 42 wait", the same as 2026-10-12. Its **capability statuses are stale**: free layouts (FL), walls and gates (K1, K2, K3, GJ), aerial connectors (K1 rope bridges, CW) and steep ground (S2, T1-T3) shipped, but they still read "waits" or "nearest" | §1 orders 7c by the **2026-11-10 recorded plans' waiting parts**, scored against catalogue 16, which is current. The capability ranking is secondary. Steward is asked for a $0 refresh (S-7c-9) |
@@ -28654,7 +28655,7 @@ ARCHITECT-ASKS round 8) and the 7c half of over water (aqueducts). Free layouts 
 | Template-first over the scenario programs (§10.2) | 4 named templates | the scenario programs parametrised and listed in the pick catalogue | TC |
 | Bible format 3 (§10.3), K1/T3/7a's "format 3's `connectors` block" | format 2 + restraint + rarity, Styles | format 3 over Styles: `connectors`, `forms`, `scatter`, `settlement` (with `roleShares`), `references` | SF |
 | Several related Styles in one settlement (Steward's zones, round 8) | one Style per region, per-zone `style` refs in plan/0 | a settlement Style whose zone Styles derive from it (shared core roles) | SF |
-| Style references (§16.5 use 3; N-7b-7) | deferred | Noah's GPT Image 2.5 references in format 3's `references`, A/B'd | SF, PAY |
+| Style references (§16.5 use 3; N-7b-7) | deferred | Noah's GPT Image 2.5 references in format 3's `references`, A/B'd (made with gpt-image-2, N-7c-4's answer) | SF, PAY |
 | Program authoring (old 6c; S-6b-3's `NO_TEMPLATE`) | none | `Regions.authorProgram`: an authoring session, frozen into the artifact by sha | AU |
 | Shape promotion (§13); "7c reuse across settlements" (Steward round 3: offered as a card choice only) | none | the promotion pipeline plus the first promoted form. Offering across settlements stays Steward's | PM |
 | Composites past 96x64x96 (§12); "schematics past the cap as composites" (6c's importer note) | none | kit `Composite`, joint ports, the union-grid checker, placement as one group, undo per module or group | CM-a, CM-b |
@@ -28779,7 +28780,7 @@ Unit costs used:
 | P2 | Six briefs | S1, S2, S3, S5, S6 (+ S4 if 7b made it green): 6 picks, 6 format 3 settlement Styles, the plan path forced on two scenarios (S3, S6), and up to 4 new archetype designs where no cached entry fits the run's Style (the rest re-skinned, $0) | $29 | $38 | Gallery run; the "images on" arm of P4 and the "references off" arm of P5 |
 | P3 | Authoring | 2 sessions on builder-written briefs that no program fits (a monastery on a sea stack; a crater lake town without `crater_works`) | $11 | $16 | "Not shown" with the data if a session fails its rounds; a passing generator is PM's candidate |
 | P4 | Planning images A/B (§16.5 use 1) | the composer on S3's and S6's briefs with the images **off**, from the same seed | $3 | $4 | Noah picks blind, as 7b's P4 did |
-| P5 | Style references A/B (§16.5 use 3) | the settlement Style job on two scenarios **with** Noah's GPT Image references | $3 | $4 | Only if Noah supplies them (N-7c-4); otherwise skipped, $0 |
+| P5 | Style references A/B (§16.5 use 3) | the settlement Style job on two scenarios **with** Noah's GPT Image references | $3 | $4 | Only if Noah supplies them (N-7c-4); otherwise skipped, $0. **On:** six gpt-image-2 references (N-7c-4's answer) |
 | P6 | A Claude composite (optional) | one landmark designed as a `Composite` (Opus), on S3's summit | $6 | $9 | Not gating (CM-b's hand-written castle gates); runs only if the ledger reads at most $50 after P5 |
 | R | Reserve | repair re-runs; one retry per item | $8 | $8 | Only within the $65 |
 | | **Total** | | **$57 (+$8 = $65)** | | |
@@ -28874,8 +28875,8 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
 3. **S-7c-5.** `Regions.authorProgram` runs under Steward's settlement budget and the player's approval, like a paid build (a card line, then Start).
 4. **S-7c-6, composites keep the lot binding.** A composite is one entry and one group item, so Steward's `itemKey == lotId` binding holds;
    CM-a/CM-b must keep it true (a gate item asserts it).
-5. **S-7c-9 done:** Steward main 045c6ea refreshed `fixtures/strange-asks/capabilities.json` at $0 (from the plan catalogue at main bdd1fdc0):
-   **15 built, 20 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
+5. **S-7c-9 done:** Steward main 045c6ea refreshed `fixtures/strange-asks/capabilities.json` at $0 (from the plan catalogue at main bdd1fdc0),
+   and eacff0e corrected it (big_program stays nearest): **11 built, 24 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
    (7b carve_into + 7c hollow mountain, 5), sculpted forms (7c BF, 4), megastructure (7c CM, 3), off ground (7b SL, 3), secrets (7c HR).
    It supports the order BF, CM, HR after 7b's site lots (Steward's `artifacts/strange-asks/report.md`, `node tools/strange-asks.mjs`).
 
@@ -28885,6 +28886,9 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
 - **N-7c-2 keep both:** US (inverted builds) and CX (`Sites.placeConnector`) stay in scope, ordered last, so they're dropped first if 7c runs long.
 - **N-7c-3 yes:** the phase gate as proposed (§5).
 - **N-7c-4 yes:** when SF merges, the coordinator asks Noah (via the parent session) for 2-3 GPT Image references each for S3 and S5.
+  **Then (2026-11-12, Noah via parent session: "you go ahead and generate them w/ codex/chatgpt"):** the parent generated six with
+  **gpt-image-2**, not GPT Image 2.5 (S3-monastery-1..3, S5-treehouse-1..3, 1536x1024; `Minecraft/references/7c-N-7c-4/`, outside the
+  repo). gpt-image-2 stands in for GPT Image 2.5 wherever this contract names it for 7c's references; P5 is on.
 - **N-7c-5 yes:** program authoring ships behind the `programAuthoring` feature, on for claude-login users.
 - **N-7c-6 yes:** Noah approves each promotion candidate's 20-seed contact sheet.
 ### Slice SO as built (branch `slice/SO` off main b1ee8dcc; versions NEXT; $0; recorded 2026-11-11)
@@ -29208,7 +29212,7 @@ Architect API NEXT (slice X)"):
 | `record CompositeInfo.Joint` | `(String fromModule, String fromPort, String toModule, String toPort)`; `JsonObject wire()` |
 | `Regions` | `default CompletableFuture<String> compose(ComposeRequest)`: throws until CO; `default CompletableFuture<String> authorProgram(AuthorRequest)`: throws until AU; `default JsonObject planCatalogue(Set<String> kinds)`: **works now** (RegionsImpl), the no-arg `planCatalogue()` unchanged |
 | `Sites` | `default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest)`: throws until CX |
-| `Reason` | appended after `NO_LINK`: `JOINT_MISMATCH, AUTHORED_STALE`, each documented (`AUTHORED_STALE`'s detail: the program id) |
+| `Reason` | appended: `JOINT_MISMATCH, AUTHORED_STALE` (after `NO_LINK` on the branch; on main after GP's `PROGRAM_REFUSED`, merge 212ea8e6), each documented (`AUTHORED_STALE`'s detail: the program id) |
 | ext keys | `PlanRequest.EXT_SECRETS = "architect_mc:secrets"` (HR), `PlanRequest.EXT_PLAN_IMAGES = "architect_mc:planImages"` (CO), `BibleRequest.EXT_RELATED_TO = "architect_mc:relatedTo"` (SF) |
 | Features | none advertised; `ArchitectApi.features()` javadoc reserves `bigForms`, `hiddenRooms`, `suspendedBuilds`, `aqueduct`, `regionM15`, `styleFormat3`, `scenarioTemplates`, `compose`, `programAuthoring`, `shapePromotion`, `composites`, `placeConnector` for their slices |
 
@@ -29265,6 +29269,10 @@ about 8 kinds under 90,000.
 | `node tools/step-inputs.mjs check` | clean after `build` (345 steps; unit-kit gains f7c-foundation) |
 | `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
 | gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
+
+**Leftover (closed 2026-11-15, docs tidy DX-a):** a `systemRefs` form serving kinds' long text (a ref in place of a
+`planCatalogue(kinds)` call) was left "if wanted"; nobody asked, so it is dropped. `planCatalogue(kinds)` is the path (Steward's
+repair round uses it, its leftovers-1 fa2a452).
 
 ### Slice CM-a as built (branch `slice/CM-a` off main 0cdb1869; versions NEXT; $0, kit only, no client; recorded 2026-11-12)
 
@@ -30524,7 +30532,7 @@ lot's reserved cells, found again by key after a restart. Feature `"givenProgram
 - `Designs.variant(String entryId, JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved, String opKey)`
   and the same with `@Nullable String owner` last -> `CompletableFuture<String>`.
 - `Designs.variantByKey(String opKey)` and `variantByKey(@Nullable String owner, String opKey)` -> `CompletableFuture<Optional<String>>`.
-- `Reason.PROGRAM_REFUSED` (appended last); `class ProgramRefused extends ArchitectRefused` with `CheckReport report()` (the checker's
+- `Reason.PROGRAM_REFUSED` (appended after `NO_LINK`; 7cF's `JOINT_MISMATCH, AUTHORED_STALE`, merged after GP, follow it); `class ProgramRefused extends ArchitectRefused` with `CheckReport report()` (the checker's
   findings as `CheckReport.Finding(rule, "error", null, null, 1, [], message)`); `Limits.PROGRAM_SOURCE_MAX` 262144,
   `Limits.PROGRAM_PARAMS_MAX` 16384. `Library.makeVariant` is unchanged.
 
@@ -31044,6 +31052,182 @@ and after, as JR's and RL's gates measure). No mint, no loss.
 - **Checks:** Gradle 1211 tests 0 failures; kit 1358/1358; sidecar 892/892; `step-inputs check` 391 clean; `api-compat --baselines` 8/8 clean (Steward's jar included).
 - **Steward RC areas:** `bp.fillContainers` and the sidecar `fill`; `ProgramRefused` `fill`; SITE_BUILT only after the unlock; the fill's items in `outstanding` and `nextNeeded`; `SiteWait.blocked`; Quote `fill:<lot>`; removal blockers for declared containers; refunds include custody; NOT_ALLOWED for crate-fed survival fill sites, moves, deltas and overwrites of fill cells.
 - **Left over:** a single-site Remove credits without a save (PS's leftover; a crash after it leaves an orphan custody `atStart` ignores); a stalled removal's custody is written back at load and its retry may wipe it uncredited; only the Groups removal path is gated; locks: lever `powered` only.
+
+### FK-b contract (module-provided fill items; slice `slice/FKB`; accepted by Steward, 2026-11-14)
+
+Drafted against origin/main 799a1df4 plus J1's branch (slice/J1 2410f3f4) for the refund, credit and save paths; the build starts only after J1
+merges. Strict tier, $0, versions `NEXT`, additive API. It extends FK's contract (CONTRACT "### FK contract" and "Slice FK as built"); where
+this says nothing, FK's text holds.
+
+#### 1. The declaration (kit and sidecar)
+
+    bp.fillContainers({ containers: [ { at: [x, y, z], items: [
+        { slot: 0, id: 'minecraft:cobblestone', count: 18 },                          // billed, as in FK
+        { slot: 1, id: 'minecraft:petrified_oak_slab', count: 1, provided: true },   // module-provided
+    ] } ], locks: [...] })
+
+- `provided` is an optional boolean on an item (absent = false). The sidecar's `fill` carries it unchanged; no IR or golden moves for a
+  fill without it.
+- **The allow-list** is one constant: `Limits.FILL_PROVIDED_ITEMS = Set.of("minecraft:petrified_oak_slab")` (Java), mirrored in the kit
+  (`FILL_PROVIDED_ITEMS`, a kit unit test pins them equal). Plain, survival-unobtainable items only; a later item is an API change.
+- **Refused at plan time** (kit checker rule `fill`, so `ProgramRefused.detail` = `fill`; Java `Fills.parse` refuses the same, so a placement
+  reaching the mod with one is NOT_ALLOWED before any write; 0 cells written either way). New finding strings:
+  - `fill: <id> can't be module-provided (allowed: minecraft:petrified_oak_slab)`: `provided: true` on any other item;
+  - `fill: <id> is creative-only; declare it provided: true`: an allow-listed item declared **billed** (survival could never deliver it; the
+    target would starve forever);
+  - `fill: a provided item can't go in a <dropper|dispenser>`: those eject their contents when powered (a leak); provided items go only in a
+    hopper, chest, trapped chest or barrel;
+  - `fill: provided must be true or false`.
+- A container may hold provided items only, billed only, or both. A fill whose items are all provided has an empty bill.
+
+#### 2. Java API (additive, `Since NEXT`)
+
+- `Limits.FILL_PROVIDED_ITEMS` (an unmodifiable `Set<String>`).
+- Feature `"fillProvided"` (helper `design.fillProvided`).
+- No new method, record field or `Reason`. `Sites.view`, `outstanding`, `SiteWait.nextNeeded` and the quote simply leave provided items out.
+
+#### 3. The fill (survival and creative)
+
+- `Fills.Spec` splits into `billed()` (the bill: what `purse.pay`, the stock check, `outstanding`/`nextNeeded`, `Run.pending()`'s reservation
+  and `Quotes.lot`'s `fill:<lot>` use) and `provided()`. `Box.counts()` stays the full declaration: "ours vs cargo", FK3's `holdsExactly`
+  replay and `atStart` count the slabs as ours.
+- In FK's one fill tick (3c) the provided stacks are written with the billed ones, **unbilled**: not paid, not in `paid[key]`.
+- **Ledger:** the commit's ledger write (3d) carries, with FK's marker, `provided[key] = {item: count}` (additive format-2 field, beside
+  `filled`/`custody`). That write stays the commit point, so FK1-FK4 hold unchanged: before it on disk, the fill runs once (FK3 clears a
+  container holding exactly its full declaration, slabs included); after it, never again.
+- A fill with only provided items still has a commit (the marker and `provided[key]`), so it is never written twice.
+- **Creative/instant:** written with the rest, as FK; no ledger.
+- **Quote/bill:** `consumed = quote` holds with the slabs out of both.
+
+#### 4. Removal and undo
+
+- `takeCustody` (both callers: Groups and Sites.remove) splits what it takes: billed items into `custody[key]` (as FK), provided items into
+  a separate `heldProvided[key]`, in the same ledger change and the same `saveWithWorld`.
+- At the key's credit (`StockLedger.credit`, once per key): the billed custody refunds with the blocks under FK's per-item cap;
+  `heldProvided[key]` and `provided[key]` are dropped, **refunding nothing**. The slabs leave the game.
+- `writeBack` (a removal ending unwritten, or an orphan custody at load) writes both back by declaration. A provided item with no free slot
+  is **destroyed** (logged), never dropped at the site (FK drops billed leftovers there; that stays).
+- Creative removal: as FK (contents go with the cell's FLAGS write; no drop).
+- Crash: FKC1/FKC2 as FK. Custody (both maps) is on disk before the world write; a credited key never credits again; `heldProvided` is
+  never refunded, so a replay can neither mint nor double-take.
+
+#### 5. Never into survival: the break and take paths
+
+The coordinator asked that no path mint the creative-only item; with repair (section 6) any leak would be repeatable. Every path is covered,
+so the contract names **no known leak**.
+
+- **(a) Any break, one hook.** In 26.3 every container's contents drop through `BlockEntity.preRemoveSideEffects` ->
+  `Containers.dropContents` (no container overrides it). A mixin at its head strips the allow-listed provided stacks of a declared container
+  of a filled site before vanilla drops the rest. That covers a player's break (survival or creative), explosions (TNT, creeper, crystal,
+  bed, anchor, wither), the wither and dragon, `/setblock`/`/fill`. Billed items (the filter items) still drop as vanilla: they are the
+  player's paid goods. Architect's own writes use FLAGS that skip block-entity side effects, so the hook never fires on a removal or undo.
+  No `PlayerBlockBreakEvents` hook is needed. (Hoppers and chests can't be piston-moved.)
+- **(b) The menu.** A mixin on `Slot.mayPickup`: a non-creative player can't pick up an allow-listed provided stack from a slot of a declared
+  container of a filled site. Every menu take path checks it (click, shift-click, hotbar swap, throw, double-click collect; `tryRemove`
+  and `safeTake`, which bundles use). Billed items stay takeable (FK's "an emptied hopper refunds the rest" is unchanged). Inserting is not
+  touched.
+- **(c) Item transfer.** Mixins on `HopperBlockEntity.tryTakeInItemFromSlot` (a hopper or hopper minecart pulling from the container) and
+  on `ejectItems` (a declared hopper pushing its own slots) skip provided stacks. In M4's normal running nothing changes: a hopper pushes
+  from its first non-empty slot, and the filter item sits first.
+- **(d) Other mods' pipes (Fabric Transfer API).** Every item extraction through `ItemStorage.SIDED` from a vanilla container goes through
+  Fabric's `ContainerSlotWrapper.extract` (the sided wrapper delegates to it). A mixin there returns 0 for a provided variant in a slot of a
+  declared fill container (a double chest's compound container mapped to its half by slot). The mixin targets a Fabric impl class, so it
+  is **optional** (`require = 0`): a Fabric API that renames the wrapper never fails the mod's load. At start, if it didn't apply, a WARN:
+  "fill-provided guard for the Fabric Transfer API inactive: provided items can be extracted by pipe mods". A unit test asserts that it
+  applied in our build, and the gate's Transfer API case checks it in game, so a Fabric API bump that renames it fails our CI, not players'
+  games.
+- **Named leak (out of scope):** a mod that edits a container's stacks directly (`setItem`, `removeItem`, or shrinking the stack
+  `getItem` returns), bypassing both vanilla transfer and Fabric's Transfer API. Such a mod can create items anyway; FK-b doesn't guard
+  raw `Container` calls, because Architect and vanilla make them too.
+- **Named leak (accepted):** the Transfer API guard inactive, only if a Fabric API version renames the wrapper; logged at start (5d).
+- **The lookup** is cheap on every path: first "does the stack (or container) hold an allow-listed item" (almost always no), then a
+  position index of the filled sites' declared containers per dimension (built from the sites file at load, updated at the fill commit,
+  the custody take and the site's removal), never a scan of `Sites.all()`.
+- **Scope (coordinator, 11-14).** All three hooks act only on a provided stack in a declared fill container: the container's position is a
+  declared container of a filled site (the index, built from the Fills record and the ledger's `provided[key]`), and the stack's item is one
+  that container's declaration marks provided. Petrified slabs anywhere else behave as vanilla: a creative player's own slabs, a hopper that
+  is not a fill container, a fill container's cell of a site that isn't filled yet (cargo, as FK).
+- **Every menu take path** goes through `Slot.mayPickup`: click pickup (`tryRemove`), shift-click (`QUICK_MOVE` checks it before
+  `quickMoveStack`), number-key and offhand swap (`SWAP`), drop from the slot, Q and ctrl-Q (`THROW`), double-click collect (`PICKUP_ALL`), a bundle's take (`safeTake`).
+  Drag (`QUICK_CRAFT`) only places items from the cursor, so it can't take. A hopper minecart under the container pulls through
+  `tryTakeInItemFromSlot` (5c).
+- **Crash safety of the strip.** The strip writes no ledger record: `provided[key]` stays as written and `heldProvided` exists only from a
+  removal's custody take. A kill after the strip and before the next save leaves the saved chunk as it was, the container standing with its
+  slabs, matching `provided[key]`. The slabs never became item entities, so no slab is saved loose and no `heldProvided` is stale. A kill
+  after the chunk save leaves the container gone, its slabs destroyed, and `provided[key]` untouched until the removal.
+- **Conservation:** a stripped stack is destroyed and counted (`Fills.STRIPPED`, dev); `provided[key]` is unchanged until the removal.
+  Per provided item: written at the fill = in the containers + stripped + taken at removal, and the player's inventory and the world's item
+  entities never gain one.
+- **Not covered, on purpose:** commands and a creative player (both can create the item anyway).
+
+#### 6. Repair
+
+Architect has no in-place repair of a BUILT site (its builder never re-queues a broken cell, and an UNLOCKED site never fills again). So a
+Steward repair of a broken filter hopper is a **removal of the target and a new placement** of the same entry: a new `placedAt`, a new key.
+- The removal takes what is left (billed refunded, provided not); the broken hopper's slabs were stripped at the break (5a).
+- The new placement's fill writes the plan again into empty containers: provided **unbilled**, filter items billed and on the quote.
+  Exactly the planned counts, never more: FK's fill writes only into empty containers, once per key.
+- Since 5a-5c close every take path, a repair can't be turned into a source of slabs.
+- **The supported repair (Steward's review):** undo the hall's growth (its revision) and grow it again, under a new key. There is no
+  in-place re-fill.
+
+#### 7. Dev hooks and kill points
+
+- `dev.fk.state` adds `provided`, `heldProvided` and the containers' provided counts; `dev.fk.stripped` reads `Fills.STRIPPED`.
+- `dev.fk.take {site, cell, slot}` runs a server-side menu click as the player (for 5b); `dev.fk.pull {cell}` ticks a hopper minecart under
+  a cell (5c).
+- Kill points unchanged (FK1-FK4, FKC1, FKC2), re-run with provided items in the fill.
+
+#### 8. Gate (strict; one in-game step `fkb-survival` plus `fkb-crash`, headless, 8916/8917)
+
+- **fkb-unit:** kit `fk.test` additions (every new refusal, the allow-list mirror); Java `FillsFKBTest` (the split, the ledger round trip
+  of `provided`/`heldProvided`, credit drops them with no refund, writeBack destroys an unplaceable provided item, the index) and
+  `ApiFKBTest` (limit, feature).
+- **fkb-survival:** `fk_hall` with filter hoppers holding billed filter items plus provided petrified slabs, fed from the stockpile:
+  - quote and bill show only the filter items; consumed = quote; the containers hold the planned stacks (slabs included);
+  - menu takes of a slab refused, driven server-side as the player's container clicks: pickup, shift-click, number-key swap, offhand
+    swap, Q and ctrl-Q, double-click collect; a filter item's pickup allowed; a hopper minecart under a filter hopper pulls no slab (bundle and
+    drag named as covered by the code path);
+  - **negative case:** a creative-placed hopper holding petrified slabs, not a fill container, behaves as vanilla: the slabs can be taken,
+    a minecart pulls them, and its break drops them;
+  - a kill after a strip and before the save: after the restart, the container stands with its slabs, no slab entity, no `heldProvided`;
+  - player break of a filter hopper: its filter items drop, no slab entity, `STRIPPED` = its slabs; a TNT explosion on another: same;
+  - repair, one cycle: break a filter hopper, undo the hall's revision, grow it again: slabs = the plan, the new fill's bill = the filter
+    items only, items in = items out;
+  - a Transfer API extraction (`ItemStorage.SIDED` on a declared hopper) moves no slab, and does move a filter item;
+  - removal and undo: slabs taken, refund = the billed part only; items in = items out per item against the saved state, provided apart;
+  - a non-allow-listed item marked provided (and the slab declared billed): refused at plan time, 0 cells written.
+  - the player's inventory and the item entities hold 0 petrified slabs throughout.
+- **fkb-crash:** FK2/FK3 at the fill and FKC1/FKC2 at removal, with slabs: no duplicate and no loss of slabs or billed items.
+- Re-run fk-survival, fk-crash, jr-crash, rl-crash, rs-survival-smoke. Strict verifier on 8896:8897 `--shards 1`, `--no-cache`.
+
+#### 9. Steward RC areas
+
+`provided: true` and the allow-list; the new `fill` findings; quote/bill/outstanding/nextNeeded without provided items; removal refunds
+without them; slabs unpickupable and untransferable from declared containers; stripped at any break; repair = remove + re-place.
+
+#### Changes from Steward's review (accepted 2026-11-14, through the coordinator; these win over the text above)
+
+- **Scope (coordinator):** the hooks act only on provided stacks in declared fill containers of filled sites, never on petrified slabs
+  elsewhere. Gated with a negative case: a creative-placed hopper outside any fill behaves as vanilla. (Folded into 5.)
+- **Every menu take path (coordinator, Steward):** pickup, shift-click, number-key and offhand swap, Q and ctrl-Q, double-click collect,
+  bundle; drag only places items. The ones the headless harness can drive are gated; the rest are named as covered by the code path. (5, 8)
+- **Strip crash safety (coordinator):** a kill between the strip and the save leaves no loose slab and no stale `heldProvided`. Gated. (5, 8)
+- **Repair (Steward, 6):** undo the revision and grow again (a new key) is the supported repair; no in-place re-fill. Gated as one cycle.
+- **Every automated transfer (Steward):** block hoppers, hopper minecarts, and the Fabric Transfer API (5d). Accepted named leaks: direct
+  `Container` edits by another mod; the Transfer API guard inactive under a Fabric API that renames its wrapper (optional mixin, WARN at
+  start, our test asserts it applied: the coordinator).
+- Steward's M4 certifies `slots > 0` once FK-b ships.
+
+### Slice FK-b as built (branch `slice/FKB` off origin/main 799a1df4, J1 1d195edb and CP/AR a10c21b3 merged; versions NEXT; $0; strict; 2026-11-15)
+
+- **Declaration:** `provided: true` per fill item; allow-list `Limits.FILL_PROVIDED_ITEMS` (petrified oak slab), kit `FILL_PROVIDED_ITEMS` pinned equal by fk.test; the four `fill:` findings in the kit's checkFill and in `Fills.parse`/`Fills.refusal(Entry)` (the dropper/dispenser rule reads the template grid). Feature `fillProvided` (`design.fillProvided`). Fixture `fk_hall` param `provided` (default 0: FK unchanged).
+- **Bill/ledger:** `Spec.billed()` feeds the pay, stock check, `fillOwed`/outstanding and `Quotes`' `fill:<lot>` (omitted when empty); `Box.counts()` stays full. `StockLedger` gains `provided[key]` (with `markFilled(key, provided)`) and `heldProvided[key]` (the custody take's provided part), both additive format 2, dropped at `credit` and never merged into the refund; `writeBack` restores both and destroys (logs) a provided item with no slot.
+- **Guards (`FillGuard`):** a per-dimension index of filled sites' declared containers with provided items, rebuilt lazily after any fill phase write, the fill commit or the load; a hit is re-checked against the live site record (so it stays through a custody take and a write-back, and ends with the record; not "updated at the custody take" as 5 says). Mixins: `BlockEntityStripMixin` (head of `preRemoveSideEffects`, `Fills.STRIPPED`), `SlotMayPickupMixin` (non-creative), `HopperGuardMixin` (`tryTakeInItemFromSlot`, `ejectItems`), `CompoundContainerAccessor` (double chests); `ContainerSlotWrapperMixin` in the optional `architect_mc.compat.mixins.json` (`required: false`, `@Pseudo`, plugin `TransferGuardPlugin` records the apply; the WARN at start once). It reads the wrapper's fields by reflection and fails closed (refuses) if they can't be read.
+- **Dev hooks:** `dev.fk.state` adds provided/heldProvided/providedItems/providedHolds/stripped/guarded; new `dev.fk.take` (the real menu, as a survival player), `dev.fk.pull` (a hopper minecart's pull), `dev.fk.transfer` (ItemStorage.SIDED, aborted), `dev.fk.guard`, `dev.fk.break` (survival break; `halt` writes `fkb-strip-halt.json` then halts), `dev.fk.slabs`.
+- **Gate (tools/lib/gatem5fkb.mjs):** fkb-unit, fkb-survival (incl. the negative hopper, repair = region removed and grown again under a new key, the creative instant fill and the bad declaration refused by the mod in a creative world: a survival instant placement stops at its op-actor check first), fkb-crash (FK2, FK3, FKC1, FKC2 with slabs, and the strip-then-halt case, here rather than in fkb-survival). The unit asserts the Transfer API target (class, extract descriptor, fields, the optional config); "applied" is asserted in game (`dev.fk.guard`).
+- **Ran:** units (unit-scope, full Gradle 1278/0, kit 1430/0, sidecar 909), step-inputs check, api-compat --baselines 8/8, gitleaks (branch commits clean); gate change run 20261115-074036 at a10c21b3: 8/8 PASS (fkb-unit 3/0, fkb-survival 28/0, fkb-crash 40/0, fk-survival 17/0, fk-crash 50/0, jr-crash 24/0, rl-crash 90/0, rs-survival-smoke 40/0). Per-slice verifier skipped (speed rule 11: once per release, by the coordinator).
+- **Leftovers:** an all-provided fill whose blocks all went before its removal never credits (`Stockpiles.credit` returns early), so `provided`/`heldProvided` stay, as FK's `filled` marker does; bundles and drag covered by the code path only.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
@@ -32102,6 +32286,24 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
   one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
 
+
+### Slice CH as built (branch `slice/CH` off origin/main cccf611d, main 91ce29bf (CP) merged; no API change; $0; light; recorded 2026-11-15)
+
+1. The hang: an opKey adopts the helper's first design in any state, and the helper's designs span every world and every game run in
+   its data dir; a snapshot carries only the last 20 (DESIGN_SNAPSHOT_LIMIT) plus the active ones. A design that ended outside that window
+   (CP's reused run dir: d120, 27 designs back) never reached the mod's reader, so `Designs.get` stayed empty and `dev.region.compose`'s
+   wait (and any caller waiting for DESIGN_DONE) ran to its 30 min timeout. Reproduced in `k3-designkeys.test.ts` "(CH)" (fails without the fix).
+2. Chosen: **re-run, $0 only.** On adoption the helper sends the ended design's record again (`DesignBook.announce`, before the ack; compose,
+   author, design.request incl. versionOf). Nothing paid re-runs: adoption still returns before the Claude check and `designs.create`, so a
+   key never spends twice. Only the world-local tail runs again: the mod's reader gets the record and a PICKED pick is planned in this world
+   (`Composes.reset` now clears PLAN_OF/PLAN_ERROR, so world A's planId never answers in world B). Refusing was not needed: a body pins the land
+   by its volume sha (and builds), so a key reused over other land is `OP_KEY_CONFLICT` as before; when no claim volume is sent (none
+   read) nothing pins it (leftover; Steward's keys carry its world id and card sha).
+3. Bounded: the mod's keyed compose, author and design paths wait for an adopted record at most 30 s (`AdoptWait`,
+   `-Darchitect.api.adoptWaitMs`), else `TIMED_OUT` naming the design ("ask again with the same key"). A PICKED pick's plan was already
+   bounded (`Regions.plan`, 300/600 s, then planError). `Regions.design` has no opKey, so no adoption path.
+4. Gate: `ch-compose` (fixed keys, world A then a fresh world B from the same base: same designs, answered in seconds, PICKED re-planned,
+   COMPOSED same artifact), co-compose and cp-compose re-run; AdoptWaitTest (the timeout); scoped units, full sidecar and kit suites.
 
 ### Slice QL as built (2026-11-14)
 

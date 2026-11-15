@@ -109,8 +109,11 @@ public final class Authors {
 					JsonObject res2 = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
 					String id = res2.get("designId").getAsString();
 					dev.larattalabs.architect.apiimpl.ApiImpl.rememberDesign(id, ownerOf(r), r.ext().deepCopy());
-					Architect.LOGGER.info("Program design {} requested (authorProgram): {}", id, r.brief());
-					return RegionsImpl.onServer(s, () -> id);
+					boolean adopted = res2.has("adopted") && res2.get("adopted").getAsBoolean();
+					Architect.LOGGER.info("Program design {} {} (authorProgram): {}", id, adopted ? "adopted by its opKey" : "requested", r.brief());
+					// (CH) as Composes: an adopted design's record is waited for, bounded
+					return dev.larattalabs.architect.apiimpl.AdoptWait.record(id, adopted, () -> Composes.adoptTimeout("authoring request", id)).thenCompose(
+						x -> RegionsImpl.onServer(s, () -> id));
 				});
 		});
 	}

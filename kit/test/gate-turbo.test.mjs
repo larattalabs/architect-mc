@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chooseTurbo, enqueue, liveHolders, liveTickets, loadConfig, loadGate, releaseAll, slotFile, tryAcquire } from '../../tools/lib/turbo.mjs';
+import { chooseTurbo, enqueue, liveHolders, liveTickets, loadConfig, loadGate, LOAD_BOUNDS, LOAD_DEFAULTS, releaseAll, slotFile, tryAcquire } from '../../tools/lib/turbo.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const kids = [];
@@ -307,4 +307,26 @@ test('load-aware start: --no-load-wait (max1 0) skips the settle rule too, and g
   const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'tools', 'gate-run.mjs'), 'utf8');
   assert.match(src, /flag\('--no-load-wait'\) \? \{ \.\.\.loadConfig\(cfg\), max1: 0 \} : loadConfig\(cfg\)/, 'the flag sets max1 0');
   assert.match(src, /load: LOAD_GATE/, 'and the acquire uses it');
+});
+
+// (GI2 D5) a holder whose clock is in the future does not hold the settle rule on until the 15-min cap
+test('load-aware start: a holder startedAt in the future is ignored (clock skew past 60 s); rule 10 bounds unchanged', () => {
+  const now = Date.parse('2026-11-15T12:00:00Z');
+  const load = { max1: 72, settleSec: 300, maxWaitMin: 15 };
+  const at = (ms) => ({ startedAt: new Date(now + ms).toISOString() });
+  // an hour ahead: not "just started"; the load is low, so the run goes at once
+  const me = {};
+  assert.equal(loadGate(me, [at(3_600_000)], { load, loadNow: () => 10, now }), null);
+  assert.equal(me.loadWaitSince, undefined, 'it never waited');
+  assert.equal(me.loadFutureIgnored, true);
+  // a real 10-s-old holder still waits on the settle rule, beside a future one
+  assert.match(loadGate({}, [at(-10_000), at(3_600_000)], { load, loadNow: () => 10, now }), /less than 300 s ago/);
+  // small skew (30 s ahead) counts as just started
+  assert.match(loadGate({}, [at(30_000)], { load, loadNow: () => 10, now }), /less than 300 s ago/);
+  // the cap still fires
+  const w = { loadWaitSince: now - 15 * 60_000 };
+  assert.equal(loadGate(w, [at(-10_000)], { load, loadNow: () => 99, now }), null);
+  assert.equal(w.loadWait.gaveUp, true);
+  assert.deepEqual(LOAD_BOUNDS, { max1Min: 72, maxWaitMinMax: 15 });
+  assert.deepEqual(LOAD_DEFAULTS, { max1: 72, settleSec: 300, maxWaitMin: 15 });
 });

@@ -237,7 +237,7 @@ export class AuthorDesigns {
       sc.log.info(`design ${pd.id}: authoring adopted by opKey ${key} (${pd.status})`);
       // a design that already ended may have ended in another world (the helper's data spans the worlds): its upsert again, so the mod
       // installs an AUTHORED program into this world as its end would have (the mod's install is idempotent)
-      if (isFinalDesign(pd)) sc.emit({ type: 'design.upsert', design: structuredClone(pd) } as Parameters<Sidecar['emit']>[0]);
+      sc.designs.announce(pd);
       return { designId: pd.id, adopted: true };
     }
     const maxRounds = authorRounds(msg.ext as Record<string, unknown> | undefined);

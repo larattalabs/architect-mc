@@ -162,6 +162,14 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - Leftovers: run dirs stay on the SSD (5-13 GB each x 4 slots > 24 GB); `kit/lib/rebuild.mjs` (shipped, try/finally) and
   `kit/tools/site-renders.mjs` (kept output) unchanged; the sidecar tests' design writes are not cut yet.
 
+### Exact-bill gates: fixtures and discriminators (lesson from slice QT, 2026-11-12)
+
+An exact-bill gate (quote equals consumed, item for item) needs fixtures built from what actually consumes: the state at put-down
+(after the stage's own roads stand, every queued cell cleared to air), not the land before the plan writes. A discriminator (a check
+that two cases differ) needs a fixture where the difference exists. QT lost three runs to both: its quote measured approaches over
+today's land (12 cells high), and its "piece above its template bill" check had no lot with an approach above zero, so it could only
+fail (CONTRACT "Slice QT as built", runs 1-3). Prove such a model in a unit when no in-game fixture shows it (QT's `QuoteRoadsTest`).
+
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
 These override the tier, verifier and RC rules below for as long as dev mode is on.
@@ -175,7 +183,8 @@ No regression suite, impact steps or before/after comparison runs per slice. Use
 **The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
 the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
 
-**Steward RC only when the API Steward calls changes.** Otherwise Steward picks up the next tag.
+**A Steward RC runs on every release** (practice since v0.60; its areas follow what changed, so a release that leaves the API Steward
+calls alone gets a smaller set). Steward's pin and smoke rules decide its depth (speed rule 4).
 
 **Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
 
@@ -183,14 +192,15 @@ the journal, removal, crash recovery or survival accounting. Those stay strict, 
 
 **The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
 
-**No new test-tooling projects** unless something is actually broken.
+**Test-tooling slices are allowed** (GX, TS, SP and the load-aware start were all such slices) when they save more wall time than
+they cost; the coordinator briefs them and picks the tier (tooling is light, speed rule 1).
 
 **Keep the machine for product:**
 - at most 4 gate runs on the machine at once (`slots.max` 4, below; the one number every doc and brief uses; Noah's speed rules, 2026-11-13);
 - no duplicate before/after runs: compare against recorded history instead;
 - commit before running (the runner tests a frozen snapshot).
 
-**To return to release mode:** Noah says so. Then the full tiers, verifier re-runs and Steward RCs come back.
+**To return to release mode:** Noah says so. Then the full tiers and verifier re-runs come back (Steward RCs already run every release).
 
 ## Policy update (Noah, 2026-10-12): cut what has only cost time
 
@@ -2970,3 +2980,22 @@ at load p50 48.
 - **A32 (SO minors), skipped.** Both are mod Java: `Builder.anchorState` counts the player's hopper chain as support, and
   `Builder.removeScaffold` logs a failed undo and carries on. The so-survival driver's own connectivity scan already ignores the
   hopper chain (it reads the frozen fixture volume). A fix belongs to a mod slice.
+
+### Slice GI2 as built
+
+Gate infra 2 plus the gate-runner leftovers GR-a; tooling, two mod minors, no API change; units only (speed rule 11: no in-game run).
+- **`change` runs `unit-scope`** (new step: `tools/unit-scope.mjs --run` over the range's files, `GATE_CHANGED_FILES`; uncacheable). An impact
+  rule's unit-mod/unit-kit/unit-sidecar stands for it; a full suite joins only for a step that waits for it (`tools/lib/change-units.mjs`).
+  slice and release keep the full suites. **unit-kit** timeout 20 -> 40 min (measured 10m41s-17m44s under load; not split: one JUnit report).
+- **api-compat** checks this head's built classes: unit-mod's run, then the frozen source (`GATE_FROZEN_SOURCE`), then the checkout; none
+  fails with "no compiled classes ... build first" (exit 2), never a MISSING list (`tools/lib/api-classes.mjs`; the o1 lane's 951 MISSING).
+- **apijars** retries a failed jar once in a fresh world (`RETRY apijars ...`, the first run's FAIL lines, `retried` in apijars.json); the
+  second run decides, timing-only runs never retry (`tools/lib/apijars-judge.mjs`).
+- **co-compose's restarts**: the headless server's probe answered "" after 3 s against its own busy sidecar (19 times in the CP run), and
+  each world open killed it (STOP_THEN_START). The probe now skips frames without a version, waits 20 s more when slow, keeps its own live
+  sidecar (REUSE) and logs what it saw (`[probe: ...]`). The client Launcher has the same 3-s probe (product code, not changed).
+- **All-CACHED** runs write summary.json (done, PASS) and SUMMARY.md (`tools/lib/cached-summary.mjs`). **D3**: the log polling moved to
+  `watchLogFile` (stall-watch.mjs), tested with a real child. **D5**: a holder `startedAt` over 60 s in the future is ignored by loadGate
+  (rule 10 bounds unchanged). **junit-reuse** takes `Class.method` patterns (globs; fails closed). **j3's split** compares every mod.
+- **A32**: a hopper is no anchor (`Builder.anchorState`); `removeScaffold` returns false on a failed take-down and `complete` leaves the
+  site BUILDING, retried every 200 ticks. CLI units: api-baselines-build, plan-catalogue-diff, step-inputs, api-compat (kit/test/tool-clis).

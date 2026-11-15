@@ -5,7 +5,8 @@
 //     pass its items to, so a filled hopper keeps them); a comparator behind each hopper; a lever on the stone block at the row's west
 //     end, the lock cell (the template holds it unpowered, unlocked; it is built powered, locked: the hopper beside it is disabled);
 //   - the shell (from the palette's roles): a floor at y0 and a walkway in front.
-//   - the fill: each filter hopper holds `count` of its item in slot 0 and one filler (`filler`) in each of slots 1-4.
+//   - the fill: each filter hopper holds `count` of its item in slot 0 and one filler (`filler`) in each of slots 1-4. (FK-b) With
+//     `provided` 1 the filler is Steward's: a petrified oak slab, module-provided (`provided: true`: unbilled, never into survival).
 //
 //   x ->   0      1 .. slots
 //   y2     stone  hopper (declared)       z=1
@@ -19,14 +20,18 @@ export const id = 'fk_hall';
 export const params = {
   slots: { type: 'int', min: 1, max: 8, default: 4, label: 'Filter slots' },
   count: { type: 'int', min: 1, max: 64, default: 18, label: 'Filter items per slot' },
+  provided: { type: 'int', min: 0, max: 1, default: 0, label: 'Module-provided filler (FK-b)' },
 };
 
 // items no town block costs, so a gate can feed the build and the fill apart
 const FILTERS = ['minecraft:flint', 'minecraft:clay_ball', 'minecraft:bone', 'minecraft:feather', 'minecraft:string', 'minecraft:leather',
   'minecraft:gunpowder', 'minecraft:slime_ball'];
 export const FILLER = 'minecraft:paper';
+/** (FK-b) Steward's filler: creative-only, module-provided. */
+export const PROVIDED_FILLER = 'minecraft:petrified_oak_slab';
 
-export default function build({ palette = PALETTES.rustic, slots = 4, count = 18 } = {}) {
+export default function build({ palette = PALETTES.rustic, slots = 4, count = 18, provided = 0 } = {}) {
+  const filler = provided ? { id: PROVIDED_FILLER, count: 1, provided: true } : { id: FILLER, count: 1 };
   const p = palette;
   const W = slots + 2;
   const bp = new Blueprint({
@@ -55,7 +60,7 @@ export default function build({ palette = PALETTES.rustic, slots = 4, count = 18
       bp.set(x, 1, 1, 'minecraft:stone');
       bp.set(x, 2, 1, 'minecraft:hopper', { facing: 'down', enabled: 'true' });
       bp.set(x, 2, 2, 'minecraft:comparator', { facing: 'south' });
-      containers.push({ at: [x, 2, 1], items: [{ slot: 0, id: FILTERS[i], count }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: FILLER, count: 1 }))] });
+      containers.push({ at: [x, 2, 1], items: [{ slot: 0, id: FILTERS[i], count }, ...[1, 2, 3, 4].map((slot) => ({ slot, ...filler }))] });
     }
   });
   bp.fillContainers({ containers, locks: [{ at: [0, 3, 1], locked: { powered: 'true' } }] });

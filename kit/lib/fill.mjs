@@ -28,6 +28,13 @@ export const FILL_CONTAINERS = Object.freeze({
  * (recomputed on a neighbour update), a torch's `lit` (on its tick), a wire's power, a repeater's or comparator's `powered` are not.
  */
 export const LOCK_PROPS = Object.freeze({ 'minecraft:lever': Object.freeze(['powered']) });
+/**
+ * (FK-b, docs/CONTRACT.md "### FK-b contract" 1) The items a fill may mark `provided: true`: module-provided, written unbilled, refunded
+ * never, kept out of survival (Java `Limits.FILL_PROVIDED_ITEMS`; fk.test pins them equal). Plain, survival-unobtainable items only.
+ */
+export const FILL_PROVIDED_ITEMS = Object.freeze(['minecraft:petrified_oak_slab']);
+/** (FK-b) The containers a provided item can't go in: they eject their contents when powered. */
+const PROVIDED_NOT_IN = Object.freeze(['minecraft:dropper', 'minecraft:dispenser']);
 /** The most of one item a slot may hold (the mod checks the item's own max stack). */
 export const FILL_STACK_MAX = 64;
 const ITEM_ID = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
@@ -55,7 +62,8 @@ export function normalizeFill(spec, origin = [0, 0, 0]) {
         items: c.items.map((it, j) => {
           if (!it || typeof it !== 'object') throw new Error(`fill: containers[${i}].items[${j}] must be {slot, id, count}`);
           const id = typeof it.id === 'string' && !it.id.includes(':') ? `minecraft:${it.id}` : it.id;
-          return { slot: it.slot, id, count: it.count };
+          // (FK-b) `provided` kept only when declared (a fill without it records exactly as FK did); checkFill judges its value
+          return 'provided' in it ? { slot: it.slot, id, count: it.count, provided: it.provided } : { slot: it.slot, id, count: it.count };
         }).sort((a, b) => a.slot - b.slot),
       };
     }),
@@ -107,6 +115,12 @@ export function checkFill(fill, cells, size) {
       if (typeof it?.id !== 'string' || !ITEM_ID.test(it.id) || it.id === 'minecraft:air') e(`${w}: id '${it?.id}' must be a plain item id (no components)`);
       if (it && ('components' in it || 'nbt' in it || 'tag' in it)) e(`${w}: a fill stack is plain (no components)`);
       if (!Number.isInteger(it?.count) || it.count < 1 || it.count > FILL_STACK_MAX) e(`${w}: count ${it?.count} must be 1..${FILL_STACK_MAX}`);
+      // (FK-b) module-provided items: the allow-list, never billed, never in a container that ejects
+      if (it && 'provided' in it && typeof it.provided !== 'boolean') { e('provided must be true or false'); continue; }
+      const allowed = FILL_PROVIDED_ITEMS.includes(it?.id);
+      if (it?.provided === true && !allowed) e(`${it.id} can't be module-provided (allowed: ${FILL_PROVIDED_ITEMS.join(', ')})`);
+      else if (it?.provided !== true && allowed) e(`${it.id} is creative-only; declare it provided: true`);
+      else if (it?.provided === true && PROVIDED_NOT_IN.includes(st.name)) e(`a provided item can't go in a ${st.name.slice('minecraft:'.length)}`);
     }
   }
   for (const [i, l] of fill.locks.entries()) {

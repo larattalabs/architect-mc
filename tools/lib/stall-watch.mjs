@@ -10,6 +10,8 @@
 // indented ` FAIL  file > test` (vitest keeps printing after one) and not a `FAIL BAR` line where the tier records timing bars (that step can
 // still pass, and its driver goes on). Any output at all resets the idle clock: a driver still printing after a failure is not stuck.
 
+import fs from 'node:fs';
+
 const FAIL_RE = /^(?:\[\d\d:\d\d:\d\d\] )?FAIL\b/;
 const BAR_FAIL_RE = /^(?:\[\d\d:\d\d:\d\d\] )?FAIL\s+BAR\b/;
 
@@ -56,4 +58,37 @@ export function stallWatch({ idleMs, barsRecorded = false, now = Date.now() } = 
 export function stallMinutes(step, cfg) {
   const v = step.stallAfterFailMin ?? cfg.stallAfterFailMin ?? 5;
   return v === false ? 0 : Number(v) || 0;
+}
+
+/**
+ * (GI2 D3) The runner's side of the watch: polls a step's log file every pollMs, feeds what was appended to `watch` and calls
+ * onStall(st) once when watch.check() reports a stall. Used by tools/gate-run.mjs runProcess (the unit test drives the same function with a
+ * real child process). -> { stop() }. idle (watch off) when `watch` is null.
+ */
+export function watchLogFile({ logFile, watch, pollMs = 10_000, onStall, fsImpl = fs }) {
+  if (!watch) return { stop() {} };
+  const f = fsImpl;
+  let readAt = f.statSync(logFile).size;
+  let fired = false;
+  const timer = setInterval(() => {
+    try {
+      const size = f.statSync(logFile).size;
+      if (size > readAt) {
+        const rfd = f.openSync(logFile, 'r');
+        const buf = Buffer.alloc(Math.min(size - readAt, 4 << 20));
+        f.readSync(rfd, buf, 0, buf.length, size - buf.length);
+        f.closeSync(rfd);
+        readAt = size;
+        watch.feed(buf.toString('utf8'));
+      }
+    } catch {
+      // the log is read again next tick
+    }
+    const st = fired ? null : watch.check();
+    if (st) {
+      fired = true;
+      onStall(st);
+    }
+  }, pollMs);
+  return { stop() { clearInterval(timer); } };
 }
