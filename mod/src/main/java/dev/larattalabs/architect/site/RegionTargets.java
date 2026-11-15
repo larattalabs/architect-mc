@@ -143,7 +143,7 @@ public final class RegionTargets {
 		Value[] vals = c.values();
 		for (int k = 0; k < pos.length; k++) {
 			int i = at.get(pos[k]);
-			if (i < 0 || cls == null || cls[i] == Packed.FREE) {
+			if (i < 0 || cls == null || Packed.freePass(cls[i])) { // (8aF) a staged cell: the free pass until slice ST
 				fp.add(pos[k]);
 				fv.add(vals[k]);
 				if (i >= 0 && grp != null && grp[i] < groupIds.size()) {
@@ -1525,6 +1525,12 @@ public final class RegionTargets {
 
 	/** The ext key a region item waiting for an earlier target carries: {@code {target, part}} (ITEM_WAITING's ext, S-RS-1). */
 	public static final String EXT_WAITS_FOR = "architect_mc:waitsFor";
+	/**
+	 * (8a, docs/CONTRACT.md "Phase 8a" §3, §6; S-8a-3) The {@code kind} of a stage wait on a staged terrain target ({@code SITE_BUSY}, ext
+	 * {@code architect_mc:waitsFor {target, part, kind: "terrain", terrainCells, terrainBuilt, say}}). Steward words its line from this exact
+	 * string: keep it stable. Slice ST sets it. Since NEXT.
+	 */
+	public static final String WAIT_KIND_TERRAIN = "terrain";
 
 	/**
 	 * (§6.3) Whether a survival region's item must wait for an earlier target to be built (then it waits SITE_BUSY, naming the target and

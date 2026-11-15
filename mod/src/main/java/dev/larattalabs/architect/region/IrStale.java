@@ -26,7 +26,8 @@ public final class IrStale {
 	public static final List<String> KINDS_FORMAT2 = List.of("blobs:side", "fields", "forms", "material:rule", "shape:array", "shape:capsuleChain",
 		"shape:ellipsoid", "shape:instances", "shape:prism", "shape:strata", "shape:warp", "shape:wedge", "volumes", "road:lamp", "voxels",
 		"mask", "pattern", "relief", "scatter", "stamp", "volume:blocks", "fluid", "volume:fluids", "courses", "survival", "coralDecor",
-		"bubbleColumns"); // ((7a LF) a lift's column: a fluid op's bubble set)
+		"bubbleColumns", // ((7a LF) a lift's column: a fluid op's bubble set)
+		"stagedTerrain"); // ((8aF) a survival IR's staged terrain ops: ARTL class 3, built over time from phase 8a)
 
 	private IrStale() {
 	}

@@ -14,7 +14,7 @@ import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
 import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
-import { CLASS_HELD, CLASS_PAID, CREATIVE_ONLY, MK_DIRT_PATH, TERRAIN_BLOCKS, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
+import { CLASS_HELD, CLASS_PAID, CLASS_STAGED, CREATIVE_ONLY, MK_DIRT_PATH, TERRAIN_BLOCKS, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
 
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp', 'fluid'];
@@ -24,7 +24,8 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns',
+  'stagedTerrain']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -47,6 +48,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (7a LF) 'bubbleColumns': a fluid op with a `bubble` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], a lift's column): each cell
 // is written as its bubble_column state over its source (it wins the cell, as a grate's bars). A mod or kit before LF would write still
 // water (no lift), so it refuses the plan PLAN_STALE.
+// (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
+// cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
+// before 8a would write them at once, so it refuses the plan PLAN_STALE.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -153,6 +157,7 @@ export function walkKinds(ir) {
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
+  if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.staged === true))) k.add('stagedTerrain'); // (8aF)
   return [...k].sort();
 }
 
@@ -482,11 +487,12 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
     groupOfPart[i] = g;
     padPart[i] = pads.has(p.id) ? 1 : 0;
   });
-  const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length);
+  const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length), opStaged = new Uint8Array(ops.length);
   let k = 0;
   for (const p of irParts) for (const o of p.ops ?? []) {
     opFree[k] = o.free === true || o.op === 'relief' || o.op === 'scatter' || o.op === 'stamp' ? 1 : 0;
     opFluid[k] = o.op === 'fluid' ? 1 : 0;
+    opStaged[k] = o.staged === true && o.op !== 'fluid' ? 1 : 0; // (8aF) a staged terrain op (never a fluid op: 8c's)
     k++;
   }
   const mk = Int8Array.from(mats.map((m) => materialKind(m)));
@@ -498,7 +504,7 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
   }
   const items = new Array(mats.length).fill(null);
   return {
-    groups, groupOfPart, padPart, opFree, opFluid, mk, hold,
+    groups, groupOfPart, padPart, opFree, opFluid, opStaged, mk, hold,
     itemsAt: (m) => (items[m] ??= itemsOf(mats[m])),
     charged: mats.map((m) => chargedOf(m)),
     creative: mats.map((m) => CREATIVE_ONLY.has(blockName(m))),
@@ -935,7 +941,8 @@ export function evalTile(ir, key, heights, opts = {}) {
               const free = freeCell(kind, S.opFree[opi] === 1, S.opFluid[opi] === 1, yBase + s * 16 + (p >> 8), ground, wet);
               // a fluid op's cells are never held: the fluids gate writes them in its waves (a target writing a reach's sources after the gate
               // cleared the reaches not yet due would let them flow early)
-              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : 0) : CLASS_PAID;
+              // (8aF) a free-pass cell of a staged op is CLASS_STAGED (counted free; the mod writes it in the free pass until slice ST)
+              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : S.opStaged[opi] === 1 ? CLASS_STAGED : 0) : CLASS_PAID;
               const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
               if (cls === CLASS_PAID) {
                 st.paid++;
