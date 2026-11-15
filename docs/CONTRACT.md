@@ -32241,19 +32241,23 @@ No API surface change.
 - **Item 2's code waits until FK-b and SS merge** (accepted); items 1, 3 and 4 build now. **UC** as proposed (accepted).
 - **Steward RC areas (added):** an undo with the steward standing near the box, and an undo with a bee in the air inside it.
 
-### Slice J2 as built (in progress: items 1, 3b and 4 coded, unrun in game; item 2 waits for FK-b and SS; recorded 2026-11-15)
+### Slice J2 as built (in progress: items 1, 3, 4 built and gated; item 2 and the RL6 fix wait for SS; recorded 2026-11-15)
 
 - **Item 1:** `Sites.removalBlockersOf`: an unnamed `LIVING` animal blocks only when `wildHarmed` (the removal changes a cell its box overlaps or the
-  cell under its feet: journal top layer this site's, the world not holding its before; `removalChanges`). Named animals, pets, players unchanged.
-  Units `RemovalWildJ2Test` (6). apitest survival: a named bee in an air cell of B's box refuses, an unnamed one doesn't and is still there after.
-- **Item 4:** F9 (production): `Sites.reconcile` releases the RELEASEd groups only after every pending site and road settled (a road's
-  evidence read a site's later restore that an earlier release had taken away). DPT (production): `JournalStore.ptOf` takes the D3 create's PT
-  records into D7's rewrite (SiteDeltas; DeltaJob in memory, so a delta job resumed after a stop carries none). PTS (production): after an
-  undo's writes, `Placed.restoreUnchanged` gives an expected block that no write changed (an upper entry wrote the same block first) its record
-  (`SiteJournal.restoresUnchanged`, shared with UMT). F10: a model gap (UMT now writes a template in `StructureTemplate.load`'s order). The five
-  repros moved to `UmtPropertiesTest`; `umtFindings` keeps F2, F3, F5, F7, F8 and both UC (UC tagged for SS, as accepted). UMT's CI baseline:
-  seed 207's F5 changed its hash (the same finding; the model's template order), rebaselined.
-- **Item 3:** (b) `ru-crash-mid` (gatem5ru `rumid`: two growths, the middle still building, the undo halted at RVU1 and RVC1). (a) crash + swap
-  and (c) a halted terrain target: not yet coded (they need an in-game version install and an rs world: built with the ports).
-- **Checks so far:** Gradle build 1284 tests (after the rebaseline: 0 failures, 1 skipped); `step-inputs check` 419 clean; `api-compat --baselines`
-  8/8 clean; gitleaks clean. In game: none yet (no ports until FK-b merges).
+  cell under its feet). Named animals, pets, players unchanged. Units `RemovalWildJ2Test` (6). apitest survival (this checkout, 8916): ALL OK; a named
+  bee in an air cell of s2's box refuses ("Buzz (bee) at 110, 73, 52"), an unnamed one doesn't and is alive after; apijars 12/0 (old jars' line 375 ok).
+- **Item 4:** F9 (the start's settle releases groups after every pending record settled), DPT (`JournalStore.ptOf` into D7), PTS
+  (`Placed.restoreUnchanged` / `SiteJournal.restoresUnchanged`), F10 (a UMT model gap: template order). Repros moved to `UmtPropertiesTest`; UMT CI
+  baseline: seed 207's F5 rehashed. UC tagged for SS.
+- **Item 3:** `ru-crash-mid`: the middle-revision case cannot arise: a second growth planned while a survival growth still builds is refused
+  OVERLAP_BUSY ("revising 1"; measured: the growth stays revising until built); gated as that guard. `rl-crash-j2` RL7 (rs01_land, RegionTargets
+  `c2`, part spire): 958 cells built after the save, reconciled (charged 28), second load idempotent, built: standing 153 = paid 153. **RL6
+  (crash + swap) found a loss:** live before the halt standing 335 = paid 335; after the restart the 21 swapped cells (oak to spruce planks,
+  built after the save) are charged spruce by the reconcile, but the swap's give-back of the oak (`refundSwap` -> `fromPaid`) was lost with the
+  unsaved ledger and the reconcile never redoes it: the record keeps 21 oak planks that no cell holds (lost to the player; no mint). Fix
+  (proposed, in `Stockpiles.reconcile`, SS's file): an ahead cell with a swap's old block (`Run.old[i]`, not free) gives the old block's cost back
+  out of the record, as `refundSwap` does.
+- **Gate (rule 11, 8916/8917):** run 20261115-085918: umt 37/0, apijars 12/0, jr-crash 24/0, jr-crash-v063 23/0, rl-crash 90/0, sad-crash 24/0
+  (ru-crash-mid's first form failed on the guard above). Run 20261115-095948: ru-crash-mid 8/0, rl-crash-j2 33/1 (RL6's finding).
+- **Checks:** Gradle 1284 tests, 0 failures after the rebaseline (1 skipped); kit 1426/1426; `step-inputs check` 420 clean; `api-compat
+  --baselines` 8/8; gitleaks clean.
