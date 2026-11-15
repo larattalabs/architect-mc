@@ -148,7 +148,16 @@ public final class SliceFkDev {
 				return o;
 			}
 		}
-		menu.clicked(at, button, in, pl);
+		// as a survival player (the gate's bot is a spectator): the mode set around the click, then restored
+		net.minecraft.world.level.GameType mode = pl.gameMode.getGameModeForPlayer();
+		pl.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+		o.addProperty("mode", pl.gameMode.getGameModeForPlayer().getName());
+		o.addProperty("creative", pl.isCreative());
+		try {
+			menu.clicked(at, button, in, pl);
+		} finally {
+			pl.setGameMode(mode);
+		}
 		Map<String, Integer> after = holds(c);
 		ItemStack carried = menu.getCarried();
 		o.add("after", counts(after));
@@ -238,8 +247,26 @@ public final class SliceFkDev {
 					return o;
 				}
 				long before = dev.larattalabs.architect.site.Fills.STRIPPED;
-				boolean ok = players.get(0).gameMode.destroyBlock(p);
+				var pl = players.get(0);
+				net.minecraft.world.level.GameType mode = pl.gameMode.getGameModeForPlayer();
+				pl.setGameMode(net.minecraft.world.level.GameType.SURVIVAL); // a survival player's break (the gate's bot is a spectator)
+				pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(net.minecraft.world.item.Items.IRON_PICKAXE));
+				boolean ok;
+				try {
+					ok = pl.gameMode.destroyBlock(p);
+				} finally {
+					pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+					pl.setGameMode(mode);
+				}
+				o.addProperty("mode", "survival");
 				if (req.has("halt") && req.get("halt").getAsBoolean()) {
+					// the evidence the halt can't answer with: written beside the world before the JVM halts
+					try {
+						java.nio.file.Files.writeString(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("fkb-strip-halt.json"),
+							"{\"broken\": " + ok + ", \"stripped\": " + (dev.larattalabs.architect.site.Fills.STRIPPED - before) + "}");
+					} catch (java.io.IOException e) {
+						dev.larattalabs.architect.Architect.LOGGER.error("TEST dev.fk.break: {}", e.toString());
+					}
 					dev.larattalabs.architect.Architect.LOGGER.warn("TEST dev.fk.break: halting after the break at {} (stripped {})", p.toShortString(),
 						dev.larattalabs.architect.site.Fills.STRIPPED - before);
 					Runtime.getRuntime().halt(7);

@@ -223,7 +223,7 @@ export async function registerFKB(steps, h) {
       takes[click] = await call('dev.fk.take', { pos: P(A), slot: 1, click }, 30_000);
     }
     out.takes = takes;
-    const refused = Object.entries(takes).every(([, t]) => !t.error && t.creative === false && t.containerSlabsLost === 0 && t.slabsGained === 0 && t.slabEntitiesGained === 0);
+    const refused = Object.entries(takes).every(([, t]) => !t.error && t.mode === 'survival' && t.creative === false && t.containerSlabsLost === 0 && t.slabsGained === 0 && t.slabEntitiesGained === 0);
     check(refused, `every menu take of a slab from ${A} refused for the survival player (pickup, shift-click, swap, offhand, Q, ctrl-Q, double-click collect): ${Object.entries(takes).map(([k, t]) => `${k}: lost ${t.containerSlabsLost}, gained ${t.slabsGained}/${t.slabEntitiesGained}${t.error ? ` ${t.error}` : ''}`).join('; ')}`, takes);
     const tf = await call('dev.fk.take', { pos: P(A), slot: 0, click: 'pickup' }, 30_000);
     out.takeFilter = tf;
@@ -252,7 +252,7 @@ export async function registerFKB(steps, h) {
     await L.settle(800);
     const ne = await slabsNear([nx, ny, nz]);
     out.negative = { take: nt, pull: np, brk: nb, near: ne };
-    check(nt.slabsGained === 4 && np.pulled?.[SLAB] === 2 && nb.stripped === 0 && ne.entities === 2,
+    check(nt.mode === 'survival' && nt.slabsGained === 4 && np.pulled?.[SLAB] === 2 && nb.broken === true && nb.stripped === 0 && ne.entities === 2,
       `negative: a hopper set by command holding slabs behaves as vanilla: taken (${nt.slabsGained}), pulled by a minecart (${json(np.pulled)}), dropped at its break (${ne.entities} slab entities, none stripped)`, out.negative);
     await cmd('/kill @e[type=item]');
     await cmd(`/clear @a ${SLAB}`);
@@ -262,7 +262,7 @@ export async function registerFKB(steps, h) {
     const bad2 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: SLAB, count: 1 }; } });
     const kitNo = [bad1.ck.errors.find((e) => /can't be module-provided/.test(e)), bad2.ck.errors.find((e) => /is creative-only/.test(e))];
     const origin = [CLAIM[0] - 20, W.gy, CLAIM[1] - 20];
-    const pBad = await call('dev.pl.place', { blueprint: 'fkb_bad', origin, mode: 'instant' }, 120_000).catch((e) => ({ error: String(e) }));
+    const pBad = await call('dev.pl.place', { blueprint: 'fkb_bad', origin }, 120_000).catch((e) => ({ error: String(e) }));
     out.bad = { kit: kitNo, place: pBad };
     check(kitNo.every(Boolean) && pBad.placed !== true && /creative-only/.test(json(pBad)) && !(pBad.cells > 0),
       `a bad declaration is refused: the kit (${kitNo.join(' | ')}); the mod, before any write (${json(pBad).slice(0, 200)})`, out.bad);
@@ -305,7 +305,7 @@ export async function registerFKB(steps, h) {
       const st1 = (await call('dev.fk.guard', {}, 10_000)).stripped;
       const afterTnt = await slabsNear(hC);
       out.breaks = { br, afterBreak, gone, stripped: st1 - st0, afterTnt, holds: s1.containers?.map((c) => c.holds ?? null) };
-      check(br.stripped === 4 && afterBreak.near.entities === 0 && (afterBreak.items[FILTERS[0]] ?? 0) === 18,
+      check(br.broken === true && br.stripped === 4 && afterBreak.near.entities === 0 && (afterBreak.items[FILTERS[0]] ?? 0) === 18,
         `the player breaks the filter hopper at ${hA}: its 4 slabs stripped (${br.stripped}), its 18 flint dropped as the player's goods (${afterBreak.items[FILTERS[0]] ?? 0}), no slab entity (${afterBreak.near.entities})`, out.breaks);
       check(gone >= 2 && st1 - st0 === 4 * gone && afterTnt.entities === 0 && afterTnt.player === 0,
         `TNT at ${hC}: ${gone - 1} more declared hopper(s) gone, all stripped (${st1 - st0} = 4 x ${gone}); no slab entity (${afterTnt.entities}), the player ${afterTnt.player}`, out.breaks);
@@ -431,6 +431,8 @@ export async function registerFKB(steps, h) {
     call('dev.fk.break', { pos: P(A), halt: true }, 30_000).catch(() => null);
     if (!(await halt(tag))) { await L.leaveWorld(); return null; }
     const S = savedLedger(W.name);
+    const ev = (() => { try { return JSON.parse(fs.readFileSync(path.join(W.dir, 'fkb-strip-halt.json'), 'utf8')); } catch { return null; } })();
+    check(ev?.broken === true && ev?.stripped === 4, `${tag}: the break happened and stripped its 4 slabs before the halt (${json(ev)})`, ev);
     await restart(W.name);
     const s = await fk(b.site);
     const sl = await slabsNear(A);
