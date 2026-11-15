@@ -29,6 +29,11 @@
 // stamped into it, so the same answers give the same plan bytes with the images on or off. Cost: the pick's and every round's, summed; `budgetUsd` caps them together (a round gets what
 // is left; nothing left: the design fails "budget").
 //
+// (7c CP, "Slice CP"): ext architect_mc:skipPick (no pick: pick.outcome SKIPPED), architect_mc:composeVocab "families" (the block families in
+// the system), architect_mc:streetFix (default on: Steward's $0 street wouldFit as a free round, no job, checked like any round); every
+// result with a plan carries summary (the shown round's own reason), waits[].say (player words, $0) and leftOut; owner and dimension (not the
+// Overworld) ride region.compose and the record, and the mod checks there.
+//
 // Sim backend: ext["architect:simCompose"] = [answer per round] ({plan, reason}; a later round reuses the last) scripts the rounds;
 // otherwise the stand-in (simCompose) answers a small plan (a lots zone at the claim's centre and a path from its south edge), the same
 // every round. ext["architect:simAnswers"] scripts the pick (region.design's). Never a model.
@@ -116,6 +121,14 @@ export const EXT_REPAIRS = 'architect_mc:repairRounds';
 export const HINTS_MAX = 16_000;
 /** The caller's rules are at most this many characters (with plan/0#compact and the composer's own, well under JOB_SYSTEM_MAX). */
 export const CALLER_SYSTEM_MAX = 30_000;
+/** (7c CP) The block-families block is at most this many characters, and with ext composeVocab "families" it counts against the caller's rules. */
+export const FAMILIES_MAX = 2_000;
+/** (7c CP) `ext["architect_mc:skipPick"]`: true composes from plan/0's parts with no template pick first. */
+export const EXT_SKIP_PICK = 'architect_mc:skipPick';
+/** (7c CP) `ext["architect_mc:composeVocab"]`: "families" adds vocab/1's block families (names, groups, dyed, the palette line) to the system. */
+export const EXT_VOCAB = 'architect_mc:composeVocab';
+/** (7c CP) `ext["architect_mc:streetFix"]`: false turns off the $0 street wouldFit round (default on). */
+export const EXT_STREET_FIX = 'architect_mc:streetFix';
 /** At most this many repair rounds (Steward's PlanWriter repairs up to 2). */
 export const MAX_REPAIR_ROUNDS = 2;
 
@@ -130,6 +143,12 @@ export interface CallerOptions {
   anchors?: Record<string, [number, number, number]>;
   system?: string;
   repairs: number;
+  /** (7c CP) ext architect_mc:skipPick: no template pick first */
+  skipPick?: boolean;
+  /** (7c CP) ext architect_mc:composeVocab: "families" adds the block families to the system */
+  vocab?: 'families';
+  /** (7c CP) ext architect_mc:streetFix: the $0 street wouldFit round (default true) */
+  streetFix: boolean;
 }
 
 /**
@@ -154,7 +173,7 @@ export function hintAnchors(raw: unknown): Record<string, [number, number, numbe
 /** The caller's ext members the composer reads, validated: {hints?, system?, repairs}. Throws a ClientError (FIELD_LIMIT) naming the key. */
 export function callerOptions(ext: Record<string, unknown> | undefined): CallerOptions {
   const e = ext ?? {};
-  const out: CallerOptions = { repairs: REPAIR_ROUNDS };
+  const out: CallerOptions = { repairs: REPAIR_ROUNDS, streetFix: true };
   const h = e[EXT_HINTS];
   if (h !== undefined) {
     if (!h || typeof h !== 'object' || Array.isArray(h)) throw new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"] is an object ({zones, parts, ...})`);
@@ -167,7 +186,9 @@ export function callerOptions(ext: Record<string, unknown> | undefined): CallerO
   const sy = e[EXT_SYSTEM];
   if (sy !== undefined) {
     if (typeof sy !== 'string') throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is a string`);
-    if (sy.length > CALLER_SYSTEM_MAX) throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is ${sy.length} characters (at most ${CALLER_SYSTEM_MAX})`);
+    // ((7c CP) with the block families the rules have FAMILIES_MAX less, so the round's system stays under JOB_SYSTEM_MAX)
+    const max = e[EXT_VOCAB] === 'families' ? CALLER_SYSTEM_MAX - FAMILIES_MAX : CALLER_SYSTEM_MAX;
+    if (sy.length > max) throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is ${sy.length} characters (at most ${max}${max < CALLER_SYSTEM_MAX ? ` with ext["${EXT_VOCAB}"] "families"` : ''})`);
     if (sy.trim()) out.system = sy.trim();
   }
   const r = e[EXT_REPAIRS];
@@ -175,12 +196,57 @@ export function callerOptions(ext: Record<string, unknown> | undefined): CallerO
     if (typeof r !== 'number' || !Number.isInteger(r) || r < 0 || r > MAX_REPAIR_ROUNDS) throw new ClientError(`FIELD_LIMIT: ext["${EXT_REPAIRS}"] is an integer 0 to ${MAX_REPAIR_ROUNDS}`);
     out.repairs = r;
   }
+  const sp = e[EXT_SKIP_PICK];
+  if (sp !== undefined) {
+    if (typeof sp !== 'boolean') throw new ClientError(`FIELD_LIMIT: ext["${EXT_SKIP_PICK}"] is a boolean`);
+    if (sp) out.skipPick = true;
+  }
+  const vo = e[EXT_VOCAB];
+  if (vo !== undefined) {
+    if (vo !== 'families') throw new ClientError(`FIELD_LIMIT: ext["${EXT_VOCAB}"] is "families"`);
+    out.vocab = 'families';
+  }
+  const sf = e[EXT_STREET_FIX];
+  if (sf !== undefined) {
+    if (typeof sf !== 'boolean') throw new ClientError(`FIELD_LIMIT: ext["${EXT_STREET_FIX}"] is a boolean`);
+    out.streetFix = sf;
+  }
   return out;
 }
 
-/** A round's system text (after the refs' blocks): the composer's, then the caller's rules under their own heading. */
-export function composeSystemText(text: ComposerText, callerSystem?: string): string {
-  return callerSystem ? `${text.system}\n\n## The caller's rules (they add to the rules above)\n\n${callerSystem}` : text.system;
+/**
+ * A round's system text (after the refs' blocks): the composer's, (7c CP) with `families` the block families, then the caller's rules under
+ * their own heading.
+ */
+export function composeSystemText(text: ComposerText, callerSystem?: string, families?: string): string {
+  const base = families ? `${text.system}\n\n${families}` : text.system;
+  return callerSystem ? `${base}\n\n## The caller's rules (they add to the rules above)\n\n${callerSystem}` : base;
+}
+
+const familiesCache = new Map<string, string>();
+/**
+ * (7c CP) vocab/1's block families as the composer's system shows them (ext architect_mc:composeVocab "families"): the names of every family with
+ * more than one member, the groups, the dyed families and vocab/1's palette line, from the kit's own schemas/vocab-1.json (its compact member).
+ * What a palette rule's `family` names; the check still refuses or repairs a name it does not know. Throws when the kit lacks the file.
+ */
+export function vocabFamiliesText(kitDir: string): string {
+  const file = path.join(kitDir, 'schemas', 'vocab-1.json');
+  const hit = familiesCache.get(file);
+  if (hit) return hit;
+  const c = (JSON.parse(fs.readFileSync(file, 'utf8')) as { compact?: Record<string, unknown> }).compact;
+  if (!c || typeof c.families !== 'object' || !c.families) throw new Error('the kit\'s vocab/1 has no compact families');
+  const groups = (c.groups ?? {}) as Record<string, string[]>;
+  const t = [
+    '## Block families (vocab/1)',
+    'A palette rule\'s `family` is one of these names, a group below, or a block id (any other block is a family of its own, named by its id).',
+    `families: ${Object.keys(c.families as Record<string, unknown>).sort().join(', ')}`,
+    ...Object.keys(groups).sort().map((g) => `group ${g}: ${(groups[g] ?? []).join(', ')}`),
+    `dyed (members are colour-prefixed): ${((c.dyed ?? []) as string[]).join(', ')}`,
+    ...(typeof c.palette === 'string' ? [c.palette] : []),
+  ].join('\n');
+  if (t.length > FAMILIES_MAX) throw new Error(`the block families are ${t.length} characters (at most ${FAMILIES_MAX})`);
+  familiesCache.set(file, t);
+  return t;
 }
 
 /** The answer's schema: the plan, and why. */
@@ -211,6 +277,12 @@ export interface ComposeAffordance {
 export interface ComposeRound extends RoundRecord {
   plan?: Record<string, unknown>;
   reason?: string;
+  /** (7c CP) a $0 round with no job: Architect's street wouldFit applied to the round before (its reason is that round's) */
+  free?: 'street';
+  /** (7c CP) a free round's zones set to street */
+  parts?: string[];
+  /** (7c CP) the lots a free round's street fragments dropped, in words ("townhouse 4") */
+  leftOut?: string[];
 }
 
 /** What a settlement design keeps in its record (`design.settlement`). */
@@ -225,8 +297,10 @@ export interface ComposeState {
   budgetUsd?: number;
   owner?: string;
   opKey?: string;
-  /** the template pick's design and, once it ended, its answer */
-  pick?: { designId: string; outcome?: string; program?: string | null; params?: unknown; fits?: boolean; reason?: string; cost?: Cost; error?: string };
+  /** (7c CP) the claim's level when it is not the Overworld (the mod checks the rounds there) */
+  dimension?: string;
+  /** the template pick's design and, once it ended, its answer; (7c CP) no designId and outcome SKIPPED with ext architect_mc:skipPick */
+  pick?: { designId?: string; outcome?: string; program?: string | null; params?: unknown; fits?: boolean; reason?: string; cost?: Cost; error?: string };
   affordances?: ComposeAffordance[];
   affordanceError?: string;
   planImages?: { images: Array<{ name: string; blobId: string; pixelSha: string; width: number; height: number }>; labels: PlanImages['labels'] };
@@ -322,7 +396,7 @@ export function composePrompt(i: ComposeInput): string {
     ...(i.builds?.length ? ['## The player\'s own builds in the claim (keep every part clear of them and their doors; name one as a feature {build: {id}}, a target {build: id} or an endpoint {build: id, port: "door"})', ...i.builds.map((b) => `- ${String(b.id)} (${String(b.kind ?? 'build')}): bounds ${JSON.stringify(b.bounds ?? null)}${Array.isArray(b.entrances) && b.entrances.length ? `, doors ${JSON.stringify(b.entrances)}` : ''}`), ''] : []),
     ...(i.images.length ? ['## Planning images', `${i.images.length} images come before this text: ${i.images.join(', ')}. top: a hillshade, north up, each affordance framed and numbered; section-1: a cut west to east through the claim's middle; section-2: north to south; iso: the land from the south-west.`, ''] : []),
     '## The template pick',
-    pick?.program ? `no bundled template fits (the closest: ${pick.program}${pick.reason ? `; ${pick.reason}` : ''}), so compose the settlement from plan/0's parts.` : 'no bundled template fits, so compose the settlement from plan/0\'s parts.',
+    pick?.outcome === 'SKIPPED' ? 'the caller asked for no template pick, so compose the settlement from plan/0\'s parts.' : pick?.program ? `no bundled template fits (the closest: ${pick.program}${pick.reason ? `; ${pick.reason}` : ''}), so compose the settlement from plan/0's parts.` : 'no bundled template fits, so compose the settlement from plan/0\'s parts.',
     '',
     ...(i.hints ? ['## The caller\'s hints (structured; follow them where the land and the catalogue allow)', JSON.stringify(i.hints), ''] : []),
     i.answer,
@@ -374,7 +448,7 @@ export function repairPrompt(first: string, round: ComposeRound, kindsText: stri
   return [
     first,
     '',
-    `## Your plan (round ${round.n})`,
+    (round as ComposeRound).free ? `## Your plan (round ${round.n - 1}, with Architect's street layout applied to ${((round as ComposeRound).parts ?? []).join(', ')} at $0)` : `## Your plan (round ${round.n})`,
     truncate(JSON.stringify(round.plan ?? null), 70_000),
     '',
     '## The check',
@@ -425,7 +499,9 @@ export function repairStop(rounds: readonly ComposeRound[]): 'nothing_to_repair'
   if (!last) return undefined;
   if (!repairable(last)) return 'nothing_to_repair';
   const k = answersKey(last);
-  if (rounds.slice(0, -1).some((r) => answersKey(r) === k)) return 'oscillation';
+  // ((7c CP) a free street round is never compared with the paid round it fixed)
+  const earlier = (last as ComposeRound).free ? rounds.slice(0, -2) : rounds.slice(0, -1);
+  if (earlier.some((r) => answersKey(r) === k)) return 'oscillation';
   return undefined;
 }
 
@@ -442,6 +518,98 @@ export function waitsOf(check: Record<string, unknown> | undefined, until: Map<s
   return parts
     .filter((p) => !GOOD.has(String(p.class)))
     .map((p) => ({ part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}) }));
+}
+
+/** (7c CP) The one level regions build in (the mod's Level.OVERWORLD), its refusal as the mod words it, and the player's words for it. */
+export const OVERWORLD = 'minecraft:overworld';
+export const NOT_OVERWORLD = 'NOT_ALLOWED: regions are Overworld only in this version';
+export const NOT_OVERWORLD_SAY = 'regions can only be built in the Overworld for now';
+
+/** (7c CP) The waits with each one's player line (`say`): `waitsOf` plus `say` from the plan's names. */
+export function waitsSaid(plan: unknown, check: Record<string, unknown> | undefined, until: Map<string, string>): Array<Record<string, unknown>> {
+  const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
+  return waitsOf(check, until).map((w) => ({ ...w, say: waitSay(plan, w, parts.find((p) => p.part === w.part)?.blockedBy) }));
+}
+
+/** (7c CP) A plan's zone by id, or undefined. */
+function zoneOf(plan: Record<string, unknown>, id: string): Record<string, unknown> | undefined {
+  const zs = Array.isArray(plan.zones) ? (plan.zones as unknown[]) : [];
+  return zs.find((z) => !!z && typeof z === 'object' && (z as Record<string, unknown>).id === id) as Record<string, unknown> | undefined;
+}
+
+/** (7c CP) A refused part's NO_ROOM evidence naming the street layout as its alternative, or undefined. */
+function streetEvidence(p: Record<string, unknown>): Record<string, unknown> | undefined {
+  for (const r of Array.isArray(p.reasons) ? (p.reasons as Array<Record<string, unknown>>) : []) {
+    if (r?.code !== 'NO_ROOM' || !r.evidence || typeof r.evidence !== 'object') continue;
+    const ev = r.evidence as Record<string, unknown>;
+    if (ev.alt === 'street') return ev;
+  }
+  return undefined;
+}
+
+/**
+ * (7c CP; Steward's Composer.streetFixes, ported as is) A zone with a free layout refused NO_ROOM whose evidence names the street layout (`alt:
+ * "street"`) carries one `wouldFit`: the zone's program as street, without the lots street cannot place (`altDropped`). Every such fragment
+ * applied to the plan (a copy), the zones changed and the lots they drop in words; undefined when no part has one. Pure, $0.
+ */
+export function streetFixes(plan: unknown, check: Record<string, unknown> | undefined): { plan: Record<string, unknown>; parts: string[]; leftOut: string[] } | undefined {
+  if (!plan || typeof plan !== 'object' || !check) return undefined;
+  const out = structuredClone(plan) as Record<string, unknown>;
+  const parts: string[] = [];
+  const leftOut: string[] = [];
+  for (const p of Array.isArray(check.parts) ? (check.parts as Array<Record<string, unknown>>) : []) {
+    if (p?.class !== 'refused' || !Array.isArray(p.wouldFit) || p.wouldFit.length !== 1) continue;
+    const ev = streetEvidence(p);
+    const w = p.wouldFit[0] as Record<string, unknown> | undefined;
+    if (!ev || !w || typeof w !== 'object' || !w.fragment || typeof w.fragment !== 'object' || Array.isArray(w.fragment)) continue;
+    const id = typeof w.part === 'string' ? w.part : typeof p.part === 'string' ? p.part : undefined;
+    const zone = id === undefined ? undefined : zoneOf(out, id);
+    if (!zone || id === undefined) continue;
+    for (const [k, v] of Object.entries(w.fragment as Record<string, unknown>)) zone[k] = structuredClone(v);
+    parts.push(id);
+    if (Array.isArray(ev.altDropped)) for (const d of ev.altDropped) leftOut.push(String(d).replaceAll('_', ' '));
+  }
+  return parts.length ? { plan: out, parts, leftOut } : undefined;
+}
+
+/** (7c CP) A part as the player reads it: its plan `label`, else its id with `_` as spaces ("townhouse_4" -> "townhouse 4"). */
+export function partName(plan: unknown, id: unknown): string {
+  const want = String(id);
+  let label: string | undefined;
+  const walk = (v: unknown): void => {
+    if (label !== undefined || !v || typeof v !== 'object') return;
+    if (Array.isArray(v)) return v.forEach(walk);
+    const o = v as Record<string, unknown>;
+    if (o.id === want && typeof o.label === 'string' && o.label.trim()) {
+      label = o.label.trim();
+      return;
+    }
+    Object.values(o).forEach(walk);
+  };
+  walk(plan);
+  return label ?? want.replaceAll('_', ' ');
+}
+
+/** (7c CP) A wait's player line (`say`), $0, from the check: what waits and for what. */
+export function waitSay(plan: unknown, w: Record<string, unknown>, blockedBy?: unknown): string {
+  const name = partName(plan, w.part);
+  switch (String(w.class)) {
+    case 'unsupported':
+      return `${name} waits for ${typeof w.until === 'string' && w.until ? w.until : 'a later Architect release'}`;
+    case 'blocked': {
+      const b = Array.isArray(blockedBy) && blockedBy.length ? blockedBy[0] : undefined;
+      const bid = b && typeof b === 'object' ? (b as Record<string, unknown>).part ?? (b as Record<string, unknown>).id : b;
+      return bid !== undefined ? `${name} waits for ${partName(plan, bid)}` : `${name} waits for another part`;
+    }
+    case 'refused':
+      return `${name} didn't fit here`;
+    case 'malformed':
+      return `${name} couldn't be read`;
+    case 'incomplete':
+      return `${name} couldn't be checked yet`;
+    default:
+      return `${name} waits`;
+  }
 }
 
 /** The check as the record keeps it (what the repair prompt and the result read): the members that matter, bounded. */
@@ -555,6 +723,7 @@ export class ComposeDesigns {
       ...(msg.budgetUsd !== undefined ? { budgetUsd: msg.budgetUsd } : {}),
       ...(msg.owner ? { owner: msg.owner } : {}),
       ...(key ? { opKey: key } : {}),
+      ...(msg.dimension ? { dimension: msg.dimension } : {}),
       rounds: [],
       repairs: opts.repairs,
       ...(opts.anchors && Object.keys(opts.anchors).length ? { anchors: opts.anchors } : {}),
@@ -562,7 +731,7 @@ export class ComposeDesigns {
     };
     const d = sc.designs.create(req, undefined, { kind: 'settlement', settlement: st as unknown as Record<string, unknown> });
     if (key) sc.opKeys.record('compose', msg.owner, key, body, d.id);
-    sc.designs.update(d.id, { status: 'designing', step: 'picking a region template first' });
+    sc.designs.update(d.id, { status: 'designing', step: opts.skipPick ? 'composing (no template pick)' : 'picking a region template first' });
     sc.log.info(`design ${d.id}: compose requested ("${truncate(msg.brief, 80)}", claim ${c.maxX - c.minX + 1}x${c.maxZ - c.minZ + 1}, ${model}, images ${st.images ? 'on' : 'off'}${msg.budgetUsd !== undefined ? `, budget $${msg.budgetUsd}` : ''})`);
     void this.drive(d.id);
     return { designId: d.id, ...(key ? { adopted: false } : {}) };
@@ -671,7 +840,19 @@ export class ComposeDesigns {
     const st = this.state(d0);
     const ext = (d0.request.ext ?? {}) as Record<string, unknown>;
 
-    // 1. the template pick
+    // 0. (7c CP) regions are Overworld only (PlanChecks/RegionsImpl refuse NOT_ALLOWED): another level ends NO_PLAN at once, $0 (no pick, no round)
+    if (st.dimension && st.dimension !== OVERWORLD) {
+      return this.done(id, st, 'no plan: regions are Overworld only', {
+        outcome: 'NO_PLAN', reason: `${NOT_OVERWORLD} (${st.dimension})`, refused: NOT_OVERWORLD, summary: NOT_OVERWORLD_SAY,
+        waits: [], leftOut: [], rounds: 0, history: [], pick: { outcome: 'SKIPPED', program: null, fits: false },
+      });
+    }
+
+    // 1. the template pick ((7c CP) none with ext architect_mc:skipPick: no region.design at all)
+    if (!st.pick && ext[EXT_SKIP_PICK] === true) {
+      st.pick = { outcome: 'SKIPPED', program: null, fits: false };
+      this.save(id, st, { step: 'composing (no template pick)' });
+    }
     if (!st.pick) {
       const pick = sc.regionDesigns.request({
         v: 1, type: 'region.design', brief: st.brief, claim: st.claim, surveyBlobId: st.surveyBlobId,
@@ -683,7 +864,7 @@ export class ComposeDesigns {
       st.pick = { designId: pick.id };
       this.save(id, st, { step: `picking a region template first (${pick.id})` });
     }
-    if (st.pick.outcome === undefined && st.pick.error === undefined) {
+    if (st.pick.outcome === undefined && st.pick.error === undefined && st.pick.designId) {
       await sc.regionDesigns.drive(st.pick.designId);
       const pd = sc.designs.get(st.pick.designId);
       const cur = sc.designs.get(id);
@@ -706,7 +887,7 @@ export class ComposeDesigns {
       this.save(id, st, { cost: this.cost(st) });
     }
     if (st.pick.error === 'budget') return this.fail(id, st, 'budget');
-    const pickOut = { designId: st.pick.designId, outcome: st.pick.outcome ?? 'FAILED', program: st.pick.program ?? null, fits: st.pick.fits === true, ...(st.pick.reason ? { reason: st.pick.reason } : {}), ...(st.pick.error ? { error: st.pick.error } : {}) };
+    const pickOut = { ...(st.pick.designId ? { designId: st.pick.designId } : {}), outcome: st.pick.outcome ?? 'FAILED', program: st.pick.program ?? null, fits: st.pick.fits === true, ...(st.pick.reason ? { reason: st.pick.reason } : {}), ...(st.pick.error ? { error: st.pick.error } : {}) };
     if (st.pick.outcome === 'PICKED' && st.pick.fits) {
       return this.done(id, st, `picked ${String(st.pick.program)}`, { outcome: 'PICKED', fits: true, program: st.pick.program, params: st.pick.params, reason: st.pick.reason ?? '', rounds: 0, pick: pickOut });
     }
@@ -755,7 +936,15 @@ export class ComposeDesigns {
     } catch (e) {
       return this.fail(id, st, (e as Error).message);
     }
-    const job = this.roundJob(st.model, composeSystemText(text, opts.system));
+    let families: string | undefined;
+    if (opts.vocab === 'families') {
+      try {
+        families = vocabFamiliesText(sc.config.kitDir);
+      } catch (e) {
+        return this.fail(id, st, (e as Error).message);
+      }
+    }
+    const job = this.roundJob(st.model, composeSystemText(text, opts.system, families));
     const rounds = 1 + (st.repairs ?? REPAIR_ROUNDS);
     const first = composePrompt({
       brief: st.brief, claim: st.claim, summary, style: st.style ? `${st.style.id} v${st.style.version}` : undefined, roles,
@@ -765,12 +954,26 @@ export class ComposeDesigns {
     const scripted = ext['architect:simCompose'];
     const sim = sc.designerName() === 'sim' ? (Array.isArray(scripted) && scripted.length ? scripted : [simCompose()]) : undefined;
 
-    // 3-4. the rounds
-    for (let i = 0; i < rounds; i++) {
+    // 3-4. the rounds ((7c CP) `rounds` paid rounds; a $0 street round after a paid one sits between them in st.rounds)
+    for (let i = 0; ; i++) {
       let r = st.rounds[i];
       if (!r) {
-        const prev = st.rounds[i - 1];
+        const prev = st.rounds[i - 1] as ComposeRound | undefined;
         if (prev && !prev.refused && prev.check && String(prev.check.overall) === 'READY' && prev.check.artifactSha) break;
+        // (7c CP) the $0 street wouldFit, at most once after each paid round: a free round (no job), checked like any round
+        const fix = opts.streetFix && prev && !prev.free && !prev.refused && prev.check ? streetFixes(prev.plan, prev.check) : undefined;
+        if (fix) {
+          const fr: ComposeRound = { n: i + 1, jobId: '', answer: {}, free: 'street', plan: fix.plan, parts: fix.parts, leftOut: fix.leftOut, ...(prev!.reason !== undefined ? { reason: prev!.reason } : {}) };
+          st.rounds.push(fr);
+          sc.log.info(`design ${id}: round ${fr.n}: Architect's street layout applied to ${fix.parts.join(', ')} ($0${fix.leftOut.length ? `; left out: ${fix.leftOut.join(', ')}` : ''})`);
+          this.save(id, st, { status: 'designing', step: `the street layout applied (round ${fr.n}, $0)` });
+          r = fr;
+        }
+      }
+      if (!r) {
+        const prev = st.rounds[i - 1] as ComposeRound | undefined;
+        const paid = st.rounds.filter((x) => !(x as ComposeRound).free).length;
+        if (paid >= rounds) break;
         // ((7c AU, CO's gaps) a repair only while a part is refused or malformed, and never round again over the same answers)
         const why = prev ? repairStop(st.rounds) : undefined;
         if (why) {
@@ -795,13 +998,13 @@ export class ComposeDesigns {
           r = startRound(sc, job, {
             designId: id, n: i + 1, prompt, budgetUsd: left,
             images: images.map((im) => ({ file: sc.blobs.file(im.blobId), label: `planning image ${im.name}` })),
-            ...(sim ? { simAnswer: sim[Math.min(i, sim.length - 1)] } : {}),
+            ...(sim ? { simAnswer: sim[Math.min(paid, sim.length - 1)] } : {}),
           });
         } catch (e) {
           return this.fail(id, st, `round ${i + 1} did not start: ${(e as Error).message}`);
         }
         st.rounds.push(r);
-        this.save(id, st, { status: 'designing', step: i === 0 ? 'composing the plan' : `repairing the plan (round ${i + 1} of ${rounds})` });
+        this.save(id, st, { status: 'designing', step: i === 0 ? 'composing the plan' : `repairing the plan (round ${paid + 1} of ${rounds})` });
       }
       if (r.answer === undefined && r.error === undefined) {
         const how = await finishRound(sc, id, r);
@@ -848,13 +1051,19 @@ export class ComposeDesigns {
     const best = ready ? last : bestRound(st.rounds as ComposeRound[]);
     const images = st.planImages ? { images: st.planImages.images.map((im) => ({ name: im.name, blobId: im.blobId })) } : {};
     // every round's answer, in order: what each check said (the repair's evidence without the record)
-    const history = st.rounds.map((r) => ({ round: r.n, ...(r.refused ? { refused: r.refused } : { overall: String(r.check?.overall ?? 'unchecked') }), ...(typeof r.check?.planSha === 'string' ? { planSha: r.check.planSha } : {}) }));
+    const history = st.rounds.map((r) => ({ round: r.n, ...((r as ComposeRound).free ? { free: (r as ComposeRound).free } : {}), ...(r.refused ? { refused: r.refused } : { overall: String(r.check?.overall ?? 'unchecked') }), ...(typeof r.check?.planSha === 'string' ? { planSha: r.check.planSha } : {}) }));
     const base = { rounds: st.rounds.length, history, pick, ...images, ...(st.stopped ? { stopped: st.stopped } : {}) };
-    if (ready && last) return { outcome: 'COMPOSED', reason: last.reason ?? '', plan: last.plan, check: last.check, round: last.n, ...base };
+    // (7c CP) the player-worded members: the shown round's own reason (a free round carries the paid round's), and the lots a street round dropped
+    const said = (r: ComposeRound | undefined) => ({
+      summary: r?.reason ?? '',
+      leftOut: (st.rounds as ComposeRound[]).filter((x) => x.free && r && x.n <= r.n).flatMap((x) => x.leftOut ?? []),
+    });
+    if (ready && last) return { outcome: 'COMPOSED', reason: last.reason ?? '', plan: last.plan, check: last.check, round: last.n, waits: waitsSaid(last.plan, last.check, until), ...said(last), ...base };
     return {
       outcome: 'NO_PLAN',
       reason: best ? `no round's plan checked READY; the best is round ${best.n} (${best.refused ? `refused: ${best.refused}` : String(best.check?.overall)})` : 'no round answered a plan',
-      ...(best ? { plan: best.plan, ...(best.check ? { check: best.check } : {}), ...(best.refused ? { refused: best.refused } : {}), round: best.n, waits: waitsOf(best.check, until) } : { waits: [] }),
+      ...(best ? { plan: best.plan, ...(best.check ? { check: best.check } : {}), ...(best.refused ? { refused: best.refused } : {}), round: best.n, waits: waitsSaid(best.plan, best.check, until) } : { waits: [] }),
+      ...said(best),
       ...base,
     };
   }

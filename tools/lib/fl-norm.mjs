@@ -58,6 +58,18 @@ export const k3AskLine = (l) => moverLine(l, K3_ASK_PARTS, 'K3');
 export const atAskLine = (l) => l.replace(/^(redstone_gate\/drawbridge connector\.drawbridge) .*$/, '$1 GMc')
   .replace(/^(upside_down\/hang_from_ceiling rule\.suspended unsupported UNSUPPORTED) until \S+$/, '$1')
   .replace(/^(secret_tunnels\/tunnel_(?:cellar|dock|hatch) tunnel\.under) .*$/, '$1 LP');
+/** (chore AR) The 7c movers the HY-b item's fixed before table (v0.37.0's) and CL's kept record (cl/asks-gap-after.txt, which kit/test/cl.test.mjs
+ * item 3 holds against its before table) still hold, each compared by part and kind: BF's crater_mine/crater and ring_city/crater_lake
+ * (form.crater) -> fits, dwarven_hold/mountain_hollow (form.hollow_mountain) and sky_monastery/sky_island (form.floating_island) -> adjusted
+ * (30c36d79, the three forms supported), and ring_city/ring_town, whose crater_lake dependency now fits (blocked DEPENDENCY -> fits); US's
+ * upside_down/hang_from_ceiling (rule.suspended supported, 79018555) -> refused NO_FEATURE. `AR_GAP_ROW` their gap table rows. */
+export const AR_ASK_PARTS = Object.freeze({ 'crater_mine/crater': 'BF', 'ring_city/crater_lake': 'BF', 'ring_city/ring_town': 'BF',
+  'dwarven_hold/mountain_hollow': 'BF', 'sky_monastery/sky_island': 'BF', 'upside_down/hang_from_ceiling': 'US' });
+export const arAskLine = (l) => {
+  const m = /^([a-z0-9_]+\/[a-z0-9_]+) ([a-z_]+\.[a-z_]+) /.exec(l);
+  return m && AR_ASK_PARTS[m[1]] ? `${m[1]} ${m[2]} ${AR_ASK_PARTS[m[1]]}` : l;
+};
+export const AR_GAP_ROW = /^\s+(?:form\.(?:crater|hollow_mountain|floating_island)|rule\.suspended)\s+\d+$/;
 export function flAsksFilter(text) {
   const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));
   const out = [];

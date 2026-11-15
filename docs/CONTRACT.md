@@ -31990,6 +31990,64 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | instant town grown in survival | consumed 231 = quote; undo 231; lamp stands (2/2 cells); remove refunds 0, E-flat 0 | neither |
 | region remove | back 509 = paid records; E-flat 0 | neither |
 
+## Slice CP, compose follow-ups for Steward's Composer (branch `slice/CP` off main 799a1df4; 2026-11-14; DEV MODE, light; versions NEXT; $0)
+
+Steward's slice CA moves its Composer onto `Regions.compose`; these are its five asks (and AU's and BR's leftovers: `vocab/1#compact`, the
+`{waits, summary}` answer, the $0 wouldFit street fix, BR's skip-pick key). All additive; defaults are CO's behaviour unless marked.
+1. **Skip the pick:** `ComposeRequest.EXT_SKIP_PICK = "architect_mc:skipPick"`, `true`: no `region.design` pick (no pick design or cost,
+   never PICKED); `pick: {outcome: "SKIPPED", program: null, fits: false}`; round 1's pick line says the caller asked for none. In the opKey
+   body. Reaches BR/PAY's paid plan path through `scenarios.mjs --brief-ext`.
+2. **Player words:** every result with a plan gains `summary` (the shown round's own `reason`; a free street round takes the paid round
+   it fixed), `leftOut` (lots a street round dropped, in words) and `waits[].say` ($0, from the check: the part's `label`, else its id with
+   spaces; "<name> waits for <until | a later Architect release>", "waits for <blocking part>", "didn't fit here", "couldn't be read",
+   "couldn't be checked yet"). NO_PLAN's `reason` (the diagnostic) is unchanged. COMPOSED is READY, so its `waits` is `[]`.
+3. **Block families:** `ComposeRequest.EXT_VOCAB = "architect_mc:composeVocab"`, `"families"` only: the composer's system gains "## Block
+   families (vocab/1)" (the family names, groups, dyed families and vocab/1's palette line, from the kit's `schemas/vocab-1.json` compact
+   member, ~1,700 characters) before the caller's rules. `vocab/1#compact` itself would leave ~900 characters beside plan/0#compact.
+4. **The $0 street fix** **(default changes)**: after a paid round's check that is not READY, every zone refused `NO_ROOM` with `alt:
+   "street"` evidence and one `wouldFit` fragment has it applied (Steward's `Composer.streetFixes`, ported). The fixed plan is a free
+   round (`{n, free: "street", parts, leftOut}`, no job, $0) the mod checks like any other; at most one after each paid round; the next
+   repair starts from it. Paid rounds stay 1 + repairRounds; `rounds` counts all; history rows carry `free`. A free round is never compared
+   with the round it fixed by the oscillation stop. `ComposeRequest.EXT_STREET_FIX = "architect_mc:streetFix"`, `false`: off.
+5. **Owner and level:** `ComposeRequest` gains trailing `@Nullable ServerLevel level` (null: the Overworld) and `@Nullable String owner`
+   (null: the player); the old 7-argument constructor stays. Survey, builds, every round's check and a PICKED plan use the level; the owner
+   is the design's (the mod's remembered design), the record's and every check's. `region.compose` carries `owner` and `dimension` only when
+   set, so CO-shaped requests send the same body and opKey body. A design whose dimension is not loaded answers its round refused.
+
+Not in CP: Steward's own check load policy (`LOAD_BOUNDED` for volume parts); a model's summaries (PAY measures them).
+Gate ($0): `cp-unit` (the sidecar's "7c CP" compose cases), `cp-compose` (tools/gate7ccp.mjs: skip-pick counted, a Nether owner compose
+realised and removed, the street free round, an invented family repaired, NO_PLAN's words), CO's and BR's compose steps re-run, api-compat
+`--baselines`.
+
+### Changes from Steward's review (2026-11-14, via the coordinator: accepted; these win over the text above)
+- a) The request-level `skipPick` is enough: CA2 composes one waiting part per request. No per-part key.
+- b) The street fix is default ON. Steward's `streetFixes` acts only on zones whose answer carries `alt: "street"`, so it is a no-op after
+  compose's round (a unit holds it idempotent); Steward drops its own pass when it pins CP. The free round stays $0 (no design or job call).
+- c) `composeVocab` is `"families"` only (`"compact"` dropped; another value refuses `FIELD_LIMIT`). Steward sends `"families"`. A block
+  the model invents from a family name is still refused or repaired by compose's check (gated: an invented family, refused `NO_FEATURE`,
+  repaired).
+- `summary`, `waits[].say` and `leftOut` as written; NO_PLAN's `reason` unchanged; `level`/`owner` sent only when not the default.
+- Steward RC areas for the release: a card compose with skipPick, NO_PLAN wording, the street free round, a non-Overworld compose refused
+  cleanly, an Overworld owner compose.
+- d) (coordinator, 2026-11-14, after gate run 1) Regions stay Overworld only (`checkPlan`, `plan`, adopt refuse `NOT_ALLOWED`); lifting it is
+  its own strict slice (leftover "regions in other dimensions"). `level` is carried; a non-Overworld compose ends `NO_PLAN` at once, $0
+  (no pick, no round): `refused` "NOT_ALLOWED: regions are Overworld only in this version", `summary` "regions can only be built in the
+  Overworld for now", `rounds` 0. Gate (b) asserts that plus the owner on an Overworld compose (no Nether realise).
+- e) (after merging PF: plan/0 grew) The families block is at most 2,000 characters (`FAMILIES_MAX`) and, with `composeVocab` "families",
+  counts against the caller's rules: `composeSystem` at most 28,000 then (30,000 without), so a round's system stays under 120,000.
+
+### Slice CP as built
+
+1. Skip-pick: `ComposeRequest.EXT_SKIP_PICK` makes no region.design; the pick reads `{outcome: SKIPPED, program: null, fits: false}`, and round 1 is told no template was picked.
+2. Words: COMPOSED and NO_PLAN carry `summary` (the shown round's reason), `leftOut` and `waits[].say` (`waitSay`, $0); NO_PLAN's `reason` is unchanged.
+3. Vocab: `EXT_VOCAB` "families" adds a compose-local block-families block (about 1,700 characters, `FAMILIES_MAX` 2,000) that counts against the caller's rules (28,000 then).
+4. Street fix: `EXT_STREET_FIX` (default on) runs Steward's `streetFixes` port after each paid round's check; a fix is a free round (no job, $0), checked by the mod, never part of the oscillation compare. It is idempotent (unit).
+5. Owner and level: `ComposeRequest` gains trailing `level` and `owner`; the 7-argument constructor delegates. `region.compose` sends `owner`/`dimension` only when set. Regions stay Overworld only: another level ends NO_PLAN at once ($0) with `refused` NOT_ALLOWED and summary "regions can only be built in the Overworld for now".
+- Dev hooks: `dev.region.compose` takes `dimension`/`owner`; `dev.region.designKinds` counts designs by kind; `designJson` shows `owner`.
+- Gate: `cp-unit` (7 sidecar cases), `cp-compose` (tools/gate7ccp.mjs (a)-(e), opKeys unique per run); chain `7ccp`, impact rule "7c CP".
+- Evidence: change-tier runs 20261115-040728 (19/21; api-compat on the classless o1 lane, co-compose's adopted design) and the re-runs 051744, 052209 and 062646 at the final head.
+- Leftovers: regions in other dimensions (its own strict slice); the runner puts api-compat on an offline lane without classes; CO's gate (and any caller) reusing an opKey whose design finished under another world waits forever (the new world never hears of it); Steward's check load policy; model summaries (PAY).
+
 ## Slice J1, crash and refund edges (branch `slice/J1` off main bdc1cad1 (SA, FK in); 2026-11-14; DEV MODE, strict; versions NEXT; $0)
 
 - **RS-c (audit F8):** a piston can't push a survival region's free write (`PistonBaseBlock.isPushable`); a piston's break of one and an explosion (`BlockBehaviour.onExplosionHit`'s `dropFromExplosion`) take it without loot and record it in `mined`, so the removal puts it back (`RegionFreeDrops.pistonHolds` / `takenWithoutDrop`, a cheap claim test before the journal read). Decay, water and endermen accepted (Noah, "safety: defaults").

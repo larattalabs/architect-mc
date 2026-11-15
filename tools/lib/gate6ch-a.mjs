@@ -30,7 +30,7 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter, atAskLine } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter, atAskLine, arAskLine, AR_GAP_ROW } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { kitReuse } from './kit-reuse.mjs';
 import * as P3 from './p3-tier.mjs';
 import { testConcurrencyArgs } from './cpu-budget.mjs';
@@ -141,7 +141,8 @@ async function haAsks(ctx) {
   // free asks with the free-layout rows (its item 8), compared without them, as KC's and HY-b's asks items do)
   // ((chore AT) and GM-c's drawbridge (its line by part and kind, its gap row) and 7bF's hang_from_ceiling (no `until`), LP's tunnel.under (by part and kind, its gap row): fl-norm atAskLine;
   // asks-gap-after-ha.txt stays H-a's record, which kit/test/h-a.test.mjs item 10 compares with the before table)
-  const later = (t) => flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l) && !/^\s+(?:connector\.drawbridge|tunnel\.under)\s+\d+$/.test(l)).map(atAskLine).join('\n');
+  // ((chore AR) and BF's three forms and US's rule.suspended (by part and kind, their gap rows): fl-norm arAskLine, AR_GAP_ROW)
+  const later = (t) => flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l) && !/^\s+(?:connector\.drawbridge|tunnel\.under)\s+\d+$/.test(l) && !AR_GAP_ROW.test(l)).map((l) => arAskLine(atAskLine(l))).join('\n');
   const lines = (t) => new Map(later(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before), la = lines(text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).sort();
