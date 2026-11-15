@@ -162,6 +162,14 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - Leftovers: run dirs stay on the SSD (5-13 GB each x 4 slots > 24 GB); `kit/lib/rebuild.mjs` (shipped, try/finally) and
   `kit/tools/site-renders.mjs` (kept output) unchanged; the sidecar tests' design writes are not cut yet.
 
+### Exact-bill gates: fixtures and discriminators (lesson from slice QT, 2026-11-12)
+
+An exact-bill gate (quote equals consumed, item for item) needs fixtures built from what actually consumes: the state at put-down
+(after the stage's own roads stand, every queued cell cleared to air), not the land before the plan writes. A discriminator (a check
+that two cases differ) needs a fixture where the difference exists. QT lost three runs to both: its quote measured approaches over
+today's land (12 cells high), and its "piece above its template bill" check had no lot with an approach above zero, so it could only
+fail (CONTRACT "Slice QT as built", runs 1-3). Prove such a model in a unit when no in-game fixture shows it (QT's `QuoteRoadsTest`).
+
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
 These override the tier, verifier and RC rules below for as long as dev mode is on.
@@ -175,7 +183,8 @@ No regression suite, impact steps or before/after comparison runs per slice. Use
 **The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
 the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
 
-**Steward RC only when the API Steward calls changes.** Otherwise Steward picks up the next tag.
+**A Steward RC runs on every release** (practice since v0.60; its areas follow what changed, so a release that leaves the API Steward
+calls alone gets a smaller set). Steward's pin and smoke rules decide its depth (speed rule 4).
 
 **Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
 
@@ -183,14 +192,15 @@ the journal, removal, crash recovery or survival accounting. Those stay strict, 
 
 **The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
 
-**No new test-tooling projects** unless something is actually broken.
+**Test-tooling slices are allowed** (GX, TS, SP and the load-aware start were all such slices) when they save more wall time than
+they cost; the coordinator briefs them and picks the tier (tooling is light, speed rule 1).
 
 **Keep the machine for product:**
 - at most 4 gate runs on the machine at once (`slots.max` 4, below; the one number every doc and brief uses; Noah's speed rules, 2026-11-13);
 - no duplicate before/after runs: compare against recorded history instead;
 - commit before running (the runner tests a frozen snapshot).
 
-**To return to release mode:** Noah says so. Then the full tiers, verifier re-runs and Steward RCs come back.
+**To return to release mode:** Noah says so. Then the full tiers and verifier re-runs come back (Steward RCs already run every release).
 
 ## Policy update (Noah, 2026-10-12): cut what has only cost time
 

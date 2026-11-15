@@ -18,7 +18,8 @@ gate anything:
   scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
   the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
   the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
-- a Steward RC only for API changes;
+- a Steward RC runs on every release (its areas follow what changed);
+- test-tooling slices (GX, TS) are allowed when they save more wall time than they cost; the coordinator briefs them;
 - the full set runs nightly.
 
 ## Where things are decided
@@ -31,7 +32,8 @@ gate anything:
   leftovers to their manager.
 - `kit/PLAYBOOK.md`: the design agent's playbook; Steward's structure-design skill points to it as the source of truth.
 - `docs/GATES.md`: how to test. `docs/DEVBRIDGE.md`: in-game test hooks.
-- `docs/HANDOFF-<phase>.md` (on phase branches): resume notes. Keep it current; delete it when the gate passes.
+- `docs/HANDOFF-<phase>.md` (on phase branches): resume notes. Keep it current; delete it when the gate passes (or
+  move it to `docs/archive/` with `git mv` if its notes are worth keeping).
 
 ## Process
 
