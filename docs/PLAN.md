@@ -1612,7 +1612,10 @@ Tables cut on 2b6b1729 with the function each item calls (`asksGap`; sl `{ curre
 - Code: fl-norm `arAskLine`/`AR_GAP_ROW` (BF's and US's parts by part and kind), read by hy item 11 against v0.37.0's table; kc item 3's base may
   equal either committed table (F3's rule); cl item 3 keeps `cl/asks-gap-after.txt` as CL's record (kit/test/cl.test.mjs item 3) and compares
   through K3/LF/AT/AR normalisers; sl's step accepts "SL on the base: nothing moves" and a base table equal to the committed after table.
-- Leftover (not run, out of scope): h-unit item 10, coa-unit item 6 and vocc-unit item 3 read tables AT cut before BF and US; likely stale too.
+- Extended (coordinator, same day) to h-unit item 10, coa-unit item 6 and vocc-unit item 3, whose tables AT cut before BF and US:
+  `coa/asks-after.txt` re-cut (BF's 5 rows, its 3 gap rows); `vocc/asks-after.txt` re-cut (BF's 5 parts and the overalls they free:
+  crater_mine, dwarven_hold, ring_city REQUIRED_BLOCKED -> READY; US's hang_from_ceiling); `h/asks-gap-after-ha.txt` stays H-a's record
+  (kit/test/h-a.test.mjs item 10), haAsks compares through arAskLine and AR_GAP_ROW in both its comparisons.
 
 ## Chore AT as built (builder, 2026-11-11; branch `chore/AT` off main bcd9eddb; DEV MODE; $0)
 
