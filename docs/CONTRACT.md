@@ -31113,11 +31113,15 @@ so the contract names **no known leak**.
   from its first non-empty slot, and the filter item sits first.
 - **(d) Other mods' pipes (Fabric Transfer API).** Every item extraction through `ItemStorage.SIDED` from a vanilla container goes through
   Fabric's `ContainerSlotWrapper.extract` (the sided wrapper delegates to it). A mixin there returns 0 for a provided variant in a slot of a
-  declared fill container (a double chest's compound container mapped to its half by slot). The mixin targets a Fabric impl class, so a
-  Fabric API update that renames it fails the mod's load in the gate, never silently.
+  declared fill container (a double chest's compound container mapped to its half by slot). The mixin targets a Fabric impl class, so it
+  is **optional** (`require = 0`): a Fabric API that renames the wrapper never fails the mod's load. At start, if it didn't apply, a WARN:
+  "fill-provided guard for the Fabric Transfer API inactive: provided items can be extracted by pipe mods". A unit test asserts that it
+  applied in our build, and the gate's Transfer API case checks it in game, so a Fabric API bump that renames it fails our CI, not players'
+  games.
 - **Named leak (out of scope):** a mod that edits a container's stacks directly (`setItem`, `removeItem`, or shrinking the stack
   `getItem` returns), bypassing both vanilla transfer and Fabric's Transfer API. Such a mod can create items anyway; FK-b doesn't guard
   raw `Container` calls, because Architect and vanilla make them too.
+- **Named leak (accepted):** the Transfer API guard inactive, only if a Fabric API version renames the wrapper; logged at start (5d).
 - **The lookup** is cheap on every path: first "does the stack (or container) hold an allow-listed item" (almost always no), then a
   position index of the filled sites' declared containers per dimension (built from the sites file at load, updated at the fill commit,
   the custody take and the site's removal), never a scan of `Sites.all()`.
@@ -31192,8 +31196,9 @@ without them; slabs unpickupable and untransferable from declared containers; st
   bundle; drag only places items. The ones the headless harness can drive are gated; the rest are named as covered by the code path. (5, 8)
 - **Strip crash safety (coordinator):** a kill between the strip and the save leaves no loose slab and no stale `heldProvided`. Gated. (5, 8)
 - **Repair (Steward, 6):** undo the revision and grow again (a new key) is the supported repair; no in-place re-fill. Gated as one cycle.
-- **Every automated transfer (Steward):** block hoppers, hopper minecarts, and the Fabric Transfer API (5d). Direct `Container` edits by
-  another mod are the one named leak.
+- **Every automated transfer (Steward):** block hoppers, hopper minecarts, and the Fabric Transfer API (5d). Accepted named leaks: direct
+  `Container` edits by another mod; the Transfer API guard inactive under a Fabric API that renames its wrapper (optional mixin, WARN at
+  start, our test asserts it applied: the coordinator).
 - Steward's M4 certifies `slots > 0` once FK-b ships.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
