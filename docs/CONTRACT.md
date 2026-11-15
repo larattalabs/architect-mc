@@ -32678,7 +32678,10 @@ No API surface change.
   empty estimate names a missing Style; steppers are lab-ui's `Stepper` (SetDialog, the editor's W/H/D).
 - **DS:** `unfitRule` refuses SITE_UNFIT on a site *error* only (site_bound, site_keep); warnings pass (reverses DS reading 3; for
   Steward: a site variant with only site warnings now installs). `sidecar/test/site-unfit.test.ts`.
-- **Checks:** mod compile against lab-ui feat/0.5; `PlacedGroupsTest` 2/2; sidecar site-unfit, site-design, follow 36/36; step-inputs
-  build+check clean; gitleaks clean. In game: the UI gallery before (d7d000ca) and after, ports 8916/8917, sheet in artifacts/UI/.
-- **Leftovers:** the capped-refund toast; Architect's own HasParent/ScreenPause/ClientEnv/Keys copies -> lab-ui's (both mods); Library
+- **Jobs panel** (`jobs/JobRows.playerStep`): steps without helper ids or a repeated state, Style jobs kind `style`, link label without the id.
+- **Checks:** mod compile against lab-ui feat/0.5 (and with the 0.5.0 pin); `PlacedGroupsTest` 2/2, `JobRowsTest` 7/7, Phase4bUiRules 5/5,
+  MassingRules 4/4; sidecar site-unfit, site-design, follow 36/36; lab-ui 155/155; step-inputs build+check clean; gitleaks clean (both).
+  In game: UI gallery before (d7d000ca) and 3 after runs (8916/8917, 145 shots, 0 failed); design-critic round 1 iterate on all four
+  groups, round 2 ship on 8 of 10 files, the last two fixed after the final capture (not re-shot). Sheet: architect-mc/artifacts/UI/sheet.html.
+- **Leftovers:** at GUI 4 the placement panel still covers part of one chat line (nothing fits whole); the capped-refund toast; Architect's own HasParent/ScreenPause/ClientEnv/Keys copies -> lab-ui's (both mods); Library
   detail description clamp at GUI 4; A-first-run (later).
