@@ -30397,6 +30397,54 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 - **Ran:** kit full suite 1400/1400; scoped units (unit-scope: kit 904/905, the one a gate-chains convention fixed then 6/6; Gradle picks pass; sidecar full 908/908); pm-promote.test 10/10 (+ au.test 6: 16/0); step-inputs check clean (402 steps); api-compat --baselines 8/8 clean; gate **20261114-202005-change** at 6516f550 PASS 2/2 (pm-unit, pm-promote; ports 8918/8919). Earlier runs failed on step wiring only (`${OUT}` in a shell, ok-line accounting).
 - **Leftovers (the coordinator's follow-on slice):** the catalogue entry `form.arch_span` and the `shapePromotion` feature (§2) need plan compile, the compact copy and Java; AQ's arches still come from course.mjs (rewiring them moves committed fixtures); the sheet's iso renders are compared by sha on one machine only.
 
+### Slice PF as built (branch `slice/PF` off main c787a7e5 (PM merged); versions NEXT; $0, sim only; light; recorded 2026-11-14)
+
+- **`form.arch_span`** (new id, `sinceApi NEXT`, schemaVersion 1; catalogueVersion unchanged): limits from archSpan's ranges (length 12-128, width 3-9, height 6-48, tiers 1-2, bays 1-16, pier/spandrel 1-4, ground drop 32; the four profiles, parapets and species). Compile (`kit/lib/forms/archSpanPart.mjs`, `resolveArchSpan` in compile.mjs): scan or `where`/`sketch` for a dry rect whose ground drops at most 32, deck at its highest ground + 1; refusals NO_ROOM `{drop, limit}`/OVERLAP, archSpan's own `{field, rule}` refusals, the "params X: not read" note. Emits `r.archSpan` in the forms stage with `{terrain: false}` (new `form()` opt): built in the structure role, a construction target in survival, never free. The compact copy follows the schema (82,441 -> 83,793 chars). Java needs nothing (PlanCatalogue reads the bundled plan.json); ApiPFTest covers it.
+- **`shapePromotion`**: helper feature `plan.shapePromotion` (sidecar FEATURES) -> ApiRules -> `ArchitectApi.features()` javadoc "since NEXT". Advertising only: no record, method or reason.
+- **AQ's arches from the module:** `course.mjs` `archRise(n)` = archSpan's round soffit over the clear run (arch `1 + crown - s` thick). A 7-clear run goes 3,2,1,1,1,2,3 -> 3,2,2,1,2,2,3; overhang stays <= 2.
+- **Goldens moved:** the catalogue golden (+form.arch_span, nothing else; `plan-catalogue-diff`). Fixtures: only the span part of an arched aqueduct moves (answers, overall and the other parts identical): aq/x01 (817 -> 831 span cells), aq/d16 (+14), valid/v7c_aq_valley, hy/r03, extension/e18. These are named `PF_MOVED` in `tools/lib/pf-norm.mjs` for every byte-identity helper. No SAD or J1 file or fixture is touched. The old IR: `aq/pre-pf-x01.json` (x01 planned at c787a7e5) evaluates to its recorded tiles.
+- **Tests renamed by id:** eight archived-catalogue tests (cl, f7a/b/c-foundation, gm-c, lp, sl, k2) leave form.arch_span to pf.test. New step `pf-unit` (chain `7cpf`, impact rule "7c PF").
+- **Ran:** pf.test 6/6; unit-scope kit picks green after the renames, sidecar 908/908, Gradle picks pass; the other catalogue tests 63/0; step-inputs check clean (403 steps); compact measured. Gate **20261114-220400-change** at 88786ea2: 21 PASS (unit-mod/Gradle build 1245/0, unit-sidecar 908, api-compat 8/0, aq-ingame 7/0, pf-unit, 6a-inv3, sims), 10 FAIL on the five movers, 2 TIMEOUT under load 170. Re-run of the failing steps **20261115-003419-change** at b8c0fe2e: 7 PASS (unit-kit full 1406/1406, 7af, irr, fl, s3, aq, lp); hy/kc/cl/f3/sl fail only their committed asks tables (stale on main: base == head).
+- **Leftovers:** `r.archSpan` called from a program still writes terrain (free natural blocks are free there; only the plan form opts out). The scan prefers flat rects, so a valley crossing needs `where`/`sketch`. The committed asks tables of KC, CL, F3 and SL are stale on main: base == head, PF moves no ask. PM's iso-render sha leftover stands.
+
+### Slice BR as built (branch `slice/BR` off main c787a7e5; versions NEXT; $0, sim only; light; recorded 2026-11-14)
+
+- **Brief runs.**
+  - `tools/scenarios.mjs run <s> --brief` takes the program and params from the scenario's one-line brief, never from the scenario file. S1, S2 and S5 go through `Regions.design`; S3 and S6 go through `Regions.compose` (`tools/lib/scenario-br.mjs`, `BRIEF_VIA`).
+  - The call runs on the run's world after any sculpt, with the claim forceloaded (TC's volume reads loaded chunks only).
+  - The rest of the run is unchanged. Each run writes `brief.json` and a gated `brief` row.
+- **Goldens.**
+  - A brief run cuts `goldens/<short>-br`. With no `-br` golden of its own, it compares with the scenario's golden.
+  - New: `goldens/s6-br` (`floorY` and the lots now come from the land's hall, TC's auto mode).
+  - None moved. S1's and S2's briefs plan their goldens' tiles (S1's IR differs only by `kitVersion`). S3's run holds its golden through its committed inputs re-planning, as the program runs do.
+  - The golden match "differs only by the frozen live volume" now also skips a site lot's cut of that volume.
+- **Bars.**
+  - `roleShares` is gated. It is kept through S2's and S3's own bar sets.
+  - Brief runs use format 3 settlement Styles in `scenarios/styles/` (outside `scenarios/bibles/`, so the v0.37 palette snapshot holds). Their bands were set from each Style's intent.
+  - Reading: S2's accent is unbanded. Its accent, packed ice, is also the spikes' material (measured 0.271 against [0, 0.05]).
+  - New world class `leafdecay`: SB-sculpted /fill leaves at distance 7, not persistent, gone to air at an unwritten cell in no lot box.
+- **Lots** (the coordinator's reading, 2026-11-14).
+  - S5 uses 7b P2's cached `gen_pa_treehouse_home` and `gen_pa_treehouse_lodge`. They are committed at `kit/test/fixtures/br/library` (146 KB, no PNGs, S-THEME unit) and given as $0 `Designs.siteVariant`s, 6 of 6 lots.
+  - S6 uses SB's sim archetype. 7b's paid S5/S6 entries are gone from disk, and P3's S6 lots failed disturbance (0.514 against 0.3).
+- **S3 v2 gallery item** (`kit/regions/s3v2_cliffs.mjs`, not in the catalogue; `scenarios/s3v2_cliff_gallery.json`, gallery only).
+  - It lays 5 `attach_to_cliff` lots on S3's own cliff faces, and the cameras shoot.
+  - P1's `gen_pa_cliff_house` refused all 5 variants with `SITE_UNFIT site_bound`: its source writes at z = depth on any site. **Not shown**; the shots are of the empty lots.
+- **PAY hooks:** `--via`, `--model`, `--budget`, `--images`, `--brief-ext <json>` (compose's ext as is), and `brief.json` (TC's pick accuracy, P2). The cached-entry path (`siteLibrary`, `librarySiteEntries`) is ready for PAY's regenerated carve_into lots.
+- **Ran.**
+  - Full kit suite: 1408/1408.
+  - Scoped units, step-inputs check (409 steps) and api-compat `--baselines` (8/8 clean) all pass. `release-version --check --lenient` is consistent; `s6-br` re-plans byte for byte.
+  - Gate (ports 8916-8921): br-unit, br-s1, br-s2, br-s3, br-s5, br-s6 and br-s3v2 PASS. The final full run, 20261114-231247 at 70cbeed4, passed 6 of 7. br-s5's sculpt plan hit its 30 s limit at load 98; its re-run, 20261114-235219, passed. MSPT is recorded only; it missed on a loaded box.
+  - Per scenario, all from the brief, E-flat 0 and 0 unclassified throughout:
+    - S1, S2: PICKED their program; each matches its golden.
+    - S3: compose PICKED `terraced_monastery`; its role shares are inside every band.
+    - S5: PICKED; Fit 6/6, disturbance 0.001.
+    - S6: compose PICKED; matches `s6-br`; Fit 7/7, disturbance 0.178.
+- **Leftovers:**
+  - COMPOSED plan/0 artifacts aren't realised by the harness. That's PAY P2's plan-path hook, which also needs a skip-pick key outside the sim.
+  - P1's cliff design writes past its box, so S3 v2 needs a fixed cliff design.
+  - S7 has no brief run.
+  - The determinism row's threshold text names `goldens/s1.json` for every scenario.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
@@ -31964,3 +32012,51 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | TW / XW (LF1): a Take, a dissolve, halted in its save | dupe (players before the ledger) | lost 32, minted 0 / lost 32, minted 0 |
 | RL5: a player's block in a lot cell after the save | charged to the stock | 1 player cell uncharged; standing 388 = paid 388; second load changes nothing |
 | RL5 F10 roads + JR-b residual at the removal | the road cell refunded from its record | dropped as the player's; refund 385 = paid less the two cells and the popped torch |
+
+## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
+
+Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
+by a terrain cell before the realise reaches it. **Additive API change, binary compatible.**
+
+- **`Quote.terrain()`: `Map<String, Integer>`** (item id -> count, sorted, unmodifiable; a new last record component). **Keys:** every item
+  of the plan's kept paid terrain cells (plan.json `survivalTerrain`, all groups), **including items whose count is 0** (x03: 49 dirt all
+  standing -> `{"minecraft:dirt": 0}`), so a terrain item can be told from any other. **Count:** the units of `bom` those cells bill at
+  quote time (cells not holding their block now, plus cells in unloaded chunks, which stay billed with `exact` false and a note). A standing
+  cell is in neither `terrain` nor `bom`. Each count is clamped to `[0, bom[item]]` (`bom` drops zero items, so a 0 key may be absent there).
+- **Empty** for a creative quote and for a plan with no `survivalTerrain`. Natural cells the plan could not keep (past the kit's cap, unknown
+  states) are not terrain: they stay billed as an upper bound (SA's note) and can only bill less. No unread-cell count: `exact` and `notes` say it.
+- **Steward's rule (named here so the field is unambiguous; Architect does not apply it):** a terrain item may go up to
+  `max(2, ceil(2% of terrain[item]))` over its quoted `bom` count; every other item stays exact. Build `maxBill` over **bom ∪ terrain keys**.
+- **One world read:** the same pass as the A11 cut; BILL_CAP and the `bill_cap` wait are unchanged.
+- **Compat:** the old 9-component constructor stays (empty `terrain`); `Since NEXT.`; feature `quoteTerrain` in `ArchitectApi.features()`
+  (Java side only, as `quote` and `maxBill`: quotes don't cross the sidecar, so no sidecar FEATURES or protocol change). `dev.region.quote` returns it.
+- **Gate:** units (split, 0 keys, clamp, x03, one cell changed between two quotes: only `terrain`, `bom` and `tiles:<group>` move, by one);
+  `bc-x03` extended in game with the one-cell drift; `bc-cap`; api-compat `--baselines`. **Steward RC:** `terrain`, `quoteTerrain`, a
+  `maxBill` built from it realising past a one-cell drift.
+
+### Changes from Steward's review (2026-11-14, through the coordinator: accepted on all three points)
+
+- **Zero keys:** confirmed. Steward builds `maxBill` over `bom` ∪ `terrain` keys, so a 0-count terrain item gets its allowance of 2.
+- **The allowance base is the terrain part:** `cap[item] = bom[item] + max(2, ceil(2% × terrain[item]))` for a terrain item; lot material
+  (and every other item) stays exact. Without `quoteTerrain` Steward keeps every item exact.
+- **Unkept cells** stay outside `terrain`: accepted.
+- **Steward RC areas:** a module quote, a survival region growth's quote, and `maxBill` at realise. **Tests:** a module quote with terrain
+  lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
+  one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
+
+
+### Slice QL as built (2026-11-14)
+
+- `Quote.terrain()`, the new last component (sorted, unmodifiable, null → empty); the 9-arg 1.55.0 constructor is kept and gives empty terrain.
+  Feature `quoteTerrain` is in `ApiRules` (Java-only, like `quote` and `maxBill`; no sidecar entry).
+- `Quotes.of` (survival): `terrain` = Σ over the `survivalTerrain` groups of covered − off, clamped to [0, bom]. A 0 key stays; an unloaded
+  kept cell counts as terrain (billed, `exact` false). Creative quotes carry an empty map. The `maxBill`/BILL_CAP path is unchanged.
+- Dev hooks: `dev.region.quote` returns `terrain`; the new `dev.ql.terrainCells {planId|sha, max}` lists kept cells with
+  {group, state, items, x, y, z, loaded, standing} for the gate.
+- `tools/lib/quote-terrain.mjs`: `terrainShape` (integers, ≤ bom, ≤ the tiles pieces, sorted) and `stewardCap` (Steward's rule over bom ∪ terrain).
+- Gate step `ql-drift` (x03 survival): q1 has terrain dirt 0. One grass cell billing a dirt is set to coarse dirt; q2 then moves only
+  `tiles:hamlet` by {dirt:1}. Under Steward's cap with planks 2 below the bill, the realise is refused BILL_CAP (world unchanged, nothing
+  consumed). With Steward's cap it is accepted; it consumes the put-down bill and the refund equals what was consumed. qt-growth (town and
+  growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
+- Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
+  `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.

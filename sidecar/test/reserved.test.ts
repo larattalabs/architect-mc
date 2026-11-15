@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import * as P from '../src/protocol.js';
 import { reservedLines } from '../src/claude/brief.js';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'kit');
 const base = { type: 'barn', style: 'rustic', features: [], maxSize: { x: 13, y: 12, z: 13 } };
@@ -31,7 +32,7 @@ describe('DesignRequest.reserved (6c IRR)', () => {
   });
 
   it("the kit's checker refuses a design writing a reserved cell, and --leave-reserved (the sim's stand-in) keeps it", () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'irr-reserved-'));
+    const out = archTmpDir('irr-reserved');
     const r = JSON.stringify({ front: 'south', size: [13, 13], cells: [[6, 0, 6]] });
     const run = (extra: string[]) => {
       try {

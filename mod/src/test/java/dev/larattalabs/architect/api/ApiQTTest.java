@@ -47,4 +47,21 @@ class ApiQTTest {
 		Quote empty = new Quote("p2", "s", null, false, new JsonObject(), new JsonObject(), null, true, null);
 		assertTrue(empty.lotEntries().isEmpty() && empty.notes().isEmpty());
 	}
+
+	@Test
+	void terrainSinceQL() throws Exception {
+		assertTrue(ApiRules.features(0, List.of()).contains("quoteTerrain"), "a Java feature: no helper needed");
+		// the 1.55.0 constructor is kept (binary compatible): no terrain part
+		var old = Quote.class.getConstructor(String.class, String.class, String.class, boolean.class, JsonObject.class, JsonObject.class, Map.class,
+			boolean.class, List.class);
+		Quote q = old.newInstance("p1", null, null, true, null, null, null, true, null);
+		assertTrue(q.terrain().isEmpty());
+		Map<String, Integer> t = new LinkedHashMap<>();
+		t.put("minecraft:gravel", 3);
+		t.put("minecraft:dirt", 0);
+		Quote n = new Quote("p1", null, null, true, null, null, null, true, null, t);
+		t.put("minecraft:sand", 1);
+		assertEquals(List.of("minecraft:dirt", "minecraft:gravel"), List.copyOf(n.terrain().keySet()), "sorted, its own copy, 0 kept");
+		assertThrows(UnsupportedOperationException.class, () -> n.terrain().put("x", 1));
+	}
 }

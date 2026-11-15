@@ -26,9 +26,10 @@ import { importDesign, loadDesign, SITE_DESIGNS } from '../build.mjs';
 import { buildExample, listSiteDesigns } from '../tools/examples.mjs';
 import { renderStructure } from '../render.mjs';
 import { slices } from '../tools/slices.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-'));
+const tmp = archTmpDir('sv');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const GOLDENS = path.join(KIT, 'test', 'fixtures', 'sv-renders.json');

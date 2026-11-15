@@ -2,8 +2,8 @@
  "scenario": "crossings_demo_flat",
  "version": 0,
  "note": "tile shas of the IR over its own plan survey, 1 worker = 4 workers shuffled; inputs in goldens/crossings_demo_flat/ (written by tools/gate6ct3a.mjs flat)",
- "irSha": "84e4704fde0bb0b6d5690d24c29d5c4eac1bda8f9efc6b387260e9ba85ff5ab9",
- "kitVersion": "0.63.0",
+ "irSha": "77c38ba96fd6c6785a6805ad6482a291ffb238b958322b785a8de13f029d18de",
+ "kitVersion": "0.65.0",
  "cells": 75225,
  "tiles": {
   "ground|terrain|94,94": "b0fd33e028d612ed5749050469bd42eb4a434371bd057d75ecf2610c6b155a4f",

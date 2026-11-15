@@ -31,6 +31,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-B-run');
@@ -113,7 +114,7 @@ steps.unit = async () => {
 };
 
 steps.stale = async () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6cb-'));
+  const tmp = archTmpDir('gate6cb');
   const { planRegion } = await imp('lib/region/plan.mjs');
   const { makeColumns } = await imp('lib/region/pack.mjs');
   const { encodeArvx, decodeArvx, VC } = await imp('lib/region/volume.mjs');

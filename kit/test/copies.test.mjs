@@ -10,8 +10,9 @@ import { buildDesign, listDesigns, importDesign, loadDesign } from '../build.mjs
 import { BUILTIN_BIBLES, builtinBible } from '../lib/bible.mjs';
 import { chooseRecipe, leversBetween, mirroredOrdinal, paramOptions, seedOf, shiftOptions } from '../lib/variation.mjs';
 import { diffFiles } from '../lib/diff.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
-const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-copies-'));
+const OUT = archTmpDir('kit-copies');
 const share = (d, a) => (d.added + d.removed + d.changed) / a;
 
 async function build(id, roles, values, mirror, tag) {

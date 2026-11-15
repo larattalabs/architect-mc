@@ -126,6 +126,28 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - Leftovers: unit-kit's 20-minute timeout is unchanged; the estimate doesn't model the rule-5 hold; an all-CACHED run prints its
   hits but writes no SUMMARY.md; `~/.claude/agents/gate-verifier.md` (global) should say `--no-cache` for re-runs.
 
+### Slice TS as built (temp-dir hygiene, 2026-11-14)
+
+- **One creator** (`tools/lib/arch-tmp.mjs` `archTmpDir(name)`): all ~104 kit/sidecar test, runner and driver mkdtemps. It makes `arch-<name>-XXXXXX`
+  with an `.arch-owner` marker (pid + start) and removes it at exit, SIGINT, SIGTERM and SIGHUP. Sidecar `test/setup-tmp.ts` also clears
+  it after each file. `ARCH_KEEP_TMP=1` keeps it (and `rmrf` of arch-* dirs).
+- **RAM disk** (`tools/lib/ram-tmp.mjs`): `/Volumes/MCTmp/tmp` is the temp root when it exists, is writable and has >= 2 GB free;
+  otherwise $TMPDIR, with a WARNING. Importing arch-tmp sets TMPDIR there, so every `node --test` file process, vitest worker and
+  child uses it (tested from inside a worker). gate-run, eval, run-headless-server and vitest.config set it too. `ARCH_NO_RAMDISK=1`
+  turns it off. An ENOSPC there names the disk and the fix.
+- **`tools/tmp-sweep.mjs [--dry-run] [--unmarked] [--json]`** sweeps the start TMPDIR, the OS temp dir and the RAM disk. By default
+  (gate-run start after `--plan`, the nightly; logged, never failing) it removes only marked dirs whose owner is dead (pid + start
+  time; a reused pid doesn't count) and older than 6 h. No unmarked dir is ever touched. `--unmarked` adds unmarked dirs past 24 h whose name
+  is in `tools/tmp-prefixes.json` (155 pre-TS prefixes + the 6-char suffix; the short generic ones are left out). It uses lstat and never
+  follows a symlink. **The one-time cleanup of pre-TS dirs runs only by hand with --unmarked, after Noah's OK (dry-run 2026-11-14:
+  12,500 entries, 1.47 GB).**
+- **Measured (one run each):** sidecar before 908 pass / 18 dirs left, after 909 / 0. Kit before 1401/1408 (the base was a
+  non-git copy) / 172 left, after 1416/1416 / 0. Sidecar writes (proc_pid_rusage of the run's tree, under load): 16.6 GB physical
+  to the SSD before; after, the same 16.6 GB while the RAM disk device moved 22.9 GB, so ~0 to the SSD. Biggest writers: `data/designs`
+  of the polish, groups, copies, follow and critique harnesses (~0.1 GB each, 6.4 GB kept per run), unchanged in size.
+- Leftovers: run dirs stay on the SSD (5-13 GB each x 4 slots > 24 GB); `kit/lib/rebuild.mjs` (shipped, try/finally) and
+  `kit/tools/site-renders.mjs` (kept output) unchanged; the sidecar tests' design writes are not cut yet.
+
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
 These override the tier, verifier and RC rules below for as long as dev mode is on.

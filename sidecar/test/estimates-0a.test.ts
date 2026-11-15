@@ -24,9 +24,11 @@ const OUT = process.env.GATE6C0A_OUT;
 
 function withEst<T>(f: (e: Estimates) => T): T {
   const root = tempDir('arch-0a-est-');
+  const store = new Store(root, { debounceMs: 5 });
   try {
-    return f(new Estimates(new Store(root, { debounceMs: 5 })));
+    return f(new Estimates(store));
   } finally {
+    store.close(); // flush now: a debounced write after rmrf would recreate the dir (slice TS)
     rmrf(root);
   }
 }

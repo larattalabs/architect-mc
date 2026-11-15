@@ -42,6 +42,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { formatBaselines, rollBaselines } from './api-baselines.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SEMVER = /^(\d{1,4})\.(\d{1,5})\.(\d{1,6})$/;
@@ -262,7 +263,7 @@ function readBlobs(dir) {
 export function replanGolden(root, name, { paramsOver = null, noVolumes = false, tmp = null } = {}) {
   const gDir = path.join(root, 'scenarios', 'goldens', name);
   const ir = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
-  const t = tmp ?? fs.mkdtempSync(path.join(os.tmpdir(), `reltool-${name}-`));
+  const t = tmp ?? archTmpDir(`reltool-${name}`);
   const inDir = path.join(t, 'in'), volDir = path.join(t, 'volumes'), out = path.join(t, 'out');
   fs.mkdirSync(inDir, { recursive: true });
   fs.mkdirSync(volDir, { recursive: true });
@@ -301,7 +302,7 @@ const errLines = (text) => String(text).split('\n').map((l) => l.trim()).filter(
 
 /** Run an ES module's source in a fresh node (a temp file, not --input-type: worker threads inherit execArgv). */
 function runModule(code) {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'reltool-js-'));
+  const d = archTmpDir('reltool-js');
   try {
     fs.writeFileSync(path.join(d, 'run.mjs'), code);
     return spawnSync(process.execPath, [path.join(d, 'run.mjs')], { encoding: 'utf8', maxBuffer: 64 << 20 });

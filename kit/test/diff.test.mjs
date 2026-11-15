@@ -14,9 +14,10 @@ import { writeBlueprint } from '../lib/write.mjs';
 import { diffFiles, loadVersion, boxLabels } from '../lib/diff.mjs';
 import { verifyRebuild, rebuild } from '../lib/rebuild.mjs';
 import { buildDesign } from '../build.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'architect-diff-')));
+const tmp = fs.realpathSync(archTmpDir('architect-diff'));
 const DIFF = path.join(KIT, 'tools', 'diff.mjs');
 const run = (args) => spawnSync(process.execPath, [DIFF, ...args], { encoding: 'utf8' });
 let seq = 0;

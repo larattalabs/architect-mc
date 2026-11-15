@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { decodeArvx, encodeArvx, VC } from '../lib/region/volume.mjs';
 import { AFFORDANCE_KINDS, FIT_AFFORDANCES, analyseVolume, analyseSite, proposeFrame, affordanceId, rotationFacing } from '../lib/region/affordances.mjs';
 import { FIT_IDS } from '../lib/siteFits.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
@@ -263,7 +264,7 @@ test('through the plan CLI (kit/tools/region.mjs plan, as the helper runs it): p
   const { makeColumns, encodeColumns } = await import('../lib/region/pack.mjs');
   const { site, vol: v } = fixture('cliff_face');
   const b = v.box;
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'af-cli-'));
+  const tmp = archTmpDir('af-cli');
   try {
     const c = makeColumns(b.minX, b.minZ, v.width, v.depth, 1);
     for (let n = 0; n < v.width * v.depth; n++) { c.ground[n] = 116; c.height[n] = 116; c.floor[n] = 116; }

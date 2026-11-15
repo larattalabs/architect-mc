@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 23,
- "api": "1.60.0",
- "kitVersion": "0.63.0",
+ "catalogueVersion": 24,
+ "api": "1.62.0",
+ "kitVersion": "0.65.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -981,6 +981,62 @@
     ]
    },
    "note": "BF: a mountain raised where the land is lower (an existing one is kept) with a lit cavern inside: a vertical-walled domed hall, a ledge along its back wall, up to 3 carved side halls and a tunnel out through the mountainside. Its inner walls, floor and ledge are recorded as cliff_face, cave and ledge affordances (Regions.affordances), so carve_into site lots can go inside once it stands. Free in survival (natural cut and fill; shroomlights light the floor)."
+  },
+  {
+   "id": "form.arch_span",
+   "sinceApi": "1.61.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "length": [
+     12,
+     128
+    ],
+    "width": [
+     3,
+     9
+    ],
+    "height": [
+     6,
+     48
+    ],
+    "tiers": [
+     1,
+     2
+    ],
+    "bays": [
+     1,
+     16
+    ],
+    "pier": [
+     1,
+     4
+    ],
+    "spandrel": [
+     1,
+     4
+    ],
+    "drop": 32,
+    "profiles": [
+     "round",
+     "segmental",
+     "pointed",
+     "elliptical"
+    ],
+    "parapets": [
+     "wall",
+     "crenel",
+     "rail",
+     "none"
+    ],
+    "species": [
+     "roman",
+     "gothic",
+     "bridge",
+     "viaduct"
+    ]
+   },
+   "note": "PF: an arcade of masonry arches carrying a deck (the promoted archSpan module, kit/lib/forms/archSpan.mjs): length along axis (default x), width across, height from the springing to the deck; one or two tiers of bays between piers that reach down to the ground (at most 32 under the springing), so it stands across a dip or a valley. The seed picks what is left out (species roman, gothic, bridge or viaduct). Placed (no where: nearest the claim's centre) clear of the zones and forms before it, off water. Built in the structure role (a rail parapet in rail): a construction target in survival, never free."
   },
   {
    "id": "form.waterfall",

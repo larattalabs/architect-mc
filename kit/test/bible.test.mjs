@@ -14,9 +14,10 @@ import { buildFrame, buildPartsHouse, checkComponents, loadComponents, REQUIRED_
 import { AUTHORED_STYLES, Blueprint, CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, palette, resolvePalette } from '../lib/kit.mjs';
 import { decodePng } from '../lib/png.mjs';
 import { presetBuilds, FIXTURE } from '../tools/preset-builds.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-bible-'));
+const tmp = archTmpDir('kit-bible');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const run = (script, args) => spawnSync(process.execPath, [path.join(KIT, script), ...args], { encoding: 'utf8' });
 

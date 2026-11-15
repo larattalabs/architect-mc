@@ -11,12 +11,13 @@ import { Blueprint } from '../lib/kit.mjs';
 import { checkBlueprint } from '../lib/check.mjs';
 import { checkFill, FILL_CONTAINERS_MAX, normalizeFill } from '../lib/fill.mjs';
 import { mirrorBlueprint } from '../lib/mirror.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'fk', 'fk_hall.mjs'), 'utf8');
 
 function designDir(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-test-'));
+  const dir = archTmpDir('fk-test');
   const lib = pathToFileURL(path.join(KIT, 'lib')).href;
   for (const [id, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, `${id}.mjs`), src.replaceAll("'../lib/", `'${lib}/`));
   return dir;
@@ -24,7 +25,7 @@ function designDir(files) {
 
 test('fk_hall builds clean; the sidecar records its fill in template coordinates', async () => {
   const dir = designDir({ fk_hall: SOURCE });
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-out-'));
+  const out = archTmpDir('fk-out');
   try {
     const { bp, result } = await buildDesign('fk_hall', { dir, out, values: { slots: 3, count: 20 } });
     assert.deepEqual(result.errors, []);

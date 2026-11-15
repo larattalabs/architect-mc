@@ -19,6 +19,7 @@ import { validateSchema } from '../lib/region/siteplan.mjs';
 import { decodeArvx, encodeArvx } from '../lib/region/volume.mjs';
 import { F_WRITTEN, buildVirtual, decodeArwd, dumpWorld, encodeArwd } from '../lib/region/vworld.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KIT = path.resolve(HERE, '..');
@@ -79,7 +80,7 @@ test('previews: pixel goldens; siteplan.json validates against siteplan-1 with a
   for (const id of Object.keys(CASES)) {
     const p = await plan(id);
     const survey = synthSurvey(claimOf(CASES[id]), SEED);
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), `preview-${id}-`));
+    const out = archTmpDir(`preview-${id}`);
     const r = renderPreviews({ ir: p.ir, survey, blobs: p.blobs, meta: p.meta, outDir: out, irSha: p.irSha });
     const again = renderPreviews({ ir: p.ir, survey, blobs: p.blobs, meta: p.meta, outDir: out, irSha: p.irSha });
     assert.deepEqual(again.pixels, r.pixels, `${id}: the same pixels twice`);

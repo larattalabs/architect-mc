@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { TARGETS, checkTree, featureNames, findPlaceholders, javaNextOffsets, readVersions, recutGolden, releaseDocProblems, setVersions, syncBlock, verifyRecut } from '../../tools/release-version.mjs';
 import { apitestBaselines, formatBaselines, rollBaselines } from '../../tools/api-baselines.mjs';
 import { releaseContext } from '../../tools/release-context.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 // every number below is derived from this tree's, so a release bump moves none of these tests
@@ -43,12 +44,12 @@ test('release context: env wins, CI refs, lenient without git', () => {
   assert.equal(releaseContext(ROOT, { GITHUB_ACTIONS: 'true', GITHUB_REF: 'refs/tags/v0.41.0' }).release, true);
   assert.equal(releaseContext(ROOT, { GITHUB_ACTIONS: 'true', GITHUB_REF: 'refs/pull/9/merge', GITHUB_HEAD_REF: 'slice/FL' }).release, false);
   assert.equal(releaseContext(ROOT, { GITHUB_ACTIONS: 'true', GITHUB_REF: 'refs/pull/9/merge', GITHUB_HEAD_REF: 'integrate/fl' }).release, true);
-  assert.equal(releaseContext(fs.mkdtempSync(path.join(os.tmpdir(), 'relctx-')), {}).release, false);
+  assert.equal(releaseContext(archTmpDir('relctx'), {}).release, false);
 });
 
 /** A temp tree with what the tool reads and writes, two goldens (one with a frozen volume) and a NEXT-stamped entry and class. */
 function tempTree() {
-  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'reltool-test-'));
+  const t = archTmpDir('reltool-test');
   const cp = (rel) => fs.cpSync(path.join(ROOT, rel), path.join(t, rel), { recursive: true });
   for (const e of fs.readdirSync(path.join(ROOT, 'kit'))) if (!['test', 'stamps'].includes(e)) cp(`kit/${e}`); // the kit but its tests
   for (const f of ['tools/scenarios.mjs', 'tools/lib/scenario-eval-worker.mjs', 'tools/catalogue-since-check.mjs', 'tools/release-context.mjs', 'mod/gradle.properties',

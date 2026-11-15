@@ -14,6 +14,7 @@ import { decodeArvx, encodeArvx, VC } from '../lib/region/volume.mjs';
 import { Site } from '../lib/site.mjs';
 import { buildDesign } from '../build.mjs';
 import { sculptRuns, stateClass } from '../lib/region/sculpt.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const regionFile = (id) => path.join(KIT, 'regions', `${id}.mjs`);
@@ -90,7 +91,7 @@ export const exampleFor = (fit) => EX[fit];
  * checked on the composite, as Designs.siteVariant does ($0). Returns [{lot, entry, ok, errors, siteFindings, ports, sidecar, dir}].
  */
 export async function buildLots(res, land) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-lots-'));
+  const tmp = archTmpDir('sb-lots');
   const out = [];
   for (const lot of res.ir.lots.filter((l) => l.site)) {
     const b = res.ir.blobs?.[`site_${lot.id}`];
