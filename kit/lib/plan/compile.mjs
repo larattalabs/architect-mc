@@ -1072,7 +1072,14 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   };
   const budgetHit = (cap) => ({ class: 'incomplete', reasons: [{ code: 'BUDGET', message: `the check ran out of ${cap} before this part had an answer`, evidence: { cap } }] });
   const okClass = (id) => ['fits', 'adjusted'].includes(answers.get(id)?.class);
+  const deferredZones = new Set(); // ((slice R2) form-hosted elevated zones, answered only after the forms emit)
   const depState = (p) => {
+    // ((R2) a zone or form placed against a form-hosted zone would stand on its provisional answer: blocked until that zone is placed by
+    // its form instead; connectors resolve after the forms emit and read its final answer; rules (rule.suspended) scope it before)
+    if (deferredZones.size && (p.family === 'zone' || p.family === 'form')) {
+      const on = p.deps.filter((d) => deferredZones.has(d));
+      if (on.length) return { class: 'blocked', blockedBy: on, reasons: [{ code: 'DEPENDENCY', message: `depends on ${on.join(', ')}, an elevated zone on a form part whose lots are found only after the forms are written: locate this part by the form instead`, evidence: { blockedBy: on, onForm: true } }] };
+    }
     const bad = p.deps.filter((d) => !okClass(d));
     if (!bad.length) return null;
     const inc = bad.filter((d) => answers.get(d)?.class === 'incomplete');
@@ -1249,6 +1256,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       }
       const z = resolveElevatedZone(env, p, { loc: hloc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !hostRect || !meets(q, hostRect))], tol: tolOf(p.part, 'count'), suspended: suspendedZones.has(p.id), ...(host ? { host } : {}) });
       res.set(p.id, { ...z, elevated: true });
+      if (z.deferred) deferredZones.add(p.id);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
       continue;
@@ -1718,6 +1726,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   for (const p of order) {
     const z0 = res.get(p.id);
     if (!z0?.elevated || !z0.deferred || !emitOk(p.id)) continue;
+    deferredZones.delete(p.id);
     const vol = (env.ctx.volumes ?? []).find((v) => v.decoded && v.box.minX === z0.volBox.minX && v.box.minY === z0.volBox.minY && v.box.minZ === z0.volBox.minZ
       && v.box.maxX === z0.volBox.maxX && v.box.maxY === z0.volBox.maxY && v.box.maxZ === z0.volBox.maxZ)?.decoded;
     const hostOk = okClass(z0.host.id) && geom.has(z0.host.id);

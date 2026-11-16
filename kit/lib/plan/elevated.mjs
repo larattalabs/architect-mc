@@ -35,14 +35,14 @@ export function isElevatedZone(p) {
 }
 
 /**
- * (slice R2, forms as land) The form part an elevated zone stands on: its locator `inside: {part}` or `near: {feature: {part}}` naming a
- * form part of the plan. Such a zone's lots are found on the land as it stands after that form (and every op before it) is written, not on
+ * (slice R2, forms as land) The form part an elevated zone stands on: its locator `inside: {part}` naming a form part of the plan (a zone
+ * `near` a form stays on the frozen land, as before). Such a zone's lots are found on the land as it stands after that form (and every op before it) is written, not on
  * the frozen survey's: an island's underside (suspend), a giant tree's trunk or canopy (wrap_trunk), a ledge or pad on a raised form
  * (on_pad). Null for every other zone (resolved as before, byte for byte).
  */
 export function formHostOf(p, byId) {
   const w = p?.part?.where;
-  const id = w?.inside?.part ?? w?.near?.feature?.part ?? null;
+  const id = w?.inside?.part ?? null;
   if (typeof id !== 'string') return null;
   const q = byId?.get(id);
   return q && q.family === 'form' ? { id, kind: q.kind } : null;
