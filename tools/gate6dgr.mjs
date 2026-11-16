@@ -1011,6 +1011,13 @@ steps.look = async () => {
   await registerFKB(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, CX, CZ, CLAIM, haltWait, root, javaTests, apiJars, nodeTest });
 }
 
+// ------------------------------------------------------------------ (slice FL) flsurvival: tools/lib/gatem5fl.mjs
+
+{
+  const { registerFL } = await import('./lib/gatem5fl.mjs');
+  await registerFL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM });
+}
+
 // ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs
 
 {
