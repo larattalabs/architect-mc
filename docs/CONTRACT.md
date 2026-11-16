@@ -32828,3 +32828,17 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **PT:** the "took longer than 120 s" stop was the sidecar's `runKit` wall-clock timer (`sidecar/src/regions.ts`; regionPlanMs 30 s, regionPassPlanMs 120 s). `run()` (`sidecar/src/util/proc.ts`) takes `cpuLimitMs`: the child's CPU time (Linux /proc stat, else `ps -o time=`) sampled each second, stopped past the limit (`limitHit`); a failed sample keeps the last reading, and a child never read (Windows) is held to the limit by wall clock. The plan, link-pass and authored-plan runs use it, with a wall backstop `planWallBackstopMs` = 5x, 600-1800 s (config `regionPlanWallMs` overrides it; author.test's idle-timer probe sets 8 s, since an idle child never reaches a CPU limit). Messages keep 6a's prefix: "the plan took longer than 120 s of CPU time and was stopped", or "... than 600 s of wall-clock time (the backstop; N s of CPU time used, ...)". The check and previews stay wall clock. The mod's wait for a plan (RegionsImpl) rises 300/600 s to 660/900 s, past the backstop.
 - **Tests:** `kit/test/wall-wr2.test.mjs` (the gate at the claim's centre on and off the open line: fails on slice/WR, passes; the moat and the free/form rings, enclosing and not); `sidecar/test/proc-cpu.test.ts` (limitHit, the ps parser, backstop, messages, a busy child stopped by CPU, an idle one only by the backstop, an unreadable one by wall clock). Scoped units (`unit-scope --run`): kit 489/489, gradle PASS, sidecar 565/566 with author.test's idle-timer probe timing out on the 600 s backstop, fixed by `regionPlanWallMs` (author, regions, proc-cpu re-run: 46/46).
 - **Left over:** a regionPassPlanMs raised past 180 s gives a backstop beyond the mod's 900 s wait; Steward's own waits on a plan are its own.
+
+### Slice M1 as built (branch `slice/M1` off origin/main 97d04b80; four light fixes; versions NEXT; no API change; $0; light; recorded 2026-11-16)
+
+- **CS2** (`Composites.modulesToDelete`): module ids deduped (`[M, M, N]` takes M once: no partial delete); a hidden module that no surviving
+  composite lists goes with its last lister whatever its `compositeOf`, a module another live composite lists stays (`shared` still only this
+  composite's own). ApiCSTest's first case now has its "other" composite in the library (without it keep__east is an orphan and goes); +2 units.
+- **S-M5-19:** `dev.command` (client and headless) answers `ok: false` with the error text when no result callback fired; the reply keeps `cmd`,
+  `messages`, `success: false`, `result: null` (DevException detail). New `dev.stockpile.save {}` (generated headless too): `saveWithWorld` on the
+  server thread -> `{written, path, bytes, saves}`. The drivers' `/save-all` and `/op` sends (not commands on the integrated client) catch the
+  DevError; gate3's helper reads the response. DEVBRIDGE.md rows and changelog.
+- **Slot test:** realpaths compared. **GR-c:** the pins' online resolve is a throwaway project with the mod's repository block (`gradlew help`
+  downloaded nothing); real check on a fresh home: lab_ui 0.5.0 fetched, same repo id, offline seed passed with no online fallback; +2 units.
+- **Checks:** kit 1539/1539, Gradle build (incl. devserver) pass, ApiCSTest 9/9; step-inputs clean; gitleaks clean. Leftover: slot-outside's
+  "several slots" (same-ms ticket id `t-<ms>-<pid>`) and "load gate" tests flake under load, pre-existing.
