@@ -87,7 +87,8 @@ export function f3Emit(C, p) {
     if (loc.error) { const a = { class: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] }; C.ans(p, a); return a; }
     const zid = insideZone(C, p);
     const open = zid ? zoneOpen(C, zid) : null;
-    const zones = C.zones.filter((z) => z.id !== zid).map((z) => z.rect);
+    // ((slice R2) a zone standing on this form (its locator inside it: compile's formHosted) is the form's to carry, not in its way)
+    const zones = C.zones.filter((z) => z.id !== zid && !C.formHosted?.get(p.id)?.has(z.id)).map((z) => z.rect);
     // (broken variants, ext architect_mc:unsafe: `treeInPond` places the form as if no body were there, M25:clear's backstop catches it;
     // `leafNotPersistent` writes vanilla's own leaves, M18's)
     const unsafe = p.part.ext?.['architect_mc:unsafe'] ?? {};
