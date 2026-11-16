@@ -1264,9 +1264,14 @@ public final class RegionTargets {
 			}
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			// (LC2) a player's item holder there (a chest, a lectern, a campfire): its contents too (the write below skips its side effects)
+			net.minecraft.world.Container held = LateCargo.holder(level.getBlockEntity(p));
+			List<net.minecraft.world.item.ItemStack> contents = held == null || held.isEmpty() ? List.of()
+				: LateCargo.takeCell(held, List.of(), st -> false).stacks();
 			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
 				Sites.CELL_FLAGS);
 			Builder.dropAtCell(level, p, items); // (LC2, F10) on top of the before just written, never inside it
+			LateCargo.drop(level, p, contents, null);
 			out.add(p.asLong());
 			n++;
 		}
