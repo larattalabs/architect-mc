@@ -5,6 +5,7 @@
 	"mixins": [
 		"BlockBehaviourExplosionMixin",
 		"BlockEntityStripMixin",
+		"BlockItemSealMixin",
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
 		"ChunkSaveWaitMixin",

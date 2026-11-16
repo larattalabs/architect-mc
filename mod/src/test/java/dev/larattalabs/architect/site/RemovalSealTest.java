@@ -95,6 +95,37 @@ class RemovalSealTest {
 		assertFalse(jb.done);
 	}
 
+	@Test
+	void aReloadedQueueSealsRunningAndStalledRemovals() {
+		// the queue file's removals after a restart: a running one and a stalled one (a retry resumes it with no new blocker scan)
+		Groups.Removal run = new Groups.Removal("g1", "lots", null, false);
+		run.sites.addAll(List.of("lot_a", "lot_b"));
+		run.current = "lot_c";
+		run.started = true;
+		Groups.Removal stalled = new Groups.Removal("g2", null, null, false);
+		stalled.sites.add("lot_d");
+		stalled.started = true;
+		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+		a.add(run.toJson());
+		com.google.gson.JsonObject s = stalled.toJson();
+		s.addProperty("stalled", true);
+		a.add(s);
+		try {
+			Groups.load(a);
+			List<String> ids = new java.util.ArrayList<>();
+			Groups.sealedIds(ids);
+			assertEquals(List.of("lot_a", "lot_b", "lot_c", "lot_d"), ids);
+			int m0 = Groups.sealMods();
+			Groups.load(new com.google.gson.JsonArray());
+			List<String> none = new java.util.ArrayList<>();
+			Groups.sealedIds(none);
+			assertTrue(none.isEmpty(), "nothing in the queue: nothing sealed");
+			assertTrue(Groups.sealMods() != m0, "the index follows the change");
+		} finally {
+			Groups.reset(null);
+		}
+	}
+
 	static String read(String rel) throws Exception {
 		return Files.readString(Path.of("src/main/" + rel));
 	}
@@ -105,12 +136,14 @@ class RemovalSealTest {
 		assertTrue(read(mx + "HopperHoldMixin.java").contains("RemovalSeal.refusesInsert(container, slot)"), "hopper, dropper, crafter, item pickup");
 		assertTrue(read(mx + "HopperHoldMixin.java").contains("FillHold.refusesInsert(container, slot)"), "FL's fill rule kept");
 		assertTrue(read(mx + "CopperGolemSealMixin.java").contains("RemovalSeal.refusesGolem(container)"), "copper golem");
-		assertTrue(read(mx + "ContainerStillValidMixin.java").contains("RemovalSeal.refusesMenu("), "an open menu");
+		assertTrue(read(mx + "ContainerStillValidMixin.java").contains("RemovalSeal.refusesMenu(")
+			&& read(mx + "ContainerStillValidMixin.java").contains("CrafterBlockEntity.class"), "an open menu (the crafter overrides stillValid)");
+		assertTrue(read(mx + "BlockItemSealMixin.java").contains("RemovalSeal.refusesPlace("), "a filled block item placed (a player, a dispenser)");
 		assertTrue(read(mx + "ItemFrameSealMixin.java").contains("RemovalSeal.refusesFrame("), "item frame");
 		String cw = read("java/dev/larattalabs/architect/compatmixin/ContainerSlotWrapperMixin.java");
 		assertTrue(cw.contains("method = \"insert(") && cw.contains("RemovalSeal.refusesTransferInsert(this)"), "Transfer API insert");
 		String mixins = read("resources/architect_mc.mixins.json");
-		for (String m : List.of("HopperHoldMixin", "CopperGolemSealMixin", "ContainerStillValidMixin", "ItemFrameSealMixin")) {
+		for (String m : List.of("HopperHoldMixin", "CopperGolemSealMixin", "ContainerStillValidMixin", "ItemFrameSealMixin", "BlockItemSealMixin")) {
 			assertTrue(mixins.contains("\"" + m + "\""), m + " registered");
 		}
 		String seal = read("java/dev/larattalabs/architect/site/RemovalSeal.java");

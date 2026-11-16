@@ -53,8 +53,8 @@ import org.jspecify.annotations.Nullable;
  * entity picked up, a dropper's and a crafter's push; {@code HopperHoldMixin}, with FL's fill rule), a copper golem's put-down
  * ({@code CopperGolemSealMixin}), the Fabric Transfer API's insert ({@code ContainerSlotWrapperMixin}, optional); a player's use of a
  * holder (opening its menu, a book on a lectern, food on a campfire, an item into a pot, a shelf, a jukebox or a chiseled bookshelf:
- * {@link UseBlockCallback}), a block item carrying contents placed into a box (a filled shulker box), an open menu
- * ({@code BaseContainerBlockEntity.stillValid} answers false: the click is refused, the menu closes next tick), an item put into an
+ * {@link UseBlockCallback}), a block item carrying contents placed into a box by anyone (a filled shulker box; {@code BlockItemSealMixin}),
+ * an open menu ({@code ContainerStillValidMixin}: the click is refused, the menu closes next tick), an item put into an
  * empty item frame ({@code ItemFrameSealMixin}). A brushable block has no insertion path. Server thread.
  */
 public final class RemovalSeal {
@@ -164,10 +164,9 @@ public final class RemovalSeal {
 	}
 
 	private static Object[] fingerprint(@Nullable MinecraftServer srv) {
-		// any change of the sites state (records placed, pending, gone), the infra maps, the queue's jobs, the group removals; and while
-		// anything is sealed, the tick (a member written or a list shrunk: the seal lifts at the next tick)
-		return new Object[] {Sites.stateIdentity(), Infras.identity(), Infras.pendingIdentity(), Placement.jobMods(), Groups.sealMods(), epoch,
-			index.boxes() > 0 && srv != null ? srv.getTickCount() : -1};
+		// any change of the sites state (records placed, pending, gone), the infra maps, the queue's jobs, the group removals (their lists and
+		// their members: a member written leaves its removal's list)
+		return new Object[] {Sites.stateIdentity(), Infras.identity(), Infras.pendingIdentity(), Placement.jobMods(), Groups.sealMods(), epoch};
 	}
 
 	private static boolean same(Object @Nullable [] a, Object[] b) {
@@ -183,8 +182,7 @@ public final class RemovalSeal {
 	}
 
 	static Index current() {
-		MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
-		Object[] f = fingerprint(srv);
+		Object[] f = fingerprint(null);
 		if (!same(builtFrom, f)) {
 			List<Sealed> boxes = new ArrayList<>();
 			for (String id : sealedIds()) {
@@ -194,7 +192,7 @@ public final class RemovalSeal {
 				}
 			}
 			index = index(boxes);
-			builtFrom = fingerprint(srv); // the tick part follows what was just built
+			builtFrom = f;
 		}
 		return index;
 	}
@@ -283,6 +281,21 @@ public final class RemovalSeal {
 		return true;
 	}
 
+	/**
+	 * (from {@code BlockItemSealMixin}) A block item carrying contents (a filled shulker box) placed into a box being removed, by a player, a
+	 * dispenser or any other caller of {@code BlockItem.place}: refused at the real placement cell.
+	 */
+	public static boolean refusesPlace(ItemStack st, Level level, BlockPos at, @Nullable Player p) {
+		if (level.isClientSide() || !any() || !carriesContents(st) || !sealed(level, at)) {
+			return false;
+		}
+		count("place");
+		if (p != null) {
+			tell(p);
+		}
+		return true;
+	}
+
 	/** (from {@code ItemFrameSealMixin}) An item put into an empty item frame inside a sealed box: refused. */
 	public static boolean refusesFrame(Player p, ItemStack hand, ItemStack inFrame, Level level, BlockPos at) {
 		if (level.isClientSide() || hand.isEmpty() || !inFrame.isEmpty() || !sealed(level, at)) {
@@ -307,20 +320,13 @@ public final class RemovalSeal {
 		return c != null && c.nonEmptyItemCopyStream().findAny().isPresent() || st.has(DataComponents.BLOCK_ENTITY_DATA);
 	}
 
-	/** (the player path, UseBlockCallback) Whether a player's use at {@code hit} is refused: a sealed holder, or contents placed into a box. */
-	static boolean refusesUse(Player p, Level level, BlockPos hit, BlockPos placeAt, ItemStack held) {
-		if (level.isClientSide() || !any()) {
+	/** (the player path, UseBlockCallback) Whether a player's use of the block at {@code hit} is refused: a holder in a sealed box. */
+	static boolean refusesUse(Player p, Level level, BlockPos hit) {
+		if (level.isClientSide() || !any() || !holder(level.getBlockEntity(hit)) || !sealed(level, hit)) {
 			return false;
 		}
-		if (holder(level.getBlockEntity(hit)) && sealed(level, hit)) {
-			count("use");
-			return true;
-		}
-		if (carriesContents(held) && (sealed(level, hit) || sealed(level, placeAt))) {
-			count("place");
-			return true;
-		}
-		return false;
+		count("use");
+		return true;
 	}
 
 	static void tell(Player p) {
@@ -329,8 +335,7 @@ public final class RemovalSeal {
 
 	static void init() {
 		UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
-			ItemStack held = player.getItemInHand(hand);
-			if (!refusesUse(player, world, hit.getBlockPos(), hit.getBlockPos().relative(hit.getDirection()), held)) {
+			if (!refusesUse(player, world, hit.getBlockPos())) {
 				return InteractionResult.PASS;
 			}
 			tell(player);

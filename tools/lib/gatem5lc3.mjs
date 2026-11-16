@@ -7,7 +7,7 @@
 //                                                hopper set outside the box with 4 diamonds pushes nothing into C; a hopper set inside picks
 //                                                up no item entity; a Transfer API insert into C inserts 0; the player's hand into C (no menu),
 //                                                a book onto the lectern, beef onto a campfire, a diamond into a decorated pot, a shelf, a disc
-//                                                into a jukebox, a book into a chiseled bookshelf, a filled shulker box placed on the floor, a
+//                                                into a jukebox, a book into a chiseled bookshelf, a filled shulker box placed on the floor and by a dispenser outside, a
 //                                                diamond into an item frame: every one refused, the item still in the hand (or the source).
 //                                                Then the restore resumed to 1000 cells and paused again, saved, the JVM halted: after the
 //                                                restart the same box is sealed (from the queue file) and refuses again. Resumed: removed; the
@@ -88,6 +88,14 @@ export async function registerLC3(steps, h) {
     r.shulker = await use(fl, 'minecraft:shulker_box', { contents: { [DIAMOND]: 2 }, face: 'up' });
     check(!r.shulker.error && r.shulker.nextAfter === r.shulker.nextBefore && r.shulker.hand?.item === 'minecraft:shulker_box' && r.shulker.refused > 0,
       `${tag}: a shulker box holding 2 diamonds placed into the box refused (${r.shulker.nextBefore} -> ${r.shulker.nextAfter}, the hand ${json(r.shulker.hand)})`, r.shulker);
+    // a dispenser set just outside the box, facing in, holding a filled shulker box, powered: it places nothing into the box
+    const front = at(6, 1, 0), disp = [front[0], front[1], front[2] - 1], power = [front[0] - 1, front[1], front[2] - 1];
+    await cmd(`/setblock ${disp.join(' ')} minecraft:dispenser[facing=south]{Items:[{Slot:0b,id:"minecraft:shulker_box",count:1,components:{"minecraft:container":[{slot:0,item:{id:"${DIAMOND}",count:2}}]}}]}`);
+    await cmd(`/setblock ${power.join(' ')} minecraft:redstone_block`);
+    await L.settle(1500);
+    const dh = await holder(disp), fc = await holder(front);
+    r.dispenser = { dispenser: dh.holds, front: fc.block };
+    check(dh.holds?.['minecraft:shulker_box'] === 1 && fc.block === 'minecraft:air', `${tag}: a powered dispenser outside the box places no filled shulker box into it (the dispenser ${json(dh.holds)}, the cell ${fc.block})`, r.dispenser);
     // an item frame hanging inside the box
     const fr = at(22, 1, 3);
     await cmd(`/summon minecraft:item_frame ${fr.join(' ')} {Facing:3b}`);

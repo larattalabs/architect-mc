@@ -277,7 +277,13 @@ public final class Groups {
 
 	/** (slice LC3) The removals lists' structural changes so far. */
 	static int sealMods() {
-		return REMOVALS.mods() * 31 + STALLED.mods();
+		int h = REMOVALS.mods() * 31 + STALLED.mods();
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				h = h * 31 + r.sites.size() * 2 + (r.current != null ? 1 : 0); // a member written leaves the list (or current)
+			}
+		}
+		return h;
 	}
 
 	/**
