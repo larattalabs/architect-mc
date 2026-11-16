@@ -1239,6 +1239,14 @@ public final class RegionTargets {
 	 * cell and goes back to its before, as a lot's player block drops (Y1's PLAYER_DROP). Returns those cells. Server thread.
 	 */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t) {
+		return dropPlayerBlocks(level, t, true);
+	}
+
+	/**
+	 * {@link #dropPlayerBlocks}; {@code apply} false (slice DR-S) only finds the cells (nothing dropped, nothing written): a group removal
+	 * tallies its refund over them first and drops them only once its credits are saved, so a refused save drops nothing.
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t, boolean apply) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (!is(t)) {
 			return out;
@@ -1262,12 +1270,15 @@ public final class RegionTargets {
 			if (was != null && now.is(was.getBlock()) || !SiteJournal.isOwnedBy(t.dimension(), p.asLong(), t.id())) {
 				continue;
 			}
+			out.add(p.asLong());
+			if (!apply) {
+				continue;
+			}
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
 			Builder.dropItems(level, p, items, null);
 			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
 				Sites.CELL_FLAGS);
-			out.add(p.asLong());
 			n++;
 		}
 		if (n > 0) {

@@ -17,6 +17,9 @@
 //           is pending on disk; the hall's west half "lost" as above, then AS1. After the restart the members settled at the start booked
 //           theirs; the hall is stuck: repaired, its decCredit booked once from its durable record; what came back since the saved state =
 //           every pending credit the saved ledger held, each once; nothing pending, no member's paid record left; second diagnose/repair
+//     DR12  (before DR4b) the region removed with every explicit save refused (dev.stockpile.ps refuseSave): nothing changed (the town's
+//           box, a player's block in a region target standing, no item dropped, the ledger and its file), the region keeps its state with
+//           RegionView.removalStop NOT_STARTED; DR4b's removal after it works and drops that block
 //     DR8   a paid record naming no target (dev.repair ledger, TEST): PAID_ORPHAN reported; the repair writes nothing and the ledger is
 //           unchanged
 //     DR7   an unresolved custody (dev.repair ledger: the key's fill paid and its items in custody, its site gone): CUSTODY reported; the repair
@@ -247,6 +250,50 @@ export async function registerDRS(steps, h) {
       out.DR4a.site = A.s;
     }
 
+    // DR12 (DR-S, the coordinator's strict fix): a removal whose saves are refused (dev.stockpile.ps refuseSave, SS's refusal) changes
+    // nothing: a player's block in a region target stays, nothing drops, the world and the ledger are as before, the region keeps its state
+    // and says NOT_STARTED (RegionView.removalStop); DR4b's removal after it then works (and drops the player's block as before)
+    {
+      const tag = 'DR12';
+      const rc = await call('dev.rs.cells', { region: W.region }, 120_000);
+      let cell = null;
+      for (const t of rc.targets ?? []) { for (const c of t.cells ?? []) if ((c[3] & 2) && !(c[3] & 4)) { cell = c; break; } if (cell) break; }
+      check(!!cell, `${tag}: a built cell of a region target (${json(cell)})`);
+      const [px, py, pz] = cell;
+      W.sponge = [px, py, pz];
+      await cmd(`/setblock ${px} ${py} ${pz} minecraft:sponge`);
+      await cmd('/kill @e[type=item]');
+      await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+      await cmd('/save-all flush');
+      await L.settle(2000);
+      const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 24, CLAIM[3] + 8];
+      const h0 = await hash(BOX);
+      const S0 = json(saved());
+      const L0 = (await pile()).ledger;
+      const v0 = (await call('dev.region.state', { region: W.region }, 60_000)).view;
+      await call('dev.stockpile.ps', { refuseSave: true }, 30_000);
+      const rr = call('dev.region.remove', { region: W.region, requester: G.OWNER }, 600_000).catch((e) => ({ error: String(e) }));
+      let v = null;
+      for (let i = 0; i < 120; i++) {
+        await L.sleep(1000);
+        v = (await call('dev.region.state', { region: W.region }, 60_000).catch(() => null))?.view;
+        if (v && v.state !== 'REMOVING') break;
+      }
+      await call('dev.stockpile.ps', { refuseSave: false }, 30_000);
+      const res = await Promise.race([rr, L.sleep(5000).then(() => null)]);
+      log(`  ${tag}: remove answered ${json(res).slice(0, 300)}; view ${v?.state} ${v?.removalStop}: ${v?.removalStopReason}`);
+      check(v?.state === v0.state && v?.removalStop === 'NOT_STARTED' && /was not started: .*ledger was not saved/.test(v?.removalStopReason ?? ''),
+        `${tag}: the refused removal ended NOT_STARTED; the region stays ${v0.state} (${v?.state}, ${v?.removalStop}: ${v?.removalStopReason})`);
+      const pc = await call('dev.box.hash', { min: [px, py, pz], max: [px, py, pz], cells: true }, 60_000);
+      const near = (await call('dev.items.near', { pos: [px, py, pz], radius: 48 }, 60_000)).items ?? {};
+      const L1 = (await pile()).ledger;
+      check(await hash(BOX) === h0 && /sponge/.test(json(pc.cells ?? [])) && Object.keys(near).length === 0,
+        `${tag}: nothing changed in the world: the town's box hashes as before, the player's sponge stands, no item dropped (${json(near)})`);
+      check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
+        `${tag}: nothing changed in the ledger: the saved file as before, nothing credited, no hold or custody left`);
+      out.DR12 = { cell, stop: v?.removalStop, reason: v?.removalStopReason, state: v?.state };
+    }
+
     // DR4b: the rest removed as a region; its decCredit held pending on disk (DR-S); the hall stuck, repaired, credited once
     {
       const tag = 'DR4b';
@@ -263,6 +310,10 @@ export async function registerDRS(steps, h) {
       await G.remove(ctx, W.region);
       const sv = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
       check(!sv?.view?.state || sv.view.state === 'REMOVED', `${tag}: the region removed (${sv?.view?.state ?? 'gone'})`);
+      if (W.sponge) {
+        const near = (await call('dev.items.near', { pos: W.sponge, radius: 48 }, 60_000)).items ?? {};
+        check((near['minecraft:sponge'] ?? 0) >= 1, `${tag}: (after DR12) the later removal works: the player's sponge dropped at its cell as before (${json(near)})`);
+      }
       const restored = await hash(H.b);
       const wb = westOf(H.b, gy);
       const lost = (await rep('unwrite', { name: 'H', min: wb.slice(0, 3), max: wb.slice(3) })).cells;

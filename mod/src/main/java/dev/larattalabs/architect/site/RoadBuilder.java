@@ -674,6 +674,11 @@ public final class RoadBuilder {
 	 * refund (never out of the road's paid record). A before that is the same block keeps it standing. Returns the cells left out.
 	 */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road) {
+		return dropPlayerMatches(level, road, true);
+	}
+
+	/** {@link #dropPlayerMatches}; {@code apply} false (slice DR-S) only finds the cells left out (nothing dropped, nothing written). */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road, boolean apply) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		Construction c = road.construction();
 		Builder.Run r = c == null ? null : run(level.getServer(), road);
@@ -700,6 +705,9 @@ public final class RoadBuilder {
 			out.add(p.asLong());
 			if (WorldJournal.cuEquivalent(now, r.target[q])) {
 				continue; // (JR-b verifier's case) the restore keeps it as the player's: nothing dropped, nothing refunded
+			}
+			if (!apply) {
+				continue;
 			}
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(x -> items.merge(x.item(), x.count(), Integer::sum));

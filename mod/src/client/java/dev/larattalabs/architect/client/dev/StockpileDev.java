@@ -43,7 +43,7 @@ public final class StockpileDev {
 		op("dev.stockpile.ss", "ss", "{probe?: bool} - (SS) TEST: probe: the region-file durability cases with the mixins applied (first open, clean flush, "
 			+ "write then flush, a failed force retried, a failed close then a reopen, an oversized chunk, the device barrier, a dirty imposter, an "
 			+ "earlier save's writes forced before the ledger); else the force, skip and barrier counters and the files not durable now");
-		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, joinSave?: bool, noCreditSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases: the "
+		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, joinSave?: bool, noCreditSave?: bool, refuseSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases ((DR-S) refuseSave: every explicit save with the world refused as SS refuses it): the "
 			+ "periodic ledger save off (RL: with the save when a target joins the feed, unless joinSave: true); a finished undo's refund not "
 			+ "saved at its credit; reset the periodic save counters");
 		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the

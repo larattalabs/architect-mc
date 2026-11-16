@@ -76,6 +76,8 @@ public final class Groups {
 		/** Phase 6a: how far the per-member checks got (they go over ticks). */
 		transient int scan;
 		transient int blockerScan;
+		/** (DR-S) The save-first probe passed (this session): the world and ledger saved before anything of the removal changed the world. */
+		transient boolean probed;
 		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
 		transient @Nullable CompletableFuture<java.util.LinkedHashSet<String>> outsideF;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
@@ -713,6 +715,17 @@ public final class Groups {
 		if (r.nextCheck > tick) {
 			return;
 		}
+		// (slice DR-S) save first: a survival removal saves the world and the ledger before anything of it changes the world (its fluid
+		// bodies' drain, a stage's irrigation, the player blocks' drop, the custody's take). A refused save (SS: a chunk write not durable) ends
+		// it unwritten here, the world as it was (NOT_STARTED); the credit hold's own save in plan() comes after, before the drops
+		if (r.undo == null && r.planned == null && !r.probed && survival(r)) {
+			String refused = probe(() -> Stockpiles.saveWithWorld(server));
+			if (refused != null) {
+				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + refused), Map.copyOf(r.refund)));
+				return;
+			}
+			r.probed = true;
+		}
 		// (6c H §4.1) a region's fluid bodies drain first and settle one bound before the group's undo is planned (the solids, shells
 		// included, after: no source ever stands against a removed shell); the phase is saved, so a stop between resumes the wait
 		if (r.undo == null && r.stage == null && !dev.larattalabs.architect.region.RegionFluids.removalGate(server, r.group)) {
@@ -1031,7 +1044,17 @@ public final class Groups {
 			}
 		}
 		if (custody) {
-			Stockpiles.saveWithWorld(server);
+			String refused = probe(() -> Stockpiles.saveWithWorld(server)); // (DR-S) a refused save gives the custody back: nothing changed
+			if (refused != null) {
+				for (String back : ids) {
+					Site b = Sites.get(back);
+					if (b != null && Fills.phase(b) != null) {
+						Fills.writeBack(level, b);
+					}
+				}
+				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + refused), Map.copyOf(r.refund)));
+				return;
+			}
 			dev.larattalabs.architect.journal.WorldJournal.kill("FKC1"); // (TEST) the custody saved, the undo's world write not yet
 		}
 		// (slice LC, TEST) dev.removal.lateCargo: items into a container cell now, ticks before the writes; dev.removal.failAfterCustody: the
@@ -1053,6 +1076,7 @@ public final class Groups {
 			return;
 		}
 		// refunds against the stacks before the undo is planned (rule 7)
+		List<Infra> dropLater = new ArrayList<>();
 		for (String id : ids) {
 			Site s = Sites.get(id);
 			if (s != null && s.construction() != null) {
@@ -1073,8 +1097,11 @@ public final class Groups {
 			}
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
 			if (pile != null) {
-				var dropped = RegionTargets.dropPlayerBlocks(level, inf); // (6c RS §9) a player's block in a region target drops at its cell first
-				var matches = RoadBuilder.dropPlayerMatches(level, inf); // (J1, F10 for roads) a player's matching block: theirs, not refunded
+				// (6c RS §9) a player's block in a region target drops at its cell; (J1, F10 for roads) a player's matching block is theirs, not
+				// refunded. (DR-S) Found now, left out of the refund, dropped only once the credits are saved (a refused save drops nothing)
+				var dropped = RegionTargets.dropPlayerBlocks(level, inf, false);
+				var matches = RoadBuilder.dropPlayerMatches(level, inf, false);
+				dropLater.add(inf);
 				if (!matches.isEmpty()) {
 					dropped = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(dropped);
 					dropped.addAll(matches);
@@ -1102,6 +1129,7 @@ public final class Groups {
 			try {
 				Stockpiles.saveWithWorld(server);
 			} catch (IllegalStateException e) {
+				// nothing dropped yet (dropLater): the player blocks stand as they were
 				dropPending(r);
 				for (String back : ids) {
 					Site b = Sites.get(back);
@@ -1112,6 +1140,11 @@ public final class Groups {
 				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + e.getMessage()), Map.copyOf(r.refund)));
 				return;
 			}
+		}
+		// (DR-S) the credits are saved: now the player blocks found above drop at their cells (the same cells: nothing changed since)
+		for (Infra inf : dropLater) {
+			RegionTargets.dropPlayerBlocks(level, inf, true);
+			RoadBuilder.dropPlayerMatches(level, inf, true);
 		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
 		List<String> withCrate = new ArrayList<>(ids);
@@ -1290,6 +1323,28 @@ public final class Groups {
 				return;
 			}
 		}
+	}
+
+	/** (DR-S) Runs a save; returns null when it was written, else why it was refused (SS: {@code IllegalStateException}). */
+	static @Nullable String probe(Runnable save) {
+		try {
+			save.run();
+			return null;
+		} catch (IllegalStateException e) {
+			return e.getMessage();
+		}
+	}
+
+	/** (DR-S) Whether a removal takes a survival target (a construction site or a fed road/region target): it saves first. */
+	static boolean survival(Removal r) {
+		for (String id : r.sites) {
+			Site s = Sites.get(id);
+			Infra i = s == null ? Infras.get(id) : null;
+			if (s != null && s.construction() != null || i != null && i.construction() != null) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** (DR-S) Holds each target-keyed {@link Removal#decCredit} pending in its pile's ledger; true when any was held. */
