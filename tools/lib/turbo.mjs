@@ -150,13 +150,30 @@ export function liveTickets(dir, { alive = pidAlive, prune = true } = {}) {
 const before = (a, b) => a.enqueuedAt < b.enqueuedAt || (a.enqueuedAt === b.enqueuedAt && a.pid < b.pid);
 export const describeRun = (h) => `pid ${h.pid} ${h.turbo ? 'TURBO ' : ''}${h.chain ?? '?'} ${h.worktree ?? ''}${h.state === 'reserving' ? ' (reserving the machine)' : ''}${h.startedAt ? ` since ${h.startedAt}` : h.enqueuedAt ? ` queued ${new Date(h.enqueuedAt).toISOString()}` : ''}`;
 
+/** (M1) The enqueue times of the tickets the held slot files carry (outside callers' `ticket: t-<ms>-<pid>`). */
+function heldTicketTimes(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((f) => /^slot-\d+\.json$/.test(f)); } catch { return []; }
+  const out = [];
+  for (const f of names) {
+    try {
+      const t = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).ticket;
+      const m = typeof t === 'string' && /^t-(\d+)-\d+$/.exec(t);
+      if (m) out.push(Number(m[1]));
+    } catch { /* a slot file being written or removed: skip it */ }
+  }
+  return out;
+}
+
 /** me: { pid, worktree, chain, turbo }. Writes the ticket under the mutex and sets me.enqueuedAt there, later than every live
  * ticket's: the order is the order of enqueueing, so a ticket can never appear ahead of one already queued (which could otherwise
  * deadlock a reserving turbo run against it). */
 export async function enqueue(dir, me) {
   fs.mkdirSync(queueDir(dir), { recursive: true });
   const r = await withMutex(dir, () => {
-    me.enqueuedAt = Math.max(Date.now(), ...liveTickets(dir, { prune: false }).map((t) => t.enqueuedAt + 1));
+    // (M1) also later than every held slot's ticket: one holder pid acquiring twice in the same millisecond would otherwise get
+    // the same ticket id t-<ms>-<pid> as the slot it already holds (the first ticket leaves the queue once its slot is taken)
+    me.enqueuedAt = Math.max(Date.now(), ...liveTickets(dir, { prune: false }).map((t) => t.enqueuedAt + 1), ...heldTicketTimes(dir).map((t) => t + 1));
     writeAtomic(ticketFile(dir, me), me);
     return true;
   }, { tries: 400 });
