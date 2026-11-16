@@ -12,6 +12,8 @@
 		"CompoundContainerAccessor",
 		"ContainerStillValidMixin",
 		"CopperGolemSealMixin",
+		"CrafterSealMixin",
+		"DispenseSealMixin",
 		"FallingBlockEntityMixin",
 		"HopperGuardMixin",
 		"HopperHoldMixin",
@@ -30,7 +32,8 @@
 		"SaveTimingServerMixin",
 		"ServerPlayerGameModeMixin",
 		"SlotMayPickupMixin",
-		"StructureTemplateAccessor"
+		"StructureTemplateAccessor",
+		"VaultSealMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -126,6 +126,74 @@ class RemovalSealTest {
 		}
 	}
 
+	@Test
+	void aRoadOrCellSiteSealsOnlyItsWriteFootprint() {
+		// (LC3 fix, should-fix) a road's bounding box spans holders it never writes: only the cells of its journal entries are sealed
+		Anchors.Bounds box = new Anchors.Bounds(0, 60, 0, 40, 62, 40);
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet cells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		for (int x = 0; x <= 40; x++) {
+			cells.add(BlockPos.asLong(x, 61, x)); // a diagonal road
+		}
+		RemovalSeal.Index ix = RemovalSeal.index(List.of(new RemovalSeal.Sealed(OW, box, cells), new RemovalSeal.Sealed(OW, new Anchors.Bounds(100, 0, 100,
+			101, 1, 101))));
+		assertTrue(ix.contains(OW, 20, 61, 20), "a cell the road writes");
+		assertTrue(ix.contains(OW, 33, 61, 33), "across chunks");
+		assertFalse(ix.contains(OW, 20, 61, 30), "in its bounding box, off its cells: a player's chest there is not sealed");
+		assertFalse(ix.contains(OW, 20, 60, 20), "below a cell it writes");
+		assertTrue(ix.contains(OW, 100, 1, 101), "a site's box (no footprint): the whole box");
+	}
+
+	@Test
+	void aGroupRemovalKeepsItsWrittenMembersSealedUntilItEnds() {
+		// (LC3 fix, review 2) member A written (out of sites), B being written: A stays sealed, since a crash before the removal ends writes A
+		// again (Sites.reconcile -> Groups.writeAgain -> writeAgainIn); so does a planned (not yet committed) removal's whole set
+		Groups.Removal r = new Groups.Removal("g1", null, null, false);
+		r.undo = "u:g1";
+		r.undoSites.addAll(List.of("lot_b", "lot_a"));
+		r.current = "lot_b";
+		r.started = true;
+		Groups.Removal planned = new Groups.Removal("g2", null, null, false);
+		planned.planned = "u:g2";
+		planned.plannedSites.add("lot_p");
+		planned.started = true;
+		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+		a.add(r.toJson());
+		a.add(planned.toJson());
+		try {
+			Groups.load(a);
+			List<String> ids = new java.util.ArrayList<>();
+			Groups.sealedIds(ids);
+			assertTrue(ids.contains("lot_a"), "the written member stays sealed: " + ids);
+			assertTrue(ids.contains("lot_b") && ids.contains("lot_p"), "the member being written and a planned removal's members: " + ids);
+		} finally {
+			Groups.reset(null);
+		}
+	}
+
+	@Test
+	void everyExtractionAndConsumerPathAsksTheSeal() throws Exception {
+		// (LC3 fix, review 1, 3, 4, 5) out of a sealed holder, a crafter, a vault, a chained shelf
+		String mx = "java/dev/larattalabs/architect/mixin/";
+		String hg = read(mx + "HopperGuardMixin.java");
+		assertTrue(hg.contains("RemovalSeal.refusesExtract(container, slot)") && hg.contains("method = \"ejectItems\", at = @At(\"HEAD\")")
+			&& hg.contains("RemovalSeal.refusesPush(level, pos)"), "a hopper's or hopper minecart's pull, a sealed hopper's push");
+		assertTrue(read(mx + "CopperGolemSealMixin.java").contains("RemovalSeal.refusesGolemTake(container)"), "a copper golem's pick-up");
+		assertTrue(read(mx + "CrafterSealMixin.java").contains("method = \"dispenseFrom\", at = @At(\"HEAD\")")
+			&& read(mx + "CrafterSealMixin.java").contains("RemovalSeal.refusesCraft("), "a crafter, before it consumes anything");
+		assertTrue(read(mx + "DispenseSealMixin.java").contains("{DispenserBlock.class, DropperBlock.class}"), "a sealed dispenser or dropper");
+		assertTrue(read(mx + "VaultSealMixin.java").contains("method = \"tryInsertKey\", at = @At(\"HEAD\")"), "a vault's key");
+		String cw = read("java/dev/larattalabs/architect/compatmixin/ContainerSlotWrapperMixin.java");
+		assertTrue(cw.contains("RemovalSeal.refusesTransferExtract(this)"), "Transfer API extract");
+		String mixins = read("resources/architect_mc.mixins.json");
+		for (String m : List.of("CrafterSealMixin", "DispenseSealMixin", "VaultSealMixin", "HopperGuardMixin")) {
+			assertTrue(mixins.contains("\"" + m + "\""), m + " registered");
+		}
+		String seal = read("java/dev/larattalabs/architect/site/RemovalSeal.java");
+		assertTrue(seal.contains("chain.getAllBlocksConnectedTo(level, at)"), "a powered shelf's whole chain");
+		assertTrue(seal.contains("PlayerBlockBreakEvents.BEFORE.register"), "a player breaking a sealed holder");
+		assertTrue(seal.contains("Placement.saved()"), "an ended removal's boxes stay sealed until the queue file without it is written");
+	}
+
 	static String read(String rel) throws Exception {
 		return Files.readString(Path.of("src/main/" + rel));
 	}

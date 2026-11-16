@@ -281,6 +281,7 @@ public final class Groups {
 		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
 			for (Removal r : l) {
 				h = h * 31 + r.sites.size() * 2 + (r.current != null ? 1 : 0); // a member written leaves the list (or current)
+				h = h * 31 + r.undoSites.hashCode() * 17 + r.plannedSites.hashCode(); // (the whole member set, refilled at a commit or a reload)
 			}
 		}
 		return h;
@@ -288,7 +289,9 @@ public final class Groups {
 
 	/**
 	 * (slice LC3) The ids a group or stage removal seals: running or stalled (a retry resumes it with no new blocker scan), its members not
-	 * yet written and the one being written. All of it is in the queue file.
+	 * yet written and the one being written, and (LC3 fix, review 2) its members already written too, its whole undo set (or the planned
+	 * set before the commit): crash recovery can still write a written member again ({@link #writeAgainIn}) until the removal leaves the
+	 * queue, so none unseals before the removal ends. All of it is in the queue file.
 	 */
 	static void sealedIds(List<String> out) {
 		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
@@ -297,6 +300,8 @@ public final class Groups {
 				if (r.current != null) {
 					out.add(r.current);
 				}
+				out.addAll(r.undoSites);
+				out.addAll(r.plannedSites);
 			}
 		}
 	}

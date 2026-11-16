@@ -16,6 +16,11 @@
 //                                                stage (Groups.undoStage, ownStage) and then the region Remove (the group undo), each paused
 //                                                in its first member's restore: a chest set inside a sealed box refuses the player's hand and a
 //                                                Transfer API insert; resumed, each ends removed and the seal lifts.
+//                                                (LC3 fix) In the group undo member A runs to its end while B stays paused: A's box stays
+//                                                sealed, and again after a flush, a halt and a restart, until the removal ends.
+//   (LC3 fix) lc3-seal also: a powered shelf outside chained into the box (the hotbar swap refused), a hopper and a hopper minecart below
+//   sealed chests (nothing pulled), a sealed hopper pushing out (nothing), a crafter firing into the box (no craft, nothing consumed or
+//   dropped), an active vault in the box (no key taken); each with a control outside the box that works.
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -109,6 +114,87 @@ export async function registerLC3(steps, h) {
     return r;
   }
 
+  /**
+   * (LC3 fix: review findings 1, 3, 4, 5) Paths the first build missed, each with a control outside the box that shows the path works when
+   * nothing is sealed: a powered shelf chain reaching into the box, extraction out of a sealed holder (a hopper below a sealed chest, a hopper
+   * minecart below one, a sealed hopper pushing out), a crafter firing into the box, a vault inside it.
+   */
+  async function fixCases(tag, sb, C) {
+    const [X0, Y0, Z0] = sb[0];
+    const Y = C[1];
+    const r = {};
+    const nearOf = async (pos, radius = 2) => (await call('dev.items.near', { pos, radius }, 60_000)).items ?? {};
+    const inBox = (p) => p[0] >= sb[0][0] && p[0] <= sb[1][0] && p[1] >= sb[0][1] && p[1] <= sb[1][1] && p[2] >= sb[0][2] && p[2] <= sb[1][2];
+    // 1. a powered shelf chain: the outside shelf at minX - 1 chained to two inside; the whole hotbar swap refused
+    const Zs = Z0 + 24;
+    const sh = [[X0 - 1, Y, Zs], [X0, Y, Zs], [X0 + 1, Y, Zs]];
+    for (const p of sh) await cmd(`/setblock ${p.join(' ')} minecraft:oak_shelf[facing=south]`);
+    for (const p of sh) await cmd(`/setblock ${p[0]} ${p[1]} ${p[2] - 1} minecraft:redstone_block`);
+    await L.settle(1000);
+    const sIn = await holder(sh[1]);
+    const chained = /powered=true/.test(sIn.state ?? '') && !/side_chain=unconnected/.test(sIn.state ?? '');
+    check(chained && sIn.sealed && !inBox(sh[0]), `${tag}: shelves chained and powered across the box's west face (inside: ${sIn.state}, sealed ${sIn.sealed}; outside ${sh[0].join(',')})`, sIn);
+    r.shelf = await use(sh[0], DIAMOND, { face: 'south', fillHotbar: true });
+    const inside = sum((await holder(sh[1])).holds) + sum((await holder(sh[2])).holds);
+    const outsideShelf = sum((await holder(sh[0])).holds);
+    r.shelf.inside = inside;
+    check(!r.shelf.error && inside === 0 && outsideShelf === 0 && r.shelf.hotbar === 9 && r.shelf.refused > 0,
+      `${tag}: a powered outside shelf chained into the box swaps nothing (inside shelves ${inside}, outside ${outsideShelf}, the hotbar ${r.shelf.hotbar} of 9 diamonds)`, r.shelf);
+    // 3. extraction: a hopper below a sealed chest (and its control outside the box), a hopper minecart below one, a sealed hopper pushing out
+    const Ze = Z0 + 10;
+    const full = (p) => `/setblock ${p.join(' ')} minecraft:chest{Items:[{Slot:0b,id:"${DIAMOND}",count:2}]}`;
+    const c1 = [X0 + 5, Y0, Ze], h1 = [X0 + 5, Y0 - 1, Ze];
+    const c2 = [X0 + 8, Y0, Ze], m2 = [X0 + 8, Y0 - 1, Ze];
+    const c0 = [X0 - 3, Y0, Ze], h0 = [X0 - 3, Y0 - 1, Ze];
+    const h3 = [X0, Y, Z0 + 12], c3 = [X0 - 1, Y, Z0 + 12];
+    for (const p of [c1, c2, c0]) await cmd(full(p));
+    await cmd(`/setblock ${h1.join(' ')} minecraft:hopper[facing=down]`);
+    await cmd(`/setblock ${h0.join(' ')} minecraft:hopper[facing=down]`);
+    await cmd(`/setblock ${m2.join(' ')} minecraft:air`);
+    await cmd(`/summon minecraft:hopper_minecart ${m2[0] + 0.5} ${m2[1]} ${m2[2] + 0.5}`);
+    await cmd(`/setblock ${c3.join(' ')} minecraft:chest`);
+    await cmd(`/setblock ${h3.join(' ')} minecraft:hopper[facing=west]{Items:[{Slot:0b,id:"${DIAMOND}",count:2}]}`);
+    await L.settle(4000);
+    const x1 = await holder(c1), y1 = await holder(h1), x2 = await holder(c2), x0 = await holder(c0), y0 = await holder(h0), y3 = await holder(h3), x3 = await holder(c3);
+    r.extract = { sealedChest: x1.holds, hopperBelow: y1.holds, minecartChest: x2.holds, control: { chest: x0.holds, hopper: y0.holds }, sealedHopper: y3.holds, outsideChest: x3.holds };
+    check(x1.sealed && !inBox(h1) && x1.holds?.[DIAMOND] === 2 && sum(y1.holds) === 0, `${tag}: a hopper below a sealed chest pulls nothing out of it in 4 s (the chest ${json(x1.holds)}, the hopper ${json(y1.holds)})`, r.extract);
+    check(x2.sealed && x2.holds?.[DIAMOND] === 2, `${tag}: a hopper minecart below a sealed chest pulls nothing out of it (${json(x2.holds)})`, r.extract);
+    check(!x0.sealed && sum(x0.holds) === 0 && y0.holds?.[DIAMOND] === 2, `${tag}: control: a hopper below a chest outside the box pulled its 2 diamonds (${json(r.extract.control)})`, r.extract);
+    check(y3.sealed && !x3.sealed && y3.holds?.[DIAMOND] === 2 && sum(x3.holds) === 0, `${tag}: a sealed hopper pushes nothing out of the box (the hopper ${json(y3.holds)}, the chest outside ${json(x3.holds)})`, r.extract);
+    // 4. a crafter outside the box firing into a sealed chest crafts nothing (9 iron ingots kept, no output dropped); its control crafts
+    const ingots = Array.from({ length: 9 }, (_, i) => `{Slot:${i}b,id:"minecraft:iron_ingot",count:1}`).join(',');
+    const crafter = (p) => `/setblock ${p.join(' ')} minecraft:crafter[orientation=east_up]{Items:[${ingots}]}`;
+    const k1 = [X0 - 1, Y, Z0 + 16], t1 = [X0, Y, Z0 + 16];
+    const k0 = [X0 - 5, Y, Z0 + 20], t0 = [X0 - 4, Y, Z0 + 20];
+    await cmd(`/setblock ${t1.join(' ')} minecraft:chest`);
+    await cmd(`/setblock ${t0.join(' ')} minecraft:chest`);
+    await cmd(crafter(k1));
+    await cmd(crafter(k0));
+    await cmd(`/setblock ${k1[0] - 1} ${k1[1]} ${k1[2]} minecraft:redstone_block`);
+    await cmd(`/setblock ${k0[0] - 1} ${k0[1]} ${k0[2]} minecraft:redstone_block`);
+    await L.settle(2500);
+    const kk1 = await holder(k1), tt1 = await holder(t1), kk0 = await holder(k0), tt0 = await holder(t0);
+    const n1 = await nearOf(t1, 3);
+    r.crafter = { crafter: kk1.holds, chest: tt1.holds, near: n1, control: { crafter: kk0.holds, chest: tt0.holds } };
+    check(!kk1.sealed && tt1.sealed && kk1.holds?.['minecraft:iron_ingot'] === 9 && sum(tt1.holds) === 0 && !n1['minecraft:iron_block'] && !n1['minecraft:iron_ingot'],
+      `${tag}: a powered crafter firing into the box crafts nothing: its 9 iron ingots kept, the sealed chest ${json(tt1.holds)}, nothing dropped (${json(n1)})`, r.crafter);
+    check(sum(kk0.holds) === 0 && tt0.holds?.['minecraft:iron_block'] === 1, `${tag}: control: a crafter outside crafted an iron block into its chest (${json(r.crafter.control)})`, r.crafter);
+    // 5. a vault inside the box takes no key; its control outside takes one (both active: the player within range)
+    const v1 = [C[0] + 6, Y, C[2]], v0 = [C[0] + 6, Y, C[2] - 3];
+    await L.tp(C[0] + 8.5, Y, C[2] - 1.5);
+    await cmd(`/setblock ${v1.join(' ')} minecraft:vault[vault_state=active,facing=north]`);
+    await cmd(`/setblock ${v0.join(' ')} minecraft:vault[vault_state=active,facing=north]`);
+    await L.settle(2000);
+    const vs1 = await holder(v1), vs0 = await holder(v0);
+    r.vault = await use(v1, 'minecraft:trial_key', { face: 'north' });
+    r.vaultControl = await use(v0, 'minecraft:trial_key', { face: 'north' });
+    r.vault.states = [vs1.state, vs0.state];
+    check(vs1.sealed && /vault_state=active/.test(vs1.state ?? '') && r.vault.hand?.item === 'minecraft:trial_key' && r.vault.hand?.count === 1 && r.vault.refused > 0,
+      `${tag}: an active vault in the box takes no key (the hand ${json(r.vault.hand)}, ${vs1.state})`, r.vault);
+    check(!vs0.sealed && /vault_state=active/.test(vs0.state ?? '') && r.vaultControl.hand?.count === 0, `${tag}: control: an active vault outside took the key (the hand ${json(r.vaultControl.hand)})`, r.vaultControl);
+    return r;
+  }
+
   // ------------------------------------------------------------------ lc3-seal
 
   steps.lc3seal = async () => {
@@ -172,6 +258,8 @@ export async function registerLC3(steps, h) {
     check(sum(hi.holds) === 0 && near['minecraft:flint'] === 3, `the hopper inside the box picked up none of the 3 flint lying on it (still an item entity: ${json(near)})`, out.automation);
     await cmd(`/kill @e[type=item,x=${hin[0]},y=${hin[1]},z=${hin[2]},distance=..3]`); // (an item thrown into a box being removed: the drop clear's, a leftover)
     out.paused = await attempts('paused', b, C, L4);
+    out.fix = await fixCases('paused', sb, C);
+    await L.tp(C[0] + 0.5, C[1], C[2] - 4);
     // across a crash: the restore resumed to 1000 cells and paused again, saved, halted; the restart re-seals the box from the queue file
     await call('dev.removal.pause', { site, after: 1000 }, 10_000);
     const mid = await until(async () => { const st = await seal(); const j = (st.jobs ?? []).find((x) => x.site === site); return j && j.progress >= 1000 ? j : null; });
@@ -262,8 +350,47 @@ export async function registerLC3(steps, h) {
     await call('dev.removal.pause', { site: '*', after: 0 }, 10_000);
     const fr = call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e) }));
     out.group = await sealedChest('group undo');
+    // (LC3 fix, review 2) member A (the first) runs to its end, B pauses before any write: A stays sealed while the removal is in the queue,
+    // across a crash (a restart can write A again), and unseals only when the removal ends
+    const A = out.group?.first;
+    let halted = false;
+    if (A) {
+      await call('dev.removal.pause', { site: A, after: 2_000_000_000 }, 10_000);
+      const st = await until(async () => { const x = await seal(); return (x.jobs ?? []).length && !(x.jobs ?? []).some((j) => j.site === A) ? x : null; }, 600, 500);
+      const B = st?.jobs?.[0]?.site;
+      check(!!st && B !== A, `group undo: member ${A} written and out of the queue's jobs, member ${B} paused before its writes (${json(st?.jobs)})`, st);
+      const aSealed = async (t) => {
+        const x = await seal();
+        const e = (x.sealed ?? []).find((y) => y.id === A);
+        if (!e) return { sealed: (x.sealed ?? []).map((y) => y.id) };
+        const P = e.cell.split(',').map(Number);
+        await cmd(`/setblock ${P.join(' ')} minecraft:chest`);
+        const u = await use(P, DIAMOND);
+        const t2 = await call('dev.seal.transfer', { pos: P, item: DIAMOND, count: 2 }, 30_000).catch((y) => ({ error: String(y) }));
+        await cmd(`/setblock ${P.join(' ')} minecraft:air`);
+        return { sealed: (x.sealed ?? []).map((y) => y.id), at: P, use: u, transfer: t2, ok: refused(u, DIAMOND) && t2.inserted === 0 };
+      };
+      out.writtenA = await aSealed('before');
+      check(!!out.writtenA.ok, `group undo: written member ${A} still sealed while ${B} is paused: a chest in its box refuses the hand and a Transfer API insert (${json(out.writtenA).slice(0, 300)})`, out.writtenA);
+      await cmd('/save-all flush');
+      await L.settle(1500);
+      await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+      const down = await haltWait();
+      check(down, 'group undo: halted with A written and B paused');
+      halted = !!down;
+      if (down) {
+        await L.openWorld(name);
+        await L.tp(CX + 80, 80, CZ + 56);
+        await L.settle(4000);
+        await until(async () => { const x = await seal().catch(() => null); return x && (x.sealed ?? []).length ? x : null; }, 60, 1000);
+        out.writtenAfterRestart = await aSealed('after');
+        check(!!out.writtenAfterRestart.ok, `group undo: after the restart written member ${A} is sealed again from the queue file (${json(out.writtenAfterRestart).slice(0, 300)})`, out.writtenAfterRestart);
+      }
+      await call('dev.removal.pause', { site: A, off: true }, 10_000);
+    }
     await call('dev.removal.pause', { site: '*', off: true }, 10_000);
-    out.group && (out.group.answer = await fr);
+    // (after a halt the first world's call never answers: the region's state decides below)
+    out.group && (out.group.answer = halted ? await Promise.race([fr, L.sleep(5000).then(() => ({ halted: true }))]) : await fr);
     const end = await until(async () => { const r = await call('dev.region.state', { region }, 60_000).catch(() => null); return !r?.view || ['REMOVED', 'PARTIAL', 'FAILED'].includes(r.view.state) ? (r?.view?.state ?? 'gone') : null; }, 600, 1000);
     check(['REMOVED', 'gone'].includes(end), `group undo: resumed, the region removed (${end}; ${json(out.group?.answer).slice(0, 200)})`, out.group);
     await L.settle(3000);

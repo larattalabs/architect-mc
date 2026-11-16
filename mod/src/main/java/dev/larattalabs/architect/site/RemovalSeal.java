@@ -77,20 +77,20 @@ public final class RemovalSeal {
 	// ------------------------------------------------------------------ the index
 
 	/** (pure) The sealed boxes, per dimension, filed by every chunk column they touch. */
-	record Index(Map<String, Long2ObjectOpenHashMap<List<Anchors.Bounds>>> byDim, int boxes) {
+	record Index(Map<String, Long2ObjectOpenHashMap<List<Sealed>>> byDim, int boxes) {
 		static final Index EMPTY = new Index(Map.of(), 0);
 
 		boolean contains(String dim, int x, int y, int z) {
-			Long2ObjectOpenHashMap<List<Anchors.Bounds>> m = byDim.get(dim);
+			Long2ObjectOpenHashMap<List<Sealed>> m = byDim.get(dim);
 			if (m == null) {
 				return false;
 			}
-			List<Anchors.Bounds> l = m.get(chunk(x >> 4, z >> 4));
+			List<Sealed> l = m.get(chunk(x >> 4, z >> 4));
 			if (l == null) {
 				return false;
 			}
-			for (Anchors.Bounds b : l) {
-				if (b.contains(x, y, z)) {
+			for (Sealed s : l) {
+				if (s.box().contains(x, y, z) && (s.cells() == null || s.cells().contains(BlockPos.asLong(x, y, z)))) {
 					return true;
 				}
 			}
@@ -98,8 +98,14 @@ public final class RemovalSeal {
 		}
 	}
 
-	/** A sealed box of a dimension. */
-	record Sealed(String dim, Anchors.Bounds box) {
+	/**
+	 * A sealed box of a dimension. {@code cells} (null: the whole box): a road's or cell site's write footprint, the cells its journal
+	 * entries hold (its restore writes no other cell), so a holder in its bounding box but off its cells is not sealed.
+	 */
+	record Sealed(String dim, Anchors.Bounds box, it.unimi.dsi.fastutil.longs.@Nullable LongSet cells) {
+		Sealed(String dim, Anchors.Bounds box) {
+			this(dim, box, null);
+		}
 	}
 
 	static long chunk(int cx, int cz) {
@@ -111,13 +117,13 @@ public final class RemovalSeal {
 		if (boxes.isEmpty()) {
 			return Index.EMPTY;
 		}
-		Map<String, Long2ObjectOpenHashMap<List<Anchors.Bounds>>> out = new HashMap<>();
+		Map<String, Long2ObjectOpenHashMap<List<Sealed>>> out = new HashMap<>();
 		for (Sealed s : boxes) {
-			Long2ObjectOpenHashMap<List<Anchors.Bounds>> m = out.computeIfAbsent(s.dim(), d -> new Long2ObjectOpenHashMap<>());
+			Long2ObjectOpenHashMap<List<Sealed>> m = out.computeIfAbsent(s.dim(), d -> new Long2ObjectOpenHashMap<>());
 			Anchors.Bounds b = s.box();
 			for (int cx = b.minX() >> 4; cx <= b.maxX() >> 4; cx++) {
 				for (int cz = b.minZ() >> 4; cz <= b.maxZ() >> 4; cz++) {
-					m.computeIfAbsent(chunk(cx, cz), k -> new ArrayList<>()).add(b);
+					m.computeIfAbsent(chunk(cx, cz), k -> new ArrayList<>()).add(s);
 				}
 			}
 		}
@@ -137,7 +143,46 @@ public final class RemovalSeal {
 		if (i == null) {
 			i = Infras.pending(id);
 		}
-		return i == null ? null : new Sealed(i.dimension(), i.box());
+		return i == null ? null : new Sealed(i.dimension(), i.box(), footprint(i));
+	}
+
+	/** (slice LC3 fix) Roads' and cell sites' write footprints, per id and placement (they never change while it stands). */
+	private static final Map<String, it.unimi.dsi.fastutil.longs.LongSet> FOOTPRINTS = new HashMap<>();
+
+	/**
+	 * The cells {@code i}'s journal entries hold, every status (its undo restores those and no other): its write footprint; null (seal the
+	 * whole box) when the journal can't be read or holds no cell of it.
+	 */
+	static it.unimi.dsi.fastutil.longs.@Nullable LongSet footprint(Infra i) {
+		String key = i.id() + "@" + i.placedAt();
+		it.unimi.dsi.fastutil.longs.LongSet f = FOOTPRINTS.get(key);
+		if (f != null) {
+			return f;
+		}
+		dev.larattalabs.architect.journal.JournalStore js = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+		if (js == null) {
+			return null;
+		}
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet cells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		try {
+			for (dev.larattalabs.architect.journal.JournalStore.Meta m : SiteJournal.entries(i.id())) {
+				for (long k : m.sections()) {
+					dev.larattalabs.architect.journal.SectionCells sc = js.section(m.id(), k);
+					if (sc != null) {
+						for (int n = 0; n < sc.size(); n++) {
+							cells.add(sc.pos(n));
+						}
+					}
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			return null; // fail closed: the whole box
+		}
+		if (cells.isEmpty()) {
+			return null;
+		}
+		FOOTPRINTS.put(key, cells);
+		return cells;
 	}
 
 	/** The ids whose boxes are sealed now: from the queue's jobs and the group removals (their persisted state). */
@@ -157,6 +202,23 @@ public final class RemovalSeal {
 	private static Index index = Index.EMPTY;
 	private static Object @Nullable [] builtFrom;
 	private static int epoch;
+	/** The boxes of the last build, by id. */
+	private static Map<String, Sealed> built = Map.of();
+
+	/**
+	 * (slice LC3 fix) A box whose removal just ended (its job or group removal left the queue) stays sealed until the queue file without it
+	 * is on disk ({@link Placement#saved}: the save is written off the server thread): a crash before that reloads the removal, which writes
+	 * the box again.
+	 */
+	private record Linger(Sealed box, java.util.concurrent.CompletableFuture<Void> saved) {
+	}
+
+	private static final Map<String, Linger> LINGER = new java.util.LinkedHashMap<>();
+
+	/** Drops the lingering boxes whose queue file is written; answers whether any went (the index then rebuilds). */
+	private static boolean pruneLinger() {
+		return !LINGER.isEmpty() && LINGER.values().removeIf(l -> l.saved().isDone());
+	}
 
 	/** A removal's seal sources changed in a way the fingerprint does not see (a group removal's member list grew). */
 	static void changed() {
@@ -164,6 +226,9 @@ public final class RemovalSeal {
 	}
 
 	private static Object[] fingerprint(@Nullable MinecraftServer srv) {
+		if (pruneLinger()) {
+			epoch++;
+		}
 		// any change of the sites state (records placed, pending, gone), the infra maps, the queue's jobs, the group removals (their lists and
 		// their members: a member written leaves its removal's list)
 		return new Object[] {Sites.stateIdentity(), Infras.identity(), Infras.pendingIdentity(), Placement.jobMods(), Groups.sealMods(), epoch};
@@ -184,15 +249,30 @@ public final class RemovalSeal {
 	static Index current() {
 		Object[] f = fingerprint(null);
 		if (!same(builtFrom, f)) {
-			List<Sealed> boxes = new ArrayList<>();
+			Map<String, Sealed> now = new java.util.LinkedHashMap<>();
 			for (String id : sealedIds()) {
 				Sealed s = boxOf(id);
 				if (s != null) {
-					boxes.add(s);
+					now.put(id, s);
 				}
 			}
+			java.util.concurrent.CompletableFuture<Void> saved = null;
+			for (var e : built.entrySet()) {
+				if (!now.containsKey(e.getKey())) {
+					if (saved == null) {
+						saved = Placement.saved(); // after the save its removal's end queued (same tick, before any seal check)
+					}
+					LINGER.put(e.getKey(), new Linger(e.getValue(), saved));
+				}
+			}
+			for (String id : now.keySet()) {
+				LINGER.remove(id);
+			}
+			List<Sealed> boxes = new ArrayList<>(now.values());
+			LINGER.values().forEach(l -> boxes.add(l.box()));
+			built = now;
 			index = index(boxes);
-			builtFrom = f;
+			builtFrom = f; // (a linger made now whose save is already written goes at the next check's prune)
 		}
 		return index;
 	}
@@ -227,6 +307,93 @@ public final class RemovalSeal {
 			return false;
 		}
 		count("hopper");
+		return true;
+	}
+
+	/**
+	 * (LC3 fix, review 3; from {@code HopperGuardMixin}) A hopper's or hopper minecart's pull out of slot {@code slot} of {@code source}
+	 * ({@code tryTakeInItemFromSlot}, before it removes anything): refused when that slot's block is sealed. A restore job that restarts
+	 * writes its holders' contents again, so an item taken out of a restored holder mid-removal would come back twice.
+	 */
+	public static boolean refusesExtract(Container source, int slot) {
+		if (!any()) {
+			return false;
+		}
+		FillGuard.Cell cell = FillGuard.resolve(source, slot);
+		if (cell == null || !sealed(cell.be().getLevel(), cell.be().getBlockPos())) {
+			return false;
+		}
+		count("extract");
+		return true;
+	}
+
+	/** (LC3 fix, review 3; from {@code HopperGuardMixin}) A sealed hopper pushes nothing out ({@code ejectItems}). */
+	public static boolean refusesPush(Level level, BlockPos hopper) {
+		if (!any() || !sealed(level, hopper)) {
+			return false;
+		}
+		count("extract");
+		return true;
+	}
+
+	/** (LC3 fix, review 3; from {@code DispenseSealMixin}) A sealed dispenser or dropper fires nothing (its contents stay). */
+	public static boolean refusesDispense(Level level, BlockPos at) {
+		if (!any() || !sealed(level, at)) {
+			return false;
+		}
+		count("dispense");
+		return true;
+	}
+
+	/**
+	 * (LC3 fix, review 4; from {@code CrafterSealMixin}) A crafter crafts nothing while it, or the cell its output goes to, is sealed: refused
+	 * before {@code dispenseFrom} assembles anything, so no ingredient is consumed, no leftover ejected, and no output dropped into a box
+	 * being cleared.
+	 */
+	public static boolean refusesCraft(Level level, BlockPos at, net.minecraft.core.Direction front) {
+		if (!any() || !sealed(level, at) && !sealed(level, at.relative(front))) {
+			return false;
+		}
+		count("crafter");
+		return true;
+	}
+
+	/** (LC3 fix, review 5; from {@code VaultSealMixin}) A vault in a sealed box takes no key ({@code tryInsertKey}: nothing consumed). */
+	public static boolean refusesVaultKey(Level level, BlockPos at, @Nullable Player p) {
+		if (!any() || !sealed(level, at)) {
+			return false;
+		}
+		count("vault");
+		if (p != null) {
+			tell(p);
+		}
+		return true;
+	}
+
+	/** (LC3 fix, review 3; from {@code CopperGolemSealMixin}) A copper golem takes nothing out of a sealed container. */
+	public static boolean refusesGolemTake(Container c) {
+		if (!sealedContainer(c)) {
+			return false;
+		}
+		count("golem");
+		return true;
+	}
+
+	/** (LC3 fix, review 3; from {@code ContainerSlotWrapperMixin}) A Fabric Transfer API extract from a sealed block's slot extracts 0. */
+	public static boolean refusesTransferExtract(Object wrapper) {
+		if (!any()) {
+			return false;
+		}
+		Object[] cs = FillGuard.wrapperSlot(wrapper);
+		if (cs == null) {
+			count("transfer");
+			return true; // fail closed
+		}
+		FillGuard.Cell cell = FillGuard.resolve((Container) cs[0], (Integer) cs[1]);
+		if (cell == null || !sealed(cell.be().getLevel(), cell.be().getBlockPos())) {
+			return false;
+		}
+		count("transfer");
 		return true;
 	}
 
@@ -320,12 +487,41 @@ public final class RemovalSeal {
 		return c != null && c.nonEmptyItemCopyStream().findAny().isPresent() || st.has(DataComponents.BLOCK_ENTITY_DATA);
 	}
 
-	/** (the player path, UseBlockCallback) Whether a player's use of the block at {@code hit} is refused: a holder in a sealed box. */
+	/**
+	 * (the player path, UseBlockCallback) Whether a player's use of the block at {@code hit} is refused: a holder in a sealed box, or (LC3 fix,
+	 * review 1) a chained block (a powered shelf: {@code ShelfBlock.swapHotbar} swaps the hotbar into every connected shelf) any of whose
+	 * connected blocks is a sealed holder.
+	 */
 	static boolean refusesUse(Player p, Level level, BlockPos hit) {
-		if (level.isClientSide() || !any() || !holder(level.getBlockEntity(hit)) || !sealed(level, hit)) {
+		if (level.isClientSide() || !any() || !holder(level.getBlockEntity(hit))) {
+			return false;
+		}
+		if (!sealed(level, hit) && !chainSealed(level, hit)) {
 			return false;
 		}
 		count("use");
+		return true;
+	}
+
+	/** Whether a block chained to {@code at} (a connected shelf; none when it can't connect) is a sealed holder. */
+	static boolean chainSealed(Level level, BlockPos at) {
+		if (!(level.getBlockState(at).getBlock() instanceof net.minecraft.world.level.block.SideChainPartBlock chain)) {
+			return false;
+		}
+		for (BlockPos q : chain.getAllBlocksConnectedTo(level, at)) {
+			if (sealed(level, q) && holder(level.getBlockEntity(q))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** (LC3 fix, review 3; a player's block break) A holder in a sealed box is not broken (its contents would drop, and a restart restores them). */
+	static boolean refusesBreak(Player p, Level level, BlockPos at, @Nullable BlockEntity be) {
+		if (level.isClientSide() || !any() || !holder(be) || !sealed(level, at)) {
+			return false;
+		}
+		count("break");
 		return true;
 	}
 
@@ -347,12 +543,25 @@ public final class RemovalSeal {
 			}
 			return InteractionResult.FAIL;
 		});
+		net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, be) -> {
+			if (!refusesBreak(player, world, pos, be)) {
+				return true;
+			}
+			tell(player);
+			if (player instanceof ServerPlayer sp) {
+				sp.connection.send(new ClientboundBlockUpdatePacket(world, pos));
+			}
+			return false;
+		});
 		ServerLifecycleEvents.SERVER_STARTED.register(RemovalSeal::loadPause);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			PAUSE.clear();
 			pauseFile = null;
 			index = Index.EMPTY;
 			builtFrom = null;
+			built = Map.of();
+			LINGER.clear();
+			FOOTPRINTS.clear();
 		});
 	}
 
@@ -368,6 +577,13 @@ public final class RemovalSeal {
 				x.addProperty("dim", s.dim());
 				Anchors.Bounds b = s.box();
 				x.addProperty("box", b.minX() + "," + b.minY() + "," + b.minZ() + " " + b.maxX() + "," + b.maxY() + "," + b.maxZ());
+				// one sealed cell (a test sets a holder there): a footprint's highest cell, else the box's middle two above its floor
+				long c = BlockPos.asLong((b.minX() + b.maxX()) / 2, Math.min(b.maxY(), b.minY() + 2), (b.minZ() + b.maxZ()) / 2);
+				if (s.cells() != null) {
+					x.addProperty("footprint", s.cells().size());
+					c = s.cells().longStream().reduce((p, q) -> BlockPos.getY(q) > BlockPos.getY(p) ? q : p).orElse(c);
+				}
+				x.addProperty("cell", BlockPos.getX(c) + "," + BlockPos.getY(c) + "," + BlockPos.getZ(c));
 				ids.add(x);
 			}
 		}

@@ -235,6 +235,7 @@ public final class SliceFkDev {
 		o.addProperty("holder", dev.larattalabs.architect.site.RemovalSeal.holder(be));
 		o.addProperty("kind", be == null ? "" : be.getClass().getSimpleName());
 		o.addProperty("block", BuiltInRegistries.BLOCK.getKey(level.getBlockState(p).getBlock()).toString());
+		o.addProperty("state", level.getBlockState(p).toString()); // (LC3 fix) a shelf's chain, a vault's state
 		Map<String, Integer> m = new TreeMap<>();
 		java.util.function.Consumer<ItemStack> add = st -> {
 			if (!st.isEmpty()) {
@@ -295,17 +296,42 @@ public final class SliceFkDev {
 		net.minecraft.world.level.GameType mode = pl.gameMode.getGameModeForPlayer();
 		pl.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
 		long refused0 = dev.larattalabs.architect.site.RemovalSeal.REFUSED.values().stream().mapToLong(Long::longValue).sum();
+		// (LC3 fix) fillHotbar: every hotbar slot holds a copy of the item for the call (a powered shelf swaps the whole hotbar)
+		boolean fill = req.has("fillHotbar") && req.get("fillHotbar").getAsBoolean();
+		var inv = pl.getInventory();
+		ItemStack[] bar = new ItemStack[9];
+		for (int i = 0; i < 9; i++) {
+			bar[i] = inv.getItem(i).copy();
+		}
 		try {
+			if (fill) {
+				for (int i = 0; i < 9; i++) {
+					inv.setItem(i, st.copy());
+				}
+			}
 			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, st);
 			var hit = new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(p).relative(face, 0.5), face, p, false);
 			var r = pl.gameMode.useItemOn(pl, level, st, net.minecraft.world.InteractionHand.MAIN_HAND, hit);
 			o.addProperty("result", String.valueOf(r));
 			o.add("hand", stackJson(pl.getMainHandItem()));
+			if (fill) {
+				int n = 0;
+				for (int i = 0; i < 9; i++) {
+					ItemStack h = inv.getItem(i);
+					n += !h.isEmpty() && h.getItem() == st.getItem() ? h.getCount() : 0;
+				}
+				o.addProperty("hotbar", n); // the item's count left in the hotbar
+			}
 			o.addProperty("menuOpened", pl.containerMenu != pl.inventoryMenu);
 			if (pl.containerMenu != pl.inventoryMenu) {
 				pl.closeContainer();
 			}
 		} finally {
+			if (fill) {
+				for (int i = 0; i < 9; i++) {
+					inv.setItem(i, bar[i]);
+				}
+			}
 			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, prev);
 			pl.setGameMode(mode);
 		}
@@ -395,9 +421,9 @@ public final class SliceFkDev {
 			(req, mc) -> ServerTasks.callOnServer(s -> dev.larattalabs.architect.site.RemovalSeal.stateJson()));
 		DevBridge.register("dev.seal.holder", 10_000, "{pos} - (slice LC3) the item holder at pos: {holder, kind, block, holds, sealed}",
 			(req, mc) -> ServerTasks.callOnServer(s -> holderJson(s.overworld(), posOf(req))));
-		DevBridge.register("dev.seal.use", 30_000, "{pos, item?, count?, contents?: {item: n}, face?: up} - (slice LC3) TEST: the first player (survival for "
+		DevBridge.register("dev.seal.use", 30_000, "{pos, item?, count?, contents?: {item: n}, face?: up, fillHotbar?} - (slice LC3) TEST: the first player (survival for "
 			+ "the call) uses item on the block at pos through ServerPlayerGameMode.useItemOn (Fabric's UseBlockCallback included) -> {before, after, "
-			+ "result, hand, menuOpened, refused, nextBefore, nextAfter}; the player's hand put back after", (req, mc) -> ServerTasks.callOnServer(s -> sealUse(s, req)));
+			+ "result, hand, hotbar?, menuOpened, refused, nextBefore, nextAfter}; the player's hand (and hotbar) put back after", (req, mc) -> ServerTasks.callOnServer(s -> sealUse(s, req)));
 		DevBridge.register("dev.seal.menu", 30_000, "{pos, open?, close?} - (slice LC3) TEST: opens the holder's menu for the first player (no checks), or "
 			+ "answers {open, menu, valid, holder}", (req, mc) -> ServerTasks.callOnServer(s -> sealMenu(s, req)));
 		DevBridge.register("dev.seal.frame", 30_000, "{pos, item, count?} - (slice LC3) TEST: the first player (survival for the call) puts item into the "

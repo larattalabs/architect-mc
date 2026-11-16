@@ -22,4 +22,12 @@ public abstract class CopperGolemSealMixin {
 			cir.setReturnValue(mob.getMainHandItem());
 		}
 	}
+
+	/** (slice LC3 fix) Nor takes anything out of one ({@code pickupItemFromContainer}: nothing picked up). */
+	@Inject(method = "pickupItemFromContainer", at = @At("HEAD"), cancellable = true)
+	private static void architect$sealedPickUp(Container container, CallbackInfoReturnable<ItemStack> cir) {
+		if (dev.larattalabs.architect.site.RemovalSeal.refusesGolemTake(container)) {
+			cir.setReturnValue(ItemStack.EMPTY);
+		}
+	}
 }
