@@ -551,6 +551,14 @@ command to run by hand. Another pinned dev.larattalabs dependency is one row in 
 nightly's `SUMMARY.md` and `nightly.log` then start with `SETUP ABORT: <reason>`, and `summary.json` and `artifacts/nightly/latest.json`
 carry `setupAbort: true` (with `setupAbortReason`), so it cannot be read as a test failure. No notification is sent.
 
+### Review sheets for Noah (2026-11-15)
+
+Noah via the parent session: a sheet meant for Noah (a before/after UI sheet, a blind A/B pick sheet) is **one self-contained HTML
+file**: his preview receives only the HTML, so relative `img/` paths show nothing. Write it with `writeSheet(file, html)` from
+`tools/lib/sheet-inline.mjs` (local `<img src>` inlined as data URIs; a PNG over 300 KB re-encoded as JPEG with `sips`), or
+convert an existing one with `node tools/sheet-inline.mjs <sheet.html> [--out <file>]` (it fails if an image is missing).
+Keep the answer key in its own file, never in the sheet.
+
 ### UI gallery (nightly only)
 
 After the full run, the nightly runs the named chain `ui-gallery` (one client step, `tools/gateui2b.mjs gallery`, built on the UI-2b
