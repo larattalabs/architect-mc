@@ -21,10 +21,10 @@ const report = (f, r) => {
 };
 const errors = (rep) => rep.findings.filter((x) => x.severity === 'error').map((x) => `${x.rule} ${x.part}: ${x.message}`);
 
-test('formHostOf: inside or near a form part only; every other zone none (resolved as before)', () => {
+test('formHostOf: inside a form part only; every other zone none (resolved as before)', () => {
   const byId = new Map([['isle', { family: 'form', kind: 'floating_island' }], ['town', { family: 'zone', kind: 'standard' }]]);
   assert.deepEqual(formHostOf({ part: { where: { inside: { part: 'isle' } } } }, byId), { id: 'isle', kind: 'floating_island' });
-  assert.deepEqual(formHostOf({ part: { where: { near: { feature: { part: 'isle' } } } } }, byId), { id: 'isle', kind: 'floating_island' });
+  assert.equal(formHostOf({ part: { where: { near: { feature: { part: 'isle' } } } } }, byId), null, 'near a form: the frozen land, as before');
   assert.equal(formHostOf({ part: { where: { inside: { part: 'town' } } } }, byId), null);
   assert.equal(formHostOf({ part: { where: { near: { anchor: 'stone' } } } }, byId), null);
   assert.equal(formHostOf({ part: {} }, byId), null);
@@ -131,4 +131,17 @@ test('AQ leftover: r.course with `aqueduct` carries a built course level over a 
   const deep = await plan(prog({}, 30));
   assert.equal(deep.meta.sb.refused?.code, 'UNREACHABLE');
   assert.equal(deep.meta.sb.refused?.evidence?.block, 'channel.aqueduct');
+});
+
+test('a form-hosted zone the land after the forms can\'t hold: refused NO_FEATURE naming that land; a zone near it is blocked, not left fits; not READY', async () => {
+  const f = fx('r2', 'x01_island_hanging');
+  f.plan.zones[0].program.lots[0].size = [60, 60];
+  f.plan.zones.push({ id: 'below', kind: 'standard', where: { near: { feature: { part: 'hanging' } } }, program: { lots: [{ id: 'hut_1', type: 'house', size: [9, 9] }] } });
+  const r = await run(f);
+  const z = part(r, 'hanging');
+  assert.equal(z.class, 'refused', JSON.stringify(z));
+  assert.equal(z.reasons[0].code, 'NO_FEATURE');
+  assert.match(z.reasons[0].message, /land after the forms/);
+  assert.notEqual(r.check.overall, 'READY');
+  assert.notEqual(part(r, 'below').class, 'fits', JSON.stringify(part(r, 'below')));
 });
