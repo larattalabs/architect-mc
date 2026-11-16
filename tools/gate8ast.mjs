@@ -7,9 +7,10 @@
 //     ingame   (st-ingame)  per fixture an INSTANT twin (creative, the flat base: checked, realised, no staged target, the box snapshotted),
 //                           then the same plan in survival (the RS base, a stockpile): realised and built over time, sampled every ~2 s
 //                           through dev.region.terrain: staged targets for its land, intermediate states seen (0 < built < cells), the
-//                           region-wide rate never above terrainPerTick (16) cells per game tick, every standing staged cell supported by
+//                           region-wide rate never above terrainPerTick (16; rs01 2) cells per game tick, every standing staged cell supported by
 //                           the world (TO's rules read live), percent under 100 while terrain is unbuilt and 100 at the end, a terrain
-//                           part `building`; rs01 (relief, a rock spire, pads with two lots, a held terrace): a lot waits SITE_BUSY with
+//                           part `building`; rs01 over raised land (relief blending real slopes, a rock spire, pads with two lots, a held
+//                           terrace; its relief at 2 per tick, so the wait is seen): a lot waits SITE_BUSY with
 //                           architect_mc:waitsFor {kind: "terrain", part, terrainCells, terrainBuilt}; x01 (the hollow mountain); x03's
 //                           island alone (a floating form from its anchor), its owner with no stockpile (an all-free plan needs none). Then: every staged target's bill empty, the check's bills per
 //                           part equal to the targets' (items in = items out: the conservation sum exact), the final world equal to its
@@ -102,7 +103,7 @@ async function twinOf(tag, fx, entries, over) {
  * One fixture staged in survival: realised over a stockpile, fed what its lots lack (G.feed), sampled through dev.region.terrain until built
  * and done; the checks of the file's header; removed (E-flat 0).
  */
-async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) {
+async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 16 } = {}) {
   const entries = entriesOf(fx);
   const T = await twinOf(tag, fx, entries, over);
   const s = await G.site(ctx, tag, fx);
@@ -113,6 +114,8 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) 
   const out = { tag, overall: ck.check?.overall, survival: ck.check?.survival, entries, twin: T };
   check(ck.check?.survival === true && ['READY', 'NEEDS_REPAIR'].includes(ck.check?.overall) && !!ck.check?.artifactSha, `${tag}: Regions.checkPlan in survival: ${ck.check?.overall}, ${json((ck.check?.parts ?? []).map((a) => [a.part, a.class, a.cost?.survival?.free, a.cost?.survival?.held, sum(a.cost?.survival?.bom)]))}`);
   if (!ck.check?.artifactSha) return out;
+  const set = await call('dev.terrain.rate', { n: rate }, 30_000); // (16, the default; rs01's small relief slower, so its half-built states are seen)
+  out.rateSet = set.terrainPerTick;
   const crateAt = crates > 0 ? await G.pile(ctx, s, crates) : []; // (crates 0: no stockpile, an all-free plan needs none)
   const C = new G.Conservation(ctx, box);
   await C.start();
@@ -154,7 +157,7 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) 
     if (dt > 0 && db > 0) { maxRate = Math.max(maxRate, db / dt); if (db > samples[i].rate * dt + samples[i].rate) over16.push([samples[i - 1].t, samples[i].t, db]); }
   }
   out.rate = { max: Math.round(maxRate * 100) / 100, terrainPerTick: final.terrainPerTick, over: over16 };
-  check(final.terrainPerTick === 16 && rs.build?.terrainPerTick === 16 && over16.length === 0 && maxRate > 0, `${tag}: built at most terrainPerTick (${final.terrainPerTick}, RegionBuild.terrainPerTick ${rs.build?.terrainPerTick}) cells per game tick region-wide: the fastest stretch ${out.rate.max}/tick, ${over16.length} stretch(es) over`, over16.slice(0, 4));
+  check(final.terrainPerTick === rate && rs.build?.terrainPerTick === rate && over16.length === 0 && maxRate > 0, `${tag}: built at most terrainPerTick (${final.terrainPerTick}, RegionBuild.terrainPerTick ${rs.build?.terrainPerTick}) cells per game tick region-wide: the fastest stretch ${out.rate.max}/tick, ${over16.length} stretch(es) over`, over16.slice(0, 4));
   // support order: every standing staged cell supported, at every deep sample and at the end
   const deep = samples.filter((x) => x.unsupported !== null);
   const bad = deep.filter((x) => x.unsupported > 0);
@@ -189,6 +192,7 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) 
   const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
   out.eflat = { removed: rm.removed, mismatches: ef.length, list: ef.slice(0, 8) };
   check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, out.eflat);
+  if (rate !== 16) await call('dev.terrain.rate', { n: 16 }, 30_000);
   return out;
 }
 
@@ -201,7 +205,11 @@ steps.ingame = async () => {
   const rate = await call('dev.terrain.rate', {}, 30_000).catch((e) => ({ error: String(e.message ?? e) }));
   out.rateHook = rate;
   if (want('rs01')) {
-    try { out.rs01 = await staged('rs01', G.fixture(ctx, 'rs01_land'), { lotWait: true }); } catch (e) { check(false, `rs01: ${String(e.message).slice(0, 300)}`); out.rs01 = { error: String(e.stack ?? e) }; }
+    // rs01 over raised land: the claim 2 up, a block 5 up under the town (its lots stand on it), so its relief blends real slopes (on rs01's
+    // flat claim the relief and the pads write nothing: no staged cell); the relief built at 2 per tick so the lots' typed wait is seen
+    const fx = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs01_land')));
+    fx.terrain.bands = [...fx.terrain.bands, { x0: 1000, z0: 2000, x1: 1239, z1: 2159, y: 66 }, { x0: 1100, z0: 2060, x1: 1159, z1: 2120, y: 69 }];
+    try { out.rs01 = await staged('rs01', fx, { lotWait: true, rate: 2 }); } catch (e) { check(false, `rs01: ${String(e.message).slice(0, 300)}`); out.rs01 = { error: String(e.stack ?? e) }; }
   }
   if (want('x01')) {
     try { out.x01 = await staged('x01', G.fixture(ctx, 'bf/x01_hollow_mountain'), { over: 96, crates: 1 }); } catch (e) { check(false, `x01: ${String(e.message).slice(0, 300)}`); out.x01 = { error: String(e.stack ?? e) }; }
