@@ -2980,6 +2980,23 @@ public final class Sites {
 	}
 
 	/**
+	 * (DR2 fix, P1-5) The player's record {@link #laterWrite}'s writer restored with that write: its cell's record when what it wrote is its
+	 * own before (the block it captured, with its owner), else null.
+	 */
+	static dev.larattalabs.architect.journal.@Nullable Pt laterPt(List<SectionCells> below, int idx, long layer) {
+		for (SectionCells s : below) {
+			int j = s.find(idx);
+			if (j >= 0 && s.layer(j) < layer) {
+				Journal.Value w = s.written(j);
+				if (w != null) {
+					return w.equals(s.before(j)) ? s.pt(j) : null;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * (F6) What a RECOVER of {@code siteId} takes back of its undo group {@code group}: the site, the other members whose own evidence
 	 * stands, and the group's crate. A member whose cells show it removed stays undone and settles on its own evidence (a member taken
 	 * back over one that stays undone gets the undo's written values as its befores there: {@link Journal#reactivate}). Null while the
@@ -3190,6 +3207,13 @@ public final class Sites {
 			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
 				ev.stands(), ev.restored(), ev.covered(), action);
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
+			if (action == Reconcile.Action.RELEASE && gone.construction() != null && Repairs.takenAfterUndo(server, gone.id(), group) > 0) {
+				// (DR2 fix, P1-4) a survival removal a player mined into "restored": its stored refund counts the blocks taken. Kept pending
+				// (never booked twice); diagnose reports them
+				report(gone.id(), true, "removed " + gone.id() + " reads restored, but players took " + Repairs.takenAfterUndo(server, gone.id(), group)
+					+ " of its standing blocks after its removal: it stays pending (its stored refund holds them: never paid twice)");
+				action = Reconcile.Action.KEEP;
+			}
 			switch (action) {
 				case RELEASE -> {
 					releaseAfter.addAll(groupIds);

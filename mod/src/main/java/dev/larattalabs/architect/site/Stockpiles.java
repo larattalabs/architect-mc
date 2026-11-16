@@ -220,6 +220,7 @@ public final class Stockpiles {
 
 	static void init() {
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
+		OverflowDrops.init(); // (DR2 fix, P1-1)
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
 		SiteWaits.source((srv, level, target) -> {
@@ -1196,10 +1197,15 @@ public final class Stockpiles {
 			Architect.LOGGER.info("Stockpile {}: refund {} already credited; nothing credited again", p.owner, key);
 			return c;
 		}
-		dropOverflow(srv, p, c.overflow(), fallback);
+		if (loadFailed) {
+			dropOverflow(srv, p, c.overflow(), fallback); // never saved this session: nothing to make durable first
+		} else if (!c.overflow().isEmpty()) {
+			// (DR2 fix, P1-1) owed in this same ledger change; spawned only after a save wrote it (OverflowDrops)
+			p.ledger.oweDrop(key, c.overflow(), dropAt(srv, p, fallback).asLong());
+		}
 		changed(p);
-		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), c.overflow().isEmpty() ? "" : ", overflow dropped "
-			+ c.overflow());
+		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), c.overflow().isEmpty() ? "" : ", overflow owed "
+			+ c.overflow() + " (dropped after the ledger's save)");
 		return c;
 	}
 
@@ -2828,6 +2834,12 @@ public final class Stockpiles {
 		if (!srv.isSameThread()) {
 			throw new IllegalStateException("Stockpiles: a repair's save runs on the server thread");
 		}
+		String off = savingOff(srv);
+		if (off != null) {
+			// (DR2 fix, P1-2) saveAllChunks skips a level with noSave (/save-off) unless forced, and RegionDurability tracks only the writes
+			// attempted: the barrier would pass over chunks still dirty in memory. Never forced (an op's backup window): refused
+			throw new IllegalStateException(off);
+		}
 		if (!loadFailed) {
 			saveWithWorld(srv);
 			return;
@@ -2848,6 +2860,26 @@ public final class Stockpiles {
 		if (!undurable.isEmpty()) {
 			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable " + undurable);
 		}
+	}
+
+	/**
+	 * (DR2 fix, P1-2) Why the world's chunks can't be saved now (a level with saving off, {@code /save-off}), or null. A save then writes
+	 * nothing of that level, yet reports no undurable write.
+	 */
+	static @Nullable String savingOff(MinecraftServer srv) {
+		List<String> off = new ArrayList<>();
+		for (ServerLevel l : srv.getAllLevels()) {
+			if (l.noSave()) {
+				off.add(l.dimension().identifier().toString());
+			}
+		}
+		return savingOffMessage(off);
+	}
+
+	/** (pure) {@link #savingOff}'s message over the levels with saving off. */
+	static @Nullable String savingOffMessage(List<String> levelsOff) {
+		return levelsOff.isEmpty() ? null : "saving is off (/save-off) in " + String.join(", ", levelsOff)
+			+ ": the world can't be saved, so a repair can't be made durable; /save-on, then repair";
 	}
 
 	static void saveWithWorld(MinecraftServer srv) {
@@ -2902,6 +2934,12 @@ public final class Stockpiles {
 				}
 				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
 			}
+			// (DR2 fix) the spawned overflow's chunk and entity writes are durable: its entries leave this ledger write
+			if (OverflowDrops.confirm() && "OV1".equals(WorldJournal.armed())) {
+				// (DR2 fix, TEST kill point OV1) the overflow's save: its items on disk, the ledger still owing them
+				Architect.LOGGER.error("Stockpiles: kill point OV1: the overflow's items flushed, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
+			}
 			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
 				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
 				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
@@ -2913,7 +2951,11 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 		}
+		int wrote = saves;
 		save();
+		if (saves > wrote) {
+			OverflowDrops.spawnOwed(srv); // (DR2 fix, P1-1) the ledger owing them is on disk: the overflow drops now (saved at once)
+		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
 		lastWorldSaveMs = ms;
@@ -3084,6 +3126,9 @@ public final class Stockpiles {
 			return;
 		}
 		String why = loadFile(f);
+		if (why == null) {
+			OverflowDrops.loaded(PILES.values()); // (DR2 fix) owed overflow on disk: resolved by the items' tag before any drop
+		}
 		if (why != null) {
 			// (PS, F6, F11) nothing loaded, nothing saved: the file stays as it is
 			PILES.clear();

@@ -47,6 +47,11 @@ final class RepairCore {
 		default long mined(long pos) {
 			return -1;
 		}
+
+		/** (DR2 fix, P1-3) The newest mark its chunk dropped (cap or expiry), or -1: an unmarked cell may be one of them. */
+		default long evicted(long pos) {
+			return -1;
+		}
 	}
 
 	enum Cell {
@@ -94,7 +99,8 @@ final class RepairCore {
 				}
 			}
 		}
-		return minedSince(c, r.mined(w.pos()), w.at());
+		long mined = r.mined(w.pos());
+		return minedSince(c, mined >= 0 ? mined : r.evicted(w.pos()), w.at());
 	}
 
 	/**
@@ -103,6 +109,14 @@ final class RepairCore {
 	 */
 	static Cell minedSince(Cell c, long minedAt, long committedAt) {
 		return c == Cell.LAGGING && minedAt >= 0 && minedAt >= committedAt ? Cell.FOREIGN : c;
+	}
+
+	/**
+	 * (DR2 fix, P1-4) A survival removal's cell a player broke after its undo ({@code minedAt} at or after {@code w.at()}: its placed block
+	 * still stood, the player took it) is FOREIGN, even holding the undo's value (OK): the removal's stored refund counts that block.
+	 */
+	static Cell takenSince(Cell c, long minedAt, Want w, boolean survival) {
+		return survival && w.removal() && c == Cell.OK && minedAt >= 0 && minedAt >= w.at() ? Cell.FOREIGN : c;
 	}
 
 	/**
@@ -248,8 +262,10 @@ final class RepairCore {
 					Value after = sc.after(k);
 					Value w = sc.written(k) != null ? sc.written(k) : wrote.get(pos);
 					Value lw = Sites.laterWrite(below, sc.index(k), sc.layer(k));
+					Pt lpt = null;
 					if (lw != null) {
 						w = lw;
+						lpt = Sites.laterPt(below, sc.index(k), sc.layer(k)); // (DR2 fix, P1-5) the lower writer's restored record rides along
 					}
 					if (after == null || w == null || WorldJournal.same(after, w) && WorldJournal.same(w, after)) {
 						continue;
@@ -261,7 +277,7 @@ final class RepairCore {
 					if (prev != null && prev.layer() >= sc.layer(k)) {
 						continue;
 					}
-					Pt pt = w.equals(sc.before(k)) ? sc.pt(k) : null;
+					Pt pt = lw != null ? lpt : w.equals(sc.before(k)) ? sc.pt(k) : null;
 					List<Value> more = new ArrayList<>();
 					for (Above h : higher.getOrDefault(sc.index(k), List.of())) {
 						if (h.layer() > sc.layer(k) && h.after() != null) {

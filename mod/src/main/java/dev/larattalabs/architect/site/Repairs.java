@@ -74,7 +74,7 @@ public final class Repairs {
 
 	/** One site's part of a diagnosis: its wants, which of them lag, how they read. */
 	record Unit(String site, @Nullable String region, boolean stuck, @Nullable String group, List<RepairCore.Want> wants,
-		List<RepairCore.Want> lagging, int foreign, List<CellDiff> diffs, List<CellDiff> foreignDiffs, int unread) {
+		List<RepairCore.Want> lagging, int foreign, List<CellDiff> diffs, List<CellDiff> foreignDiffs, int unread, int taken, String obs) {
 	}
 
 	/** A diagnosis with what a repair needs. */
@@ -147,7 +147,8 @@ public final class Repairs {
 		MinedCells.World.init();
 		// (DR2, P1-3) a player's break of a journal-owned cell is marked in its chunk (saved with it): later at its pre-op value, it is mined
 		net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> {
-			if (level instanceof ServerLevel sl && !state.isAir() && SiteJournal.owned(Sites.dimensionId(sl), pos.asLong())) {
+			if (level instanceof ServerLevel sl && !state.isAir() && (SiteJournal.owned(Sites.dimensionId(sl), pos.asLong()) || SiteJournal
+				.pendingRemovalStands(Sites.dimensionId(sl), pos.asLong(), state))) { // (DR2 fix, P1-4) a stuck removal's standing block too
 				MinedCells.World.mark(sl, pos, System.currentTimeMillis());
 			}
 			return true;
@@ -291,6 +292,11 @@ public final class Repairs {
 			return MinedCells.World.at(level, pos);
 		}
 
+		@Override
+		public long evicted(long pos) {
+			return MinedCells.World.evicted(level, pos);
+		}
+
 		/** (DR-S) Whether the cell is a container holding items (never rolled forward: a write would destroy them). */
 		boolean holdsItems(long pos) {
 			return level.getBlockEntity(BlockPos.of(pos)) instanceof net.minecraft.world.Container c && !c.isEmpty();
@@ -414,12 +420,28 @@ public final class Repairs {
 		List<CellDiff> fdiffs = new ArrayList<>();
 		int foreign = 0;
 		int unread = 0;
+		int taken = 0;
+		boolean survival = stuck && pendingKeyOf(site) != null;
+		java.security.MessageDigest md;
+		try {
+			md = java.security.MessageDigest.getInstance("SHA-256");
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 		for (RepairCore.Want w : wants) {
 			RepairCore.Reader r = readers.apply(w.dim());
-			RepairCore.Cell c = r == null ? null : RepairCore.classify(r, w);
+			RepairCore.Cell c = r == null ? null : cellOf(r, w, survival);
 			if (c == null) {
 				unread++; // (DR2) no level, or its chunk not read: never a silent clean
 				continue;
+			}
+			// (DR2 fix, should-fix) every observed cell in the plan id (its state, its record, its mark), not only the lagging positions
+			md.update((w.pos() + "=" + r.get(w.pos()) + "|" + r.pt(w.pos()) + "|" + r.mined(w.pos()) + "|" + r.evicted(w.pos()) + ";").getBytes(
+				StandardCharsets.UTF_8));
+			boolean took = c == RepairCore.Cell.FOREIGN && survival && RepairCore.takenSince(RepairCore.Cell.OK, r.mined(w.pos()), w, true)
+				== RepairCore.Cell.FOREIGN && RepairCore.classify(r, w) == RepairCore.Cell.OK;
+			if (took) {
+				taken++;
 			}
 			if (c == RepairCore.Cell.LAGGING && r instanceof LevelReader lr && lr.holdsItems(w.pos())) {
 				c = RepairCore.Cell.FOREIGN; // (DR-S) a container's contents are never written over (custody's rule): a crate or chest with items
@@ -427,7 +449,8 @@ public final class Repairs {
 			if (c == null || c == RepairCore.Cell.OK) {
 				continue;
 			}
-			CellDiff d = new CellDiff(BlockPos.of(w.pos()), RepairCore.text(w.expected()), RepairCore.text(r.get(w.pos())));
+			CellDiff d = new CellDiff(BlockPos.of(w.pos()), RepairCore.text(w.expected()), RepairCore.text(r.get(w.pos())) + (took ? " (taken by a player)"
+				: ""));
 			if (c == RepairCore.Cell.LAGGING) {
 				lag.add(w);
 				if (diffs.size() < 64) {
@@ -440,7 +463,22 @@ public final class Repairs {
 				}
 			}
 		}
-		return new Unit(site, region, stuck, group, wants, lag, foreign, diffs, fdiffs, unread);
+		StringBuilder obs = new StringBuilder();
+		byte[] h = md.digest();
+		for (int i = 0; i < 8; i++) {
+			obs.append(String.format(java.util.Locale.ROOT, "%02x", h[i]));
+		}
+		return new Unit(site, region, stuck, group, wants, lag, foreign, diffs, fdiffs, unread, taken, obs.toString());
+	}
+
+	/**
+	 * A cell's classification for a repair: {@link RepairCore#classify}, then (DR2 fix, P1-4) a survival removal's cell a player broke after
+	 * its undo (its placed block, still standing then, taken: the item is the player's) is FOREIGN even where it now holds the undo's value:
+	 * the removal never settles while one is there (its stored refund includes that block: booking it would pay it twice).
+	 */
+	static RepairCore.@Nullable Cell cellOf(RepairCore.Reader r, RepairCore.Want w, boolean survival) {
+		RepairCore.Cell c = RepairCore.classify(r, w);
+		return c == null ? null : RepairCore.takenSince(c, r.mined(w.pos()), w, survival);
 	}
 
 	/** {@link Sites#diagnose}: read-only, after the start's settles. */
@@ -572,6 +610,7 @@ public final class Repairs {
 
 	private static void findingsOf(Unit u, List<RepairFinding> out, List<String> lines) {
 		int lag = u.lagging().size();
+		lines.add("obs " + u.site() + " " + u.obs()); // (DR2 fix) any change to an observed cell changes the plan id
 		if (u.unread() > 0) {
 			out.add(new RepairFinding(RepairCode.UNREAD, u.site(), u.region(), null, u.unread(), 0, 0, List.of(), u.site() + ": " + u.unread()
 				+ " cell(s) not read (their dimension or chunk unavailable): not diagnosed"));
@@ -596,7 +635,9 @@ public final class Repairs {
 		}
 		if (u.foreign() > 0) {
 			out.add(new RepairFinding(RepairCode.FOREIGN, u.site(), u.region(), null, u.foreign(), 0, u.foreign(), u.foreignDiffs(), u.site()
-				+ ": " + u.foreign() + " cell(s) hold neither the journal's value nor the operation's pre-op value (players' or the world's): left"));
+				+ ": " + u.foreign() + " cell(s) hold neither the journal's value nor the operation's pre-op value (players' or the world's): left"
+				+ (u.taken() > 0 ? "; " + u.taken() + " of them a player took from the pending removal (its stored refund holds them: it stays "
+					+ "pending, never paid twice)" : "")));
 			StringBuilder f = new StringBuilder();
 			u.foreignDiffs().forEach(d -> f.append(d.pos().asLong()).append(':').append(d.found()).append(','));
 			lines.add("foreign " + u.site() + " " + f);
@@ -838,6 +879,10 @@ public final class Repairs {
 			return new RepairResult(planId, false, 0, Map.of(), List.of(), left, null, null, "Nothing to repair in " + now.diagnosis().scope().describe()
 				+ " (" + planId + "); nothing was written", List.of()); // no record: nothing changes
 		}
+		String off = Stockpiles.savingOff(srv);
+		if (off != null) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "Repair " + planId + " refused: " + off + "; nothing was written");
+		}
 		// the record, durable before any write
 		JsonObject o = new JsonObject();
 		o.addProperty("planId", planId);
@@ -991,6 +1036,8 @@ public final class Repairs {
 		// survival: a rolled-forward removal's stored credit (J2 2a's, or a group removal's decCredit held pending, slice DR-S) books once, keyed
 		// to the removals this repair settled only, then saved with the world; custody under the cap. What is credited is what left the
 		// pending credits and the custody for the stock: returned plus overflow (dropped as items)
+		// (DR2 fix) an earlier attempt's refused-save credits already booked in memory (nothing of them pending now, no stop since)
+		boolean bookedBefore = keys.stream().noneMatch(k -> Stockpiles.all().stream().anyMatch(p -> p.ledger().pendingKeys().contains(k)));
 		Map<String, Integer> credited = new TreeMap<>(); // this attempt's (a resumed one books only what is still pending: once per key)
 		boolean saveRefused = false;
 		if (!keys.isEmpty()) {
@@ -1026,9 +1073,17 @@ public final class Repairs {
 				Architect.LOGGER.error("Repair {}: the custody credit's save was refused ({}); the record stays open", planId, e.getMessage());
 			}
 		}
-		JsonObject cr = new JsonObject();
-		credited.forEach(cr::addProperty);
-		o.add("credited", cr);
+		JsonObject prior = o.has("credited") && o.get("credited").isJsonObject() ? o.getAsJsonObject("credited") : null;
+		if (o.get("creditedUnsaved") instanceof JsonObject un && bookedBefore) {
+			prior = creditedAudit(prior, creditedAudit(un, Map.of()).entrySet().stream().collect(java.util.stream.Collectors.toMap(e -> e.getKey(),
+				e -> e.getValue().getAsInt()))); // an earlier attempt booked them in memory (its save refused, no stop since): counted once
+		}
+		if (saveRefused) {
+			o.add("creditedUnsaved", creditedAudit(null, credited)); // its save refused: books again (once per key) when resumed
+		} else {
+			o.add("credited", creditedAudit(prior, credited));
+			o.remove("creditedUnsaved");
+		}
 		JsonArray sj = settledBefore.deepCopy();
 		settled.forEach(sj::add);
 		o.add("settled", sj);
@@ -1076,6 +1131,21 @@ public final class Repairs {
 			PLANS.remove(planId);
 		}
 		return res;
+	}
+
+	/**
+	 * (DR2 fix, should-fix) The record's credit audit over every attempt: an earlier attempt's (a resumed repair books only what is still
+	 * pending) plus this one's.
+	 */
+	static JsonObject creditedAudit(@Nullable JsonObject before, Map<String, Integer> now) {
+		Map<String, Integer> all = new TreeMap<>();
+		if (before != null) {
+			before.entrySet().forEach(e -> all.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+		}
+		now.forEach((k, v) -> all.merge(k, v, Integer::sum));
+		JsonObject cr = new JsonObject();
+		all.forEach(cr::addProperty);
+		return cr;
 	}
 
 	/** The open record rewritten at a phase; a failure is logged (the record before it still resumes: every step is keyed or idempotent). */
@@ -1132,8 +1202,35 @@ public final class Repairs {
 		return out;
 	}
 
+	/**
+	 * (DR2 fix, P1-4) How many of a pending removal's cells a player broke after its undo while its placed block stood there (their marks,
+	 * saved with their chunks; the chunks loaded as needed). The start's settle keeps such a survival removal pending.
+	 */
+	static int takenAfterUndo(MinecraftServer srv, String site, String group) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return 0;
+		}
+		try {
+			int n = 0;
+			Map<String, LevelReader> readers = new LinkedHashMap<>();
+			int[] budget = {Integer.MAX_VALUE};
+			for (RepairCore.Want x : RepairCore.removalWants(js, site, group)) {
+				LevelReader r = readerFor(srv, readers, x.dim(), budget, new HashSet<>());
+				if (r != null && r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) && RepairCore.takenSince(RepairCore.Cell.OK, r.mined(x.pos()),
+					x, true) == RepairCore.Cell.FOREIGN) {
+					n++;
+				}
+			}
+			return n;
+		} catch (IOException e) {
+			return 0;
+		}
+	}
+
 	/** Whether every cell a stuck removal owns now holds what its undo wrote. */
 	private static boolean unanimous(MinecraftServer srv, JournalStore js, String site, String group) {
+		boolean survival = pendingKeyOf(site) != null;
 		try {
 			List<RepairCore.Want> w = RepairCore.removalWants(js, site, group);
 			Map<String, LevelReader> readers = new LinkedHashMap<>();
@@ -1141,7 +1238,8 @@ public final class Repairs {
 			Set<Long> loaded = new HashSet<>();
 			for (RepairCore.Want x : w) {
 				LevelReader r = readerFor(srv, readers, x.dim(), budget, loaded);
-				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) || RepairCore.classify(r, x) != RepairCore.Cell.OK) {
+				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) || cellOf(r, x, survival) != RepairCore.Cell.OK
+					|| x.pt() != null && !r.pt(x.pos())) { // (DR2 fix, P1-5) a restored player's record missing: not settled
 					return false;
 				}
 			}
@@ -1183,6 +1281,8 @@ public final class Repairs {
 				} finally {
 					dev.larattalabs.architect.placed.Placed.endRestore();
 				}
+				// (DR2 fix, P1-5) a cell already holding the block (a stacked upper's identical write came first) gets its record, as an undo's does
+				dev.larattalabs.architect.placed.Placed.restoreUnchanged(level, pts);
 			} else {
 				SiteJournal.writeCells(level, one);
 			}
@@ -1228,6 +1328,10 @@ public final class Repairs {
 			if (b != null) {
 				return refused(planId, Reason.SITE_BUSY, b + "; repair " + planId + " stays open, nothing was written");
 			}
+		}
+		String off = Stockpiles.savingOff(srv);
+		if (off != null) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "Repair " + planId + " refused: " + off + "; it stays open, nothing was written");
 		}
 		Set<String> stuck = stuckSites(srv);
 		List<RepairCore.Want> owed;

@@ -99,6 +99,49 @@ public final class StockLedger {
 	}
 
 	/**
+	 * (DR2 fix, P1-1) A keyed credit's overflow not yet known on disk as item entities: what drops and where (a BlockPos long). Booked in the
+	 * same ledger change as the credit (its key credited, its pending dropped), so the ledger that says "credited" also says "its overflow is
+	 * owed". The entities are spawned only after that ledger is on disk, and the entry leaves the ledger only in a save whose chunk and entity
+	 * writes (the spawned items) are durable first ({@code Stockpiles.spawnOwed}); a start finding one resolves it by the items' tag.
+	 */
+	public record OwedDrop(Map<String, Integer> items, long at) {
+	}
+
+	private final Map<String, OwedDrop> owedDrops = new TreeMap<>();
+
+	/** (DR2 fix) Owes {@code key}'s overflow (merged with any owed already under it; nothing for an empty map). */
+	public void oweDrop(String key, Map<String, Integer> items, long at) {
+		Map<String, Integer> m = new TreeMap<>();
+		OwedDrop o = owedDrops.get(key);
+		if (o != null) {
+			m.putAll(o.items());
+		}
+		items.forEach((k, v) -> {
+			if (v > 0) {
+				m.merge(k, v, Integer::sum);
+			}
+		});
+		if (!m.isEmpty()) {
+			owedDrops.put(key, new OwedDrop(java.util.Collections.unmodifiableMap(m), o != null ? o.at() : at));
+		}
+	}
+
+	/** (DR2 fix) The overflow owed under {@code key}, or null. */
+	public @Nullable OwedDrop owedDrop(String key) {
+		return owedDrops.get(key);
+	}
+
+	/** (DR2 fix) Every key with an owed overflow. */
+	public java.util.Set<String> owedDropKeys() {
+		return java.util.Set.copyOf(owedDrops.keySet());
+	}
+
+	/** (DR2 fix) {@code key}'s owed overflow is on disk as entities (or resolved so at a start): the entry goes. */
+	public void clearOwedDrop(String key) {
+		owedDrops.remove(key);
+	}
+
+	/**
 	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
 	 * chunk never loaded since the world started is not known: the reconcile leaves it alone), {@code standing} the known cells that stood
 	 * paid at the save, {@code owed} the cells that stand unpaid (live: the feed clears a bit as it charges the cell). {@code queueHash} and
@@ -877,6 +920,16 @@ public final class StockLedger {
 			});
 			o.add("pendingCredit", pc); // (J2) additive (format 2)
 		}
+		if (!owedDrops.isEmpty()) {
+			JsonObject od = new JsonObject();
+			owedDrops.forEach((key, d) -> {
+				JsonObject e = new JsonObject();
+				e.add("items", counts(new TreeMap<>(d.items())));
+				e.addProperty("at", d.at());
+				od.add(key, e);
+			});
+			o.add("owedDrops", od); // (DR2 fix) additive (format 2)
+		}
 		return o;
 	}
 
@@ -973,6 +1026,19 @@ public final class StockLedger {
 					}
 					l.pendingCredit.put(e.getKey(), m);
 					l.pendingAt.put(e.getKey(), pe.get("at").getAsLong());
+				}
+			});
+		}
+		if (o.get("owedDrops") instanceof JsonObject od) { // (DR2 fix)
+			od.entrySet().forEach(e -> {
+				if (e.getValue() instanceof JsonObject de && de.has("at")) {
+					Map<String, Integer> m = new TreeMap<>();
+					if (de.get("items") instanceof JsonObject it) {
+						read(it, m);
+					}
+					if (!m.isEmpty()) {
+						l.owedDrops.put(e.getKey(), new OwedDrop(java.util.Collections.unmodifiableMap(m), de.get("at").getAsLong()));
+					}
 				}
 			});
 		}
