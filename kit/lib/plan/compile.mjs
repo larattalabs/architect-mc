@@ -340,6 +340,8 @@ export function featureGeom(env, f, geomOf, from) {
     const n = near(pick);
     return { rect: pick.bbox, aim: [n.x, n.z], avoid: null, body: pick, what: `${pick.kind} (${pick.area} columns)` };
   }
+  // ((slice CAVE) a cave locates an elevated zone only (elevated.mjs, cave.mjs): its lots carved into the cave's walls)
+  if (f.cave !== undefined) return { error: { code: 'NO_FEATURE', message: 'a cave feature locates a lots zone with layout elevated (its lots carved into the cave\'s walls), nothing else' } };
   return { error: { code: 'NO_FEATURE', message: `feature ${Object.keys(f)[0]} is not compiled in v0` } };
 }
 

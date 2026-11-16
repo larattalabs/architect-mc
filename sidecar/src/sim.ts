@@ -118,6 +118,73 @@ export default function build({ palette: p = PALETTES.rustic, roof = 'gable' } =
 }
 `;
 }
+// ---- (CW2) the stand-in for a lot no kit example fits ---------------------------------------------------------------
+
+/** (CW2) The lot stand-in's shed: its box (x0, y0, z0, x1, y1, z1; the door to the south, one row in front for the path) and roof. */
+export interface SimLotSpec {
+  box: [number, number, number, number, number, number];
+  roof: 'gable' | 'lean_to';
+}
+
+/**
+ * (CW2) The sim's stand-in for a request whose max size no kit example fits (a real S plan's 9x9 lot: the smallest cabin is 11 wide):
+ * a kit/lib/smalls.mjs shed sized from the request's box: the full width, the depth less the path row in front, a gable roof when it
+ * fits under the height, else a lean-to. Undefined when even a lean-to shed does not fit (under 4 x 6 x 5). Pure and deterministic.
+ */
+export function simLotSpec(maxSize: Size3 | undefined): SimLotSpec | undefined {
+  if (!maxSize) return undefined;
+  const W = Math.min(maxSize.x, 32);
+  const D = Math.min(maxSize.z - 1, 32);
+  if (W < 4 || D < 4 || maxSize.y < 6) return undefined;
+  // smalls.shed's gable: the walls to row 3, then a stair row per half span, a slab ridge on an odd span (the door side runs along x)
+  const gableTop = 3 + Math.floor(D / 2) + (D % 2);
+  if (gableTop + 1 <= maxSize.y && D >= 5) return { box: [0, 0, 0, W - 1, Math.max(5, gableTop), D - 1], roof: 'gable' };
+  return { box: [0, 0, 0, W - 1, Math.min(maxSize.y - 1, 3 + D), D - 1], roof: 'lean_to' };
+}
+
+/** (CW2) The lot stand-in's design source: the shed of `spec`, framed to exactly its written extents (built once to measure them). */
+export function simLotDesign(id: string, type: string, profile: string[] | undefined, spec: SimLotSpec): string {
+  const [, , , x1, y1, z1] = spec.box;
+  return `// The sim's stand-in for a lot no kit example fits (CW2): a kit/lib/smalls.mjs shed sized from the request's box.
+import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { shed } from '../lib/smalls.mjs';
+
+export const id = '${id}';
+export const lotStandIn = ${JSON.stringify(spec)};
+function framed(make) {
+  const big = make([${x1 + 9}, ${y1 + 9}, ${z1 + 9}], [4, 0, 4]);
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const k of big.cells.keys()) k.split(',').map(Number).forEach((v, i) => { min[i] = Math.min(min[i], v); max[i] = Math.max(max[i], v); });
+  return make(max.map((v, i) => v - min[i] + 1), [4 - min[0], -min[1], 4 - min[2]]);
+}
+export default function build({ palette: p = PALETTES.rustic } = {}) {
+  return framed((size, origin) => {
+    const bp = new Blueprint({ id, name: 'Lot stand-in', type: '${type}', ${profile ? `profile: ${JSON.stringify(profile)}, ` : ''}size, origin, groundY: 1, front: 'south', palette: p });
+    let out;
+    bp.part('main', () => { out = shed(bp, lotStandIn.box, { roof: lotStandIn.roof }); });
+    bp.part('path', () => bp.set(out.standAt[0], 0, out.standAt[2], p.path));
+    bp.spot('entrance', out.standAt[0], out.standAt[2], 180);
+    bp.spot('spawn', out.standAt[0], out.standAt[2], 180);
+    bp.interior(out.interior);
+    return bp;
+  });
+}
+`;
+}
+
+/** (CW2) What a lot stand-in source builds (its size, front and anchors): the source run once from the scratch kit's designs dir. */
+export async function simLotBuilt(designsDir: string, id: string, source: string): Promise<Built> {
+  const f = path.join(designsDir, `${id}__lot_standin.mjs`);
+  fs.writeFileSync(f, source);
+  try {
+    const b = ((await import(`${pathToFileURL(f).href}?t=${Date.now()}`)) as KitModule).default();
+    return { size: { x: b.size.x, y: b.size.y, z: b.size.z }, ...(b.front ? { front: b.front } : {}), ...(b.anchors ? { anchors: b.anchors } : {}) };
+  } finally {
+    fs.rmSync(f, { force: true });
+  }
+}
+
 // ---- (7a K3) the stand-in for a wall lot ---------------------------------------------------------------------
 
 /** (7a K3) The brief line Steward adds for a lot on a wall's line ("keep the faces outside the wall closed at ground level (doors face in)"). */
@@ -281,7 +348,16 @@ function paramCombos(params: Record<string, ParamSpec>): Array<Record<string, un
  * at its defaults when that fits (as before), else the combination of its params with the largest footprint that fits, else the
  * other examples the same way. Undefined when nothing in the kit fits (the request then fails as before, with the checker's reason).
  */
-export async function simFit(kitDir: string, type: string, maxSize: Size3 | undefined): Promise<{ src: string; values: Record<string, unknown>; built: Built; changed: boolean } | undefined> {
+export async function simFit(kitDir: string, type: string, maxSize: Size3 | undefined): Promise<SimFitResult | undefined> {
+  // (CW2) memoised: the kit examples are fixed for the sidecar's life, and a box nothing fits walks every combination of every example
+  const key = `${kitDir}\u0000${type}\u0000${maxSize ? `${maxSize.x},${maxSize.y},${maxSize.z}` : '-'}`;
+  let p = SIM_FIT_CACHE.get(key);
+  if (!p) SIM_FIT_CACHE.set(key, (p = simFitUncached(kitDir, type, maxSize)));
+  return p;
+}
+type SimFitResult = { src: string; values: Record<string, unknown>; built: Built; changed: boolean };
+const SIM_FIT_CACHE = new Map<string, Promise<SimFitResult | undefined>>();
+async function simFitUncached(kitDir: string, type: string, maxSize: Size3 | undefined): Promise<SimFitResult | undefined> {
   const dir = path.join(kitDir, 'designs');
   const own = simSource(kitDir, type);
   const order = [...new Set([...(own ? [own] : []), ...(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => f.slice(0, -4)).sort() : [])])];
@@ -650,6 +726,9 @@ export class SimDesigner implements Designer {
     const wallLot = d.massing || req.versionOf || composite ? undefined : simWallLot(req);
     // (since NEXT, 7a K3) a wall lot's massing takes its box: the stand-in massing of the wall-lot stand-in the detail pass builds
     const wallLotMassing = d.massing && !req.redirect ? simWallLot(req) : undefined;
+    // (CW2) no kit example fits the max size (a real S plan's 9x9 lot): a shed sized from the request's box, for the massing and the detail
+    const lotSpec = !fit && !wallLot && !wallLotMassing && !composite && !req.versionOf && !req.site ? simLotSpec(req.maxSize) : undefined;
+    const lotSource = lotSpec ? simLotDesign(bp, req.type, open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined, lotSpec) : undefined;
     let source: string;
     let what: string;
     let note = '';
@@ -668,6 +747,12 @@ export class SimDesigner implements Designer {
         source = standInMassing(bp, req.type, built);
         what = `a wall-lot stand-in massing ${built.size.x}x${built.size.y}x${built.size.z} (the lot's box)`;
         note = 'a wall-lot stand-in massing (the lot\'s box)';
+      } else if (lotSource && lotSpec) {
+        // (CW2) one box the size of the lot stand-in the detail pass builds, so the detail conforms and fills it
+        const built = await simLotBuilt(path.dirname(design), bp, lotSource);
+        source = standInMassing(bp, req.type, built);
+        what = `a lot stand-in massing ${built.size.x}x${built.size.y}x${built.size.z} (no kit example fits ${req.maxSize!.x}x${req.maxSize!.y}x${req.maxSize!.z})`;
+        note = 'a lot stand-in massing (no kit example fits the max size)';
       } else {
         const ex = simMassingSource(cfg.kitDir, req.type);
         const exSize = ex ? await massingSize(ex) : undefined;
@@ -742,6 +827,11 @@ export class SimDesigner implements Designer {
       source = simWallLotDesign(bp, wallLot);
       what = `a wall-lot stand-in ${req.type} ${wallLot.size[0]}x${wallLot.size[2]} (sim, kit/lib/wallLotDesigns.mjs)${wallLot.outerDoor ? ' with its door in an outer face (sim:outerdoor)' : ''}`;
       note = wallLot.outerDoor ? 'the door is in an outer face (sim:outerdoor)' : 'a wall-lot stand-in';
+    } else if (lotSource && lotSpec) {
+      // (CW2) no kit example fits the max size: the shed sized from the request's box (its massing is the same box)
+      source = lotSource;
+      what = `a lot stand-in shed ${lotSpec.box[3] + 1}x${lotSpec.box[5] + 2} (sim, kit/lib/smalls.mjs; no kit example fits ${req.maxSize!.x}x${req.maxSize!.y}x${req.maxSize!.z})`;
+      note = 'a lot stand-in (no kit example fits the max size)';
     } else if (req.effort === 'small' && fitsSmall(req.maxSize)) {
       // (0b) a SMALL item on an S lot: a shed composed from kit/lib/smalls.mjs, as the SMALL brief asks (the massing is 0a's fitted
       // stand-in)
@@ -763,7 +853,8 @@ export class SimDesigner implements Designer {
     // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const smallSrc = !d.massing && !req.versionOf && !wallLot && !composite && req.effort === 'small' && fitsSmall(req.maxSize);
+    const smallSrc = !d.massing && !req.versionOf && !wallLot && !composite && !lotSource && req.effort === 'small' && fitsSmall(req.maxSize);
+    // (CW2) a lot stand-in is checked as what it is (a shed: an open type keeps its type and profile)
     // (7b DS) a site stand-in is checked as what it is (its own type and profile), on the composite
     const limits = d.massing ? plan.limits : req.site || composite ? { ...plan.limits, type: undefined, profile: undefined } : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     // ((6c IRR) the sim's stand-in honours a lot's reserved cells: the kit drops the copied example's blocks there before the check)
