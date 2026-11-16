@@ -302,6 +302,31 @@ separate from the run's own `--lock`, which still guards one runner's run dir an
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
 
+**Outside callers (Steward), slice SLOT (2026-11-15).** Steward's in-game clients (e2e and slice flows) take a slot from the same
+queue, so FIFO, the slot limit, the load gate and turbo exclusivity apply to them. They take **one slot per client**, with one
+acquire before each client launch. A 2-client run makes 2 acquires under the same driver pid:
+```
+node "$ARCHITECT_DIR/tools/slot.mjs" acquire --who steward --worktree "$PWD" --label <flow or step> --pid <driver pid> \
+     [--max-wait-min N] [--no-load-wait]       # stdout: {"slot":3,"ticket":"t-<enqueuedAt>-<pid>","path":...,"waitedSeconds":...}
+node "$ARCHITECT_DIR/tools/slot.mjs" release --ticket <ticket>   # frees only that ticket's slot
+node "$ARCHITECT_DIR/tools/slot.mjs" status --json               # holders (who/worktree/label/pid/ticket), queue, load, turbo
+```
+- **`acquire`:** queues a ticket and blocks until it is that ticket's turn: no turbo run queued, reserving or running; a free
+  slot; the load gate (max1 72, settle 120 s). Waiting is logged on stderr. Settle also spaces one driver's own clients:
+  client 2 starts at least 120 s after client 1.
+- **Load alone never fails it:** as for a gate run, the load gate gives up at the cap and starts (`loadWait.gaveUp`).
+- **`--pid`:** the slot's holder. Use the e2e driver's node pid (alive for the whole run), not a relaunching client. The slot
+  frees when that pid dies; a waiter that dies loses its queue ticket.
+- **`--max-wait-min`:** 15 by default, capped at 15 (rule 10). On timeout (full slots, turbo, the queue ahead) it exits 2 with
+  `waited 15 min for a slot (load N / max1 72; turbo none|queued|reserving|running (pid ..); holders: ..)` on stderr. Exit 3: the
+  holder pid is dead. Exit 4: a release freed nothing.
+- **Status:** `status --json` `turbo` has `queued`, `reserving` and `running`. A turbo run waits for Steward holders like gate runs.
+- **Slots dir:** `GATE_SLOTS_DIR`, else `<this checkout>/../.gate-slots` from the script's own path (gate-run's dir); any cwd works.
+- *As built:* `tools/slot.mjs` over `tools/lib/slots.mjs`: `acquireSlot(dir, { who, label, pid, worktree, maxWaitMin, noLoadWait })`
+  -> `{ slot, ticket, path }`, `releaseTicket(dir, ticket)`, `slotStatus(dir)`, `resolveSlotsDir()`. No second queue: it is
+  turbo.mjs's `acquire`; `tryAcquire` writes `me.holdPid` and `me.slotExtra` (who, label, ticket); `liveHolders` sums one pid's
+  shards; gate-run's `freeRunSlots` counts slots, not pids. Each client counts as 1 shard. Tests: `kit/test/slot-outside.test.mjs`.
+
 ### Load-aware start (2026-11-12)
 
 On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot

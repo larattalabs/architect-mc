@@ -1102,7 +1102,7 @@ async function decideAuto() {
   const holders = allSlotHolders();
   const taken = new Set(holders.flatMap((h) => (Array.isArray(h.ports) ? h.ports.flat() : [])).map(Number));
   const pairsFree = await freePairs({ range: AC.portRange, given: allPairs ? portPairs : null, taken });
-  const freeRunSlots = Math.max(0, SLOTS - slotHolders().filter((h) => h.pid !== process.pid).length - 1);
+  const freeRunSlots = Math.max(0, SLOTS - slotHolders().filter((h) => h.pid !== process.pid).reduce((a, h) => a + h.slots.length, 0) - 1); // slots, not pids: one outside driver may hold several (tools/lib/slots.mjs)
   const c = chooseShards(AC, { probe, holders, freeRunSlots, wallFor: (n) => estimate(est, n, 0).wallMin, pairs: pairsFree });
   if (!pairsFree.length) die(`shards auto: no free port pair ${allPairs ? `in --ports ${allPairs}` : `in ${AC.portRange.join('-')} (shards.auto.portRange)`}`);
   autoChoice = {
