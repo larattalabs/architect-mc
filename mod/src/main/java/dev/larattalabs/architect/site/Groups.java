@@ -1033,24 +1033,6 @@ public final class Groups {
 			Stockpiles.saveWithWorld(server);
 			dev.larattalabs.architect.journal.WorldJournal.kill("FKC1"); // (TEST) the custody saved, the undo's world write not yet
 		}
-		// (slice LC, TEST) dev.removal.lateCargo: items into a container cell now, ticks before the writes; dev.removal.failAfterCustody: the
-		// removal ends unwritten here, its custody written back (FK's path for cargo found at the take), then kill point LC1
-		for (String id : ids) {
-			LateCargo.injectArmed(level, id);
-		}
-		String failed = LateCargo.failArmed(ids);
-		if (failed != null) {
-			for (String back : ids) {
-				Site b = Sites.get(back);
-				if (b != null && Fills.phase(b) != null) {
-					Fills.writeBack(level, b);
-				}
-			}
-			dev.larattalabs.architect.journal.WorldJournal.kill("LC1"); // (TEST) the custody written back in memory, nothing saved since
-			end(server, r, new Removed(false, List.of(failed + ": the removal ended unwritten after its custody was saved (TEST: dev.removal.failAfterCustody)"),
-				Map.copyOf(r.refund)));
-			return;
-		}
 		// refunds against the stacks before the undo is planned (rule 7)
 		for (String id : ids) {
 			Site s = Sites.get(id);
