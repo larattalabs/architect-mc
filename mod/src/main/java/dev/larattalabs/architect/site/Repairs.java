@@ -1415,7 +1415,7 @@ public final class Repairs {
 			}
 			BlockState was = (BlockState) v[0];
 			if (!level.getBlockState(p).equals(was) && !was.hasBlockEntity()) {
-				level.setBlock(p, was, net.minecraft.world.level.block.Block.UPDATE_CLIENTS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE
+				dev.larattalabs.architect.placed.Placed.set(level, p, was, net.minecraft.world.level.block.Block.UPDATE_CLIENTS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE
 					| net.minecraft.world.level.block.Block.UPDATE_SUPPRESS_DROPS);
 				n++;
 			}
