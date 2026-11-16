@@ -793,23 +793,45 @@ export function course(r, pathIn, opts = {}) {
     // the levels: the running minimum of the lanes' and banks' ground - 1 (a head at `from.level` when given: a weir head)
     const levels = [];
     let L = opts.from?.level ?? Infinity;
+    // ((slice R2) opts.aqueduct (true, or {span: piers | arches}): low ground up to AQUEDUCT.rise under the running level is spanned (the
+    // level held, the span on piers or arches as the plan router's channel.aqueduct); deeper ground refuses UNREACHABLE fill. Absent: as before)
+    const aqWant = opts.aqueduct ? (typeof opts.aqueduct === 'object' ? opts.aqueduct : {}) : null;
+    let held = false;
     for (let i = 0; i < path.length; i++) {
       let g = Infinity;
       for (const d of [dirs[i].din, dirs[i].dout]) for (const [x, z] of [...lanesAt(path[i][0], path[i][1], DIRS[d], offs), ...banksAt(path[i][0], path[i][1], DIRS[d], offs)]) g = Math.min(g, S.groundAt(x, z));
-      L = Math.min(L, g - 1 + (i === 0 && opts.from?.level !== undefined ? Math.max(0, opts.from.level - (g - 1)) : 0));
+      const want = g - 1 + (i === 0 && opts.from?.level !== undefined ? Math.max(0, opts.from.level - (g - 1)) : 0);
+      if (aqWant && i > 0 && Number.isFinite(L) && want < L - spec.fill) {
+        if (L - (g - 1) > AQUEDUCT.rise) throw refusal('UNREACHABLE', `r.course: the course crosses low ground deeper than an aqueduct carries it (its level at most ${AQUEDUCT.rise} over the ground)`, { kind: 'fill', block: 'channel.aqueduct', limit: AQUEDUCT.rise });
+        held = true;
+      } else L = Math.min(L, want);
       levels.push(L);
+    }
+    let aq = null;
+    if (held) {
+      const span = AQUEDUCT.spans.includes(aqWant.span) ? aqWant.span : AQUEDUCT.span;
+      aq = { span, every: aqueductEvery(span, regionM15Limits(m15LookOf(r.ctx?.connectorLook?.look ?? null))) };
+      spec.block = 'channel.aqueduct';
+      spec.aqueduct = aq;
     }
     const headKind = opts.from?.kind ?? 'spring', tailKind = opts.to?.kind ?? 'pool';
     const ends = { head: { kind: headKind }, tail: { kind: tailKind, lip: opts.to?.lip ?? null } };
     if (tailKind === 'weir' && opts.to?.level !== undefined) { const lv = opts.to.level; for (let i = 0; i < levels.length; i++) levels[i] = Math.max(Math.min(levels[i], levels[i - 1] ?? Infinity), Math.min(lv, levels[i - 1] ?? Infinity)); }
     const frozen = opts.frozen ?? false;
-    const geo = courseGeometry(S, path, levels, spec, ends, { id, rng: r.ctx.rng ? r.ctx.rng(`course:${id}`) : null, frozen });
+    const geo = courseGeometry(S, path, levels, spec, ends, { id, rng: r.ctx.rng ? r.ctx.rng(`course:${id}`) : null, frozen, ...(aq ? { aqueduct: aq } : {}) });
     if (geo.refused) throw refusal(geo.refused.code, geo.refused.message, geo.refused.evidence);
     if (opts.ice) for (const R of geo.reaches) R.ice = iceOf(r.ctx, R, geo, opts.ice === 'all');
     const m = bodiesMark(r);
     try {
       const out = layCourse(r, geo, { id, part: opts.part ?? null, look: spec.look, stage: opts.stage ?? r.stageList[0], unsafe: opts._unsafe ?? null, exits: opts.exits, survey: S });
       rec.bodies = out.bodies;
+      // ((R2) an aqueduct's span record, as the plan router's: M15 judges its parts as one connector type's spans)
+      if (geo.span?.part) {
+        const row = { course: id, span: geo.span.span, every: geo.span.every, length: geo.span.length, rise: geo.span.rise, piers: geo.span.piers };
+        const shellParts = geo.reaches.filter((R) => [...R.cols.keys()].some((kk) => geo.span.cols.has(kk))).map((R) => `${R.id}_shell`.slice(0, 48));
+        (r.meta.aqueducts ??= []).push(...[geo.span.part, ...shellParts].map((part) => ({ part, ...row })));
+        rec.aqueduct = { span: geo.span.span, every: geo.span.every, length: geo.span.length, rise: geo.span.rise, piers: geo.span.piers };
+      }
     } catch (e) { bodiesRollback(r, m); throw e; }
     rec.steps = geo.steps.map((s) => ({ kind: s.kind, from: s.from, to: s.to, drop: s.drop }));
     rec.ends = [{ end: 'from', kind: headKind, ref: opts.from?.ref ?? rec.bodies[0]?.id ?? null }, { end: 'to', kind: tailKind, ref: opts.to?.ref ?? rec.bodies.at(-1)?.id ?? null }];
