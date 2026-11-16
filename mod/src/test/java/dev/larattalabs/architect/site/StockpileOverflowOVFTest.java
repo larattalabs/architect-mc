@@ -260,6 +260,17 @@ class StockpileOverflowOVFTest {
 		assertTrue(l.identityHolds());
 	}
 
+	/** A forced crate removal on a pile a refund left over capacity drops the least stock within the capacity left (the existing rule). */
+	@Test
+	void aForcedCrateRemovalOverCapacityDropsWithinTheCapacityLeft() {
+		StockLedger l = paid();
+		l.credit(KEY, REFUND, FULL, MAX);
+		Map<String, Integer> drop = Stockpiles.excess(l, 1, MAX);
+		drop.forEach(l::drop);
+		assertTrue(l.usedStacks(MAX) <= 1 && l.identityHolds(), "within the capacity left: " + l.stock());
+		assertEquals(plus(drop, l.stock()), minus(plus(paid().stock(), REFUND), Map.of()), "dropped + left = the stock before");
+	}
+
 	/** No keyed path drops overflow before (or after) its save. */
 	@Test
 	void noKeyedPathDropsOverflow() throws Exception {
