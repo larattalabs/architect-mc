@@ -943,14 +943,18 @@ export function evalTile(ir, key, heights, opts = {}) {
               // cleared the reaches not yet due would let them flow early)
               // (8aF) a free-pass cell of a staged op is CLASS_STAGED (counted free; the mod writes it in the free pass until slice ST)
               const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : S.opStaged[opi] === 1 ? CLASS_STAGED : 0) : CLASS_PAID;
-              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
+              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, staged: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
               if (cls === CLASS_PAID) {
                 st.paid++;
                 for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c);
                 if (keepTerrain && S.terrain[m]) { let a = st.terrain.get(m); if (!a) st.terrain.set(m, (a = [])); a.push(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15)); }
               }
               else if (cls === CLASS_HELD) st.held++;
-              else st.free++;
+              else {
+                st.free++;
+                // (8a QX) a staged cell is counted free and, apart, as staged: the quote's time side (Quote.terrainCells); it bills nothing
+                if (cls === CLASS_STAGED) st.staged++;
+              }
               if (S.opFluid[opi] && S.charged[m]) st.charged.set(S.charged[m], (st.charged.get(S.charged[m]) ?? 0) + 1);
               if (S.creative[m]) { const b = blockName(C.mats[m]); st.creativeOnly.set(b, (st.creativeOnly.get(b) ?? 0) + 1); }
               SCRATCH_C[n] = cls;
@@ -1029,7 +1033,7 @@ export function evalTile(ir, key, heights, opts = {}) {
     S.groups.forEach((gid, g) => {
       const st = svStats[g];
       if (!st) return;
-      sv[gid] = { free: st.free, held: st.held, paid: st.paid, bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}),
+      sv[gid] = { free: st.free, held: st.held, paid: st.paid, ...(st.staged ? { staged: st.staged } : {}), bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}),
         // (BC, A11) the paid terrain cells by state: [x, y, z, ...] per state, with each cell's items
         ...(st.terrain.size ? { terrain: [...st.terrain].map(([m, cells]) => ({ state: C.mats[m], items: Object.fromEntries(S.itemsAt(m)), cells })) } : {}) };
     });

@@ -770,3 +770,6 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
   for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
   drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
+- **2026-11-15 (8a slice QX):** no new hook. `dev.region.quote` also returns `terrainCells` ({group: n}, `Quote.terrainCells`: the plan's staged
+  terrain cells per target group over its survey, plan.json's `survivalStaged`; `{}` for a creative quote or a plan planned before QX). The
+  bill members (`bom`, `bomParts`, `terrain`, `exact`, `notes`) are unchanged: staged cells bill nothing.

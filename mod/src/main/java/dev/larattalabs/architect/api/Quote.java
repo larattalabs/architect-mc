@@ -45,7 +45,10 @@ import org.jspecify.annotations.Nullable;
  *     terrain[item]))} over the union of {@code bom}'s and {@code terrain}'s keys, every other item exact
  * @param terrainCells (8a, feature {@code terrainConstruction}) the time side of staged terrain: per part group, the staged terrain cells
  *     left to build (they bill nothing: {@code bom}, {@code terrain} and {@code maxBill} are unchanged; docs/CONTRACT.md "Phase 8a" §5).
- *     Empty for a creative quote and until slice QX fills it. Since NEXT.
+ *     The plan's count over its survey (plan.json's {@code survivalStaged}; the world is not read, so an upper bound): a group with none is
+ *     left out. F3's region-made trees stay paid (in {@code bom}, not here). At {@link RegionBuild#terrainPerTick} cells a tick (default 16)
+ *     a group takes about {@code cells / (terrainPerTick * 20)} seconds while loaded. Empty for a creative quote and for a plan planned
+ *     before NEXT. Since NEXT.
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
 	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain, java.util.Map<String, Long> terrainCells) {
