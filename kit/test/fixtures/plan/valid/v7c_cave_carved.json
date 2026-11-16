@@ -1,5 +1,6 @@
 {
  "about": "(slice CAVE) feature.cave: an elevated zone near the cave the flat claim holds (a hall dug at y 40..47 under ground 64, read from the fixture volume through the check's two-plan flow): each lot a carve_into site lot in the hall's wall, its door on the hall floor",
+ "terrain": {},
  "volume": {
   "edits": [
    {
