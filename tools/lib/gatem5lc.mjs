@@ -362,6 +362,7 @@ export async function registerLC(steps, h) {
     for (let i = 0; i < 300; i++) {
       rec = await call('dev.pl.record', { site }, 10_000).catch(() => null);
       if (!rec || rec.refused || rec.error) break;
+      if (i % 30 === 29) log(`  LC4: ${site}'s record still stands after the restart (${i + 1} s)`);
       await L.sleep(1000);
     }
     await L.settle(3000);
