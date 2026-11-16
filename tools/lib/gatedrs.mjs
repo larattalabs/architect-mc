@@ -31,7 +31,8 @@ export async function registerDRS(steps, h) {
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
-  const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
+  // two cottages bound to rs_hut: two construction sites (the hall lot is a stub), one removed alone (DR4a), one with the region (DR4b)
+  const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }];
   const ledgerOf = (root) => (root?.stockpiles ?? []).find((p) => p.owner === G.OWNER)?.ledger ?? null;
   const rep = (op, extra = {}) => call('dev.repair', { op, ...extra }, 300_000);
   const st = () => rep('state');
@@ -158,7 +159,7 @@ export async function registerDRS(steps, h) {
     const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
     check(!cr.refused, `a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    W.region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' }, autoApprove: false });
+    W.region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut', cottage_2: 'rs_hut' }, autoApprove: false });
     W.group = (await call('dev.region.state', { region: W.region }, 60_000)).view?.groupId;
     for (const stage of ['ground', 'street', 'lots']) await cmd(`/apitest sapprove ${W.group} ${stage}`);
 
@@ -215,8 +216,9 @@ export async function registerDRS(steps, h) {
       for (const s of sites) { const r = await call('dev.pl.record', { site: s }, 30_000).catch(() => null); if (r) recs.push({ s, ...r, b: box(r.restoreBox) }); }
       recs.sort((a, b) => (a.b[3] - a.b[0]) * (a.b[5] - a.b[2]) - (b.b[3] - b.b[0]) * (b.b[5] - b.b[2]));
       log(`  ${tag}: the town's sites ${json(recs.map((r) => [r.s, r.blueprint, r.restoreBox]))}`);
-      const A = recs.find((r) => /rs_hut/.test(r.blueprint ?? '')) ?? recs[0]; // the cottage lot; the hall stays for DR4b
-      W.hall = recs.filter((r) => r !== A).pop();
+      const huts = recs.filter((r) => /rs_hut/.test(r.blueprint ?? ''));
+      const A = huts[0]; // one cottage removed alone; the other (W.hall) is the region member DR4b leaves stuck
+      W.hall = huts[1];
       check(!!A && !!W.hall && A.s !== W.hall.s, `${tag}: the cottage ${A?.s} (${A?.restoreBox}) and the hall ${W.hall?.s} (${W.hall?.restoreBox})`);
       await call('dev.stockpile.ps', { noPeriodic: true, noCreditSave: true }, 30_000);
       await cmd('/kill @e[type=item]');
@@ -225,13 +227,13 @@ export async function registerDRS(steps, h) {
       const B = saved();
       const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${A.s}@`));
       check(!!key && sum(B.paid[key]) > 0, `${tag}: ${A.s}'s paid record on disk: ${key} (${sum(B.paid?.[key])} units)`);
-      await rep('snap', { id: 'A', min: A.b.slice(0, 3), max: A.b.slice(3) });
+      await rep('snap', { name: 'A', min: A.b.slice(0, 3), max: A.b.slice(3) });
       const rm = await call('dev.pl.remove', { site: A.s, requester: G.OWNER, force: false }, 600_000);
       check(rm.removed === true, `${tag}: ${A.s} removed on its own (${json(rm.blockers ?? [])})`);
       await L.settle(1500);
       const restored = await hash(A.b);
       const wb = westOf(A.b, gy);
-      const lost = (await rep('unwrite', { id: 'A', min: wb.slice(0, 3), max: wb.slice(3) })).cells;
+      const lost = (await rep('unwrite', { name: 'A', min: wb.slice(0, 3), max: wb.slice(3) })).cells;
       check(lost > 0, `${tag}: the fault: ${lost} restored cell(s) of its west half put back as placed (their writes lost)`);
       if (!(await haltAS1(tag))) return out;
       const S = saved();
@@ -254,13 +256,13 @@ export async function registerDRS(steps, h) {
       const keys = Object.keys(B.paid ?? {}).filter((k) => sum(B.paid[k]) > 0);
       const hkey = keys.find((k) => k.startsWith(`site:${H.s}@`));
       check(!!hkey && keys.length >= 2, `${tag}: the town's paid records on disk: ${keys.length} (${json(keys)})`);
-      await rep('snap', { id: 'H', min: H.b.slice(0, 3), max: H.b.slice(3) });
+      await rep('snap', { name: 'H', min: H.b.slice(0, 3), max: H.b.slice(3) });
       await G.remove(ctx, W.region);
       const sv = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
       check(!sv?.view?.state || sv.view.state === 'REMOVED', `${tag}: the region removed (${sv?.view?.state ?? 'gone'})`);
       const restored = await hash(H.b);
       const wb = westOf(H.b, gy);
-      const lost = (await rep('unwrite', { id: 'H', min: wb.slice(0, 3), max: wb.slice(3) })).cells;
+      const lost = (await rep('unwrite', { name: 'H', min: wb.slice(0, 3), max: wb.slice(3) })).cells;
       check(lost > 0, `${tag}: the fault: ${lost} restored cell(s) of the hall's west half put back as placed`);
       if (!(await haltAS1(tag))) return out;
       const S = saved();

@@ -787,7 +787,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   or `none`); `op: state` answers `startDone`, `pending` (`suspectsPending`), `suspects`, the auto-diagnose's `opsLine` and the
   SITE_REPAIRED count with the last site and region; `op: log` the repair records; `op: killAt` arms kill point **DRK1** (the next
   repair halts the JVM once its record is durable and half its cells are written; `armed: false` disarms). Used by `dr-crash`.
-- (slice DR-S, TEST) `op: snap {id, min, max}` keeps a box's block states (this session); `op: unwrite {id, min, max}` puts back the cells
+- (slice DR-S, TEST) `op: snap {name, min, max}` keeps a box's block states (this session); `op: unwrite {name, min, max}` puts back the cells
   of the box that changed since the snapshot (no neighbour updates, no drops, no player record; cells with block entity data skipped): the
   lost-writes fault, cell exact; `op: ledger {owner, key, paid?, custody?}` pays `paid` under `key` and holds `custody` under it in that
   stockpile's ledger, saved with the world (PAID_ORPHAN, CUSTODY). Used by `dr-survival`.

@@ -27,8 +27,8 @@ public final class SliceDrDev {
 		DevBridge.register("dev.repair", 120_000, "{op: diagnose|repair|state|log|killAt|snap|unwrite|ledger, scope?: {kind: site|region|here|all, id?, x?, y?, z?, "
 			+ "continuation?}, planId?, apply?: false, actor?: player|none, armed?: true} - (DR) TEST: Sites.diagnose / Sites.repair through the API "
 			+ "(actor: the first player, or none), the auto-diagnose's suspects, ops line and SITE_REPAIRED count (state), the repair records (log); "
-			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written); (DR-S) snap {id, min, max} keeps a "
-			+ "box's cells, unwrite {id, min, max} puts back the cells changed since (the lost-writes fault), ledger {owner, key, paid?, custody?} "
+			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written); (DR-S) snap {name, min, max} keeps a "
+			+ "box's cells, unwrite {name, min, max} puts back the cells changed since (the lost-writes fault), ledger {owner, key, paid?, custody?} "
 			+ "injects a paid record or custody, saved with the world", (req, mc) -> ServerTasks.callOnServer(
 				s -> s).thenCompose(s -> run(s, req)));
 	}
@@ -53,7 +53,7 @@ public final class SliceDrDev {
 				// (DR-S, TEST) snap: a box's cells kept under an id; unwrite: the box's cells that changed since put back (the lost-writes fault)
 				var level = x.overworld();
 				BlockPos min = pos(req.getAsJsonArray("min")), max = pos(req.getAsJsonArray("max"));
-				String id = req.get("id").getAsString();
+				String id = req.get("name").getAsString(); // ("id" is the bridge's request id)
 				JsonObject o = new JsonObject();
 				o.addProperty("cells", "snap".equals(op) ? Repairs.testSnap(level, id, min, max) : Repairs.testUnwrite(level, id, min, max));
 				return o;
