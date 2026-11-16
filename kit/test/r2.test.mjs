@@ -87,3 +87,48 @@ test('the T3a/K1 moat re-check: a road, street or path from outside the moat int
     assert.deepEqual(bad.map((x) => `${x.rule} ${x.part}: ${x.message}`), [], id);
   }
 });
+
+test('AQ leftover: r.course with `aqueduct` carries a built course level over a valley (the span on arches, its meta.aqueducts row); without it the course falls into the valley as before; too deep refuses UNREACHABLE fill', async () => {
+  const { planTwice } = await import('./h-helpers.mjs');
+  const { flatSurvey } = await import('./plan-helpers.mjs');
+  const { region } = await import('../lib/region/program.mjs');
+  await import('../lib/fluids/course.mjs');
+  // a plateau 8 over the plain both sides of a valley 32 wide (the plain itself): sculpted by the program as hydro_demo does
+  const prog = (aqueduct, depth = 8) => ({
+    id: 'r2_aq', catalogue: false, params: {},
+    default(ctx) {
+      const { claim, survey } = ctx;
+      const r = region(ctx);
+      r.stages(['ground', 'forms', 'fluids']);
+      const g0 = survey.groundAt(claim.minX + 100, claim.minZ + 80);
+      const x0 = claim.minX + 40, z0 = claim.minZ + 60, z1 = claim.minZ + 100;
+      const top = (x, z) => (z < z0 || z > z1 ? null : (x >= x0 && x < x0 + 60) || (x >= x0 + 92 && x < x0 + 152) ? g0 + depth : null);
+      const cols = [];
+      for (let x = x0; x < x0 + 152; x++) for (let z = z0; z <= z1; z++) { const t = top(x, z); if (t !== null) cols.push(x, z, survey.groundAt(x, z) + 1, t - 1, 0, x, z, t, t, 1); }
+      const ter = r.part('plateaus', { stage: 'ground' });
+      ter.columns({ abs: 0 }, { abs: 0 }, cols, ['minecraft:dirt', 'minecraft:grass_block'], { cond: 0 });
+      (r.meta.parts[ter.id] ??= {}).kind = 'add';
+      const sculpted = { groundAt: (x, z) => top(x, z) ?? survey.groundAt(x, z), topAt: (x, z) => top(x, z) ?? survey.topAt(x, z) };
+      const c = r.course([[x0 + 10, z0 + 20], [x0 + 140, z0 + 20]], { id: 'canal', look: 'built', flow: 'level', stage: 'forms', survey: sculpted, from: { kind: 'spring' }, to: { kind: 'pool' }, ...(aqueduct ? { aqueduct } : {}) });
+      // (meta.sb: the scenario record planRegion passes through)
+      r.meta.sb = { refused: c.refused, aqueduct: c.aqueduct ?? null, bodies: c.bodies.length };
+      r.anchor('entrance', [x0, g0 + 1, z0]);
+      r.anchor('spawn', [x0, g0 + 1, z0]);
+      return r;
+    },
+  });
+  const sv = flatSurvey();
+  const plan = (p) => planTwice({ program: p, programSource: `// r2 ${JSON.stringify(p.id)}`, params: {}, survey: sv.bytes, seed: '7', claim: sv.claim, node: 'test' });
+  const on = await plan(prog({ span: 'arches' }));
+  assert.equal(on.meta.sb.refused, null, JSON.stringify(on.meta.sb.refused));
+  assert.ok(on.meta.sb.aqueduct && on.meta.sb.aqueduct.span === 'arches' && on.meta.sb.aqueduct.length >= 30, JSON.stringify(on.meta.sb));
+  assert.ok((on.meta.aqueducts ?? []).length > 0, 'the span record M15 reads');
+  const rep = checkRegion({ ir: on.ir, survey: sv.bytes, blobs: on.blobs, volumes: on.volumes.map((v) => v.decoded), meta: on.meta });
+  assert.deepEqual(errors(rep), [], 'the aqueduct course checks clean');
+  const off = await plan(prog(null));
+  assert.equal(off.meta.sb.aqueduct, null);
+  assert.equal(off.meta.aqueducts, undefined, 'no aqueduct without the option (as before)');
+  const deep = await plan(prog({}, 30));
+  assert.equal(deep.meta.sb.refused?.code, 'UNREACHABLE');
+  assert.equal(deep.meta.sb.refused?.evidence?.block, 'channel.aqueduct');
+});
