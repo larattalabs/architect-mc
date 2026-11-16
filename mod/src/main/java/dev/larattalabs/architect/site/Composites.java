@@ -120,6 +120,11 @@ public final class Composites {
 	 * library), so a module id another composite claims, or a missing one, is left alone. {@code library} is every library entry's
 	 * sidecar by entry id: a module that any other composite there also lists is kept (in {@code shared}, with the composites that
 	 * list it), whatever its {@code compositeOf} says. Every surviving composite is checked before anything moves. Pure but for the reader.
+	 *
+	 * <p>(CS2) A module id the composite lists twice is taken once (a second move of the same folder would fail after the composite
+	 * itself went: a partial delete). A hidden module no surviving composite lists goes with its last lister whatever its {@code
+	 * compositeOf} says: a module kept as shared when its owner was deleted (its {@code compositeOf} still the old owner) is deleted
+	 * with the last composite that used it, never left hidden and undeletable. A module another live composite lists stays.
 	 */
 	public static ModuleDeletion modulesToDelete(String entryId, @Nullable JsonObject sidecar,
 		java.util.function.Function<String, @Nullable JsonObject> moduleJson, java.util.Map<String, ? extends @Nullable JsonObject> library) {
@@ -127,7 +132,7 @@ public final class Composites {
 		if (ci == null) {
 			return new ModuleDeletion(java.util.List.of(), java.util.Map.of());
 		}
-		java.util.Map<String, java.util.List<String>> usedBy = new java.util.HashMap<>();
+		java.util.Map<String, java.util.Set<String>> usedBy = new java.util.HashMap<>();
 		for (java.util.Map.Entry<String, ? extends @Nullable JsonObject> other : library.entrySet()) {
 			if (entryId.equals(other.getKey())) {
 				continue;
@@ -137,24 +142,23 @@ public final class Composites {
 				continue;
 			}
 			for (String m : oi.moduleEntryIds()) {
-				usedBy.computeIfAbsent(m, k -> new java.util.ArrayList<>()).add(other.getKey());
+				usedBy.computeIfAbsent(m, k -> new java.util.TreeSet<>()).add(other.getKey());
 			}
 		}
 		java.util.List<String> out = new java.util.ArrayList<>();
 		java.util.Map<String, java.util.List<String>> shared = new java.util.LinkedHashMap<>();
-		for (String m : ci.moduleEntryIds()) {
+		for (String m : new java.util.LinkedHashSet<>(ci.moduleEntryIds())) { // (CS2) [M, M, N]: M once
 			JsonObject j = moduleJson.apply(m);
-			if (!isModule(j) || !entryId.equals(j.get(COMPOSITE_OF).getAsString())) {
+			if (!isModule(j)) {
 				continue;
 			}
-			java.util.List<String> others = usedBy.get(m);
-			if (others != null) {
-				java.util.List<String> sorted = new java.util.ArrayList<>(others);
-				java.util.Collections.sort(sorted);
-				shared.put(m, java.util.List.copyOf(sorted));
-			} else {
-				out.add(m);
+			java.util.Set<String> others = usedBy.get(m);
+			if (others == null) {
+				out.add(m); // (CS2) no surviving composite lists it: it goes with its last lister, whatever its compositeOf
+			} else if (entryId.equals(j.get(COMPOSITE_OF).getAsString())) {
+				shared.put(m, java.util.List.copyOf(others)); // owned here, still used: kept and reported (sorted)
 			}
+			// else another live composite owns and lists it: left alone
 		}
 		return new ModuleDeletion(java.util.List.copyOf(out), java.util.Collections.unmodifiableMap(shared));
 	}

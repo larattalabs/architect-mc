@@ -111,9 +111,9 @@ class ApiCSTest {
 		JsonObject c = composite("keep", "keep__west", "keep__centre", "keep__east");
 		assertTrue(CompositeInfo.ofExt(c.getAsJsonObject("ext")).isPresent(), "the test's wire is a well-formed CompositeInfo");
 		Map<String, JsonObject> lib = Map.of("keep__west", module("keep__west", "keep"), "keep__centre", module("keep__centre", "keep"),
-			"keep__east", module("keep__east", "other")); // east claims another composite: left alone
+			"keep__east", module("keep__east", "other")); // east claims another composite, which lists it: left alone
 		Map<String, JsonObject> all = Map.of("keep", c, "keep__west", lib.get("keep__west"), "keep__centre", lib.get("keep__centre"),
-			"keep__east", lib.get("keep__east"));
+			"keep__east", lib.get("keep__east"), "other", composite("other", "keep__east")); // (CS2) a live lister: without it east is an orphan and goes
 		assertEquals(List.of("keep__west", "keep__centre"), Composites.modulesToDelete("keep", c, lib::get, all).modules());
 		assertEquals(Map.of(), Composites.modulesToDelete("keep", c, lib::get, all).shared());
 		assertEquals(List.of(), Composites.modulesToDelete("cabin", new JsonObject(), lib::get, all).modules(), "a plain entry takes nothing with it");
@@ -141,6 +141,43 @@ class ApiCSTest {
 		Composites.ModuleDeletion db = Composites.modulesToDelete("b", b, lib::get, lib);
 		assertEquals(List.of("b__own"), db.modules());
 		assertEquals(Map.of(), db.shared());
+	}
+
+	/** (CS2) A composite that lists a module id twice ([M, M, N]) takes each once: a second move of the same folder would leave a partial delete. */
+	@Test
+	void aDuplicatedModuleIdIsDeletedOnce() {
+		JsonObject a = composite("a", "a__m", "a__m", "a__n");
+		JsonObject b = composite("b", "a__m", "a__m", "b__own"); // a survivor listing the shared id twice is reported once
+		Map<String, JsonObject> lib = Map.of("a", a, "a__m", module("a__m", "a"), "a__n", module("a__n", "a"));
+		assertEquals(List.of("a__m", "a__n"), Composites.modulesToDelete("a", a, lib::get, lib).modules());
+		Map<String, JsonObject> both = Map.of("a", a, "b", b, "a__m", module("a__m", "a"), "a__n", module("a__n", "a"), "b__own", module("b__own", "b"));
+		Composites.ModuleDeletion d = Composites.modulesToDelete("a", a, both::get, both);
+		assertEquals(List.of("a__n"), d.modules());
+		assertEquals(Map.of("a__m", List.of("b")), d.shared(), "one entry per surviving lister");
+	}
+
+	/**
+	 * (CS2) A module kept as shared when its owner went (compositeOf still the deleted owner) is deleted with its last lister, not left
+	 * hidden and undeletable; while another live composite lists it, it stays.
+	 */
+	@Test
+	void aSharedModuleGoesWithItsLastLister() {
+		JsonObject a = composite("a", "a__m", "a__own");
+		JsonObject b = composite("b", "a__m", "b__own");
+		JsonObject c = composite("c", "a__m");
+		Map<String, JsonObject> lib = new java.util.HashMap<>(Map.of("a", a, "b", b, "c", c, "a__m", module("a__m", "a"), "a__own", module("a__own", "a"),
+			"b__own", module("b__own", "b")));
+		assertEquals(Map.of("a__m", List.of("b", "c")), Composites.modulesToDelete("a", a, lib::get, lib).shared());
+		lib.remove("a");
+		lib.remove("a__own"); // A deleted: M stays, its compositeOf still "a"
+		Composites.ModuleDeletion db = Composites.modulesToDelete("b", b, lib::get, lib);
+		assertEquals(List.of("b__own"), db.modules(), "C still lists M: it stays");
+		assertEquals(Map.of(), db.shared(), "M is not B's: not reported as B's shared module");
+		lib.remove("b");
+		lib.remove("b__own");
+		assertEquals(List.of("a__m"), Composites.modulesToDelete("c", c, lib::get, lib).modules(), "the last lister takes it, whatever its compositeOf");
+		assertEquals(List.of(), Composites.modulesToDelete("c", c, x -> null, lib).modules(), "a module not in the library is left alone");
+		assertEquals(List.of(), Composites.modulesToDelete("c", c, x -> new JsonObject(), lib).modules(), "a plain (non-module) entry is never taken");
 	}
 
 	/**
