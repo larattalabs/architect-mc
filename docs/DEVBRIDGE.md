@@ -394,6 +394,12 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-16 (slice LC2; TEST, in `SliceFkDev`, generated headless too):** `dev.removal.pause {site, after?: [x, y, z], off?}` pauses
+  `site`'s removal restore (a `RestoreJob`): with no `after` it writes nothing from its next tick on; with `after` it stops right after
+  writing that cell; `off` resumes (in memory; a restart clears it). `dev.removal.state` also answers `pause: {site: {after, reached,
+  waiting}}`. `dev.removal.holder {pos, items?, move?: [from, to]}`: the item holder at `pos` (LateCargo's table: a container, a lectern, a
+  campfire): items put in now, or one slot's stack moved to another -> `{holder, slots: [[slot, item, count]...]}`. `dev.removal.lateCargo`
+  injects into any holder of the table. Driven by lc-crash's LC4.
 - **2026-11-15 (slice LC, Steward's S-M5-12/S-M5-13; TEST, in `SliceFkDev`, generated headless too):** `dev.removal.lateCargo {site, pos:
   [x, y, z], items: {item: count}}` arms one injection: the next removal of `site` (a group, stage, region or revision removal, or a
   single Remove) puts the items into the container at `pos` right after its custody is saved (for a group removal, ticks before its
