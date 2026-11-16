@@ -264,7 +264,9 @@ public final class StyleBrowserScreen extends PickerScreen {
 		// (PickerScreen's layout: the big sheet, the name, the subtitle, then lines 10 px apart), so no line is cut in half under them
 		int[] gg = gridGeometry();
 		int paneH = height - 8 - gg[2];
-		int first = gg[2] + 6 + Math.min(60, paneH / 3) + 5 + 10 + 10 + 2;
+		// (slice UI, UI-AUDIT 14 "the Style browser's detail drops its body" at GUI 4) the thumbnail height comes from lab-ui 0.5.0, a fifth of a short pane
+		int thumb = dev.larattalabs.labui.client.picker.PickerScreen.detailThumbH(paneH);
+		int first = gg[2] + 6 + (thumb > 0 ? thumb + 5 : 0) + 10 + 10 + 2;
 		int band = top - 3;
 		if (band > first) {
 			band = first + (band - first) / 10 * 10;

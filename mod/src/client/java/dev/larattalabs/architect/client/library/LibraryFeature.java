@@ -281,7 +281,7 @@ public final class LibraryFeature {
 				}
 			}
 			EDITS.remove(id);
-			say("Deleted " + nameOf(id) + (modules.isEmpty() ? "" : " and its " + modules.size() + " module entries") + " (kept in architect/library-trash/" + to.getFileName() + ")", false);
+			say("Deleted " + nameOf(id) + (modules.isEmpty() ? "" : " and its " + modules.size() + " module entries") + " (a copy is kept in the Library's trash)", false);
 			if (id.equals(selected)) {
 				selected = null;
 			}

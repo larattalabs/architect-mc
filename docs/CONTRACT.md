@@ -32766,3 +32766,29 @@ LEFTOVERS "CN connectors in game". No API record, method, reason or feature chan
 - **Units:** `RepairCoreDRTest`; `UmtRepairP7Test` (P7: F5, H-core, F7; 150 CRASH seeds: 7,373 cells rolled forward, 121 stuck records settled, idempotent); UMT.md retags F5, F7, H-core. Gradle 1344/0 at HEAD; kit 1476/1477 then the TJ probe test fixed (feature names before `"apiVersion");`); sidecar 910/921 under load, the 3 timed-out files 50/50 on re-run; api-compat 8/8; step-inputs 427 clean; gitleaks clean.
 - **Re-scoped (open contract item for the coordinator):** survival repair is NOT built. `Repairs.fed()` skips every construction record, standing or pending, so a stuck survival removal is neither reported nor repaired, and J2 2a's pending credit is never booked by a repair. Groups' `decCredit` lives only in the queued removal (dropped when it ends), so a region removal's credit has no store to roll forward from. DR4, DR5 (BOOK), DR7 (CUSTODY repair in game) and DR8 (PAID_ORPHAN in game) are not gated. The CUSTODY/PAID_ORPHAN diagnose and the credit calls exist but are unexercised in game. Crate and scaffold cells are excluded from the wants.
 - **Leftovers:** a stuck removal with foreign cells stays pending until the next start's normal settle (each repair of it writes an empty record); `diagnose all` lists a placement cell a player mined back to its pre-op value as LAGGING; a region scope reads entries by their group's region.
+
+### Slice UI as built (branch `slice/UI` off origin/main d7d000ca; LEFTOVERS "UI"; no API change; $0; light; recorded 2026-11-15)
+
+- **Needs lab-ui 0.5.0** (branch `feat/0.5`, unreleased): built and shot with `-Plab_ui.dir`. Merge order: lab-ui feat/0.5 -> tag v0.5.0 ->
+  this branch's last commit (the `lab_ui_version` 0.5.0 pin and the `>=0.5.0` range, UI audit 2 F10) -> merge.
+- **A-chips:** `ArchitectScreen.chip` is lab-ui's 18 px Chip (`CHIP_H` follows it); Library filters wrap to a second row at GUI 4 with whole
+  words; a set row's × asks twice (`GROUP_DROP`). **wording-2:** "bible" -> "Style" in SetDialog, SetFeature, LibraryTab, the Designs tab.
+- **A-placed:** `library/PlacedGroups` (pure, `PlacedGroupsTest`): yours, composites, town plans, "Managed by <mod>"; rows by name and
+  place; a managed site's Move is disabled with its reason, its Remove keeps the two-press ask (the apijars' archived apitest script
+  removes an owned site through it). Status tab scrolls when taller than the panel.
+- **A-refund-honesty:** wording only ("refunds what was paid for"); the capped-refund toast is a leftover (Stockpiles is BCC's, strict).
+- **UI-AUDIT 14:** editor body ends above a rule over the status line; variants lock bar folds into the title row on a short panel; the
+  Style browser keeps detail lines at GUI 4 (lab-ui `detailThumbH`); job steps, ids, paths, env var names and the trash path out of
+  player text; disabled controls give reasons (tooltips); Placed Remove is a plain danger button; gallery: `variants_changed` really
+  changes, `region_ghost` closes the Design screen first, new `library/placed_managed` and `jobs/panel`.
+- **SD:** pill and Jobs box above the header's clay rule (`Panels.headerBand`); Options on one grid; a dropped Style chip counted; the
+  empty estimate names a missing Style; steppers are lab-ui's `Stepper` (SetDialog, the editor's W/H/D).
+- **DS:** `unfitRule` refuses SITE_UNFIT on a site *error* only (site_bound, site_keep); warnings pass (reverses DS reading 3; for
+  Steward: a site variant with only site warnings now installs). `sidecar/test/site-unfit.test.ts`.
+- **Jobs panel** (`jobs/JobRows.playerStep`): steps without helper ids or a repeated state, Style jobs kind `style`, link label without the id.
+- **Checks:** mod compile against lab-ui feat/0.5 (and with the 0.5.0 pin); `PlacedGroupsTest` 2/2, `JobRowsTest` 7/7, Phase4bUiRules 5/5,
+  MassingRules 4/4; sidecar site-unfit, site-design, follow 36/36; lab-ui 155/155; step-inputs build+check clean; gitleaks clean (both).
+  In game: UI gallery before (d7d000ca) and 3 after runs (8916/8917, 145 shots, 0 failed); design-critic round 1 iterate on all four
+  groups, round 2 ship on 8 of 10 files, the last two fixed after the final capture (not re-shot). Sheet: architect-mc/artifacts/UI/sheet.html.
+- **Leftovers:** at GUI 4 the placement panel still covers part of one chat line (nothing fits whole); the capped-refund toast; Architect's own HasParent/ScreenPause/ClientEnv/Keys copies -> lab-ui's (both mods); Library
+  detail description clamp at GUI 4; A-first-run (later).
