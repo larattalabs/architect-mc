@@ -42,8 +42,9 @@ public final class ApiRules {
 		"kitVersion", "sitesLoadHealthy", "maxBill",
 		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
 		"quoteTerrain",
-		// (DR) Sites.diagnose and Sites.repair (an op's roll-forward of cells lagging the journal); Sites.suspects (the auto-diagnose's cache)
-		"diagnoseRepair", "repairSuspects",
+		// (DR) Sites.diagnose and Sites.repair (an op's roll-forward of cells lagging the journal); Sites.suspects (the auto-diagnose's cache);
+		// (DR-S) RegionView.removalStop: a removal stopped NOT_STARTED (nothing written) apart from PARTIAL
+		"diagnoseRepair", "repairSuspects", "removalStop",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 
