@@ -10,4 +10,7 @@ export const SP2_MOVED = Object.freeze({
   // first plan byte-identical)
   'k1a/sealed.json': "CF: UNREACHABLE through a sealed ring names the wall and the fix (sealedWallMessage); answers' text only, overall/IR/first plan identical",
   'tunnel/tn15_postern_sealed.json': "CF: UNREACHABLE through a sealed ring names the wall and the fix (sealedWallMessage); answers' text only, overall/IR/first plan identical",
+  // (WR) carried here for the same reason: kit/lib/connectors/wall.mjs ringOf keeps a closed: false ring closed when its box holds the
+  // claim's centre (no town-facing side), with a note; war_camp's palisade surrounds the asks claim's centre
+  'asks/war_camp.json': "WR: camp_palisade's ring encloses the claim's centre, so closed: false is ignored (noted) and the ring stays closed (all four sides); still fits",
 });

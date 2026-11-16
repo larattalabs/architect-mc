@@ -362,11 +362,16 @@ function appendLeg(line, crossings, leg) {
   for (const c of leg.crossings) crossings.push({ from: c.from + off, to: c.to + off });
 }
 
-/** A placed ring's cells (an open ring leaves out the side nearest the claim's centre). */
+/**
+ * A placed ring's cells (an open ring leaves out the side nearest the claim's centre). ((WR) a ring whose box holds the claim's centre
+ * strictly inside has no town-facing side: it stays closed, its gates from the routes, and closed: false is noted as ignored.)
+ */
 function ringOf(K, pl, t, st, notes) {
   let omit = null;
-  if (!st.closed) {
-    const [cx, cz] = centre(K.env.claim), I = pl.I;
+  const [cx, cz] = centre(K.env.claim), I = pl.I;
+  if (!st.closed && cx > I.minX && cx < I.maxX && cz > I.minZ && cz < I.maxZ) {
+    notes.push(`closed: false ignored: the ring encloses the claim's centre (${cx}, ${cz}), so it has no side facing the town; it stays closed and the routes crossing it get its gates`);
+  } else if (!st.closed) {
     const d = { n: Math.abs(cz - I.minZ), e: Math.abs(I.maxX - cx), s: Math.abs(I.maxZ - cz), w: Math.abs(cx - I.minX) };
     omit = ['n', 'e', 's', 'w'].reduce((a, b) => (d[b] < d[a] ? b : a), 'n');
     notes.push(`closed: false: its ${{ n: 'north', e: 'east', s: 'south', w: 'west' }[omit]} side (nearest the claim's centre) is left out`);
