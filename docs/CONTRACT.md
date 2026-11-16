@@ -32837,3 +32837,15 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Units:** `QueueWriteConfirmedTest` (a real IO fault, a directory at the .tmp path: no commit; the retry written: commit; an injected failure; NOT_SAVED never written; a loaded plan durable). The same property probed on 97d04b80 fails ("expected false but was true": the saver's turn completes after the failed write). `StockpileSavePSTest` reads the new `save` signature. Full gradle build: 1360 tests PASS.
 - **Gate (strict, change --only --no-cache --shards 1 --no-turbo, 64b0d3e9, artifacts/gate-runs-psv/20261116-150819-change):** new `psv-crash` 27/0 (hook `dev.queue.writes`): every queue write failing, a survival town's removal waits 20 s with 0 cells changed; PSV1 halted then, reopened, removed again: world as before the town, refund 389 once, identity holds; PSV2 failure cleared, retry written, REMOVED live, halt: stays removed, stock kept (lost 0, minted 0). rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, x-resume 35/0.
 - **For LC3 on rebase:** drop its own copies of requestedGen/WRITTEN_GEN/failedGen/FAIL_WRITES/writeSave(gen)/the retry in saveIfDue/the load resets and keep only `saveWanted`/`wantSave` and the `RemovalSeal.observe` calls in `tick`; take `save`'s `long` answer (NOT_SAVED under loadFailed) and drop `saved()`; its "known leftover" on groupSaved/preSaved is closed here.
+- **Fix round after the rule-15 GPT NOT SAFE (WIP, 2026-11-16, not started in code; the session was wound down):** design agreed, to build next:
+  (1) `writeSave`: after the rename, `FileChannel.open(parent, READ).force(true)` before `WRITTEN_GEN` rises (verified working on macOS/APFS);
+  an open that throws (Windows) is best-effort, a force that throws is a write failure; a test seam called after the rename (fails on bb95ec19:
+  never called). (2) Under `loadFailed` refuse at entry, before anything is touched: `removeGroup`, `undoStage`, `undoDeltaStage`,
+  `Sites.removeLarge`, `InfraPlace.remove`. (3) A preflight at the top of a removal's tick (before RegionFluids/irrigation and R1's custody,
+  legacy crate stock, MechCharges, player drops): a save requested and confirmed written; while writes fail, nothing touched. Residual (the
+  pre-save fails after R1): drop the plan (planner, txn, planned=null, preSave=0, scans) and replan once writes recover; carry the legacy crate
+  stock in a persisted `decStock` (prepareDeconstruct returns none the second time); RestoreJob replans and re-tallies a stockpile road's C29
+  credit via `RoadBuilder.beforeRemove`. Should-fixes: drop the `Fills.phase != null` guards on writeBack (it no-ops without custody); clear
+  `planned` on unwind. Gate: `dev.queue.writes {failAtPreSave}` TEST arm; psv-crash PSV3 (an rs_hut plank mined during the wait: refund ==
+  consumed - 1 exactly), PSV4 (no stockpile, a crate-fed CONSTRUCTION group with stock, the queue file corrupted, reopened: removal refused,
+  crate and stock unchanged, 0 cells changed).
