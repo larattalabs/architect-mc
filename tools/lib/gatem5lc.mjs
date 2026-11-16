@@ -291,8 +291,8 @@ export async function registerLC(steps, h) {
   }
 
   /**
-   * (LC2, the v0.73.0 RC fix review's #5 and LC-2 #4/#6) LC4, creative: a terrain chest holding 2 diamonds, lc_big forced over it (its own
-   * chest replaces it; the snapshot keeps the terrain chest's diamonds). The removal (a sliced RestoreJob) paused before any write
+   * (LC2, the v0.73.0 RC fix review's #5 and LC-2 #4/#6) LC4, creative: a terrain barrel holding 2 diamonds, lc_big forced over it (its own
+   * chest replaces it; the snapshot keeps the barrel's diamonds; a chest of the same state would keep its block entity, a blocker at removal). The removal (a sliced RestoreJob) paused before any write
    * (dev.removal.pause): late cargo after the blocker scan, ticks before the writes: 2 diamonds into the site's own chest in the slot the
    * terrain's sit in (contents equal to the restored ones), a book on its own lectern, and a new chest with 3 flint at an unwritten cell
    * (a holder placed between a sliced restore's ticks). Resumed, it stops right after writing the own chest (the terrain's 2 diamonds back,
@@ -316,9 +316,9 @@ export async function registerLC(steps, h) {
     if (!Array.isArray(b)) { await L.leaveWorld(); return null; }
     const PC = [b[0] + 2, b[1] + 1, b[2] + 2], PL = [b[0] + 4, b[1] + 1, b[2] + 2], PR = [b[0] + 20, b[1] + 1, b[2] + 20];
     const mid = [Math.floor((b[0] + b[3]) / 2), b[1], Math.floor((b[2] + b[5]) / 2)];
-    await cmd(`/setblock ${PC.join(' ')} minecraft:chest[facing=south]`);
+    await cmd(`/setblock ${PC.join(' ')} minecraft:barrel`); // another block: the site's chest replaces it (the snapshot keeps its diamonds)
     const t0 = await call('dev.removal.holder', { pos: PC, items: { [DIAMOND]: 2 } }, 10_000);
-    check(total(t0, DIAMOND) === 2, `LC4: a terrain chest at ${PC.join(',')} holds 2 diamonds (${json(t0.slots)})`, t0);
+    check(total(t0, DIAMOND) === 2, `LC4: a terrain barrel at ${PC.join(',')} holds 2 diamonds (${json(t0.slots)})`, t0);
     const p = await call('dev.pl.place', { blueprint: 'lc_big', origin, mode: 'instant', force: true }, 900_000);
     let own = null;
     for (let i = 0; i < 240 && p.placed; i++) {
@@ -345,7 +345,7 @@ export async function registerLC(steps, h) {
     await call('dev.removal.pause', { site, after: PC }, 10_000);
     const w1 = await pauseWait(site, (s) => s.reached && s.waiting);
     const m0 = await holderAt(PC);
-    check(!!w1 && total(m0, DIAMOND) === 2, `LC4: the restore stopped right after writing the own chest: the terrain chest back with its 2 diamonds (${json(m0.slots)})`, { w1, m0 });
+    check(!!w1 && total(m0, DIAMOND) === 2, `LC4: the restore stopped right after writing the own chest's cell: the terrain barrel back with its 2 diamonds (${json(m0.slots)})`, { w1, m0 });
     const mv = await call('dev.removal.holder', { pos: PC, move: [0, 5] }, 10_000);
     const nearMid = (await call('dev.items.near', { pos: mid, radius: 64 }, 60_000)).items ?? {};
     log(`  LC4 before the halt: chest ${json(mv.slots)}; items near ${json(nearMid)}`);
