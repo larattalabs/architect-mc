@@ -211,6 +211,7 @@
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
     "kit/test/sf-format3.test.mjs",
+    "kit/test/sheet-inline.test.mjs",
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
@@ -724,6 +725,7 @@
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
     "kit/test/sf-format3.test.mjs",
+    "kit/test/sheet-inline.test.mjs",
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
@@ -912,6 +914,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sheet-inline.mjs",
     "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
@@ -1759,6 +1762,7 @@
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
     "kit/test/sf-format3.test.mjs",
+    "kit/test/sheet-inline.test.mjs",
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
@@ -1840,6 +1844,7 @@
     "tools/lib/scenario-br.mjs",
     "tools/lib/scenario-sb.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sheet-inline.mjs",
     "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
@@ -126801,6 +126806,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sheet-inline.mjs",
     "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/theme-rest-norm.mjs",
@@ -126942,7 +126948,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate7bpa.mjs",
-    "tools/lib/pa-ledger.mjs"
+    "tools/lib/pa-ledger.mjs",
+    "tools/lib/sheet-inline.mjs"
    ]
   },
   "pa-p0-s5": {
@@ -127207,6 +127214,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sheet-inline.mjs",
     "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/theme-rest-norm.mjs",
@@ -127348,7 +127356,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate7bpa.mjs",
-    "tools/lib/pa-ledger.mjs"
+    "tools/lib/pa-ledger.mjs",
+    "tools/lib/sheet-inline.mjs"
    ]
   },
   "slb-ingame": {
