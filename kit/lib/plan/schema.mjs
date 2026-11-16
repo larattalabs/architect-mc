@@ -251,7 +251,7 @@ function refsOf(family, part) {
   const feature = (f, path) => {
     if (!f || typeof f !== 'object') return;
     if (typeof f.part === 'string') parts.push({ id: f.part, path: `${path}.part`, as: 'feature' });
-    for (const k of ['water', 'biome_edge', 'ridge']) if (f[k] && typeof f[k].to === 'string') anchors.push({ name: f[k].to, path: `${path}.${k}.to` });
+    for (const k of ['water', 'biome_edge', 'ridge', 'cave']) if (f[k] && typeof f[k].to === 'string') anchors.push({ name: f[k].to, path: `${path}.${k}.to` });
   };
   const target = (t, path) => { if (t && typeof t.part === 'string') parts.push({ id: t.part, path: `${path}.part`, as: 'target' }); };
   const where = (w, path) => {

@@ -1254,6 +1254,13 @@
    "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge."
   },
   {
+   "id": "feature.cave",
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "CAVE: a cave the claim's land already has (the site analysis's caves in the template pick's claim window; minFloor, pick largest or nearest to `to`). Only an elevated zone's near locator: its lots are carve_into site lots dug into the cave's walls, the door on the cave floor."
+  },
+  {
    "id": "endpoint.part",
    "sinceApi": "1.23.0",
    "schemaVersion": 1,

@@ -13,6 +13,8 @@
 import { analyseVolume } from '../region/affordances.mjs';
 import { placeFromAffordance, rotationOf } from '../region/siteLots.mjs';
 import { SITE_MARGIN } from '../siteFits.mjs';
+// (slice CAVE) an elevated zone whose locator is a cave (`near: {feature: {cave}}`): its lots carved into the cave's walls (cave.mjs)
+import { caveSpecOf, resolveCaveZone } from './cave.mjs';
 
 /** The affordance kinds an elevated lot stands on, and the fit each gives. */
 export const ELEVATED_FITS = Object.freeze({ canopy: 'wrap_trunk', trunk: 'wrap_trunk', overhang: 'suspend', ledge: 'on_pad', water: 'on_pad' });
@@ -67,6 +69,10 @@ export function elevatedVolumeBox(env, rect) {
  */
 export function resolveElevatedZone(env, p, { loc, taken = [], tol = { max: 0 }, suspended = false }) {
   const part = p.part;
+  if (caveSpecOf(part)) {
+    if (suspended) return { klass: 'refused', reasons: [{ code: 'NO_FEATURE', message: 'a zone carved into a cave has no overhang ceilings to hang from (rule.suspended)' }] };
+    return resolveCaveZone(env, p, { taken, tol, sizedRect: part.size ? (aim) => elevatedRect(env, part, aim) : null });
+  }
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] };
   const aim = Array.isArray(loc.aim) ? [loc.aim[0], loc.aim[loc.aim.length - 1]] : [Math.floor((env.claim.minX + env.claim.maxX) / 2), Math.floor((env.claim.minZ + env.claim.maxZ) / 2)];
   const rect = elevatedRect(env, part, aim);
@@ -122,7 +128,8 @@ export function emitElevatedZone(r, p, z, { stage }) {
   const out = [];
   for (const g of z.picks) {
     const l = g.spec;
-    const lot = r.siteLot(l.id, { affordance: g.a, fit: g.fit, max: g.max, stage, ...(l.brief !== undefined ? { brief: l.brief } : {}), ...(l.ext !== undefined ? { ext: l.ext } : {}), ...(z.suspended ? { inverted: true } : {}) });
+    // ((slice CAVE) a carved lot: its box and rotation as placed against the cave's wall, no affordance (its frame faces the wall, not the mouth))
+    const lot = r.siteLot(l.id, { ...(z.carved ? { box: g.box, rotation: g.rotation } : { affordance: g.a, max: g.max }), fit: g.fit, stage, ...(l.brief !== undefined ? { brief: l.brief } : {}), ...(l.ext !== undefined ? { ext: l.ext } : {}), ...(z.suspended ? { inverted: true } : {}) });
     if (!lot) throw new Error(`site lot ${l.id}: its volume was not read`);
     const b = lot.box;
     out.push({ id: l.id, box: [b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ], entrance: null, front: lot.front, size: [b.maxX - b.minX + 1, b.maxZ - b.minZ + 1], site: lot.site, affordance: lot.affordance, ...(lot.inverted ? { inverted: true } : {}) });
