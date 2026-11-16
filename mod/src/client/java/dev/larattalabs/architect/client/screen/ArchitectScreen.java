@@ -1391,6 +1391,12 @@ public final class ArchitectScreen extends Screen {
 			String imp = "Import…";
 			bx -= bw(imp) + 6;
 			button(g, "import", imp, bx, footerY, bw(imp), false, inWorld(), mx, my, library::openImport);
+		} else {
+			// (7c CN) the Build a link key's mode from the hub: closes the screen, the player marks the connector's two ends
+			String link = "Build a link…";
+			bx -= bw(link) + 6;
+			button(g, "build_link", link, bx, footerY, bw(link), false, inWorld(), mx, my,
+				dev.larattalabs.architect.client.placement.BuildLinkKey::start);
 		}
 	}
 
