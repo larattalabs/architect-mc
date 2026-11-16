@@ -25,6 +25,9 @@ export const SP2_MOVED = Object.freeze({
   'asks/terraced_hill.json': "CF2: a required zone short of its lots answers LOTS_SHORT (kit/lib/plan/finish.mjs markLotsShort); answers' reasons only, IR and first plan identical: 5 of 11 unplaced (allowed 3); overall REQUIRED_BLOCKED as before",
   'asks/two_districts.json': "CF2: a required zone short of its lots answers LOTS_SHORT (kit/lib/plan/finish.mjs markLotsShort); answers' reasons only, IR and first plan identical: 5 of 5 unplaced (allowed 1); overall REQUIRED_BLOCKED as before",
   'asks-8703dbd/redstone_gate.json': "CF2: a required zone short of its lots answers LOTS_SHORT (kit/lib/plan/finish.mjs markLotsShort); answers' reasons only, IR and first plan identical: fortress 6 of 10 unplaced (allowed 3); overall REQUIRED_BLOCKED as before",
+  // (WR) carried here for the same reason: kit/lib/connectors/wall.mjs ringOf keeps a closed: false ring closed when its box holds the
+  // claim's centre (no town-facing side), with a note; war_camp's palisade surrounds the asks claim's centre
+  'asks/war_camp.json': "WR: camp_palisade's ring encloses the claim's centre, so closed: false is ignored (noted) and the ring stays closed (all four sides); still fits",
 });
 
 /** (CF2) The recorded ask parts (ask/part) whose asks-table row CF2 moves only by its LOTS_SHORT code (adjusted -> adjusted LOTS_SHORT). */

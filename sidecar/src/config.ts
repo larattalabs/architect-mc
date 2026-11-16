@@ -92,12 +92,14 @@ export interface RegionsConfig {
   workers: number;
   /** evaluated tiles held per plan and connection (config regionWindow, 1-16, default 4) */
   window: number;
-  /** a plan run's time limit in ms (config regionPlanMs, default 30000; enforced as wall clock) */
+  /** a plan run's time limit in ms (config regionPlanMs, default 30000; (WR2) the plan child's CPU time, with a wall-clock backstop of 5x, 600-1800 s) */
   planMs: number;
   /** a plan run's heap (--max-old-space-size, config regionPlanHeapMb, default 1024) */
   planHeapMb: number;
-  /** (6c T1) a plan run's time limit when the program declares passes (config regionPassPlanMs, default 120000; SETTLEMENTS §4) */
+  /** (6c T1) a plan run's time limit when the program declares passes (config regionPassPlanMs, default 120000; SETTLEMENTS §4; (WR2) CPU time, as planMs) */
   passPlanMs: number;
+  /** (WR2) a plan run's wall-clock backstop in ms (config regionPlanWallMs, 1000-1800000; default: planWallBackstopMs of its CPU limit) */
+  planWallMs?: number | undefined;
   /** (6c T1) a plan run's heap when the program declares passes (config regionPassPlanHeapMb, default 2048) */
   passPlanHeapMb: number;
   /**
@@ -148,6 +150,7 @@ function regionsConfig(file: Record<string, unknown>, libraryDir: string, env: N
     planHeapMb: int(file.regionPlanHeapMb, 1024, 64, 8192),
     passPlanMs: int(file.regionPassPlanMs, 120_000, 100, 600_000),
     passPlanHeapMb: int(file.regionPassPlanHeapMb, 2048, 64, 8192),
+    ...(typeof file.regionPlanWallMs === 'number' && Number.isFinite(file.regionPlanWallMs) ? { planWallMs: int(file.regionPlanWallMs, 600_000, 1000, 1_800_000) } : {}),
     stampsDir: env.ARCHITECT_STAMPS_DIR ? path.resolve(env.ARCHITECT_STAMPS_DIR) : path.join(path.dirname(libraryDir), 'stamps'),
     irMaxBytes: int(file.regionIrMaxBytes, 4 * 1024 * 1024, 1024, 4 * 1024 * 1024),
     tileMs: int(file.regionTileMs, 2000, 50, 60_000),
