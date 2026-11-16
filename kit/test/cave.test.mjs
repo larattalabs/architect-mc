@@ -88,3 +88,15 @@ test('the schema and the catalogue: feature.cave supported (NEXT until the relea
   const extra = validatePlan(plan({ near: { feature: { cave: { ceiling: 6 } } } }));
   assert.ok(extra.malformed || extra.parts.some((p) => p.verdict === 'malformed'));
 });
+
+test('a carved zone\'s footprint is the box round its lots: a street zone resolved after it still places on the surface', async () => {
+  const { bytes: survey, claim } = fx();
+  const two = { schemaVersion: 'plan/0', zones: [{ id: 'a_carved', required: true, where: CAVE, program: { lots: LOTS, layout: 'elevated' } },
+    { id: 'b_town', required: true, where: { near: { anchor: 'claim_center' } }, program: { lots: [{ id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }] } }] };
+  const out = await checkPlanVolumes(two, { survey, claim, volume: VOLUME });
+  const a = out.check.parts.find((p) => p.part === 'a_carved'), b = out.check.parts.find((p) => p.part === 'b_town');
+  assert.equal(a.class, 'fits');
+  assert.ok(['fits', 'adjusted'].includes(b.class), JSON.stringify(b));
+  const r = a.geometry.rect;
+  assert.ok(r[2] - r[0] < 120 && r[0] >= HALL.x0 - 16 && r[2] <= HALL.x1 + 16, `the carved rect ${r} hugs the hall`);
+});

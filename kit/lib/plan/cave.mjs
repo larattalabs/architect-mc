@@ -188,9 +188,11 @@ export function resolveCaveZone(env, p, { taken = [], tol = { max: 0 }, sizedRec
     if (!best || r.picks.length > best.picks.length) best = { ...r, a, rect };
     if (!r.unplaced.length) break;
   }
-  const { a, rect, picks, unplaced } = best;
+  const { a, rect: search, picks, unplaced } = best;
   const cv = { cave: a.id, floorArea: a.metrics.floorArea, ceiling: a.metrics.ceiling };
   const notes = [`cave ${a.id} (floor ${a.metrics.floorArea}, ceiling ${a.metrics.ceiling}; ${caves.length} cave(s) under the claim); ${picks.length} of ${lots.length} lot(s) carved into its walls`];
+  // the zone's footprint (what later zones and forms keep clear of): the x/z box round its lots, not the rect searched (a claim-wide cave's)
+  const rect = picks.length ? picks.reduce((q, { box: b }) => ({ minX: Math.min(q.minX, b.minX), minZ: Math.min(q.minZ, b.minZ), maxX: Math.max(q.maxX, b.maxX), maxZ: Math.max(q.maxZ, b.maxZ) }), { minX: Infinity, minZ: Infinity, maxX: -Infinity, maxZ: -Infinity }) : search;
   const out = { rect, volBox, carved: true, cave: a.id, picks: picks.map((q) => ({ ...q, fit: 'carve_into' })), unplaced };
   if (!unplaced.length) return { klass: 'fits', ...out, notes };
   if (picks.length && unplaced.length <= (tol.hard ? (tol.max ?? 0) : (tol.ceiling ?? Infinity))) {
@@ -200,6 +202,6 @@ export function resolveCaveZone(env, p, { taken = [], tol = { max: 0 }, sizedRec
   return {
     klass: 'refused', ...out, picks: [], notes,
     reasons: [{ code: 'NO_FEATURE', message: `${unplaced.length} of ${lots.length} lot(s) found no wall of rock to carve into round the cave (a door on its floor, ${Math.round(CARVE_SOLID * 100)}% rock behind, clear of water, sky and the other lots)`, evidence: { ...ev, ...cv, unplaced } }],
-    ...(picks.length ? { wouldFit: [{ part: p.id, fragment, geometry: { rect: [rect.minX, rect.minZ, rect.maxX, rect.maxZ] } }] } : {}),
+    ...(picks.length ? { wouldFit: [{ part: p.id, fragment, geometry: { rect: [search.minX, search.minZ, search.maxX, search.maxZ] } }] } : {}),
   };
 }
