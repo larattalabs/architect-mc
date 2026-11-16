@@ -735,6 +735,7 @@ public final class Groups {
 			if (r.commit.isCompletedExceptionally()) {
 				r.undo = null;
 				r.commit = null;
+				dropPending(r); // (DR-S) the commit never reached the journal: its targets stand
 				end(server, r, new Removed(false, List.of("the undo could not be saved to the world journal"), Map.copyOf(r.refund)));
 				return;
 			}
@@ -1093,6 +1094,25 @@ public final class Groups {
 				RegionTargets.leaving(level.getServer(), inf);
 			}
 		}
+		// (slice DR-S) each site or road credit held pending in its pile's ledger and saved with the world before the commit (J2's rule for a
+		// single site): the queued removal is no longer its only store, so a removal that ends (or a queue file saved without it) with the
+		// credit unbooked rolls it forward at the next start (Stockpiles.settlePendingCredits) or by a repair (Repairs), never twice (the
+		// credit's key). Gate mechanisms' keys (region:...:mech:) are not target keys: they stay in the removal only
+		if (holdPending(r)) {
+			try {
+				Stockpiles.saveWithWorld(server);
+			} catch (IllegalStateException e) {
+				dropPending(r);
+				for (String back : ids) {
+					Site b = Sites.get(back);
+					if (b != null && Fills.phase(b) != null) {
+						Fills.writeBack(level, b);
+					}
+				}
+				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + e.getMessage()), Map.copyOf(r.refund)));
+				return;
+			}
+		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
 		List<String> withCrate = new ArrayList<>(ids);
 		if (r.stage == null) {
@@ -1272,8 +1292,36 @@ public final class Groups {
 		}
 	}
 
+	/** (DR-S) Holds each target-keyed {@link Removal#decCredit} pending in its pile's ledger; true when any was held. */
+	static boolean holdPending(Removal r) {
+		boolean any = false;
+		for (Credit c : r.decCredit.values()) {
+			Stockpiles.Pile p = Stockpiles.get(c.owner());
+			if (p != null && dev.larattalabs.architect.survival.StockLedger.isTargetKey(c.key()) && !p.ledger().credited(c.key())) {
+				p.ledger().holdPending(c.key(), c.items(), c.at());
+				Stockpiles.changed(p);
+				any = true;
+			}
+		}
+		return any;
+	}
+
+	/** (DR-S) The removal ended unwritten (no undo): its held pending credits dropped (the targets stand). */
+	static void dropPending(Removal r) {
+		for (Credit c : r.decCredit.values()) {
+			Stockpiles.Pile p = Stockpiles.get(c.owner());
+			if (p != null && p.ledger().pendingKeys().contains(c.key())) {
+				p.ledger().dropPending(c.key());
+				Stockpiles.changed(p);
+			}
+		}
+	}
+
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		if (!result.removed() && r.undo == null && r.planned == null) {
+			dropPending(r); // (DR-S) nothing of it was committed: its targets stand
+		}
 		if (!result.removed() && r.undo == null) {
 			// (M5 FK) ended before its undo began: a custody taken for a member that still stands goes back into its containers
 			for (String id : r.decCredit.keySet()) {

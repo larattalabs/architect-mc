@@ -24,10 +24,12 @@ public final class SliceDrDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.repair", 120_000, "{op: diagnose|repair|state|log|killAt, scope?: {kind: site|region|here|all, id?, x?, y?, z?, "
+		DevBridge.register("dev.repair", 120_000, "{op: diagnose|repair|state|log|killAt|snap|unwrite|ledger, scope?: {kind: site|region|here|all, id?, x?, y?, z?, "
 			+ "continuation?}, planId?, apply?: false, actor?: player|none, armed?: true} - (DR) TEST: Sites.diagnose / Sites.repair through the API "
 			+ "(actor: the first player, or none), the auto-diagnose's suspects, ops line and SITE_REPAIRED count (state), the repair records (log); "
-			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written)", (req, mc) -> ServerTasks.callOnServer(
+			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written); (DR-S) snap {id, min, max} keeps a "
+			+ "box's cells, unwrite {id, min, max} puts back the cells changed since (the lost-writes fault), ledger {owner, key, paid?, custody?} "
+			+ "injects a paid record or custody, saved with the world", (req, mc) -> ServerTasks.callOnServer(
 				s -> s).thenCompose(s -> run(s, req)));
 	}
 
@@ -45,6 +47,22 @@ public final class SliceDrDev {
 				Repairs.killDRK1 = !req.has("armed") || req.get("armed").getAsBoolean();
 				JsonObject o = new JsonObject();
 				o.addProperty("DRK1", Repairs.killDRK1);
+				return o;
+			});
+			case "snap", "unwrite" -> ServerTasks.callOnServer(x -> {
+				// (DR-S, TEST) snap: a box's cells kept under an id; unwrite: the box's cells that changed since put back (the lost-writes fault)
+				var level = x.overworld();
+				BlockPos min = pos(req.getAsJsonArray("min")), max = pos(req.getAsJsonArray("max"));
+				String id = req.get("id").getAsString();
+				JsonObject o = new JsonObject();
+				o.addProperty("cells", "snap".equals(op) ? Repairs.testSnap(level, id, min, max) : Repairs.testUnwrite(level, id, min, max));
+				return o;
+			});
+			case "ledger" -> ServerTasks.callOnServer(x -> {
+				// (DR-S, TEST) a paid record and/or custody under a key, saved with the world (PAID_ORPHAN, CUSTODY)
+				JsonObject o = new JsonObject();
+				o.addProperty("ok", Repairs.testLedger(x, req.get("owner").getAsString(), req.get("key").getAsString(), counts(req, "paid"), counts(req,
+					"custody")));
 				return o;
 			});
 			case "log" -> ServerTasks.callOnServer(x -> {
@@ -74,6 +92,18 @@ public final class SliceDrDev {
 				return o;
 			});
 		};
+	}
+
+	private static BlockPos pos(com.google.gson.JsonArray a) {
+		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
+	}
+
+	private static java.util.Map<String, Integer> counts(JsonObject req, String k) {
+		java.util.Map<String, Integer> m = new java.util.TreeMap<>();
+		if (req.has(k)) {
+			req.getAsJsonObject(k).entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return m;
 	}
 
 	private static DiagnoseScope scope(JsonObject req) {

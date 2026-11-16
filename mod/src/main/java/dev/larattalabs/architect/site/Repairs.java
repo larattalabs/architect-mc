@@ -270,6 +270,11 @@ public final class Repairs {
 		public boolean pt(long pos) {
 			return dev.larattalabs.architect.placed.Placed.record(level, BlockPos.of(pos)) != null;
 		}
+
+		/** (DR-S) Whether the cell is a container holding items (never rolled forward: a write would destroy them). */
+		boolean holdsItems(long pos) {
+			return level.getBlockEntity(BlockPos.of(pos)) instanceof net.minecraft.world.Container c && !c.isEmpty();
+		}
 	}
 
 	/** The sites a scope names, in a stable order, with their region (from their journal entries' group). */
@@ -318,32 +323,52 @@ public final class Repairs {
 		Set<String> jobs = Placement.jobSites(srv);
 		Set<String> out = new LinkedHashSet<>();
 		for (Site.Pending p : Sites.pending()) {
-			if (!"moved".equals(p.why()) && !jobs.contains(p.site().id()) && SiteJournal.lastGroup(p.site().id()) != null) {
+			if (!"moved".equals(p.why()) && !jobs.contains(p.site().id()) && !Groups.removing(p.site().id()) && SiteJournal.lastGroup(p.site().id()) != null) {
 				out.add(p.site().id());
 			}
 		}
 		for (Infra i : Infras.pendingAll()) {
-			if (!jobs.contains(i.id()) && SiteJournal.lastGroup(i.id()) != null) {
+			if (!jobs.contains(i.id()) && !Groups.removing(i.id()) && SiteJournal.lastGroup(i.id()) != null) {
 				out.add(i.id());
 			}
 		}
 		return out;
 	}
 
-	/** Whether a site is RL's: a construction site or a fed target (its unbuilt cells are its queue, never DR's). */
+	/**
+	 * Whether a site is RL's: a standing construction site or fed target (its unbuilt cells are its queue, its book RL's reconcile; never
+	 * DR's). (DR-S) A pending one (a survival removal) is DR's: its committed removal rolls forward like any, its stored credit booked once.
+	 */
 	static boolean fed(String id) {
 		Site s = Sites.get(id);
-		if (s == null) {
-			s = Sites.pendingRecord(id);
-		}
 		if (s != null) {
 			return s.construction() != null;
 		}
 		Infra i = Infras.get(id);
-		if (i == null) {
-			i = Infras.pending(id);
-		}
 		return i != null && i.construction() != null;
+	}
+
+	/** (DR-S) The credit key of a pending survival record (site or road), or null. */
+	static @Nullable String pendingKeyOf(String id) {
+		Site s = Sites.pendingRecord(id);
+		if (s != null) {
+			return s.construction() != null ? Builder.creditKey(s) : null;
+		}
+		Infra i = Infras.pending(id);
+		return i != null && i.construction() != null ? RoadBuilder.creditKey(i) : null;
+	}
+
+	/**
+	 * (DR-S) Whether a placement entry may lag the world: committed after the last completed save before this start's unclean stop (or with
+	 * a job at that save), and before this start. After a clean stop nothing lags, and a placed cell holding its pre-op value later is a
+	 * player's mining, never LAGGING (DR's leftover).
+	 */
+	static boolean mayLag(JournalStore.Meta m) {
+		return mayLag(m, prevUnclean, thisStart, prevSavedAt, prevJobs);
+	}
+
+	static boolean mayLag(JournalStore.Meta m, boolean unclean, long start, long savedAt, Set<String> jobsAtSave) {
+		return unclean && m.createdAt() < start && RepairCore.afterSave(m, savedAt, jobsAtSave);
 	}
 
 	/** The wants of one site: a stuck record's committed removal, else its ACTIVE entries' tops. */
@@ -371,6 +396,9 @@ public final class Repairs {
 		for (RepairCore.Want w : wants) {
 			RepairCore.Reader r = readers.apply(w.dim());
 			RepairCore.Cell c = r == null ? null : RepairCore.classify(r, w);
+			if (c == RepairCore.Cell.LAGGING && r instanceof LevelReader lr && lr.holdsItems(w.pos())) {
+				c = RepairCore.Cell.FOREIGN; // (DR-S) a container's contents are never written over (custody's rule): a crate or chest with items
+			}
 			if (c == null || c == RepairCore.Cell.OK) {
 				continue;
 			}
@@ -429,7 +457,7 @@ public final class Repairs {
 			String group = st ? SiteJournal.lastGroup(id) : null;
 			List<RepairCore.Want> wants;
 			try {
-				wants = wantsOf(js, id, st, group, m -> true);
+				wants = wantsOf(js, id, st, group, Repairs::mayLag);
 			} catch (IOException e) {
 				continue;
 			}
@@ -609,11 +637,21 @@ public final class Repairs {
 			id);
 	}
 
-	/** CUSTODY and PAID_ORPHAN (report only) over every stockpile ledger. */
+	/** CUSTODY, PAID_ORPHAN (report only) and (DR-S) BOOK (report only: RL owns it) over every stockpile ledger. */
 	private static void ledgerFindings(DiagnoseScope scope, List<RepairFinding> out, List<String> lines, List<String[]> custody) {
+		for (var e : new TreeMap<>(Stockpiles.UNRECONCILED).entrySet()) {
+			String id = e.getKey();
+			if (scope.kind() == DiagnoseScope.Kind.SITE && !id.equals(scope.id()) || Sites.get(id) == null && Infras.get(id) == null) {
+				continue;
+			}
+			String[] v = e.getValue();
+			out.add(new RepairFinding(RepairCode.BOOK, id, null, v[1], 0, 0, 0, List.of(), "Fed target " + id + " (" + v[0] + ", " + v[1]
+				+ ") was not reconciled at this start (" + v[2] + "): its saved cell book may disagree with the world. Reported only: RL owns it"));
+			lines.add("book " + id + " " + v[1]);
+		}
 		for (Stockpiles.Pile p : Stockpiles.all()) {
 			var led = p.ledger();
-			for (String key : led.custodyKeys()) {
+			for (String key : new java.util.TreeSet<>(led.custodyKeys())) {
 				if (scope.kind() == DiagnoseScope.Kind.SITE && !java.util.Objects.equals(idOfKey(key), scope.id())) {
 					continue;
 				}
@@ -631,7 +669,7 @@ public final class Repairs {
 			if (scope.kind() != DiagnoseScope.Kind.ALL) {
 				continue;
 			}
-			for (String key : led.paid().keySet()) {
+			for (String key : new java.util.TreeSet<>(led.paid().keySet())) {
 				if (!known(key) && !led.credited(key)) {
 					int n = led.paid().get(key).values().stream().mapToInt(Integer::intValue).sum();
 					out.add(new RepairFinding(RepairCode.PAID_ORPHAN, idOfKey(key), null, key, n, 0, 0, List.of(), "Paid record " + key + " (" + n
@@ -724,9 +762,12 @@ public final class Repairs {
 		}
 		int write = todo.stream().mapToInt(u -> u.lagging().size()).sum();
 		int left = todo.stream().mapToInt(Unit::foreign).sum();
+		Set<String> settles = settling(js(), now.units(), stuckSites(srv));
 		Map<String, Integer> credit = new TreeMap<>();
 		for (Unit u : todo) {
-			pendingCreditOf(u.site()).forEach((k, v) -> credit.merge(k, v, Integer::sum));
+			if (settles.contains(u.site())) {
+				pendingCreditOf(u.site()).forEach((k, v) -> credit.merge(k, v, Integer::sum)); // (DR-S) it books only as the removal settles
+			}
 		}
 		for (String[] c : now.custody()) {
 			Stockpiles.Pile p = Stockpiles.get(c[0]);
@@ -738,7 +779,9 @@ public final class Repairs {
 		if (!apply) {
 			return new RepairResult(planId, false, write, credit, List.of(), left, null, null, dryMessage(planId, now, todo, write, left), sites);
 		}
-		if (write == 0 && credit.isEmpty() && todo.stream().noneMatch(Unit::stuck)) {
+		// (DR-S) no record when nothing would change: nothing written, nothing credited, no stuck removal able to settle (a stuck removal with
+		// players' cells stays pending, and repeating its repair wrote an empty record each time)
+		if (write == 0 && credit.isEmpty() && now.custody().isEmpty() && settles.isEmpty()) {
 			return new RepairResult(planId, false, 0, Map.of(), List.of(), left, null, null, "Nothing to repair in " + now.diagnosis().scope().describe()
 				+ " (" + planId + "); nothing was written", List.of()); // no record: nothing changes
 		}
@@ -835,6 +878,14 @@ public final class Repairs {
 		if (!release.isEmpty()) {
 			SiteJournal.releaseGroup(release);
 		}
+		// (DR-S) the settled survival removals' credit keys, read before their records go
+		Set<String> keys = new LinkedHashSet<>();
+		for (String site : settled) {
+			String k = pendingKeyOf(site);
+			if (k != null) {
+				keys.add(k);
+			}
+		}
 		for (String site : settled) {
 			if (Sites.pendingRecord(site) != null) {
 				Sites.settledByRepair(srv, site);
@@ -845,11 +896,12 @@ public final class Repairs {
 			}
 			Architect.LOGGER.warn("Repair {}: {}'s removal settled (released, its restore written by the repair)", planId, site);
 		}
-		// survival: a rolled-forward removal's stored credit books once (J2 2a, keyed), then saved with the world; custody under the cap
+		// survival: a rolled-forward removal's stored credit (J2 2a's, or a group removal's decCredit held pending, slice DR-S) books once, keyed
+		// to the removals this repair settled only, then saved with the world; custody under the cap. What is credited is what left the
+		// pending credits and the custody for the stock: returned plus overflow (dropped as items)
 		Map<String, Integer> credited = new TreeMap<>();
-		Map<String, Map<String, Integer>> before = stockOf();
-		if (!settled.isEmpty()) {
-			Stockpiles.settlePendingCredits(srv);
+		if (!keys.isEmpty()) {
+			Stockpiles.bookPendingFor(srv, keys).forEach((k, v) -> credited.merge(k, v, Integer::sum));
 		}
 		boolean cust = false;
 		for (var e : o.getAsJsonArray("custody")) {
@@ -862,20 +914,15 @@ public final class Repairs {
 			ServerLevel level = Sites.levelOf(srv, p.dimension());
 			if (level != null) {
 				BlockPos at = p.crates().isEmpty() ? BlockPos.ZERO : p.crates().get(0).above();
-				Builder.creditRefund(level, owner, key, Map.of(), at, null);
+				var c = Stockpiles.credit(srv, p, key, Map.of(), at); // FK's rule: the site is gone, so credited under the cap, never written back
+				c.returned().forEach((k, v) -> credited.merge(k, v, Integer::sum));
+				c.overflow().forEach((k, v) -> credited.merge(k, v, Integer::sum));
 				cust = true;
 			}
 		}
 		if (cust) {
 			Stockpiles.saveCredit(srv);
 		}
-		Map<String, Map<String, Integer>> after = stockOf();
-		after.forEach((owner, m) -> m.forEach((k, v) -> {
-			int d = v - before.getOrDefault(owner, Map.of()).getOrDefault(k, 0);
-			if (d != 0) {
-				credited.merge(k, d, Integer::sum);
-			}
-		}));
 		o.addProperty("state", "final");
 		o.addProperty("written", written);
 		o.addProperty("left", left);
@@ -920,21 +967,40 @@ public final class Repairs {
 		return res;
 	}
 
-	private static Map<String, Map<String, Integer>> stockOf() {
-		Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
-		for (Stockpiles.Pile p : Stockpiles.all()) {
-			out.put(p.owner(), new TreeMap<>(p.ledger().stock()));
+	private static @Nullable JournalStore js() {
+		return WorldJournal.storeOrNull();
+	}
+
+	/**
+	 * (DR-S) The stuck removals of {@code units} a repair of them settles: no foreign cell, and every stuck removal stacked with it is one of
+	 * {@code units} with none either (a stacked partner left out keeps both pending).
+	 */
+	static Set<String> settling(@Nullable JournalStore js, List<Unit> units, Set<String> stuck) {
+		Map<String, Unit> by = new LinkedHashMap<>();
+		units.forEach(u -> by.put(u.site(), u));
+		Set<String> out = new LinkedHashSet<>();
+		for (Unit u : units) {
+			if (!u.stuck() || u.foreign() > 0 || js == null) {
+				continue;
+			}
+			boolean all = true;
+			for (String o : stackedWith(js, u.site(), stuck)) {
+				Unit x = by.get(o);
+				all &= x != null && x.foreign() == 0;
+			}
+			if (all) {
+				out.add(u.site());
+			}
 		}
 		return out;
 	}
 
-	/** A pending site's stored credit (J2 2a), or empty. */
+	/** A pending site's or road's stored credit (J2 2a; slice DR-S: a group removal's held pending too), or empty. */
 	private static Map<String, Integer> pendingCreditOf(String site) {
-		Site s = Sites.pendingRecord(site);
-		if (s == null) {
+		String key = pendingKeyOf(site);
+		if (key == null) {
 			return Map.of();
 		}
-		String key = Builder.creditKey(s);
 		Map<String, Integer> out = new TreeMap<>();
 		for (Stockpiles.Pile p : Stockpiles.all()) {
 			if (!p.ledger().credited(key)) {
@@ -1011,6 +1077,9 @@ public final class Repairs {
 			level.getChunk(Journal.x(w.pos()) >> 4, Journal.z(w.pos()) >> 4);
 			LevelReader r = new LevelReader(level, new int[] {0}, new HashSet<>());
 			RepairCore.Cell c = RepairCore.classify(r, w);
+			if (c == RepairCore.Cell.LAGGING && r.holdsItems(w.pos())) {
+				c = RepairCore.Cell.FOREIGN; // (DR-S) a container's contents are never written over
+			}
 			if (c == RepairCore.Cell.LAGGING) {
 				all.add(w);
 			} else if (c == RepairCore.Cell.FOREIGN) {
@@ -1311,6 +1380,66 @@ public final class Repairs {
 			}
 			return true;
 		}
+	}
+
+	// ------------------------------------------------------------------ TEST (slice DR-S, dev.repair snap/unwrite/ledger)
+
+	private static final Map<String, Map<Long, Object[]>> SNAPS = new LinkedHashMap<>();
+
+	/** (TEST) Keeps the block states and block entity data of a box under {@code id} (this session only). Returns the cell count. */
+	public static int testSnap(ServerLevel level, String id, BlockPos min, BlockPos max) {
+		Map<Long, Object[]> m = new LinkedHashMap<>();
+		for (BlockPos p : BlockPos.betweenClosed(min, max)) {
+			level.getChunk(p);
+			m.put(p.asLong(), new Object[] {level.getBlockState(p), WorldJournal.beNbt(level, p)});
+		}
+		SNAPS.put(id, m);
+		return m.size();
+	}
+
+	/**
+	 * (TEST) The lost-writes fault, cell exact: each cell of snapshot {@code id} in {@code min..max} whose block differs from the snapshot
+	 * gets the snapshot's block back (no neighbour updates, no drops, no player record), as if that cell's writes since the snapshot never
+	 * reached the disk. Only cells whose snapshot block has no block entity (their data would not be the saved one). Returns how many.
+	 */
+	public static int testUnwrite(ServerLevel level, String id, BlockPos min, BlockPos max) {
+		Map<Long, Object[]> m = SNAPS.get(id);
+		if (m == null) {
+			return -1;
+		}
+		int n = 0;
+		for (BlockPos p : BlockPos.betweenClosed(min, max)) {
+			Object[] v = m.get(p.asLong());
+			if (v == null || v[1] != null) {
+				continue;
+			}
+			BlockState was = (BlockState) v[0];
+			if (!level.getBlockState(p).equals(was) && !was.hasBlockEntity()) {
+				level.setBlock(p, was, net.minecraft.world.level.block.Block.UPDATE_CLIENTS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE
+					| net.minecraft.world.level.block.Block.UPDATE_SUPPRESS_DROPS);
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * (TEST) A ledger fault: {@code paid} items paid under {@code key} and {@code custody} items taken into its custody, in {@code owner}'s
+	 * stockpile, then saved with the world (the saved state the gate reads). A key naming no target makes PAID_ORPHAN; with custody, an
+	 * unresolved CUSTODY. False without that stockpile.
+	 */
+	public static boolean testLedger(MinecraftServer srv, String owner, String key, Map<String, Integer> paid, Map<String, Integer> custody) {
+		Stockpiles.Pile p = Stockpiles.get(owner);
+		if (p == null) {
+			return false;
+		}
+		paid.forEach((k, v) -> p.ledger().pay(key, k, v));
+		if (!custody.isEmpty()) {
+			p.ledger().holdCustody(key, custody);
+		}
+		Stockpiles.changed(p);
+		Stockpiles.saveWithWorld(srv);
+		return true;
 	}
 
 	/** Whether a player holds gamemaster permission (an op, or cheats on in single player). */
