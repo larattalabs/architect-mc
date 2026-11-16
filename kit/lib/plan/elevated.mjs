@@ -14,7 +14,7 @@ import { analyseVolume } from '../region/affordances.mjs';
 import { placeFromAffordance, rotationOf } from '../region/siteLots.mjs';
 import { SITE_MARGIN } from '../siteFits.mjs';
 import { VC } from '../region/volume.mjs';
-import { stateClass } from '../region/sculpt.mjs';
+import { voxelClassOf } from '../blocks.mjs';
 // (slice CAVE) an elevated zone whose locator is a cave (`near: {feature: {cave}}`): its lots carved into the cave's walls (cave.mjs)
 import { caveSpecOf, resolveCaveZone } from './cave.mjs';
 
@@ -52,8 +52,8 @@ export const FORM_ABOVE = 120;
 
 /**
  * (slice R2) The land after the forms: the frozen volume `vol` (decoded) with every cell the plan's draft virtual world `lw` (fluids/body.mjs
- * localWorld: every op so far over the survey and the volumes) has written classed by its block (sculpt.mjs stateClass, the game's
- * survey classes as the kit models them: a written log is LOG, not OWNED, as the live world reads it after the realise; the drift check
+ * localWorld: every op so far over the survey and the volumes) has written classed by its block (blocks.mjs voxelClassOf: the game's own
+ * voxel_classes.json table, which the mod bundles: a written log is LOG, not OWNED, as the live world reads it after the realise; the drift check
  * leaves the region's own cells out). Returns a decoded-volume-shaped object (box, sizes, classes, owners) and the count of cells changed.
  */
 export function landAfterForms(vol, lw) {
@@ -67,7 +67,7 @@ export function landAfterForms(vol, lw) {
     if (!(lw.vw.flags(wx, wy, wz) & 1)) continue; // (F_WRITTEN)
     const idx = lw.vw.get(wx, wy, wz);
     let c = memo.get(idx);
-    if (c === undefined) { c = VC[stateClass(P.states[idx])]; memo.set(idx, c); }
+    if (c === undefined) { c = VC[voxelClassOf(String(P.states[idx]).replace(/\[.*$/, ''))] ?? VC.PLAYER; memo.set(idx, c); }
     const i = (x * D + z) * H + y;
     if (classes[i] !== c) { classes[i] = c; changed++; }
   }
