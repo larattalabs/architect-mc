@@ -20,6 +20,7 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
+| v0.75.0 | 2026-11-16 | 1.65.0 | 0.69.0 | 25 |  | RC pending | unverified |
 | v0.74.0 | 2026-11-16 | 1.65.0 | 0.69.0 | 25 | `invertedDesigns` | RC pending | ok |
 | v0.73.0 | 2026-11-16 | 1.64.0 | 0.68.0 | 24 |  | RC pending | ok |
 | v0.72.0 | 2026-11-15 | 1.64.0 | 0.67.0 | 24 | `fillProvided` | RC pending | ok |
