@@ -304,6 +304,13 @@ public final class SliceFkDev {
 			bar[i] = inv.getItem(i).copy();
 		}
 		try {
+			// (LC3 fix) vaultActive: the vault at pos ACTIVE now, in this server call (its player detection is not waited for)
+			if (req.has("vaultActive") && req.get("vaultActive").getAsBoolean()
+				&& level.getBlockState(p).getBlock() instanceof net.minecraft.world.level.block.VaultBlock) {
+				level.setBlock(p, level.getBlockState(p).setValue(net.minecraft.world.level.block.VaultBlock.STATE,
+					net.minecraft.world.level.block.entity.vault.VaultState.ACTIVE), net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+				o.addProperty("vaultState", level.getBlockState(p).toString());
+			}
 			if (fill) {
 				for (int i = 0; i < 9; i++) {
 					inv.setItem(i, st.copy());
@@ -421,7 +428,7 @@ public final class SliceFkDev {
 			(req, mc) -> ServerTasks.callOnServer(s -> dev.larattalabs.architect.site.RemovalSeal.stateJson()));
 		DevBridge.register("dev.seal.holder", 10_000, "{pos} - (slice LC3) the item holder at pos: {holder, kind, block, holds, sealed}",
 			(req, mc) -> ServerTasks.callOnServer(s -> holderJson(s.overworld(), posOf(req))));
-		DevBridge.register("dev.seal.use", 30_000, "{pos, item?, count?, contents?: {item: n}, face?: up, fillHotbar?} - (slice LC3) TEST: the first player (survival for "
+		DevBridge.register("dev.seal.use", 30_000, "{pos, item?, count?, contents?: {item: n}, face?: up, fillHotbar?, vaultActive?} - (slice LC3) TEST: the first player (survival for "
 			+ "the call) uses item on the block at pos through ServerPlayerGameMode.useItemOn (Fabric's UseBlockCallback included) -> {before, after, "
 			+ "result, hand, hotbar?, menuOpened, refused, nextBefore, nextAfter}; the player's hand (and hotbar) put back after", (req, mc) -> ServerTasks.callOnServer(s -> sealUse(s, req)));
 		DevBridge.register("dev.seal.menu", 30_000, "{pos, open?, close?} - (slice LC3) TEST: opens the holder's menu for the first player (no checks), or "

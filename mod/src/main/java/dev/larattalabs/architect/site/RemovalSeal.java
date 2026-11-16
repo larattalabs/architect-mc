@@ -588,6 +588,19 @@ public final class RemovalSeal {
 			}
 		}
 		o.add("sealed", ids);
+		// (LC3 fix) every group or stage removal's member: whether its record is still pending (a restart can still write it) and sealed
+		com.google.gson.JsonArray mem = new com.google.gson.JsonArray();
+		List<String> all = new ArrayList<>();
+		Groups.sealedIds(all);
+		for (String id : new java.util.LinkedHashSet<>(all)) {
+			JsonObject x = new JsonObject();
+			x.addProperty("id", id);
+			x.addProperty("pending", Sites.pendingRecord(id) != null || Infras.pending(id) != null);
+			x.addProperty("standing", Sites.get(id) != null || Infras.get(id) != null);
+			x.addProperty("sealed", boxOf(id) != null);
+			mem.add(x);
+		}
+		o.add("members", mem);
 		com.google.gson.JsonArray jobs = new com.google.gson.JsonArray();
 		for (Placement.Job j : Placement.jobs()) {
 			JsonObject x = new JsonObject();

@@ -180,18 +180,17 @@ export async function registerLC3(steps, h) {
       `${tag}: a powered crafter firing into the box crafts nothing: its 9 iron ingots kept, the sealed chest ${json(tt1.holds)}, nothing dropped (${json(n1)})`, r.crafter);
     check(sum(kk0.holds) === 0 && tt0.holds?.['minecraft:iron_block'] === 1, `${tag}: control: a crafter outside crafted an iron block into its chest (${json(r.crafter.control)})`, r.crafter);
     // 5. a vault inside the box takes no key; its control outside takes one (both active: the player within range)
+    // (each set ACTIVE in the use's own server call: a headless player's detection is not waited for)
     const v1 = [C[0] + 6, Y, C[2]], v0 = [C[0] + 6, Y, C[2] - 3];
-    await L.tp(C[0] + 8.5, Y, C[2] - 1.5);
-    await cmd(`/setblock ${v1.join(' ')} minecraft:vault[vault_state=active,facing=north]`);
-    await cmd(`/setblock ${v0.join(' ')} minecraft:vault[vault_state=active,facing=north]`);
-    await L.settle(2000);
+    await cmd(`/setblock ${v1.join(' ')} minecraft:vault[facing=north]`);
+    await cmd(`/setblock ${v0.join(' ')} minecraft:vault[facing=north]`);
+    await L.settle(1000);
     const vs1 = await holder(v1), vs0 = await holder(v0);
-    r.vault = await use(v1, 'minecraft:trial_key', { face: 'north' });
-    r.vaultControl = await use(v0, 'minecraft:trial_key', { face: 'north' });
-    r.vault.states = [vs1.state, vs0.state];
-    check(vs1.sealed && /vault_state=active/.test(vs1.state ?? '') && r.vault.hand?.item === 'minecraft:trial_key' && r.vault.hand?.count === 1 && r.vault.refused > 0,
-      `${tag}: an active vault in the box takes no key (the hand ${json(r.vault.hand)}, ${vs1.state})`, r.vault);
-    check(!vs0.sealed && /vault_state=active/.test(vs0.state ?? '') && r.vaultControl.hand?.count === 0, `${tag}: control: an active vault outside took the key (the hand ${json(r.vaultControl.hand)})`, r.vaultControl);
+    r.vault = await use(v1, 'minecraft:trial_key', { face: 'north', vaultActive: true });
+    r.vaultControl = await use(v0, 'minecraft:trial_key', { face: 'north', vaultActive: true });
+    check(vs1.sealed && /vault_state=active/.test(r.vault.vaultState ?? '') && r.vault.hand?.item === 'minecraft:trial_key' && r.vault.hand?.count === 1 && r.vault.refused > 0,
+      `${tag}: an active vault in the box takes no key (the hand ${json(r.vault.hand)}, ${r.vault.vaultState})`, r.vault);
+    check(!vs0.sealed && /vault_state=active/.test(r.vaultControl.vaultState ?? '') && r.vaultControl.hand?.count === 0, `${tag}: control: an active vault outside took the key (the hand ${json(r.vaultControl.hand)})`, r.vaultControl);
     return r;
   }
 
@@ -382,9 +381,18 @@ export async function registerLC3(steps, h) {
         await L.openWorld(name);
         await L.tp(CX + 80, 80, CZ + 56);
         await L.settle(4000);
-        await until(async () => { const x = await seal().catch(() => null); return x && (x.sealed ?? []).length ? x : null; }, 60, 1000);
-        out.writtenAfterRestart = await aSealed('after');
-        check(!!out.writtenAfterRestart.ok, `group undo: after the restart written member ${A} is sealed again from the queue file (${json(out.writtenAfterRestart).slice(0, 300)})`, out.writtenAfterRestart);
+        const x1 = await until(async () => { const x = await seal().catch(() => null); return x && (x.sealed ?? []).length ? x : null; }, 60, 1000);
+        // a written member the start's settle released (its record gone: nothing can write it again) needs no seal; one still pending
+        // (a restart could write it again) must be sealed
+        const mA = (x1?.members ?? []).find((m) => m.id === A);
+        out.writtenAfterRestart = { member: mA ?? null };
+        if (mA?.pending) {
+          Object.assign(out.writtenAfterRestart, await aSealed('after'));
+          check(!!out.writtenAfterRestart.ok, `group undo: after the restart written member ${A} is still pending and sealed again from the queue file (${json(out.writtenAfterRestart).slice(0, 300)})`, out.writtenAfterRestart);
+        } else {
+          check(!!mA && !mA.standing && !mA.sealed, `group undo: after the restart written member ${A} was settled at the start (its record released: no restart can write it again), so it is no longer sealed (${json(mA)})`, out.writtenAfterRestart);
+        }
+        check((x1?.members ?? []).every((m) => !m.pending || m.sealed), `group undo: after the restart every member whose record is still pending is sealed (${json(x1?.members)})`, x1?.members);
       }
       await call('dev.removal.pause', { site: A, off: true }, 10_000);
     }
