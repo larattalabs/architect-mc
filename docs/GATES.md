@@ -71,6 +71,17 @@ and replace stricter habits where they differ (the DEV MODE section below still 
    Unchanged: the targeted strict scenario on every strict slice, scoped units, gitleaks, the 3-full-runs cap, $0 without Noah's
    approval, slices never merge or push main. Nightlies stay skipped until Noah says otherwise.
 
+12. **Gate capacity, raised** (Noah via parent session, 2026-11-15: "More gate slots + ports"). `slots.max` 6 and
+   `slots.load.settleSec` 120 (`gate-chains.json`; rule 5's 4 and 300 are replaced); rule 10's load bounds stay. A second slice port
+   range **9000-9099** in 6-port blocks (base, base+2, base+4) beside 8896-8939; **9100-9149 is Steward's**. The turbo range and
+   the infra ports are unchanged. The coordinator still assigns every block (Ports, below).
+13. **Standing approvals** (same decision, "Standing approvals"). Go ahead and send the parent session a one-line note: a paid step
+   under $1 inside an already-approved budget (with its cost); a product question with a confident recommendation. Still ask Noah
+   first: anything irreversible, anything that changes what a player loses or pays, a new public surface, new budgets or raised
+   caps, any step over $1.
+14. **More parallel slices** (same decision). Keep 6-8 slices in progress at once as files and ports allow, and pre-brief the next
+   ones so a free slot never sits empty. Rule 11's once-per-release strict verifier and GPT review are unchanged.
+
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
 
@@ -268,6 +279,8 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 |---|---|
 | 8890-8895 | the default Architect gate runner (the nightly, a coordinator run without `--ports`) |
 | 8896-8939 (pairs) | slice gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
+| 9000-9099 (6-port blocks) | more slice gate runs and verifiers (speed rule 12, 2026-11-15); the coordinator assigns them the same way |
+| 9100-9149 | Steward (speed rule 12); never use them from Architect |
 | 8898/8899 | reserved: the gallery client |
 | 8912-8915 | reserved (infra and UI runners) |
 | 8940-8999 | turbo shards (`gate-chains.json` `turbo.portRange`); nothing else may bind there |
@@ -276,7 +289,7 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 
 Steward's own agent range (its AGENTS.md "8960-8989") overlaps the turbo range above and is Steward's to move.
 
-### Slot lock: at most N gate runs on the machine (`slots.max`, 4)
+### Slot lock: at most N gate runs on the machine (`slots.max`, 6 since speed rule 12)
 
 Every gate run (not `--plan`) takes one of N slot files, `slot-1.json` .. `slot-N.json`, in `<LarattaLabs>/.gate-slots/` before
 anything else: pid, worktree, chain and start time, and (since "Adaptive shards") the run's shard count and ports. **One slot per
@@ -284,7 +297,7 @@ run, whatever its shard count**: the slot caps how many agents' runs share the b
 load it. With none free it logs the wait (the holders, repeated every 5 minutes) and
 polls every 15 s. The slot is released on exit, on SIGINT/SIGTERM (also while waiting), and a slot whose pid is dead counts as
 free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (`slots.max` in
-`gate-chains.json`, 4), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
+`gate-chains.json`, 6), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.

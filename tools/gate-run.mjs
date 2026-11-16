@@ -27,7 +27,7 @@
 //   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
-//   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 4): at most N runs at once, across worktrees. A run
+//   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 6): at most N runs at once, across worktrees. A run
 //                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
 //   --no-load-wait         GATE_LOAD_MAX=0  no load-aware start (docs/GATES.md "Load-aware start"): by default a shared run whose turn it is
