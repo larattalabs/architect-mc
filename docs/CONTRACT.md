@@ -31324,7 +31324,12 @@ without them; slabs unpickupable and untransferable from declared containers; st
   same weakness as #1 (a failed pre-save lets the commit go first); not changed here. An abandoned unwritten member's released entries
   give up any hand-down its undo planned to a written sibling (an ops tool for a removal that cannot finish). `dev.seal.state` reports the
   generations; there is no dev hook for a failing queue write (units only).
-- **Gate:** pending.
+- **Gate** (`--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3g`): `20261116-134209-change`
+  at 720a10c7: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, lc3-seal 40/0, fl-survival 11/0; lc3-undo 26/4 (test faults: the
+  runner's json drops whitespace, a chest under a solid block never opens, and `dev.seal.state` answered before a check rebuilt the set: the
+  chest was still, correctly, sealed until its generation was written). `20261116-141016-change` at 06975811: lc3-undo 27/3 (the refusals'
+  `success` flag, the same seal-state lag). Fixed (`dev.seal.state` rebuilds the set first) and re-run `20261116-141426-change` at 50a59d77:
+  lc3-undo 30/0, lc3-seal 40/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
