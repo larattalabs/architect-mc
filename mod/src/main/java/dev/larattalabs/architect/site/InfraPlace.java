@@ -537,6 +537,10 @@ public final class InfraPlace {
 			Infra rec = targets.get(0);
 			job = new InfraJob(rec.id(), dim, kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
 			job.writeMain = false;
+			// (8a ST) a tile whose cells are all targets (all staged terrain now) still holds its leaves (the leaves entry, written at put-down)
+			job.leafPos = r.leafPos();
+			job.leafBefore = r.leafBefore();
+			job.leafAfter = r.leafAfter();
 		}
 		job.notes.addAll(c.notes());
 		job.tile = tile;

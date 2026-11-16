@@ -155,6 +155,9 @@ public final class ApiRules {
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
+			if (!dev.larattalabs.architect.region.Packed.stagedBuild()) {
+				out.remove("terrainConstruction"); // (8a ST) advertised only while this mod builds staged terrain as targets
+			}
 			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
 				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved
 			}

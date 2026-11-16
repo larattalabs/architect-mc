@@ -59,9 +59,24 @@ public final class Packed {
 	 */
 	public static final byte STAGED = 3;
 
-	/** (8aF) Whether a class is written in the free pass today ({@link #FREE} or {@link #STAGED}). */
+	/**
+	 * (8a ST) Whether this mod builds staged terrain as construction targets (slice ST). On unless the JVM runs with
+	 * {@code -Darchitect.stagedTerrain=false} (a dev switch: the staged cells are then written in the free pass as before ST, and the
+	 * feature {@code terrainConstruction} is not advertised). Since NEXT.
+	 */
+	public static final boolean STAGED_BUILD = !"false".equals(System.getProperty("architect.stagedTerrain"));
+
+	/** (8a ST) Whether staged terrain is built over time ({@link #STAGED_BUILD}). */
+	public static boolean stagedBuild() {
+		return STAGED_BUILD;
+	}
+
+	/**
+	 * (8aF, 8a ST) Whether a class is written in the free pass: {@link #FREE}, and {@link #STAGED} only when staged terrain is not built
+	 * ({@link #stagedBuild()} off). From slice ST a staged cell is a staged terrain target's.
+	 */
 	public static boolean freePass(byte c) {
-		return c == FREE || c == STAGED;
+		return c == FREE || c == STAGED && !stagedBuild();
 	}
 
 	private Packed() {

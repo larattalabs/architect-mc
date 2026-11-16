@@ -137,9 +137,16 @@ final class Drift {
 		int oz = plan == null ? 0 : plan.minZ;
 		Map<Long, int[]> cols = new java.util.LinkedHashMap<>(); // x, z, expected, inLot
 		int[] from = new int[3]; // after, frozen, plan
+		// (8a ST) a column under a staged terrain target still building holds its before, not the region's after: not sampled (the stage's
+		// items over it wait for that target with the typed terrain wait instead)
+		List<int[]> staged = dev.larattalabs.architect.site.RegionTargets.terrainBoxes(l.rec().groupId);
 		for (int[] b : boxes) {
 			for (int x = ox + Math.ceilDiv(b[0] - ox, step) * step; x <= b[2]; x += step) {
 				for (int z = oz + Math.ceilDiv(b[1] - oz, step) * step; z <= b[3]; z += step) {
+					final int fx = x, fz = z;
+					if (!staged.isEmpty() && staged.stream().anyMatch(sb -> fx >= sb[0] && fx <= sb[2] && fz >= sb[1] && fz <= sb[3])) {
+						continue;
+					}
 					long k = ChunkPos.pack(x, z);
 					int[] had = cols.get(k);
 					if (had != null) {

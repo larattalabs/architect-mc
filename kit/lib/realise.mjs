@@ -305,6 +305,10 @@ export function compileIR(ir, opts = {}) {
   const ops = [];
   const SV = ir.survival && typeof ir.survival === 'object' ? ir.survival : null;
   const opMats = [];
+  // (8a ST) each compiled op's IR op (a fluid op's decor bed is a second compiled op of the same IR op): survival's per-op flags and
+  // materials are read through it, so a bed op shifts nothing after it
+  const opSrc = [];
+  let irOp = 0;
   for (const p of ir.parts ?? []) {
     const pi = parts.length;
     parts.push({ id: p.id, stage: p.stage, set: p.set ?? 'terrain' });
@@ -460,11 +464,13 @@ export function compileIR(ir, opts = {}) {
           ops.push({ ...base, index: ops.length, cond: 3, kind: 2, colIndex: bi, minX: bx0, maxX: bx1, minZ: bz0, maxZ: bz1 });
         }
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
+      while (opSrc.length < ops.length) opSrc.push(irOp);
+      irOp++;
     }
   }
   if (ops.length >= OP_SLOTS) throw new Error('IR: too many ops');
   track = null;
-  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats) : null, reach: compileReach(ir.reach) };
+  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats, opSrc) : null, reach: compileReach(ir.reach) };
   compiled.set(ir, c);
   return c;
 }
@@ -475,7 +481,7 @@ export function compileIR(ir, opts = {}) {
  * flag, each material's kind, and each group's hold: a group holds its free cells (§4.3) when one of its non-pad parts has an op that can
  * write a paid cell (from the op's candidate materials, statically).
  */
-function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
+function compileSurvival(sv, irParts, parts, ops, mats, opMats, opSrc = null) {
   const groups = Array.isArray(sv.groups) ? sv.groups.map(String) : [];
   const map = sv.parts && typeof sv.parts === 'object' ? sv.parts : {};
   const pads = new Set(Array.isArray(sv.pads) ? sv.pads : []);
@@ -488,19 +494,21 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
     padPart[i] = pads.has(p.id) ? 1 : 0;
   });
   const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length), opStaged = new Uint8Array(ops.length);
-  let k = 0;
-  for (const p of irParts) for (const o of p.ops ?? []) {
+  const irOps = [];
+  for (const p of irParts) for (const o of p.ops ?? []) irOps.push(o);
+  for (let k = 0; k < ops.length; k++) {
+    const o = irOps[opSrc ? opSrc[k] : k];
+    if (!o) continue;
     opFree[k] = o.free === true || o.op === 'relief' || o.op === 'scatter' || o.op === 'stamp' ? 1 : 0;
     opFluid[k] = o.op === 'fluid' ? 1 : 0;
     opStaged[k] = o.staged === true && o.op !== 'fluid' ? 1 : 0; // (8aF) a staged terrain op (never a fluid op: 8c's)
-    k++;
   }
   const mk = Int8Array.from(mats.map((m) => materialKind(m)));
   const hold = new Uint8Array(groups.length);
   for (let i = 0; i < ops.length; i++) {
     const pi = ops[i].part;
     if (padPart[pi] || hold[groupOfPart[pi]]) continue;
-    for (const m of opMats[i]) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
+    for (const m of opMats[opSrc ? opSrc[i] : i] ?? []) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
   }
   const items = new Array(mats.length).fill(null);
   return {

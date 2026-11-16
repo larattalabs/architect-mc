@@ -1,0 +1,242 @@
+#!/usr/bin/env node
+// Slice ST gate (8a staged terrain; docs/CONTRACT.md "Phase 8a" §3, §6, §7 row 3, "Slice ST as built") against the headless server of the ST run
+// worktree (GATE6B_RUN, default `../architect-mc-ST-run`, a detached worktree at this checkout's HEAD; the sim sidecar, no Claude). Ports
+// 9018 (sidecar) / 9019 (DevBridge) by default. $0: no Claude call anywhere. Strict tier, targeted scenarios only (speed rule 11).
+//
+//   node tools/gate8ast.mjs <step>
+//     ingame   (st-ingame)  per fixture an INSTANT twin (creative, the flat base: checked, realised, no staged target, the box snapshotted),
+//                           then the same plan in survival (the RS base, a stockpile): realised and built over time, sampled every ~2 s
+//                           through dev.region.terrain: staged targets for its land, intermediate states seen (0 < built < cells), the
+//                           region-wide rate never above terrainPerTick (16) cells per game tick, every standing staged cell supported by
+//                           the world (TO's rules read live), percent under 100 while terrain is unbuilt and 100 at the end, a terrain
+//                           part `building`; rs01 (relief, a rock spire, pads with two lots, a held terrace): a lot waits SITE_BUSY with
+//                           architect_mc:waitsFor {kind: "terrain", part, terrainCells, terrainBuilt}; x01 (the hollow mountain); x03's
+//                           island alone (a floating form from its anchor). Then: every staged target's bill empty, the check's bills per
+//                           part equal to the targets' (items in = items out: the conservation sum exact), the final world equal to its
+//                           INSTANT twin cell for cell (block entities included; the crates aside), Remove E-flat 0
+//     report                REPORT.md over the step JSONs
+//
+// Evidence: artifacts/gate8a-st/<step>.json in the main checkout (GATE8AST_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-ST-run');
+process.env.GATE6B_OUT = process.env.GATE8AST_OUT ?? process.env.GATE6B_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate8a-st');
+process.env.GATE6B_SIDECAR_PORT ??= '9018';
+process.env.GATE6B_DEV_PORT ??= '9019';
+fs.mkdirSync(process.env.GATE6B_OUT, { recursive: true });
+const L = await import('./lib/run6b.mjs');
+const { OUT, call, check, connect, fails, log, results, root, state } = L;
+const B = await import('./lib/gate6chy-b.mjs');
+const G = await import('./lib/gate6crs-game.mjs');
+const core = await import('./lib/gate6chy-core.mjs');
+
+L.refuseKeys();
+const KIT = path.join(root, 'kit');
+const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
+const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
+const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
+const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
+
+const steps = {};
+async function run(name) {
+  for (const k of Object.keys(results)) delete results[k];
+  const t0 = Date.now();
+  let data, error;
+  log(`== ${name}`);
+  try {
+    data = await steps[name]();
+  } catch (e) {
+    log(String(e?.stack ?? e));
+    error = String(e?.stack ?? e);
+    check(false, `${name}: ${String(e?.message ?? e).slice(0, 300)}`);
+  }
+  if (name !== 'report') L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
+}
+const ensure = async () => { if (!state.dev) await connect(); };
+function spendZero() {
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice ST is $0: sim only, no Claude call' }, null, 2)}\n`);
+}
+
+/** The lot entries a fixture binds: every lot of its plan an rs_hut (a farm, smithy or barn an rs_shed), as gate6crs's entriesOf. */
+function entriesOf(fx) {
+  const out = {};
+  const walk = (o) => {
+    if (Array.isArray(o)) o.forEach(walk);
+    else if (o && typeof o === 'object') {
+      if (Array.isArray(o.lots)) for (const l of o.lots) if (l?.id && l.type) out[l.id] = ['farm', 'smithy', 'barn'].includes(l.type) ? 'rs_shed' : 'rs_hut';
+      Object.values(o).forEach(walk);
+    }
+  };
+  walk(fx.plan?.zones ?? []);
+  return out;
+}
+
+/** The snapshot box: the claim and 8 round it, 8 under its lowest ground to `over` above its highest (an island's top). */
+const boxOf = (W, over) => [W.claim[0] - 8, W.minY - 8, W.claim[1] - 8, W.claim[2] + 8, W.maxY + over, W.claim[3] + 8];
+
+/** The INSTANT twin: a creative flat world, checked and realised there (no staged target: creative unchanged), the box snapshotted. */
+async function twinOf(tag, fx, entries, over) {
+  const s = await G.site(ctx, `${tag} twin`, fx, { creative: true });
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const ck = await G.check(ctx, `${tag}-twin`, s);
+  if (!ck.check?.artifactSha) throw new Error(`twin ${tag}: no artifact (${ck.check?.overall})`);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  const st = await L.waitRegion(region, 3_600_000, (x) => L.boxClear.onState(x, x?.view?.id));
+  const tr = await call('dev.region.terrain', { region }, 120_000);
+  const box = boxOf(s.W, over);
+  await L.settle(3000);
+  const file = path.join(OUT, `st-${tag}-twin.snap.gz`);
+  await call('dev.region.hash', { box, mode: 'snap', file }, 3_600_000);
+  const r = { file, box, state: st.view.state, survival: ck.check?.survival ?? false, terrainTargets: (tr.targets ?? []).length };
+  check(st.view.state === 'PLACED' && !ck.check?.survival && r.terrainTargets === 0, `${tag} (INSTANT twin, creative): realised ${st.view.state}, survival ${r.survival}, ${r.terrainTargets} staged terrain target(s) (creative unchanged: written at once)`, r);
+  return r;
+}
+
+/**
+ * One fixture staged in survival: realised over a stockpile, fed what its lots lack (G.feed), sampled through dev.region.terrain until built
+ * and done; the checks of the file's header; removed (E-flat 0).
+ */
+async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) {
+  const entries = entriesOf(fx);
+  const T = await twinOf(tag, fx, entries, over);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = boxOf(s.W, over);
+  const pre = await G.snap(ctx, box, `st-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  const out = { tag, overall: ck.check?.overall, survival: ck.check?.survival, entries, twin: T };
+  check(ck.check?.survival === true && ['READY', 'NEEDS_REPAIR'].includes(ck.check?.overall) && !!ck.check?.artifactSha, `${tag}: Regions.checkPlan in survival: ${ck.check?.overall}, ${json((ck.check?.parts ?? []).map((a) => [a.part, a.class, a.cost?.survival?.free, a.cost?.survival?.held, sum(a.cost?.survival?.bom)]))}`);
+  if (!ck.check?.artifactSha) return out;
+  const crateAt = await G.pile(ctx, s, crates);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  out.region = region;
+  const samples = [];
+  let lotWaits = [], n = 0, lastSample = 0;
+  const sample = async () => {
+    if (Date.now() - lastSample < 1500) return;
+    lastSample = Date.now();
+    const deep = n++ % 3 === 0;
+    const tr = await call('dev.region.terrain', { region, ...(deep ? { check: true } : {}) }, 300_000);
+    const rs = await G.rsState(ctx, region);
+    const b = rs.build ?? {};
+    const tc = (b.parts ?? []).reduce((a, p) => a + (p.terrainCells ?? 0), 0), tb = (b.parts ?? []).reduce((a, p) => a + (p.terrainBuilt ?? 0), 0);
+    samples.push({ t: tr.gameTime, cells: tr.cells, built: tr.built, targets: (tr.targets ?? []).length, percent: b.percent, rate: tr.terrainPerTick, partsTerrain: [tc, tb],
+      building: (b.parts ?? []).filter((p) => p.state === 'building' && p.terrainCells > 0).map((p) => p.part),
+      unsupported: deep ? (tr.targets ?? []).filter((t) => !t.released).reduce((a, t) => a + (t.unsupported ?? 0), 0) : null,
+      firstUnsupported: deep ? (tr.targets ?? []).flatMap((t) => t.firstUnsupported ?? []).slice(0, 4) : null, released: (tr.targets ?? []).filter((t) => t.released).map((t) => t.target) });
+    for (const w of tr.waits ?? []) if (w.key.startsWith('lot:') && w.waitsFor?.kind === 'terrain' && w.status === 'WAITING') lotWaits.push(w);
+  };
+  const f = await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 3_000_000, every: 1000, extra: async () => { await sample(); return {}; },
+    until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done });
+  await sample();
+  const final = await call('dev.region.terrain', { region, check: true }, 300_000);
+  const rs = await G.rsState(ctx, region);
+  out.feed = { waves: f.waves, inserted: f.inserted };
+  out.samples = samples;
+  out.final = { cells: final.cells, built: final.built, targets: (final.targets ?? []).map((t) => [t.target, t.part, t.cells, t.built, t.connected, t.released, t.unsupported]) };
+  out.build = rs.build && { built: rs.build.built, done: rs.build.done, percent: rs.build.percent, terrainPerTick: rs.build.terrainPerTick, parts: (rs.build.parts ?? []).map((p) => [p.part, p.state, p.cells, p.built, p.terrainCells, p.terrainBuilt]) };
+  // staged targets for the land, built over time
+  const mid = samples.filter((x) => x.built > 0 && x.built < x.cells);
+  check((final.targets ?? []).length > 0 && final.cells > 0 && mid.length >= 2, `${tag}: its land is ${(final.targets ?? []).length} staged terrain target(s), ${final.cells} cells, built over time: ${mid.length} of ${samples.length} samples between 0 and all (${json(mid.slice(0, 4).map((x) => [x.t, x.built]))})`);
+  // the rate: never above terrainPerTick per game tick, region-wide
+  let maxRate = 0;
+  const over16 = [];
+  for (let i = 1; i < samples.length; i++) {
+    const dt = samples[i].t - samples[i - 1].t, db = samples[i].built - samples[i - 1].built;
+    if (dt > 0 && db > 0) { maxRate = Math.max(maxRate, db / dt); if (db > samples[i].rate * dt + samples[i].rate) over16.push([samples[i - 1].t, samples[i].t, db]); }
+  }
+  out.rate = { max: Math.round(maxRate * 100) / 100, terrainPerTick: final.terrainPerTick, over: over16 };
+  check(final.terrainPerTick === 16 && rs.build?.terrainPerTick === 16 && over16.length === 0 && maxRate > 0, `${tag}: built at most terrainPerTick (${final.terrainPerTick}, RegionBuild.terrainPerTick ${rs.build?.terrainPerTick}) cells per game tick region-wide: the fastest stretch ${out.rate.max}/tick, ${over16.length} stretch(es) over`, over16.slice(0, 4));
+  // support order: every standing staged cell supported, at every deep sample and at the end
+  const deep = samples.filter((x) => x.unsupported !== null);
+  const bad = deep.filter((x) => x.unsupported > 0);
+  const finalBad = (final.targets ?? []).reduce((a, t) => a + (t.released ? 0 : t.unsupported ?? 0), 0);
+  const released = (final.targets ?? []).filter((t) => t.released).map((t) => t.target);
+  out.support = { deep: deep.length, bad: bad.slice(0, 4), finalBad, released };
+  check(deep.length >= 1 && bad.length === 0 && finalBad === 0, `${tag}: in support order: every standing staged cell supported by the world at ${deep.length} half-built sample(s) and at the end (${finalBad} unsupported; ${released.length} target(s) released: ${released.join(' ')})`, out.support);
+  // percent counts the terrain; a terrain part reads building while it builds
+  const early100 = samples.filter((x) => x.partsTerrain[1] < x.partsTerrain[0] && x.percent >= 100);
+  const sawBuilding = samples.some((x) => x.building.length > 0);
+  check(early100.length === 0 && rs.build?.percent === 100 && rs.build?.built && rs.build?.done && sawBuilding, `${tag}: RegionBuild.percent reaches 100 only with the terrain built (${early100.length} sample(s) at 100 before it; end ${rs.build?.percent}, built ${rs.build?.built}, done ${rs.build?.done}); a terrain part read building while it built (${sawBuilding})`, early100.slice(0, 3));
+  if (lotWait) {
+    const w = lotWaits[0];
+    out.lotWait = { n: lotWaits.length, first: w ?? null };
+    check(!!w && w.reason === 'SITE_BUSY' && typeof w.waitsFor.part === 'string' && w.waitsFor.terrainCells > 0 && Number.isInteger(w.waitsFor.terrainBuilt) && typeof w.waitsFor.say === 'string',
+      `${tag}: a lot on its staged pad waits ${w?.reason} with architect_mc:waitsFor ${json(w?.waitsFor)} (${lotWaits.length} sample(s))`);
+  }
+  // nothing billed for staged cells; the bills per part as checked; items in = items out
+  const stagedIds = new Set((final.targets ?? []).map((t) => t.target));
+  const stagedBills = (rs.targets ?? []).filter((t) => stagedIds.has(t.target)).filter((t) => sum(t.bom) !== 0);
+  const bills = G.billsOf(ck, rs);
+  const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
+  const p = await C.point('built');
+  out.bills = { stagedBilled: stagedBills.map((t) => [t.target, t.bom]), differ, conservation: p };
+  check(stagedBills.length === 0 && differ.length === 0 && G.exact(p), `${tag}: nothing billed for staged cells (${stagedBills.length} staged target(s) with a bill); the check's bills per part equal the targets' (${differ.length} differ: ${differ.join(' ')}); items in = items out (conservation ${json(p.diff)}, identity ${p.identity}; ${sum(f.inserted)} items fed)`, out.bills);
+  // the final world: its INSTANT twin's, cell for cell
+  const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
+  out.twinDiff = d;
+  check(d.mismatches === 0, `${tag}: the built world equals its INSTANT twin cell for cell (block entities included; the crates aside): ${d.mismatches} differ`, d.list);
+  const rm = await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  out.eflat = { removed: rm.removed, mismatches: ef.length, list: ef.slice(0, 8) };
+  check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, out.eflat);
+  return out;
+}
+
+steps.ingame = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  const only = process.env.ST_ONLY ? process.env.ST_ONLY.split(',') : null;
+  const want = (t) => !only || only.includes(t);
+  const rate = await call('dev.terrain.rate', {}, 30_000).catch((e) => ({ error: String(e.message ?? e) }));
+  out.rateHook = rate;
+  if (want('rs01')) {
+    try { out.rs01 = await staged('rs01', G.fixture(ctx, 'rs01_land'), { lotWait: true }); } catch (e) { check(false, `rs01: ${String(e.message).slice(0, 300)}`); out.rs01 = { error: String(e.stack ?? e) }; }
+  }
+  if (want('x01')) {
+    try { out.x01 = await staged('x01', G.fixture(ctx, 'bf/x01_hollow_mountain'), { over: 96, crates: 1 }); } catch (e) { check(false, `x01: ${String(e.message).slice(0, 300)}`); out.x01 = { error: String(e.stack ?? e) }; }
+  }
+  if (want('x03')) {
+    const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
+    delete isle.plan.zones;
+    try { out.x03 = await staged('x03', isle, { over: 96, crates: 1 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
+  }
+  return out;
+};
+
+steps.report = async () => {
+  const rows = [];
+  for (const s of ['ingame']) {
+    const f = path.join(OUT, `${s}.json`);
+    if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const res = Object.entries(j.results ?? {});
+    const bad = res.filter(([, r]) => !r.ok);
+    rows.push(`| ${s} | ${bad.length ? `**FAIL** ${bad.length}` : 'PASS'} (${res.length - bad.length}/${res.length}) | ${j.head?.slice(0, 10) ?? ''} |`);
+    for (const [m, r] of res) rows.push(`| | ${r.ok ? 'ok' : 'FAIL'} | ${m.replaceAll('|', '/')} |`);
+  }
+  spendZero();
+  fs.writeFileSync(path.join(OUT, 'REPORT.md'), `# Gate 8a-ST (staged terrain)\n\nSpend: $0.00 (cap $0).\n\n| step | result | |\n|---|---|---|\n${rows.join('\n')}\n`);
+  return { lines: rows.length };
+};
+
+const name = process.argv[2];
+if (!steps[name]) {
+  console.error(`usage: node tools/gate8ast.mjs <${Object.keys(steps).join('|')}>`);
+  process.exit(2);
+}
+fs.mkdirSync(OUT, { recursive: true });
+await run(name);
+log(`== ${name}: ${fails()} failure(s)`);
+try { state.dev?.close(); } catch { /* closed */ }
+process.exit(fails() ? 1 : 0);

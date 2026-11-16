@@ -211,6 +211,7 @@
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
+    "kit/test/st-8a.test.mjs",
     "kit/test/st.test.mjs",
     "kit/test/staged-8af.test.mjs",
     "kit/test/step-cache.test.mjs",
@@ -722,6 +723,7 @@
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
+    "kit/test/st-8a.test.mjs",
     "kit/test/st.test.mjs",
     "kit/test/staged-8af.test.mjs",
     "kit/test/step-cache.test.mjs",
@@ -1749,6 +1751,7 @@
     "kit/test/sidecar-reuse.test.mjs",
     "kit/test/sl.test.mjs",
     "kit/test/smalls.test.mjs",
+    "kit/test/st-8a.test.mjs",
     "kit/test/st.test.mjs",
     "kit/test/staged-8af.test.mjs",
     "kit/test/step-cache.test.mjs",
@@ -103051,7 +103054,7 @@
    ],
    "roots": [
     "tools/gate6b.mjs",
-    "tools/gate7bst.mjs"
+    "tools/gate8ast.mjs"
    ],
    "closure": [
     "apitest/build.gradle",
@@ -103231,7 +103234,6 @@
     "kit/lib/siteFits.mjs",
     "kit/lib/siteHelpers.mjs",
     "kit/lib/siteSpec.mjs",
-    "kit/lib/siteStandalone.mjs",
     "kit/lib/specschema.mjs",
     "kit/lib/style3.mjs",
     "kit/lib/styles.mjs",
@@ -103252,13 +103254,10 @@
     "kit/schemas/pattern.json",
     "kit/schemas/plan.json",
     "kit/schemas/site-spec.json",
-    "kit/test/fixtures/af/cliff_face.json",
     "kit/test/fixtures/vocab/voc-designs.mjs",
     "kit/test/fixtures/vocab/vocc-designs.mjs",
     "kit/test/h-helpers.mjs",
     "kit/test/plan-helpers.mjs",
-    "kit/test/st.test.mjs",
-    "kit/tools/affordances.mjs",
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
@@ -103267,10 +103266,11 @@
     "mod/gradle/wrapper/gradle-wrapper.properties",
     "mod/settings.gradle",
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "scenarios/s3_monastery.json",
     "tools/find-site.mjs",
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
-    "tools/gate7bst.mjs",
+    "tools/gate8ast.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/arch-tmp.mjs",
     "tools/lib/asks-first.mjs",
@@ -103280,15 +103280,16 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
-    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
     "tools/lib/gallery6b.html",
     "tools/lib/gallery6b.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/gate6chy-b.mjs",
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
+    "tools/lib/gate6crs-game.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
@@ -103296,6 +103297,7 @@
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
     "tools/lib/realised-virtual.mjs",
+    "tools/lib/run-shared.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/scenario-br.mjs",
     "tools/lib/scenario-districts.mjs",
@@ -103323,23 +103325,37 @@
     "kit/designs/**",
     "kit/examples/cabin/**",
     "kit/test/fixtures/br/library/**",
-    "kit/test/fixtures/ds/**",
-    "kit/test/fixtures/ds/cliff_east/**",
     "kit/test/fixtures/plan/**",
+    "kit/test/fixtures/plan/asks-8703dbd/**",
     "kit/test/fixtures/plan/asks/**",
-    "kit/test/fixtures/site/**",
-    "kit/test/fixtures/site/cliff_face/**",
+    "kit/test/fixtures/plan/hy/**",
     "mod/src/test/resources/stub-sidecar/**",
     "scenarios/bibles/**"
    ],
    "dynamic": [
     {
-     "from": "tools/gate7bst.mjs",
+     "from": "tools/gate8ast.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
-     "from": "kit/build.mjs",
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/corpus-derive.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
+    },
+    {
+     "from": "tools/lib/corpus-plan-worker.mjs",
+     "expr": "j.module)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -103366,28 +103382,12 @@
      "expr": "path.join(root, 'kit', p))"
     },
     {
-     "from": "kit/lib/plan/authored.mjs",
-     "expr": "), import.meta"
-    },
-    {
-     "from": "kit/lib/plan/authored.mjs",
-     "expr": "), no import.meta)')"
-    },
-    {
-     "from": "kit/lib/plan/authored.mjs",
-     "expr": "pathToFileURL(file).href)"
-    },
-    {
-     "from": "tools/lib/corpus-derive.mjs",
-     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href)"
-    },
-    {
-     "from": "tools/lib/corpus-plan-worker.mjs",
-     "expr": "j.module)"
-    },
-    {
      "from": "tools/lib/realised-virtual.mjs",
      "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
     }
    ],
    "env": [
@@ -103409,7 +103409,7 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
-    "GATE7BST_OUT",
+    "GATE8AST_OUT",
     "GATE_BR_LIBRARY",
     "GATE_MERGE_BASE",
     "GATE_NO_UNCHANGED_SKIP",
@@ -103421,10 +103421,14 @@
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
+    "HYB_BYPASS",
+    "HYB_ONLY",
+    "HYB_WATCH",
     "JAVA_HOME",
     "PA_PLAN",
     "REFIND",
-    "SCENARIOS_ART"
+    "SCENARIOS_ART",
+    "ST_ONLY"
    ],
    "flags": {
     "originMain": [
@@ -103439,10 +103443,9 @@
    "eager": [
     "tools/find-site.mjs",
     "tools/gate6b.mjs",
-    "tools/gate7bst.mjs",
+    "tools/gate8ast.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/clearBox.mjs",
-    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
