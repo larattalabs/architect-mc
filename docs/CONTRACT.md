@@ -32693,7 +32693,8 @@ LEFTOVERS "CN connectors in game". No API record, method, reason or feature chan
   SB's second trunk port (choosePort would flip standing plans to a port installed entries lack); HR's hatch (a vertical port link); the
   drop-to-link with a placed site house (release run). **Links in survival (design note, strict):** the link exists only in IR v2, after binding,
   so no quote bills it: a plan-time bill from the sites' ports held to QD's "up to N" at realise, or a second target with its own quote.
-- **Checks:** unit-scope (kit 995/0 of 997, sidecar, Gradle full build) PASS; cn.test 7/7; step-inputs 428 clean; gitleaks clean. cn-ingame
-  (run 20261115-233823): ladder (from the hub button) and rock stair PLACED, realised = virtual strict (105/316 cells), removed by the command,
-  E-flat 0; catwalk PLACED and removed E-flat 0 but **strict fails on 1 kept cell**: its east approach's `dirt_path` at 9555,73,9017 stays grass
-  (CW's route, pre-existing; a leftover). Release run: cn-ingame, cx-ingame, lp-ingame/lp-remove (links.mjs).
+- **Checks:** unit-scope (kit 995/0 of 997, sidecar, Gradle full build) PASS; cn.test 7/7; step-inputs 428 clean; gitleaks clean. **RoadPlan fix**
+  (the catwalk's kept approach cell): the walkway's side cells followed each cell's neighbours, so a diagonal segment's end cell (and a z-to-x
+  corner) put its side cell off the kit's model (vworld, segmentAxis); now the segment's axis (RoadPlanTest; Gradle 1341/0). cn-ingame run
+  20261116-000136 **PASS 16/0**: ladder (from the hub button), catwalk, rock stair PLACED, realised = virtual strict (105/148/316 cells),
+  removed by the command, E-flat 0. Release run: cn-ingame, cx-ingame, lp-ingame/lp-remove, and the road steps (RoadPlan moved).
