@@ -226,7 +226,7 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(sys.endsWith(COMPOSE_SYSTEM)).toBe(true);
     // (CW2) the reason is the player's summary (player words, not the plan's workings); a wall round a zone leaves `closed` unwritten
     expect(TEXT.answer).toMatch(/reason: one or two sentences the player reads: what they get, as they will see it\. Never the plan's workings/);
-    expect(TEXT.system).toContain('Leave `closed` unwritten for a wall round a zone: routes get their gates by themselves; `closed: false` is only for an edge zone open toward the rest of the town.');
+    expect(TEXT.system).toContain('or leave `closed` unwritten, as for any wall round a zone; `closed: false` only for an edge zone open to the rest of the town.');
   });
 });
 
