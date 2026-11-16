@@ -406,6 +406,8 @@ function runFree(W, a, b) {
   for (let i = a - 1; i <= b + 1; i++) {
     if (W.positions[i].axis !== ax) return false;
     if (W.ends.includes(i)) return false;
+    // ((WR2) an open ring's left-out side: its positions hold no cells, so a gate there has nothing to open (it crashed emission))
+    if (W.omit && W.positions[i].side === W.omit) return false;
     if (W.cutPos?.has(i)) return false; // ((7a K3) a lot's box: no wall there)
     if (W.gates.some((g) => i >= g.a - 1 && i <= g.b + 1)) return false;
     // ((6c HY-c, §8.3) a water gate's positions and their neighbours hold no walk gate)
@@ -542,7 +544,7 @@ export function planWalls(K) {
     }
     notes.push(...L.notes);
     if (st.sealed) notes.push(st.gatesMax === 0 && (p.part.gates === 0 || st.P.read.gatesMin === 0) ? 'sealed: gates 0 (no gate; routes go round it or refuse)' : 'sealed: closed with no gate part (no gate; routes go round it or refuse)');
-    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G, ...(L.along ? { along: L.along } : {}), ...(wetInfo ? { wet: wetInfo, wetPos: wetInfo.pos } : {}) };
+    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, omit: L.omit ?? null, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G, ...(L.along ? { along: L.along } : {}), ...(wetInfo ? { wet: wetInfo, wetPos: wetInfo.pos } : {}) };
     W.cellAt = new Map(W.cells.map((c) => [key(c.x, c.z), c]));
     // the networks' crossings: open gates (auto), at the network's own surface
     for (const c of L.crossings ?? []) {
@@ -1762,7 +1764,7 @@ export function wallPrimitive(r, line, opts = {}) {
   const K = { r, env: { S, claim: r.claim, cols: S.columns, protectedAreas: [], keepOut: [], regions: [], buildRects: [], standingHard: [] }, ctx: r.ctx, routed: [], stageOf: () => r._stage(opts.stage), record: {} };
   K.walk = networkWalk(r, S);
   K.stand = standMap(K, K.walk);
-  const W = { id, p: { part: { ext: opts._unsafe ? { 'architect_mc:unsafe': opts._unsafe } : {} } }, st, form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: null, joined: [], gates: [], devs: [], notes: [], opened: 0,
+  const W = { id, p: { part: { ext: opts._unsafe ? { 'architect_mc:unsafe': opts._unsafe } : {} } }, st, form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, omit: L.omit ?? null, I: L.I ?? null, target: null, joined: [], gates: [], devs: [], notes: [], opened: 0,
     G: obstacleGrid({ claim: r.claim, cols: S.columns, walkCells: K.walk }) };
   W.cellAt = new Map(W.cells.map((c) => [key(c.x, c.z), c]));
   let built = null;

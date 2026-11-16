@@ -742,7 +742,7 @@ function resolveSpikesAround(env, f, geomOf, taken, keep) {
   const j = judge([{ what: 'count', value: want - sites.length, ...tCount }]);
   return { klass: j.klass, sites: sites.map((s) => s.centre), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((acc, s) => ({ minX: Math.min(acc.minX, s.rect.minX), minZ: Math.min(acc.minZ, s.rect.minZ), maxX: Math.max(acc.maxX, s.rect.maxX), maxZ: Math.max(acc.maxZ, s.rect.maxZ) }), sites[0].rect),
     deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: j.failed.what === 'count' ? 'NO_ROOM' : 'TOLERANCE', message: `${want - sites.length} of ${want} site(s) found round ${a.footprint.what}`, evidence: { what: 'count', value: want - sites.length } }] : [],
-    notes: [`around ${a.footprint.what}: ${sites.length} site(s) in the band [${a.ring.join(', ')}]${want >= 3 ? ', evenly by angle' : ''}`] };
+    notes: [`around ${a.footprint.what}: ${sites.length} site(s) in the band [${a.ring.join(', ')}]${want >= 3 ? ', evenly by angle' : ''}`, ...(a.notes ?? [])] };
 }
 
 // ------------------------------------------------------------------ (D1) districts zones

@@ -208,7 +208,8 @@ export function ringCells(I, t, omit = null) {
     const c = { n: [[I.minX, I.minZ], [I.maxX, I.minZ]], s: [[I.maxX, I.maxZ], [I.minX, I.maxZ]], w: [[I.minX, I.maxZ], [I.minX, I.minZ]], e: [[I.maxX, I.minZ], [I.maxX, I.maxZ]] }[omit];
     ends = c.map(([x, z]) => posOf.get(`${x},${z}`));
   }
-  return { positions, cells, ends, closed: !omit };
+  // ((WR2) `omit`: the open side, whose straight positions keep their indices but hold no cells: no gate may stand there)
+  return { positions, cells, ends, closed: !omit, omit };
 }
 
 // ------------------------------------------------------------------ lines (wall.line)
