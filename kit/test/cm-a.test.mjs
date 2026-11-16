@@ -201,6 +201,36 @@ test('a broken join is caught: unknown module or port, not a joint port, a port 
   assert.throws(() => pair().join('nodot', 'b.w'), /'<module>\.<port>'/);
 });
 
+test('a facing mismatch alone (7c CS, CM-a\'s leftover): both ports on their own faces, one union cell, same size, facings not opposite', () => {
+  // a's port on its north face at its north-east corner cell, b's on its west face at its north-west corner: union (8, 1, 0) both
+  const p = PALETTES.fortress;
+  const corner = (id, name, x, facing) => {
+    const bp = new Blueprint({ id, type: 'castle', size: [9, 6, 7], palette: p, interior: [1, 1, 1, 7, 3, 5] });
+    bp.part('hall', () => { bp.floor(0, 0, 8, 6, 0, p.stone); bp.walls(0, 0, 8, 6, 1, 4, { block: p.stone, corners: p.stone }); bp.floor(0, 0, 8, 6, 5, p.stone); });
+    joint(bp, name, x, 1, 0, facing);
+    return bp;
+  };
+  const c = new Composite({ id: 'pair', type: 'castle', front: 'south', palette: p });
+  c.module('a', corner('pair_a', 'e', 8, 'north'), { at: [0, 0, 0] });
+  c.module('b', corner('pair_b', 'w', 0, 'west'), { at: [8, 0, 0] });
+  c.join('a.e', 'b.w');
+  assert.deepEqual(codes(c), ['JOINT_FACING']);
+  assert.match(c.findings()[0].message, /facings north and west are not opposite/);
+  assert.equal(c.check().ok, false);
+});
+
+test('joint ports face horizontally only (7c CS: intended; modules sit side by side, never stacked)', () => {
+  // a lower module's top face (y 5) joined to an upper one's bottom face (y 0): the cells meet, but an up/down joint is on no face
+  const slab = (id, name, y, facing) => {
+    const bp = new Blueprint({ id, type: 'castle', size: [9, 6, 7], palette: PALETTES.fortress });
+    bp.floor(0, 0, 8, 6, 0, PALETTES.fortress.stone);
+    joint(bp, name, 2, y, 2, facing);
+    return bp;
+  };
+  const c = new Composite({ id: 'up', type: 'castle' }).module('a', slab('up_a', 'top', 5, 'up')).module('b', slab('up_b', 'bottom', 0, 'down'), { at: [0, 5, 0] }).join('a.top', 'b.bottom');
+  assert.deepEqual(codes(c).filter((x) => x.startsWith('JOINT_')), ['JOINT_BOUNDARY', 'JOINT_BOUNDARY', 'JOINT_FACING'], 'an up/down joint is on no face (and up/down are not horizontal opposites)');
+});
+
 test('modules: the cap, one seam layer at most, and a seam cell two modules write differently', () => {
   const big = new Composite({ id: 'big', type: 'castle' });
   const bp = new Blueprint({ id: 'big_a', size: [97, 4, 4] });

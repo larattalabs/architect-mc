@@ -332,6 +332,10 @@ final class LibraryImpl implements Library {
 		if (dev.larattalabs.architect.site.Adopt.deleteRefusal(entryId) != null) {
 			return CompletableFuture.completedFuture(false); // (6c PT2) an adopted entry whose site stands: the site pins it
 		}
+		dev.larattalabs.architect.placement.Blueprints.Entry own = dev.larattalabs.architect.placement.Blueprints.entry(entryId);
+		if (own != null && dev.larattalabs.architect.site.Composites.deleteRefusal(entryId, own.json()) != null) {
+			return CompletableFuture.completedFuture(false); // (7c CS) a composite's hidden module goes only with its composite
+		}
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null) {
 			return CompletableFuture.completedFuture(false);

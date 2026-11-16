@@ -32725,3 +32725,42 @@ No API surface change.
 - **Composer rules** (`kit/prompts/composer.md`, general): the Slopes line now says `terraces: {}` goes on the zone, so every district is terraced, or on each district, and a district without terraces on a steep slope loses most of its lots. Made room by tightening five unpinned sentences (lot sizes, room-to-spare, reserved kinds, notes, answering a check), meanings kept. The system with the families and 28k caller rules is 119,434 characters (566 left; CF2 left 507).
 - **Replay** (`replay3.mjs`, s3-pay plan + `s3-retry-plan.mjs`, $0): still NEEDS_REPAIR, 3 of 13; LOTS_SHORT now ends "summit, midterrace stand on ground rising 30 blocks, too steep for a street, without terraces: add `terraces` to the zone ...". `abl-zterr` and `abl-dterr` (terraced) answer READY with no LOTS_SHORT.
 - **Tests:** `kit/test/cf3.test.mjs` (the measure; sloped untraced districts named, an unplaced one over the zone, the whole district not; zone/every-district terraces, flat ground and no survey give CF2's reason; a lots zone); `sidecar/test/compose-cf3.test.ts` (the tip and evidence in the repair prompt; the rules line, no scenario nouns, the 120k budget).
+
+### Slice CS as built (branch `slice/CS` off main de4c88ac; versions NEXT; $0; light; recorded 2026-11-15)
+
+LEFTOVERS "CS composite and site edges". **API (additive):** `DesignRequest.inverted` (28th component, the 27-arg constructor kept, withers keep
+it, `withInverted`; feature `invertedDesigns` from helper `design.inverted`); detail `composite` on `VERSION_REFUSED` and follow's `NOT_ALLOWED`;
+`Library.delete` of a composite trashes its hidden modules, of a module alone answers false. No Architect path designs site lots: Steward sets
+`inverted` from the artifact's `$.lots[].inverted`.
+- **SR:** a variant or re-skin keeps the source request's `allowComposite` and installs a new composite with its own modules; polish, versionOf,
+  revert and follow of a composite or module refuse at the request (a new version would need its modules versioned). Site variants stay refused.
+- **CM-b:** the delete cascade (client, headless, API); a batch item's composite refusal kept (persistence is strict work).
+- **CM-a:** stone under the corner towers (cm-a goldens re-cut), so cmb-ingame verifies exactly; its item now asks `allowComposite` (required
+  since SR) and checks the delete; JOINT_FACING isolated; vertical joints intended (pinned).
+- **PL, DS, HR, US:** PL/DS refusals intended as recorded (pinned in ApiCSTest); HR's ghost closed by SR; hidden_village, secret_tunnels and
+  upside_down wait on R2/CN; the US brief gains an "Inverted lot" section.
+- **Checks** ($0, rule 11.1): kit PASS; sidecar 573/574 (eval.e2e lost its sidecar under load, 4/4 alone); Gradle 1340 with Api7bFTest's
+  component check updated (12/12, ApiCSTest 7/7); api-compat 8/8 (Steward's jar too); step-inputs clean; gitleaks clean. Release run: cmb-ingame,
+  cmb-crash, a module's mid-batch rollback, an inverted lot's realise. Leftover: a group copy of a composite archetype falls back to an original.
+
+### Slice CN as built (branch `slice/CN` off `slice/CS` 0c7c9d81; versions NEXT; no API change; $0; light; recorded 2026-11-15)
+
+LEFTOVERS "CN connectors in game". No API record, method, reason or feature changed (api-compat 8/8 incl. Steward's jar).
+- **Built:** (1) **stepped branch walks** (`links.mjs`, `BRANCH_WALK.rise` 4): walk ports up to 4 feet rows apart step one row per straight
+  move, monotone, never on a turn; a step's higher cell is the deck's own stairs; the record gains `steps` only then; M10:branch_walk reads each
+  cell's feet y. One-y walks are byte-identical; 5+ rows stay typed `LEVEL` (this also covers WL's pre-WL entries off by 1-4). (2) **Player
+  remove:** the placed link's notes and toast name `/architect region remove <rg>`; the command removes as the owner when the player owns the
+  region, and with no id names the player's last link (`RegionCommands`, `ConnectorPlace`). (3) **Hub "Build a link…"** (`ArchitectScreen.java`,
+  Library > Placed here footer, one button -> `BuildLinkKey.start`). (4) **Ladder, catwalk, rock stair in game** on `fixtures/plan/cn/` lands
+  (step `cn-ingame`, chain `7ccn`). (5) **Revision of an IR-v2 region** (kit, cn.test): canopy and link stand, no site_links/portLinks/linked.
+- **Intended:** owner/dimension in params (frozen record; multiplayer player path needs a packet); composited blocks as support (no design
+  blocks at plan time; IR v2 = IR v1 + links); SL's three asks (their land lacks the canopy/overhang; us.test/sl.test fit them).
+- **Deferred:** pad-lot ports; rope bridges at a port and CL's ladder to a walk port (one-ended port links, a catalogue change; CL with R2);
+  SB's second trunk port (choosePort would flip standing plans to a port installed entries lack); HR's hatch (a vertical port link); the
+  drop-to-link with a placed site house (release run). **Links in survival (design note, strict):** the link exists only in IR v2, after binding,
+  so no quote bills it: a plan-time bill from the sites' ports held to QD's "up to N" at realise, or a second target with its own quote.
+- **Checks:** unit-scope (kit 995/0 of 997, sidecar, Gradle full build) PASS; cn.test 7/7; step-inputs 428 clean; gitleaks clean. **RoadPlan fix**
+  (the catwalk's kept approach cell): the walkway's side cells followed each cell's neighbours, so a diagonal segment's end cell (and a z-to-x
+  corner) put its side cell off the kit's model (vworld, segmentAxis); now the segment's axis (RoadPlanTest; Gradle 1341/0). cn-ingame run
+  20261116-000136 **PASS 16/0**: ladder (from the hub button), catwalk, rock stair PLACED, realised = virtual strict (105/148/316 cells),
+  removed by the command, E-flat 0. Release run: cn-ingame, cx-ingame, lp-ingame/lp-remove, and the road steps (RoadPlan moved).

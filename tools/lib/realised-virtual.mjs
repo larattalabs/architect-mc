@@ -67,7 +67,7 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
   const kindOf = writerKinds(F.ir, F.meta);
   const tot = { written: 0, differ: 0, kept: 0, road: 0, plant: 0, child: 0, grass: 0, fluid: 0, joined: 0 };
   const byKind = {};
-  const first = [];
+  const first = [], keptFirst = []; // ((7c CN) keptFirst: the first cells the realise kept as they were, for the log)
   vw.eachWritten((x, y, z, idx, f, part) => {
     if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ || inLot(x, y, z)) return;
     const { kind, sub } = kindOf(x, y, z, part);
@@ -86,6 +86,7 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
     else if (lots && nearLot(x, y, z) && joinedOnly(want, got)) cls = 'joined';
     k[cls]++; tot[cls]++;
     if (cls === 'differ' && first.length < 12) first.push({ pos: [x, y, z], kind, part: F.ir.parts[part]?.id ?? null, want, got });
+    if (cls === 'kept' && keptFirst.length < 8) keptFirst.push({ pos: [x, y, z], kind, part: F.ir.parts[part]?.id ?? null, want, got });
   });
   // the 4e street lanterns (the mod lays them at realise; kit/lib/lint/roads.mjs models them for the lints): the model's light cells
   // against the realised world's light blocks outside the lot boxes that the plan itself did not write. Both ways: a post the model
@@ -110,7 +111,7 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
   lanterns.differ = lanterns.modelOnly.length + lanterns.realisedOnly.length;
   tot.differ += lanterns.differ;
   if (lanterns.differ && first.length < 12) first.push({ lanterns: { modelOnly: lanterns.modelOnly.slice(0, 4), realisedOnly: lanterns.realisedOnly.slice(0, 4) } });
-  return { ...tot, share: tot.written ? tot.differ / tot.written : 0, first, byKind, lanterns };
+  return { ...tot, share: tot.written ? tot.differ / tot.written : 0, first, keptFirst, byKind, lanterns };
 }
 
 export const CLASSES = ['kept', 'road', 'plant', 'child', 'grass', 'fluid', 'joined'];

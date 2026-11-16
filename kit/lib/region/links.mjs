@@ -17,13 +17,14 @@ import { deckChoice, railOf } from '../connectors/bridgeGeom.mjs';
 import { rightOf } from '../connectors/ropeGeom.mjs';
 import { fixtureFor } from './fixtures.mjs';
 import { bomOf } from '../connectors/bom.mjs';
+import { variant } from '../kit.mjs';
 
 /** The stage the links are written in: after the lots (K1's own `links` stage, before the lots, already holds that name). */
 export const LINK_STAGE = 'site_links';
 /** The connector kinds a port link is built with (plan/0 kinds; `tunnel` between two door ports is the catalogue's `tunnel.under`). */
 export const PORT_LINK_KINDS = Object.freeze(['catwalk', 'branch_walk', 'tunnel']);
 /** branch_walk's limits (catalogue `connector.branch_walk`): hanger span, the reach up to an anchor, the route's length, lamps. */
-export const BRANCH_WALK = Object.freeze({ span: 8, reach: 16, lengthMax: 96, lampEvery: 12, search: 24, width: 1 });
+export const BRANCH_WALK = Object.freeze({ span: 8, reach: 16, lengthMax: 96, lampEvery: 12, search: 24, width: 1, rise: 4 });
 /** The codes a port link refuses with (plan time: the part's reason; realise: NO_LINK's detail `code`). */
 export const LINK_CODES = Object.freeze(['NO_PORT', 'FACING', 'LEVEL', 'ALIGN', 'NO_PATH', 'ANCHOR', 'HEADROOM', 'SPAN', 'PROTECTED', 'NO_GAP', 'WATER', 'NO_COVER', 'VOLUME']);
 
@@ -189,6 +190,9 @@ function routeTunnel(r, land, A, B, link) {
 }
 
 /**
+ * ((CN, LP's and WL's leftover) ports at feet y up to BRANCH_WALK.rise apart: the walk steps, one row per straight move, monotone from
+ * A's y to B's, never on a turn; the deck of a step's higher cell is a stair (written at realise), the lower cell 3 open over its deck.
+ * Ports at one feet y route exactly as before: the search never leaves their row.)
  * A branch walk between two ports at one feet y: a level deck routed round the lots (4-neighbour, fewest turns, then shortest, then
  * the fixed heading order E, S, W, N), from A's out cell to B's; every deck cell open over the deck (feet and head air or a plant),
  * the deck cell itself air, a plant or leaves; rails on every open side; chains up from a rail to the first leaf or log (or
@@ -196,71 +200,77 @@ function routeTunnel(r, land, A, B, link) {
  * a lamp on a rail at most BRANCH_WALK.lampEvery apart.
  */
 function routeBranchWalk(r, land, A, B, link) {
-  if (A.cell[1] !== B.cell[1]) throw new LinkError('LEVEL', B.lot, B.name, `a branch walk is level: port ${A.lot}.${A.name} is at feet y ${A.cell[1]}, ${B.lot}.${B.name} at ${B.cell[1]}`);
-  const fy = A.cell[1];
-  const walkable = (x, z) => !land.blocked(x, z) && OPEN.has(land.classAt(x, fy, z)) && OPEN.has(land.classAt(x, fy + 1, z)) && (OPEN.has(land.classAt(x, fy - 1, z)) || land.classAt(x, fy - 1, z) === 'LEAVES');
+  const ya = A.cell[1], yb = B.cell[1], rise = Math.sign(yb - ya);
+  if (Math.abs(yb - ya) > BRANCH_WALK.rise) throw new LinkError('LEVEL', B.lot, B.name, `a branch walk steps at most ${BRANCH_WALK.rise} rows: port ${A.lot}.${A.name} is at feet y ${ya}, ${B.lot}.${B.name} at ${yb}`);
+  const fy = ya;
+  const walkable = (x, z, y = fy) => !land.blocked(x, z) && OPEN.has(land.classAt(x, y, z)) && OPEN.has(land.classAt(x, y + 1, z)) && (OPEN.has(land.classAt(x, y - 1, z)) || land.classAt(x, y - 1, z) === 'LEAVES');
   for (const E of [A, B]) {
-    const [x, , z] = E.out;
+    const [x, ey, z] = E.out;
     if (land.blocked(x, z)) throw new LinkError('PROTECTED', E.lot, E.name, `the cell outside port ${E.lot}.${E.name} (${E.out.join(',')}) is ${land.blocked(x, z).class}`);
-    if (!walkable(x, z)) throw new LinkError('HEADROOM', E.lot, E.name, `the cell outside port ${E.lot}.${E.name} (${E.out.join(',')}) is not open with 2 of head room over a deck cell (${land.classAt(x, fy - 1, z)}, ${land.classAt(x, fy, z)}, ${land.classAt(x, fy + 1, z)})`);
+    if (!walkable(x, z, ey)) throw new LinkError('HEADROOM', E.lot, E.name, `the cell outside port ${E.lot}.${E.name} (${E.out.join(',')}) is not open with 2 of head room over a deck cell (${land.classAt(x, ey - 1, z)}, ${land.classAt(x, ey, z)}, ${land.classAt(x, ey + 1, z)})`);
   }
   const s0 = [A.out[0], A.out[2]], g = [B.out[0], B.out[2]];
   const M = BRANCH_WALK.search;
   const lo = [Math.min(s0[0], g[0]) - M, Math.min(s0[1], g[1]) - M], hi = [Math.max(s0[0], g[0]) + M, Math.max(s0[1], g[1]) + M];
   // Dijkstra over (x, z, heading): a step costs 16, a turn 1 more (fewest steps, then fewest turns); the heap's ties by insertion
   const D4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-  const key = (x, z, h) => `${x},${z},${h}`;
+  const key = (x, z, h, y) => (y === fy ? `${x},${z},${h}` : `${x},${z},${h},${y}`);
   const dist = new Map(), prev = new Map();
   const heap = [];
   let seq = 0;
-  const push = (c, x, z, h) => { heap.push([c, seq++, x, z, h]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (less(heap[i], heap[p])) { [heap[i], heap[p]] = [heap[p], heap[i]]; i = p; } else break; } };
+  const push = (c, x, z, h, y) => { heap.push([c, seq++, x, z, h, y]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (less(heap[i], heap[p])) { [heap[i], heap[p]] = [heap[p], heap[i]]; i = p; } else break; } };
   const less = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, rr = l + 1; let m = i; if (l < heap.length && less(heap[l], heap[m])) m = l; if (rr < heap.length && less(heap[rr], heap[m])) m = rr; if (m === i) break; [heap[i], heap[m]] = [heap[m], heap[i]]; i = m; } } return top; };
   const startH = D4.findIndex(([dx, dz]) => dx === VEC[A.facing][0] && dz === VEC[A.facing][1]);
-  dist.set(key(s0[0], s0[1], startH), 0);
-  push(0, s0[0], s0[1], startH);
+  // (CN) a step: a straight move one row towards B's y, the lower cell with 3 open over its deck; it costs 2 more than a level step
+  const stepOk = (x, z, y, nx, nz, ny) => (ny > y ? OPEN.has(land.classAt(x, y + 2, z)) : OPEN.has(land.classAt(nx, ny + 2, nz)));
+  dist.set(key(s0[0], s0[1], startH, ya), 0);
+  push(0, s0[0], s0[1], startH, ya);
   let end = null;
   while (heap.length) {
-    const [c, , x, z, h] = pop();
-    if (c !== dist.get(key(x, z, h))) continue;
-    if (x === g[0] && z === g[1]) { end = key(x, z, h); break; }
+    const [c, , x, z, h, y] = pop();
+    if (c !== dist.get(key(x, z, h, y))) continue;
+    if (x === g[0] && z === g[1] && y === yb) { end = key(x, z, h, y); break; }
     if (c > BRANCH_WALK.lengthMax * 17) break;
     for (let nh = 0; nh < 4; nh++) {
       const [dx, dz] = D4[nh], nx = x + dx, nz = z + dz;
       if (nx < lo[0] || nx > hi[0] || nz < lo[1] || nz > hi[1]) continue;
-      if (!walkable(nx, nz)) continue;
-      const nc = c + 16 + (nh === h ? 0 : 1);
-      const nk = key(nx, nz, nh);
-      if (dist.has(nk) && dist.get(nk) <= nc) continue;
-      dist.set(nk, nc); prev.set(nk, key(x, z, h));
-      push(nc, nx, nz, nh);
+      for (const ny of y === yb ? [y] : [y, y + rise]) {
+        if (ny !== y && (nh !== h || !stepOk(x, z, y, nx, nz, ny))) continue;
+        if (!walkable(nx, nz, ny)) continue;
+        const nc = c + 16 + (nh === h ? 0 : 1) + (ny === y ? 0 : 2);
+        const nk = key(nx, nz, nh, ny);
+        if (dist.has(nk) && dist.get(nk) <= nc) continue;
+        dist.set(nk, nc); prev.set(nk, key(x, z, h, y));
+        push(nc, nx, nz, nh, ny);
+      }
     }
   }
-  if (!end) throw new LinkError('NO_PATH', B.lot, B.name, `no level walk with 2 of head room joins ${A.lot}.${A.name} (${A.out.join(',')}) and ${B.lot}.${B.name} (${B.out.join(',')}) round the lots within ${M} of them`);
+  if (!end) throw new LinkError('NO_PATH', B.lot, B.name, `no ${ya === yb ? 'level ' : 'stepped '}walk with 2 of head room joins ${A.lot}.${A.name} (${A.out.join(',')}) and ${B.lot}.${B.name} (${B.out.join(',')}) round the lots within ${M} of them`);
   const path = [];
-  for (let k = end; k; k = prev.get(k)) { const [x, z] = k.split(',').map(Number); path.push([x, fy, z]); }
+  for (let k = end; k; k = prev.get(k)) { const [x, z, , y] = k.split(',').map(Number); path.push([x, Number.isFinite(y) ? y : fy, z]); }
   path.reverse();
   if (path.length > BRANCH_WALK.lengthMax) throw new LinkError('SPAN', B.lot, B.name, `the walk between the ports is ${path.length} cells (at most ${BRANCH_WALK.lengthMax})`);
   const onPath = new Set(path.map(([x, , z]) => `${x},${z}`));
   // rails: every lateral cell of a deck cell that is not deck, not a lot's column, open at the feet (a solid cell is its own barrier)
   const railSet = new Map();
-  path.forEach(([x, , z], i) => {
+  path.forEach(([x, py, z], i) => {
     for (const [dx, dz] of D4) {
       const qx = x + dx, qz = z + dz;
       if (onPath.has(`${qx},${qz}`) || railSet.has(`${qx},${qz}`)) continue;
       if (land.blocked(qx, qz)) continue;
-      const cl = land.classAt(qx, fy, qz);
+      const cl = land.classAt(qx, py, qz);
       if (!OPEN.has(cl) && cl !== 'LEAVES') continue;
-      railSet.set(`${qx},${qz}`, { at: [qx, fy, qz], i });
+      railSet.set(`${qx},${qz}`, { at: [qx, py, qz], i });
     }
   });
   const rails = [...railSet.values()].sort((a, b) => a.i - b.i || a.at[0] - b.at[0] || a.at[2] - b.at[2]);
   // hangers: from a rail beside deck cell i, a chain up through open cells to the first leaf, log or site-solid cell within reach
-  const anchorOf = ([x, , z]) => {
-    for (let y = fy + 1; y <= fy + BRANCH_WALK.reach; y++) {
+  const anchorOf = ([x, ry, z]) => {
+    for (let y = ry + 1; y <= ry + BRANCH_WALK.reach; y++) {
       const cl = land.classAt(x, y, z);
       if (OPEN.has(cl)) continue;
-      if (cl === 'LEAVES' || SOLID.has(cl)) return y > fy + 1 ? { top: y - 1, anchor: [x, y, z], class: cl } : null;
+      if (cl === 'LEAVES' || SOLID.has(cl)) return y > ry + 1 ? { top: y - 1, anchor: [x, y, z], class: cl } : null;
       return null;
     }
     return null;
@@ -296,10 +306,18 @@ function routeBranchWalk(r, land, A, B, link) {
   for (let i = 0; i < path.length; i++) {
     if (i - lastLamp < BRANCH_WALK.lampEvery && i !== path.length - 1) continue;
     if (i - lastLamp < Math.ceil(BRANCH_WALK.lampEvery / 2) && i === path.length - 1) break;
-    const q = railsBeside(i).find((p) => !used.has(k3(...p.at)) && OPEN.has(land.classAt(p.at[0], fy + 1, p.at[2])));
-    if (q) { lamps.push({ i, at: [q.at[0], fy + 1, q.at[2]] }); used.add(k3(...q.at)); lastLamp = i; }
+    const q = railsBeside(i).find((p) => !used.has(k3(...p.at)) && OPEN.has(land.classAt(p.at[0], p.at[1] + 1, p.at[2])));
+    if (q) { lamps.push({ i, at: [q.at[0], q.at[1] + 1, q.at[2]] }); used.add(k3(...q.at)); lastLamp = i; }
   }
-  return { kind: 'branch_walk', fy, path, rails, hangers, lamps, width: 1 };
+  // (CN) the steps: the higher cell of each pair, its stair facing from the lower cell to it
+  const steps = [];
+  for (let i = 1; i < path.length; i++) {
+    if (path[i][1] === path[i - 1][1]) continue;
+    const [up, low] = path[i][1] > path[i - 1][1] ? [i, i - 1] : [i - 1, i];
+    const dx = path[up][0] - path[low][0], dz = path[up][2] - path[low][2];
+    steps.push({ i: up, facing: dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north' });
+  }
+  return { kind: 'branch_walk', fy, path, rails, hangers, lamps, width: 1, ...(steps.length ? { steps } : {}) };
 }
 
 // ------------------------------------------------------------------ the pass
@@ -361,19 +379,24 @@ function writeBranchWalk(r, routed, part, id) {
   const light = fixtureFor(r.material(role('light') ? 'light' : 'minecraft:lantern', `${what} light`), rail);
   const lamp = light.kind === 'hanging_lantern' ? light.light.replace('hanging=true', 'hanging=false') : light.light;
   const chainB = 'minecraft:iron_chain[axis=y,waterlogged=false]';
-  const railAt = new Set(R.rails.map((q) => `${q.at[0]},${q.at[2]}`));
+  const railAt = new Set(R.rails.map((q) => `${q.at[0]},${q.at[1]},${q.at[2]}`));
   const mats = [deck, chainB, lamp];
   const idx = new Map();
   const mat = (s) => { if (!idx.has(s)) { idx.set(s, mats.length); mats.push(s); } return idx.get(s); };
   const solid = [], walk = [];
-  const fy = R.fy;
-  for (const [x, , z] of R.path) walk.push(x, z, fy - 1, fy - 1, 0);
+  // ((CN) a step's higher cell: the deck's stairs (the first deck choice with a stairs variant), facing up the walk)
+  const stairAt = new Map((R.steps ?? []).map((q) => [q.i, q.facing]));
+  const stairBase = stairAt.size ? [deck, ...resolved.map((b) => String(b).replace(/\[.*$/, '')), 'minecraft:spruce_planks'].find((b) => variant(b, 'stairs')) : null;
+  R.path.forEach(([x, y, z], i) => {
+    const f = stairAt.get(i);
+    walk.push(x, z, y - 1, y - 1, f ? mat(`${variant(stairBase, 'stairs')}[facing=${f},half=bottom,shape=straight,waterlogged=false]`) : 0);
+  });
   for (const q of R.rails) {
-    const [x, , z] = q.at;
-    const sides = { east: railAt.has(`${x + 1},${z}`), west: railAt.has(`${x - 1},${z}`), south: railAt.has(`${x},${z + 1}`), north: railAt.has(`${x},${z - 1}`) };
-    solid.push(x, z, fy, fy, mat(parapet(rail, sides)));
+    const [x, y, z] = q.at;
+    const sides = { east: railAt.has(`${x + 1},${y},${z}`), west: railAt.has(`${x - 1},${y},${z}`), south: railAt.has(`${x},${y},${z + 1}`), north: railAt.has(`${x},${y},${z - 1}`) };
+    solid.push(x, z, y, y, mat(parapet(rail, sides)));
   }
-  for (const h of R.hangers) solid.push(h.at[0], h.at[2], fy + 1, h.top, 1);
+  for (const h of R.hangers) solid.push(h.at[0], h.at[2], h.at[1] + 1, h.top, 1);
   for (const l of R.lamps) solid.push(l.at[0], l.at[2], l.at[1], l.at[1], 2);
   const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: LINK_STAGE, set: 'path' });
   (r.meta.parts[p.id] ??= {}).kind ??= 'path';
@@ -382,9 +405,10 @@ function writeBranchWalk(r, routed, part, id) {
   const states = [];
   for (const cols of [solid, walk]) for (let t = 0; t < cols.length; t += 5) for (let y = cols[t + 2]; y <= cols[t + 3]; y++) states.push(mats[cols[t + 4]]);
   const rec = {
-    id, kind: 'branch_walk', part: p.id, stage: LINK_STAGE, feetY: fy, width: 1, from: [...R.path[0]], to: [...R.path[R.path.length - 1]],
+    id, kind: 'branch_walk', part: p.id, stage: LINK_STAGE, feetY: R.fy, width: 1, from: [...R.path[0]], to: [...R.path[R.path.length - 1]],
     path: R.path.map((q) => [...q]), rails: R.rails.map((q) => [...q.at]), hangers: R.hangers.map((h) => ({ i: h.i, at: [...h.at], top: h.top, anchor: [...h.anchor], class: h.class })),
     lamps: R.lamps.map((l) => ({ i: l.i, at: [...l.at] })), deck, rail, chain: chainB, light: lamp, bom: bomOf(states),
+    ...(R.steps ? { steps: R.steps.map((q) => ({ ...q })) } : {}),
   };
   (r.meta.branchWalks ??= []).push(rec);
   return rec;
