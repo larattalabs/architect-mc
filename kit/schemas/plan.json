@@ -175,6 +175,7 @@
       { "id": "feature.biome_edge", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.ridge", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.build", "sinceApi": "1.24.0", "schemaVersion": 1, "state": "supported", "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge." },
+      { "id": "feature.cave", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "note": "CAVE: a cave the claim's land already has (the site analysis's caves in the template pick's claim window; minFloor, pick largest or nearest to `to`). Only an elevated zone's near locator: its lots are carve_into site lots dug into the cave's walls, the door on the cave floor." },
       { "id": "endpoint.part", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "endpoint.anchor", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "endpoint.feature", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
@@ -299,9 +300,11 @@
         { "type": "object", "required": ["protected"], "additionalProperties": false, "properties": { "protected": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$" } } },
         { "type": "object", "required": ["build"], "additionalProperties": false, "description": "(PT, feature.build) a player's build in the claim (Sites.builds): by id, or by kind with pick's ties (x-defaults feature.pick)", "properties": { "build": { "type": "object", "additionalProperties": false, "anyOf": [{ "required": ["id"] }, { "required": ["kind"] }], "properties": {
           "id": { "type": "string", "pattern": "^build-[0-9]{1,18}$" }, "kind": { "enum": ["house", "barn", "farm", "wall", "tower", "path", "other"] },
-          "pick": { "enum": ["largest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } }
+          "pick": { "enum": ["largest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } },
+        { "type": "object", "required": ["cave"], "additionalProperties": false, "properties": { "cave": { "type": "object", "additionalProperties": false, "properties": {
+          "minFloor": { "type": "integer", "minimum": 1 }, "pick": { "enum": ["largest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } }
       ],
-      "oneOfMessage": "a feature is {water}, {biome_edge}, {ridge}, {part}, {region}, {protected} or {build}"
+      "oneOfMessage": "a feature is {water}, {biome_edge}, {ridge}, {part}, {region}, {protected}, {build} or {cave}"
     },
 
     "target": {

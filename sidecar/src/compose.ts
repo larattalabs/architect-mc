@@ -256,7 +256,7 @@ export const COMPOSE_SCHEMA: Record<string, unknown> = {
   required: ['plan', 'reason'],
   properties: {
     plan: { type: 'object', description: 'the plan: one plan/0 document ({"schemaVersion": "plan/0", "zones": [...], "connectors": [...], "forms": [...], "rules": [...]})' },
-    reason: { type: 'string', description: 'one or two sentences: what the plan builds and what it leaves waiting' },
+    reason: { type: 'string', description: 'one or two sentences the player reads: what they get, as they will see it; never the plan\'s workings (parts, fields, the check)' },
   },
 };
 

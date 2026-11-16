@@ -133,13 +133,14 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   flipped.add('channel.aqueduct');
   // ((7c PF) form.arch_span added: pf.test.mjs)
   flipped.add('form.arch_span');
+  flipped.add('feature.cave'); // ((slice CAVE) feature.cave added: cave.test.mjs)
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
   assert.deepEqual(own(d.untilChanged, (x) => x.id), [{ id: 'connector.rail', from: '7a', to: 'CR' }]);
   assert.deepEqual(own(d.notesChanged, (x) => x.id).map((x) => x.id), ['connector.rail']);
   // ((6d RV) the revision.* entries RV adds are rv-a.test.mjs's)
-  assert.deepEqual([d.added.filter((x) => !/^(revision\.|program\.authored$|form\.arch_span$)/.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
+  assert.deepEqual([d.added.filter((x) => !/^(revision\.|program\.authored$|form\.arch_span$|feature\.cave$)/.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'x', block: 'connector.span_bridge' }]);
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
