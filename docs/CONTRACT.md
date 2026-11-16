@@ -12080,7 +12080,10 @@ record ItemCount(Item item, int count) {}
   `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it) is outside the identity.
   `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
 - **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
-  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. For a stockpile target:
+  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. **(Slice OVF)** A keyed refund
+  (every case below, and a region's keyed charge and scoop) never overflows: all of it is returned, past capacity if need be (nothing
+  new enters until the stock fits again), so its key and its items land in one ledger write and nothing drops. Only unkeyed
+  give-backs still overflow. For a stockpile target:
   - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
     returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
   - construction-delta refunds (removed cells at the start, `refundSwap` at the swap) and a survival revert's refunds;
@@ -32828,3 +32831,20 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **PT:** the "took longer than 120 s" stop was the sidecar's `runKit` wall-clock timer (`sidecar/src/regions.ts`; regionPlanMs 30 s, regionPassPlanMs 120 s). `run()` (`sidecar/src/util/proc.ts`) takes `cpuLimitMs`: the child's CPU time (Linux /proc stat, else `ps -o time=`) sampled each second, stopped past the limit (`limitHit`); a failed sample keeps the last reading, and a child never read (Windows) is held to the limit by wall clock. The plan, link-pass and authored-plan runs use it, with a wall backstop `planWallBackstopMs` = 5x, 600-1800 s (config `regionPlanWallMs` overrides it; author.test's idle-timer probe sets 8 s, since an idle child never reaches a CPU limit). Messages keep 6a's prefix: "the plan took longer than 120 s of CPU time and was stopped", or "... than 600 s of wall-clock time (the backstop; N s of CPU time used, ...)". The check and previews stay wall clock. The mod's wait for a plan (RegionsImpl) rises 300/600 s to 660/900 s, past the backstop.
 - **Tests:** `kit/test/wall-wr2.test.mjs` (the gate at the claim's centre on and off the open line: fails on slice/WR, passes; the moat and the free/form rings, enclosing and not); `sidecar/test/proc-cpu.test.ts` (limitHit, the ps parser, backstop, messages, a busy child stopped by CPU, an idle one only by the backstop, an unreadable one by wall clock). Scoped units (`unit-scope --run`): kit 489/489, gradle PASS, sidecar 565/566 with author.test's idle-timer probe timing out on the 600 s backstop, fixed by `regionPlanWallMs` (author, regions, proc-cpu re-run: 46/46).
 - **Left over:** a regionPassPlanMs raised past 180 s gives a backstop beyond the mod's 900 s wait; Steward's own waits on a plan are its own.
+
+### Slice OVF as built
+
+- Bug (pre-existing): `Stockpiles.credit` dropped a keyed refund's overflow as item entities before `saveCredit` wrote the ledger;
+  a halt at CS1 (the chunks with the entities on disk, the ledger not) left the refund pending and the start booked it again: twice.
+- Fix: a keyed credit never overflows. `StockLedger.credit` (target, delta and other keys), `chargeOnce`'s empty buckets and
+  `scoopInto` return everything into the stock, past capacity if need be (a private `giveBack(..., unbounded)`); `Stockpiles.credit`,
+  the keyed `charge` and `scoop` call no `dropOverflow`. No new ledger field, no file change, no new API (javadoc note, Since NEXT).
+- Not DR2's owed-drops handoff: one ledger write, no entity/ledger two-file commit, so no crash window is left to resolve.
+- Player-visible: no refund items on the ground at the crate; the pile can read used > capacity, inserts refused until it fits.
+- Unchanged (leftovers): unkeyed give-backs (a swap's old block, the feed's bucket, the RL reconcile's give-backs), adopt's
+  over-capacity drop, `creditRefund` with the stockpile gone, dissolve's own ground drop.
+- Tests: `StockpileOverflowOVFTest` (9: K0/K1/CS1/K2, refused save + a second crash in recovery, an unsaved second debt, dissolve
+  over capacity, a player's Take between crashes, charge/scoop, adopt over capacity, a source check; 8 fail on main); StockpileTest
+  and LedgerLintTest (the lint allows past capacity only what a keyed refund left) updated; y-ingame item 6 now expects no entity.
+- In game: fk-crash CS1o (`dev.stockpile.ps capacity 0`, TEST): the single-site removal halted at CS1 into a full stockpile is
+  returned once, no entity, the stock over capacity.

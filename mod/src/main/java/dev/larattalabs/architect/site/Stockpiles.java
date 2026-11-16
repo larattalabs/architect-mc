@@ -459,7 +459,16 @@ public final class Stockpiles {
 	}
 
 	static int capacity(MinecraftServer srv, Pile p) {
-		return StockLedger.STACKS_PER_CRATE * present(srv, p).size();
+		return testCapacity >= 0 ? testCapacity : StockLedger.STACKS_PER_CRATE * present(srv, p).size();
+	}
+
+	/** (OVF, TEST) {@code dev.stockpile.ps capacity}: every stockpile's capacity in stacks (-1: the crates', as normal). */
+	static volatile int testCapacity = -1;
+
+	/** (OVF) a log suffix when a keyed credit left the stock over capacity (nothing dropped: nothing new enters until it fits). */
+	private static String usedOver(MinecraftServer srv, Pile p) {
+		int used = p.ledger.usedStacks(Stockpiles::maxStack), cap = capacity(srv, p);
+		return used > cap ? " (the stock now over capacity: " + used + " of " + cap + " stacks; nothing dropped)" : "";
 	}
 
 	/** Where a stockpile's overflow and drops go: above its first present crate, else {@code fallback}. */
@@ -1174,9 +1183,10 @@ public final class Stockpiles {
 	private static boolean explicitSave;
 
 	/**
-	 * Credits refunds into the owner's stockpile once per {@code key} (§4): up to capacity returned, the rest dropped above the first
-	 * present crate (else at {@code fallback}) and booked as refundOverflow. Returns what was credited; empty (already) for a key
-	 * credited before.
+	 * Credits refunds into the owner's stockpile once per {@code key} (§4): (slice OVF) all of it returned, past capacity if need be, never
+	 * dropped: the key and the stock land in one ledger write, so a crash at any point (CS1: the restore's chunks saved, the ledger not)
+	 * books it once at the next start and no item entity can pay it twice. {@code fallback} is unused (kept for the callers). Returns what
+	 * was credited; empty (already) for a key credited before.
 	 */
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
@@ -1194,10 +1204,8 @@ public final class Stockpiles {
 			Architect.LOGGER.info("Stockpile {}: refund {} already credited; nothing credited again", p.owner, key);
 			return c;
 		}
-		dropOverflow(srv, p, c.overflow(), fallback);
 		changed(p);
-		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), c.overflow().isEmpty() ? "" : ", overflow dropped "
-			+ c.overflow());
+		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), usedOver(srv, p));
 		return c;
 	}
 
@@ -1264,13 +1272,13 @@ public final class Stockpiles {
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
 		if (key != null) {
-			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over);
+			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over); // (OVF) keyed: its empty buckets never overflow
 		} else {
 			for (var e : new TreeMap<>(items).entrySet()) {
 				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
 			}
+			dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		}
-		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
@@ -1303,10 +1311,8 @@ public final class Stockpiles {
 		}
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
+		// (OVF) keyed: the lava buckets and bars enter the stock past capacity if need be (never dropped: once across any crash)
 		StockLedger.Credit c = scoopInto(p.ledger, key, lavaSources, grates, cap, Stockpiles::maxStack, over);
-		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
-		dropOverflow(srv, p, over, fb);
-		dropOverflow(srv, p, c.overflow(), fb);
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
@@ -2172,6 +2178,9 @@ public final class Stockpiles {
 					if (req.has("waitAll")) {
 						SaveTiming.waitAll = req.get("waitAll").getAsBoolean(); // (SS) a flushed save waits for every loading chunk, as vanilla
 					}
+					if (req.has("capacity")) {
+						testCapacity = req.get("capacity").getAsInt(); // (OVF) every pile's capacity in stacks; -1 the crates'
+					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
@@ -2188,6 +2197,7 @@ public final class Stockpiles {
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
 					o.addProperty("waitAll", SaveTiming.waitAll);
+					o.addProperty("capacity", testCapacity);
 					return o;
 				}
 				case "state" -> {

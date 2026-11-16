@@ -22,6 +22,8 @@
 //                                                      the town consumed, item for item; no custody left; nothing dropped);
 //                                                      (J2) CS1: the fk_hall site removed on its own, halted inside its credit's save:
 //                                                      the credit pending on disk books once at the start (= its paid record)
+//                                                      (OVF) CS1o: the same into a full stockpile (capacity 0, TEST): the whole refund
+//                                                      returned into the stock once, past capacity; no item entity (before: dropped twice)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -522,8 +524,8 @@ export async function registerFK(steps, h) {
    * As built the saved ledger holds the credit pending (with the custody, saved before the commit) and the start books it once: what came
    * back = the site's paid record, item for item; no custody, nothing pending; none of the fill's items dropped.
    */
-  async function singleCase(point) {
-    const tag = point;
+  async function singleCase(point, { full = false } = {}) {
+    const tag = full ? `${point}o` : point;
     const W = await town(`G6B FK ${tag}`);
     const site = await fkSite();
     if (!site) { check(false, `${tag}: no fk_hall site`); await L.leaveWorld(); return null; }
@@ -539,9 +541,12 @@ export async function registerFK(steps, h) {
     const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${site}@`));
     const paid = B.paid?.[key] ?? {};
     check(!!key && sum(paid) > 0, `${tag}: ${site}'s paid record on disk: ${key} (${sum(paid)} units)`);
+    // (slice OVF) CS1o: the stockpile full (capacity 0 stacks, TEST; kept across the reopen: the same client), so the whole refund is past
+    // capacity. Before OVF it dropped as items before the credit's save: the halt left them in the saved chunks and the start dropped them again
+    if (full) await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.pl.remove', { site, requester: G.OWNER, force: false }, 600_000).catch(() => null);
-    if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); if (full) await call('dev.stockpile.ps', { capacity: -1 }, 30_000).catch(() => null); await L.leaveWorld(); return null; }
     const S = savedLedger(W.name);
     const pend = S.pendingCredit?.[key] ?? null;
     log(`  ${tag}: saved: pending ${json(pend)}, custody ${json(S.custody?.[key] ?? null)}, credited ${(S.credited ?? []).includes?.(key)}`);
@@ -553,6 +558,20 @@ export async function registerFK(steps, h) {
     const items = (await call('dev.items.near', { pos: at, radius: 24 }, 60_000)).items ?? {};
     const gone = await fk(site).then((x) => x?.state ?? 'gone', () => 'gone');
     const res = { key, paid: sum(paid), back: sum(back), diff: G.minus(back, paid), pending: F.pendingCredit ?? null, custody: F.custody ?? null, items: only(items, FK), site: gone };
+    if (full) {
+      // every item entity at the crates (the overflow's drop point) and at the site: none (the refund is all in the stock, once)
+      const P = await pile();
+      const atCrates = (await call('dev.items.near', { pos: W.crates[0], radius: 16 }, 60_000)).items ?? {};
+      const ents = G.plus(atCrates, items);
+      const returned = G.minus(F.returned, B.returned);
+      Object.assign(res, { atCrates, returned: sum(returned), overflow: sum(G.minus(F.refundOverflow, B.refundOverflow)), used: P.usedStacks, capacity: P.capacityStacks });
+      await call('dev.stockpile.ps', { capacity: -1 }, 30_000);
+      out_log(tag, res);
+      check(G.same(returned, paid) && sum(ents) === 0 && !F.pendingCredit?.[key] && !F.custody?.[key] && P.usedStacks > P.capacityStacks,
+        `${tag}: a refund into a full stockpile halted at CS1 is paid once: returned into the stock = ${site}'s paid record, item for item (${sum(returned)} = ${sum(paid)}); no item entity at the crates or the site (${json(ents)}; before OVF: the overflow dropped before the halt and again at the start); the stock over capacity (${P.usedStacks} of ${P.capacityStacks} stacks)`, res);
+      await L.leaveWorld();
+      return res;
+    }
     out_log(tag, res);
     check(G.same(back, paid) && !F.custody?.[key] && !F.pendingCredit?.[key] && sum(only(items, FK)) === 0,
       `${tag}: after the restart the removal's credit booked once: what came back = ${site}'s paid record, item for item (${sum(back)} = ${sum(paid)}; differ ${json(res.diff)}): no loss, no mint; no custody, nothing pending; none of the fill's items dropped`, res);
@@ -572,6 +591,7 @@ export async function registerFK(steps, h) {
     for (const p of ['FK1', 'FK2', 'FK3', 'FK4']) out[p] = await fillCase(p);
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1 = await singleCase('CS1'); // (J2) a single site's credit save halted
+    if (process.env.GATE_FK_ONLY !== 'fill') out.CS1o = await singleCase('CS1', { full: true }); // (OVF) the same into a full stockpile
     spendZero();
     return out;
   };

@@ -92,6 +92,9 @@ final class LedgerSim {
 	int crates = 2;
 	boolean dissolved;
 	/** Toggle: the stockpile's capacity may be exceeded only right after a crate went and before its excess dropped (none here). */
+	/** (slice OVF) the stacks a keyed refund left the stock at past capacity (0: within it); nothing else may exceed capacity. */
+	int refundOver;
+
 	int cap() {
 		return crates * StockLedger.STACKS_PER_CRATE;
 	}
@@ -842,6 +845,8 @@ final class LedgerSim {
 			return;
 		}
 		keys.add(key);
+		// (slice OVF) a keyed refund enters the stock past capacity: allowed up to what it left, shrinking until the stock fits again
+		refundOver = Math.max(refundOver, ledger.usedStacks(LedgerSim::maxStack));
 		Map<String, Integer> sum = new TreeMap<>(c.returned());
 		addAll(sum, c.overflow(), 1);
 		if (!sum.equals(new TreeMap<>(items))) {
@@ -1043,9 +1048,11 @@ final class LedgerSim {
 		if (!lhs.equals(rhs)) {
 			violation("conserve", after + ": in + converted " + lhs + " != stock + standing paid + the player's + ground " + rhs + " (off by " + diff(lhs, rhs) + ")");
 		}
-		if (!dissolved && ledger.usedStacks(LedgerSim::maxStack) > cap()) {
-			violation("capacity", after + ": " + ledger.usedStacks(LedgerSim::maxStack) + " stacks used of " + cap());
+		int used = ledger.usedStacks(LedgerSim::maxStack);
+		if (!dissolved && used > Math.max(cap(), refundOver)) {
+			violation("capacity", after + ": " + used + " stacks used of " + cap() + (refundOver > 0 ? " (a keyed refund left " + refundOver + ")" : ""));
 		}
+		refundOver = used > cap() ? Math.min(Math.max(refundOver, 0), used) : 0; // (OVF) only a keyed refund goes past it, and nothing grows it after
 		if (!dissolved && !ledger.creditedKeys().equals(keys)) {
 			violation("once", after + ": credited keys " + new TreeSet<>(ledger.creditedKeys()) + ", removals and deltas that ended " + new TreeSet<>(keys));
 		}
