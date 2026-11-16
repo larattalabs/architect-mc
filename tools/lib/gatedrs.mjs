@@ -128,7 +128,10 @@ export async function registerDRS(steps, h) {
     check(r.applied === true && r.written === lost && /settled/.test(r.message), `${tag}: repaired: wrote ${r.written}, settled (${r.message})`, r);
     check(G.same(r.credited, moved) && sum(moved) > 0 && G.same(moved, G.plus(pendItems, S.custody?.[key] ?? {})),
       `${tag}: its pending credit booked once: ${sum(moved)} units came back = what the saved ledger held pending for ${key} (${sum(pendItems)}), item for item (items in = items out)`, { moved, pendItems, credited: r.credited });
-    check((post.ledger?.credited ?? []).includes?.(key) !== false && !post.ledger?.pendingCredit?.[key] && !post.ledger?.paid?.[key], `${tag}: ${key} credited, nothing pending, its paid record spent`);
+    // (dev.stockpile.state's ledger leaves out `credited`): the saved file, which the repair's credit save wrote with the world
+    const Sd = saved();
+    check((Sd.credited ?? []).includes(key) && !Sd.pendingCredit?.[key] && !Sd.paid?.[key] && !post.ledger?.pendingCredit?.[key] && !post.ledger?.paid?.[key],
+      `${tag}: saved with the world: ${key} credited on disk, nothing pending, its paid record spent`, { credited: (Sd.credited ?? []).includes(key), pending: Sd.pendingCredit?.[key] ?? null, paid: Sd.paid?.[key] ?? null });
     const recPath = r.record ? path.resolve(L.GAME_DIR, r.record) : null;
     const rec = recPath && fs.existsSync(recPath) ? JSON.parse(fs.readFileSync(recPath, 'utf8')) : null;
     check(rec?.state === 'final' && rec.cells?.length === lost && (rec.settled ?? []).includes(site), `${tag}: the record is final (${rec?.state}, ${rec?.cells?.length} cells, settled ${json(rec?.settled)})`);
