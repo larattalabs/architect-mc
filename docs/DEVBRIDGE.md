@@ -394,6 +394,14 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-16 (slice LC3; TEST, in `SliceFkDev`, generated headless too):** `dev.seal.state {}` -> `{sealed: [{id, dim, box}], refused:
+  {path: n}, pause: {site: after}, jobs: [{site, kind, progress, cells}]}` (the removal seal now, its refusals since the start). `dev.seal.holder
+  {pos}` -> `{holder, kind, block, holds, sealed}`. `dev.seal.use {pos, item?, count?, contents?: {item: n}, face?}`: the first player
+  (survival for the call) uses item on the block at pos through `ServerPlayerGameMode.useItemOn` -> `{before, after, result, hand, menuOpened,
+  refused, nextBefore, nextAfter}`, the hand put back after. `dev.seal.menu {pos, open?, close?}`, `dev.seal.frame {pos, item, count?}`
+  (`ItemFrame.interact`), `dev.seal.transfer {pos, item, count?}` (a committed Transfer API insert). `dev.removal.pause {site | *, after?:
+  cells, off?}`: a removal restore pauses once it has written `after` cells; kept in `architect/dev-removal-pause.json`, so a restart keeps it.
+  `dev.removal.undoStage {site}` (LC's, kept).
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

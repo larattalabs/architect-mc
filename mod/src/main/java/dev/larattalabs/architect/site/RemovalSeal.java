@@ -151,7 +151,7 @@ public final class RemovalSeal {
 			}
 		}
 		Groups.sealedIds(ids);
-		return ids;
+		return List.copyOf(new java.util.LinkedHashSet<>(ids));
 	}
 
 	private static Index index = Index.EMPTY;

@@ -144,22 +144,24 @@ class FillsFKBTest {
 		Method m = w.getDeclaredMethod("extract", net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.class, long.class,
 			net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.class);
 		assertEquals(long.class, m.getReturnType());
+		// (slice LC3) the removal seal's insert injector
+		assertEquals(long.class, w.getDeclaredMethod("insert", net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.class, long.class,
+			net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.class).getReturnType());
 		Field storage = w.getDeclaredField("storage");
 		assertEquals(int.class, w.getDeclaredField("slot").getType());
 		Field container = storage.getType().getDeclaredField("container");
 		assertEquals(net.minecraft.world.Container.class, container.getType());
 		// the mixin's own descriptor matches it
 		var inj = dev.larattalabs.architect.compatmixin.ContainerSlotWrapperMixin.class.getDeclaredMethods();
-		boolean found = false;
+		java.util.Set<String> targets = new java.util.TreeSet<>();
 		for (Method x : inj) {
 			var a = x.getAnnotation(org.spongepowered.asm.mixin.injection.Inject.class);
 			if (a != null) {
-				assertEquals("extract(Lnet/fabricmc/fabric/api/transfer/v1/item/ItemVariant;JLnet/fabricmc/fabric/api/transfer/v1/transaction/TransactionContext;)J",
-					a.method()[0]);
-				found = true;
+				targets.add(a.method()[0]);
 			}
 		}
-		assertTrue(found);
+		assertEquals(java.util.Set.of("extract(Lnet/fabricmc/fabric/api/transfer/v1/item/ItemVariant;JLnet/fabricmc/fabric/api/transfer/v1/transaction/TransactionContext;)J",
+			"insert(Lnet/fabricmc/fabric/api/transfer/v1/item/ItemVariant;JLnet/fabricmc/fabric/api/transfer/v1/transaction/TransactionContext;)J"), targets);
 		assertNotNull(Class.forName("dev.larattalabs.architect.compat.TransferGuardPlugin"));
 		// @Mixin is class-retained: its target string is in the mixin's class file
 		try (var in = dev.larattalabs.architect.compatmixin.ContainerSlotWrapperMixin.class.getResourceAsStream("ContainerSlotWrapperMixin.class")) {

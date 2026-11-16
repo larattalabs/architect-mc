@@ -132,7 +132,9 @@ export async function registerLC3(steps, h) {
     const C = [b[0] + 2, b[1] + 1, b[2]], L4 = [b[0] + 4, b[1] + 1, b[2] + 2];
     out.c0 = await holder(C);
     check(out.c0.holder && sum(out.c0.holds) === 0 && !out.c0.sealed, `C at ${C.join(',')} is the site's empty chest, not sealed before the removal (${json(out.c0)})`, out.c0);
-    // the menu opened before the removal began
+    // the menu opened before the removal began (the player within reach of C, outside the box: the menu is valid by distance)
+    await L.tp(C[0] + 0.5, C[1], C[2] - 4);
+    await L.settle(1000);
     const m0 = await call('dev.seal.menu', { pos: C, open: true }, 10_000);
     check(m0.open && m0.valid, `C's menu open for the player before the removal (${json(m0)})`, m0);
     await call('dev.removal.pause', { site, after: 0 }, 10_000);
@@ -208,11 +210,11 @@ export async function registerLC3(steps, h) {
   // ------------------------------------------------------------------ lc3-undo
 
   /** A paused removal's first sealed box: a chest set inside it refuses the hand and a Transfer API insert. */
-  async function sealedChest(tag) {
-    const st = await until(async () => { const s = await seal(); return (s.sealed ?? []).length && (s.jobs ?? []).length ? s : null; }, 600, 500);
+  async function sealedChest(tag, only = null) {
+    const st = await until(async () => { const s = await seal(); return (s.sealed ?? []).length && (s.jobs ?? []).some((j) => !only || j.site === only) ? s : null; }, 600, 500);
     check(!!st, `${tag}: the removal started and its boxes are sealed (${json(st?.sealed)}; jobs ${json(st?.jobs)})`, st);
     if (!st) return null;
-    const first = st.jobs[0].site;
+    const first = (st.jobs.find((j) => !only || j.site === only) ?? st.jobs[0]).site;
     const e = st.sealed.find((x) => x.id === first) ?? st.sealed[0];
     const [mn, mx] = e.box.split(' ').map((c) => c.split(',').map(Number));
     const P = [Math.floor((mn[0] + mx[0]) / 2), Math.min(mx[1], mn[1] + 2), Math.floor((mn[2] + mx[2]) / 2)];
@@ -238,10 +240,11 @@ export async function registerLC3(steps, h) {
     check(st.view.state === 'PLACED' && !!hut, `the town ${region} PLACED; cottage_1 = rs_hut (${hut})`, st.view.lots);
     if (!hut) { await L.leaveWorld(); return out; }
     // a revision's undo of its own stage (Groups.undoStage, ownStage), paused in its first member's restore
-    await call('dev.removal.pause', { site: '*', after: 0 }, 10_000);
+    await call('dev.removal.pause', { site: hut, after: 0 }, 10_000);
     const fu = call('dev.removal.undoStage', { site: hut }, 3_600_000).catch((e) => ({ error: String(e) }));
-    out.revision = await sealedChest('revision undo');
-    await call('dev.removal.pause', { site: '*', off: true }, 10_000);
+    out.revision = await sealedChest('revision undo', hut);
+    check(out.revision?.first === hut, `revision undo: rs_hut's own restore (${hut}) paused, its box sealed (${json(out.revision?.sealed)})`, out.revision);
+    await call('dev.removal.pause', { site: hut, off: true }, 10_000);
     out.revision && (out.revision.answer = await fu);
     check(out.revision?.answer?.removed === true, `revision undo: resumed, the stage undone (${json(out.revision?.answer)})`, out.revision);
     await L.settle(3000);
