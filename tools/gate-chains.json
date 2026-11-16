@@ -552,6 +552,11 @@
     "6dgr-look": ["gr-look"],
     "6cfl-look": ["fl-look"]
   },
+  "timeoutLoadScale": {
+    "$comment": "(GR-b) Load-scaled timeouts (tools/lib/load-timeout.mjs, docs/GATES.md \"Load-scaled timeouts\"): for these steps a wall minute spends min(1, ref / load1) of the step's timeout (ref: slots.load.max1, at least rule 10's 72), up to a wall cap of maxFactor x the timeout (clamped to 1..2). Kept here, not on the steps, so their definition hashes (history, cache) do not move.",
+    "steps": ["unit-kit", "unit-sidecar", "unit-scope"],
+    "maxFactor": 2
+  },
   "stallAfterFailMin": 5,
   "$stallAfterFailMin": "A step that printed a functional FAIL and then nothing for this many minutes is killed and ends FAIL; its client is stopped by PID (tools/lib/stall-watch.mjs, docs/GATES.md \"Stalled after a FAIL\"). A step's own stallAfterFailMin overrides it; 0 or false turns it off.",
   "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides. load: the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md \"Load-aware start\"): a shared run whose turn it is waits while the 1-min load is above max1 or another run started less than settleSec ago; never when it would be the only gate run, at most maxWaitMin minutes; GATE_LOAD_MAX / GATE_LOAD_WAIT_MAX_MIN / --no-load-wait override.", "max": 6, "load": { "max1": 72, "settleSec": 120, "maxWaitMin": 15 } },
