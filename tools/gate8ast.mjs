@@ -135,7 +135,7 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
       building: (b.parts ?? []).filter((p) => p.state === 'building' && p.terrainCells > 0).map((p) => p.part),
       unsupported: deep ? (tr.targets ?? []).filter((t) => !t.released).reduce((a, t) => a + (t.unsupported ?? 0), 0) : null,
       firstUnsupported: deep ? (tr.targets ?? []).flatMap((t) => t.firstUnsupported ?? []).slice(0, 4) : null, released: (tr.targets ?? []).filter((t) => t.released).map((t) => t.target) });
-    for (const w of tr.waits ?? []) if (w.key.startsWith('lot:') && w.waitsFor?.kind === 'terrain' && w.status === 'WAITING') lotWaits.push(w);
+    for (const w of tr.waits ?? []) if (w.waitsFor?.kind === 'terrain' && w.status === 'WAITING') lotWaits.push(w);
   };
   const f = await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 3_000_000, every: 1000, extra: async () => { await sample(); return {}; },
     until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done });
@@ -170,10 +170,11 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   const sawBuilding = samples.some((x) => x.building.length > 0);
   check(early100.length === 0 && rs.build?.percent === 100 && rs.build?.built && rs.build?.done && sawBuilding, `${tag}: RegionBuild.percent reaches 100 only with the terrain built (${early100.length} sample(s) at 100 before it; end ${rs.build?.percent}, built ${rs.build?.built}, done ${rs.build?.done}); a terrain part read building while it built (${sawBuilding})`, early100.slice(0, 3));
   if (lotWait) {
-    const w = lotWaits[0];
+    // (a lot first; the fixtures' lots stand clear of staged land, so another item of the region that stands on it shows the typed wait)
+    const w = lotWaits.find((x) => x.key.startsWith('lot:')) ?? lotWaits[0];
     out.lotWait = { n: lotWaits.length, first: w ?? null };
     check(!!w && w.reason === 'SITE_BUSY' && typeof w.waitsFor.part === 'string' && w.waitsFor.terrainCells > 0 && Number.isInteger(w.waitsFor.terrainBuilt) && typeof w.waitsFor.say === 'string',
-      `${tag}: a lot on its staged pad waits ${w?.reason} with architect_mc:waitsFor ${json(w?.waitsFor)} (${lotWaits.length} sample(s))`);
+      `${tag}: an item over staged land (${w?.key}) waits ${w?.reason} with architect_mc:waitsFor ${json(w?.waitsFor)} (${lotWaits.length} sample(s))`);
   }
   // nothing billed for staged cells; the bills per part as checked; items in = items out
   const stagedIds = new Set((final.targets ?? []).map((t) => t.target));
@@ -181,7 +182,8 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   const bills = G.billsOf(ck, rs);
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
   const p = await C.point('built');
-  out.bills = { stagedBilled: stagedBills.map((t) => [t.target, t.bom]), differ, conservation: p };
+  out.bills = { stagedBilled: stagedBills.map((t) => [t.target, t.bom]), differ, conservation: p, want: Object.fromEntries(differ.map((k) => [k, bills.want[k]])),
+    got: Object.fromEntries(differ.map((k) => [k, bills.got[k]])), targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.bom]) };
   check(stagedBills.length === 0 && differ.length === 0 && G.exact(p), `${tag}: nothing billed for staged cells (${stagedBills.length} staged target(s) with a bill); the check's bills per part equal the targets' (${differ.length} differ: ${differ.join(' ')}); items in = items out (conservation ${json(p.diff)}, identity ${p.identity}; ${sum(f.inserted)} items fed)`, out.bills);
   // the final world: its INSTANT twin's, cell for cell
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
