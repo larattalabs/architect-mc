@@ -75,11 +75,12 @@ test('kitReuse: with no unit-kit report, it reads the shared suite (same per-fil
     t.skip('kit/ is dirty or not a git tree: kitReuse would refuse anyway');
     return;
   }
-  const saved = { GATE_KIT_RESULTS: process.env.GATE_KIT_RESULTS, GATE_KIT_TREE: process.env.GATE_KIT_TREE, GATE_KIT_SHARED_DIR: process.env.GATE_KIT_SHARED_DIR };
+  const saved = { GATE_KIT_RESULTS: process.env.GATE_KIT_RESULTS, GATE_KIT_TREE: process.env.GATE_KIT_TREE, GATE_KIT_SHARED_DIR: process.env.GATE_KIT_SHARED_DIR, GATE_KIT_PRODUCER: process.env.GATE_KIT_PRODUCER };
   const dir = archTmpDir('kit-shared');
   try {
     delete process.env.GATE_KIT_RESULTS;
     delete process.env.GATE_KIT_TREE;
+    delete process.env.GATE_KIT_PRODUCER;
     process.env.GATE_KIT_SHARED_DIR = dir;
     const files = ['kit/test/gate-kit-shared.test.mjs'];
     assert.equal(kitReuse(ROOT, files), null, 'nothing shared yet and not a starter: the driver runs the file');

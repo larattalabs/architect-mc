@@ -116,7 +116,11 @@ export function liveHolders(dir, opts = {}) {
   const by = new Map();
   for (const { i, holder } of readSlots(dir, opts)) {
     if (!holder) continue;
-    const h = by.get(holder.pid) ?? { ...holder, slots: [] };
+    const had = by.get(holder.pid);
+    const h = had ?? { ...holder, slots: [] };
+    // one pid may hold several shared slots (an outside caller's driver, one per client: tools/lib/slots.mjs): their shards add up.
+    // A turbo run writes the same record to every slot, so it counts once
+    if (had && !holder.turbo && !h.turbo && Number.isInteger(holder.shards)) h.shards = (Number.isInteger(h.shards) ? h.shards : 0) + holder.shards;
     h.slots.push(i);
     by.set(holder.pid, h);
   }
@@ -253,7 +257,9 @@ export async function tryAcquire(dir, me, { slots, fill = slots, decide = async 
       const held = loadGate(me, others, { load, loadNow, now: now?.() ?? Date.now() });
       if (held) return { acquired: false, waitingOn: [held], load: true, load1: Math.round((loadNow ?? (() => os.loadavg()[0]))() * 10) / 10 };
       const d = await decide(n);
-      writeAtomic(slotFile(dir, n), { pid: me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports });
+      // an outside caller (tools/lib/slots.mjs, Steward) waits in its own process but the slot is held by me.holdPid (its long-lived client
+      // parent), so a crash frees it; me.slotExtra adds its who/label/ticket
+      writeAtomic(slotFile(dir, n), { pid: me.holdPid ?? me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports, ...(me.slotExtra ?? {}) });
       fs.rmSync(ticketFile(dir, me), { force: true });
       return { acquired: true, slot: n, slots: [n] };
     }
