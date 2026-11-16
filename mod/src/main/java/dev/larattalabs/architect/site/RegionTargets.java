@@ -1377,6 +1377,11 @@ public final class RegionTargets {
 
 	private static int queueIn = -1;
 
+	/** (DR) Whether the start's free-pass rescan is queued and done (no rescan waiting): the start's settles are over. */
+	static boolean rescanIdle() {
+		return queueIn < 0 && RESCAN.isEmpty();
+	}
+
 	private static void rescanTick(MinecraftServer srv) {
 		if (queueIn > 0 && --queueIn == 0) {
 			queueIn = -1;

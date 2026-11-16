@@ -1565,7 +1565,14 @@ final class UmtSim {
 		if (recoveredNow.size() > 1) {
 			f7.addAll(recoveredNow);
 		}
+		var after = AFTER_START;
+		if (crash && after != null) {
+			after.accept(this); // (DR, P7) an op's repair after the start's settles
+		}
 	}
+
+	/** (DR, P7) Run after every crash's start, once its settles and resumed jobs are done (UmtRepairP7Test). Null: none. */
+	static volatile java.util.function.@Nullable Consumer<UmtSim> AFTER_START;
 
 	/** Records the settle of this start brought back (RECOVER). */
 	final java.util.Set<String> recoveredNow = new java.util.LinkedHashSet<>();

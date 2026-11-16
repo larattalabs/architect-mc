@@ -1,0 +1,1320 @@
+package dev.larattalabs.architect.site;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.api.CellDiff;
+import dev.larattalabs.architect.api.DiagnoseScope;
+import dev.larattalabs.architect.api.Diagnosis;
+import dev.larattalabs.architect.api.Reason;
+import dev.larattalabs.architect.api.RepairCode;
+import dev.larattalabs.architect.api.RepairFinding;
+import dev.larattalabs.architect.api.RepairResult;
+import dev.larattalabs.architect.api.RepairSuspect;
+import dev.larattalabs.architect.api.SiteEvents;
+import dev.larattalabs.architect.journal.Journal;
+import dev.larattalabs.architect.journal.Journal.Value;
+import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.WorldJournal;
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.storage.LevelResource;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * (DR, docs/CONTRACT.md "Slice DR") Diagnose and repair: an op's roll-forward of cells that lag the journal after a crash. The journal
+ * wins for committed operations; DR never reverses a commit, never RECOVERs or reactivates, and never decides by a share of cells. Only
+ * {@link RepairCode#LAGGING} cells are written, to their owner's committed value, through the journal's write path
+ * ({@link SiteJournal#writeCells}: its flags and FluidRearm), in commit order. A repair is final: its durable record
+ * ({@code architect-repairs/<planId>.json}) is written before any write, is the audit trail, and finishes an interrupted repair. After an
+ * unclean start the auto-diagnose reads the stuck records and the entries committed after the last completed save, spread over ticks,
+ * caches the suspects and posts one line to the ops; it never repairs. Server thread.
+ */
+public final class Repairs {
+	private Repairs() {
+	}
+
+	/** At most this many chunks a diagnose call loads (§1); the rest is UNREAD with a continuation. */
+	static final int CHUNK_BUDGET = 256;
+	/** The auto-diagnose's chunk loads a tick. */
+	static final int AUTO_CHUNKS_PER_TICK = 8;
+	/** Over this many cells a command's repair asks SAFETY's confirm (run it again within 30 s). */
+	static final int LARGE = 2000;
+	static final String DIR = "architect-repairs";
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+
+	// ------------------------------------------------------------------ state
+
+	/** One site's part of a diagnosis: its wants, which of them lag, how they read. */
+	record Unit(String site, @Nullable String region, boolean stuck, @Nullable String group, List<RepairCore.Want> wants,
+		List<RepairCore.Want> lagging, int foreign, List<CellDiff> diffs, List<CellDiff> foreignDiffs) {
+	}
+
+	/** A diagnosis with what a repair needs. */
+	record Diag(Diagnosis diagnosis, List<Unit> units, List<String[]> custody, long at) {
+	}
+
+	private static final Map<String, Diag> PLANS = new LinkedHashMap<>();
+	private static volatile List<RepairSuspect> suspects = List.of();
+	private static volatile boolean autoPending;
+	private static volatile @Nullable String lastOpsLine;
+	private static boolean opsLineSent;
+	private static int startTicks = -1;
+	private static boolean startDone;
+	/** The previous run's marker, read before the start overwrites it: its last completed save and the jobs running at it. */
+	private static long prevSavedAt = 0;
+	private static Set<String> prevJobs = Set.of();
+	private static boolean prevUnclean;
+	private static long thisStart;
+	private static long saveStartedAt;
+	private static volatile boolean running;
+	private static volatile @Nullable Path world;
+	private static @Nullable AutoRun auto;
+	/** TEST (kill point DRK1): the next repair halts the JVM after its record is durable and half its cells are written. */
+	public static volatile boolean killDRK1;
+	/** (TEST) how many SITE_REPAIRED fired this session, and the last's site and region. */
+	public static volatile int repairedEvents;
+	public static volatile @Nullable String lastRepairedSite, lastRepairedRegion;
+
+	public static void init() {
+		ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
+			world = srv.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+			startTicks = 0;
+			startDone = false;
+			running = true;
+			opsLineSent = false;
+			lastOpsLine = null;
+			suspects = List.of();
+			autoPending = prevUnclean;
+			PLANS.clear();
+		});
+		ServerTickEvents.END_SERVER_TICK.register(Repairs::tick);
+		ServerLifecycleEvents.BEFORE_SAVE.register((srv, flush, force) -> saveStartedAt = System.currentTimeMillis());
+		// registered after Stockpiles' AFTER_SAVE (which joins the chunk IO): the save's start time is the conservative bound
+		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> recordSave(srv));
+		ServerLifecycleEvents.SERVER_STOPPING.register(srv -> running = false);
+		ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
+			running = false;
+			startTicks = -1;
+			startDone = false;
+			auto = null;
+			PLANS.clear();
+			suspects = List.of();
+			autoPending = false;
+			prevUnclean = false;
+			world = null;
+		});
+		ServerPlayConnectionEvents.JOIN.register((h, sender, srv) -> {
+			if (!opsLineSent && lastOpsLine != null && op(h.getPlayer())) {
+				h.getPlayer().sendSystemMessage(Component.literal(lastOpsLine));
+				opsLineSent = true;
+			}
+		});
+		RepairCommands.init();
+	}
+
+	/**
+	 * (SiteDeltas.atStart, before it rewrites the marker) The previous run's marker: present means an unclean stop; its {@code saved}
+	 * line is that run's last completed save, {@code jobs} the sites with a job at it.
+	 */
+	static void markerAtStart(Path marker, boolean unclean) {
+		prevUnclean = unclean;
+		prevSavedAt = 0;
+		prevJobs = Set.of();
+		thisStart = System.currentTimeMillis();
+		if (!unclean) {
+			return;
+		}
+		try {
+			long start = 0;
+			for (String l : Files.readAllLines(marker, StandardCharsets.UTF_8)) {
+				l = l.trim();
+				if (l.startsWith("saved=")) {
+					prevSavedAt = Long.parseLong(l.substring(6));
+				} else if (l.startsWith("jobs=")) {
+					Set<String> j = new HashSet<>();
+					for (String x : l.substring(5).split(",")) {
+						if (!x.isBlank()) {
+							j.add(x);
+						}
+					}
+					prevJobs = Set.copyOf(j);
+				} else if (!l.isEmpty() && Character.isDigit(l.charAt(0))) {
+					start = Long.parseLong(l);
+				}
+			}
+			if (prevSavedAt == 0) {
+				prevSavedAt = start; // no save completed in that run: what it loaded is what is on disk
+			}
+		} catch (IOException | RuntimeException e) {
+			prevSavedAt = 0; // unreadable: every entry
+		}
+	}
+
+	/** After a completed save while the world runs: the marker records the save's start and the jobs running then (atomic). */
+	private static void recordSave(MinecraftServer srv) {
+		Path w = world;
+		if (!running || w == null) {
+			return;
+		}
+		Path marker = w.resolve(SiteDeltas.RUNNING_MARKER);
+		if (!Files.exists(marker)) {
+			return;
+		}
+		String text = thisStart + "\nsaved=" + saveStartedAt + "\njobs=" + String.join(",", Placement.jobSites(srv)) + "\n";
+		try {
+			Path tmp = marker.resolveSibling(SiteDeltas.RUNNING_MARKER + ".tmp");
+			Files.writeString(tmp, text, StandardCharsets.UTF_8);
+			Files.move(tmp, marker, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Repairs: could not record the save in the running marker ({})", e.getMessage());
+		}
+	}
+
+	/** Whether the start's settles are done: Sites.reconcile, Stockpiles.reconcileAtStart and RS's rescanFree (queued 20 ticks in). */
+	public static boolean startDone() {
+		return startDone;
+	}
+
+	private static void tick(MinecraftServer srv) {
+		if (startTicks < 0) {
+			return;
+		}
+		if (!startDone) {
+			startTicks++;
+			if (startTicks > 21 && RegionTargets.rescanIdle()) {
+				startDone = true;
+				if (autoPending) {
+					auto = new AutoRun(srv);
+				}
+			}
+			return;
+		}
+		AutoRun a = auto;
+		if (a != null && a.step(srv)) {
+			auto = null;
+			autoPending = false;
+		}
+	}
+
+	// ------------------------------------------------------------------ diagnose
+
+	/** The world of one dimension as diagnose reads it: loaded chunks, plus loads within {@code budget} (null: never load). */
+	static final class LevelReader implements RepairCore.Reader {
+		final ServerLevel level;
+		final int[] budget;
+		final Set<Long> loaded;
+
+		LevelReader(ServerLevel level, int[] budget, Set<Long> loaded) {
+			this.level = level;
+			this.budget = budget;
+			this.loaded = loaded;
+		}
+
+		boolean ensure(int cx, int cz) {
+			if (level.getChunkSource().getChunkNow(cx, cz) != null) {
+				return true;
+			}
+			if (budget[0] <= 0) {
+				return false;
+			}
+			budget[0]--;
+			loaded.add(net.minecraft.world.level.ChunkPos.pack(cx, cz));
+			level.getChunk(cx, cz, ChunkStatus.FULL, true);
+			return true;
+		}
+
+		@Override
+		public @Nullable BlockState get(long pos) {
+			int cx = Journal.x(pos) >> 4;
+			int cz = Journal.z(pos) >> 4;
+			if (level.getChunkSource().getChunkNow(cx, cz) == null) {
+				return null;
+			}
+			return level.getBlockState(BlockPos.of(pos));
+		}
+
+		@Override
+		public @Nullable CompoundTag nbt(long pos) {
+			return WorldJournal.beNbt(level, BlockPos.of(pos));
+		}
+
+		@Override
+		public boolean pt(long pos) {
+			return dev.larattalabs.architect.placed.Placed.record(level, BlockPos.of(pos)) != null;
+		}
+	}
+
+	/** The sites a scope names, in a stable order, with their region (from their journal entries' group). */
+	static List<String> unitsOf(MinecraftServer srv, DiagnoseScope scope) {
+		JournalStore js = WorldJournal.storeOrNull();
+		Set<String> out = new LinkedHashSet<>();
+		if (js == null) {
+			return List.of();
+		}
+		Set<String> stuck = stuckSites(srv);
+		for (JournalStore.Meta m : js.index().entries().values()) {
+			if (m.site().startsWith(SiteGroupRec.CRATE_PREFIX)) {
+				continue;
+			}
+			boolean in = switch (scope.kind()) {
+				case ALL -> true;
+				case SITE -> m.site().equals(scope.id());
+				case REGION -> scope.id() != null && scope.id().equals(regionOf(m));
+				case HERE -> {
+					BlockPos c = scope.center();
+					String dim = scope.dimension() == null ? null : scope.dimension().identifier().toString();
+					yield c != null && dim != null && m.box() != null && m.intersects(dim, new int[] {(c.getX() >> 4) - 4 << 4, -4096, (c.getZ() >> 4)
+						- 4 << 4, ((c.getX() >> 4) + 5 << 4) - 1, 4096, ((c.getZ() >> 4) + 5 << 4) - 1});
+				}
+			};
+			if (in && (m.status() == Journal.Status.ACTIVE || m.status() == Journal.Status.UNDONE && stuck.contains(m.site()))) {
+				out.add(m.site());
+			}
+		}
+		List<String> l = new ArrayList<>(out);
+		l.sort(String::compareTo);
+		return l;
+	}
+
+	/** The region a journal entry builds for (its site group's region), or null. */
+	static @Nullable String regionOf(JournalStore.Meta m) {
+		if (m.group() == null) {
+			return null;
+		}
+		SiteGroupRec g = Sites.group(m.group());
+		return g != null && g.ext().has(RegionItems.EXT_REGION) ? g.ext().get(RegionItems.EXT_REGION).getAsString() : null;
+	}
+
+	/** The pending records (sites and roads) left after the start's settle with no job in the queue: STUCK (F5). */
+	static Set<String> stuckSites(MinecraftServer srv) {
+		Set<String> jobs = Placement.jobSites(srv);
+		Set<String> out = new LinkedHashSet<>();
+		for (Site.Pending p : Sites.pending()) {
+			if (!"moved".equals(p.why()) && !jobs.contains(p.site().id()) && SiteJournal.lastGroup(p.site().id()) != null) {
+				out.add(p.site().id());
+			}
+		}
+		for (Infra i : Infras.pendingAll()) {
+			if (!jobs.contains(i.id()) && SiteJournal.lastGroup(i.id()) != null) {
+				out.add(i.id());
+			}
+		}
+		return out;
+	}
+
+	/** Whether a site is RL's: a construction site or a fed target (its unbuilt cells are its queue, never DR's). */
+	static boolean fed(String id) {
+		Site s = Sites.get(id);
+		if (s == null) {
+			s = Sites.pendingRecord(id);
+		}
+		if (s != null) {
+			return s.construction() != null;
+		}
+		Infra i = Infras.get(id);
+		if (i == null) {
+			i = Infras.pending(id);
+		}
+		return i != null && i.construction() != null;
+	}
+
+	/** The wants of one site: a stuck record's committed removal, else its ACTIVE entries' tops. */
+	static List<RepairCore.Want> wantsOf(JournalStore js, String site, boolean stuck, @Nullable String group,
+		java.util.function.Predicate<JournalStore.Meta> bound) throws IOException {
+		if (stuck && group != null) {
+			return RepairCore.removalWants(js, site, group);
+		}
+		List<RepairCore.Want> w = new ArrayList<>();
+		for (JournalStore.Meta m : SiteJournal.entries(site)) {
+			if (m.status() == Journal.Status.ACTIVE && bound.test(m)) {
+				w.addAll(RepairCore.placementWants(js, m));
+			}
+		}
+		return w;
+	}
+
+	/** Classifies a unit's wants (every chunk already read). */
+	static Unit classify(String site, @Nullable String region, boolean stuck, @Nullable String group, List<RepairCore.Want> wants,
+		java.util.function.Function<String, RepairCore.@Nullable Reader> readers) {
+		List<RepairCore.Want> lag = new ArrayList<>();
+		List<CellDiff> diffs = new ArrayList<>();
+		List<CellDiff> fdiffs = new ArrayList<>();
+		int foreign = 0;
+		for (RepairCore.Want w : wants) {
+			RepairCore.Reader r = readers.apply(w.dim());
+			RepairCore.Cell c = r == null ? null : RepairCore.classify(r, w);
+			if (c == null || c == RepairCore.Cell.OK) {
+				continue;
+			}
+			CellDiff d = new CellDiff(BlockPos.of(w.pos()), RepairCore.text(w.expected()), RepairCore.text(r.get(w.pos())));
+			if (c == RepairCore.Cell.LAGGING) {
+				lag.add(w);
+				if (diffs.size() < 64) {
+					diffs.add(d);
+				}
+			} else {
+				foreign++;
+				if (fdiffs.size() < 64) {
+					fdiffs.add(d);
+				}
+			}
+		}
+		return new Unit(site, region, stuck, group, wants, lag, foreign, diffs, fdiffs);
+	}
+
+	/** {@link Sites#diagnose}: read-only, after the start's settles. */
+	public static Diagnosis diagnose(MinecraftServer srv, DiagnoseScope scope) {
+		return diag(srv, scope).diagnosis();
+	}
+
+	static Diag diag(MinecraftServer srv, DiagnoseScope scope) {
+		JournalStore js = WorldJournal.storeOrNull();
+		String sc = scope.describe() + (scope.kind() == DiagnoseScope.Kind.HERE && scope.center() != null ? " " + scope.center().toShortString() : "");
+		if (js == null) {
+			Diagnosis d = new Diagnosis(scope, "none", List.of(new RepairFinding(RepairCode.UNREAD, null, null, null, 0, 0, 0, List.of(),
+				"The world journal is not open")), 1, null);
+			return new Diag(d, List.of(), List.of(), System.currentTimeMillis());
+		}
+		List<String> ids = unitsOf(srv, scope);
+		Set<String> stuck = stuckSites(srv);
+		int from = 0;
+		if (scope.continuation() != null) {
+			try {
+				from = Math.max(0, Integer.parseInt(scope.continuation()));
+			} catch (NumberFormatException e) {
+				from = 0;
+			}
+		}
+		int[] budget = {CHUNK_BUDGET};
+		Set<Long> loaded = new HashSet<>();
+		Map<String, LevelReader> readers = new LinkedHashMap<>();
+		List<Unit> units = new ArrayList<>();
+		List<JournalStore.Meta> read = new ArrayList<>();
+		int unread = 0;
+		String cont = null;
+		for (int i = from; i < ids.size(); i++) {
+			String id = ids.get(i);
+			if (fed(id)) {
+				continue; // RL's (one owner): its reconcile at the start settled it
+			}
+			boolean st = stuck.contains(id);
+			String group = st ? SiteJournal.lastGroup(id) : null;
+			List<RepairCore.Want> wants;
+			try {
+				wants = wantsOf(js, id, st, group, m -> true);
+			} catch (IOException e) {
+				continue;
+			}
+			// its chunks, within the budget
+			Map<String, Set<Long>> chunks = new LinkedHashMap<>();
+			for (RepairCore.Want w : wants) {
+				chunks.computeIfAbsent(w.dim(), k -> new LinkedHashSet<>()).add(net.minecraft.world.level.ChunkPos.pack(Journal.x(w.pos()) >> 4, Journal
+					.z(w.pos()) >> 4));
+			}
+			boolean ok = true;
+			for (var e : chunks.entrySet()) {
+				LevelReader r = readerFor(srv, readers, e.getKey(), budget, loaded);
+				if (r == null) {
+					continue;
+				}
+				for (long c : e.getValue()) {
+					if (!r.ensure(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(c))) {
+						ok = false;
+						break;
+					}
+				}
+				if (!ok) {
+					break;
+				}
+			}
+			if (!ok) {
+				unread = ids.size() - i;
+				cont = Integer.toString(i);
+				break;
+			}
+			read.addAll(SiteJournal.entries(id));
+			String region = SiteJournal.entries(id).stream().map(Repairs::regionOf).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+			units.add(classify(id, region, st, group, wants, d -> readerFor(srv, readers, d, budget, loaded)));
+		}
+		List<RepairFinding> findings = new ArrayList<>();
+		List<String> lines = new ArrayList<>();
+		for (Unit u : units) {
+			findingsOf(u, findings, lines);
+		}
+		stacked(js, units, stuck, findings);
+		List<String[]> custody = new ArrayList<>();
+		if (scope.kind() == DiagnoseScope.Kind.ALL || scope.kind() == DiagnoseScope.Kind.SITE) {
+			ledgerFindings(scope, findings, lines, custody);
+		}
+		for (String open : openRecords()) {
+			findings.add(new RepairFinding(RepairCode.STUCK, null, null, "repair:" + open, 0, 0, 0, List.of(), "Repair " + open
+				+ " is open (stopped part way); /architect repair " + sc + " confirm " + open + " finishes it from its record"));
+			lines.add("open " + open);
+		}
+		if (unread > 0) {
+			findings.add(new RepairFinding(RepairCode.UNREAD, null, null, null, 0, 0, 0, List.of(), unread + " site(s) not read (the "
+				+ CHUNK_BUDGET + "-chunk budget); diagnose again to read on"));
+		}
+		String planId = RepairCore.planId(sc + "@" + from, js.index(), read, lines);
+		Diagnosis d = new Diagnosis(scope, planId, findings, unread, cont);
+		Diag dg = new Diag(d, units, custody, System.currentTimeMillis());
+		synchronized (PLANS) {
+			PLANS.put(planId, dg);
+			while (PLANS.size() > 32) {
+				PLANS.remove(PLANS.keySet().iterator().next());
+			}
+		}
+		return dg;
+	}
+
+	private static @Nullable LevelReader readerFor(MinecraftServer srv, Map<String, LevelReader> readers, String dim, int[] budget, Set<Long> loaded) {
+		LevelReader r = readers.get(dim);
+		if (r == null) {
+			ServerLevel l = Sites.levelOf(srv, dim);
+			if (l == null) {
+				return null;
+			}
+			r = new LevelReader(l, budget, loaded);
+			readers.put(dim, r);
+		}
+		return r;
+	}
+
+	private static void findingsOf(Unit u, List<RepairFinding> out, List<String> lines) {
+		int lag = u.lagging().size();
+		StringBuilder cells = new StringBuilder();
+		u.lagging().forEach(w -> cells.append(w.pos()).append(','));
+		if (u.stuck()) {
+			List<CellDiff> all = new ArrayList<>(u.diffs());
+			for (CellDiff d : u.foreignDiffs()) {
+				if (all.size() < 64) {
+					all.add(d);
+				}
+			}
+			out.add(new RepairFinding(RepairCode.STUCK, u.site(), u.region(), null, u.wants().size(), lag, u.foreign(), all, "Removed " + u.site()
+				+ " was kept unsettled at the start (a stop before the world saved its restore): " + lag + " of " + u.wants().size()
+				+ " cells lag the journal" + (u.foreign() > 0 ? ", " + u.foreign() + " changed since" : "")));
+			lines.add("stuck " + u.site() + " " + u.group() + " " + cells + " f" + u.foreign());
+		} else if (lag > 0) {
+			out.add(new RepairFinding(RepairCode.LAGGING, u.site(), u.region(), null, u.wants().size(), lag, u.foreign(), u.diffs(), message(u)));
+			lines.add("lag " + u.site() + " " + cells + " f" + u.foreign());
+		}
+		if (u.foreign() > 0) {
+			out.add(new RepairFinding(RepairCode.FOREIGN, u.site(), u.region(), null, u.foreign(), 0, u.foreign(), u.foreignDiffs(), u.site()
+				+ ": " + u.foreign() + " cell(s) hold neither the journal's value nor the operation's pre-op value (players' or the world's): left"));
+			StringBuilder f = new StringBuilder();
+			u.foreignDiffs().forEach(d -> f.append(d.pos().asLong()).append(':').append(d.found()).append(','));
+			lines.add("foreign " + u.site() + " " + f);
+		}
+	}
+
+	/** The message of a lagging site (§4). */
+	static String message(Unit u) {
+		return String.format(java.util.Locale.ROOT, "Site %s lags the journal at %,d of %,d cells (a stop before the world saved)%s.", u.site(),
+			u.lagging().size(), u.wants().size(), u.foreign() > 0 ? "; " + u.foreign() + " changed since" : "");
+	}
+
+	/** (F7) Stuck removals whose boxes share cells: rolled forward top-down in commit order. */
+	private static void stacked(JournalStore js, List<Unit> units, Set<String> stuck, List<RepairFinding> out) {
+		Set<String> seen = new HashSet<>();
+		for (Unit u : units) {
+			if (!u.stuck()) {
+				continue;
+			}
+			for (String o : stackedWith(js, u.site(), stuck)) {
+				if (!o.equals(u.site()) && seen.add(u.site().compareTo(o) < 0 ? u.site() + "|" + o : o + "|" + u.site())) {
+					out.add(new RepairFinding(RepairCode.STACKED, u.site(), u.region(), o, 0, 0, 0, List.of(), u.site() + " and " + o + " were removed "
+						+ "over shared cells; a repair rolls them forward top-down, in commit order, and they settle together"));
+				}
+			}
+		}
+	}
+
+	/** {@code site} and every stuck removal stacked with it (boxes sharing cells), transitively. */
+	static Set<String> stackedWith(JournalStore js, String site, Set<String> stuck) {
+		Set<String> comp = new LinkedHashSet<>();
+		java.util.ArrayDeque<String> q = new java.util.ArrayDeque<>(List.of(site));
+		while (!q.isEmpty()) {
+			String x = q.poll();
+			if (!comp.add(x)) {
+				continue;
+			}
+			int[] a = boxOf(x);
+			for (String o : stuck) {
+				int[] b = boxOf(o);
+				if (!comp.contains(o) && a != null && b != null && a[0] <= b[3] && b[0] <= a[3] && a[1] <= b[4] && b[1] <= a[4] && a[2] <= b[5]
+					&& b[2] <= a[5]) {
+					q.add(o);
+				}
+			}
+		}
+		return comp;
+	}
+
+	private static int @Nullable [] boxOf(String site) {
+		String g = SiteJournal.lastGroup(site);
+		int[] out = null;
+		for (JournalStore.Meta m : g == null ? List.<JournalStore.Meta>of() : SiteJournal.undone(site, g)) {
+			int[] b = m.box();
+			if (b != null) {
+				out = out == null ? b.clone() : new int[] {Math.min(out[0], b[0]), Math.min(out[1], b[1]), Math.min(out[2], b[2]), Math.max(out[3], b[3]),
+					Math.max(out[4], b[4]), Math.max(out[5], b[5])};
+			}
+		}
+		return out;
+	}
+
+	/** The id a ledger key names ({@code site:s12@123} -> s12), or null. */
+	static @Nullable String idOfKey(String key) {
+		int c = key.indexOf(':');
+		int at = key.lastIndexOf('@');
+		return c < 0 || at <= c + 1 ? null : key.substring(c + 1, at);
+	}
+
+	/** Whether a key's target is in a record, a pending record, or a queued removal. */
+	static boolean known(String key) {
+		String id = idOfKey(key);
+		if (id == null) {
+			return true; // not a target key: not ours to judge
+		}
+		return Sites.get(id) != null || Sites.pendingRecord(id) != null || Infras.get(id) != null || Infras.pending(id) != null || Groups.removing(
+			id);
+	}
+
+	/** CUSTODY and PAID_ORPHAN (report only) over every stockpile ledger. */
+	private static void ledgerFindings(DiagnoseScope scope, List<RepairFinding> out, List<String> lines, List<String[]> custody) {
+		for (Stockpiles.Pile p : Stockpiles.all()) {
+			var led = p.ledger();
+			for (String key : led.custodyKeys()) {
+				if (scope.kind() == DiagnoseScope.Kind.SITE && !java.util.Objects.equals(idOfKey(key), scope.id())) {
+					continue;
+				}
+				String id = idOfKey(key);
+				boolean standing = id != null && Sites.get(id) != null;
+				if (standing || led.credited(key) || id != null && (Sites.pendingRecord(id) != null || Groups.removing(id))) {
+					continue;
+				}
+				int n = led.custody(key).values().stream().mapToInt(Integer::intValue).sum();
+				out.add(new RepairFinding(RepairCode.CUSTODY, id, null, key, n, 0, 0, List.of(), "Custody " + key + " (" + n
+					+ " items) has no standing site, queued removal or credit: a repair credits it under the cap"));
+				lines.add("custody " + p.owner() + " " + key + " " + led.custody(key));
+				custody.add(new String[] {p.owner(), key});
+			}
+			if (scope.kind() != DiagnoseScope.Kind.ALL) {
+				continue;
+			}
+			for (String key : led.paid().keySet()) {
+				if (!known(key) && !led.credited(key)) {
+					int n = led.paid().get(key).values().stream().mapToInt(Integer::intValue).sum();
+					out.add(new RepairFinding(RepairCode.PAID_ORPHAN, idOfKey(key), null, key, n, 0, 0, List.of(), "Paid record " + key + " (" + n
+						+ " items) names no record, tombstone or queued removal: reported only"));
+					lines.add("orphan " + p.owner() + " " + key);
+				}
+			}
+		}
+	}
+
+	// ------------------------------------------------------------------ repair
+
+	/** Why a site can't be repaired now (a job, a queued removal, a revision or adoption in flight), or null. */
+	static @Nullable String busy(MinecraftServer srv, String id) {
+		if (Placement.jobSites(srv).contains(id)) {
+			return id + " has a job in the queue";
+		}
+		if (Groups.leaving(id) || Groups.removing(id)) {
+			return id + "'s removal is queued";
+		}
+		Placement.Job j = Placement.job(id);
+		if (j != null) {
+			return id + " has a " + j.kind() + " job";
+		}
+		String b = Sites.busy(id, Journal.Status.ACTIVE);
+		if (b != null) {
+			return id + " " + b;
+		}
+		Site s = Sites.get(id);
+		if (s != null) {
+			if (s.versioning().updating() > 0 || s.versioning().reverting() > 0) {
+				return id + " has a revision in flight";
+			}
+			String ad = Sites.adoptBusy(s.member() == null ? null : s.member().group());
+			if (ad != null) {
+				return id + " " + ad;
+			}
+		}
+		return null;
+	}
+
+	private static RepairResult refused(String planId, Reason r, String msg) {
+		return new RepairResult(planId, false, 0, Map.of(), List.of(), 0, null, r, msg, List.of());
+	}
+
+	/** {@link Sites#repair}: a dry run unless {@code apply}; the actor must be an op. */
+	public static RepairResult repair(MinecraftServer srv, String planId, @Nullable ServerPlayer actor, boolean apply) {
+		if (actor == null || !op(actor)) {
+			return refused(planId, Reason.PERMISSION, "A repair needs an operator (gamemaster permission) as its actor");
+		}
+		if (!startDone) {
+			return refused(planId, Reason.SITE_BUSY, "The world is still starting (its settles are not done)");
+		}
+		Path rec = recordPath(planId);
+		if (rec != null && Files.exists(rec)) {
+			JsonObject o = readRecord(rec);
+			if (o != null && "open".equals(o.has("state") ? o.get("state").getAsString() : "")) {
+				return apply ? finishOpen(srv, planId, rec, o, actor) : new RepairResult(planId, false, o.getAsJsonArray("cells").size(), Map.of(),
+					List.of(), 0, rec.toString(), null, "Repair " + planId + " is open; confirm finishes it from its record", List.of());
+			}
+			if (o != null) {
+				return refused(planId, Reason.REPAIR_STALE, "Repair " + planId + " is final already (" + rec + ")");
+			}
+		}
+		Diag old;
+		synchronized (PLANS) {
+			old = PLANS.get(planId);
+		}
+		if (old == null) {
+			return refused(planId, Reason.REPAIR_STALE, "No diagnosis " + planId + " (or it is gone): diagnose again");
+		}
+		// busy first (a job, a queued removal): SITE_BUSY even when that job has since moved the cells
+		for (Unit u : old.units()) {
+			String b = u.stuck() || !u.lagging().isEmpty() ? busy(srv, u.site()) : null;
+			if (b != null) {
+				return refused(planId, Reason.SITE_BUSY, b + "; nothing was written");
+			}
+		}
+		Diag now = diag(srv, old.diagnosis().scope());
+		if (!now.diagnosis().planId().equals(planId)) {
+			return refused(planId, Reason.REPAIR_STALE, "The cells of " + planId + " changed since its diagnosis (now " + now.diagnosis().planId()
+				+ "); nothing was written. Diagnose again");
+		}
+		List<Unit> todo = now.units().stream().filter(u -> u.stuck() || !u.lagging().isEmpty()).toList();
+		for (Unit u : todo) {
+			String b = busy(srv, u.site());
+			if (b != null) {
+				return refused(planId, Reason.SITE_BUSY, b + "; nothing was written");
+			}
+		}
+		int write = todo.stream().mapToInt(u -> u.lagging().size()).sum();
+		int left = todo.stream().mapToInt(Unit::foreign).sum();
+		Map<String, Integer> credit = new TreeMap<>();
+		for (Unit u : todo) {
+			pendingCreditOf(u.site()).forEach((k, v) -> credit.merge(k, v, Integer::sum));
+		}
+		for (String[] c : now.custody()) {
+			Stockpiles.Pile p = Stockpiles.get(c[0]);
+			if (p != null) {
+				p.ledger().custody(c[1]).forEach((k, v) -> credit.merge(k, v, Integer::sum));
+			}
+		}
+		List<String> sites = todo.stream().map(Unit::site).toList();
+		if (!apply) {
+			return new RepairResult(planId, false, write, credit, List.of(), left, null, null, dryMessage(planId, now, todo, write, left), sites);
+		}
+		if (write == 0 && credit.isEmpty() && todo.stream().noneMatch(Unit::stuck)) {
+			return new RepairResult(planId, false, 0, Map.of(), List.of(), left, null, null, "Nothing to repair in " + now.diagnosis().scope().describe()
+				+ " (" + planId + "); nothing was written", List.of()); // no record: nothing changes
+		}
+		// the record, durable before any write
+		JsonObject o = new JsonObject();
+		o.addProperty("planId", planId);
+		o.addProperty("state", "open");
+		o.addProperty("op", actor.getGameProfile().name());
+		o.addProperty("opUuid", actor.getUUID().toString());
+		o.addProperty("scope", now.diagnosis().scope().describe());
+		o.addProperty("at", System.currentTimeMillis());
+		JsonArray cells = new JsonArray();
+		List<RepairCore.Want> all = new ArrayList<>();
+		todo.forEach(u -> all.addAll(u.lagging()));
+		RepairCore.commitOrder(all);
+		for (RepairCore.Want w : all) {
+			cells.add(wantJson(w));
+		}
+		o.add("cells", cells);
+		JsonArray st = new JsonArray();
+		for (Unit u : todo) {
+			if (u.stuck()) {
+				JsonObject s = new JsonObject();
+				s.addProperty("site", u.site());
+				s.addProperty("group", u.group());
+				st.add(s);
+			}
+		}
+		o.add("settle", st);
+		JsonArray cu = new JsonArray();
+		now.custody().forEach(c -> {
+			JsonArray a = new JsonArray();
+			a.add(c[0]);
+			a.add(c[1]);
+			cu.add(a);
+		});
+		o.add("custody", cu);
+		JsonObject reg = new JsonObject();
+		todo.forEach(u -> {
+			if (u.region() != null) {
+				reg.addProperty(u.site(), u.region());
+			}
+		});
+		o.add("regions", reg);
+		Path path = recordPath(planId);
+		if (path == null) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "No world is running");
+		}
+		try {
+			writeDurable(path, o);
+		} catch (IOException e) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "The repair record could not be written (" + e.getMessage() + "); nothing was written");
+		}
+		return run(srv, planId, path, o, all, left);
+	}
+
+	/** The writes, the settles, the credits, then the record final. Shared by a new repair and an open one finished. */
+	private static RepairResult run(MinecraftServer srv, String planId, Path path, JsonObject o, List<RepairCore.Want> all, int left) {
+		int written = write(srv, all);
+		List<String> settled = new ArrayList<>();
+		List<String> release = new ArrayList<>();
+		Set<String> stuckNow = stuckSites(srv);
+		JournalStore js = WorldJournal.storeOrNull();
+		// a stuck removal settles with every stuck removal stacked over or under it (F1: an upper's expected values are a lower's later
+		// undo, which a release would forget), and only when all of them are unanimous
+		Set<String> asked = new LinkedHashSet<>();
+		for (var e : o.getAsJsonArray("settle")) {
+			asked.add(e.getAsJsonObject().get("site").getAsString());
+		}
+		Set<String> done = new HashSet<>();
+		for (String site : asked) {
+			if (!stuckNow.contains(site) || js == null || done.contains(site)) {
+				continue;
+			}
+			Set<String> comp = stackedWith(js, site, stuckNow);
+			done.addAll(comp);
+			boolean every = true;
+			for (String m : comp) {
+				String g = SiteJournal.lastGroup(m);
+				every &= g != null && unanimous(srv, js, m, g);
+			}
+			if (!every) {
+				if (comp.size() > 1) {
+					Architect.LOGGER.warn("Repair {}: {} written; its removal settles with {} once they are repaired too (stacked)", planId, site, comp);
+				}
+				continue;
+			}
+			for (String m : comp) {
+				release.addAll(SiteJournal.undone(m, SiteJournal.lastGroup(m)).stream().map(JournalStore.Meta::id).toList());
+				settled.add(m);
+			}
+		}
+		// every settled group released after all are judged (a lower removal's later undo is the upper's expected value: F1)
+		if (!release.isEmpty()) {
+			SiteJournal.releaseGroup(release);
+		}
+		for (String site : settled) {
+			if (Sites.pendingRecord(site) != null) {
+				Sites.settledByRepair(srv, site);
+			} else if (Infras.pending(site) != null) {
+				Infra i = Infras.pending(site);
+				Infras.drop(srv, site);
+				dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(srv, i, 0);
+			}
+			Architect.LOGGER.warn("Repair {}: {}'s removal settled (released, its restore written by the repair)", planId, site);
+		}
+		// survival: a rolled-forward removal's stored credit books once (J2 2a, keyed), then saved with the world; custody under the cap
+		Map<String, Integer> credited = new TreeMap<>();
+		Map<String, Map<String, Integer>> before = stockOf();
+		if (!settled.isEmpty()) {
+			Stockpiles.settlePendingCredits(srv);
+		}
+		boolean cust = false;
+		for (var e : o.getAsJsonArray("custody")) {
+			String owner = e.getAsJsonArray().get(0).getAsString();
+			String key = e.getAsJsonArray().get(1).getAsString();
+			Stockpiles.Pile p = Stockpiles.get(owner);
+			if (p == null || p.ledger().credited(key) || p.ledger().custody(key).isEmpty()) {
+				continue;
+			}
+			ServerLevel level = Sites.levelOf(srv, p.dimension());
+			if (level != null) {
+				BlockPos at = p.crates().isEmpty() ? BlockPos.ZERO : p.crates().get(0).above();
+				Builder.creditRefund(level, owner, key, Map.of(), at, null);
+				cust = true;
+			}
+		}
+		if (cust) {
+			Stockpiles.saveCredit(srv);
+		}
+		Map<String, Map<String, Integer>> after = stockOf();
+		after.forEach((owner, m) -> m.forEach((k, v) -> {
+			int d = v - before.getOrDefault(owner, Map.of()).getOrDefault(k, 0);
+			if (d != 0) {
+				credited.merge(k, d, Integer::sum);
+			}
+		}));
+		o.addProperty("state", "final");
+		o.addProperty("written", written);
+		o.addProperty("left", left);
+		JsonObject cr = new JsonObject();
+		credited.forEach(cr::addProperty);
+		o.add("credited", cr);
+		JsonArray sj = new JsonArray();
+		settled.forEach(sj::add);
+		o.add("settled", sj);
+		o.addProperty("finishedAt", System.currentTimeMillis());
+		try {
+			writeDurable(path, o);
+		} catch (IOException e) {
+			Architect.LOGGER.error("Repair {}: the record could not be made final ({})", planId, e.getMessage());
+		}
+		Set<String> sites = new LinkedHashSet<>();
+		all.forEach(w -> sites.add(w.site()));
+		sites.addAll(settled);
+		JsonObject reg = o.has("regions") ? o.getAsJsonObject("regions") : new JsonObject();
+		RepairResult res = new RepairResult(planId, true, written, credited, List.of(), left, path.toString(), null, String.format(java.util.Locale.ROOT,
+			"Repaired %s: wrote %,d, left %,d (players' blocks or changed since)%s. Final: record %s/%s.json.", String.join(", ", sites), written,
+			left, settled.isEmpty() ? "" : "; settled " + String.join(", ", settled), DIR, planId), List.copyOf(sites));
+		Architect.LOGGER.warn("Repair {} by {}: wrote {} cell(s), left {}, settled {}, credited {} (record {})", planId, o.get("op").getAsString(), written,
+			left, settled, credited, path);
+		for (String s : sites) {
+			String region = reg.has(s) ? reg.get(s).getAsString() : null;
+			repairedEvents++;
+			lastRepairedSite = s;
+			lastRepairedRegion = region;
+			try {
+				SiteEvents.SITE_REPAIRED.invoker().onRepaired(s, region, res);
+			} catch (RuntimeException e) {
+				Architect.LOGGER.warn("A SITE_REPAIRED listener failed", e);
+			}
+		}
+		List<RepairSuspect> left2 = new ArrayList<>(suspects);
+		left2.removeIf(x -> sites.contains(x.siteId()) || x.reason().equals("repair_open") && x.siteId().equals(planId));
+		suspects = List.copyOf(left2);
+		synchronized (PLANS) {
+			PLANS.remove(planId);
+		}
+		return res;
+	}
+
+	private static Map<String, Map<String, Integer>> stockOf() {
+		Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
+		for (Stockpiles.Pile p : Stockpiles.all()) {
+			out.put(p.owner(), new TreeMap<>(p.ledger().stock()));
+		}
+		return out;
+	}
+
+	/** A pending site's stored credit (J2 2a), or empty. */
+	private static Map<String, Integer> pendingCreditOf(String site) {
+		Site s = Sites.pendingRecord(site);
+		if (s == null) {
+			return Map.of();
+		}
+		String key = Builder.creditKey(s);
+		Map<String, Integer> out = new TreeMap<>();
+		for (Stockpiles.Pile p : Stockpiles.all()) {
+			if (!p.ledger().credited(key)) {
+				p.ledger().pendingItems(key).forEach((k, v) -> out.merge(k, v, Integer::sum));
+				p.ledger().custody(key).forEach((k, v) -> out.merge(k, v, Integer::sum));
+			}
+		}
+		return out;
+	}
+
+	/** Whether every cell a stuck removal owns now holds what its undo wrote. */
+	private static boolean unanimous(MinecraftServer srv, JournalStore js, String site, String group) {
+		try {
+			List<RepairCore.Want> w = RepairCore.removalWants(js, site, group);
+			Map<String, LevelReader> readers = new LinkedHashMap<>();
+			int[] budget = {Integer.MAX_VALUE};
+			Set<Long> loaded = new HashSet<>();
+			for (RepairCore.Want x : w) {
+				LevelReader r = readerFor(srv, readers, x.dim(), budget, loaded);
+				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) || RepairCore.classify(r, x) != RepairCore.Cell.OK) {
+					return false;
+				}
+			}
+			return true;
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
+	/** Writes the wants (in their order) through the journal's write path; DRK1 halts half way. Returns how many were written. */
+	private static int write(MinecraftServer srv, List<RepairCore.Want> all) {
+		int n = 0;
+		int half = all.size() / 2;
+		Map<String, ServerLevel> levels = new LinkedHashMap<>();
+		for (RepairCore.Want w : all) {
+			if (killDRK1 && n == half && half > 0) {
+				Architect.LOGGER.error("Repair: kill point DRK1 (the record durable, {} of {} cells written): halting the JVM", n, all.size());
+				Runtime.getRuntime().halt(7);
+			}
+			ServerLevel level = levels.computeIfAbsent(w.dim(), d -> Sites.levelOf(srv, d));
+			if (level == null) {
+				continue;
+			}
+			level.getChunk(Journal.x(w.pos()) >> 4, Journal.z(w.pos()) >> 4);
+			List<SiteJournal.CellWrite> one = List.of(new SiteJournal.CellWrite(w.pos(), w.expected(), w.flags()));
+			if (w.pt() != null) {
+				it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts =
+					new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+				pts.put(w.pos(), new dev.larattalabs.architect.placed.Placed.Expect(WorldJournal.state(w.expected()).getBlock(), w.pt()));
+				dev.larattalabs.architect.placed.Placed.beginRestore(pts);
+				try {
+					SiteJournal.writeCells(level, one);
+				} finally {
+					dev.larattalabs.architect.placed.Placed.endRestore();
+				}
+			} else {
+				SiteJournal.writeCells(level, one);
+			}
+			n++;
+		}
+		return n;
+	}
+
+	/** Finishes an open repair (DRK1) from its record: each cell still at its pre-op value is written; credits are keyed (once). */
+	private static RepairResult finishOpen(MinecraftServer srv, String planId, Path path, JsonObject o, ServerPlayer actor) {
+		List<RepairCore.Want> all = new ArrayList<>();
+		int left = 0;
+		for (var e : o.getAsJsonArray("cells")) {
+			RepairCore.Want w = wantOf(e.getAsJsonObject());
+			ServerLevel level = Sites.levelOf(srv, w.dim());
+			if (level == null) {
+				continue;
+			}
+			level.getChunk(Journal.x(w.pos()) >> 4, Journal.z(w.pos()) >> 4);
+			LevelReader r = new LevelReader(level, new int[] {0}, new HashSet<>());
+			RepairCore.Cell c = RepairCore.classify(r, w);
+			if (c == RepairCore.Cell.LAGGING) {
+				all.add(w);
+			} else if (c == RepairCore.Cell.FOREIGN) {
+				left++;
+			}
+		}
+		o.addProperty("finishedBy", actor.getGameProfile().name());
+		Architect.LOGGER.warn("Repair {}: open (stopped part way); finishing {} cell(s) from its record", planId, all.size());
+		return run(srv, planId, path, o, all, left);
+	}
+
+	private static String dryMessage(String planId, Diag d, List<Unit> todo, int write, int left) {
+		if (todo.isEmpty()) {
+			return "Nothing to repair in " + d.diagnosis().scope().describe() + " (" + planId + ")";
+		}
+		StringBuilder sb = new StringBuilder();
+		for (Unit u : todo) {
+			sb.append(u.stuck() ? "Removed " + u.site() + " is stuck at " + u.lagging().size() + " of " + u.wants().size() + " cells" : message(u)).append(' ');
+		}
+		sb.append(String.format(java.util.Locale.ROOT, "/architect repair %s confirm %s writes the %,d and leaves the %,d.", d.diagnosis().scope()
+			.describe(), planId, write, left));
+		return sb.toString().trim();
+	}
+
+	// ------------------------------------------------------------------ records
+
+	static @Nullable Path recordDir() {
+		Path w = world;
+		return w == null ? null : w.resolve(DIR);
+	}
+
+	static @Nullable Path recordPath(String planId) {
+		Path d = recordDir();
+		return d == null || !planId.matches("[0-9a-f]{1,16}") ? null : d.resolve(planId + ".json");
+	}
+
+	/** Writes {@code o} at {@code path} durably: a temporary file, fsync, an atomic rename, the directory fsynced (as RP's records). */
+	static void writeDurable(Path path, JsonObject o) throws IOException {
+		Files.createDirectories(path.getParent());
+		Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+			ch.write(java.nio.ByteBuffer.wrap(GSON.toJson(o).getBytes(StandardCharsets.UTF_8)));
+			ch.force(true);
+		}
+		Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		try (FileChannel d = FileChannel.open(path.getParent(), StandardOpenOption.READ)) {
+			d.force(true);
+		} catch (IOException e) {
+			// a directory can't be opened on every platform: the rename is atomic anyway
+		}
+	}
+
+	static @Nullable JsonObject readRecord(Path p) {
+		try {
+			return com.google.gson.JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	/** The plan ids of open records (a repair stopped part way). */
+	static List<String> openRecords() {
+		Path d = recordDir();
+		List<String> out = new ArrayList<>();
+		if (d == null || !Files.isDirectory(d)) {
+			return out;
+		}
+		try (var s = Files.list(d)) {
+			for (Path p : s.filter(f -> f.getFileName().toString().endsWith(".json")).sorted().toList()) {
+				JsonObject o = readRecord(p);
+				if (o != null && o.has("state") && "open".equals(o.get("state").getAsString())) {
+					out.add(o.get("planId").getAsString());
+				}
+			}
+		} catch (IOException e) {
+			return out;
+		}
+		return out;
+	}
+
+	/** {@code /architect repair log [planId]}: the records, newest first (or one). */
+	public static List<JsonObject> records(@Nullable String planId) {
+		Path d = recordDir();
+		List<JsonObject> out = new ArrayList<>();
+		if (d == null || !Files.isDirectory(d)) {
+			return out;
+		}
+		try (var s = Files.list(d)) {
+			for (Path p : s.filter(f -> f.getFileName().toString().endsWith(".json")).toList()) {
+				JsonObject o = readRecord(p);
+				if (o != null && (planId == null || planId.equals(o.has("planId") ? o.get("planId").getAsString() : ""))) {
+					out.add(o);
+				}
+			}
+		} catch (IOException e) {
+			return out;
+		}
+		out.sort((a, b) -> Long.compare(b.has("at") ? b.get("at").getAsLong() : 0, a.has("at") ? a.get("at").getAsLong() : 0));
+		return out;
+	}
+
+	private static JsonObject wantJson(RepairCore.Want w) {
+		JsonObject o = new JsonObject();
+		o.addProperty("dim", w.dim());
+		o.addProperty("pos", w.pos());
+		o.addProperty("x", Journal.x(w.pos()));
+		o.addProperty("y", Journal.y(w.pos()));
+		o.addProperty("z", Journal.z(w.pos()));
+		o.addProperty("expected", w.expected().state().toString());
+		if (w.expected().nbt() != null) {
+			o.addProperty("expectedNbt", w.expected().nbt().toString());
+		}
+		o.addProperty("found", w.pre().state().toString());
+		if (w.pre().nbt() != null) {
+			o.addProperty("foundNbt", w.pre().nbt().toString());
+		}
+		o.addProperty("site", w.site());
+		o.addProperty("entry", w.entry());
+		o.addProperty("removal", w.removal());
+		o.addProperty("at", w.at());
+		o.addProperty("layer", w.layer());
+		o.addProperty("flags", w.flags());
+		if (!w.morePre().isEmpty()) {
+			JsonArray mp = new JsonArray();
+			w.morePre().forEach(x -> mp.add(x.state().toString()));
+			o.add("morePre", mp); // (F7) a higher removal's placed blocks (no block entity data)
+		}
+		return o;
+	}
+
+	private static RepairCore.Want wantOf(JsonObject o) {
+		try {
+			Value exp = Value.of(TagParser.parseCompoundFully(o.get("expected").getAsString()), o.has("expectedNbt") ? TagParser.parseCompoundFully(o.get(
+				"expectedNbt").getAsString()) : null);
+			Value pre = Value.of(TagParser.parseCompoundFully(o.get("found").getAsString()), o.has("foundNbt") ? TagParser.parseCompoundFully(o.get(
+				"foundNbt").getAsString()) : null);
+			List<Value> more = new ArrayList<>();
+			if (o.has("morePre")) {
+				for (var e : o.getAsJsonArray("morePre")) {
+					more.add(Value.of(TagParser.parseCompoundFully(e.getAsString()), null));
+				}
+			}
+			return new RepairCore.Want(o.get("dim").getAsString(), o.get("pos").getAsLong(), exp, pre, o.get("site").getAsString(), o.get("entry")
+				.getAsString(), o.get("removal").getAsBoolean(), o.get("at").getAsLong(), o.get("layer").getAsLong(), null, o.get("flags").getAsInt(), more);
+		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+			throw new IllegalStateException("a repair record's cell could not be read: " + e.getMessage(), e);
+		}
+	}
+
+	// ------------------------------------------------------------------ suspects and the auto-diagnose
+
+	public static List<RepairSuspect> suspects() {
+		return suspects;
+	}
+
+	public static boolean suspectsPending() {
+		return autoPending;
+	}
+
+	/** The last ops line of the auto-diagnose (null: none this start). */
+	public static @Nullable String opsLine() {
+		return lastOpsLine;
+	}
+
+	/**
+	 * (§1) The auto-diagnose after an unclean start: the stuck records plus every entry committed after the previous run's last completed
+	 * save (or with a job at it), at most {@link #AUTO_CHUNKS_PER_TICK} chunk loads a tick (a site over more loads its chunks in one tick).
+	 * Never repairs.
+	 */
+	static final class AutoRun {
+		final List<String> todo;
+		int next;
+		final Set<String> stuck;
+		final List<RepairSuspect> found = new ArrayList<>();
+		final Set<String> regions = new LinkedHashSet<>();
+
+		AutoRun(MinecraftServer srv) {
+			stuck = stuckSites(srv);
+			JournalStore js = WorldJournal.storeOrNull();
+			Set<String> ids = new LinkedHashSet<>(stuck);
+			if (js != null) {
+				for (JournalStore.Meta m : js.index().entries().values()) {
+					if (m.status() == Journal.Status.ACTIVE && RepairCore.afterSave(m, prevSavedAt, prevJobs) && !m.site().startsWith(
+						SiteGroupRec.CRATE_PREFIX)) {
+						ids.add(m.site());
+					}
+				}
+			}
+			todo = new ArrayList<>(ids);
+			Architect.LOGGER.info("Repairs: unclean start; the auto-diagnose reads {} site(s) (stuck {}, committed after the save at {})", todo.size(),
+				stuck.size(), prevSavedAt);
+		}
+
+		/** One tick; true when done. */
+		boolean step(MinecraftServer srv) {
+			JournalStore js = WorldJournal.storeOrNull();
+			if (js == null) {
+				return finish(srv);
+			}
+			int[] budget = {AUTO_CHUNKS_PER_TICK};
+			Set<Long> loaded = new HashSet<>();
+			Map<String, LevelReader> readers = new LinkedHashMap<>();
+			boolean first = true;
+			while (next < todo.size()) {
+				String id = todo.get(next);
+				if (fed(id)) {
+					next++;
+					continue;
+				}
+				boolean st = stuck.contains(id);
+				String group = st ? SiteJournal.lastGroup(id) : null;
+				List<RepairCore.Want> wants;
+				try {
+					wants = wantsOf(js, id, st, group, m -> st || RepairCore.afterSave(m, prevSavedAt, prevJobs));
+				} catch (IOException e) {
+					next++;
+					continue;
+				}
+				Map<String, Set<Long>> chunks = new LinkedHashMap<>();
+				for (RepairCore.Want w : wants) {
+					chunks.computeIfAbsent(w.dim(), k -> new LinkedHashSet<>()).add(net.minecraft.world.level.ChunkPos.pack(Journal.x(w.pos()) >> 4,
+						Journal.z(w.pos()) >> 4));
+				}
+				int need = 0;
+				for (var e : chunks.entrySet()) {
+					ServerLevel l = Sites.levelOf(srv, e.getKey());
+					for (long c : e.getValue()) {
+						if (l != null && l.getChunkSource().getChunkNow(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(
+							c)) == null) {
+							need++;
+						}
+					}
+				}
+				if (need > budget[0] && !first) {
+					return false; // the next tick
+				}
+				int[] b2 = {Math.max(need, budget[0])};
+				for (var e : chunks.entrySet()) {
+					LevelReader r = readerFor(srv, readers, e.getKey(), b2, loaded);
+					if (r != null) {
+						for (long c : e.getValue()) {
+							r.ensure(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(c));
+						}
+					}
+				}
+				budget[0] -= need;
+				first = false;
+				String region = SiteJournal.entries(id).stream().map(Repairs::regionOf).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+				Unit u = classify(id, region, st, group, wants, d -> readerFor(srv, readers, d, b2, loaded));
+				if (st) {
+					found.add(new RepairSuspect(id, region, "stuck"));
+				} else if (!u.lagging().isEmpty()) {
+					found.add(new RepairSuspect(id, region, "lagging"));
+				}
+				if ((st || !u.lagging().isEmpty()) && region != null) {
+					regions.add(region);
+				}
+				next++;
+				if (budget[0] <= 0) {
+					return false;
+				}
+			}
+			return finish(srv);
+		}
+
+		private boolean finish(MinecraftServer srv) {
+			for (Stockpiles.Pile p : Stockpiles.all()) {
+				for (String key : p.ledger().custodyKeys()) {
+					String id = idOfKey(key);
+					if (id != null && Sites.get(id) == null && Sites.pendingRecord(id) == null && !Groups.removing(id) && !p.ledger().credited(key)) {
+						found.add(new RepairSuspect(id, null, "custody"));
+					}
+				}
+			}
+			for (String open : openRecords()) {
+				found.add(new RepairSuspect(open, null, "repair_open"));
+			}
+			suspects = List.copyOf(found);
+			if (!found.isEmpty()) {
+				Set<String> names = new LinkedHashSet<>();
+				for (RepairSuspect s : found) {
+					names.add(s.regionId() != null ? "region " + s.regionId() : s.siteId());
+				}
+				List<String> shown = new ArrayList<>(names);
+				String list = String.join(", ", shown.subList(0, Math.min(6, shown.size()))) + (shown.size() > 6 ? ", +" + (shown.size() - 6) : "");
+				String line = String.format(java.util.Locale.ROOT, "Architect: %d build%s lag the journal after an unclean stop (%s). "
+					+ "/architect diagnose all for details.", found.size(), found.size() == 1 ? "" : "s", list);
+				lastOpsLine = line;
+				Architect.LOGGER.warn("{}", line);
+				for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
+					if (op(p)) {
+						p.sendSystemMessage(Component.literal(line));
+						opsLineSent = true;
+					}
+				}
+			} else {
+				Architect.LOGGER.info("Repairs: the auto-diagnose after the unclean stop found nothing lagging");
+			}
+			return true;
+		}
+	}
+
+	/** Whether a player holds gamemaster permission (an op, or cheats on in single player). */
+	static boolean op(@Nullable ServerPlayer p) {
+		return p != null && p.createCommandSourceStack().permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+	}
+}
