@@ -3464,6 +3464,7 @@ public final class Sites {
 		static Drops before(ServerLevel level, Anchors.Bounds box) {
 			Drops d = new Drops(Occupancy.aabb(box).inflate(1));
 			level.getEntitiesOfClass(ItemEntity.class, d.area).forEach(e -> d.before.add(e.getUUID()));
+			Architect.LOGGER.info("LC2TRACE drops before {}: {} item(s) (tick {})", d.area, d.before.size(), level.getServer().getTickCount());
 			level.getEntitiesOfClass(ExperienceOrb.class, d.area).forEach(e -> d.before.add(e.getUUID()));
 			return d;
 		}
@@ -3482,6 +3483,8 @@ public final class Sites {
 			int n = 0;
 			for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, area)) {
 				if (!before.contains(e.getUUID())) {
+					Architect.LOGGER.info("LC2TRACE drop clear discards {} x{} at {} (area {})", e.getItem().getItem(), e.getItem().getCount(), e.blockPosition().toShortString(), area,
+						new Throwable("LC2TRACE"));
 					e.discard();
 					n++;
 				}

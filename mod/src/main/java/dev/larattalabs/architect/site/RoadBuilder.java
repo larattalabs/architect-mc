@@ -704,6 +704,7 @@ public final class RoadBuilder {
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(x -> items.merge(x.item(), x.count(), Integer::sum));
 			Builder.dropItems(level, p, items, null);
+			Architect.LOGGER.info("LC2TRACE road {} player block {} dropped at {} (tick {})", road.id(), items, p.toShortString(), level.getServer().getTickCount());
 			dev.larattalabs.architect.placed.Placed.set(level, p, was, Sites.CELL_FLAGS);
 			dropped++;
 		}
