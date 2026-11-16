@@ -24,6 +24,14 @@
 //           unchanged
 //     DR7   an unresolved custody (dev.repair ledger: the key's fill paid and its items in custody, its site gone): CUSTODY reported; the repair
 //           credits it under the cap once (custody = credit, item for item); a second diagnose and repair find nothing
+//   (DR2 fix round, the GPT review's NOT SAFE)
+//     DR4c  a third cottage removed alone, stuck as DR4a; a player mines one of its standing placed blocks before the repair: that cell is
+//           FOREIGN ("a player took"), the repair writes the rest and never settles it (nothing booked, its credit still pending); a clean
+//           start keeps it pending too (it reads restored)
+//     DR7c  a custody credit overflowing whole (dev.stockpile.ps capacity 0), CS1 armed: the halt inside the credit's save leaves no item
+//           at the crate and the custody held; finishing the open repair drops the 4 flint once
+//     DR7o  the same with OV1 (the overflow's own save, its items flushed, the ledger owing them): after the restart the 4 flint lie at the
+//           crate once, found by their tag (resolvedFound, none spawned again); finishing the repair credits nothing again
 //
 // Evidence: artifacts/gate6d-gr/drsurvival.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -35,7 +43,8 @@ export async function registerDRS(steps, h) {
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
   // two cottages bound to rs_hut: two construction sites (the hall lot is a stub), one removed alone (DR4a), one with the region (DR4b)
-  const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }];
+  // (DR2 fix) a third cottage for DR4c (a stuck removal a player mines)
+  const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }, { id: 'cottage_3', type: 'cottage', size: [9, 9] }];
   const ledgerOf = (root) => (root?.stockpiles ?? []).find((p) => p.owner === G.OWNER)?.ledger ?? null;
   const rep = (op, extra = {}) => call('dev.repair', { op, ...extra }, 300_000);
   const st = () => rep('state');
@@ -165,7 +174,8 @@ export async function registerDRS(steps, h) {
     const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
     check(!cr.refused, `a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    W.region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut', cottage_2: 'rs_hut' }, autoApprove: false });
+    W.region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut', cottage_2: 'rs_hut', cottage_3: 'rs_hut' }, autoApprove: false });
+    W.crates = crates;
     W.group = (await call('dev.region.state', { region: W.region }, 60_000)).view?.groupId;
     for (const stage of ['ground', 'street', 'lots']) await cmd(`/apitest sapprove ${W.group} ${stage}`);
 
@@ -225,7 +235,8 @@ export async function registerDRS(steps, h) {
       const huts = recs.filter((r) => /rs_hut/.test(r.blueprint ?? ''));
       const A = huts[0]; // one cottage removed alone; the other (W.hall) is the region member DR4b leaves stuck
       W.hall = huts[1];
-      check(!!A && !!W.hall && A.s !== W.hall.s, `${tag}: the cottage ${A?.s} (${A?.restoreBox}) and the hall ${W.hall?.s} (${W.hall?.restoreBox})`);
+      W.third = huts[2]; // (DR2 fix) DR4c's
+      check(!!A && !!W.hall && !!W.third && A.s !== W.hall.s, `${tag}: the cottage ${A?.s} (${A?.restoreBox}), the hall ${W.hall?.s} (${W.hall?.restoreBox}) and DR4c's ${W.third?.s}`);
       await call('dev.stockpile.ps', { noPeriodic: true, noCreditSave: true }, 30_000);
       await cmd('/kill @e[type=item]');
       await cmd('/save-all flush');
@@ -248,6 +259,58 @@ export async function registerDRS(steps, h) {
       out.DR4a = await stuckCase(tag, s1, A.s, A.b, lost, key, S);
       check(await hash(A.b) === restored, `${tag}: the box is as its removal committed it`);
       out.DR4a.site = A.s;
+    }
+
+    // DR4c (DR2 fix, P1-4): a stuck survival removal a player mines before the repair: the taken cell is FOREIGN, the repair writes the rest
+    // and never settles it (its stored refund holds the taken block: booking it would pay it twice); the start keeps it pending too
+    {
+      const tag = 'DR4c';
+      const C = W.third;
+      await call('dev.stockpile.ps', { noPeriodic: true, noCreditSave: true }, 30_000);
+      await cmd('/kill @e[type=item]');
+      await cmd('/save-all flush');
+      await L.settle(2000);
+      const B = saved();
+      const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${C.s}@`));
+      W.ckey = key;
+      check(!!key && sum(B.paid[key]) > 0, `${tag}: ${C.s}'s paid record on disk: ${key}`);
+      await rep('snap', { name: 'C', min: C.b.slice(0, 3), max: C.b.slice(3) });
+      const rm = await call('dev.pl.remove', { site: C.s, requester: G.OWNER, force: false }, 600_000);
+      check(rm.removed === true, `${tag}: ${C.s} removed on its own`);
+      await L.settle(1500);
+      const wb = westOf(C.b, gy);
+      const lost = (await rep('unwrite', { name: 'C', min: wb.slice(0, 3), max: wb.slice(3) })).cells;
+      check(lost > 1, `${tag}: the fault: ${lost} restored cells put back as placed`);
+      if (!(await haltAS1(tag))) return out;
+      const S = saved();
+      const pend = S.pendingCredit?.[key]?.items ?? null;
+      check(!!pend, `${tag}: on disk ${key}'s credit is pending (${sum(pend)} units)`);
+      await restart(tag);
+      const d1 = await diag({ kind: 'site', id: C.s });
+      const f1 = (d1.findings ?? []).find((x) => x.code === 'STUCK' && x.site === C.s);
+      // a diff line: "x,y,z expected <- found"; a cell whose restore is air and whose placed block stands
+      const cell = (f1?.diffs ?? []).map((x) => /^(-?\d+),(-?\d+),(-?\d+) (\S+) <- (\S+)/.exec(x)).find((m) => m && /^air/.test(m[4]) && !/^air/.test(m[5]));
+      check(!!f1 && f1.lagging === lost && !!cell, `${tag}: stuck at ${f1?.lagging} lagging; a standing placed block to mine (${cell?.[0]})`);
+      if (!cell) return out;
+      const at = [Number(cell[1]), Number(cell[2]), Number(cell[3])];
+      const br = await call('dev.pt.breaks', { at: [at], placer: 'DRPlayer' }, 60_000);
+      const pre = await pile();
+      const d2 = await diag({ kind: 'site', id: C.s });
+      const st2 = (d2.findings ?? []).find((x) => x.code === 'STUCK' && x.site === C.s);
+      const fo2 = (d2.findings ?? []).find((x) => x.code === 'FOREIGN' && x.site === C.s);
+      check(st2?.lagging === lost - 1 && fo2?.foreign === 1 && /a player took/.test(fo2?.message ?? ''), `${tag}: the mined cell (${json(br).slice(0, 120)}) is FOREIGN, taken by a player, never OK (lagging ${st2?.lagging}, foreign ${fo2?.foreign}: ${fo2?.message})`, d2);
+      const r = await repair(d2.planId, true);
+      const post = await pile();
+      check(r.written === lost - 1 && !/settled/.test(r.message ?? '') && sum(r.credited) === 0 && G.same(back(post.ledger), back(pre.ledger)) && !!post.ledger?.pendingCredit?.[key],
+        `${tag}: the repair wrote the other ${r.written} and did not settle; nothing booked, ${key} still pending (was: settled with the full refund plus the mined item) (${r.message})`, r);
+      await L.leaveWorld();
+      await L.openWorld(W.name);
+      await L.tp(CX + 80, 60, CZ + 56);
+      const s3 = await started(`${tag} clean restart`);
+      const post3 = await pile();
+      check(!!post3.ledger?.pendingCredit?.[key] && G.same(back(post3.ledger), back(post.ledger)) && (s3.suspects ?? []).length >= 0,
+        `${tag}: a start keeps it pending too (it reads restored, but a player took one of its blocks): ${key} pending, nothing booked`);
+      out.DR4c = { site: C.s, lost, written: r.written, foreign: fo2?.foreign, message: r.message };
     }
 
     // DR12 (DR-S, the coordinator's strict fix): a removal whose saves are refused (dev.stockpile.ps refuseSave, SS's refusal) changes
@@ -289,7 +352,7 @@ export async function registerDRS(steps, h) {
       const L1 = (await pile()).ledger;
       check(await hash(BOX) === h0 && /sponge/.test(json(pc.cells ?? [])) && Object.keys(near).length === 0,
         `${tag}: nothing changed in the world: the town's box hashes as before, the player's sponge stands, no item dropped (${json(near)})`);
-      check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
+      check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).filter((k) => k !== W.ckey).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
         `${tag}: nothing changed in the ledger: the saved file as before, nothing credited, no hold or custody left`);
       out.DR12 = { cell, stop: v?.removalStop, reason: v?.removalStopReason, state: v?.state };
     }
@@ -303,7 +366,7 @@ export async function registerDRS(steps, h) {
       await cmd('/save-all flush');
       await L.settle(2000);
       const B = saved();
-      const keys = Object.keys(B.paid ?? {}).filter((k) => sum(B.paid[k]) > 0);
+      const keys = Object.keys(B.paid ?? {}).filter((k) => sum(B.paid[k]) > 0 && k !== W.ckey); // (DR2 fix) DR4c's stays pending
       const hkey = keys.find((k) => k.startsWith(`site:${H.s}@`));
       check(!!hkey && keys.length >= 2, `${tag}: the town's paid records on disk: ${keys.length} (${json(keys)})`);
       await rep('snap', { name: 'H', min: H.b.slice(0, 3), max: H.b.slice(3) });
@@ -331,8 +394,9 @@ export async function registerDRS(steps, h) {
       check(await hash(H.b) === restored, `${tag}: the hall's box is as its removal committed it`);
       const end = await pile();
       const all = G.minus(back(end.ledger), back(S));
-      check(G.same(all, pendSum(S)) && Object.keys(end.ledger?.pendingCredit ?? {}).length === 0 && keys.every((k) => !end.ledger?.paid?.[k]),
-        `${tag}: items in = items out against the saved state: ${sum(all)} units came back = every pending credit on disk (${sum(pendSum(S))}), each once; nothing pending; no member's paid record left`, { all, pend: pendSum(S) });
+      const mine = Object.keys(S.pendingCredit ?? {}).filter((k) => k !== W.ckey);
+      check(G.same(all, pendSum(S, mine)) && Object.keys(end.ledger?.pendingCredit ?? {}).filter((k) => k !== W.ckey).length === 0 && keys.every((k) => !end.ledger?.paid?.[k]),
+        `${tag}: items in = items out against the saved state: ${sum(all)} units came back = every pending credit on disk (${sum(pendSum(S, mine))}; DR4c's left pending), each once; nothing pending; no member's paid record left`, { all, pend: pendSum(S, mine) });
       out.DR4b.site = H.s;
       out.DR4b.atStart = { keys: others.length, units: sum(bookedAtStart) };
     }
@@ -381,6 +445,50 @@ export async function registerDRS(steps, h) {
       const post2 = await pile();
       check(left.length === 0 && r2.written === 0 && sum(r2.credited) === 0 && G.same(back(post2.ledger), back(post.ledger)), `${tag}: a second diagnose finds nothing for ${key} and a second repair credits nothing (${r2.message})`);
       out.DR7 = { key, moved, record: r.record };
+    }
+
+    // DR7c / DR7o (DR2 fix, P1-1): a keyed credit's overflow is paid once across a stop inside its save. The stockpile's room set to none
+    // (dev.stockpile.ps capacity 0), so a custody credit overflows whole: CS1 halts the credit's save after its chunks, before the ledger
+    // (was: the items already in the saved chunks, and the open repair credited the custody again: twice); OV1 halts the overflow's own save
+    // after its items are on disk, the ledger still owing them (the start finds them by their tag: never dropped again)
+    for (const [tag, point, n] of [['DR7c', 'CS1', 3], ['DR7o', 'OV1', 4]]) {
+      const key = `site:scust@${n}`;
+      const items = { 'minecraft:flint': 4 };
+      const crate = W.crates[0];
+      const flint = async () => ((await call('dev.items.near', { pos: crate, radius: 6 }, 60_000)).items ?? {})['minecraft:flint'] ?? 0;
+      const inj = await rep('ledger', { owner: G.OWNER, key, paid: items, custody: items });
+      check(inj.ok === true, `${tag}: custody ${json(items)} under ${key} (TEST injection, saved)`);
+      await cmd('/kill @e[type=item]');
+      await call('dev.stockpile.ps', { capacity: 0, noPeriodic: true }, 30_000);
+      const d = await diag({ kind: 'all' });
+      check(!!(d.findings ?? []).find((x) => x.code === 'CUSTODY' && x.key === key), `${tag}: CUSTODY ${key} reported`);
+      await call('dev.journal.killAt', { point }, 10_000);
+      repair(d.planId, true).catch(() => null);
+      check(await haltWait(), `${tag}: ${point} halted the server inside the credit's save`);
+      await restart(tag);
+      let ps = null;
+      for (let i = 0; i < 60; i++) { ps = await call('dev.stockpile.ps', {}, 30_000); if (!ps.owedDrops) break; await L.sleep(1000); }
+      await L.settle(3000);
+      const S = saved();
+      const after = await flint();
+      if (point === 'CS1') {
+        check(after === 0 && !(S.credited ?? []).includes(key) && !!S.custody?.[key], `${tag}: after the stop no flint lies at the crate (${after}; was 4: dropped before the ledger's save) and ${key} is still held, not credited`, { custody: S.custody?.[key] });
+        await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
+        const r = await repair(d.planId, true);
+        await L.settle(2000);
+        const fin = await flint();
+        check(r.applied === true && fin === 4 && saved().credited?.includes(key), `${tag}: the open repair finished: the custody credited once, its 4 flint dropped once (${fin}; ${r.message})`, r);
+        out[tag] = { after, fin };
+      } else {
+        check(after === 4 && (S.credited ?? []).includes(key) && ps?.resolvedFound >= 1 && ps?.resolvedSpawned === 0 && !ps?.owedDrops,
+          `${tag}: after the stop the 4 flint lie at the crate once (${after}), found on disk by their tag (found ${ps?.resolvedFound}, spawned ${ps?.resolvedSpawned}, owed ${ps?.owedDrops}); ${key} credited`, ps);
+        const r = await repair(d.planId, true);
+        await L.settle(2000);
+        const fin = await flint();
+        check(fin === 4, `${tag}: finishing the open repair credits nothing again: still 4 flint (${fin}; ${r.message})`, r);
+        out[tag] = { after, fin, ps };
+      }
+      await call('dev.stockpile.ps', { capacity: -1 }, 30_000);
     }
     await L.leaveWorld();
     spendZero();

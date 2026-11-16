@@ -26,6 +26,7 @@
 //                                                            over G's west half (the stale record's pre-op value); finishing G leaves
 //                                                            N's cells untouched (no longer owed), the record final, G pending
 //                                                            under N (STACKED names N); N removed: G lags again, repaired, settles
+//                                                  DR14s     (DR2 fix) H's repair under /save-off: refused, no record, nothing written
 //                                                  DR14      (P1-1) H's repair halted at DRK2 (after its record went final, nothing
 //                                                            saved after): after the restart the box = before (the durability barrier
 //                                                            put the writes on disk first), H settled, nothing to diagnose
@@ -342,6 +343,17 @@ export async function registerDR(steps, h) {
     const dH = await diag(ids.H);
     const fH = (dH.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.H);
     check(!!fH && fH.lagging > 0, `DR14: H stuck, ${fH?.lagging} lagging`);
+    // (DR2 fix, P1-2) with saving off (/save-off) the barrier can't be made durable: the repair is refused before anything is written
+    {
+      const hOff = await hash(BX.H);
+      await cmd('/save-off');
+      const rOff = await rep('repair', { planId: dH.planId, apply: true, actor: 'player' });
+      const recOff = fs.existsSync(path.join(L.SAVES, W, 'architect-repairs', `${dH.planId}.json`));
+      check(rOff.applied === false && rOff.written === 0 && /save-off/.test(rOff.message ?? '') && !recOff && await hash(BX.H) === hOff,
+        `DR14s: under /save-off the repair is refused, no record, nothing written (was: final over chunks never saved) (${rOff.message})`, rOff);
+      await cmd('/save-on');
+      out.DR14s = { message: rOff.message };
+    }
     await rep('killAt', { armed: true, point: 'DRK2' });
     rep('repair', { planId: dH.planId, apply: true, actor: 'player' }).catch(() => null);
     check(await haltWait(), 'DR14: DRK2 halted the server after H\'s record went final');

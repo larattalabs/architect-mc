@@ -341,6 +341,7 @@ public final class Stockpiles {
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
+			testCapacity = -1;
 			SERVER = null;
 			PILES.clear();
 			dir = null;
@@ -461,7 +462,13 @@ public final class Stockpiles {
 		return p.crates.stream().filter(c -> !pr.contains(c)).map(CrateRec::pos).toList();
 	}
 
+	/** (DR2 fix, TEST dev.stockpile.ps capacity) every stockpile's capacity in stacks, or -1 (off): a refund then overflows. */
+	static volatile int testCapacity = -1;
+
 	static int capacity(MinecraftServer srv, Pile p) {
+		if (testCapacity >= 0) {
+			return testCapacity;
+		}
 		return StockLedger.STACKS_PER_CRATE * present(srv, p).size();
 	}
 
@@ -2255,6 +2262,9 @@ public final class Stockpiles {
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
 					}
+					if (req.has("capacity")) {
+						testCapacity = req.get("capacity").getAsInt(); // (DR2 fix) -1 off
+					}
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
@@ -2278,6 +2288,14 @@ public final class Stockpiles {
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
 					o.addProperty("waitAll", SaveTiming.waitAll);
+					o.addProperty("capacity", testCapacity);
+					int owed = 0;
+					for (Pile q : PILES.values()) {
+						owed += q.ledger.owedDropKeys().size();
+					}
+					o.addProperty("owedDrops", owed); // (DR2 fix) overflow owed (not yet on disk as items)
+					o.addProperty("resolvedFound", OverflowDrops.resolvedFound);
+					o.addProperty("resolvedSpawned", OverflowDrops.resolvedSpawned);
 					return o;
 				}
 				case "state" -> {
