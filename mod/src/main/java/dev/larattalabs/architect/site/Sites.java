@@ -238,6 +238,11 @@ public final class Sites {
 		return List.copyOf(state.byId().values());
 	}
 
+	/** (slice FL) The sites map now: replaced on every change (copy-on-write), so a cache keyed on its identity sees every change. */
+	static Object storeIdentity() {
+		return state.byId();
+	}
+
 	public static @Nullable Site get(String id) {
 		return state.byId().get(id);
 	}

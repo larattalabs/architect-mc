@@ -10,7 +10,8 @@
 //                                                      after 40 s no F holds anything, no fill_blocked, the 69 cobblestone in the hall's other
 //                                                      containers. The fill fed: filled once (paid = the declaration), unlocked, BUILT; each F
 //                                                      exactly its declaration; the 69 cobblestone still there (none lost, none minted); the
-//                                                      town PLACED and consumed = the quote, item for item.
+//                                                      town PLACED and consumed = the quote, item for item. (S-M5-18) The land check: the lot's
+//                                                      changed = the undeclared containers holding cobblestone (the filled Fs are the site's).
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -163,10 +164,10 @@ export async function registerFL(steps, h) {
     await L.sleep(40_000); // 8 ticks a hopper move: 69 items through a 4-hopper line in well under 40 s
     s = await fk(site);
     const k1 = await cobble(c);
-    out.midBuild = { cobble: k1, wait: s.wait, F: s.containers.map((x) => x.holds), state: s.state };
+    out.midBuild = { cobble: k1, wait: s.wait, F: s.containers.map((x) => x.holds), state: s.state, held: s.held };
     log(`  fl: 40 s after the cargo: ${json(out.midBuild)}`);
-    check(s.containers.every((x) => sum(x.holds) === 0) && k1.inF === 0 && !s.wait?.blocked,
-      `S-M5-17: 64 cobblestone into the input chest and 5 into line hopper 2, mid-build: no fill container took any (F holds ${s.containers.map((x) => json(x.holds)).join(' ')}); no fill_blocked (${s.wait?.blocked ?? 'none'})`, out.midBuild);
+    check(s.containers.every((x) => sum(x.holds) === 0) && k1.inF === 0 && !s.wait?.blocked && (s.held ?? 0) > 0,
+      `S-M5-17: 64 cobblestone into the input chest and 5 into line hopper 2, mid-build: no fill container took any (F holds ${s.containers.map((x) => json(x.holds)).join(' ')}); no fill_blocked (${s.wait?.blocked ?? 'none'}); insertions held ${s.held ?? 'n/a'}`, out.midBuild);
     check(k1.total === 69, `the 69 cobblestone are all in the hall's other containers or loose by it (${json(k1.per)}, loose ${k1.loose}): none lost, none minted`, k1);
     // the fill fed: filled once, unlocked, BUILT
     let fed = {};
@@ -190,6 +191,15 @@ export async function registerFL(steps, h) {
     out.consumed = { consumed: sum(consumed), quote: sum(q.bom), diff: G.minus(consumed, q.bom), cobble: consumed[COBBLE] ?? 0, quoteCobble: q.bom?.[COBBLE] ?? 0 };
     check(r0.last.st.view.state === 'PLACED' && G.same(consumed, q.bom),
       `the town PLACED; consumed = the quote item for item, the fill once (${sum(consumed)} = ${sum(q.bom)}; differ ${json(G.minus(consumed, q.bom))}): the player's cobblestone never billed or credited`, out.consumed);
+    // (S-M5-18) the land check: each filled F (exactly its fill) is the site's, not changed; the undeclared containers holding the
+    // player's cobblestone (built empty) are what the lot reads changed
+    const lc = await call('dev.region.landCheck', { region }, 900_000);
+    const lot = (lc.lots ?? []).find((x) => x.lot === 'cottage_1');
+    const k3 = await cobble(c);
+    const cargoCells = Object.entries(k3.per).filter(([k, n]) => !k.startsWith('F') && n > 0).length;
+    out.landCheck = { lot, cargoCells, per: k3.per };
+    check(lot && lot.changed === cargoCells && k3.inF === 0,
+      `S-M5-18: the land check reads fl_hall's 4 filled F hoppers (each exactly its fill) as the site's: the lot's changed ${lot?.changed} = the ${cargoCells} undeclared container(s) holding the player's cobblestone (${json(k3.per)})`, out.landCheck);
     await L.leaveWorld();
     spendZero();
     return out;

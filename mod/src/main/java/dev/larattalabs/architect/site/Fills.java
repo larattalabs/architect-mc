@@ -537,6 +537,41 @@ public final class Fills {
 		return true;
 	}
 
+	/**
+	 * (slice FL, S-M5-18) The land check's rule for a declared container of a filled site: ours while its contents are plain stacks within its
+	 * declaration (exactly the fill, or less of it); anything more, another item or a component stack, stays cargo. Pure.
+	 */
+	public static boolean fillOurs(@Nullable Map<String, Integer> now, @Nullable Map<String, Integer> declared) {
+		return now != null && declared != null && within(now, declared);
+	}
+
+	private static @Nullable Object oursFrom;
+	private static long oursRevision = Long.MIN_VALUE;
+	private static Map<String, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<Map<String, Integer>>> oursIndex = Map.of();
+
+	/**
+	 * (slice FL, S-M5-18) Whether the container at {@code p} is a declared container of a filled site (FILLED or UNLOCKED) whose contents
+	 * are its fill or less of it ({@link #fillOurs}). The index of the filled sites' declared cells is rebuilt when the sites store or the
+	 * library's revision changes. Server thread.
+	 */
+	public static boolean filledContainerOurs(ServerLevel level, BlockPos p) {
+		Object now = Sites.storeIdentity();
+		long rev = Blueprints.revision();
+		if (now != oursFrom || rev != oursRevision) {
+			Map<String, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<Map<String, Integer>>> m = new java.util.HashMap<>();
+			for (Site s : Sites.all()) {
+				declaredOurs(level.getServer(), s).forEach((pos, d) -> m.computeIfAbsent(s.dimension(), k -> new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>())
+					.put(pos.asLong(), d));
+			}
+			oursIndex = m;
+			oursFrom = now;
+			oursRevision = rev;
+		}
+		var d = oursIndex.get(Sites.dimensionId(level));
+		Map<String, Integer> declared = d == null ? null : d.get(p.asLong());
+		return declared != null && level.getBlockEntity(p) instanceof Container c && fillOurs(plainCounts(c), declared);
+	}
+
 	/** After a write into a container: saved with its chunk, and comparators re-read it (Steward's review C). */
 	static void touched(ServerLevel level, BlockPos p, BlockEntity be) {
 		be.setChanged();
@@ -1041,6 +1076,7 @@ public final class Fills {
 		Spec spec = of(srv, s);
 		o.addProperty("phase", phase(s));
 		o.addProperty("hasFill", spec != null);
+		o.addProperty("held", FillHold.held); // (slice FL) automated insertions into held fill containers refused since the start
 		o.addProperty("state", s.construction() == null ? "INSTANT" : s.building() ? "BUILDING" : "BUILT");
 		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), Sites.levelOf(srv, s)));
 		String key = Builder.creditKey(s);
