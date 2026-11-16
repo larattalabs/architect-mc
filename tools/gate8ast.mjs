@@ -10,9 +10,9 @@
 //                           region-wide rate never above terrainPerTick (16; rs01 2) cells per game tick, every standing staged cell supported by
 //                           the world (TO's rules read live), percent under 100 while terrain is unbuilt and 100 at the end, a terrain
 //                           part `building`; rs01 over raised land (relief blending real slopes, a rock spire, pads with two lots, a held
-//                           terrace; its relief at 2 per tick, so the wait is seen): a lot waits SITE_BUSY with
-//                           architect_mc:waitsFor {kind: "terrain", part, terrainCells, terrainBuilt}; x01 (the hollow mountain); x03's
-//                           island alone (a floating form from its anchor), its owner with no stockpile (an all-free plan needs none). Then: every staged target's bill empty, the check's bills per
+//                           terrace; at 2 per tick); x01 (the hollow mountain); x03's island alone (a floating form from its anchor), its
+//                           owner with no stockpile (an all-free plan needs none); x03h, the whole hamlet: a lot on the island waits
+//                           SITE_BUSY with architect_mc:waitsFor {kind: "terrain", part, terrainCells, terrainBuilt, say}. Then: every staged target's bill empty, the check's bills per
 //                           part equal to the targets' (items in = items out: the conservation sum exact), the final world equal to its
 //                           INSTANT twin cell for cell (block entities included; the crates aside), Remove E-flat 0
 //     report                REPORT.md over the step JSONs
@@ -206,10 +206,11 @@ steps.ingame = async () => {
   out.rateHook = rate;
   if (want('rs01')) {
     // rs01 over raised land: the claim 2 up, a block 5 up under the town (its lots stand on it), so its relief blends real slopes (on rs01's
-    // flat claim the relief and the pads write nothing: no staged cell); the relief built at 2 per tick so the lots' typed wait is seen
+    // flat claim the relief and the pads write nothing: no staged cell); built at 2 per tick so its half-built states are seen. (Its lots
+    // can't wait on the relief: the ground stage's path tile waits for the relief's targets, so the lots stage starts after them.)
     const fx = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs01_land')));
     fx.terrain.bands = [...fx.terrain.bands, { x0: 1000, z0: 2000, x1: 1239, z1: 2159, y: 66 }, { x0: 1100, z0: 2060, x1: 1159, z1: 2120, y: 69 }];
-    try { out.rs01 = await staged('rs01', fx, { lotWait: true, rate: 2 }); } catch (e) { check(false, `rs01: ${String(e.message).slice(0, 300)}`); out.rs01 = { error: String(e.stack ?? e) }; }
+    try { out.rs01 = await staged('rs01', fx, { rate: 2 }); } catch (e) { check(false, `rs01: ${String(e.message).slice(0, 300)}`); out.rs01 = { error: String(e.stack ?? e) }; }
   }
   if (want('x01')) {
     try { out.x01 = await staged('x01', G.fixture(ctx, 'bf/x01_hollow_mountain'), { over: 96, crates: 1 }); } catch (e) { check(false, `x01: ${String(e.message).slice(0, 300)}`); out.x01 = { error: String(e.stack ?? e) }; }
@@ -218,6 +219,10 @@ steps.ingame = async () => {
     const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
     delete isle.plan.zones;
     try { out.x03 = await staged('x03', isle, { over: 96, crates: 0 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
+  }
+  if (want('x03h')) {
+    // the whole hamlet: its lots stand on the island (a stage after the island's): each waits for the island's staged targets, typed
+    try { out.x03h = await staged('x03h', G.fixture(ctx, 'bf/x03_island_hamlet'), { over: 96, crates: 3, lotWait: true }); } catch (e) { check(false, `x03h: ${String(e.message).slice(0, 300)}`); out.x03h = { error: String(e.stack ?? e) }; }
   }
   return out;
 };

@@ -32707,3 +32707,31 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   re-order the rest once the part's other targets stand; feed a floating part from its anchor's tile.
 - **Leftovers**: under 8aF the crater's and terrace's cells are HELD and F3's trees PAID, so only x01/x03/v05 stage (tests take the rest by part);
   `f3/s01_steward_glade` throws in survival (`compileSurvival`: `opMats[i] is not iterable`); `unit-mod`'s step inputs miss the kit helper.
+
+### Slice ST as built (branch `slice/ST` off `slice/TO` c9e22901; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Targets.** `RegionTargets.split` gives each group's class 3 cells a target of their own per tile (`regionTarget.terrain: true`, every cell
+  held, none in `freeCells`), put down ahead of the group's paid/held one. `Packed.freePass` is FREE only; `-Darchitect.stagedTerrain=false`
+  (dev) writes class 3 in the free pass again and drops the feature. Its queue is TO's `terrainOrder` read against the world at put-down.
+- **Building (reading taken).** No re-order of the persisted queue: each turn scans the queue from its first unbuilt cell (at most 4,096) and
+  writes each cell the world now supports by TO's rules read live (a cut once the cut above is gone; loose/resting over solid; a leaf by a
+  log or leaf; a fill on a replaced solid, beside solid land or a log, or under a floating anchor's 3x3), so TO's rounds (x03's tile 18,31)
+  wait on the cells beside them with no re-order. A target that wrote nothing for 100 turns while no other staged target of its part wrote
+  is released (the rest in order, unsupported) so a region always completes. Runs: 4,096-cell slabs of the order (no bill, so no start rule).
+- **Rate.** `terrainPerTick` in architect-world.json (default 16, clamped 1-64, kept by the toggle and budget rewrites), shared by a region's
+  staged targets per tick; `RegionBuild.terrainPerTick` reads it (javadoc fixed: per region, not per target). A staged target of an owner with
+  no stockpile (an all-free plan needs none) is built by the road tick.
+- **Waits.** A lot or road waits for a staged target of an earlier or its own stage under its box + 8: `SITE_BUSY`, `waitsFor {target, part,
+  kind: "terrain", terrainCells, terrainBuilt, say}`. A paid/held target of the same tile item waits (before it starts) for a staged target it
+  meets. `Drift.checkStage` skips columns under a building staged target. A tile all targets keeps its held-leaves entry.
+- **Counts.** `PartBuild.terrainCells/terrainBuilt` (staged targets' cells, not in `cells`/`built`); `percent` = (paid + terrain built) / (paid
+  + terrain). Dev: `dev.region.terrain {region, check?}` (targets, cursor, connected, stall, released, unsupported, gameTime, the waits),
+  `dev.terrain.rate {n?}`. Feature `terrainConstruction`: the helper's `region.terrainConstruction` AND `Packed.stagedBuild()`.
+- **F3 trees stay paid** (Noah, "Keep paid"; the contract's exception): under 8aF a tree group holds paid cells, so its free cells are HELD,
+  never class 3; ST changes nothing there. `kit/test/st-8a.test.mjs` pins s01_steward_glade: no staged log or leaf, every log class 2.
+- **Kit fix.** `compileSurvival` read its per-op flags by IR op index while the evaluator reads compiled ops (a fluid op's decor bed is a
+  second compiled op), so every flag after a bed shifted and the last threw (s01). Now through each compiled op's IR op. Moves the survival
+  tiles of v73, f3/c01 and f3/u05 (coral ponds): fluid-op cells now class 0 (the fluids gate's), their shells now paid, their corals no
+  longer paid; creative IRs and every other fixture unchanged. Gradle's `test` now declares kit/lib, the kit helpers and the plan fixtures.
+- **Ran.** Units (full: build.gradle): kit 1484/1484, gradle build PASS (StagedTargetsTest 5, StagedTerrainFoundationTest 5, TerrainOrderTest
+  10, SurvivalWorldTest 3), sidecar green (4 files timed out under load 22-28 and passed alone, 29/29 + 7/7); gitleaks clean. Gate below.
