@@ -3276,6 +3276,12 @@ public final class Sites {
 			Architect.LOGGER.info("Sites check: removed {} at {} (stands {}, restored {}, covered {})", gone.id(), Anchors.str(gone.box()), ev.stands(),
 				ev.restored(), ev.covered());
 			Reconcile.Action action = settleInfra(ev);
+			if (action == Reconcile.Action.RELEASE && gone.construction() != null && Repairs.takenAfterUndo(server, gone.id(), group) > 0) {
+				// (DR2 fix, P1-4) as for a site: a survival road a player mined into "restored" stays pending (its stored refund holds them)
+				report(gone.id(), true, "removed " + gone.id() + " reads restored, but players took some of its standing blocks after its removal: it "
+					+ "stays pending (never paid twice)");
+				action = Reconcile.Action.KEEP;
+			}
 			Set<String> scope = action == Reconcile.Action.RECOVER ? recoverScope(levelOf(server, gone.dimension()), gone.id(), group, jobSites) : null;
 			if (action == Reconcile.Action.RECOVER && scope == null) {
 				// (F6) its restore was written, but the stop lost those writes; its group's removal is still in the queue: it writes it again

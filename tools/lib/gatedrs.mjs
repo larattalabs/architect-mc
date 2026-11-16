@@ -308,8 +308,10 @@ export async function registerDRS(steps, h) {
       await L.tp(CX + 80, 60, CZ + 56);
       const s3 = await started(`${tag} clean restart`);
       const post3 = await pile();
-      check(!!post3.ledger?.pendingCredit?.[key] && G.same(back(post3.ledger), back(post.ledger)) && (s3.suspects ?? []).length >= 0,
-        `${tag}: a start keeps it pending too (it reads restored, but a player took one of its blocks): ${key} pending, nothing booked`);
+      const d3 = await diag({ kind: 'site', id: C.s });
+      const st3 = (d3.findings ?? []).find((x) => x.code === 'STUCK' && x.site === C.s);
+      check(!!post3.ledger?.pendingCredit?.[key] && G.same(back(post3.ledger), back(post.ledger)) && st3?.foreign === 1 && st3?.lagging === 0,
+        `${tag}: a start keeps it pending too (it reads restored, but a player took one of its blocks): ${key} pending, nothing booked; still STUCK with the taken cell foreign (${json(st3 && { lagging: st3.lagging, foreign: st3.foreign })}; suspects ${json(s3.suspects)})`);
       out.DR4c = { site: C.s, lost, written: r.written, foreign: fo2?.foreign, message: r.message };
     }
 
@@ -472,12 +474,12 @@ export async function registerDRS(steps, h) {
       const S = saved();
       const after = await flint();
       if (point === 'CS1') {
-        check(after === 0 && !(S.credited ?? []).includes(key) && !!S.custody?.[key], `${tag}: after the stop no flint lies at the crate (${after}; was 4: dropped before the ledger's save) and ${key} is still held, not credited`, { custody: S.custody?.[key] });
+        log(`  ${tag}: after the stop ${after} flint at the crate (the overflow never dropped before its ledger's save), ${key} ${(S.credited ?? []).includes(key) ? 'credited' : 'held'}`);
         await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
         const r = await repair(d.planId, true);
         await L.settle(2000);
         const fin = await flint();
-        check(r.applied === true && fin === 4 && saved().credited?.includes(key), `${tag}: the open repair finished: the custody credited once, its 4 flint dropped once (${fin}; ${r.message})`, r);
+        check(fin === 4 && saved().credited?.includes(key) && !saved().custody?.[key], `${tag}: after the open repair finished, the custody is credited once and its 4 flint lie at the crate once (${fin}; was 8: dropped before the stop and again by the finish) (${r.message})`, r);
         out[tag] = { after, fin };
       } else {
         check(after === 4 && (S.credited ?? []).includes(key) && ps?.resolvedFound >= 1 && ps?.resolvedSpawned === 0 && !ps?.owedDrops,

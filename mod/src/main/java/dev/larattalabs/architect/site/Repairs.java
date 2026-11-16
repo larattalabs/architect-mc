@@ -148,7 +148,7 @@ public final class Repairs {
 		// (DR2, P1-3) a player's break of a journal-owned cell is marked in its chunk (saved with it): later at its pre-op value, it is mined
 		net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> {
 			if (level instanceof ServerLevel sl && !state.isAir() && (SiteJournal.owned(Sites.dimensionId(sl), pos.asLong()) || SiteJournal
-				.pendingRemovalStands(Sites.dimensionId(sl), pos.asLong(), state))) { // (DR2 fix, P1-4) a stuck removal's standing block too
+				.pendingRemovalStands(Sites.dimensionId(sl), pos.asLong(), state, () -> WorldJournal.beNbt(sl, pos)))) { // (DR2 fix, P1-4) a stuck removal's standing block too
 				MinedCells.World.mark(sl, pos, System.currentTimeMillis());
 			}
 			return true;
@@ -435,10 +435,12 @@ public final class Repairs {
 				unread++; // (DR2) no level, or its chunk not read: never a silent clean
 				continue;
 			}
-			// (DR2 fix, should-fix) every observed cell in the plan id (its state, its record, its mark), not only the lagging positions
-			md.update((w.pos() + "=" + r.get(w.pos()) + "|" + r.pt(w.pos()) + "|" + r.mined(w.pos()) + "|" + r.evicted(w.pos()) + ";").getBytes(
-				StandardCharsets.UTF_8));
-			boolean took = c == RepairCore.Cell.FOREIGN && survival && RepairCore.takenSince(RepairCore.Cell.OK, r.mined(w.pos()), w, true)
+			if (c != RepairCore.Cell.OK) {
+				// (DR2 fix, should-fix) every lagging and foreign cell as observed (its state, its record, its mark) in the plan id, beyond the
+				// first 64 diffs; OK cells change the classification lines when they change (a random tick inside the scope never stales it)
+				md.update((w.pos() + "=" + r.get(w.pos()) + "|" + r.pt(w.pos()) + "|" + markOf(r, w.pos()) + ";").getBytes(StandardCharsets.UTF_8));
+			}
+			boolean took = c == RepairCore.Cell.FOREIGN && survival && RepairCore.takenSince(RepairCore.Cell.OK, markOf(r, w.pos()), w, true)
 				== RepairCore.Cell.FOREIGN && RepairCore.classify(r, w) == RepairCore.Cell.OK;
 			if (took) {
 				taken++;
@@ -478,7 +480,13 @@ public final class Repairs {
 	 */
 	static RepairCore.@Nullable Cell cellOf(RepairCore.Reader r, RepairCore.Want w, boolean survival) {
 		RepairCore.Cell c = RepairCore.classify(r, w);
-		return c == null ? null : RepairCore.takenSince(c, r.mined(w.pos()), w, survival);
+		return c == null ? null : RepairCore.takenSince(c, markOf(r, w.pos()), w, survival);
+	}
+
+	/** (DR2 fix) A cell's mark, else its chunk's newest dropped mark (it may have been one of them), else -1. */
+	static long markOf(RepairCore.Reader r, long pos) {
+		long m = r.mined(pos);
+		return m >= 0 ? m : r.evicted(pos);
 	}
 
 	/** {@link Sites#diagnose}: read-only, after the start's settles. */
@@ -1217,7 +1225,7 @@ public final class Repairs {
 			int[] budget = {Integer.MAX_VALUE};
 			for (RepairCore.Want x : RepairCore.removalWants(js, site, group)) {
 				LevelReader r = readerFor(srv, readers, x.dim(), budget, new HashSet<>());
-				if (r != null && r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) && RepairCore.takenSince(RepairCore.Cell.OK, r.mined(x.pos()),
+				if (r != null && r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) && RepairCore.takenSince(RepairCore.Cell.OK, markOf(r, x.pos()),
 					x, true) == RepairCore.Cell.FOREIGN) {
 					n++;
 				}
@@ -1239,7 +1247,7 @@ public final class Repairs {
 			for (RepairCore.Want x : w) {
 				LevelReader r = readerFor(srv, readers, x.dim(), budget, loaded);
 				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) || cellOf(r, x, survival) != RepairCore.Cell.OK
-					|| x.pt() != null && !r.pt(x.pos())) { // (DR2 fix, P1-5) a restored player's record missing: not settled
+					|| x.pt() != null && dev.larattalabs.architect.placed.TrackingRule.on && !r.pt(x.pos())) { // (DR2 fix, P1-5) a restored player's record missing: not settled
 					return false;
 				}
 			}

@@ -176,6 +176,8 @@ class RepairDR2FixTest {
 			+ "the full refund: a dupe)");
 		assertEquals(RepairCore.Cell.OK, Repairs.cellOf(r, w, false), "creative: no refund, it settles");
 		assertEquals(RepairCore.Cell.OK, Repairs.cellOf(reader(a, 900, -1), w, true), "a mark before the undo is about an earlier owner");
+		assertEquals(RepairCore.Cell.FOREIGN, Repairs.cellOf(reader(-99, -1, 1200), w, true), "its mark evicted after the undo (the chunk's "
+			+ "watermark): it may have been taken, never settled on a guess");
 	}
 
 	// ------------------------------------------------------------------ P1-5: a stacked upper's want carries the lower's restored record

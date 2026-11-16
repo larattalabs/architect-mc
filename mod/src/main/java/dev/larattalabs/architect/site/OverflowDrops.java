@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  * entities loaded with none spawns it. Never spawned before that.</li>
  * </ol>
  * The same window existed for every keyed refund (a single removal's deconstruct, a group member's, a road's, a delta's, a put-down's
- * take-ups, the start's pending credits), not only a repair's booking: all go through it. Server thread.
+ * take-ups, the start's pending credits, a region's keyed charge and scoop), not only a repair's booking: all go through it. Keyless
+ * give-backs (a swap's old block, a bucket, RL's reconcile) still drop at once (leftover). Server thread.
  */
 final class OverflowDrops {
 	private OverflowDrops() {
@@ -179,8 +180,8 @@ final class OverflowDrops {
 	 * leave the ledger in that save, after its chunk and entity writes are durable. A refused save discards the items again.
 	 */
 	static void spawnOwed(MinecraftServer srv) {
-		if (spawning || srv == null || !srv.isSameThread()) {
-			return;
+		if (spawning || srv == null || !srv.isSameThread() || Stockpiles.savingOff(srv) != null) {
+			return; // (/save-off: the items' save would write nothing; they stay owed until saving is on)
 		}
 		List<Spawned> round = new ArrayList<>();
 		for (Stockpiles.Pile p : Stockpiles.all()) {

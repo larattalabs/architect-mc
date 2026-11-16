@@ -154,7 +154,8 @@ public final class SiteJournal {
 	 * (DR2 fix, P1-4) Whether {@code pos} is a cell of a removal still pending (its record kept unsettled: a stuck removal) whose placed block
 	 * still stands there ({@code now} holds the undone entry's {@code after}): a player's break of it is the player's, never a repair's.
 	 */
-	public static boolean pendingRemovalStands(String dimension, long pos, net.minecraft.world.level.block.state.BlockState now) {
+	public static boolean pendingRemovalStands(String dimension, long pos, net.minecraft.world.level.block.state.BlockState now,
+		java.util.function.Supplier<net.minecraft.nbt.@Nullable CompoundTag> nbt) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return false;
@@ -171,7 +172,7 @@ public final class SiteJournal {
 				SectionCells sc = s.section(id, key);
 				int k = sc == null ? -1 : sc.find(i);
 				Journal.Value after = k < 0 ? null : sc.after(k);
-				if (after != null && WorldJournal.holds(now, () -> null, after)) {
+				if (after != null && WorldJournal.holds(now, nbt, after)) {
 					return true;
 				}
 			} catch (IOException e) {

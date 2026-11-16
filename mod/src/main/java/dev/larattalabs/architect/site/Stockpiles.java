@@ -1285,7 +1285,7 @@ public final class Stockpiles {
 				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
 			}
 		}
-		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		dropKeyed(srv, p, key, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
@@ -1320,8 +1320,8 @@ public final class Stockpiles {
 		Map<String, Integer> over = new TreeMap<>();
 		StockLedger.Credit c = scoopInto(p.ledger, key, lavaSources, grates, cap, Stockpiles::maxStack, over);
 		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
-		dropOverflow(srv, p, over, fb);
-		dropOverflow(srv, p, c.overflow(), fb);
+		dropKeyed(srv, p, key, over, fb);
+		dropKeyed(srv, p, key, c.overflow(), fb); // (DR2 fix) a keyed credit: owed in the ledger, dropped after its save
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
@@ -1572,6 +1572,18 @@ public final class Stockpiles {
 		dropOverflow(srv, p, c.overflow(), fallback);
 		changed(p);
 		return c;
+	}
+
+	/**
+	 * (DR2 fix, P1-1) A keyed booking's overflow: owed in the ledger under {@code key} (spawned after the save that writes it,
+	 * {@link OverflowDrops}); keyless, or the ledger never saved this session, dropped now.
+	 */
+	static void dropKeyed(MinecraftServer srv, Pile p, @Nullable String key, Map<String, Integer> over, BlockPos fallback) {
+		if (key == null || loadFailed) {
+			dropOverflow(srv, p, over, fallback);
+		} else if (!over.isEmpty()) {
+			p.ledger.oweDrop(key, over, dropAt(srv, p, fallback).asLong());
+		}
 	}
 
 	static void dropOverflow(MinecraftServer srv, Pile p, Map<String, Integer> over, BlockPos fallback) {
