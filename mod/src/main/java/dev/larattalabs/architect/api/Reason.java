@@ -66,7 +66,7 @@ package dev.larattalabs.architect.api;
  * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
  * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
  * (single designs only); (PT2) {@code adopted_polish} (an adopted build's entry is changed by versionOf, never polished); (7c CS,
- * since NEXT) {@code composite} (a composite, or one of its hidden modules, gets no new versions: polish, versionOf and revert are
+ * since 1.65.0) {@code composite} (a composite, or one of its hidden modules, gets no new versions: polish, versionOf and revert are
  * refused; a variant or re-skin of it is a new composite entry).</li>
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
