@@ -31,6 +31,7 @@ import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as P from './lib/pay-ledger.mjs';
 import * as S2 from './lib/pay-stage2.mjs';
+import { abSheet as abSheetLib } from './lib/pay-sheet.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -865,25 +866,8 @@ subs['p4-sheet'] = async () => {
 /** R: the reserve is retries only: every item's command takes --retry (charged to R, one per item; the guard refuses a second). */
 subs.r = async () => { console.log('R: no command of its own. Re-run an item\'s command with --retry (and --scn/--attempt where it takes them): its jobs are charged to R, at most one retry per item (tools/lib/pay-ledger.mjs guard).'); };
 
-/** A blind A/B sheet: per pair, the two arms as A and B (sides randomised), the key in its own file (never on the sheet). */
-function abSheet(item, out, pairs, title, intro) {
-  const dir = path.join(out, 'ab');
-  fs.mkdirSync(dir, { recursive: true });
-  const key = {};
-  const html = [`<!doctype html><meta charset="utf-8"><title>${title}</title>`, '<style>body{font:16px system-ui;margin:24px;max-width:1200px}.row{display:flex;gap:12px}figure{flex:1;margin:0}img{width:100%;border:1px solid #888}pre{white-space:pre-wrap;font-size:12px;border:1px solid #888;padding:8px;max-height:600px;overflow:auto}</style>', `<h1>${title}</h1><p>${intro}</p>`];
-  pairs.forEach((p, i) => {
-    const flip = crypto.randomBytes(1)[0] & 1;
-    key[p.pair] = flip ? { A: 'off', B: 'on' } : { A: 'on', B: 'off' };
-    const cell = (side) => { const arm = p[key[p.pair][side]];
-      // (several pictures per arm: the same views in the same order on both sides)
-      if (arm.imgs?.length) return `<figure>${arm.imgs.filter((f) => fs.existsSync(f)).map((f, j) => { const n = `pair-${i + 1}-${side}-${j + 1}${path.extname(f)}`; fs.copyFileSync(f, path.join(dir, n)); return `<img src="${n}">`; }).join('')}<figcaption>${side}</figcaption></figure>`;
-      if (arm.img && fs.existsSync(arm.img)) { const f = `pair-${i + 1}-${side}${path.extname(arm.img)}`; fs.copyFileSync(arm.img, path.join(dir, f)); return `<figure><img src="${f}"><figcaption>${side}</figcaption></figure>`; } return `<figure><pre>${String(arm.text ?? '').replace(/</g, '&lt;')}</pre><figcaption>${side}</figcaption></figure>`; };
-    html.push(`<h2>Pair ${i + 1}</h2><div class="row">${cell('A')}${cell('B')}</div><p>Pick: A / B</p>`);
-  });
-  fs.writeFileSync(path.join(dir, 'sheet.html'), `${html.join('\n')}\n`);
-  writeJson(path.join(out, 'ab-key.json'), { at: new Date().toISOString(), note: `which arm each side shows (on = the references or images on; off = without). Not for Noah until his picks are recorded.`, key });
-  log(`${item} A/B sheet: ${path.join(dir, 'sheet.html')} (${pairs.length} pair(s)); key ${path.join(out, 'ab-key.json')}`);
-}
+/** A blind A/B sheet (tools/lib/pay-sheet.mjs), logged. */
+function abSheet(item, out, pairs, title, intro) { const r = abSheetLib(item, out, pairs, title, intro); log(`${item} A/B sheet: ${r.sheet} (${pairs.length} pair(s), ${r.inlined} image(s) inlined${r.missing.length ? `, ${r.missing.length} missing` : ''}); key ${r.key}`); return r; }
 function report2(item, backend, res) {
   const L = P.readLedger(LEDGER);
   log(`${item} (${backend}) done; ${backend === 'claude' ? `${item} spent $${L.items[item].spentUsd} of its ceiling $${P.ceilingOf(item)}; ledger $${L.totalUsd}` : '$0 (sim)'}; ${path.join(outOf(item, backend), `${item.toLowerCase()}.json`)}`);
