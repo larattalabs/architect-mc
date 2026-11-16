@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { kitReuse, SHARED_MIN_FILES } from '../../tools/lib/kit-reuse.mjs';
+import { kitReuse, SHARED_MIN_FILES, suiteEnv } from '../../tools/lib/kit-reuse.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const LIB = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tools', 'lib', 'kit-reuse.mjs')).href;
@@ -136,4 +136,11 @@ process.stdout.write(JSON.stringify({ reused: r?.reused ?? null }));
   const rs = await Promise.all([one(), one(), one()]);
   assert.equal(fs.readFileSync(counter, 'utf8').length, 1, 'one shared re-run');
   for (const r of rs) assert.match(r.reused ?? '', /shared kit suite/);
+});
+
+test("the shared re-run gets unit-kit's env: no GATE_KIT_PRODUCER (a kit test inside it never starts or waits on the run's lock)", () => {
+  const e = suiteEnv({ PATH: '/bin', GATE_KIT_PRODUCER: 'TIMEOUT', GATE_KIT_SHARED_DIR: '/x' });
+  assert.equal(e.GATE_KIT_PRODUCER, undefined);
+  assert.equal(e.PATH, '/bin');
+  assert.equal(e.GATE_KIT_SHARED_DIR, '/x');
 });

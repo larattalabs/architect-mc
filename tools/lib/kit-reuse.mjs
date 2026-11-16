@@ -194,9 +194,16 @@ export function sharedSuite(root, tree, { start = false, wait = true, dir = proc
   }
 }
 
+/** (GR-b) the re-run's env: unit-kit's own (no GATE_KIT_PRODUCER, so a kit test inside it never starts or waits on this run's lock). */
+export function suiteEnv(env = process.env) {
+  const e = { ...env };
+  delete e.GATE_KIT_PRODUCER;
+  return e;
+}
+
 function runSuite(root, junit, timeoutMs) {
   const files = fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).sort().map((f) => `kit/test/${f}`);
-  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), '--test-reporter=dot', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...files], { cwd: root, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 2 ** 20 });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), '--test-reporter=dot', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...files], { cwd: root, env: suiteEnv(), encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 2 ** 20 });
   return { code: r.status };
 }
 
