@@ -222,7 +222,255 @@ public final class SliceFkDev {
 		return o;
 	}
 
+	// ------------------------------------------------------------------ (slice LC3) the removal seal, driven as the first player
+
+	private static net.minecraft.world.item.Item itemOf(String id) {
+		return BuiltInRegistries.ITEM.getValue(Identifier.parse(id));
+	}
+
+	/** What the holder at {@code p} holds: {holder, kind, holds: {item: count}}. */
+	private static JsonObject holderJson(ServerLevel level, BlockPos p) {
+		BlockEntity be = level.getBlockEntity(p);
+		JsonObject o = new JsonObject();
+		o.addProperty("holder", dev.larattalabs.architect.site.RemovalSeal.holder(be));
+		o.addProperty("kind", be == null ? "" : be.getClass().getSimpleName());
+		o.addProperty("block", BuiltInRegistries.BLOCK.getKey(level.getBlockState(p).getBlock()).toString());
+		Map<String, Integer> m = new TreeMap<>();
+		java.util.function.Consumer<ItemStack> add = st -> {
+			if (!st.isEmpty()) {
+				m.merge(BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), Integer::sum);
+			}
+		};
+		if (be instanceof Container c) {
+			for (int i = 0; i < c.getContainerSize(); i++) {
+				add.accept(c.getItem(i));
+			}
+		} else if (be instanceof net.minecraft.world.level.block.entity.LecternBlockEntity l) {
+			add.accept(l.getBook());
+		} else if (be instanceof net.minecraft.world.level.block.entity.CampfireBlockEntity cf) {
+			cf.getItems().forEach(add);
+		}
+		o.add("holds", counts(m));
+		o.addProperty("sealed", dev.larattalabs.architect.site.RemovalSeal.sealed(level, p));
+		return o;
+	}
+
+	private static net.minecraft.server.level.ServerPlayer firstPlayer(net.minecraft.server.MinecraftServer s) {
+		var players = s.getPlayerList().getPlayers();
+		if (players.isEmpty()) {
+			throw new DevBridge.DevException("no player");
+		}
+		return players.get(0);
+	}
+
+	private static JsonObject stackJson(ItemStack st) {
+		JsonObject o = new JsonObject();
+		o.addProperty("item", st.isEmpty() ? "" : BuiltInRegistries.ITEM.getKey(st.getItem()).toString());
+		o.addProperty("count", st.isEmpty() ? 0 : st.getCount());
+		return o;
+	}
+
+	/** dev.seal.use: the first player (survival for the call) uses {@code item} on the block at pos, through the server's real use path. */
+	private static JsonObject sealUse(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		net.minecraft.server.level.ServerPlayer pl = firstPlayer(s);
+		String item = req.has("item") ? req.get("item").getAsString() : "";
+		int count = req.has("count") ? req.get("count").getAsInt() : 1;
+		ItemStack st = item.isEmpty() ? ItemStack.EMPTY : new ItemStack(itemOf(item), count);
+		if (req.has("contents")) {
+			java.util.List<ItemStack> in = new java.util.ArrayList<>();
+			req.getAsJsonObject("contents").entrySet().forEach(e -> in.add(new ItemStack(itemOf(e.getKey()), e.getValue().getAsInt())));
+			st.set(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.fromItems(in));
+		}
+		net.minecraft.core.Direction face = req.has("face") ? net.minecraft.core.Direction.byName(req.get("face").getAsString()) : net.minecraft.core.Direction.UP;
+		if (face == null) {
+			throw new DevBridge.DevException("face must be up|down|north|south|east|west");
+		}
+		JsonObject o = new JsonObject();
+		o.add("before", holderJson(level, p));
+		BlockPos next = p.relative(face);
+		o.addProperty("nextBefore", BuiltInRegistries.BLOCK.getKey(level.getBlockState(next).getBlock()).toString());
+		ItemStack prev = pl.getMainHandItem().copy();
+		net.minecraft.world.level.GameType mode = pl.gameMode.getGameModeForPlayer();
+		pl.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+		long refused0 = dev.larattalabs.architect.site.RemovalSeal.REFUSED.values().stream().mapToLong(Long::longValue).sum();
+		try {
+			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, st);
+			var hit = new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(p).relative(face, 0.5), face, p, false);
+			var r = pl.gameMode.useItemOn(pl, level, st, net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+			o.addProperty("result", String.valueOf(r));
+			o.add("hand", stackJson(pl.getMainHandItem()));
+			o.addProperty("menuOpened", pl.containerMenu != pl.inventoryMenu);
+			if (pl.containerMenu != pl.inventoryMenu) {
+				pl.closeContainer();
+			}
+		} finally {
+			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, prev);
+			pl.setGameMode(mode);
+		}
+		o.addProperty("refused", dev.larattalabs.architect.site.RemovalSeal.REFUSED.values().stream().mapToLong(Long::longValue).sum() - refused0);
+		o.add("after", holderJson(level, p));
+		o.addProperty("nextAfter", BuiltInRegistries.BLOCK.getKey(level.getBlockState(next).getBlock()).toString());
+		return o;
+	}
+
+	/** dev.seal.menu: {open?}: opens the holder's menu for the first player (no checks: before a removal), or answers whether it is open and valid. */
+	private static JsonObject sealMenu(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		net.minecraft.server.level.ServerPlayer pl = firstPlayer(s);
+		JsonObject o = new JsonObject();
+		if (req.has("open") && req.get("open").getAsBoolean()) {
+			if (!(level.getBlockEntity(p) instanceof net.minecraft.world.MenuProvider mp)) {
+				throw new DevBridge.DevException("no menu at " + p.toShortString());
+			}
+			pl.openMenu(mp);
+		}
+		if (req.has("close") && req.get("close").getAsBoolean() && pl.containerMenu != pl.inventoryMenu) {
+			pl.closeContainer();
+		}
+		o.addProperty("open", pl.containerMenu != pl.inventoryMenu);
+		o.addProperty("menu", pl.containerMenu.getClass().getSimpleName());
+		o.addProperty("valid", pl.containerMenu.stillValid(pl));
+		o.add("holder", holderJson(level, p));
+		return o;
+	}
+
+	/** dev.seal.frame: the first player (survival for the call) puts {@code item} into the item frame hanging at pos (ItemFrame.interact). */
+	private static JsonObject sealFrame(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		net.minecraft.server.level.ServerPlayer pl = firstPlayer(s);
+		var frames = level.getEntitiesOfClass(net.minecraft.world.entity.decoration.ItemFrame.class, new net.minecraft.world.phys.AABB(p).inflate(1),
+			f -> f.getPos().equals(p));
+		JsonObject o = new JsonObject();
+		o.addProperty("frames", frames.size());
+		if (frames.isEmpty()) {
+			o.addProperty("error", "no item frame at " + p.toShortString());
+			return o;
+		}
+		var fr = frames.get(0);
+		String item = Fields.of(req).nonBlank("item");
+		ItemStack st = new ItemStack(itemOf(item), req.has("count") ? req.get("count").getAsInt() : 1);
+		ItemStack prev = pl.getMainHandItem().copy();
+		net.minecraft.world.level.GameType mode = pl.gameMode.getGameModeForPlayer();
+		pl.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+		try {
+			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, st);
+			o.addProperty("result", String.valueOf(fr.interact(pl, net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.phys.Vec3.ZERO)));
+			o.add("hand", stackJson(pl.getMainHandItem()));
+		} finally {
+			pl.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, prev);
+			pl.setGameMode(mode);
+		}
+		o.add("frameItem", stackJson(fr.getItem()));
+		o.addProperty("sealed", dev.larattalabs.architect.site.RemovalSeal.sealed(level, p));
+		return o;
+	}
+
+	/** dev.seal.transfer: a Fabric Transfer API insert of count item into the holder at pos (from above), committed. */
+	private static JsonObject sealTransfer(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		String item = Fields.of(req).nonBlank("item");
+		long n = req.has("count") ? req.get("count").getAsLong() : 1;
+		JsonObject o = new JsonObject();
+		var storage = net.fabricmc.fabric.api.transfer.v1.item.ItemStorage.SIDED.find(level, p, net.minecraft.core.Direction.UP);
+		if (storage == null) {
+			o.addProperty("error", "no item storage at " + p.toShortString());
+			return o;
+		}
+		try (var tx = net.fabricmc.fabric.api.transfer.v1.transaction.Transaction.openOuter()) {
+			o.addProperty("inserted", storage.insert(net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.of(itemOf(item)), n, tx));
+			tx.commit();
+		}
+		o.addProperty("guardApplied", dev.larattalabs.architect.site.FillGuard.transferGuardApplied());
+		o.add("holder", holderJson(level, p));
+		return o;
+	}
+
+	private static void initSeal() {
+		DevBridge.register("dev.seal.state", 10_000, "{} - (slice LC3) the removal seal: {sealed: [{id, dim, box}], refused: {path: n}, pause: {site: after}}",
+			(req, mc) -> ServerTasks.callOnServer(s -> dev.larattalabs.architect.site.RemovalSeal.stateJson()));
+		DevBridge.register("dev.seal.holder", 10_000, "{pos} - (slice LC3) the item holder at pos: {holder, kind, block, holds, sealed}",
+			(req, mc) -> ServerTasks.callOnServer(s -> holderJson(s.overworld(), posOf(req))));
+		DevBridge.register("dev.seal.use", 30_000, "{pos, item?, count?, contents?: {item: n}, face?: up} - (slice LC3) TEST: the first player (survival for "
+			+ "the call) uses item on the block at pos through ServerPlayerGameMode.useItemOn (Fabric's UseBlockCallback included) -> {before, after, "
+			+ "result, hand, menuOpened, refused, nextBefore, nextAfter}; the player's hand put back after", (req, mc) -> ServerTasks.callOnServer(s -> sealUse(s, req)));
+		DevBridge.register("dev.seal.menu", 30_000, "{pos, open?, close?} - (slice LC3) TEST: opens the holder's menu for the first player (no checks), or "
+			+ "answers {open, menu, valid, holder}", (req, mc) -> ServerTasks.callOnServer(s -> sealMenu(s, req)));
+		DevBridge.register("dev.seal.frame", 30_000, "{pos, item, count?} - (slice LC3) TEST: the first player (survival for the call) puts item into the "
+			+ "item frame hanging at pos (ItemFrame.interact) -> {result, hand, frameItem, sealed}", (req, mc) -> ServerTasks.callOnServer(s -> sealFrame(s, req)));
+		DevBridge.register("dev.seal.transfer", 30_000, "{pos, item, count?} - (slice LC3) TEST: a Fabric Transfer API insert into the holder at pos "
+			+ "(ItemStorage.SIDED from above), committed -> {inserted, guardApplied, holder}", (req, mc) -> ServerTasks.callOnServer(s -> sealTransfer(s, req)));
+		DevBridge.register("dev.removal.pause", 10_000, "{site, after?: cells, off?: bool} - (slice LC3) TEST: pauses site's removal restore (a RestoreJob) "
+			+ "once it has written after cells (0: before any write); off resumes. Kept in the world's architect/dev-removal-pause.json: a restart keeps it "
+			+ "-> dev.seal.state", (req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				int after = req.has("after") ? req.get("after").getAsInt() : 0;
+				boolean off = req.has("off") && req.get("off").getAsBoolean();
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.site.RemovalSeal.armPause(s, site, after, off);
+					return dev.larattalabs.architect.site.RemovalSeal.stateJson();
+				});
+			});
+		DevBridge.register("dev.removal.undoStage", 3_600_000, "{site} - (slice LC, kept by LC3) TEST: undoes the stage holding site as a region revision "
+			+ "undoes its own stage (Groups.undoStage, ownStage), the later placed stages first -> {removed, blockers, refund}", (req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				return ServerTasks.callOnServer(s -> {
+					var rec = dev.larattalabs.architect.site.Sites.get(site);
+					if (rec == null || rec.member() == null) {
+						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
+					}
+					var g = dev.larattalabs.architect.site.Sites.group(rec.member().group());
+					int at = -1;
+					for (int i = 0; g != null && i < g.stages().size(); i++) {
+						if (g.stages().get(i).sites().contains(site)) {
+							at = i;
+						}
+					}
+					if (at < 0) {
+						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
+					}
+					java.util.List<String> order = new java.util.ArrayList<>();
+					for (int i = g.stages().size() - 1; i > at; i--) {
+						var st = g.stages().get(i);
+						if (st.state() == dev.larattalabs.architect.api.Stage.State.PLACED || st.state() == dev.larattalabs.architect.api.Stage.State.PARTIAL) {
+							order.add(st.name());
+						}
+					}
+					order.add(g.stages().get(at).name());
+					String gid = g.id();
+					java.util.concurrent.CompletableFuture<dev.larattalabs.architect.site.Groups.Removed> f = java.util.concurrent.CompletableFuture.completedFuture(null);
+					for (String st : order) {
+						f = f.thenCompose(prev -> prev != null && !prev.removed() ? java.util.concurrent.CompletableFuture.completedFuture(prev)
+							: s.submit(() -> dev.larattalabs.architect.site.Groups.undoStage(s, gid, st, false, dev.larattalabs.architect.site.Sites.Covered.KEEP, true))
+								.thenCompose(x -> x));
+					}
+					return f;
+				}).thenCompose(f -> f).handle((r, ex) -> {
+					JsonObject o = new JsonObject();
+					if (ex != null) {
+						o.addProperty("error", String.valueOf(ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()));
+						return o;
+					}
+					if (r == null) {
+						o.addProperty("error", "no stage holds " + site);
+						return o;
+					}
+					o.addProperty("removed", r.removed());
+					JsonArray b = new JsonArray();
+					r.blockers().forEach(b::add);
+					o.add("blockers", b);
+					o.add("refund", counts(r.refund()));
+					return o;
+				});
+			});
+	}
+
 	public static void init() {
+		initSeal(); // (slice LC3)
 		DevBridge.register("dev.fk.take", 30_000, "{pos: [x, y, z], slot, click: pickup|quick|swap|offhand|throw|throwAll|collect} - (FK-b) TEST: a menu click "
 			+ "on the container as the first player, through the real menu (Slot.mayPickup); answers {before, after, carried, slabsGained, "
 			+ "slabEntitiesGained, containerSlabsLost, restored}; a taken billed item is put back", (req, mc) -> ServerTasks.callOnServer(s -> take(s, req)));

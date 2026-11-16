@@ -271,9 +271,29 @@ public final class Groups {
 		}
 	}
 
-	private static final List<Removal> REMOVALS = new ArrayList<>();
+	private static final RemovalSeal.Counted<Removal> REMOVALS = new RemovalSeal.Counted<>();
 	/** (6c X, C22) Removals that stopped with restorations unfinished (their undo committed): a retry resumes them, it never starts over. */
-	private static final List<Removal> STALLED = new ArrayList<>();
+	private static final RemovalSeal.Counted<Removal> STALLED = new RemovalSeal.Counted<>();
+
+	/** (slice LC3) The removals lists' structural changes so far. */
+	static int sealMods() {
+		return REMOVALS.mods() * 31 + STALLED.mods();
+	}
+
+	/**
+	 * (slice LC3) The ids a group or stage removal seals: running or stalled (a retry resumes it with no new blocker scan), its members not
+	 * yet written and the one being written. All of it is in the queue file.
+	 */
+	static void sealedIds(List<String> out) {
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				out.addAll(r.sites);
+				if (r.current != null) {
+					out.add(r.current);
+				}
+			}
+		}
+	}
 
 	private static @Nullable Removal stalled(String group, @Nullable String stage) {
 		for (Removal r : STALLED) {
@@ -709,6 +729,7 @@ public final class Groups {
 			java.util.Collections.reverse(sites);
 			r.sites.addAll(sites);
 			r.started = true;
+			RemovalSeal.changed(); // (slice LC3) its members sealed from now on
 		}
 		if (r.nextCheck > tick) {
 			return;
@@ -991,6 +1012,7 @@ public final class Groups {
 			top.removeIf(r.sites::contains);
 			ids.addAll(0, top);
 			r.sites.addAll(0, top);
+			RemovalSeal.changed(); // (slice LC3) the cascaded sites sealed before their scan
 			r.cascaded.addAll(top);
 		}
 		while (r.blockerScan < ids.size()) {
@@ -1156,6 +1178,7 @@ public final class Groups {
 		for (String id : r.undoSites) {
 			if (!r.sites.contains(id)) {
 				r.sites.add(0, id); // (a cascaded site: taken first, as planned)
+				RemovalSeal.changed();
 			}
 		}
 		r.handed = new TreeMap<>();

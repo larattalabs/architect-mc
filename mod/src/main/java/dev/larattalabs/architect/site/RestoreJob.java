@@ -272,6 +272,11 @@ final class RestoreJob implements Placement.Job {
 				return false;
 			}
 		}
+		if (RemovalSeal.paused(siteId, writer.progress())) {
+			return false; // (TEST, slice LC3) dev.removal.pause: nothing written this tick
+		}
+		TemplateWriter w0 = writer;
+		writer.stop = () -> RemovalSeal.paused(siteId, w0.progress());
 		TickDeferral.begin(level, held);
 		if (restore != null && restore.mask() != null) {
 			UpdateMask.begin(restore.mask());
@@ -288,6 +293,7 @@ final class RestoreJob implements Placement.Job {
 				}
 			}
 		} finally {
+			writer.stop = null;
 			if (restore != null) {
 				dev.larattalabs.architect.placed.Placed.endRestore();
 			}
@@ -475,6 +481,9 @@ final class RestoreJob implements Placement.Job {
 		}
 		List<SiteJournal.CellWrite> cells = restore.cells();
 		int from = cellCursor;
+		if (RemovalSeal.paused(siteId, cellCursor)) {
+			return false; // (TEST, slice LC3) dev.removal.pause
+		}
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
 			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);

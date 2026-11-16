@@ -205,6 +205,7 @@ public final class Sites {
 			notifyListeners();
 		});
 		Placement.init();
+		RemovalSeal.init(); // (slice LC3) a removal's boxes take no item
 		Builder.init();
 		Adopt.init(); // 6c PT2: adopted builds (its start-time repair runs after the sites and the build index are loaded)
 		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
@@ -241,6 +242,11 @@ public final class Sites {
 	/** (slice FL) The sites map now: replaced on every change (copy-on-write), so a cache keyed on its identity sees every change. */
 	static Object storeIdentity() {
 		return state.byId();
+	}
+
+	/** (slice LC3) The whole sites state now (records and pending records): replaced on every change. */
+	static Object stateIdentity() {
+		return state;
 	}
 
 	public static @Nullable Site get(String id) {
@@ -3446,7 +3452,7 @@ public final class Sites {
 		private int clear(ServerLevel level) {
 			int n = 0;
 			for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, area)) {
-				if (!before.contains(e.getUUID())) {
+				if (!before.contains(e.getUUID()) && !PROTECTED.containsKey(e.getUUID())) {
 					e.discard();
 					n++;
 				}
@@ -3461,8 +3467,22 @@ public final class Sites {
 		}
 
 		private static final List<Object[]> LATER = new ArrayList<>();
+		/** (LC2, F10) Entities a removal drops on purpose (a player's block at its cell): no drop clear takes them for a while. */
+		private static final Map<java.util.UUID, Integer> PROTECTED = new java.util.HashMap<>();
+		/** Ticks a protected drop is spared by every drop clear (a member's clear runs within 3 ticks of its write). */
+		static final int PROTECT_TICKS = 200;
+
+		/** (LC2, F10) Spares {@code e} from every drop clear for {@link #PROTECT_TICKS} ticks (a later member's clear, a clear 3 ticks later). */
+		static void protect(ServerLevel level, Entity e) {
+			PROTECTED.put(e.getUUID(), level.getServer().getTickCount() + PROTECT_TICKS);
+		}
 
 		static void tick() {
+			if (!PROTECTED.isEmpty()) {
+				net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
+				int now = srv == null ? Integer.MAX_VALUE : srv.getTickCount();
+				PROTECTED.values().removeIf(until -> until <= now);
+			}
 			for (var it = LATER.iterator(); it.hasNext();) {
 				Object[] x = it.next();
 				int left = (Integer) x[2] - 1;
@@ -3477,6 +3497,7 @@ public final class Sites {
 
 		static void reset() {
 			LATER.clear();
+			PROTECTED.clear();
 		}
 	}
 

@@ -88,8 +88,10 @@ class StockpileSaveJ1Test {
 		String rb = read(SITE + "RoadBuilder.java");
 		String dm = StockpileSaveHFTest.body(rb, "static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road)");
 		assertTrue(dm.contains("free.get(q)") && dm.contains("Placed.record(level, p) == null"), "only a non-free cell with a PT record");
-		assertTrue(dm.indexOf("cuEquivalent") < dm.indexOf("Builder.dropItems"), "a CU equivalent is kept, not dropped");
-		assertTrue(dm.indexOf("Builder.dropItems") < dm.indexOf("Placed.set(level, p, was"), "dropped, then the before written (a second pass finds nothing)");
+		assertTrue(dm.indexOf("cuEquivalent") < dm.indexOf("Builder.dropAtCell"), "a CU equivalent is kept, not dropped");
+		// (LC2, F10) the before written, then the items dropped on top of it (never inside it), in the same tick (a second pass finds nothing)
+		assertTrue(dm.indexOf("Placed.set(level, p, was") >= 0 && dm.indexOf("Placed.set(level, p, was") < dm.indexOf("Builder.dropAtCell"),
+			"the before written, then dropped on top of it");
 		assertTrue(rb.contains("refundOf(level, road, dropPlayerMatches(level, road))"), "a standalone road's refund leaves them out");
 		String g = read(SITE + "Groups.java");
 		int m = g.indexOf("RoadBuilder.dropPlayerMatches(level, inf)");

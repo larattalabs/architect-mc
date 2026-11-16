@@ -62,7 +62,12 @@ public final class Placement {
 		JsonObject toJson();
 	}
 
-	private static final List<Job> JOBS = new ArrayList<>();
+	private static final RemovalSeal.Counted<Job> JOBS = new RemovalSeal.Counted<>();
+
+	/** (slice LC3) The queue's structural changes so far (a job added or gone): the removal seal follows them. */
+	static int jobMods() {
+		return JOBS.mods();
+	}
 	private static long deadline;
 
 	/** This tick's placement deadline ({@link System#nanoTime}). */
