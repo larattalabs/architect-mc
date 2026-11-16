@@ -23829,7 +23829,8 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs"
    ],
    "verified": "20261023-114540-release t3a-unit"
   },
@@ -24308,6 +24309,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release t3a-probe"
@@ -24787,6 +24789,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release t3a-ingame"
@@ -25266,6 +25269,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release t3a-natural"
@@ -25730,7 +25734,8 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs"
    ],
    "verified": "20261023-114540-release t3a-frozen"
   },
@@ -26209,6 +26214,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release t3a-look"
@@ -46173,7 +46179,8 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/p3-tier.mjs"
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/sp2-norm.mjs"
    ],
    "verified": "20261023-114540-release kc-unit"
   },
@@ -46550,7 +46557,8 @@
     "tools/gate7af.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs"
    ]
   },
   "cw-unit": {
@@ -58716,6 +58724,7 @@
     "tools/lib/f7a-norm.mjs",
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -59166,6 +59175,7 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
@@ -59617,6 +59627,7 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
@@ -60054,6 +60065,7 @@
     "tools/lib/f7a-norm.mjs",
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/src-gradle.mjs"
    ]
   },
@@ -60504,6 +60516,7 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
@@ -72765,6 +72778,7 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release kc-ingame"
@@ -82873,6 +82887,7 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ]
   },
