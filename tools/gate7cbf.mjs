@@ -255,10 +255,15 @@ async function survivalLake(tag, fx, partId) {
   out.region = region;
   const p0 = await C.point('realised');
   // held until supplied: before any feed the crater's target stands unbuilt
+  // (the targets appear once the region is queued; the billed one, the shell, waits for its items: the free ones may build at once)
+  const billed = (rs) => (rs?.targets ?? []).filter((t) => t.part === partId && sum(t.bom) > 0);
+  const w0 = await G.waitFor(ctx, region, (st, rs) => billed(rs).length > 0 || ['PLACED', 'FAILED', 'PARTIAL'].includes(st.view.state), { timeoutMs: 600_000, every: 2000 });
+  await L.sleep(15_000);
   const rs0 = await G.rsState(ctx, region);
-  const held0 = (rs0.targets ?? []).filter((t) => t.part === partId);
-  out.held = held0.map((t) => ({ target: t.target, cells: t.cells, built: t.built, bom: t.bom }));
-  check(held0.length > 0 && held0.every((t) => !t.built), `${tag} (survival): before any item is fed the crater's lake shell is a construction target, not built (held): ${json(out.held.map((t) => [t.target, t.cells, t.built, t.bom]))}`, out.held);
+  const st0 = await L.call('dev.region.state', { region }, 60_000);
+  out.held = { state: st0?.view?.state, targets: (rs0.targets ?? []).filter((t) => t.part === partId).map((t) => ({ target: t.target, cells: t.cells, built: t.built, bom: t.bom })) };
+  check(w0.ok && billed(rs0).length > 0 && billed(rs0).every((t) => !t.built) && st0?.view?.state !== 'PLACED',
+    `${tag} (survival): before any item is fed the lake shell's billed target waits unbuilt (held), the region not PLACED (${st0?.view?.state}): ${json(out.held.targets.map((t) => [t.target, t.cells, t.built, t.bom]))}`, out.held);
   const f = await G.feed(ctx, region, { cons: C, fraction: 0.5, timeoutMs: 2_400_000 });
   const st = f.last.st, rs = f.last.rs;
   out.feed = { waves: f.waves, inserted: f.inserted };
