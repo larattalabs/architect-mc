@@ -82,6 +82,12 @@ and replace stricter habits where they differ (the DEV MODE section below still 
 14. **More parallel slices** (same decision). Keep 6-8 slices in progress at once as files and ports allow, and pre-brief the next
    ones so a free slot never sits empty. Rule 11's once-per-release strict verifier and GPT review are unchanged.
 
+15. **Review per strict slice** (Noah via parent session, 2026-11-16: "Review per strict slice"; he did not pick auto-dropping a
+   failed slice). As soon as a strict slice is built and its targeted strict scenarios pass, the coordinator runs that slice's own GPT
+   review in the background, on its diff only (`codex exec ... -s read-only`, the second-opinion skill's framing), while other work
+   goes on. Its P1 findings are fixed (one fix-verification pass) before the slice joins a batch. Rule 11's per-release GPT review
+   stays: this adds a check and removes none. Light slices get none.
+
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
 
