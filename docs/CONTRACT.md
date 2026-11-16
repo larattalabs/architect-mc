@@ -32734,4 +32734,13 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   tiles of v73, f3/c01 and f3/u05 (coral ponds): fluid-op cells now class 0 (the fluids gate's), their shells now paid, their corals no
   longer paid; creative IRs and every other fixture unchanged. Gradle's `test` now declares kit/lib, the kit helpers and the plan fixtures.
 - **Ran.** Units (full: build.gradle): kit 1484/1484, gradle build PASS (StagedTargetsTest 5, StagedTerrainFoundationTest 5, TerrainOrderTest
-  10, SurvivalWorldTest 3), sidecar green (4 files timed out under load 22-28 and passed alone, 29/29 + 7/7); gitleaks clean. Gate below.
+  10, SurvivalWorldTest 3), sidecar green (4 files timed out under load 22-28 and passed alone, 29/29 + 7/7); gitleaks clean. st-ingame
+  (artifacts/gate-runs-ST/20261116-031304-change, -032158-change, -071816-change): rs01 over raised land (relief at 2/tick), x01 (32,078
+  staged cells at 16/tick), x03's island with no stockpile and x03h (the hamlet) all pass staged targets, the rate, support at every half-built
+  sample, percent, creative twins with no target, twin equality (0 differ), conservation exact and E-flat 0. The typed wait is seen on
+  x03h's props tile (`waitsFor {target c4, part isle, kind terrain, terrainCells 7200, ...}`); no fixture has a lot on a cutting staged pad
+  (their pads cut nothing; rs01's lots start after its relief by the stage chain), so the lot-specific wait is unit-proven only.
+- **Open (WIP): x03h's bill row.** The check bills part `hamlet` 49 dirt, 4 lanterns, 4 oak fences; its targets bill only the lanterns and
+  fences (no target holds the 49 dirt), while the world equals its twin and the conservation sum is exact (nothing minted). Not yet known
+  whether it is pre-existing (BF only ran the island alone in survival) or ST's: next, the same x03h in survival with
+  `-Darchitect.stagedTerrain=false` (TO behaviour), then fix the root cause with a unit test.
