@@ -22,7 +22,7 @@ camp_to_city/camp_city zone.standard fits
 camp_to_city/city_wall connector.wall fits
 castle_city/castle zone.standard adjusted
 castle_city/curtain_wall connector.wall fits
-cat_sanctuary/sanctuary zone.standard adjusted
+cat_sanctuary/sanctuary zone.standard adjusted LOTS_SHORT
 cliff_monks/monastery zone.standard fits
 cliff_monks/sea_stair connector.path fits
 cliff_monks/ledge_path connector.path fits
@@ -35,7 +35,7 @@ desert_jungle_wall/great_wall connector.wall fits
 desert_jungle_wall/two_faced_palette rule.palette refused NO_FEATURE
 dwarven_hold/hold zone.standard fits
 dwarven_hold/mountain_hollow form.hollow_mountain adjusted
-end_city_ruins/city zone.standard adjusted
+end_city_ruins/city zone.standard adjusted LOTS_SHORT
 end_city_ruins/terrace_1 form.terrace fits
 falls_to_ruin/hold zone.standard fits
 farm_village/hamlet zone.standard fits
@@ -43,17 +43,17 @@ fishing_village/village zone.standard fits
 grid_city/grid_city zone.standard fits
 harbour/harbour zone.standard fits
 harvest_hamlet/hamlet zone.standard fits
-hidden_village/hollow zone.standard adjusted
+hidden_village/hollow zone.standard adjusted LOTS_SHORT
 hidden_village/cave_ladders connector.ladder blocked DEPENDENCY
 hidden_village/waterfall_curtain form.waterfall adjusted
 hidden_village/mossy_palette rule.palette refused NO_FEATURE
-ice_village/village zone.standard adjusted
+ice_village/village zone.standard adjusted LOTS_SHORT
 lone_hermit/hermitage zone.standard fits
 looks_old/hold zone.standard fits
 mage_exiles/enclave zone.standard fits
 mage_exiles/shared_stone_base rule.palette refused TOLERANCE
 market_town/town zone.standard fits
-metropolis/capital zone.standard adjusted
+metropolis/capital zone.standard adjusted LOTS_SHORT
 metropolis/city_wall connector.wall fits
 mining_town/mining_town zone.standard fits
 mining_town/street_1 connector.street fits
@@ -69,13 +69,13 @@ old_new_town/town zone.standard fits
 old_new_town/hill_street connector.street fits
 old_new_town/quarter_stair connector.stair refused NO_CLIMB
 old_new_town/two_styles rule.palette refused NO_FEATURE
-one_block/reach zone.standard adjusted
+one_block/reach zone.standard adjusted LOTS_SHORT
 one_block/terraces form.terrace fits
 one_block/blend form.relief fits
 one_block/copper_only rule.palette refused TOLERANCE
 organic_hamlet/hamlet zone.standard fits
 pirate_cove/cove zone.standard fits
-redstone_gate/fortress zone.standard adjusted
+redstone_gate/fortress zone.standard adjusted LOTS_SHORT
 redstone_gate/curtain_wall connector.wall adjusted
 redstone_gate/moat connector.channel fits
 redstone_gate/gate_road connector.road blocked DEPENDENCY
@@ -83,8 +83,8 @@ redstone_gate/main_gate connector.gate blocked DEPENDENCY
 redstone_gate/drawbridge connector.drawbridge blocked DEPENDENCY
 ring_city/ring_town zone.standard fits
 ring_city/crater_lake form.crater fits
-rival_families/west_bank zone.standard adjusted
-rival_families/east_bank zone.standard adjusted
+rival_families/west_bank zone.standard adjusted LOTS_SHORT
+rival_families/east_bank zone.standard adjusted LOTS_SHORT
 row_houses/row zone.standard fits
 row_houses/identical_houses rule.variety unsupported UNSUPPORTED until RC
 row_houses/plain_palette rule.palette refused NO_FEATURE
@@ -100,13 +100,13 @@ sky_monastery/cloister zone.standard fits
 sky_monastery/long_stair connector.stair refused NO_CLIMB
 sky_monastery/sky_island form.floating_island adjusted
 sorting_warehouse/trading_post zone.standard fits
-spiral_town/hill_town zone.standard adjusted
+spiral_town/hill_town zone.standard adjusted LOTS_SHORT
 survival_village/village zone.standard fits
 swamp_stilts/hollow zone.standard refused NO_FEATURE
 swamp_stilts/bridge_coven connector.rope_bridge blocked DEPENDENCY
 swamp_stilts/bridge_circle connector.rope_bridge blocked DEPENDENCY
 swamp_stilts/bridge_perch connector.rope_bridge blocked DEPENDENCY
-terraced_hill/town zone.standard adjusted
+terraced_hill/town zone.standard adjusted LOTS_SHORT
 terraced_hill/switchback_street connector.street blocked DEPENDENCY
 terraced_hill/terraces form.terrace fits
 terraced_hill/blend form.relief fits
@@ -124,7 +124,7 @@ treetop_village/bridge_shop connector.rope_bridge blocked DEPENDENCY
 twin_villages/villages zone.standard fits
 twin_villages/village_road connector.road fits
 two_districts/town_core zone.standard adjusted
-two_districts/crafts_quarter zone.standard adjusted
+two_districts/crafts_quarter zone.standard adjusted LOTS_SHORT
 two_districts/east_street connector.street blocked DEPENDENCY
 underwater_domes/colony zone.standard blocked DEPENDENCY
 underwater_domes/glass_tubes connector.tube unsupported UNSUPPORTED until UW
