@@ -271,7 +271,7 @@ steps.base = async () => {
     await call('dev.survival.set', { on: true });
     await cmd('/kill @e[type=!minecraft:player]');
     await stand(0.5, 0, 0.5, 'spectator');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     fs.writeFileSync(mark, JSON.stringify({ made: new Date().toISOString(), host }));
   }
@@ -855,7 +855,7 @@ steps.once = async () => {
   // the half-done state is the failed restore's: the road's blocks still stand (paid), its refund not credited: still exact
   check(exact(pm), `item 7: conservation difference 0 after the failed removal (${json(pm.diff)})`);
   // save, reload, retry: the removal resumes; the house's key is found, nothing credited twice
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld(W);
   const r2 = await later(`sgremove ${b.group} noforce ${OWNER}`, 600_000);
@@ -935,7 +935,7 @@ steps.restart = async () => {
     // the hard kill (manual: the runner's client can't be killed under it): an autosave, more feeding and building, then kill -9
     await ensure();
     if (!(await call('dev.state')).inWorld) await openWorld(RESTART);
-    await cmd('/save-all');
+    await cmd('/save-all').catch(() => null);
     await sleep(1000);
     const atSave = await cons.parts();
     const totSave = cons.total(atSave);
@@ -1126,7 +1126,7 @@ steps.migrate = async () => {
     out.stock = stock;
     out.s3 = s3state.ledger;
     check(stock.outstanding && Object.keys(stock.outstanding).length > 0 && s3state.state === 'building', `migrate a (${v.version}): a half-built sharedCrate group and a per-site crate (${json(sum(stock.outstanding))} items outstanding)`);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     return out;
   }
@@ -1210,7 +1210,7 @@ steps.migrate = async () => {
     for (const [k, v] of Object.entries(need)) await call('dev.crate.insert', { site: `stockpile:${OWNER}`, items: { [k]: Math.ceil(v / 2) } }, 60_000);
     await sleep(5000);
     fs.writeFileSync(path.join(OUT, 'downgrade-state.json'), JSON.stringify({ site: h.siteId, h0, y, x0, z0 }));
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     return out;
   }
@@ -1370,7 +1370,7 @@ steps.c29restart = async () => {
   await sleep(2000);
   check(await groupState(group) === 'REMOVING' && (await pstate()).targets[A]?.leaving === true, 'item 2: the removal waits for the player; A out of the feed');
   const paidA0 = await paidOf(cons, A);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld(W);
   await call('dev.survival.set', { on: true });
@@ -1536,7 +1536,7 @@ steps.c29pause = async () => {
   check(exact(p1), `item 3: conservation exact (${json(p1.diff)})`);
   // the state survives a reload
   const orderBefore = (await pstate()).feedOrder;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld(W);
   await call('dev.survival.set', { on: true });

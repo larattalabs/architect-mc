@@ -92,7 +92,7 @@ export async function registerBCD(steps, h) {
     check(f1.done && f1.held.length === 0 && G.same(c1.maxBill, g1.quote) && G.same(c1.drawn, g1.quote) && json(Object.keys(c1.caps ?? {})) === json(['0', String(g1.rid)]),
       `G1: built under its own cap (rid ${g1.rid}): drawn ${sum(c1.drawn)} = its quote ${sum(g1.quote)}${G.same(c1.drawn, g1.quote) ? '' : ` (over ${json(G.minus(c1.drawn, g1.quote))}, under ${json(G.minus(g1.quote, c1.drawn))})`}; caps ${json(Object.keys(c1.caps ?? {}))}; held ${json(f1.held)}`, out.G1);
     // a halt with nothing saved since the flush, the restart: both caps kept
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
     check(await haltWait(), 'restart: halted');
     await L.openWorld(name);

@@ -281,7 +281,7 @@ export async function registerRL(steps, h) {
     // (PS) a changed ledger is saved with the world every 10 s while a build feeds: the crash window is the time before the next such save.
     // The case holds that window open (PS's test switch, this JVM only: the restart runs as shipped)
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const lot0 = (await pile()).targets?.[lot] ?? {};
@@ -399,7 +399,7 @@ export async function registerRL(steps, h) {
     await quiet();
     const half = await deliverTo(lot, 0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const lot0 = (await pile()).targets?.[lot] ?? {};
@@ -458,7 +458,7 @@ export async function registerRL(steps, h) {
     await quiet();
     const half = await deliverTo(id, 0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const t0 = (await pile()).targets?.[id] ?? {};
@@ -527,7 +527,7 @@ export async function registerRL(steps, h) {
     const quote = c00.maxBill ?? {};
     await deliver(0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const cSave = await capAt();

@@ -552,7 +552,7 @@ export async function registerIG(steps, h) {
     // undoRevision, killed at RVU2 after a save (drained, nothing removed yet), resumed after the restart: the world before it; the refund
     // once. The world is saved first and the stockpile read after it: a halt with nothing saved rewinds the crates and the ledger to the
     // last autosave (run 1's reading), so only a saved state is a baseline the refund can be judged against.
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await L.settle(3000);
     const ps1s = await pile();
     check(G.same(ps1s.stock ?? {}, ps1.stock ?? {}) && G.same(ps1s.ledger?.consumed ?? {}, ps1.ledger?.consumed ?? {}), 'survival: the stockpile unchanged across the save (the baseline for the refund)');

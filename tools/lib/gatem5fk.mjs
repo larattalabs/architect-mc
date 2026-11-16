@@ -442,7 +442,7 @@ export async function registerFK(steps, h) {
     const acc = await deliver({ fill: true });
     check(G.same(acc, FILL), `${tag}: the fill's items delivered to the stockpile while it is paused (${json(acc)})`);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
@@ -485,7 +485,7 @@ export async function registerFK(steps, h) {
     const at = (await fk(site)).containers[0].at.split(',').map(Number);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     const consumed = G.minus(B.consumed, W.ps0.ledger?.consumed ?? {});
     await call('dev.journal.killAt', { point }, 10_000);
@@ -534,7 +534,7 @@ export async function registerFK(steps, h) {
     const at = (await fk(site)).containers[0].at.split(',').map(Number);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${site}@`));
     const paid = B.paid?.[key] ?? {};

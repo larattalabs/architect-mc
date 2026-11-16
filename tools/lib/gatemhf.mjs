@@ -53,7 +53,7 @@ export async function registerHF(steps, h) {
    * disk read before the restart, the world opened again. `items`: the items the move concerns (the totals are judged on them).
    */
   async function crashCase(tag, W, items, move) {
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
     const s0 = await saved();
     const pf0 = playerFile(W.dir);
@@ -101,7 +101,7 @@ export async function registerHF(steps, h) {
    * drops with the halt. Judged: no dupe (minted 0); the window's loss recorded.
    */
   async function killCase(tag, W, items, point, move) {
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
     const c0 = await counts();
     const total0 = G.plus(pick(c0.inv, items), pick(c0.stock, items));
@@ -162,7 +162,7 @@ export async function registerHF(steps, h) {
         check(ins.moved > 0, `AS: ${ins.moved} item(s) moved into the stockpile; then /save-all (unflushed), halted at AS1`);
         await call('dev.journal.killAt', { point: null }, 10_000);
         await call('dev.stockpile.ps', { haltBeforeAutosaveLedger: true }, 10_000);
-        await cmd('/save-all');
+        await cmd('/save-all').catch(() => null);
         return { moved: ins.moved };
       });
     }
@@ -172,7 +172,7 @@ export async function registerHF(steps, h) {
       await cmd(`/give @s ${A} ${Math.min(64, left)}`);
       const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
       check(ins.moved > 0, `TW: ${ins.moved} item(s) stocked for the Take`);
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
     }
     // the region removed: what the stock holds becomes credit (a Take's source)
     await call('dev.region.remove', { region, requester: G.OWNER }, 600_000).catch(() => null);

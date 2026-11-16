@@ -40,6 +40,9 @@ public final class StockpileDev {
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
 		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session; (PS) the "
 			+ "periodic saves (count, last, max, median ms), unsaved, loadFailed (and why), the format this build writes");
+		op("dev.stockpile.save", "save", "{} - (S-M5-19) a save barrier: Stockpiles.saveWithWorld on the server thread (the players, the chunks flushed, then "
+			+ "<world>/architect/stockpiles.json); answers when the file is written -> written, path, bytes, saves (a world with no stockpile keeps "
+			+ "no file: written false, why); fails when stockpiles.json failed to load this session or the write failed");
 		op("dev.stockpile.ss", "ss", "{probe?: bool} - (SS) TEST: probe: the region-file durability cases with the mixins applied (first open, clean flush, "
 			+ "write then flush, a failed force retried, a failed close then a reopen, an oversized chunk, the device barrier, a dirty imposter, an "
 			+ "earlier save's writes forced before the ledger); else the force, skip and barrier counters and the files not durable now");

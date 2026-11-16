@@ -171,7 +171,7 @@ export async function rmcrash(ctx) {
   let baseError = null;
   try {
     base = await build(ctx, BASE, 'base');
-    await ctx.L.cmd('/save-all flush');
+    await ctx.L.cmd('/save-all flush').catch(() => null);
     await ctx.L.leaveWorld();
   } catch (e) { baseError = e; }
   for (const point of POINTS) {

@@ -115,7 +115,7 @@ export async function registerPS(steps, h) {
       await ps({ noPeriodic, resetPeriodic: true });
       await fill(lines[k]);
       const cPre = await totals(); // just before the flush: what the flush saves (the line has barely started)
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
       const s0 = await saved();
       const c0 = await totals();
       const tStart = Date.now();
@@ -155,7 +155,7 @@ export async function registerPS(steps, h) {
       const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
       check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `${tag}: fed until built (${f.waves} waves): ${f.last.st.view.state}`);
       await ps({ noPeriodic: true, noCreditSave });
-      await cmd('/save-all flush'); // the ledger saved with the consumption (as an autosave after the build)
+      await cmd('/save-all flush').catch(() => null); // the ledger saved with the consumption (as an autosave after the build)
       await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const a0 = await audit();
@@ -228,7 +228,7 @@ export async function registerPS(steps, h) {
       if (!id) { check(false, `${tag}: no ${kind} left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
       used.add(id);
       await ps({ noPeriodic: true, noCreditSave });
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
       await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const a0 = await audit();

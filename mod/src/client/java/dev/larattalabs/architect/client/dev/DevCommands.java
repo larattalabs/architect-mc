@@ -119,7 +119,8 @@ public final class DevCommands {
 			return serverCommand(mc, "weather " + type);
 		});
 		DevBridge.register("dev.command", 30_000, "{cmd, asPlayer?: false} - run a command as the player with full permissions (asPlayer: with the "
-			+ "player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result}",
+			+ "player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result}; a command that "
+			+ "did not run (unknown, incomplete, not permitted: no result) answers ok: false with the error text, plus cmd, messages, success: false",
 			(req, mc) -> {
 				Fields f = Fields.of(req);
 				boolean asPlayer = f.optBool("asPlayer", false);
@@ -885,6 +886,11 @@ public final class DevCommands {
 
 	// ------------------------------------------------------------------ dev.command
 
+	/** (S-M5-19) The error text of a command that never ran: the command and what it answered (vanilla's parse error). */
+	public static String notRun(String cmd, List<String> messages) {
+		return "dev.command: '" + cmd + "' did not run (no result: unknown, incomplete or not permitted)" + (messages.isEmpty() ? "" : ": " + String.join(" | ", messages));
+	}
+
 	public static CompletableFuture<JsonObject> serverCommand(Minecraft mc, String cmd) {
 		return serverCommand(mc, cmd, false);
 	}
@@ -940,9 +946,12 @@ public final class DevCommands {
 					o.addProperty("success", success.get());
 					o.addProperty("result", result.get());
 				} else {
-					// No result callback means the command failed to parse/execute.
+					// No result callback: the command did not parse or run (unknown, incomplete, not permitted; on the integrated client
+					// the dedicated-only commands such as /save-all and /op are unknown). (S-M5-19) ok: false with the error text; the reply
+					// still carries cmd, messages, success: false and result: null.
 					o.addProperty("success", false);
 					o.add("result", JsonNull.INSTANCE);
+					throw new DevException(notRun(cmd, messages), o);
 				}
 				return o;
 			});

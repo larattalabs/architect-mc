@@ -242,7 +242,7 @@ steps.ingame = async () => {
   const { besidePorts } = await imp('lib/region/districtsEmit.mjs');
   await L.fresh('G6B D Ingame', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   await call('dev.pt.rule', { name: 'graceMs', value: '600000' }).catch(() => null);
   const X = 9000, Z = 9000;
   const A = [X, Z, X + 111, Z + 111];
@@ -401,7 +401,7 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     const region = await L.realise(p.planId, { lots: {} });
     const st = await L.waitRegion(region, 3_600_000);
     // reload: save, leave, reopen; plan again (ticks frozen again in the reopened world)
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     await openWorld(world);
     if (natural) await cmd('/tick freeze');

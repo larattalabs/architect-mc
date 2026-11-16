@@ -370,7 +370,7 @@ steps['flat-permission'] = async () => {
   const b = await brush({ ...req, actor: 'me' });
   if (b.region) await undo(b.region);
   check(b.reason === 'PERMISSION', `item 4: PLAYER_BLOCKS by a player without permission level 2 refused PERMISSION (${b.refused})`);
-  await cmd(`/op ${who}`);
+  await cmd(`/op ${who}`).catch(() => null);
   check(perm.permission2 === false && (await call('dev.brush.perm')).permission2 === true, `the player's permission level 2 off (/deop) then on again (/op): ${perm.permission2} -> true`);
   const list1 = (await call('dev.region.list')).regions?.length ?? 0;
   const wh1 = await boxHash(w.min, w.max);

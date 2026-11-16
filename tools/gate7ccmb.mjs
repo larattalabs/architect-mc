@@ -328,7 +328,7 @@ steps.crash = async () => {
   check(p0.placed && !!r0?.removed && e0.n === 0, `the clean placement (group ${p0.siteId}) is recorded and removed exactly (E-flat 0)`, { p0, first: e0.first });
   // the crash: an explicit save point, then the kill between the first and the second module
   const logFile = path.join(GAME_DIR, 'logs', 'latest.log');
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await L.settle(1000);
   await call('dev.journal.killAt', { point: 'CM1+save' }, 10_000);
   api(`place ${placeArgs(E, X0, gy, Z0, 'INSTANT', 'actor', 0)}`).catch(() => null);

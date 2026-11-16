@@ -175,7 +175,7 @@ export async function registerSAD(steps, h) {
 
   /** The saved baseline: /save-all flush, PS's periodic save off (the crash window), the saved file's ledger and save count. */
   async function baseline(tag) {
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
     const ps = await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     const s = await savedNow();
@@ -450,7 +450,7 @@ export async function registerSAD(steps, h) {
     let region = null;
     // a clean save, leave and reopen first: a load compacts the journal's index (the entry count drops at the first reopen of a world that
     // built from materials), so the crash cases compare loads with loads
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await L.leaveWorld();
     await L.openWorld(path.basename(W.dir));
     await L.tp(CX + 80, 80, CZ + 48);

@@ -2138,6 +2138,35 @@ public final class Stockpiles {
 					o.addProperty("format", FORMAT);
 					return o;
 				}
+				case "save" -> {
+					// (S-M5-19) a save barrier that works on the integrated client (where /save-all is not a command): an explicit ledger save
+					// with the world (players, chunks flushed, then stockpiles.json), on this, the server thread; answers once the file is written
+					Path d = dir;
+					if (d == null) {
+						throw new IllegalStateException("dev.stockpile.save: no world is open");
+					}
+					if (loadFailed) {
+						throw new IllegalStateException("dev.stockpile.save: not saved: " + FILE + " failed to load this session (" + loadFailedWhy + "); the file is kept as it is");
+					}
+					int before = saves;
+					saveWithWorld(srv);
+					Path f = d.resolve(FILE);
+					boolean written = saves > before;
+					if (!written && !(PILES.isEmpty() && !Files.exists(f))) {
+						throw new IllegalStateException("dev.stockpile.save: " + f + " was not written (the log says why)");
+					}
+					o.addProperty("written", written);
+					o.addProperty("path", f.toString());
+					try {
+						o.addProperty("bytes", Files.exists(f) ? Files.size(f) : 0L);
+					} catch (IOException e) {
+						throw new java.io.UncheckedIOException(e);
+					}
+					o.addProperty("saves", saves);
+					if (!written) {
+						o.addProperty("why", "no stockpile in this world: no file is kept");
+					}
+				}
 				case "ss" -> {
 					// (SS, TEST) the region-file durability probe, with the mixins applied (SaveProbe)
 					if (req.has("probe") && req.get("probe").getAsBoolean()) {

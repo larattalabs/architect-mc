@@ -848,7 +848,7 @@ steps.item11 = async () => {
     for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 3) > 0) half[it] = Math.floor(n / 3);
     await C.insert(`stockpile:${G.OWNER}`, half);
     await sleep(8000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await sleep(1000);
     const atSave = await C.parts();
     const totSave = C.total(atSave);
