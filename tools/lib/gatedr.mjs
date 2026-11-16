@@ -315,7 +315,7 @@ export async function registerDR(steps, h) {
     await L.tp(XL + 0.5, gy + 40, 11400.5);
     await started('DR13 restart');
     const NB = [XL - 6, y0, 11540, XL - 1, y1, 11545];
-    const rn = await call('dev.cells.place', { kind: 'dr:test', policy: 'BOX', fill: { min: NB.slice(0, 3), max: NB.slice(3) , state: 'minecraft:stone_bricks' }, overlap: 'LAYER', force: true }, 600_000);
+    const rn = await call('dev.cells.place', { kind: 'dr:test', policy: 'BOX', fill: { min: NB.slice(0, 3), max: NB.slice(3), state: 'minecraft:stone_bricks' }, naturalOnly: false, overlap: 'LAYER', force: true }, 600_000);
     check(rn.placed === true, `DR13: a newer placement N over G's west half (${rn.siteId ?? json(rn.refusals)})`);
     const hN = await hash(NB);
     const r13 = await repair(dG.planId, true);
