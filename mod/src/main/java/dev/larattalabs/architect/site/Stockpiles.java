@@ -98,6 +98,8 @@ public final class Stockpiles {
 	static final java.util.ArrayDeque<Double> PERIODIC_MS = new java.util.ArrayDeque<>();
 	/** (PS, TEST) the gate's before-the-fix cases: the periodic save off; a finished undo's refund not saved at its credit. */
 	static volatile boolean testNoPeriodic, testNoCreditSave;
+	/** (DR-S, TEST) every explicit save with the world refused (SS's refusal), until turned off. */
+	static volatile boolean testRefuseSave;
 	/** (RL, TEST) RL's save when a target joins the feed off: set with {@code noPeriodic}, unless {@code joinSave} says otherwise. */
 	static volatile boolean testNoJoinSave;
 	/** (PS) the next saveWithWorld is the periodic one (not logged at INFO). Server thread. */
@@ -2244,6 +2246,9 @@ public final class Stockpiles {
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
 					}
+					if (req.has("refuseSave")) {
+						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
+					}
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
@@ -2262,6 +2267,7 @@ public final class Stockpiles {
 						}
 					}
 					o.addProperty("noPeriodic", testNoPeriodic);
+					o.addProperty("refuseSave", testRefuseSave);
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -2816,6 +2822,10 @@ public final class Stockpiles {
 	static void saveWithWorld(MinecraftServer srv) {
 		boolean quiet = quietSave;
 		quietSave = false;
+		if (testRefuseSave && !quiet) {
+			// (DR-S, TEST dev.stockpile.ps refuseSave) as SS refuses an explicit save whose chunk writes are not durable: nothing written
+			throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
+		}
 		if (loadFailed) {
 			refusedSave();
 			return; // (PS, F6) nothing of the stockpiles is written this session

@@ -86,13 +86,13 @@ class StockpileSaveJ1Test {
 	@Test
 	void roadsDropAPlayersMatchingBlockAsTheirs() throws Exception {
 		String rb = read(SITE + "RoadBuilder.java");
-		String dm = StockpileSaveHFTest.body(rb, "static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road)");
+		String dm = StockpileSaveHFTest.body(rb, "static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road, boolean apply)"); // (DR-S: find, then apply)
 		assertTrue(dm.contains("free.get(q)") && dm.contains("Placed.record(level, p) == null"), "only a non-free cell with a PT record");
 		assertTrue(dm.indexOf("cuEquivalent") < dm.indexOf("Builder.dropItems"), "a CU equivalent is kept, not dropped");
 		assertTrue(dm.indexOf("Builder.dropItems") < dm.indexOf("Placed.set(level, p, was"), "dropped, then the before written (a second pass finds nothing)");
 		assertTrue(rb.contains("refundOf(level, road, dropPlayerMatches(level, road))"), "a standalone road's refund leaves them out");
 		String g = read(SITE + "Groups.java");
-		int m = g.indexOf("RoadBuilder.dropPlayerMatches(level, inf)");
+		int m = g.indexOf("RoadBuilder.dropPlayerMatches(level, inf, false)"); // (DR-S) found for the tally, dropped after the credits' save
 		assertTrue(m >= 0 && m < g.indexOf("RoadBuilder.refundOf(level, inf, dropped)"), "a group's road refund leaves them out");
 	}
 
