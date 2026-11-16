@@ -668,7 +668,7 @@ export class Regions {
    * Run `node <kit>/tools/region.mjs <args>` in the plan sandbox: reads the kit, the plan dir (and `extraReads`), writes
    * the plan dir only, no network, a minimal environment, a heap cap and a wall-clock limit. The last JSON line of stdout.
    * ((WR2) `cpu`: the limit is the child's CPU time, not the wall clock (a loaded machine stretched a 24 s CPU plan to 105 s of wall
-   * time and it was cut off at 120 s), with a wall-clock backstop, planWallBackstopMs, so a hung run still stops.)
+   * time and it was cut off at 120 s), with a wall-clock backstop, planWallBackstopMs (config regionPlanWallMs overrides it), so a hung run still stops.)
    */
   private async runKit(dir: string, args: string[], o: { timeoutMs: number; heapMb: number; extraReads?: string[]; what: string; writeDir?: string; cpu?: boolean }): Promise<KitRun> {
     const t0 = Date.now();
@@ -681,7 +681,7 @@ export class Regions {
     if (o.timeoutMs <= 0) return { ok: false, message: `no time was left for the ${o.what}`, ms: 0 };
     const reads = [kit, dir, ...(o.extraReads ?? [])];
     const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${o.writeDir ?? dir}`, `--max-old-space-size=${o.heapMb}`, '--disallow-code-generation-from-strings', `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
-    const wallMs = o.cpu ? planWallBackstopMs(o.timeoutMs) : o.timeoutMs;
+    const wallMs = o.cpu ? Math.max(o.timeoutMs, this.cfg.planWallMs ?? planWallBackstopMs(o.timeoutMs)) : o.timeoutMs;
     const r = await run(process.execPath, [...flags, script, ...args], { cwd: dir, env: minimalEnv(), timeoutMs: wallMs, ...(o.cpu ? { cpuLimitMs: o.timeoutMs } : {}) });
     const out = lastJson(r.stdout);
     if (r.timedOut) return { ok: false, message: kitTimeoutMessage(o.what, { cpu: !!o.cpu, limitMs: o.timeoutMs, wallMs, hit: r.limit ?? 'wall', cpuMs: r.cpuMs, elapsedMs: ms() }), ms: ms() };

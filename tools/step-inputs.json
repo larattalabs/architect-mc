@@ -236,6 +236,7 @@
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
     "kit/test/wall-wr.test.mjs",
+    "kit/test/wall-wr2.test.mjs",
     "kit/test/wl.test.mjs",
     "kit/test/ws.test.mjs"
    ],
@@ -749,6 +750,7 @@
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
     "kit/test/wall-wr.test.mjs",
+    "kit/test/wall-wr2.test.mjs",
     "kit/test/wl.test.mjs",
     "kit/test/ws.test.mjs",
     "kit/tools/BlockDump.java",
@@ -1776,6 +1778,7 @@
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
     "kit/test/wall-wr.test.mjs",
+    "kit/test/wall-wr2.test.mjs",
     "kit/test/wl.test.mjs",
     "kit/test/ws.test.mjs",
     "kit/tools/components.mjs",
