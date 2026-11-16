@@ -169,9 +169,10 @@ test('CLI from another repo\'s cwd: acquire, status --json, release; the default
   assert.equal(a.status, 0, a.stderr);
   const r = JSON.parse(a.stdout);
   assert.equal(r.slot, 1);
-  assert.equal(JSON.parse(fs.readFileSync(slotFile(dir, 1), 'utf8')).worktree, cwd);
+  // realpaths: the child's cwd is the resolved path (macOS: a TMPDIR under /var is /private/var)
+  assert.equal(fs.realpathSync(JSON.parse(fs.readFileSync(slotFile(dir, 1), 'utf8')).worktree), fs.realpathSync(cwd));
   const s = JSON.parse(cli('status', '--json').stdout);
-  assert.equal(s.dir, dir);
+  assert.equal(fs.realpathSync(s.dir), fs.realpathSync(dir));
   assert.deepEqual(s.holders.map((x) => [x.who, x.label, x.pid]), [['steward', 'e2e-client-1', h.pid]]);
   assert.ok('reserving' in s.turbo && 'queued' in s.turbo && Array.isArray(s.queue));
   assert.equal(cli('release', '--ticket', r.ticket).status, 0);
