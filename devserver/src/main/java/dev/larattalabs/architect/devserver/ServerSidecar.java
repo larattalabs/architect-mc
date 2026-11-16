@@ -661,11 +661,11 @@ public final class ServerSidecar implements ClientBridge {
 		try {
 			Path trash = Blueprints.gameDataDir().resolve("library-trash");
 			Files.createDirectories(trash);
-			// (7c CS) a composite's hidden module entries go with it, after it (as on a client)
+			// (7c CS) a composite's hidden module entries go with it, after it (as on a client); one another composite also lists stays
 			List<String> modules = dev.larattalabs.architect.site.Composites.modulesToDelete(id, e.json(), m -> {
 				Blueprints.Entry me = Blueprints.entry(m);
 				return me == null || me.dir() == null ? null : me.json();
-			});
+			}, dev.larattalabs.architect.site.Composites.librarySidecars()).modules();
 			long now = System.currentTimeMillis();
 			Files.move(e.dir(), trash.resolve(e.blueprint().id() + "-" + now), StandardCopyOption.ATOMIC_MOVE);
 			for (String m : modules) {

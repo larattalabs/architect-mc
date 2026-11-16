@@ -112,13 +112,35 @@ class ApiCSTest {
 		assertTrue(CompositeInfo.ofExt(c.getAsJsonObject("ext")).isPresent(), "the test's wire is a well-formed CompositeInfo");
 		Map<String, JsonObject> lib = Map.of("keep__west", module("keep__west", "keep"), "keep__centre", module("keep__centre", "keep"),
 			"keep__east", module("keep__east", "other")); // east claims another composite: left alone
-		assertEquals(List.of("keep__west", "keep__centre"), Composites.modulesToDelete("keep", c, lib::get));
-		assertEquals(List.of(), Composites.modulesToDelete("cabin", new JsonObject(), lib::get), "a plain entry takes nothing with it");
+		Map<String, JsonObject> all = Map.of("keep", c, "keep__west", lib.get("keep__west"), "keep__centre", lib.get("keep__centre"),
+			"keep__east", lib.get("keep__east"));
+		assertEquals(List.of("keep__west", "keep__centre"), Composites.modulesToDelete("keep", c, lib::get, all).modules());
+		assertEquals(Map.of(), Composites.modulesToDelete("keep", c, lib::get, all).shared());
+		assertEquals(List.of(), Composites.modulesToDelete("cabin", new JsonObject(), lib::get, all).modules(), "a plain entry takes nothing with it");
 		assertNull(Composites.deleteRefusal("keep", c));
 		assertNull(Composites.deleteRefusal("cabin", new JsonObject()));
 		String why = Composites.deleteRefusal("keep__west", module("keep__west", "keep"));
 		assertNotNull(why);
 		assertTrue(why.contains("hidden module of composite keep"), why);
+	}
+
+	/**
+	 * (7c CS, v0.74.0 review P1 #5) Composites A and B both list module M, M.compositeOf = A: deleting A must not trash M (B would be
+	 * left installed but unusable). M stays and is reported as shared with B; A's own unshared module still goes.
+	 */
+	@Test
+	void aModuleAnotherCompositeAlsoListsStaysWhenItsOwnerIsDeleted() {
+		JsonObject a = composite("a", "a__m", "a__own");
+		JsonObject b = composite("b", "a__m", "b__own");
+		Map<String, JsonObject> lib = Map.of("a", a, "b", b, "a__m", module("a__m", "a"), "a__own", module("a__own", "a"),
+			"b__own", module("b__own", "b"));
+		Composites.ModuleDeletion d = Composites.modulesToDelete("a", a, lib::get, lib);
+		assertEquals(List.of("a__own"), d.modules(), "the shared module is not trashed");
+		assertEquals(Map.of("a__m", List.of("b")), d.shared(), "the shared module is reported with the composite that still uses it");
+		// deleting B (M is A's, not B's) takes only B's own module, and nothing is shared
+		Composites.ModuleDeletion db = Composites.modulesToDelete("b", b, lib::get, lib);
+		assertEquals(List.of("b__own"), db.modules());
+		assertEquals(Map.of(), db.shared());
 	}
 
 	/**

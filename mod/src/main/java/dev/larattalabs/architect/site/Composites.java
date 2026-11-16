@@ -108,22 +108,62 @@ public final class Composites {
 	}
 
 	/**
+	 * (7c CS) What a composite's delete does with its modules: {@code modules} go to the trash with it, {@code shared} stay (each one a
+	 * module this composite lists and owns that a surviving composite also lists: trashing it would leave that composite unusable).
+	 */
+	public record ModuleDeletion(java.util.List<String> modules, java.util.Map<String, java.util.List<String>> shared) {
+	}
+
+	/**
 	 * (7c CS) The hidden module entry ids a composite's delete takes with it (its CompositeInfo's modules, each marked with this
 	 * composite in {@code compositeOf}); empty for any other entry. {@code moduleJson} reads a module's sidecar (null: not in the
-	 * library), so a module id another composite claims, or a missing one, is left alone. Pure but for the reader.
+	 * library), so a module id another composite claims, or a missing one, is left alone. {@code library} is every library entry's
+	 * sidecar by entry id: a module that any other composite there also lists is kept (in {@code shared}, with the composites that
+	 * list it), whatever its {@code compositeOf} says. Every surviving composite is checked before anything moves. Pure but for the reader.
 	 */
-	public static java.util.List<String> modulesToDelete(String entryId, @Nullable JsonObject sidecar,
-		java.util.function.Function<String, @Nullable JsonObject> moduleJson) {
+	public static ModuleDeletion modulesToDelete(String entryId, @Nullable JsonObject sidecar,
+		java.util.function.Function<String, @Nullable JsonObject> moduleJson, java.util.Map<String, ? extends @Nullable JsonObject> library) {
 		CompositeInfo ci = info(sidecar);
 		if (ci == null) {
-			return java.util.List.of();
+			return new ModuleDeletion(java.util.List.of(), java.util.Map.of());
+		}
+		java.util.Map<String, java.util.List<String>> usedBy = new java.util.HashMap<>();
+		for (java.util.Map.Entry<String, ? extends @Nullable JsonObject> other : library.entrySet()) {
+			if (entryId.equals(other.getKey())) {
+				continue;
+			}
+			CompositeInfo oi = info(other.getValue());
+			if (oi == null) {
+				continue;
+			}
+			for (String m : oi.moduleEntryIds()) {
+				usedBy.computeIfAbsent(m, k -> new java.util.ArrayList<>()).add(other.getKey());
+			}
 		}
 		java.util.List<String> out = new java.util.ArrayList<>();
+		java.util.Map<String, java.util.List<String>> shared = new java.util.LinkedHashMap<>();
 		for (String m : ci.moduleEntryIds()) {
 			JsonObject j = moduleJson.apply(m);
-			if (isModule(j) && entryId.equals(j.get(COMPOSITE_OF).getAsString())) {
+			if (!isModule(j) || !entryId.equals(j.get(COMPOSITE_OF).getAsString())) {
+				continue;
+			}
+			java.util.List<String> others = usedBy.get(m);
+			if (others != null) {
+				java.util.List<String> sorted = new java.util.ArrayList<>(others);
+				java.util.Collections.sort(sorted);
+				shared.put(m, java.util.List.copyOf(sorted));
+			} else {
 				out.add(m);
 			}
+		}
+		return new ModuleDeletion(java.util.List.copyOf(out), java.util.Collections.unmodifiableMap(shared));
+	}
+
+	/** (7c CS) Every library entry's sidecar by entry id, for {@link #modulesToDelete}'s shared-module check. Any thread. */
+	public static java.util.Map<String, JsonObject> librarySidecars() {
+		java.util.Map<String, JsonObject> out = new java.util.HashMap<>();
+		for (Blueprints.Entry e : Blueprints.entries()) {
+			out.put(e.blueprint().id(), e.json());
 		}
 		return out;
 	}
