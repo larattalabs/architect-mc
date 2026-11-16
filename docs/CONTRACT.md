@@ -31246,6 +31246,23 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **Release-review fix (v0.72.0 GPT review, 2 blockers):** (1) `Fills.atStart` runs at START_SERVER_TICK (`Builder.fillsAtStart`), before any level ticks, so an FK3 replay's hopper can't push before the reconcile; and `FillGuard` asks `Fills.guardedSite` (FILLING too), so the declared containers of a site saved mid-fill stay guarded. (2) `Fills.providedFits`: provided items go only into the template's declared block, never a dropper or dispenser; a swapped live block blocks the fill (it waits, `SWAP_REFUSED`), `writeBack` returns no provided item there (destroyed), and `creative` skips it. Gate: FK3-eject (fkb-crash; a chest under a declared hopper) and a hopper swapped for a dropper mid-fill (fkb-survival, `dev.fk.swap`); units FillsFKBTest +2. Ran after merging main 47630ede (J2's `settlePendingCredits` runs first in the same START-tick `atStart`): unit-scope PASS, step-inputs 426 OK, gitleaks clean; gate change run 20261115-154050 at e8bd209b: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. Verification follow-up (a resized library head moved a rotated site's fill cells): `Fills.world` derives the template size from the site's stored box and rotation (extents swapped for odd turns), never the head; every fill path goes through it. Unit FillsFKBTest +1 (11/0); gate run 20261115-161244 at 3905f771: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. No in-game resize case (it needs a versioned library re-cut; the unit covers the transform).
 - **Leftovers:** an all-provided fill whose blocks all went before its removal never credits (`Stockpiles.credit` returns early), so `provided`/`heldProvided` stay, as FK's `filled` marker does; bundles and drag covered by the code path only.
 
+### Slice LC as built (late cargo on removal, Steward's S-M5-12 and S-M5-13; branch `slice/LC` off origin/main d7d000ca; $0; strict; 2026-11-15)
+
+- **Reproduced first** (hooks + scenario, no fix; run `gate-runs-LC/20261115-222514-change`): 3 diamonds in the input chest (no fill container)
+  and 5 flint in the emptied declared hopper, put in after the custody take, erased by a stage undo; 2 diamonds + 4 bone erased by the region Remove.
+- **Fix (`site/LateCargo.java`):** in the tick a restore writes a site, each container cell it writes (`SiteJournal.Restore.writes`, a new
+  `boxCells` component) not already holding the restored value gives up its stacks, dropped at the site's drop cell and kept from the drop
+  clear: `finishGroupDeconstruct` (group, stage, region, revision removals), `removeDetailed` (atomic, not under `force`), each RestoreJob
+  REMOVE tick (into `dropsBefore`). Stays with the write: a creative declared container within its declaration (FK §5), FK-b provided ids.
+- **Why a drop:** the undo is committed and the records pending before the writes (ending unwritten needs a reverse commit; a retry meets the
+  same cargo); a stockpile credit is capped by `paid[key]`. Take and write share one tick, so items in = items out for any insertion path.
+- **Hooks (TEST, DEVBRIDGE):** `dev.removal.failAfterCustody` (+ kill point `LC1`), `dev.removal.lateCargo`, `dev.removal.state`, `dev.removal.undoStage`.
+- **Gate:** run 20261115-223439 (9a2cd4fa): lc-survival 16/0, fk-crash 58/0, fkb-crash 48/0; run 20261115-230037 (1be055e5): lc-crash 17/0 (LC1:
+  the queued removal resumed, 371 = 371; LC2: unwritten, halt, restart: region stands, hoppers exact, no custody; retry 371 = 371),
+  fk-survival 17/0, fkb-survival 30/0. Units: full Gradle 1338/0 (unit-scope), LateCargoTest 4/0; step-inputs check; gitleaks clean.
+- **Not in game:** the RestoreJob path (large instant sites), removeDetailed's check (no window), Revisions.undo end to end (undoStage(ownStage) is
+  its call). **Leftovers:** Infra (road, cell-site) restores unchecked; drop vs chunk save order as vanilla; FK `writeBack` not saved with chunks.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo

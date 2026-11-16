@@ -394,6 +394,14 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-15 (slice LC, Steward's S-M5-12/S-M5-13; TEST, in `SliceFkDev`, generated headless too):** `dev.removal.lateCargo {site, pos:
+  [x, y, z], items: {item: count}}` arms one injection: the next removal of `site` (a group, stage, region or revision removal, or a
+  single Remove) puts the items into the container at `pos` right after its custody is saved (for a group removal, ticks before its
+  writes): the late-cargo window, hit on purpose. `dev.removal.failAfterCustody {site}` arms: the next removal of `site` ends unwritten
+  right after its custody is saved, the custody written back (FK's path), then kill point `LC1` (`dev.journal.killAt`). Both one-shot, in
+  memory. `dev.removal.state {clear?}` -> `{injectArmed, failArmed, last: {site, items, cells, at} | null}` (the last late cargo handed
+  out). `dev.removal.undoStage {site}`: the stage holding `site` undone as a revision undoes its own stage (`Groups.undoStage`, ownStage; the later placed stages first)
+  -> `{removed, blockers, refund}` or `{error}`.
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,
