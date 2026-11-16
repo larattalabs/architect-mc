@@ -1018,6 +1018,13 @@ steps.look = async () => {
   await registerLC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root });
 }
 
+// ------------------------------------------------------------------ (slice FL) flsurvival: tools/lib/gatem5fl.mjs
+
+{
+  const { registerFL } = await import('./lib/gatem5fl.mjs');
+  await registerFL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM });
+}
+
 // ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs
 
 {
