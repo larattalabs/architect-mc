@@ -2946,7 +2946,6 @@ public final class Builder {
 				ie.setDefaultPickUpDelay();
 				level.addFreshEntity(ie);
 				Sites.Drops.protect(level, ie);
-				Sites.Drops.track(level, ie); // TEMP LC2TRACE
 			}
 		}
 	}

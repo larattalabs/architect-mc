@@ -706,7 +706,6 @@ public final class RoadBuilder {
 			dev.larattalabs.architect.placed.Placed.set(level, p, was, Sites.CELL_FLAGS);
 			// (LC2, F10) on top of the before just written, never inside it (vanilla pushed the item out toward a free neighbour: off the cell)
 			Builder.dropAtCell(level, p, items);
-			Architect.LOGGER.info("LC2TRACE road {} player block {} dropped at {} (tick {})", road.id(), items, p.toShortString(), level.getServer().getTickCount());
 			dropped++;
 		}
 		if (!out.isEmpty()) {

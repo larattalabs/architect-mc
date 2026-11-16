@@ -3465,7 +3465,6 @@ public final class Sites {
 		static Drops before(ServerLevel level, Anchors.Bounds box) {
 			Drops d = new Drops(Occupancy.aabb(box).inflate(1));
 			level.getEntitiesOfClass(ItemEntity.class, d.area).forEach(e -> d.before.add(e.getUUID()));
-			Architect.LOGGER.info("LC2TRACE drops before {}: {} item(s) (tick {})", d.area, d.before.size(), level.getServer().getTickCount());
 			level.getEntitiesOfClass(ExperienceOrb.class, d.area).forEach(e -> d.before.add(e.getUUID()));
 			return d;
 		}
@@ -3484,9 +3483,6 @@ public final class Sites {
 			int n = 0;
 			for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, area)) {
 				if (!before.contains(e.getUUID()) && !PROTECTED.containsKey(e.getUUID())) {
-					if (TRACKED.containsKey(e.getUUID())) {
-						Architect.LOGGER.info("LC2TRACE drop clear discards tracked {} at {} (area {})", e.getItem(), e.position(), area); // TEMP
-					}
 					e.discard();
 					n++;
 				}
@@ -3511,26 +3507,7 @@ public final class Sites {
 			PROTECTED.put(e.getUUID(), level.getServer().getTickCount() + PROTECT_TICKS);
 		}
 
-		/** (TEMP LC2TRACE) An entity whose fate is logged for 100 ticks. */
-		static final Map<java.util.UUID, Object[]> TRACKED = new java.util.HashMap<>();
-
-		static void track(ServerLevel level, ItemEntity e) {
-			TRACKED.put(e.getUUID(), new Object[] {e, 100});
-		}
-
 		static void tick() {
-			for (var it = TRACKED.entrySet().iterator(); it.hasNext();) { // TEMP LC2TRACE
-				var x = it.next().getValue();
-				ItemEntity e = (ItemEntity) x[0];
-				int left = (Integer) x[1] - 1;
-				x[1] = left;
-				if (left % 5 == 0 || e.isRemoved()) {
-					Architect.LOGGER.info("LC2TRACE tracked {} {} at {} removed {} ({} ticks left)", e.getUUID(), e.getItem(), e.position(), e.getRemovalReason(), left);
-				}
-				if (left <= 0 || e.isRemoved()) {
-					it.remove();
-				}
-			}
 			if (!PROTECTED.isEmpty()) {
 				net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
 				int now = srv == null ? Integer.MAX_VALUE : srv.getTickCount();
@@ -3551,7 +3528,6 @@ public final class Sites {
 		static void reset() {
 			LATER.clear();
 			PROTECTED.clear();
-			TRACKED.clear();
 		}
 	}
 
