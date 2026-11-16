@@ -598,6 +598,7 @@ public final class RemovalSeal {
 
 	/** (TEST, {@code dev.seal.state}) What is sealed now and the refusals. */
 	public static JsonObject stateJson() {
+		current(); // (LC3 fix 2) the seal set as a check sees it now: a removal that just ended lingers before this answers
 		JsonObject o = new JsonObject();
 		com.google.gson.JsonArray ids = new com.google.gson.JsonArray();
 		for (String id : sealedIds()) {

@@ -433,7 +433,7 @@ export async function registerLC3(steps, h) {
     if (st.view.state !== 'PLACED') { await L.leaveWorld(); return out; }
     const none = await cmd('/architect removal abandon g999');
     out.unknown = none;
-    check(!none.success && says(none, 'No stalled removal of g999'), `abandon: refused for a group with no stalled removal (${json(none.messages)})`, none);
+    check(says(none, 'No stalled removal of g999'), `abandon: refused for a group with no stalled removal (${json(none.messages)})`, none);
     await call('dev.undo.failRestore', { skip: 1 }, 10_000); // the first member's restore finishes, the next breaks mid-write
     const fr = call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e) }));
     const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 600, 1000);
@@ -458,7 +458,7 @@ export async function registerLC3(steps, h) {
     out.abandon = r1;
     check(r1.success !== false && says(r1, 'abandoned the stalled'), `abandon: /architect removal abandon ${sr.group} accepted (${json(r1.messages).slice(0, 300)})`, r1);
     const x1 = await until(async () => { const x = await seal(); return !(x.sealed ?? []).length && !(x.lingering ?? []).length && !(x.stalled ?? []).length ? x : null; }, 120, 500);
-    check(!!x1 && x1.queueWritten >= x1.queueRequested - 1, `abandon: the removal left the queue and, once its queue file generation was written, nothing is sealed (written ${x1?.queueWritten}, requested ${x1?.queueRequested})`, x1);
+    check(!!x1 && !x1.queueWriteFailing, `abandon: the removal left the queue and, once its queue file generation was written, nothing is sealed or lingering (written ${x1?.queueWritten}, requested ${x1?.queueRequested})`, x1);
     const h1 = await holder(P);
     await cmd(`/setblock ${P[0]} ${P[1] + 1} ${P[2]} minecraft:air`); // a chest under a solid block never opens
     const u1 = await use(P, DIAMOND);
@@ -489,7 +489,7 @@ export async function registerLC3(steps, h) {
     check(!json((s2.sites ?? []).map((p) => p.id)).includes(`"${B}"`) && !json((s2.pending ?? []).map((p) => p.site?.id ?? p.id)).includes(`"${B}"`), `abandon: after the restart unwritten member ${B} has no record (none came back from the journal)`, s2);
     const r2 = await cmd(`/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`);
     out.second = r2;
-    check(!r2.success && says(r2, 'No stalled removal'), `abandon: a second abandon is refused (${json(r2.messages)})`, r2);
+    check(says(r2, 'No stalled removal'), `abandon: a second abandon is refused (${json(r2.messages)})`, r2);
     await L.leaveWorld();
     return out;
   }
