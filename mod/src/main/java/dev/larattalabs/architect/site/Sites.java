@@ -1707,9 +1707,11 @@ public final class Sites {
 			if (lc != null) {
 				notes.add(lc);
 			}
+			// (fix b5b, review finding 2) the cargo drops before afterRestore: a stockpile deconstruct's credit save there (saveCreditPending)
+			// flushes the restored chunks and their entities, so the drop is on disk with the emptied containers (kept from the drop clear)
+			LateCargo.drop(level, dropPosOf(x), cargo, drops::keep);
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
 				x.id().equals(id) ? cascade : List.of(), notes);
-			LateCargo.drop(level, dropPosOf(x), cargo, drops::keep);
 			tr.mark("after " + x.id());
 			if (x.id().equals(id)) {
 				last = done;

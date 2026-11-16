@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.journal.Journal.Value;
-import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchors;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -79,38 +78,118 @@ public final class LateCargo {
 		Map<BlockPos, Map<String, Integer>> declared = s == null ? Map.of() : declaredCells(level, s);
 		Set<String> provided = s == null ? Set.of() : providedIds(level, s);
 		boolean instant = s == null || s.construction() == null;
+		Set<BlockPos> own = s == null ? Set.of() : Sites.ownBlockEntities(s);
 		List<String> where = new ArrayList<>();
 		for (BlockPos p : cells) {
 			if (!level.isLoaded(p) || !(level.getBlockEntity(p) instanceof Container c) || c.isEmpty()) {
 				continue;
 			}
 			Value v = r.writes(p.asLong());
-			if (v == null || WorldJournal.holds(level, p.asLong(), v)) {
-				continue; // not this restore's cell, or already written back (its restored contents are the terrain's)
+			if (v == null) {
+				continue; // not this restore's cell
 			}
 			Map<String, Integer> decl = declared.get(p);
 			Map<String, Integer> now = decl == null ? null : Fills.plainCounts(c);
 			if (containerOurs(instant, decl != null, now != null && Fills.within(now, decl))) {
 				continue;
 			}
-			int n = 0;
-			for (int i = 0; i < c.getContainerSize(); i++) {
-				ItemStack st = c.getItem(i);
-				if (st.isEmpty() || stackOurs(decl != null, provided.contains(BuiltInRegistries.ITEM.getKey(st.getItem()).toString()))) {
-					continue;
-				}
-				out.add(c.removeItemNoUpdate(i));
-				n += st.getCount();
+			// (fix b5b, review finding 5) "already restored" is the restored value's contents exactly, not the block alone (ownership's holds
+			// takes any contents for a filled container). Else: at a block entity of the site's own template every item is cargo (the site
+			// wrote that container; the write recreates the terrain's contents from the snapshot); at any other cell (terrain the site left,
+			// or a cell written back already) what the write recreates stays, slot by slot, and everything past it is cargo.
+			Map<Integer, ItemStack> restored = restoredSlots(level, v.nbt());
+			if (sameContents(c, restored)) {
+				continue;
 			}
-			if (n > 0 && c instanceof BlockEntity be) {
+			Map<Integer, ItemStack> want = s == null || own.contains(p) ? Map.of() : restored;
+			Taken t = takeCell(c, want::get, st -> stackOurs(decl != null, provided.contains(BuiltInRegistries.ITEM.getKey(st.getItem()).toString())));
+			out.addAll(t.stacks());
+			if (t.units() > 0 && c instanceof BlockEntity be) {
 				Fills.touched(level, p, be);
-				where.add(p.toShortString() + " (" + n + ")");
+				where.add(p.toShortString() + " (" + t.units() + ")");
 			}
 		}
 		if (!out.isEmpty()) {
 			Architect.LOGGER.warn("Removal of {}: late cargo in its container cells at {}: {} stack(s) handed out at the site, not erased", r.site(), where,
 				out.size());
 			record(r.site(), out, where);
+		}
+		return out;
+	}
+
+	/** (fix b5b) What one container cell gave up: the stacks, and their units counted off the stacks returned. */
+	record Taken(List<ItemStack> stacks, int units) {
+	}
+
+	/**
+	 * (fix b5b, review findings 1 and 5) Takes a container's late cargo: per slot, a stack the write recreates as it is ({@code want} of the
+	 * slot: the same item and components) keeps up to that count (the write puts it back); the rest of the slot, and every slot that is not
+	 * {@code ours}, is taken out. The units are counted off the stacks the container returns, never off the slot's stack after the removal (a
+	 * single-item container, a decorated pot, splits its own stack to zero and returns a new one).
+	 */
+	static Taken takeCell(Container c, java.util.function.IntFunction<@Nullable ItemStack> want, java.util.function.Predicate<ItemStack> ours) {
+		List<ItemStack> out = new ArrayList<>();
+		int units = 0;
+		for (int i = 0; i < c.getContainerSize(); i++) {
+			ItemStack st = c.getItem(i);
+			if (st.isEmpty() || ours.test(st)) {
+				continue;
+			}
+			int n = takeUnits(st, want.apply(i));
+			if (n <= 0) {
+				continue;
+			}
+			ItemStack got = n >= st.getCount() ? c.removeItemNoUpdate(i) : c.removeItem(i, n);
+			if (!got.isEmpty()) {
+				units += got.getCount();
+				out.add(got);
+			}
+		}
+		return new Taken(out, units);
+	}
+
+	/** (pure) Whether {@code c} holds exactly {@code restored}: slot by slot, the same item, components and count; nothing else. */
+	static boolean sameContents(Container c, Map<Integer, ItemStack> restored) {
+		for (int i = 0; i < c.getContainerSize(); i++) {
+			ItemStack st = c.getItem(i), w = restored.get(i);
+			boolean we = w == null || w.isEmpty();
+			if (st.isEmpty() != we || !st.isEmpty() && (!ItemStack.isSameItemSameComponents(st, w) || st.getCount() != w.getCount())) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** (pure) The units of {@code now} to take when the write recreates {@code want} in its slot. */
+	static int takeUnits(ItemStack now, @Nullable ItemStack want) {
+		if (want == null || want.isEmpty() || !ItemStack.isSameItemSameComponents(now, want)) {
+			return now.getCount();
+		}
+		return Math.max(0, now.getCount() - want.getCount());
+	}
+
+	/** The stacks a restored value's block entity data holds, by slot ({@code Items}; a single-item container's {@code item}/{@code RecordItem}: slot 0). */
+	static Map<Integer, ItemStack> restoredSlots(ServerLevel level, net.minecraft.nbt.@Nullable CompoundTag nbt) {
+		return restoredSlots(level.registryAccess().createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), nbt);
+	}
+
+	static Map<Integer, ItemStack> restoredSlots(com.mojang.serialization.DynamicOps<net.minecraft.nbt.Tag> ops, net.minecraft.nbt.@Nullable CompoundTag nbt) {
+		Map<Integer, ItemStack> out = new HashMap<>();
+		if (nbt == null) {
+			return out;
+		}
+		if (nbt.get("Items") instanceof net.minecraft.nbt.ListTag l) {
+			for (net.minecraft.nbt.Tag t : l) {
+				if (t instanceof net.minecraft.nbt.CompoundTag e) {
+					int slot = e.getByteOr("Slot", (byte) 0) & 255;
+					ItemStack.CODEC.parse(ops, e).result().ifPresent(st -> out.put(slot, st));
+				}
+			}
+		}
+		for (String k : new String[] {"item", "RecordItem"}) {
+			if (nbt.get(k) instanceof net.minecraft.nbt.CompoundTag e) {
+				ItemStack.CODEC.parse(ops, e).result().ifPresent(st -> out.put(0, st));
+			}
 		}
 		return out;
 	}

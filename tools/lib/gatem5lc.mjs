@@ -15,6 +15,8 @@
 //                                                      point LC1 (the custody saved, then written back in memory, nothing saved since): the
 //                                                      region Remove halts; after the restart the removal resumes or is asked again: what
 //                                                      came back = consumed, item for item; no custody; none of the fill's items dropped.
+//                                                      (fix b5b) LC3: the hall site removed alone (the atomic path) with late cargo, halted
+//                                                      at CS1 inside its credit's save: the cargo is on disk with the restore.
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -202,6 +204,11 @@ export async function registerLC(steps, h) {
   steps.lccrash = async () => {
     await ensure();
     const out = {};
+    if (process.env.GATE_LC_ONLY === 'lc3') { // (fix b5b) the atomic path's case alone
+      out.LC3 = await cargoAtCreditSave();
+      spendZero();
+      return out;
+    }
     const W = await town('G6B LC Crash');
     if (!W) return out;
     const at = P(W.s.containers[0].at);
@@ -243,9 +250,52 @@ export async function registerLC(steps, h) {
       `LC1: after the restart and the retry the removal ends once (${out.LC1.state}): what came back = what the town consumed, item for item (${sum(back)} = ${sum(consumed)}; differ ${json(out.LC1.diff)}): items in = items out; no custody; none of the fill's items dropped`, out.LC1);
     await L.leaveWorld();
     out.LC2 = await failThenHalt();
+    out.LC3 = await cargoAtCreditSave();
     spendZero();
     return out;
   };
+
+  /**
+   * (fix b5b, the GPT review's finding 2) LC3: the lc_hall site removed on its own (dev.pl.remove: Sites.removeDetailed, the atomic path, a
+   * stockpile deconstruct) with late cargo armed (3 diamonds into its input chest right after the custody take), halted at CS1 inside its
+   * credit's save (the players and the restored chunks with their entities on disk, the ledger not). Before the fix the cargo dropped after
+   * that save: the restart found the chest gone and no diamonds. Judged: exactly the 3 diamonds at the site after the restart (none lost,
+   * none twice); the credit booked once (what came back = the site's paid record); none of the fill's items dropped.
+   */
+  async function cargoAtCreditSave() {
+    const W = await town('G6B LC Crash LC3');
+    if (!W) return null;
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/kill @e[type=item]');
+    await cmd('/save-all flush');
+    const B = savedLedger(W.name);
+    const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${W.site}@`));
+    const paid = B.paid?.[key] ?? {};
+    check(!!key && sum(paid) > 0, `LC3: ${W.site}'s paid record on disk: ${key} (${sum(paid)} units)`);
+    await call('dev.removal.lateCargo', { site: W.site, pos: W.chest, items: { [DIAMOND]: 3 } }, 10_000);
+    await call('dev.journal.killAt', { point: 'CS1' }, 10_000);
+    call('dev.pl.remove', { site: W.site, requester: G.OWNER, force: false }, 600_000).catch(() => null);
+    const down = await haltWait();
+    check(down, 'LC3: the kill point CS1 halted the server inside the removal credit\'s save');
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    const S = savedLedger(W.name);
+    check(!!S.pendingCredit?.[key], `LC3: at the halt the saved ledger holds ${key}'s credit pending`, S.pendingCredit?.[key] ?? null);
+    await L.openWorld(W.name);
+    await L.tp(W.chest[0], W.chest[1] + 2, W.chest[2]);
+    await L.settle(4000);
+    const F = (await pile()).ledger;
+    const back = backOf(F, B);
+    const items = (await call('dev.items.near', { pos: W.chest, radius: 64 }, 60_000)).items ?? {};
+    const ch = await call('dev.fk.container', { pos: W.chest }, 30_000).catch(() => ({ error: 'none' }));
+    const res = { key, paid: sum(paid), back: sum(back), diff: G.minus(back, paid), diamonds: items[DIAMOND] ?? 0, fill: only(items, FK), chest: ch.error ? 'gone' : ch.holds,
+      pending: F.pendingCredit?.[key] ?? null };
+    log(`  LC3 after the restart: ${json(res)}`);
+    check(res.diamonds === 3, `LC3: the late cargo survives the halt inside the credit's save: ${res.diamonds} of 3 diamonds at the site after the restart (none lost, none twice; the chest ${json(res.chest)})`, res);
+    check(G.same(back, paid) && !res.pending && sum(res.fill) === 0,
+      `LC3: the credit booked once: what came back = ${W.site}'s paid record, item for item (${sum(back)} = ${sum(paid)}; differ ${json(res.diff)}); nothing pending; none of the fill's items dropped`, res);
+    await L.leaveWorld();
+    return res;
+  }
 
   /**
    * LC2: dev.removal.failAfterCustody with no kill point: the region Remove answers unwritten (the custody written back in memory), then
