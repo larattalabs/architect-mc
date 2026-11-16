@@ -1046,6 +1046,13 @@ steps.look = async () => {
   await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
 }
 
+// ------------------------------------------------------------------ (slice PSV) psvcrash: tools/lib/gatempsv.mjs
+
+{
+  const { registerPSV } = await import('./lib/gatempsv.mjs');
+  await registerPSV(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
+}
+
 // ------------------------------------------------------------------ (slice BC-d) bcdgrow: tools/lib/gatebcd.mjs
 
 {

@@ -394,6 +394,9 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-16 (slice PSV):** new (`StockpileDev`, generated headless too) `dev.queue.writes {fail?: n}`: TEST, the next n queue file
+  (`architect-queue.json`) writes fail before writing (0 clears) -> `{requestedGen, writtenGen, writeFailing, failWrites, loadFailed}`.
+  A failing write keeps a group removal's (and a removal job's) undo commit waiting; Placement retries every 5 s.
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

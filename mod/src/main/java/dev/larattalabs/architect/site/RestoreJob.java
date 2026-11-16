@@ -52,8 +52,11 @@ final class RestoreJob implements Placement.Job {
 	transient WorldJournal.@Nullable UndoWork work;
 	transient WorldJournal.@Nullable UndoPlanner planner;
 	transient boolean planned;
-	/** The queue save holding {@link #group}, written before the commit is submitted ({@link #groupSaved}). */
-	transient @Nullable CompletableFuture<Void> preSave;
+	/**
+	 * The queue save holding {@link #group} (its generation, {@link Placement#save}; 0: none yet), confirmed written before the commit is
+	 * submitted ({@link #groupSaved}; slice PSV).
+	 */
+	transient long preSave;
 	transient @Nullable CompletableFuture<Object[]> txn;
 	/** A restore's writer, prepared off the server thread for a large site (the template of 600k cells). */
 	transient @Nullable CompletableFuture<Object[]> prepared;
@@ -395,12 +398,17 @@ final class RestoreJob implements Placement.Job {
 	 * site back. With the group saved, {@link #fromJson} asks the journal (UNDONE in that group: written again).
 	 */
 	private boolean groupSaved(MinecraftServer server) {
-		if (preSave == null) {
-			Placement.save(server, false);
-			preSave = Placement.saved();
+		if (preSave == 0) {
+			preSave = Placement.save(server, false);
+			if (preSave == Placement.NOT_SAVED) {
+				// (slice PSV) nothing is saved over a queue file that failed to load: the undo can't be recorded, so none is committed
+				broken = "the queue file (" + Placement.FILE + ") failed to load this session: an undo can't be recorded, so none is committed";
+			}
 			return false;
 		}
-		return preSave.isDone();
+		// (slice PSV) the generation confirmed written (fsynced and renamed), not the saver's turn: a failed write keeps the job waiting while
+		// Placement retries the save every 5 s
+		return Placement.written(preSave);
 	}
 
 	/** A road's or cell site's undo: plan and commit (when this job planned it), the record pending, the cells lowest first over ticks. */

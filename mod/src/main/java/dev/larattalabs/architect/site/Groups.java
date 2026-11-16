@@ -61,8 +61,11 @@ public final class Groups {
 		 */
 		@Nullable String planned;
 		final List<String> plannedSites = new ArrayList<>();
-		/** The queue save holding {@link #planned}, written before the commit is submitted. */
-		transient @Nullable CompletableFuture<Void> preSave;
+		/**
+		 * The queue save holding {@link #planned} (its generation, {@link Placement#save}), written before the commit is submitted (slice
+		 * PSV: a confirmed write, not the saver's turn). 0: none this session (a loaded {@link #planned} is in the file already).
+		 */
+		transient long preSave;
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
 		/** Phase 6a: CELL cells the undo left as they are (the world no longer held what the entry wrote: a player's block). */
@@ -851,6 +854,9 @@ public final class Groups {
 						return;
 					}
 					if (!r.txn.isDone() || !preSaved(server, r)) {
+						if (r.preSave == Placement.NOT_SAVED) {
+							endUnrecorded(server, r);
+						}
 						return;
 					}
 					Object[] built;
@@ -877,6 +883,9 @@ public final class Groups {
 					}
 				} else {
 					if (!preSaved(server, r)) {
+						if (r.preSave == Placement.NOT_SAVED) {
+							endUnrecorded(server, r);
+						}
 						return;
 					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
@@ -1112,11 +1121,42 @@ public final class Groups {
 			r.planned = r.planGroup;
 			r.plannedSites.clear();
 			r.plannedSites.addAll(r.planIds);
-			Placement.save(server, false);
-			r.preSave = Placement.saved();
+			r.preSave = Placement.save(server, false);
 			return false;
 		}
-		return r.preSave == null || r.preSave.isDone();
+		return preSaveWritten(r.preSave);
+	}
+
+	/**
+	 * (slice PSV) Whether a pre-save lets the commit go: none this session (0: the planned undo came from the file), or its generation
+	 * confirmed written (fsynced and renamed). A failed write is not: the removal waits while Placement retries the save every 5 s.
+	 * {@link Placement#NOT_SAVED} (the queue file failed to load this session) never is.
+	 */
+	static boolean preSaveWritten(long gen) {
+		return gen == 0 || Placement.written(gen);
+	}
+
+	/**
+	 * (slice PSV) The queue file failed to load this session, so nothing is saved over it and an undo can't be recorded: the removal ends
+	 * before its commit, unwritten (as a cargo blocker: the custody R1 took is given back and saved with the ledger).
+	 */
+	private static void endUnrecorded(MinecraftServer server, Removal r) {
+		boolean back = false;
+		for (String id : r.planIds) {
+			Site b = Sites.get(id);
+			ServerLevel level = b == null ? null : Sites.levelOf(server, b.dimension());
+			if (level != null && Fills.phase(b) != null) {
+				Fills.writeBack(level, b);
+				back = true;
+			}
+		}
+		if (back) {
+			Stockpiles.saveWithWorld(server);
+		}
+		r.planner = null;
+		r.txn = null;
+		end(server, r, new Removed(false, List.of("the queue file (" + Placement.FILE + ") failed to load this session: an undo can't be recorded, "
+			+ "so none is committed"), Map.copyOf(r.refund)));
 	}
 
 	/**
