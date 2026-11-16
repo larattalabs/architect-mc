@@ -31,7 +31,7 @@ export async function registerSAD(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, growPlan, rvState, rvWait, root, cellsOf, diff, haltWait, removeRegion, ig } = h;
   const ctx = { L, OUT, KIT: path.join(root, 'kit'), imp: h.imp };
   // (BC-c) row 4's growth realises under a maxBill (its quote); every halt's restart reads the cap back
-  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER });
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER, log });
   const OWNER = G.OWNER;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
@@ -367,7 +367,7 @@ export async function registerSAD(steps, h) {
     const c0 = (await pile()).ledger?.consumed ?? {};
     const r = await call('dev.region.realise', { planId: g.planId, lots: entries, maxBill: q.bom }, 300_000); // (BC-c) under its quote
     check(!r.refused, `row 4: the growth realised under its quote as maxBill: ${r.refused ?? r.region}`);
-    caps.track(region);
+    await caps.track(region);
     for (let i = 0; i < 90; i++) { if (sum((await pile()).outstanding) > 0) break; await sleep(2000); }
     const b4 = await baseline('row 4');
     const ps = await pile();

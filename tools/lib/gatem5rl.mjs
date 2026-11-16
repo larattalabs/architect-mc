@@ -29,7 +29,7 @@ export async function registerRL(steps, h) {
   const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait } = h;
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   // (BC-c) RL's crash cases realise under a maxBill (the put-down quote): the reconcile runs inside the running cap
-  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER });
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER, log });
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
   const audit = async () => call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
   const savedNow = async () => call('dev.stockpile.saved', { owner: G.OWNER }, 60_000);

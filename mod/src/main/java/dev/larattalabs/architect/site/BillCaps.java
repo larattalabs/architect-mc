@@ -85,10 +85,14 @@ public final class BillCaps {
 		}
 	}
 
-	/** (BC-d) A record from before BC-d (one region-wide maxBill) moved to its rid's entry; no change otherwise. */
-	static void migrate(JsonObject survival, int headRid) {
+	/**
+	 * (BC-d) A record from before BC-d (one region-wide maxBill) moved to its rid's entry; no change otherwise. (fix b5b, review P2) Run when
+	 * the record loads ({@code RegionRec.fromJson}, with the head it was saved with), so the cap's owner is fixed once: a later head change (an
+	 * undo, a revision) never moves it. Returns whether it moved one.
+	 */
+	public static boolean migrate(JsonObject survival, int headRid) {
 		if (!(survival.get("maxBill") instanceof JsonObject mb)) {
-			return;
+			return false;
 		}
 		int rid = legacyRid(survival, headRid);
 		JsonObject caps = survival.get(CAPS) instanceof JsonObject c ? c : new JsonObject();
@@ -100,6 +104,7 @@ public final class BillCaps {
 		survival.add(CAPS, caps);
 		survival.remove("maxBill");
 		survival.remove("billBase");
+		return true;
 	}
 
 	private static int legacyRid(JsonObject survival, int headRid) {
@@ -322,6 +327,7 @@ public final class BillCaps {
 		}
 		Cap cap = capOf(region, rec.groupId, rid, rec.survival, rec.headRid);
 		o.addProperty("rid", rid);
+		o.addProperty("createdAt", rec.createdAt); // (fix b5b) the record's identity: a gate's expected caps are this record's
 		o.add("maxBill", cap == null ? null : json(cap.max()));
 		o.add("billBase", cap == null ? null : json(cap.base()));
 		JsonObject caps = new JsonObject();
