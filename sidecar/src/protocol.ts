@@ -1704,7 +1704,10 @@ export function toProtocol1(full: Record<string, unknown>): Record<string, unkno
   const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;
   if (full.type === 'design.upsert') full = { ...full, design: v1Status(full.design) };
-  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)).map(v1Status) };
+  // (r074 fix) and any design protocol 1 cannot read (an open type: protocol 1 has the 11 presets only) is left out of the snapshot,
+  // as its design.upsert is: one such design used to make ServerMessageV1 refuse the whole snapshot, so a protocol-1 hello (the
+  // version probe) got no answer at all
+  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)).map(v1Status).filter((d) => DesignV1.safeParse(d).success) };
   const r = ServerMessageV1.safeParse(full);
   return r.success ? (r.data as Record<string, unknown>) : undefined;
 }

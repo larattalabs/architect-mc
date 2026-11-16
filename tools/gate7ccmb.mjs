@@ -284,8 +284,10 @@ steps.ingame = async () => {
   out.survival = { construction: s5, actorless: s6 };
   // (7c CS) the library delete: a hidden module alone refuses; the composite takes its modules to the trash with it
   const mod1 = `${E}__west`;
-  const dm = await result(await api(`delete ${mod1}`), 30_000);
-  const dc = await result(await api(`delete ${E}`), 60_000);
+  // (result() answers the unwrapped value, a boolean here; an immediate answer without a pending key is its {value} object)
+  const val = (x) => (x && typeof x === 'object' && 'value' in x ? x.value : x);
+  const dm = { value: val(await result(await api(`delete ${mod1}`), 30_000)) };
+  const dc = { value: val(await result(await api(`delete ${E}`), 60_000)) };
   await L.settle(1500);
   const libLeft = [E, `${E}__west`, `${E}__centre`, `${E}__east`].filter((id) => fs.existsSync(path.join(LIBRARY, id)));
   check(dm.value === false && dc.value === true && libLeft.length === 0, `delete: the module ${mod1} alone refuses (${dm.value}); the composite deletes (${dc.value}) with its 3 modules (left in the library: ${libLeft.join(', ') || 'none'})`, { dm: dm.value, dc: dc.value, left: libLeft });
