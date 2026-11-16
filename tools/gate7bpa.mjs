@@ -28,6 +28,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as P from './lib/pa-ledger.mjs';
+import { writeSheet } from './lib/sheet-inline.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -563,7 +564,7 @@ function sheet(res) {
     '<style>body{font:16px system-ui;margin:24px;max-width:1100px}figure{display:inline-block;margin:8px;width:48%}img{width:100%;border:1px solid #888}h2{margin-top:32px}</style>',
     '<h1>Treehouse pick sheet</h1><p>Two treehouse designs per pair, each built into the same tree site from the same request. For each pair, pick the one you prefer (A or B), and say why in a few words if you like.</p>',
     ...items.map((it, i) => `<h2>Pair ${i + 1}</h2><figure><img src="${it.A}"><figcaption>A</figcaption></figure><figure><img src="${it.B}"><figcaption>B</figcaption></figure><p>Pick: A / B</p>`)];
-  fs.writeFileSync(path.join(out, 'sheet.html'), `${html.join('\n')}\n`);
+  writeSheet(path.join(out, 'sheet.html'), `${html.join('\n')}\n`); // one self-contained file for Noah (docs/GATES.md "Review sheets")
   writeJson(path.join(out, 'sheet.json'), { pairs: items.map((it, i) => ({ pair: i + 1, A: it.A, B: it.B, pick: null })) });
   log(`P4 sheet: ${path.join(out, 'sheet.html')}; key ${path.join(ART, 'P4', 'ab-key.json')}`);
 }
