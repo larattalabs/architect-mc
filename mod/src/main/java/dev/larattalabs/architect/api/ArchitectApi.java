@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.64.0";
+	String VERSION = "1.65.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -296,7 +296,7 @@ public interface ArchitectApi {
 	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
 	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
 	 * ceiling). An overhang made by the plan's own forms can't host one (the land is read before the plan). No new record, method or reason.
-	 * (7c CS, since NEXT) {@code "invertedDesigns"} is advertised when the helper reads {@link DesignRequest#inverted()} (its
+	 * (7c CS, since 1.65.0) {@code "invertedDesigns"} is advertised when the helper reads {@link DesignRequest#inverted()} (its
 	 * {@code design.inverted}): a design request for such a lot (its {@link SiteSpec}, fit {@link FitMode#SUSPEND}) sets it, and the design job is
 	 * told the lot hangs inverted (its brief's "Inverted lot" section); the entry's recorded request carries it. Without the feature an inverted request is refused, nothing sent.
 	 * (M5 FK, since 1.59.0) {@code "filledContainers"} is advertised when the helper's kit takes a given program's fill (its {@code design.fill}):

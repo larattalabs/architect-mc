@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 24,
- "api": "1.64.0",
- "kitVersion": "0.68.0",
+ "catalogueVersion": 25,
+ "api": "1.65.0",
+ "kitVersion": "0.69.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -1255,7 +1255,7 @@
   },
   {
    "id": "feature.cave",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.65.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "CAVE: a cave the claim's land already has (the site analysis's caves in the template pick's claim window; minFloor, pick largest or nearest to `to`). Only an elevated zone's near locator: its lots are carve_into site lots dug into the cave's walls, the door on the cave floor."

@@ -59,7 +59,7 @@ import org.jspecify.annotations.Nullable;
  *     designed in one pass with no massing of its own (since 1.53.0, 7b SL: in a massingFirst group it waits for the group's massing step,
  *     then designs in the same group), and it has no count or copyOf (its site variants are
  *     {@link Designs#siteVariant}). A versionOf of a site-bound entry without a site is built into the entry's own site
- * @param inverted (7c CS, since NEXT, a helper with {@code "design.inverted"}, feature {@code "invertedDesigns"}) the lot hangs inverted:
+ * @param inverted (7c CS, since 1.65.0, a helper with {@code "design.inverted"}, feature {@code "invertedDesigns"}) the lot hangs inverted:
  *     a {@code rule.suspended} lot (the plan artifact's {@code $.lots[].inverted}, {@link LotSpec}'s lot). The design job is told so
  *     (its brief's Site section: the house is built standing and turned over with {@code bp.invert()}, hung by its old floor from the
  *     site's hang points, the floor furniture written after the flip); the entry's recorded request carries it (its blueprint has
@@ -154,7 +154,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 
 	/**
 	 * (7c CS) A copy for a lot that hangs inverted ({@code true}) or not: see {@link #inverted()}. Needs a suspend site
-	 * ({@link #withSite}). Since NEXT.
+	 * ({@link #withSite}). Since 1.65.0.
 	 */
 	public DesignRequest withInverted(boolean on) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,

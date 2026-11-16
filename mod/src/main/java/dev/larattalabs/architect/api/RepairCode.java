@@ -2,7 +2,7 @@ package dev.larattalabs.architect.api;
 
 /**
  * (DR) What a diagnosis found (docs/CONTRACT.md "Slice DR" §1). Only {@link #LAGGING} cells are ever written by a repair; the rest are
- * reported. New values are appended at the end. Since NEXT.
+ * reported. New values are appended at the end. Since 1.65.0.
  */
 public enum RepairCode {
 	/** The owner's committed value is absent and the cell holds that operation's exact pre-op value: rolled forward by a repair. */

@@ -147,7 +147,7 @@ public final class ApiRules {
 					case "plan.aqueduct" -> "aqueduct"; // 7c AQ: a course past its fill carried on piers or arches (channel.aqueduct; since 1.58.0)
 					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since 1.57.0)
 					case "plan.suspendedBuilds" -> "suspendedBuilds"; // 7c US: plan/0's rule.suspended (an elevated zone's lots hung inverted from overhang ceilings; since 1.58.0)
-					case "design.inverted" -> "invertedDesigns"; // 7c CS: DesignRequest.inverted (an inverted lot's design is told so; since NEXT)
+					case "design.inverted" -> "invertedDesigns"; // 7c CS: DesignRequest.inverted (an inverted lot's design is told so; since 1.65.0)
 					case "plan.shapePromotion" -> "shapePromotion"; // 7c PF: plan/0's promoted forms (form.arch_span, the archSpan module; since 1.61.0)
 					case "design.fill" -> "filledContainers"; // M5 FK: a given program's bp.fill (filled containers and lock cells; since 1.59.0)
 					case "design.fillProvided" -> "fillProvided"; // FK-b: a fill's provided: true items (Limits.FILL_PROVIDED_ITEMS; since 1.64.0)

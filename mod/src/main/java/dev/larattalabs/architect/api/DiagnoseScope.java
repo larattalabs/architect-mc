@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * (DR) What {@link Sites#diagnose} reads: a site, a region (its tiles, roads, lots and targets), the chunks within 4 of a position
- * ({@code here}) or everything. {@code continuation}: from a previous {@link Diagnosis#continuation()} (null: from the start). Since NEXT.
+ * ({@code here}) or everything. {@code continuation}: from a previous {@link Diagnosis#continuation()} (null: from the start). Since 1.65.0.
  */
 public record DiagnoseScope(Kind kind, @Nullable String id, @Nullable ResourceKey<Level> dimension, @Nullable BlockPos center,
 	@Nullable String continuation) {

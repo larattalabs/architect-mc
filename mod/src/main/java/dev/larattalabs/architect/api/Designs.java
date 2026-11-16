@@ -242,7 +242,7 @@ public interface Designs {
 	 * {@code opKey}: the same key returns the same result (also after a restart); another body under it fails
 	 * {@link Reason#OP_KEY_CONFLICT}. Fails {@link ArchitectRefused} {@link Reason#NOT_ALLOWED} for an entry that does not follow:
 	 * detail {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
-	 * {@code adopted} (a copy of an adopted entry), {@code composite} (7c CS, since NEXT: a composite or one of its hidden modules);
+	 * {@code adopted} (a copy of an adopted entry), {@code composite} (7c CS, since 1.65.0: a composite or one of its hidden modules);
 	 * {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. Needs a helper with
 	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
 	 * version. Since 1.51.0. (7b DS, since 1.53.0) A SITE entry follows too: the source's version re-run on the entry's own site, checked
