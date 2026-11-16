@@ -404,25 +404,27 @@ public final class Groups {
 			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, no);
 		}
 		Settle st = settle(r);
-		for (String id : st.unwritten()) {
+		// only a member still pending has records to drop: one standing (a start's settle took it back) or settled already is left alone
+		List<String> drop = st.unwritten().stream().filter(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null).toList();
+		for (String id : drop) {
 			String under = SiteJournal.belowAny(id);
 			if (under != null) {
 				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "Unwritten member " + id + " of " + name + " lies on top of " + under
 					+ ": forget or remove that site first; nothing was changed");
 			}
 		}
-		for (String id : st.unwritten()) {
+		for (String id : drop) {
 			Site s = Sites.pendingRecord(id);
 			ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
 			if (lv != null && Fills.phase(s) != null) {
 				Fills.writeBack(lv, s); // its custody back into its containers (none taken: nothing)
 			}
 		}
-		for (String id : st.unwritten()) {
+		for (String id : drop) {
 			SiteJournal.await(SiteJournal.release(id), "abandoning " + id + "'s removal");
 		}
-		Sites.dropPending(server, st.unwritten());
-		for (String id : st.unwritten()) {
+		Sites.dropPending(server, drop);
+		for (String id : drop) {
 			if (Infras.pending(id) != null) {
 				Infras.drop(server, id);
 			}
@@ -431,8 +433,8 @@ public final class Groups {
 		RemovalSeal.changed();
 		Placement.save(server, false);
 		String line = "Ops: " + by + " abandoned the stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage + " of group " + group)
-			+ ": written " + st.written() + " settled as finished; unwritten " + st.unwritten() + " left standing as they are, their records and journal "
-			+ "entries dropped (nothing replays); its boxes unseal once the queue file is written";
+			+ ": written " + st.written() + " settled as finished; unwritten " + st.unwritten() + " left standing as they are, the pending ones' records "
+			+ "and journal entries dropped " + drop + " (nothing replays); its boxes unseal once the queue file is written";
 		Architect.LOGGER.warn(line);
 		return line;
 	}

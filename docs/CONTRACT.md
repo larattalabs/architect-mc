@@ -31309,7 +31309,7 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **2 ops abandon:** `/architect removal abandon <group> [stage]` (permission level 2 as `/architect survival on|off`, the console too;
   `SiteCommands`). Only a persisted STALLED group or stage removal: its written members are settled as after a normal finish (their pending
   records and undone entries stay; the next start releases them on their evidence); its unwritten members (the one that broke included) stay
-  standing as they are, nothing written: a filled member's custody goes back into its containers (as `end()` does for a removal ended before
+  standing as they are, nothing written; for each still pending (one a start's settle already took back or released is left alone) a filled member's custody goes back into its containers (as `end()` does for a removal ended before
   its undo), their journal entries are released (awaited) and their pending records dropped (`Sites.dropPending`), so no start's settle can
   take them back and no removal restore them again; then it leaves the stalled list, the queue is saved, and its boxes unseal once that
   generation is written (#1). Refusals (nothing changed): "No stalled removal of X (never stalled, finished, retried or already abandoned)"
