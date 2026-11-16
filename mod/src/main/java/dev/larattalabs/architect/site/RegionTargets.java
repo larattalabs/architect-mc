@@ -1532,6 +1532,60 @@ public final class RegionTargets {
 	 */
 	public static final String WAIT_KIND_TERRAIN = "terrain";
 
+	// ------------------------------------------------------------------ (8a TO) the terrain order's inputs
+
+	/** (8a TO) A terrain cell's {@link BuildOrder#forTerrain} role, from its planned after. */
+	static int terrainRole(BlockState after) {
+		if (after.isAir()) {
+			return BuildOrder.T_CUT;
+		}
+		if (Builder.gravity(after)) {
+			return BuildOrder.T_LOOSE;
+		}
+		if (after.is(net.minecraft.tags.BlockTags.LOGS)) {
+			return BuildOrder.T_LOG;
+		}
+		if (after.is(net.minecraft.tags.BlockTags.LEAVES)) {
+			return BuildOrder.T_LEAF;
+		}
+		return Builder.kind(after) == BuildOrder.ATTACHABLE ? BuildOrder.T_REST : BuildOrder.T_FILL;
+	}
+
+	/** (8a TO) What a world block is to {@link BuildOrder#forTerrain}'s land: a log, a leaf, site-solid land, or nothing that bears. */
+	static int terrainLand(BlockState st) {
+		if (st.is(net.minecraft.tags.BlockTags.LOGS)) {
+			return BuildOrder.LAND_LOG;
+		}
+		if (st.is(net.minecraft.tags.BlockTags.LEAVES)) {
+			return BuildOrder.LAND_LEAF;
+		}
+		return Builder.anchorState(st) ? BuildOrder.LAND_SOLID : BuildOrder.LAND_NONE;
+	}
+
+	/**
+	 * (8a TO, docs/CONTRACT.md "Phase 8a" §3) A terrain target's build order ({@link BuildOrder#forTerrain}) from its cells: positions
+	 * ({@link BlockPos#asLong}), planned afters and befores (only cells whose after differs from their before: a carve inside the plan's
+	 * own raised land is air before and after, so it is no cell and is never queued), the world around them as it stands ({@code world}:
+	 * the land, and the same part's cells earlier targets built), and the part's floating anchors (M3's declaration; empty for most).
+	 * Leaves are held by order alone (the INSTANT write is {@code persistent=true}; see the as-built). Slice ST feeds its targets from it.
+	 */
+	static BuildOrder.Terrain terrainOrder(long[] pos, BlockState[] after, BlockState[] before, java.util.function.Function<BlockPos, BlockState> world,
+		List<BlockPos> floating) {
+		int n = pos.length;
+		int[] x = new int[n], y = new int[n], z = new int[n], role = new int[n];
+		boolean[] wasSolid = new boolean[n];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = BlockPos.of(pos[i]);
+			x[i] = p.getX();
+			y[i] = p.getY();
+			z[i] = p.getZ();
+			role[i] = terrainRole(after[i]);
+			wasSolid[i] = Builder.anchorState(before[i]);
+		}
+		int[][] fl = floating.stream().map(b -> new int[] {b.getX(), b.getY(), b.getZ()}).toArray(int[][]::new);
+		return BuildOrder.forTerrain(x, y, z, role, wasSolid, (a, b, c) -> terrainLand(world.apply(new BlockPos(a, b, c))), fl);
+	}
+
 	/**
 	 * (§6.3) Whether a survival region's item must wait for an earlier target to be built (then it waits SITE_BUSY, naming the target and
 	 * its part in its ext, and ITEM_WAITING fires). A tile waits for every earlier stage's target within one tile (a path tile also for
