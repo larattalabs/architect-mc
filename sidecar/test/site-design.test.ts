@@ -173,14 +173,15 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
 
   it('a massingFirst group whose massing fails still designs its site item (a failed massing holds nothing)', async () => {
     const blob = put(h, CLIFF.bytes);
-    const tiny = { type: 'house', style: 'rustic', features: [], maxSize: { x: 11, y: 10, z: 11 }, itemKey: 'tiny' };
+    // (CW2) the sim's lot stand-in now fits an 11x10x11 box, so the massing fails by sim:fail
+    const tiny = { type: 'house', style: 'rustic', features: [], maxSize: { x: 11, y: 10, z: 11 }, notes: 'sim:fail', itemKey: 'tiny' };
     const sited = { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'cliff', site: { ...CLIFF.spec, volumeBlobId: blob } };
     const a = await call(h, { type: 'design.group', group: { name: 'mf5', bible: 'rustic', massingFirst: true, items: [tiny, sited] } });
     expect(a.error).toBeUndefined();
     const gid = a.result!.groupId as string;
     await until(() => ['done', 'failed'].includes(h.sc.groups.get(gid)!.status), 300_000);
     const g = h.sc.groups.get(gid)!;
-    expect(g.items.find((x) => x.itemKey === 'tiny')!.status, 'the sim massing refuses the 11x10x11 cap').toBe('failed');
+    expect(g.items.find((x) => x.itemKey === 'tiny')!.status, 'the sim massing fails (sim:fail)').toBe('failed');
     expect(g.items.find((x) => x.itemKey === 'cliff')!.status).toBe('done');
     expect(g.status).toBe('done');
   });
