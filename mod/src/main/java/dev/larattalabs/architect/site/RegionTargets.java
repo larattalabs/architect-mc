@@ -1164,7 +1164,7 @@ public final class RegionTargets {
 	 * paid neighbours, each cell written as the tile writes it. Only blockers stop a started run (a player or a mob in a cell, an
 	 * unloaded chunk, a support not built yet), never materials: they are reserved.
 	 */
-	static void stepFed(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Builder.Purse purse, long ticks) {
+	static void stepFed(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Builder.@Nullable Purse purse, long ticks) {
 		Plan pl = planOf(srv, t);
 		if (pl == null) {
 			return;
@@ -1324,7 +1324,7 @@ public final class RegionTargets {
 	 * wrote nothing for {@link #TERRAIN_STALL} turns while no other staged target of its part wrote either (a cell nothing will ever
 	 * support: the plan's own floating block) is released: the rest is written in its order, unsupported, so the region completes.
 	 */
-	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.Purse purse, long ticks) {
+	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.@Nullable Purse purse, long ticks) {
 		int budget = terrainLeft(t.group(), ticks);
 		if (budget <= 0) {
 			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
@@ -1374,7 +1374,9 @@ public final class RegionTargets {
 				if (sibs == null) {
 					sibs = RegionOverwrites.lives(srv, t.group(), t.id());
 				}
-				RegionOverwrites.retake(sibs, p, now, purse::giveBack, RoadBuilder.dropAt(t), t.id()); // (XR) a block another writer paid for goes back
+				// (XR) a block another writer paid for goes back (to the stockpile; with none, dropped at the cell)
+				RegionOverwrites.retake(sibs, p, now, purse != null ? purse::giveBack : (items, fb) -> Builder.dropItems(level, fb, items, null), RoadBuilder.dropAt(t),
+					t.id());
 			}
 			write(level, r, q, p);
 			budget--;

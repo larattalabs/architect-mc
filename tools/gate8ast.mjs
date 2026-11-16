@@ -11,7 +11,7 @@
 //                           the world (TO's rules read live), percent under 100 while terrain is unbuilt and 100 at the end, a terrain
 //                           part `building`; rs01 (relief, a rock spire, pads with two lots, a held terrace): a lot waits SITE_BUSY with
 //                           architect_mc:waitsFor {kind: "terrain", part, terrainCells, terrainBuilt}; x01 (the hollow mountain); x03's
-//                           island alone (a floating form from its anchor). Then: every staged target's bill empty, the check's bills per
+//                           island alone (a floating form from its anchor), its owner with no stockpile (an all-free plan needs none). Then: every staged target's bill empty, the check's bills per
 //                           part equal to the targets' (items in = items out: the conservation sum exact), the final world equal to its
 //                           INSTANT twin cell for cell (block entities included; the crates aside), Remove E-flat 0
 //     report                REPORT.md over the step JSONs
@@ -113,7 +113,7 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false } = {}) 
   const out = { tag, overall: ck.check?.overall, survival: ck.check?.survival, entries, twin: T };
   check(ck.check?.survival === true && ['READY', 'NEEDS_REPAIR'].includes(ck.check?.overall) && !!ck.check?.artifactSha, `${tag}: Regions.checkPlan in survival: ${ck.check?.overall}, ${json((ck.check?.parts ?? []).map((a) => [a.part, a.class, a.cost?.survival?.free, a.cost?.survival?.held, sum(a.cost?.survival?.bom)]))}`);
   if (!ck.check?.artifactSha) return out;
-  const crateAt = await G.pile(ctx, s, crates);
+  const crateAt = crates > 0 ? await G.pile(ctx, s, crates) : []; // (crates 0: no stockpile, an all-free plan needs none)
   const C = new G.Conservation(ctx, box);
   await C.start();
   const region = await G.realise(ctx, ck.check.artifactSha, entries);
@@ -209,7 +209,7 @@ steps.ingame = async () => {
   if (want('x03')) {
     const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
     delete isle.plan.zones;
-    try { out.x03 = await staged('x03', isle, { over: 96, crates: 1 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
+    try { out.x03 = await staged('x03', isle, { over: 96, crates: 0 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
   }
   return out;
 };
