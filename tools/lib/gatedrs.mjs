@@ -180,9 +180,10 @@ export async function registerDRS(steps, h) {
       await cmd('/save-all flush');
       await L.settle(2000);
       await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
+      // a BUILT target leaves the feed's targets
       let t;
-      for (let i = 0; i < 240; i++) { t = (await pile()).targets?.[lot]; if (t && t.built >= t.queued) break; await L.sleep(1000); }
-      check(!!t && t.built >= t.queued, `${tag}: ${lot} built after the save (${t?.built}/${t?.queued})`);
+      for (let i = 0; i < 240; i++) { t = (await pile()).targets?.[lot]; if (!t || t.built >= t.queued) break; await L.sleep(1000); }
+      check(!t || t.built >= t.queued, `${tag}: ${lot} built after the save (${t ? `${t.built}/${t.queued}` : 'BUILT: out of the feed'})`);
       await L.settle(12_000);
       if (!(await halt(tag))) return out;
       const s5 = await restart(tag);
@@ -207,13 +208,15 @@ export async function registerDRS(steps, h) {
     // DR4a: a single survival site's removal (J2 2a): stuck, its pending credit booked by the repair
     {
       const tag = 'DR4a';
-      const targets = (await pile()).targets ?? {};
-      const sites = Object.keys(targets).filter((k) => /^s\d+$/.test(k));
+      const sr = await cmd('/apitest sites');
+      const sl = JSON.parse((sr.messages ?? []).find((m) => m.startsWith('{')) ?? '{}');
+      const sites = (sl.all ?? []).map((x) => x.id).filter((k) => /^s\d+$/.test(k));
       const recs = [];
       for (const s of sites) { const r = await call('dev.pl.record', { site: s }, 30_000).catch(() => null); if (r) recs.push({ s, ...r, b: box(r.restoreBox) }); }
       recs.sort((a, b) => (a.b[3] - a.b[0]) * (a.b[5] - a.b[2]) - (b.b[3] - b.b[0]) * (b.b[5] - b.b[2]));
-      const A = recs[0]; // the cottage (the smaller lot); the hall stays for DR4b
-      W.hall = recs[recs.length - 1];
+      log(`  ${tag}: the town's sites ${json(recs.map((r) => [r.s, r.blueprint, r.restoreBox]))}`);
+      const A = recs.find((r) => /rs_hut/.test(r.blueprint ?? '')) ?? recs[0]; // the cottage lot; the hall stays for DR4b
+      W.hall = recs.filter((r) => r !== A).pop();
       check(!!A && !!W.hall && A.s !== W.hall.s, `${tag}: the cottage ${A?.s} (${A?.restoreBox}) and the hall ${W.hall?.s} (${W.hall?.restoreBox})`);
       await call('dev.stockpile.ps', { noPeriodic: true, noCreditSave: true }, 30_000);
       await cmd('/kill @e[type=item]');
