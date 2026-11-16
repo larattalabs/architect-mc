@@ -20,6 +20,19 @@
 //                                                  DR10      F repaired with DRK1 armed: halts mid-repair; after the restart diagnose
 //                                                            names the open record, repair finishes it; the box = before
 //                                                  DR11      a clean stop and start: no ops line, suspects() empty
+//   (DR2, the GPT release review's P1s)            DR10      (P1-4) F's box holds a player's block (a PT record) its removal restores;
+//                                                            DRK1pt halts before that cell: finished, the block and its record back
+//                                                  DR13      (P1-2) G's repair halted at DRK1; after the restart a newer placement N
+//                                                            over G's west half (the stale record's pre-op value); finishing G leaves
+//                                                            N's cells untouched (no longer owed), the record final
+//                                                  DR14      (P1-1) H's repair halted at DRK2 (after its record went final, nothing
+//                                                            saved after): after the restart the box = before (the durability barrier
+//                                                            put the writes on disk first), H settled, nothing to diagnose
+//                                                  DR16      (P1-3) B3 placed after the save the marker names (saved= rewritten to just
+//                                                            before B3: its cells on disk), one cell mined by a player before the halt
+//                                                            (the mark saved with the chunk), one after the restart: neither LAGGING
+//                                                            (FOREIGN), nothing written; not a suspect
+//                                                  the auto-diagnose loads at most 8 chunks a tick (autoMaxLoads)
 //
 // Survival cases DR4, DR5, DR7, DR8 are not in this step (docs/CONTRACT.md "Slice DR as built": leftovers).
 // Evidence: artifacts/gate6d-gr/drcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
@@ -84,7 +97,13 @@ export async function registerDR(steps, h) {
     await L.tp(XL + 0.5, gy + 40, 11400.5);
     // boxes: x XL-6..XL+5 (6 columns each side of the line), z bands 40 apart, all in region z 22 (11264..11775)
     const box = (z0, dz = 5, x0 = XL - 6, x1 = XL + 5, top = y1) => [x0, y0, z0, x1, top, z0 + dz];
-    const BX = { A: box(11300), E: box(11340), F: box(11380), D: box(11420), C: [XL - 3, y0, 11423, XL + 8, y1 + 1, 11428], B: box(11460), B2: box(11500, 9, XL - 12, XL + 11) };
+    const BX = { A: box(11300), E: box(11340), F: box(11380), D: box(11420), C: [XL - 3, y0, 11423, XL + 8, y1 + 1, 11428], B: box(11460), B2: box(11500, 9, XL - 12, XL + 11),
+      G: box(11540), H: box(11580), B3: [XL + 8, y0, 11620, XL + 13, y1, 11625] };
+    // (DR2 DR10, P1-4) a player's block in F's box, before F: F's removal restores it with its record
+    const ptF = [XL - 2, y0, 11382];
+    const puF = await call('dev.pt.uses', { ops: [{ item: 'minecraft:bricks', at: ptF, on: [ptF[0], gy, ptF[2]], face: 'up', placer: 'DRPlayer' }] }, 60_000);
+    const ptF0 = await call('dev.pt.at', { at: ptF }, 10_000);
+    check(!!puF.results?.[0]?.tracked || !!ptF0.placer, `DR10: a player's bricks at ${ptF} in F's box, with a PT record (${json(ptF0)})`);
     const h0 = {};
     for (const [k, b] of Object.entries(BX)) h0[k] = await hash(b);
     const ids = {};
@@ -95,11 +114,11 @@ export async function registerDR(steps, h) {
       ids[k] = r.siteId;
       return r;
     };
-    for (const k of ['A', 'E', 'F', 'D']) await place(k, 'minecraft:stone_bricks');
+    for (const k of ['A', 'E', 'F', 'D', 'G', 'H']) await place(k, 'minecraft:stone_bricks');
     await place('C', 'minecraft:oak_planks');
     await L.settle(2000);
     const placed = {};
-    for (const k of ['A', 'E', 'F', 'D', 'C']) placed[k] = await hash(BX[k]);
+    for (const k of ['A', 'E', 'F', 'D', 'C', 'G', 'H']) placed[k] = await hash(BX[k]);
     await cmd('/save-all flush');
     await L.settle(3000);
     const RD = regionDir(W);
@@ -108,12 +127,20 @@ export async function registerDR(steps, h) {
     const S0 = path.join(L.OUT, 'dr-s0');
     fs.mkdirSync(S0, { recursive: true });
     for (const f of west) fs.copyFileSync(path.join(RD, f), path.join(S0, f));
-    for (const k of ['C', 'D', 'A', 'E', 'F']) {
+    for (const k of ['C', 'D', 'A', 'E', 'F', 'G', 'H']) {
       const r = await result(await api(`remove ${ids[k]} - noforce keep`));
       check(r.removed === true, `${k} (${ids[k]}) removed (${json(r.blockers ?? [])})`);
     }
     await L.settle(2000);
-    for (const k of ['A', 'E', 'F', 'D']) check(await hash(BX[k]) === h0[k] || k === 'D', `${k}: restored exactly before the fault`);
+    for (const k of ['A', 'E', 'F', 'D', 'G', 'H']) check(await hash(BX[k]) === h0[k] || k === 'D', `${k}: restored exactly before the fault`);
+    // (DR2 DR16, P1-3) B3 after t0 (the save the marker will name), its cells saved by the flush below; a player mines one before the halt
+    const t0 = Date.now();
+    await L.sleep(1100);
+    await place('B3', 'minecraft:stone_bricks');
+    const m1 = [XL + 10, y1, 11622], m2 = [XL + 11, y1, 11623];
+    const br1 = await call('dev.pt.breaks', { at: [m1], placer: 'DRPlayer' }, 60_000);
+    const c1 = await cellsOf([...m1, ...m1]);
+    check(isId([...c1.values()][0], 'minecraft:air'), `DR16: a player mined B3's cell ${m1} before the halt (${json(br1)})`);
     await cmd('/save-all flush');
     await L.settle(3000);
     await place('B', 'minecraft:oak_planks');
@@ -125,12 +152,19 @@ export async function registerDR(steps, h) {
     check(await haltWait(), 'dev.stockpile.halt halted the server (nothing saved)');
     for (const f of west) fs.copyFileSync(path.join(S0, f), path.join(RD, f));
     log('  fault: S0 west region file put back (the removals\' west halves and the placements after the flush lost)');
+    // (DR2 DR16) the marker's last save rewritten to t0, just before B3: B3 is in the bound with its cells (and the mined mark) on disk
+    const MK = path.join(L.SAVES, W, 'architect-running.marker');
+    const mk = fs.readFileSync(MK, 'utf8');
+    check(/saved=\d+/.test(mk), `DR16: the running marker names its last save (${mk.replace(/\n/g, ' | ')})`);
+    fs.writeFileSync(MK, mk.replace(/saved=\d+/, `saved=${t0}`));
     await L.openWorld(W);
     await L.tp(XL + 0.5, gy + 40, 11400.5);
     const s1 = await started('restart');
     const sus = Object.fromEntries((s1.suspects ?? []).map((x) => [x.site, x.reason]));
     log(`  auto-diagnose: ${s1.opsLine}; suspects ${json(sus)}`);
-    for (const k of ['A', 'E', 'F', 'D', 'C']) check(sus[ids[k]] === 'stuck', `${k}: suspects() names ${ids[k]} stuck (${sus[ids[k]]})`);
+    for (const k of ['A', 'E', 'F', 'D', 'C', 'G', 'H']) check(sus[ids[k]] === 'stuck', `${k}: suspects() names ${ids[k]} stuck (${sus[ids[k]]})`);
+    check(sus[ids.B3] === undefined, `DR16: B3 (its mined cell only) is not a suspect (${sus[ids.B3]})`);
+    check(typeof s1.autoMaxLoads === 'number' && s1.autoMaxLoads <= 8, `the auto-diagnose loaded at most 8 chunks a tick (${s1.autoMaxLoads})`);
     for (const k of ['B', 'B2']) check(sus[ids[k]] === 'lagging', `${k}: suspects() names ${ids[k]} lagging (${sus[ids[k]]})`);
     check(typeof s1.opsLine === 'string' && /lag the journal after an unclean stop/.test(s1.opsLine) && s1.opsLine.includes('/architect diagnose all'),
       `the ops line after the unclean stop (${s1.opsLine})`);
@@ -230,12 +264,27 @@ export async function registerDR(steps, h) {
     await call('dev.placement.slow', { on: false }, 10_000);
     log(`  DR9: B2's removal ${json(rm).slice(0, 200)}`);
     out.DR9 = { lagging: f9?.lagging, permissionNull: pn.refused, permissionNonOp: po.refused, busy: pb.refused };
+    // DR16 (P1-3): B3's cell mined before the halt (its mark on disk with it) and one mined now: neither LAGGING, nothing written
+    const d16a = await diag(ids.B3);
+    const lag16a = (d16a.findings ?? []).filter((x) => x.site === ids.B3 && x.code === 'LAGGING');
+    const for16a = (d16a.findings ?? []).find((x) => x.site === ids.B3 && x.code === 'FOREIGN');
+    check(lag16a.length === 0 && for16a?.foreign === 1, `DR16: B3's cell mined before the crash is FOREIGN, not LAGGING (${json((d16a.findings ?? []).map((x) => [x.code, x.site, x.lagging, x.foreign]))})`);
+    const br2 = await call('dev.pt.breaks', { at: [m2], placer: 'DRPlayer' }, 60_000);
+    const d16 = await diag(ids.B3);
+    const lag16 = (d16.findings ?? []).filter((x) => x.site === ids.B3 && x.code === 'LAGGING');
+    const for16 = (d16.findings ?? []).find((x) => x.site === ids.B3 && x.code === 'FOREIGN');
+    check(lag16.length === 0 && for16?.foreign === 2, `DR16: a cell mined after the restart is FOREIGN too (${json(br2)}; ${json((d16.findings ?? []).map((x) => [x.code, x.lagging, x.foreign]))})`);
+    const r16 = await repair(d16.planId, true);
+    const c16 = await cellsOf([...m1, ...m2]);
+    check(r16.written === 0 && [...c16.entries()].filter(([k]) => [m1.join(','), m2.join(',')].includes(k)).every(([, v]) => isId(v, 'minecraft:air')),
+      `DR16: the repair writes nothing; both mined cells stay air (${r16.written}; ${r16.message})`);
+    out.DR16 = { before: for16a?.foreign, after: for16?.foreign, written: r16.written };
     // DR10: F repaired with DRK1 armed: halts mid-repair; after the restart the open record is named and finished
     const dF = await diag(ids.F);
     const fF = (dF.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.F);
-    await rep('killAt', { armed: true });
+    await rep('killAt', { armed: true, point: 'DRK1pt' });
     rep('repair', { planId: dF.planId, apply: true, actor: 'player' }).catch(() => null);
-    check(await haltWait(), 'DR10: DRK1 halted the server mid-repair');
+    check(await haltWait(), 'DR10: DRK1pt halted the server mid-repair (before the player\'s block)');
     await L.openWorld(W);
     await L.tp(XL + 0.5, gy + 40, 11400.5);
     const s10 = await started('DR10 restart');
@@ -249,7 +298,47 @@ export async function registerDR(steps, h) {
     check(r10.applied && /settled/.test(r10.message) && await hash(BX.F) === h0.F, `DR10: the open repair finished from its record: wrote ${r10.written} more (of ${fF?.lagging}); F settled, the box = before (${r10.message})`);
     const fin = JSON.parse(fs.readFileSync(recF, 'utf8'));
     check(fin.state === 'final', `DR10: the record is final (${fin.state})`);
-    out.DR10 = { lagging: fF?.lagging, finished: r10.written, record: fin.state };
+    const ptCell = (open?.cells ?? []).find((x) => x.x === ptF[0] && x.y === ptF[1] && x.z === ptF[2]);
+    check(!!ptCell?.ptPlacer, `DR10 (P1-4): the record keeps the player's cell with its record (${json(ptCell && { ptPlacer: ptCell.ptPlacer, expected: ptCell.expected })})`);
+    const ptF1 = await call('dev.pt.at', { at: ptF }, 10_000);
+    const cF = await cellsOf([...ptF, ...ptF]);
+    check(isId([...cF.values()][0], 'minecraft:bricks') && !!ptF1.placer && ptF1.placer === ptF0.placer, `DR10 (P1-4): the player's bricks are back with their record across DRK1 (${json(ptF1)} was ${json(ptF0)})`);
+    out.DR10 = { lagging: fF?.lagging, finished: r10.written, record: fin.state, pt: ptF1 };
+    // DR13 (P1-2): G's repair halted at DRK1; a newer placement N over G's west half; finishing G leaves N alone
+    const dG = await diag(ids.G);
+    const fG = (dG.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.G);
+    check(!!fG && fG.lagging > 0, `DR13: G stuck, ${fG?.lagging} lagging`);
+    await rep('killAt', { armed: true });
+    rep('repair', { planId: dG.planId, apply: true, actor: 'player' }).catch(() => null);
+    check(await haltWait(), 'DR13: DRK1 halted G\'s repair mid-way');
+    await L.openWorld(W);
+    await L.tp(XL + 0.5, gy + 40, 11400.5);
+    await started('DR13 restart');
+    const NB = [XL - 6, y0, 11540, XL - 1, y1, 11545];
+    const rn = await call('dev.cells.place', { kind: 'dr:test', policy: 'BOX', fill: { min: NB.slice(0, 3), max: NB.slice(3) , state: 'minecraft:stone_bricks' }, overlap: 'LAYER', force: true }, 600_000);
+    check(rn.placed === true, `DR13: a newer placement N over G's west half (${rn.siteId ?? json(rn.refusals)})`);
+    const hN = await hash(NB);
+    const r13 = await repair(dG.planId, true);
+    const recG = JSON.parse(fs.readFileSync(path.join(L.SAVES, W, 'architect-repairs', `${dG.planId}.json`), 'utf8'));
+    check(r13.applied && await hash(NB) === hN, `DR13: G's open repair finished without writing over N (wrote ${r13.written}; ${r13.message})`, r13);
+    check(recG.state === 'final' && recG.stale > 0, `DR13: the record is final and names ${recG.stale} cell(s) no longer owed (${recG.state})`);
+    out.DR13 = { lagging: fG?.lagging, written: r13.written, stale: recG.stale, newer: rn.siteId };
+    // DR14 (P1-1): H's repair halted at DRK2, after its record went final with nothing saved after it
+    const dH = await diag(ids.H);
+    const fH = (dH.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.H);
+    check(!!fH && fH.lagging > 0, `DR14: H stuck, ${fH?.lagging} lagging`);
+    await rep('killAt', { armed: true, point: 'DRK2' });
+    rep('repair', { planId: dH.planId, apply: true, actor: 'player' }).catch(() => null);
+    check(await haltWait(), 'DR14: DRK2 halted the server after H\'s record went final');
+    await L.openWorld(W);
+    await L.tp(XL + 0.5, gy + 40, 11400.5);
+    const s14 = await started('DR14 restart');
+    const recH = JSON.parse(fs.readFileSync(path.join(L.SAVES, W, 'architect-repairs', `${dH.planId}.json`), 'utf8'));
+    const d14 = await diag(ids.H);
+    check(recH.state === 'final' && await hash(BX.H) === h0.H, `DR14: the record final and H's box = before after the crash (the writes were durable first) (${recH.state})`);
+    check(!(d14.findings ?? []).some((x) => x.site === ids.H) && !(s14.suspects ?? []).some((x) => x.site === ids.H),
+      `DR14: nothing to diagnose for H, not a suspect (${json((d14.findings ?? []).map((x) => [x.code, x.site]))})`);
+    out.DR14 = { lagging: fH?.lagging, record: recH.state, written: recH.written };
     // DR11: a clean stop and start
     await L.leaveWorld();
     await L.openWorld(W);

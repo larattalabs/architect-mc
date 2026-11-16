@@ -42,6 +42,11 @@ final class RepairCore {
 
 		/** Whether a player's record (PT) is at the cell. */
 		boolean pt(long pos);
+
+		/** (DR2, P1-3) When a player broke the cell ({@link MinedCells}, saved with its chunk), or -1. */
+		default long mined(long pos) {
+			return -1;
+		}
 	}
 
 	enum Cell {
@@ -84,11 +89,63 @@ final class RepairCore {
 		if (c == Cell.FOREIGN && !r.pt(w.pos())) {
 			for (Value p : w.morePre()) {
 				if (WorldJournal.holds(now, () -> r.nbt(w.pos()), p)) {
-					return Cell.LAGGING; // (F7) a higher removal's placed block, lost with both removals' writes
+					c = Cell.LAGGING; // (F7) a higher removal's placed block, lost with both removals' writes
+					break;
 				}
 			}
 		}
-		return c;
+		return minedSince(c, r.mined(w.pos()), w.at());
+	}
+
+	/**
+	 * (DR2, P1-3) Equality with the pre-op value does not prove a lost write: a cell a player broke after the operation's commit (its mark,
+	 * saved with the chunk, at or after {@code committedAt}) is FOREIGN, never LAGGING. A mark older than the commit is about an earlier owner.
+	 */
+	static Cell minedSince(Cell c, long minedAt, long committedAt) {
+		return c == Cell.LAGGING && minedAt >= 0 && minedAt >= committedAt ? Cell.FOREIGN : c;
+	}
+
+	/**
+	 * (DR2, P1-2) The cells of an open repair's record that the journal still owes now, as the journal states them now (its flags, its player
+	 * records): a placement's cell while its entry is still ACTIVE, the same commit, and still the cell's top writer (XR); a removal's while
+	 * its entry is still UNDONE by the same undo and no standing entry owns the cell (a newer placement over it wins). A cell whose value
+	 * changed in the journal, or a later removal or placement of it, is dropped: never written over a newer commit, never resurrected.
+	 */
+	static List<Want> stillOwed(JournalStore js, List<Want> recorded) throws IOException {
+		Map<String, Map<Long, Want>> now = new HashMap<>();
+		List<Want> out = new ArrayList<>();
+		for (Want w : recorded) {
+			JournalStore.Meta m = js.meta(w.entry());
+			if (m == null) {
+				continue; // released (settled) or gone
+			}
+			String k;
+			if (w.removal()) {
+				if (m.status() != Journal.Status.UNDONE || m.undoneAt() != w.at() || m.undoGroup() == null) {
+					continue;
+				}
+				k = "r|" + w.site() + "|" + m.undoGroup();
+			} else {
+				if (m.status() != Journal.Status.ACTIVE || m.createdAt() != w.at()) {
+					continue;
+				}
+				k = "p|" + m.id();
+			}
+			Map<Long, Want> cur = now.get(k);
+			if (cur == null) {
+				cur = new HashMap<>();
+				for (Want x : w.removal() ? removalWants(js, w.site(), m.undoGroup()) : placementWants(js, m)) {
+					cur.put(x.pos(), x);
+				}
+				now.put(k, cur);
+			}
+			Want c = cur.get(w.pos());
+			if (c != null && c.entry().equals(w.entry()) && WorldJournal.same(c.expected(), w.expected()) && WorldJournal.same(w.expected(), c
+				.expected())) {
+				out.add(c);
+			}
+		}
+		return out;
 	}
 
 	/** Guard kinds whose cells are a survival site's (its crate, its scaffold): the builder's while it stands, never DR's placements. */

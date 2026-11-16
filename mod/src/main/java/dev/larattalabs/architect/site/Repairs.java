@@ -74,7 +74,7 @@ public final class Repairs {
 
 	/** One site's part of a diagnosis: its wants, which of them lag, how they read. */
 	record Unit(String site, @Nullable String region, boolean stuck, @Nullable String group, List<RepairCore.Want> wants,
-		List<RepairCore.Want> lagging, int foreign, List<CellDiff> diffs, List<CellDiff> foreignDiffs) {
+		List<RepairCore.Want> lagging, int foreign, List<CellDiff> diffs, List<CellDiff> foreignDiffs, int unread) {
 	}
 
 	/** A diagnosis with what a repair needs. */
@@ -99,6 +99,13 @@ public final class Repairs {
 	private static @Nullable AutoRun auto;
 	/** TEST (kill point DRK1): the next repair halts the JVM after its record is durable and half its cells are written. */
 	public static volatile boolean killDRK1;
+	/**
+	 * (DR2, TEST) A named kill point for the next repair: {@code DRK1pt} halts before its first cell that restores a player's record (P1-4),
+	 * {@code DRK2} after its record is final, nothing saved after (P1-1: the durability barrier came first). Null: none.
+	 */
+	public static volatile @Nullable String killPoint;
+	/** (DR2, TEST) The most chunks the auto-diagnose loaded in one tick this session. */
+	public static volatile int autoMaxLoads;
 	/** (TEST) how many SITE_REPAIRED fired this session, and the last's site and region. */
 	public static volatile int repairedEvents;
 	public static volatile @Nullable String lastRepairedSite, lastRepairedRegion;
@@ -136,6 +143,14 @@ public final class Repairs {
 				h.getPlayer().sendSystemMessage(Component.literal(lastOpsLine));
 				opsLineSent = true;
 			}
+		});
+		MinedCells.World.init();
+		// (DR2, P1-3) a player's break of a journal-owned cell is marked in its chunk (saved with it): later at its pre-op value, it is mined
+		net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> {
+			if (level instanceof ServerLevel sl && !state.isAir() && SiteJournal.owned(Sites.dimensionId(sl), pos.asLong())) {
+				MinedCells.World.mark(sl, pos, System.currentTimeMillis());
+			}
+			return true;
 		});
 		RepairCommands.init();
 	}
@@ -271,6 +286,11 @@ public final class Repairs {
 			return dev.larattalabs.architect.placed.Placed.record(level, BlockPos.of(pos)) != null;
 		}
 
+		@Override
+		public long mined(long pos) {
+			return MinedCells.World.at(level, pos);
+		}
+
 		/** (DR-S) Whether the cell is a container holding items (never rolled forward: a write would destroy them). */
 		boolean holdsItems(long pos) {
 			return level.getBlockEntity(BlockPos.of(pos)) instanceof net.minecraft.world.Container c && !c.isEmpty();
@@ -393,9 +413,14 @@ public final class Repairs {
 		List<CellDiff> diffs = new ArrayList<>();
 		List<CellDiff> fdiffs = new ArrayList<>();
 		int foreign = 0;
+		int unread = 0;
 		for (RepairCore.Want w : wants) {
 			RepairCore.Reader r = readers.apply(w.dim());
 			RepairCore.Cell c = r == null ? null : RepairCore.classify(r, w);
+			if (c == null) {
+				unread++; // (DR2) no level, or its chunk not read: never a silent clean
+				continue;
+			}
 			if (c == RepairCore.Cell.LAGGING && r instanceof LevelReader lr && lr.holdsItems(w.pos())) {
 				c = RepairCore.Cell.FOREIGN; // (DR-S) a container's contents are never written over (custody's rule): a crate or chest with items
 			}
@@ -415,7 +440,7 @@ public final class Repairs {
 				}
 			}
 		}
-		return new Unit(site, region, stuck, group, wants, lag, foreign, diffs, fdiffs);
+		return new Unit(site, region, stuck, group, wants, lag, foreign, diffs, fdiffs, unread);
 	}
 
 	/** {@link Sites#diagnose}: read-only, after the start's settles. */
@@ -446,6 +471,7 @@ public final class Repairs {
 		Map<String, LevelReader> readers = new LinkedHashMap<>();
 		List<Unit> units = new ArrayList<>();
 		List<JournalStore.Meta> read = new ArrayList<>();
+		List<String> failed = new ArrayList<>();
 		int unread = 0;
 		String cont = null;
 		for (int i = from; i < ids.size(); i++) {
@@ -458,7 +484,8 @@ public final class Repairs {
 			List<RepairCore.Want> wants;
 			try {
 				wants = wantsOf(js, id, st, group, Repairs::mayLag);
-			} catch (IOException e) {
+			} catch (IOException | RuntimeException e) {
+				failed.add(id + " (" + e.getMessage() + ")"); // (DR2) a journal read failure is UNREAD, never a false clean
 				continue;
 			}
 			// its chunks, within the budget
@@ -511,6 +538,13 @@ public final class Repairs {
 			findings.add(new RepairFinding(RepairCode.UNREAD, null, null, null, 0, 0, 0, List.of(), unread + " site(s) not read (the "
 				+ CHUNK_BUDGET + "-chunk budget); diagnose again to read on"));
 		}
+		for (String f : failed) {
+			String id = f.substring(0, f.indexOf(' '));
+			findings.add(new RepairFinding(RepairCode.UNREAD, id, null, null, 0, 0, 0, List.of(), "Site " + id + "'s journal could not be read "
+				+ f.substring(f.indexOf(' ') + 1) + ": not diagnosed (not clean)"));
+			lines.add("unread " + f);
+		}
+		unread += failed.size();
 		String planId = RepairCore.planId(sc + "@" + from, js.index(), read, lines);
 		Diagnosis d = new Diagnosis(scope, planId, findings, unread, cont);
 		Diag dg = new Diag(d, units, custody, System.currentTimeMillis());
@@ -538,6 +572,11 @@ public final class Repairs {
 
 	private static void findingsOf(Unit u, List<RepairFinding> out, List<String> lines) {
 		int lag = u.lagging().size();
+		if (u.unread() > 0) {
+			out.add(new RepairFinding(RepairCode.UNREAD, u.site(), u.region(), null, u.unread(), 0, 0, List.of(), u.site() + ": " + u.unread()
+				+ " cell(s) not read (their dimension or chunk unavailable): not diagnosed"));
+			lines.add("unread " + u.site() + " " + u.unread());
+		}
 		StringBuilder cells = new StringBuilder();
 		u.lagging().forEach(w -> cells.append(w.pos()).append(','));
 		if (u.stuck()) {
@@ -838,9 +877,28 @@ public final class Repairs {
 		return run(srv, planId, path, o, all, left);
 	}
 
-	/** The writes, the settles, the credits, then the record final. Shared by a new repair and an open one finished. */
+	/**
+	 * The writes, the durability barrier, the settles, the credits, then the record final. Shared by a new repair and an open one finished.
+	 * (DR2, P1-1) Nothing settles and the record never goes final before the written chunks are on disk: a crash before the barrier leaves
+	 * the journal as it was and the record open (resumable); a refused save the same, without a crash. The record names its phase
+	 * ({@code written}, then {@code settling} with the credit keys of the removals it settles, read while their records still stand).
+	 */
 	private static RepairResult run(MinecraftServer srv, String planId, Path path, JsonObject o, List<RepairCore.Want> all, int left) {
 		int written = write(srv, all);
+		Set<String> touched = new LinkedHashSet<>();
+		all.forEach(w -> touched.add(w.site()));
+		try {
+			Stockpiles.durableBarrier(srv);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Repair {}: wrote {} cell(s) but the world's save was refused ({}); nothing settled, the record stays open", planId,
+				written, e.getMessage());
+			return new RepairResult(planId, false, written, Map.of(), List.of(), left, path.toString(), Reason.JOURNAL_UNAVAILABLE, String.format(
+				java.util.Locale.ROOT, "Repair %s wrote %,d cell(s), but the world's save was refused (%s): nothing settled and nothing credited. The "
+					+ "record stays open; /architect repair ... confirm %s finishes it.", planId, written, e.getMessage(), planId), List.copyOf(touched));
+		}
+		o.addProperty("phase", "written");
+		o.addProperty("written", (o.has("writtenBefore") ? o.get("writtenBefore").getAsInt() : 0) + written);
+		durableOrWarn(planId, path, o);
 		List<String> settled = new ArrayList<>();
 		List<String> release = new ArrayList<>();
 		Set<String> stuckNow = stuckSites(srv);
@@ -874,17 +932,32 @@ public final class Repairs {
 				settled.add(m);
 			}
 		}
-		// every settled group released after all are judged (a lower removal's later undo is the upper's expected value: F1)
-		if (!release.isEmpty()) {
-			SiteJournal.releaseGroup(release);
-		}
-		// (DR-S) the settled survival removals' credit keys, read before their records go
+		// (DR-S) the settled survival removals' credit keys, read before their records go; (DR2) kept in the record first, with an earlier
+		// attempt's (a resumed repair books what it settled before the stop: once per key)
 		Set<String> keys = new LinkedHashSet<>();
+		if (o.has("keys")) {
+			o.getAsJsonArray("keys").forEach(k -> keys.add(k.getAsString()));
+		}
 		for (String site : settled) {
 			String k = pendingKeyOf(site);
 			if (k != null) {
 				keys.add(k);
 			}
+		}
+		JsonArray settledBefore = o.has("settledBefore") ? o.getAsJsonArray("settledBefore") : new JsonArray();
+		if (!settled.isEmpty() || !keys.isEmpty()) {
+			JsonArray ka = new JsonArray();
+			keys.forEach(ka::add);
+			o.add("keys", ka);
+			JsonArray sb = settledBefore.deepCopy();
+			settled.forEach(sb::add);
+			o.add("settledBefore", sb);
+			o.addProperty("phase", "settling");
+			durableOrWarn(planId, path, o);
+		}
+		// every settled group released after all are judged (a lower removal's later undo is the upper's expected value: F1)
+		if (!release.isEmpty()) {
+			SiteJournal.releaseGroup(release);
 		}
 		for (String site : settled) {
 			if (Sites.pendingRecord(site) != null) {
@@ -899,9 +972,15 @@ public final class Repairs {
 		// survival: a rolled-forward removal's stored credit (J2 2a's, or a group removal's decCredit held pending, slice DR-S) books once, keyed
 		// to the removals this repair settled only, then saved with the world; custody under the cap. What is credited is what left the
 		// pending credits and the custody for the stock: returned plus overflow (dropped as items)
-		Map<String, Integer> credited = new TreeMap<>();
+		Map<String, Integer> credited = new TreeMap<>(); // this attempt's (a resumed one books only what is still pending: once per key)
+		boolean saveRefused = false;
 		if (!keys.isEmpty()) {
-			Stockpiles.bookPendingFor(srv, keys).forEach((k, v) -> credited.merge(k, v, Integer::sum));
+			try {
+				Stockpiles.bookPendingFor(srv, keys).forEach((k, v) -> credited.merge(k, v, Integer::sum));
+			} catch (IllegalStateException e) {
+				saveRefused = true; // booked in memory; on disk still pending: the next start (or this record, resumed) books it once
+				Architect.LOGGER.error("Repair {}: the credits' save was refused ({}); the record stays open", planId, e.getMessage());
+			}
 		}
 		boolean cust = false;
 		for (var e : o.getAsJsonArray("custody")) {
@@ -921,25 +1000,38 @@ public final class Repairs {
 			}
 		}
 		if (cust) {
-			Stockpiles.saveCredit(srv);
+			try {
+				Stockpiles.saveCredit(srv);
+			} catch (IllegalStateException e) {
+				saveRefused = true;
+				Architect.LOGGER.error("Repair {}: the custody credit's save was refused ({}); the record stays open", planId, e.getMessage());
+			}
 		}
-		o.addProperty("state", "final");
-		o.addProperty("written", written);
-		o.addProperty("left", left);
 		JsonObject cr = new JsonObject();
 		credited.forEach(cr::addProperty);
 		o.add("credited", cr);
-		JsonArray sj = new JsonArray();
+		JsonArray sj = settledBefore.deepCopy();
 		settled.forEach(sj::add);
 		o.add("settled", sj);
+		o.addProperty("left", left);
+		if (saveRefused) {
+			durableOrWarn(planId, path, o);
+			return new RepairResult(planId, false, written, credited, List.of(), left, path.toString(), Reason.JOURNAL_UNAVAILABLE, "Repair " + planId
+				+ " wrote and settled, but a credit's save was refused: the record stays open; confirm finishes it", List.copyOf(touched));
+		}
+		o.addProperty("state", "final");
 		o.addProperty("finishedAt", System.currentTimeMillis());
 		try {
 			writeDurable(path, o);
 		} catch (IOException e) {
 			Architect.LOGGER.error("Repair {}: the record could not be made final ({})", planId, e.getMessage());
 		}
-		Set<String> sites = new LinkedHashSet<>();
-		all.forEach(w -> sites.add(w.site()));
+		if ("DRK2".equals(killPoint)) {
+			// TEST (DR2 kill point DRK2): after the record is final, nothing saved after it; the barrier put the writes on disk first
+			Architect.LOGGER.error("Repair: kill point DRK2 (the record final, {} cells written): halting the JVM", written);
+			Runtime.getRuntime().halt(7);
+		}
+		Set<String> sites = new LinkedHashSet<>(touched);
 		sites.addAll(settled);
 		JsonObject reg = o.has("regions") ? o.getAsJsonObject("regions") : new JsonObject();
 		RepairResult res = new RepairResult(planId, true, written, credited, List.of(), left, path.toString(), null, String.format(java.util.Locale.ROOT,
@@ -965,6 +1057,15 @@ public final class Repairs {
 			PLANS.remove(planId);
 		}
 		return res;
+	}
+
+	/** The open record rewritten at a phase; a failure is logged (the record before it still resumes: every step is keyed or idempotent). */
+	private static void durableOrWarn(String planId, Path path, JsonObject o) {
+		try {
+			writeDurable(path, o);
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Repair {}: the record's phase {} could not be written ({})", planId, o.get("phase"), e.getMessage());
+		}
 	}
 
 	private static @Nullable JournalStore js() {
@@ -1040,6 +1141,12 @@ public final class Repairs {
 				Architect.LOGGER.error("Repair: kill point DRK1 (the record durable, {} of {} cells written): halting the JVM", n, all.size());
 				Runtime.getRuntime().halt(7);
 			}
+			if (w.pt() != null && "DRK1pt".equals(killPoint)) {
+				// TEST (DR2, P1-4): before the first cell restoring a player's record, nothing saved
+				Architect.LOGGER.error("Repair: kill point DRK1pt (the record durable, {} of {} cells written, next a player's block): halting the JVM", n,
+					all.size());
+				Runtime.getRuntime().halt(7);
+			}
 			ServerLevel level = levels.computeIfAbsent(w.dim(), d -> Sites.levelOf(srv, d));
 			if (level == null) {
 				continue;
@@ -1059,19 +1166,65 @@ public final class Repairs {
 			} else {
 				SiteJournal.writeCells(level, one);
 			}
+			MinedCells.World.clear(level, w.pos()); // (DR2) the journal's value again: an old mark no longer describes it
 			n++;
 		}
 		return n;
 	}
 
-	/** Finishes an open repair (DRK1) from its record: each cell still at its pre-op value is written; credits are keyed (once). */
+	/**
+	 * Finishes an open repair (DRK1, a refused save) from its record. (DR2, P1-2) The record is not trusted alone: every site it names must
+	 * not be busy (SITE_BUSY, the record stays open), and each recorded cell is replayed only while the journal still owes it now
+	 * ({@link RepairCore#stillOwed}: the same commit, still its owner, a removal's site still stuck under the same undo group); a newer
+	 * placement over it or a later removal of it wins. The cells still owed are classified again (a player's mark, a PT record: FOREIGN).
+	 * Credits are keyed (once).
+	 */
 	private static RepairResult finishOpen(MinecraftServer srv, String planId, Path path, JsonObject o, ServerPlayer actor) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "The world journal is not open; repair " + planId + " stays open");
+		}
+		List<RepairCore.Want> recorded = new ArrayList<>();
+		Set<String> named = new LinkedHashSet<>();
+		try {
+			for (var e : o.getAsJsonArray("cells")) {
+				RepairCore.Want w = wantOf(e.getAsJsonObject());
+				recorded.add(w);
+				named.add(w.site());
+			}
+		} catch (IllegalStateException e) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "Repair " + planId + "'s record could not be read (" + e.getMessage() + "); it stays open");
+		}
+		Map<String, String> groups = new LinkedHashMap<>();
+		for (var e : o.getAsJsonArray("settle")) {
+			JsonObject x = e.getAsJsonObject();
+			named.add(x.get("site").getAsString());
+			if (x.has("group") && !x.get("group").isJsonNull()) {
+				groups.put(x.get("site").getAsString(), x.get("group").getAsString());
+			}
+		}
+		for (String site : named) {
+			String b = busy(srv, site);
+			if (b != null) {
+				return refused(planId, Reason.SITE_BUSY, b + "; repair " + planId + " stays open, nothing was written");
+			}
+		}
+		Set<String> stuck = stuckSites(srv);
+		List<RepairCore.Want> owed;
+		try {
+			owed = RepairCore.stillOwed(js, recorded);
+		} catch (IOException e) {
+			return refused(planId, Reason.JOURNAL_UNAVAILABLE, "The journal could not be read (" + e.getMessage() + "); repair " + planId + " stays open");
+		}
+		// a removal's cell only while its site is still stuck under the undo the record named
+		owed.removeIf(w -> w.removal() && (!stuck.contains(w.site()) || groups.containsKey(w.site()) && !groups.get(w.site()).equals(SiteJournal
+			.lastGroup(w.site()))));
 		List<RepairCore.Want> all = new ArrayList<>();
 		int left = 0;
-		for (var e : o.getAsJsonArray("cells")) {
-			RepairCore.Want w = wantOf(e.getAsJsonObject());
+		for (RepairCore.Want w : owed) {
 			ServerLevel level = Sites.levelOf(srv, w.dim());
 			if (level == null) {
+				left++;
 				continue;
 			}
 			level.getChunk(Journal.x(w.pos()) >> 4, Journal.z(w.pos()) >> 4);
@@ -1086,8 +1239,13 @@ public final class Repairs {
 				left++;
 			}
 		}
+		RepairCore.commitOrder(all);
+		int stale = recorded.size() - owed.size();
 		o.addProperty("finishedBy", actor.getGameProfile().name());
-		Architect.LOGGER.warn("Repair {}: open (stopped part way); finishing {} cell(s) from its record", planId, all.size());
+		o.addProperty("stale", stale);
+		o.addProperty("writtenBefore", o.has("written") ? o.get("written").getAsInt() : 0);
+		Architect.LOGGER.warn("Repair {}: open (stopped part way); finishing {} cell(s) from its record ({} no longer owed: a newer commit wins)", planId,
+			all.size(), stale);
 		return run(srv, planId, path, o, all, left);
 	}
 
@@ -1181,7 +1339,7 @@ public final class Repairs {
 		return out;
 	}
 
-	private static JsonObject wantJson(RepairCore.Want w) {
+	static JsonObject wantJson(RepairCore.Want w) {
 		JsonObject o = new JsonObject();
 		o.addProperty("dim", w.dim());
 		o.addProperty("pos", w.pos());
@@ -1202,6 +1360,12 @@ public final class Repairs {
 		o.addProperty("at", w.at());
 		o.addProperty("layer", w.layer());
 		o.addProperty("flags", w.flags());
+		if (w.pt() != null) { // (DR2, P1-4) a restored player's block keeps its record across a resume
+			o.addProperty("ptPlacer", w.pt().placer().toString());
+			if (w.pt().build() != null) {
+				o.addProperty("ptBuild", w.pt().build());
+			}
+		}
 		if (!w.morePre().isEmpty()) {
 			JsonArray mp = new JsonArray();
 			w.morePre().forEach(x -> mp.add(x.state().toString()));
@@ -1210,7 +1374,7 @@ public final class Repairs {
 		return o;
 	}
 
-	private static RepairCore.Want wantOf(JsonObject o) {
+	static RepairCore.Want wantOf(JsonObject o) {
 		try {
 			Value exp = Value.of(TagParser.parseCompoundFully(o.get("expected").getAsString()), o.has("expectedNbt") ? TagParser.parseCompoundFully(o.get(
 				"expectedNbt").getAsString()) : null);
@@ -1222,9 +1386,11 @@ public final class Repairs {
 					more.add(Value.of(TagParser.parseCompoundFully(e.getAsString()), null));
 				}
 			}
+			dev.larattalabs.architect.journal.Pt pt = o.has("ptPlacer") ? new dev.larattalabs.architect.journal.Pt(java.util.UUID.fromString(o.get(
+				"ptPlacer").getAsString()), o.has("ptBuild") ? o.get("ptBuild").getAsString() : null) : null;
 			return new RepairCore.Want(o.get("dim").getAsString(), o.get("pos").getAsLong(), exp, pre, o.get("site").getAsString(), o.get("entry")
-				.getAsString(), o.get("removal").getAsBoolean(), o.get("at").getAsLong(), o.get("layer").getAsLong(), null, o.get("flags").getAsInt(), more);
-		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+				.getAsString(), o.get("removal").getAsBoolean(), o.get("at").getAsLong(), o.get("layer").getAsLong(), pt, o.get("flags").getAsInt(), more);
+		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException | IllegalArgumentException e) {
 			throw new IllegalStateException("a repair record's cell could not be read: " + e.getMessage(), e);
 		}
 	}
@@ -1246,8 +1412,9 @@ public final class Repairs {
 
 	/**
 	 * (§1) The auto-diagnose after an unclean start: the stuck records plus every entry committed after the previous run's last completed
-	 * save (or with a job at it), at most {@link #AUTO_CHUNKS_PER_TICK} chunk loads a tick (a site over more loads its chunks in one tick).
-	 * Never repairs.
+	 * save (or with a job at it), at most {@link #AUTO_CHUNKS_PER_TICK} chunk loads a tick. (DR2) A site is read chunk by chunk, across
+	 * ticks when it needs more (each chunk's cells classified in the tick that loads it: an unticketed chunk may unload by the next), so no
+	 * tick loads more than the budget. A site whose journal can't be read is a suspect {@code unread}. Never repairs.
 	 */
 	static final class AutoRun {
 		final List<String> todo;
@@ -1255,6 +1422,14 @@ public final class Repairs {
 		final Set<String> stuck;
 		final List<RepairSuspect> found = new ArrayList<>();
 		final Set<String> regions = new LinkedHashSet<>();
+		/** The site being read: its wants by chunk, how far, what it found so far. */
+		@Nullable String cur;
+		boolean curStuck;
+		@Nullable String curGroup, curRegion;
+		final List<Map.Entry<String, List<RepairCore.Want>>> chunks = new ArrayList<>();
+		int chunkAt;
+		int lagging;
+		int unread;
 
 		AutoRun(MinecraftServer srv) {
 			stuck = stuckSites(srv);
@@ -1262,8 +1437,7 @@ public final class Repairs {
 			Set<String> ids = new LinkedHashSet<>(stuck);
 			if (js != null) {
 				for (JournalStore.Meta m : js.index().entries().values()) {
-					if (m.status() == Journal.Status.ACTIVE && RepairCore.afterSave(m, prevSavedAt, prevJobs) && !m.site().startsWith(
-						SiteGroupRec.CRATE_PREFIX)) {
+					if (m.status() == Journal.Status.ACTIVE && mayLag(m) && !m.site().startsWith(SiteGroupRec.CRATE_PREFIX)) {
 						ids.add(m.site());
 					}
 				}
@@ -1281,68 +1455,84 @@ public final class Repairs {
 			}
 			int[] budget = {AUTO_CHUNKS_PER_TICK};
 			Set<Long> loaded = new HashSet<>();
-			Map<String, LevelReader> readers = new LinkedHashMap<>();
-			boolean first = true;
-			while (next < todo.size()) {
-				String id = todo.get(next);
-				if (fed(id)) {
-					next++;
-					continue;
-				}
-				boolean st = stuck.contains(id);
-				String group = st ? SiteJournal.lastGroup(id) : null;
-				List<RepairCore.Want> wants;
-				try {
-					wants = wantsOf(js, id, st, group, m -> st || RepairCore.afterSave(m, prevSavedAt, prevJobs));
-				} catch (IOException e) {
-					next++;
-					continue;
-				}
-				Map<String, Set<Long>> chunks = new LinkedHashMap<>();
-				for (RepairCore.Want w : wants) {
-					chunks.computeIfAbsent(w.dim(), k -> new LinkedHashSet<>()).add(net.minecraft.world.level.ChunkPos.pack(Journal.x(w.pos()) >> 4,
-						Journal.z(w.pos()) >> 4));
-				}
-				int need = 0;
-				for (var e : chunks.entrySet()) {
-					ServerLevel l = Sites.levelOf(srv, e.getKey());
-					for (long c : e.getValue()) {
-						if (l != null && l.getChunkSource().getChunkNow(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(
-							c)) == null) {
-							need++;
+			try {
+				while (true) {
+					if (cur == null) {
+						if (next >= todo.size()) {
+							return finish(srv);
 						}
+						open(js, todo.get(next++));
+						continue;
 					}
-				}
-				if (need > budget[0] && !first) {
-					return false; // the next tick
-				}
-				int[] b2 = {Math.max(need, budget[0])};
-				for (var e : chunks.entrySet()) {
-					LevelReader r = readerFor(srv, readers, e.getKey(), b2, loaded);
-					if (r != null) {
-						for (long c : e.getValue()) {
-							r.ensure(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(c));
+					while (chunkAt < chunks.size()) {
+						var e = chunks.get(chunkAt);
+						String dim = e.getKey().substring(0, e.getKey().lastIndexOf('|'));
+						long c = Long.parseLong(e.getKey().substring(e.getKey().lastIndexOf('|') + 1));
+						ServerLevel l = Sites.levelOf(srv, dim);
+						if (l == null) {
+							unread += e.getValue().size();
+							chunkAt++;
+							continue;
 						}
+						LevelReader r = new LevelReader(l, budget, loaded);
+						if (!r.ensure(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos.getZ(c))) {
+							return false; // the budget is spent: this chunk next tick
+						}
+						Unit u = classify(cur, curRegion, curStuck, curGroup, e.getValue(), d -> r);
+						lagging += u.lagging().size();
+						unread += u.unread();
+						chunkAt++;
 					}
+					close();
 				}
-				budget[0] -= need;
-				first = false;
-				String region = SiteJournal.entries(id).stream().map(Repairs::regionOf).filter(java.util.Objects::nonNull).findFirst().orElse(null);
-				Unit u = classify(id, region, st, group, wants, d -> readerFor(srv, readers, d, b2, loaded));
-				if (st) {
-					found.add(new RepairSuspect(id, region, "stuck"));
-				} else if (!u.lagging().isEmpty()) {
-					found.add(new RepairSuspect(id, region, "lagging"));
-				}
-				if ((st || !u.lagging().isEmpty()) && region != null) {
-					regions.add(region);
-				}
-				next++;
-				if (budget[0] <= 0) {
-					return false;
+			} finally {
+				autoMaxLoads = Math.max(autoMaxLoads, loaded.size());
+			}
+		}
+
+		/** Starts reading a site: its wants grouped by chunk (or, its journal unreadable, an {@code unread} suspect). */
+		private void open(JournalStore js, String id) {
+			chunks.clear();
+			chunkAt = 0;
+			lagging = 0;
+			unread = 0;
+			if (fed(id)) {
+				return;
+			}
+			curStuck = stuck.contains(id);
+			curGroup = curStuck ? SiteJournal.lastGroup(id) : null;
+			curRegion = SiteJournal.entries(id).stream().map(Repairs::regionOf).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+			List<RepairCore.Want> wants;
+			try {
+				wants = wantsOf(js, id, curStuck, curGroup, m -> curStuck || mayLag(m));
+			} catch (IOException | RuntimeException e) {
+				Architect.LOGGER.warn("Repairs: the auto-diagnose could not read {}'s journal ({}): unread", id, e.getMessage());
+				found.add(new RepairSuspect(id, curRegion, "unread"));
+				return;
+			}
+			Map<String, List<RepairCore.Want>> by = new LinkedHashMap<>();
+			for (RepairCore.Want w : wants) {
+				by.computeIfAbsent(w.dim() + "|" + net.minecraft.world.level.ChunkPos.pack(Journal.x(w.pos()) >> 4, Journal.z(w.pos()) >> 4),
+					k -> new ArrayList<>()).add(w);
+			}
+			chunks.addAll(by.entrySet());
+			cur = id;
+		}
+
+		/** The site read: a suspect when stuck, lagging, or (not otherwise named) partly unread. */
+		private void close() {
+			String id = cur;
+			cur = null;
+			if (id == null) {
+				return;
+			}
+			String reason = curStuck ? "stuck" : lagging > 0 ? "lagging" : unread > 0 ? "unread" : null;
+			if (reason != null) {
+				found.add(new RepairSuspect(id, curRegion, reason));
+				if (curRegion != null && !reason.equals("unread")) {
+					regions.add(curRegion);
 				}
 			}
-			return finish(srv);
 		}
 
 		private boolean finish(MinecraftServer srv) {

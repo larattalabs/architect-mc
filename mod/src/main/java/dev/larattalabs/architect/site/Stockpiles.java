@@ -2819,6 +2819,37 @@ public final class Stockpiles {
 	 * scoop): the loaded chunks are saved with it, as autosave saves them (its BEFORE_SAVE writes the file), so a crash after it never finds
 	 * the ledger ahead of the world (consumption recorded for blocks the saved world lost). Server thread.
 	 */
+	/**
+	 * (DR2, P1-1) A repair's durability barrier: the world's chunks flushed and known durable (SS's check), then the ledger, as
+	 * {@link #saveWithWorld}; with the ledger off (its load failed) the chunks alone, still checked. Throws when the save is refused (a chunk
+	 * write not durable, TEST refuseSave). Server thread.
+	 */
+	static void durableBarrier(MinecraftServer srv) {
+		if (!srv.isSameThread()) {
+			throw new IllegalStateException("Stockpiles: a repair's save runs on the server thread");
+		}
+		if (!loadFailed) {
+			saveWithWorld(srv);
+			return;
+		}
+		if (testRefuseSave) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
+		}
+		explicitSave = true;
+		SaveTiming.explicit = true;
+		try {
+			srv.saveAllChunks(true, true, false);
+		} finally {
+			explicitSave = false;
+			SaveTiming.explicit = false;
+		}
+		RegionDurability.retryOwed();
+		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
+		if (!undurable.isEmpty()) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable " + undurable);
+		}
+	}
+
 	static void saveWithWorld(MinecraftServer srv) {
 		boolean quiet = quietSave;
 		quietSave = false;
