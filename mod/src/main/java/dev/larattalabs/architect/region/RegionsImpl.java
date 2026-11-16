@@ -1033,8 +1033,10 @@ public final class RegionsImpl implements Regions {
 			String planId = ack.getAsJsonObject("result").get("planId").getAsString();
 			PLAN_SERVER.put(planId, s);
 			CompletableFuture<JsonObject> done = PLANNING.computeIfAbsent(planId, k -> new CompletableFuture<>());
-			// the checker and the renders: mega_bench full resolution up to 120 s + 30 s; (6c T1) a plan with passes may take 120 s alone
-			long timeout = checkOf(r) ? 600 : 300;
+			// the checker and the renders: mega_bench full resolution up to 120 s + 30 s; (6c T1) a plan with passes may take 120 s alone;
+			// (WR2) the sidecar limits a plan by CPU time with a wall-clock backstop of at least 600 s (sidecar planWallBackstopMs): wait past
+			// it (plus the check's 180 s), so a loaded machine's slow plan, or the sidecar's own stop, answers before this does
+			long timeout = checkOf(r) ? 900 : 660;
 			return done.orTimeout(timeout, java.util.concurrent.TimeUnit.SECONDS).thenCompose(planned -> irOf(link, planned).thenApply(irJson -> {
 				JsonObject doctor = DOCTOR_NEXT_PLAN;
 				if (doctor != null) {
