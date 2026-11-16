@@ -92,11 +92,11 @@ export interface RegionsConfig {
   workers: number;
   /** evaluated tiles held per plan and connection (config regionWindow, 1-16, default 4) */
   window: number;
-  /** a plan run's time limit in ms (config regionPlanMs, default 30000; enforced as wall clock) */
+  /** a plan run's time limit in ms (config regionPlanMs, default 30000; (WR2) the plan child's CPU time, with a wall-clock backstop of 5x, 600-1800 s) */
   planMs: number;
   /** a plan run's heap (--max-old-space-size, config regionPlanHeapMb, default 1024) */
   planHeapMb: number;
-  /** (6c T1) a plan run's time limit when the program declares passes (config regionPassPlanMs, default 120000; SETTLEMENTS §4) */
+  /** (6c T1) a plan run's time limit when the program declares passes (config regionPassPlanMs, default 120000; SETTLEMENTS §4; (WR2) CPU time, as planMs) */
   passPlanMs: number;
   /** (6c T1) a plan run's heap when the program declares passes (config regionPassPlanHeapMb, default 2048) */
   passPlanHeapMb: number;

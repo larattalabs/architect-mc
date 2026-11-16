@@ -667,8 +667,10 @@ export class Regions {
   /**
    * Run `node <kit>/tools/region.mjs <args>` in the plan sandbox: reads the kit, the plan dir (and `extraReads`), writes
    * the plan dir only, no network, a minimal environment, a heap cap and a wall-clock limit. The last JSON line of stdout.
+   * ((WR2) `cpu`: the limit is the child's CPU time, not the wall clock (a loaded machine stretched a 24 s CPU plan to 105 s of wall
+   * time and it was cut off at 120 s), with a wall-clock backstop, planWallBackstopMs, so a hung run still stops.)
    */
-  private async runKit(dir: string, args: string[], o: { timeoutMs: number; heapMb: number; extraReads?: string[]; what: string; writeDir?: string }): Promise<KitRun> {
+  private async runKit(dir: string, args: string[], o: { timeoutMs: number; heapMb: number; extraReads?: string[]; what: string; writeDir?: string; cpu?: boolean }): Promise<KitRun> {
     const t0 = Date.now();
     const ms = () => Date.now() - t0;
     const kit = fs.realpathSync(this.host.config.kitDir);
@@ -679,9 +681,10 @@ export class Regions {
     if (o.timeoutMs <= 0) return { ok: false, message: `no time was left for the ${o.what}`, ms: 0 };
     const reads = [kit, dir, ...(o.extraReads ?? [])];
     const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${o.writeDir ?? dir}`, `--max-old-space-size=${o.heapMb}`, '--disallow-code-generation-from-strings', `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
-    const r = await run(process.execPath, [...flags, script, ...args], { cwd: dir, env: minimalEnv(), timeoutMs: o.timeoutMs });
+    const wallMs = o.cpu ? planWallBackstopMs(o.timeoutMs) : o.timeoutMs;
+    const r = await run(process.execPath, [...flags, script, ...args], { cwd: dir, env: minimalEnv(), timeoutMs: wallMs, ...(o.cpu ? { cpuLimitMs: o.timeoutMs } : {}) });
     const out = lastJson(r.stdout);
-    if (r.timedOut) return { ok: false, message: `the ${o.what} took longer than ${Math.round(o.timeoutMs / 100) / 10} s and was stopped`, ms: ms() };
+    if (r.timedOut) return { ok: false, message: kitTimeoutMessage(o.what, { cpu: !!o.cpu, limitMs: o.timeoutMs, wallMs, hit: r.limit ?? 'wall', cpuMs: r.cpuMs, elapsedMs: ms() }), ms: ms() };
     if (/heap out of memory|ERR_WORKER_OUT_OF_MEMORY|Allocation failed/i.test(r.stderr)) return { ok: false, message: `the ${o.what} ran out of memory (${o.heapMb} MB heap)`, ms: ms() };
     if (r.code !== 0 || (out && out.ok === false)) {
       const msg = (typeof out?.error === 'string' && out.error) || (typeof out?.message === 'string' && out.message) || outputTail(`${r.stdout}\n${r.stderr}`) || `the ${o.what} exited with code ${r.code}`;
@@ -729,7 +732,7 @@ export class Regions {
         fs.mkdirSync(this.argsDir(), { recursive: true });
         fs.writeFileSync(path.join(this.argsDir(), `${planId}.json`), pa);
       }
-      const r = await this.runKit(dir, args, { ...budget, extraReads, what: 'plan' });
+      const r = await this.runKit(dir, args, { ...budget, extraReads, what: 'plan', cpu: true });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
       const out = r.out;
@@ -1002,7 +1005,7 @@ export class Regions {
         if (at('--blobs-out') >= 0) args[at('--blobs-out') + 1] = path.join(sub, 'blobs');
         args.push('--links', path.join(sub, 'links.json'), '--link-base', path.join(dir, 'ir.json'));
         const extraReads = (pa.extraReads ?? []).filter((x) => fs.existsSync(x));
-        const r = await this.runKit(dir, args, { timeoutMs: pa.budget?.timeoutMs ?? this.cfg.planMs, heapMb: pa.budget?.heapMb ?? this.cfg.planHeapMb, extraReads, what: 'link pass', writeDir: sub });
+        const r = await this.runKit(dir, args, { timeoutMs: pa.budget?.timeoutMs ?? this.cfg.planMs, heapMb: pa.budget?.heapMb ?? this.cfg.planHeapMb, extraReads, what: 'link pass', writeDir: sub, cpu: true });
         if (!r.ok) {
           const nl = r.out?.noLink as Record<string, unknown> | undefined;
           if (nl && typeof nl === 'object') {
@@ -1465,7 +1468,7 @@ export class Regions {
     fs.mkdirSync(out, { recursive: true });
     const args = ['author-check', path.join(real, 'source.mjs'), '--survey', path.join(real, 'survey.bin'), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','), ...(hasBible ? ['--bible', path.join(real, 'bible.json')] : []), '--out', out, '--plan-only', '--json'];
     const b = this.planBudget([]);
-    const r = await this.runKit(real, args, { ...b, what: 'authored program\'s plan', writeDir: out });
+    const r = await this.runKit(real, args, { ...b, what: 'authored program\'s plan', writeDir: out, cpu: true });
     if (!r.ok) return { sha, findings: [{ rule: /longer than/.test(r.message) ? 'timeout' : 'program', message: truncate(r.message, 2000) }] };
     const pf = Array.isArray(r.out.findings) ? (r.out.findings as Array<{ rule: string; message: string; line?: number }>) : [];
     if (pf.length) return { sha, findings: keep(pf) };
@@ -1549,4 +1552,25 @@ export const LAND_ANALYSIS_MAX_MS = 600_000;
 export function landAnalysisMs(columns?: number): number {
   const n = Number.isFinite(columns) && (columns as number) > 0 ? (columns as number) : 0;
   return Math.min(LAND_ANALYSIS_MAX_MS, LAND_ANALYSIS_MIN_MS + Math.round(n * LAND_ANALYSIS_MS_PER_COLUMN));
+}
+
+/**
+ * (WR2) A plan run's wall-clock backstop when its limit is CPU time: 5x the limit, at least 600 s and at most 1800 s. The mod waits
+ * longer than this for a plan (RegionsImpl: 900 s with the check, 660 s without), so the sidecar's own stop reaches it first.
+ */
+export function planWallBackstopMs(cpuLimitMs: number): number {
+  return Math.min(1_800_000, Math.max(600_000, 5 * cpuLimitMs));
+}
+
+/**
+ * (WR2) A stopped kit run's message. The text keeps 6a's prefix ("the <what> took longer than <limit> s"), adding which clock: CPU
+ * time, or the wall-clock backstop (with the CPU used, when it was read).
+ */
+export function kitTimeoutMessage(what: string, o: { cpu: boolean; limitMs: number; wallMs: number; hit: 'cpu' | 'wall'; cpuMs?: number | undefined; elapsedMs: number }): string {
+  const s = (ms: number) => `${Math.round(ms / 100) / 10} s`;
+  if (!o.cpu) return `the ${what} took longer than ${s(o.limitMs)} and was stopped`;
+  if (o.hit === 'cpu') return `the ${what} took longer than ${s(o.limitMs)} of CPU time and was stopped`;
+  // (no CPU reading at all: the CPU limit was enforced as wall clock, before the backstop)
+  if (o.cpuMs === undefined && o.elapsedMs < o.wallMs) return `the ${what} took longer than ${s(o.limitMs)} and was stopped (its CPU time could not be read: wall clock)`;
+  return `the ${what} took longer than ${s(o.wallMs)} of wall-clock time (the backstop; ${o.cpuMs !== undefined ? `${s(o.cpuMs)} of CPU time used, ` : ''}its limit ${s(o.limitMs)} of CPU time) and was stopped`;
 }
