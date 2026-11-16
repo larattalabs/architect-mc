@@ -11,6 +11,7 @@
 		"CompoundContainerAccessor",
 		"FallingBlockEntityMixin",
 		"HopperGuardMixin",
+		"HopperHoldMixin",
 		"LevelChunkMixin",
 		"LevelTicksAccessor",
 		"LevelTicksMixin",

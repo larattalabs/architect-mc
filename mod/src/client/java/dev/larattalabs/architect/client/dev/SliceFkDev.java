@@ -393,7 +393,7 @@ public final class SliceFkDev {
 				return ServerTasks.callOnServer(s -> Fills.stateJson(s, id));
 			});
 		DevBridge.register("dev.fk.container", 30_000, "{pos: [x, y, z], take?: {item: count}, add?: {item: count}, clear?: bool} - (M5 FK) TEST: a player's "
-			+ "hand in the container at pos (takes from any slot; adds into free slots); answers {holds: {item: count}}", (req, mc) -> {
+			+ "hand in the container at pos (takes from any slot; adds into free slots); answers {holds: {item: count}, state}", (req, mc) -> {
 				JsonElement pe = req.get("pos");
 				if (pe == null || !pe.isJsonArray() || pe.getAsJsonArray().size() != 3) {
 					throw new DevBridge.DevException("pos must be [x, y, z]");
@@ -455,6 +455,7 @@ public final class SliceFkDev {
 					JsonObject h = new JsonObject();
 					holds.forEach(h::addProperty);
 					o.add("holds", h);
+					o.addProperty("state", level.getBlockState(p).toString()); // (slice FL) e.g. a hopper's enabled
 					return o;
 				});
 			});
