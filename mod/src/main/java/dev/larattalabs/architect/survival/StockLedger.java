@@ -624,6 +624,11 @@ public final class StockLedger {
 	}
 
 	/** A feed target's credit key ({@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}): capped by its record. */
+	/** (DR-S) Whether {@code key} is a fed target's ({@code site:id@placedAt} or {@code road:id@placedAt}). */
+	public static boolean isTargetKey(String key) {
+		return targetKey(key);
+	}
+
 	static boolean targetKey(String key) {
 		return (key.startsWith("site:") || key.startsWith("road:")) && key.indexOf('@') > 0;
 	}

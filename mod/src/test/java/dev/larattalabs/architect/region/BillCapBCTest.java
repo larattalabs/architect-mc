@@ -44,7 +44,7 @@ class BillCapBCTest {
 			.maxBill());
 		assertThrows(IllegalArgumentException.class, () -> req(Map.of("minecraft:dirt", -1)));
 		assertEquals(SiteWait.BILL_CAP, "bill_cap");
-		assertEquals(Reason.BILL_CAP, Reason.values()[Reason.values().length - 1], "appended last");
+		assertEquals(Reason.BILL_CAP, Reason.values()[Reason.JOINT_MISMATCH.ordinal() + 2], "appended after 7c's reasons (later ones follow it: DR's REPAIR_STALE)");
 	}
 
 	@Test
