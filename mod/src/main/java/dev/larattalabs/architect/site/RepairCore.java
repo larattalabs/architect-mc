@@ -91,7 +91,7 @@ final class RepairCore {
 		return c;
 	}
 
-	/** Guard kinds whose cells are a survival site's (its crate, its scaffold): the builder's, never DR's. */
+	/** Guard kinds whose cells are a survival site's (its crate, its scaffold): the builder's while it stands, never DR's placements. */
 	static boolean survivalGuard(String kind) {
 		return kind.equals(WorldJournal.CRATE) || kind.equals(WorldJournal.SCAFFOLD);
 	}
@@ -163,7 +163,9 @@ final class RepairCore {
 	 * undone cell's after is what the world showed before the undo). Cells with no after (a rolled-back PLACING) are skipped.
 	 */
 	static List<Want> removalWants(JournalStore js, String siteId, String group) throws IOException {
-		List<JournalStore.Meta> undone = SiteJournal.undone(siteId, group).stream().filter(m -> !survivalGuard(m.kind())).toList();
+		// (DR-S) a survival site's scaffold (costs nothing, refunds nothing) and crate cells roll forward with it; a crate (or any container)
+		// still holding items is never written over (Repairs: FOREIGN)
+		List<JournalStore.Meta> undone = SiteJournal.undone(siteId, group);
 		List<JournalStore.Meta> inGroup = new ArrayList<>(js.find(m -> group.equals(m.undoGroup())));
 		inGroup.sort(Comparator.comparingLong(JournalStore.Meta::layer));
 		Map<Long, Want> byPos = new LinkedHashMap<>();
