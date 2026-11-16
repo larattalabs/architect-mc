@@ -161,6 +161,6 @@ public enum Reason {
 	JOINT_MISMATCH, AUTHORED_STALE,
 	// 1.60.0 (BC, S-M5-9): a survival realise's bill past its maxBill
 	BILL_CAP,
-	// 1.65.0 (DR): a repair whose plan's cells changed since its diagnosis (diagnose again)
+	// NEXT (DR): a repair whose plan's cells changed since its diagnosis (diagnose again)
 	REPAIR_STALE
 }
