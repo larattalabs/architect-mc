@@ -66,7 +66,7 @@ package dev.larattalabs.architect.api;
  * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
  * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
  * (single designs only); (PT2) {@code adopted_polish} (an adopted build's entry is changed by versionOf, never polished); (7c CS,
- * since 1.65.0) {@code composite} (a composite, or one of its hidden modules, gets no new versions: polish, versionOf and revert are
+ * since NEXT) {@code composite} (a composite, or one of its hidden modules, gets no new versions: polish, versionOf and revert are
  * refused; a variant or re-skin of it is a new composite entry).</li>
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
@@ -160,7 +160,5 @@ public enum Reason {
 	// 1.55.0 (7c foundation): composition's reasons, in the contract's order
 	JOINT_MISMATCH, AUTHORED_STALE,
 	// 1.60.0 (BC, S-M5-9): a survival realise's bill past its maxBill
-	BILL_CAP,
-	// 1.65.0 (DR): a repair whose plan's cells changed since its diagnosis (diagnose again)
-	REPAIR_STALE
+	BILL_CAP
 }

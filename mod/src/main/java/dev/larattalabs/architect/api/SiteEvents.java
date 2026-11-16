@@ -292,21 +292,6 @@ public interface SiteEvents {
 		}
 	});
 
-	/**
-	 * (DR) An op's {@link Sites#repair} wrote a site's lagging cells (docs/CONTRACT.md "Slice DR"): the site id, its region id (null
-	 * outside a region) and the repair's result. Once per repaired site. Server thread. Since 1.65.0.
-	 */
-	Event<SiteRepaired> SITE_REPAIRED = EventFactory.createArrayBacked(SiteRepaired.class, ls -> (siteId, regionId, result) -> {
-		for (SiteRepaired l : ls) {
-			Guard.run(() -> l.onRepaired(siteId, regionId, result), "SITE_REPAIRED");
-		}
-	});
-
-	@FunctionalInterface
-	interface SiteRepaired {
-		void onRepaired(String siteId, @org.jspecify.annotations.Nullable String regionId, RepairResult result);
-	}
-
 	@FunctionalInterface
 	interface Adopted {
 		void onAdopted(String siteId, String buildId, String entryId);

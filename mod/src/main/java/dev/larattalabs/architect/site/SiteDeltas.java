@@ -97,7 +97,6 @@ public final class SiteDeltas {
 		java.nio.file.Path marker = sv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(RUNNING_MARKER);
 		boolean unclean = java.nio.file.Files.exists(marker);
 		lastStartUnclean = unclean;
-		Repairs.markerAtStart(marker, unclean); // (DR) the previous run's last completed save, read before the marker is rewritten
 		settle(sv, unclean);
 		try {
 			java.nio.file.Files.writeString(marker, Long.toString(System.currentTimeMillis()));

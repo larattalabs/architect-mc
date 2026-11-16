@@ -29,7 +29,6 @@ public class Architect implements ModInitializer {
 		dev.larattalabs.architect.apiimpl.ApiImpl.init(); // the public API (docs/CONTRACT.md phase 4a)
 		SiteCommands.init();
 		dev.larattalabs.architect.library.SchematicCommands.init(); // 6c SCH: /architect export <entry> schem, /architect import <file>
-		dev.larattalabs.architect.site.Repairs.init(); // (DR) diagnose and repair; last, so its AFTER_SAVE runs after the stockpiles'
 		LOGGER.info("Architect common init done");
 	}
 

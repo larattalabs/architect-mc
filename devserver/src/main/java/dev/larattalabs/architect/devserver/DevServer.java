@@ -201,7 +201,6 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SliceDsDev.init(); // (7b DS) dev.ds.*
 		dev.larattalabs.architect.devserver.gen.SliceGpDev.init(); // (M5 GP) dev.gp.*
 		dev.larattalabs.architect.devserver.gen.SliceFkDev.init(); // (M5 FK) dev.fk.*
-		dev.larattalabs.architect.devserver.gen.SliceDrDev.init(); // (DR) dev.repair
 		dev.larattalabs.architect.devserver.gen.SliceCxDev.init(); // (7c CX) dev.cx.place, dev.cx.plan
 		dev.larattalabs.architect.devserver.gen.SliceSoDev.init(); // (7b SO) dev.so.*
 		dev.larattalabs.architect.devserver.gen.SliceSlDev.init(); // (7b SL) dev.sl.*
