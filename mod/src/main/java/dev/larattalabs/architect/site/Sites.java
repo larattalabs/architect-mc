@@ -2707,6 +2707,31 @@ public final class Sites {
 		reports.merge(id, new Report(id, problem, message), (a, b) -> new Report(id, a.problem() || b.problem(), a.message() + " " + b.message()));
 	}
 
+	/**
+	 * (DR) A pending record a repair settled (its restore now unanimous; the caller releases its undo group): dropped and saved, and
+	 * SITE_REMOVED fires as for a normal removal. Returns the record, or null when none was pending. Server thread.
+	 */
+	static @Nullable Site settledByRepair(MinecraftServer server, String id) {
+		State s = state;
+		Site found = null;
+		List<Site.Pending> p = new ArrayList<>();
+		for (Site.Pending x : s.pending()) {
+			if (x.site().id().equals(id)) {
+				found = x.site();
+			} else {
+				p.add(x);
+			}
+		}
+		if (found == null) {
+			return null;
+		}
+		state = new State(s.byId(), s.next(), List.copyOf(p));
+		save(server, state);
+		notifyListeners();
+		ApiEvents.removed(server, new Removed(found, Map.of()));
+		return found;
+	}
+
 	/** The sites taken down whose journal entries are kept until the next world start settles them. Any thread. */
 	public static List<Site.Pending> pending() {
 		return state.pending();
@@ -2917,7 +2942,7 @@ public final class Sites {
 	 * was there first: {@code main} wrote the holder's {@code after} (its {@code before} came from that holder), and the holder's
 	 * later undo replaced it. Removing a stacked pair top-down then reads as restored, not as neither restored nor standing.
 	 */
-	private static List<SectionCells> laterBelow(JournalStore js, JournalStore.Meta main, String group, long key) throws IOException {
+	static List<SectionCells> laterBelow(JournalStore js, JournalStore.Meta main, String group, long key) throws IOException {
 		List<JournalStore.Meta> later = new ArrayList<>();
 		for (String id : js.inSection(main.dimension(), key)) {
 			JournalStore.Meta m = js.meta(id);
@@ -2941,7 +2966,7 @@ public final class Sites {
 	}
 
 	/** (F1) What the latest of {@code below} with a cell under {@code layer} at section index {@code idx} wrote there, or null. */
-	private static Journal.@Nullable Value laterWrite(List<SectionCells> below, int idx, long layer) {
+	static Journal.@Nullable Value laterWrite(List<SectionCells> below, int idx, long layer) {
 		for (SectionCells s : below) {
 			int j = s.find(idx);
 			if (j >= 0 && s.layer(j) < layer) {

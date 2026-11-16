@@ -528,4 +528,39 @@ public interface Sites {
 	default boolean loadHealthy() {
 		throw new UnsupportedOperationException("Sites.loadHealthy needs Architect API 1.60.0");
 	}
+
+	// ------------------------------------------------------------------ NEXT (DR): diagnose and repair (docs/CONTRACT.md "Slice DR")
+
+	/**
+	 * (DR) Compares a scope's cells with the journal's committed state, read-only: each cell only with its owner's committed value. Runs
+	 * after the start's settles; loads at most 256 chunks a call (the rest {@link RepairCode#UNREAD}, with a continuation). Feature
+	 * {@code "diagnoseRepair"}. Server thread (any thread: queued there). Since NEXT.
+	 */
+	default CompletableFuture<Diagnosis> diagnose(DiagnoseScope scope) {
+		throw new UnsupportedOperationException("Sites.diagnose needs Architect API NEXT");
+	}
+
+	/**
+	 * (DR) Rolls a diagnosis's {@link RepairCode#LAGGING} cells forward to the journal's committed values ({@code apply}), or says what it
+	 * would write and credit (a dry run, nothing written). Refuses {@link Reason#PERMISSION} without an actor holding gamemaster permission
+	 * (Architect never repairs on its own), {@link Reason#REPAIR_STALE} when the plan's cells changed, {@link Reason#SITE_BUSY} for a site
+	 * with a job, a queued removal or a revision in flight. Fires {@link SiteEvents#SITE_REPAIRED} once per repaired site. Repairs are
+	 * final (no undo; the record is the audit trail). Feature {@code "diagnoseRepair"}. Since NEXT.
+	 */
+	default CompletableFuture<RepairResult> repair(String planId, net.minecraft.server.level.@Nullable ServerPlayer actor, boolean apply) {
+		throw new UnsupportedOperationException("Sites.repair needs Architect API NEXT");
+	}
+
+	/**
+	 * (DR) The sites the auto-diagnose after an unclean start found (cached: loads nothing, O(suspects)); empty after a clean start, and
+	 * it empties as repairs land. Feature {@code "repairSuspects"}. Any thread. Since NEXT.
+	 */
+	default List<RepairSuspect> suspects() {
+		throw new UnsupportedOperationException("Sites.suspects needs Architect API NEXT");
+	}
+
+	/** (DR) Whether the auto-diagnose is still running ({@link #suspects()} is not final yet). Feature {@code "repairSuspects"}. Since NEXT. */
+	default boolean suspectsPending() {
+		throw new UnsupportedOperationException("Sites.suspectsPending needs Architect API NEXT");
+	}
 }
