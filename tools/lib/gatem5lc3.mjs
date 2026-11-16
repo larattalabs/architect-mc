@@ -420,6 +420,8 @@ export async function registerLC3(steps, h) {
   async function abandonCase() {
     const name = 'G6B LC3 Abandon';
     const out = {};
+    // (the runner's json() drops whitespace: compare without it)
+    const says = (r, t) => json(r?.messages ?? []).replace(/\s/g, '').includes(t.replace(/\s/g, ''));
     await L.fresh(name, G.FLAT);
     await L.setRules('exact');
     await G.designs(ctx);
@@ -431,7 +433,7 @@ export async function registerLC3(steps, h) {
     if (st.view.state !== 'PLACED') { await L.leaveWorld(); return out; }
     const none = await cmd('/architect removal abandon g999');
     out.unknown = none;
-    check(!none.success && json(none.messages).includes('No stalled removal of g999'), `abandon: refused for a group with no stalled removal (${json(none.messages)})`, none);
+    check(!none.success && says(none, 'No stalled removal of g999'), `abandon: refused for a group with no stalled removal (${json(none.messages)})`, none);
     await call('dev.undo.failRestore', { skip: 1 }, 10_000); // the first member's restore finishes, the next breaks mid-write
     const fr = call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e) }));
     const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 600, 1000);
@@ -454,12 +456,14 @@ export async function registerLC3(steps, h) {
     check(refused(u0, DIAMOND) && h0.holds?.[DIAMOND] === 5, `abandon: the chest at ${P.join(',')} in ${A}'s box is sealed (the hand refused, ${json(h0.holds)} kept)`, { u0, h0 });
     const r1 = await cmd(`/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`);
     out.abandon = r1;
-    check(r1.success !== false && json(r1.messages).includes('abandoned the stalled'), `abandon: /architect removal abandon ${sr.group} accepted (${json(r1.messages).slice(0, 300)})`, r1);
+    check(r1.success !== false && says(r1, 'abandoned the stalled'), `abandon: /architect removal abandon ${sr.group} accepted (${json(r1.messages).slice(0, 300)})`, r1);
     const x1 = await until(async () => { const x = await seal(); return !(x.sealed ?? []).length && !(x.lingering ?? []).length && !(x.stalled ?? []).length ? x : null; }, 120, 500);
     check(!!x1 && x1.queueWritten >= x1.queueRequested - 1, `abandon: the removal left the queue and, once its queue file generation was written, nothing is sealed (written ${x1?.queueWritten}, requested ${x1?.queueRequested})`, x1);
     const h1 = await holder(P);
+    await cmd(`/setblock ${P[0]} ${P[1] + 1} ${P[2]} minecraft:air`); // a chest under a solid block never opens
     const u1 = await use(P, DIAMOND);
-    check(h1.holds?.[DIAMOND] === 5 && !u1.error && u1.refused === 0, `abandon: the chest opens again with its items intact (${json(h1.holds)}; menu ${u1.menuOpened})`, { h1, u1 });
+    out.open = { h1, u1 };
+    check(h1.holds?.[DIAMOND] === 5 && !u1.error && u1.refused === 0 && u1.menuOpened, `abandon: the chest opens again with its items intact (${json(h1.holds)}; ${json(u1).slice(0, 400)})`, { h1, u1 });
     await call('dev.seal.menu', { pos: P, close: true }, 10_000).catch(() => null);
     await cmd(`/item replace block ${P.join(' ')} container.0 with minecraft:air`); // the diamonds taken out: a replay would bring the chest's cell back
     const h2 = await holder(P);
@@ -485,7 +489,7 @@ export async function registerLC3(steps, h) {
     check(!json((s2.sites ?? []).map((p) => p.id)).includes(`"${B}"`) && !json((s2.pending ?? []).map((p) => p.site?.id ?? p.id)).includes(`"${B}"`), `abandon: after the restart unwritten member ${B} has no record (none came back from the journal)`, s2);
     const r2 = await cmd(`/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`);
     out.second = r2;
-    check(!r2.success && json(r2.messages).includes('No stalled removal'), `abandon: a second abandon is refused (${json(r2.messages)})`, r2);
+    check(!r2.success && says(r2, 'No stalled removal'), `abandon: a second abandon is refused (${json(r2.messages)})`, r2);
     await L.leaveWorld();
     return out;
   }
