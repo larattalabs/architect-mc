@@ -377,6 +377,10 @@ public final class RegionRec {
 				list.forEach(e -> r.revisions.add(Revisions.Rev.fromJson(e.getAsJsonObject())));
 			}
 		}
+		if (r.survival != null) {
+			// (fix b5b, review P2) a 0.72.0 region-wide maxBill gets its rid once, by the head it was saved with (saved with the next record save)
+			dev.larattalabs.architect.site.BillCaps.migrate(r.survival, r.headRid);
+		}
 		return r;
 	}
 

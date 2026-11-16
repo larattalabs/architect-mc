@@ -87,6 +87,16 @@ public final class StockLedger {
 	 */
 	private final Map<String, Map<String, Integer>> pendingCredit = new TreeMap<>();
 	private final Map<String, Long> pendingAt = new TreeMap<>();
+	/**
+	 * (fix b5b, review finding 3) A region's own charges (its fluids', a gate mechanism's), by key: what was debited and for which rid. Booked
+	 * with the debit in the same ledger save, so a crash before the region's record is saved finds the charge here: replayed, it debits
+	 * nothing again ({@link #chargeOnce}) and the record is settled from it (its cap counts it).
+	 */
+	private final Map<String, Charge> charges = new TreeMap<>();
+
+	/** (fix b5b) A keyed region charge: its items and the rid its cap counts it for. */
+	public record Charge(Map<String, Integer> items, int rid) {
+	}
 
 	/**
 	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
@@ -363,6 +373,28 @@ public final class StockLedger {
 			c.overflow().forEach((k, v) -> overflowOut.merge(k, v, Integer::sum));
 		}
 		return true;
+	}
+
+	/**
+	 * (fix b5b, review finding 3) A region charge under {@code key}, once: the first call consumes {@code items} and records the key with
+	 * them (one ledger change, saved together); a key charged before consumes nothing and returns false (a replay after a crash that lost the
+	 * region's record). The caller checks the stock first ({@code Stockpiles.charge}).
+	 */
+	public boolean chargeOnce(String key, Map<String, Integer> items, int rid, int capacityStacks, ToIntFunction<String> maxStack,
+		Map<String, Integer> overflowOut) {
+		if (charges.containsKey(key)) {
+			return false;
+		}
+		for (var e : new TreeMap<>(items).entrySet()) {
+			consume(e.getKey(), e.getValue(), capacityStacks, maxStack, overflowOut);
+		}
+		charges.put(key, new Charge(Map.copyOf(new TreeMap<>(items)), rid));
+		return true;
+	}
+
+	/** (fix b5b) The region charge booked under {@code key}, or null. */
+	public @Nullable Charge charged(String key) {
+		return charges.get(key);
 	}
 
 	/**
@@ -820,6 +852,16 @@ public final class StockLedger {
 			heldProvided.forEach((key, m) -> hp.add(key, counts(m)));
 			o.add("heldProvided", hp); // (FK-b) additive (format 2)
 		}
+		if (!charges.isEmpty()) {
+			JsonObject ch = new JsonObject();
+			charges.forEach((key, c) -> {
+				JsonObject e = new JsonObject();
+				e.add("items", counts(new TreeMap<>(c.items())));
+				e.addProperty("rid", c.rid());
+				ch.add(key, e);
+			});
+			o.add("charges", ch); // (fix b5b) additive (format 2)
+		}
 		if (!pendingAt.isEmpty()) {
 			JsonObject pc = new JsonObject();
 			pendingAt.forEach((key, at) -> {
@@ -926,6 +968,17 @@ public final class StockLedger {
 					}
 					l.pendingCredit.put(e.getKey(), m);
 					l.pendingAt.put(e.getKey(), pe.get("at").getAsLong());
+				}
+			});
+		}
+		if (o.get("charges") instanceof JsonObject ch) { // (fix b5b)
+			ch.entrySet().forEach(e -> {
+				if (e.getValue() instanceof JsonObject ce) {
+					Map<String, Integer> m = new TreeMap<>();
+					if (ce.get("items") instanceof JsonObject it) {
+						read(it, m);
+					}
+					l.charges.put(e.getKey(), new Charge(Map.copyOf(m), ce.has("rid") ? ce.get("rid").getAsInt() : 0));
 				}
 			});
 		}

@@ -85,10 +85,14 @@ public final class BillCaps {
 		}
 	}
 
-	/** (BC-d) A record from before BC-d (one region-wide maxBill) moved to its rid's entry; no change otherwise. */
-	static void migrate(JsonObject survival, int headRid) {
+	/**
+	 * (BC-d) A record from before BC-d (one region-wide maxBill) moved to its rid's entry; no change otherwise. (fix b5b, review P2) Run when
+	 * the record loads ({@code RegionRec.fromJson}, with the head it was saved with), so the cap's owner is fixed once: a later head change (an
+	 * undo, a revision) never moves it. Returns whether it moved one.
+	 */
+	public static boolean migrate(JsonObject survival, int headRid) {
 		if (!(survival.get("maxBill") instanceof JsonObject mb)) {
-			return;
+			return false;
 		}
 		int rid = legacyRid(survival, headRid);
 		JsonObject caps = survival.get(CAPS) instanceof JsonObject c ? c : new JsonObject();
@@ -100,6 +104,7 @@ public final class BillCaps {
 		survival.add(CAPS, caps);
 		survival.remove("maxBill");
 		survival.remove("billBase");
+		return true;
 	}
 
 	private static int legacyRid(JsonObject survival, int headRid) {
@@ -308,8 +313,14 @@ public final class BillCaps {
 	 */
 	public static JsonObject devState(net.minecraft.server.MinecraftServer srv, String region, @Nullable Integer ridArg, @Nullable Map<String, Integer> set) {
 		JsonObject o = new JsonObject();
+		// (fix b5b) the world it answers for: a gate's expected caps are judged only in their own world
+		o.addProperty("world", srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString());
 		var live = dev.larattalabs.architect.region.RegionsImpl.live(region);
 		if (live == null || live.rec().survival == null) {
+			var tomb = dev.larattalabs.architect.region.RegionsImpl.tomb(region);
+			if (tomb != null) {
+				o.addProperty("removedCreatedAt", tomb.createdAt); // (fix b5b) removed on purpose: the gate tells it from a lost record
+			}
 			o.addProperty("refused", "no survival region " + region);
 			return o;
 		}
@@ -322,6 +333,7 @@ public final class BillCaps {
 		}
 		Cap cap = capOf(region, rec.groupId, rid, rec.survival, rec.headRid);
 		o.addProperty("rid", rid);
+		o.addProperty("createdAt", rec.createdAt); // (fix b5b) the record's identity: a gate's expected caps are this record's
 		o.add("maxBill", cap == null ? null : json(cap.max()));
 		o.add("billBase", cap == null ? null : json(cap.base()));
 		JsonObject caps = new JsonObject();

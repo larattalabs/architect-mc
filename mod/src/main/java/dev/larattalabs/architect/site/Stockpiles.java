@@ -1238,9 +1238,22 @@ public final class Stockpiles {
 	}
 
 	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items) {
+		return charge(srv, owner, items, null, 0);
+	}
+
+	/**
+	 * (fix b5b, review finding 3) {@link #charge} under {@code key} (a region's fluids or a gate mechanism; null: unkeyed): the debit and the key
+	 * are one ledger change in one save, and a key the ledger already holds debits nothing (true: the charge stands; the caller settles its
+	 * record from {@link StockLedger#charged}).
+	 */
+	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items, @Nullable String key, int rid) {
 		Pile p = get(owner);
 		if (p == null) {
 			return items.values().stream().allMatch(n -> n <= 0);
+		}
+		if (key != null && p.ledger.charged(key) != null) {
+			Architect.LOGGER.warn("Stockpile {}: region charge {} was booked before (its record not saved): not charged again", p.owner, key);
+			return true;
 		}
 		Map<String, Integer> reserved = LAST_RESERVED.getOrDefault(p.id, Map.of());
 		for (var e : items.entrySet()) {
@@ -1250,13 +1263,17 @@ public final class Stockpiles {
 		}
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
-		for (var e : new TreeMap<>(items).entrySet()) {
-			p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+		if (key != null) {
+			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over);
+		} else {
+			for (var e : new TreeMap<>(items).entrySet()) {
+				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+			}
 		}
 		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
-		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}", p.owner, items);
+		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
 		return true;
 	}
 

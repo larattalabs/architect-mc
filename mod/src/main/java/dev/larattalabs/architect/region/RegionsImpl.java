@@ -2917,6 +2917,11 @@ public final class RegionsImpl implements Regions {
 
 	// ------------------------------------------------------------------ views, removal
 
+	/** (fix b5b, TEST readers) A removed region's record (its tombstone), or null. */
+	public static @Nullable RegionRec tomb(String regionId) {
+		return TOMBS.get(regionId);
+	}
+
 	@Override
 	public Optional<RegionView> get(String regionId) {
 		Live l = REGIONS.get(regionId);
