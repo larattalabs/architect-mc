@@ -207,17 +207,33 @@ public final class RemovalSeal {
 
 	/**
 	 * (slice LC3 fix) A box whose removal just ended (its job or group removal left the queue) stays sealed until the queue file without it
-	 * is on disk ({@link Placement#saved}: the save is written off the server thread): a crash before that reloads the removal, which writes
-	 * the box again.
+	 * is on disk: a crash before that reloads the removal, which writes the box again. (LC3 fix 2) "On disk" is a confirmed queue file
+	 * generation ({@link Placement#writtenGen}), not the saver's barrier: the box waits for a generation requested after it left the seal
+	 * set ({@code need}: the state then excludes it) to be written, forced and renamed with no exception. A failed write leaves it sealed;
+	 * the placement tick retries the save ({@link Placement#wantSave}, the retry every 5 s).
 	 */
-	private record Linger(Sealed box, java.util.concurrent.CompletableFuture<Void> saved) {
+	record Linger(Sealed box, long need) {
 	}
 
 	private static final Map<String, Linger> LINGER = new java.util.LinkedHashMap<>();
 
-	/** Drops the lingering boxes whose queue file is written; answers whether any went (the index then rebuilds). */
+	/** (pure) Whether a lingering box may unseal: the generation it waits for is written. */
+	static boolean released(Linger l, long writtenGen) {
+		return writtenGen >= l.need();
+	}
+
+	/** Drops the lingering boxes whose queue file generation is written; answers whether any went (the index then rebuilds). */
 	private static boolean pruneLinger() {
-		return !LINGER.isEmpty() && LINGER.values().removeIf(l -> l.saved().isDone());
+		if (LINGER.isEmpty()) {
+			return false;
+		}
+		long w = Placement.writtenGen();
+		return LINGER.values().removeIf(l -> released(l, w));
+	}
+
+	/** (TEST, units) The lingering boxes now, by id. */
+	static Map<String, Linger> lingering() {
+		return java.util.Collections.unmodifiableMap(LINGER);
 	}
 
 	/** A removal's seal sources changed in a way the fingerprint does not see (a group removal's member list grew). */
@@ -256,13 +272,16 @@ public final class RemovalSeal {
 					now.put(id, s);
 				}
 			}
-			java.util.concurrent.CompletableFuture<Void> saved = null;
+			long need = -1;
 			for (var e : built.entrySet()) {
 				if (!now.containsKey(e.getKey())) {
-					if (saved == null) {
-						saved = Placement.saved(); // after the save its removal's end queued (same tick, before any seal check)
+					if (need < 0) {
+						// (LC3 fix 2) a generation requested from now on excludes it (this may run in the middle of a change, from a mixin:
+						// the save is the tick's, never made here); its removal's own end save may be earlier and is not trusted
+						need = Placement.requestedGen() + 1;
+						Placement.wantSave();
 					}
-					LINGER.put(e.getKey(), new Linger(e.getValue(), saved));
+					LINGER.put(e.getKey(), new Linger(e.getValue(), need));
 				}
 			}
 			for (String id : now.keySet()) {
@@ -275,6 +294,18 @@ public final class RemovalSeal {
 			builtFrom = f; // (a linger made now whose save is already written goes at the next check's prune)
 		}
 		return index;
+	}
+
+	/**
+	 * (LC3 fix 2) The placement tick's check, between its steps: the seal set is rebuilt when its sources changed, so a box whose removal
+	 * ended lingers even when no holder was asked about in between (the lazy checks alone would never see it sealed).
+	 */
+	static void observe() {
+		try {
+			current();
+		} catch (RuntimeException e) {
+			Architect.LOGGER.warn("Removal seal: could not rebuild the sealed boxes", e);
+		}
 	}
 
 	/** Whether {@code pos} of {@code level} lies in a box being removed. Server levels only. */
@@ -601,6 +632,22 @@ public final class RemovalSeal {
 			mem.add(x);
 		}
 		o.add("members", mem);
+		// (LC3 fix 2) boxes kept sealed until a queue file generation is written, and the generations
+		com.google.gson.JsonArray lg = new com.google.gson.JsonArray();
+		LINGER.forEach((id, l) -> {
+			JsonObject x = new JsonObject();
+			x.addProperty("id", id);
+			x.addProperty("need", l.need());
+			lg.add(x);
+		});
+		o.add("lingering", lg);
+		// (LC3 fix 2) the stalled removals ({@code /architect removal abandon}): their members written and not
+		com.google.gson.JsonArray stl = new com.google.gson.JsonArray();
+		Groups.stalledJson(stl);
+		o.add("stalled", stl);
+		o.addProperty("queueRequested", Placement.requestedGen());
+		o.addProperty("queueWritten", Placement.writtenGen());
+		o.addProperty("queueWriteFailing", Placement.writeFailing());
 		com.google.gson.JsonArray jobs = new com.google.gson.JsonArray();
 		for (Placement.Job j : Placement.jobs()) {
 			JsonObject x = new JsonObject();

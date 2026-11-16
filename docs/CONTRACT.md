@@ -31295,6 +31295,37 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **After a restart** the start's settle can release a written member (its record and entries gone: nothing can write it again), so it unseals then; a member still pending is sealed (lc3-undo checks both through `dev.seal.state` `members`).
 - **Gate** (`--only --no-cache --shards 1 --no-turbo`, 9068/9069; `artifacts/gate-runs-LC3f`): `20261116-122948-change` at bb230641: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, fl-survival 11/0; lc3-seal 38/2 and lc3-undo 13/1 (test faults: a headless player's vault detection, and a released member expected sealed); fixed and re-run `20261116-130515-change` at fd1c848f: lc3-seal 40/0, lc3-undo 15/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
+#### LC3 fix 2 (the GPT fix-verification, NOT SAFE at 611ee4ee: two P1s; one small round, $0, strict)
+
+- **1 unseal on a confirmed queue write:** every `Placement.save` takes the next generation; a write counts only once its temporary file is
+  forced to disk and renamed with no exception (`writtenGen`; the write now forces, as the sites file's commit does). A box that leaves the
+  seal set lingers until a generation requested after it left is written (`need = requestedGen + 1`; the save is the tick's, never made
+  inside a seal check, which can run mid-change from a mixin); `Placement.saved()` (the saver's barrier) no longer decides it. A failed write
+  keeps it sealed and the placement tick retries the save every 5 s (one error line per failure streak). The tick also rebuilds the seal set
+  between its steps, so a removal that ends with no holder asked about meanwhile still lingers. A session whose queue file failed to load
+  (PS: never saved) keeps such boxes sealed until it ends (fail closed). Unit `aLingeringBoxUnsealsOnlyOnceAQueueGenerationThatExcludesItIsWritten`
+  (an injected failing write: still sealed though the barrier completed; the retry's write releases it); with 611ee4ee's rule (the barrier)
+  swapped in, it fails.
+- **2 ops abandon:** `/architect removal abandon <group> [stage]` (permission level 2 as `/architect survival on|off`, the console too;
+  `SiteCommands`). Only a persisted STALLED group or stage removal: its written members are settled as after a normal finish (their pending
+  records and undone entries stay; the next start releases them on their evidence); its unwritten members (the one that broke included) stay
+  standing as they are, nothing written: a filled member's custody goes back into its containers (as `end()` does for a removal ended before
+  its undo), their journal entries are released (awaited) and their pending records dropped (`Sites.dropPending`), so no start's settle can
+  take them back and no removal restore them again; then it leaves the stalled list, the queue is saved, and its boxes unseal once that
+  generation is written (#1). Refusals (nothing changed): "No stalled removal of X (never stalled, finished, retried or already abandoned)"
+  (so a second abandon is refused), "The removal of X is running, not stalled", the journal unavailable, an unwritten member lying on top of
+  a site outside it (`SiteJournal.belowAny`, as `forget`). One ops log line (`Ops: <who> abandoned the stalled ...`). The group record keeps
+  the state the stall left (ACTIVE; its stages as they were); no region end is called. No player-facing change. Unit
+  `abandonSettlesOnlyAStalledRemovalItsWrittenAndUnwrittenMembers`; lc3-undo: a second town's group removal forced STALLED
+  (`dev.undo.failRestore` skip 1), a chest with 5 diamonds in written member A's sealed box; abandoned: it opens with its 5 diamonds; taken
+  out, flushed, halted, reopened: nothing resumes or is sealed, the chest stands empty (nothing replayed), the unwritten member has no record,
+  a second abandon refused (one for a group with no stalled removal too).
+- **Leftovers:** `RestoreJob.groupSaved` and `Groups.preSaved` still wait on the saver's barrier (`Placement.saved()`) before a commit, the
+  same weakness as #1 (a failed pre-save lets the commit go first); not changed here. An abandoned unwritten member's released entries
+  give up any hand-down its undo planned to a written sibling (an ops tool for a removal that cannot finish). `dev.seal.state` reports the
+  generations; there is no dev hook for a failing queue write (units only).
+- **Gate:** pending.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo

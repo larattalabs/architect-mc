@@ -18,6 +18,11 @@
 //                                                Transfer API insert; resumed, each ends removed and the seal lifts.
 //                                                (LC3 fix) In the group undo member A runs to its end while B stays paused: A's box stays
 //                                                sealed, and again after a flush, a halt and a restart, until the removal ends.
+//                                                (LC3 fix 2) A second town's group removal forced STALLED (dev.undo.failRestore skip 1): a chest
+//                                                with 5 diamonds in written member A's box sealed; /architect removal abandon <group>: the chest
+//                                                opens with its items once the queue file is written; the diamonds taken out, a halt and a
+//                                                restart: nothing resumes, the chest stands empty, the unwritten member has no record, a second
+//                                                abandon refused (so is one for a group with no stalled removal).
 //   (LC3 fix) lc3-seal also: a powered shelf outside chained into the box (the hotbar swap refused), a hopper and a hopper minecart below
 //   sealed chests (nothing pulled), a sealed hopper pushing out (nothing), a crafter firing into the box (no craft, nothing consumed or
 //   dropped), an active vault in the box (no key taken); each with a control outside the box that works.
@@ -405,7 +410,83 @@ export async function registerLC3(steps, h) {
     const s2 = await seal();
     check(!(s2.sealed ?? []).length, `group undo: nothing sealed once it ended (${json(s2.sealed)}); refusals ${json(s2.refused)}`, s2);
     await L.leaveWorld();
+    out.abandon = await abandonCase();
     spendZero();
     return out;
   };
+
+  // (LC3 fix 2, GPT P1 #2) /architect removal abandon: a group removal forced STALLED (member A written, B's restore broken mid-write) keeps
+  // a chest in A's box sealed; abandoned, the chest opens with its items, nothing replays after a halt and a restart, a second abandon refused
+  async function abandonCase() {
+    const name = 'G6B LC3 Abandon';
+    const out = {};
+    await L.fresh(name, G.FLAT);
+    await L.setRules('exact');
+    await G.designs(ctx);
+    await L.tp(CX + 80, 80, CZ + 56);
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const st = await L.waitRegion(region, 1_800_000);
+    check(st.view.state === 'PLACED', `abandon: the town ${region} PLACED`, st.view.lots);
+    if (st.view.state !== 'PLACED') { await L.leaveWorld(); return out; }
+    const none = await cmd('/architect removal abandon g999');
+    out.unknown = none;
+    check(!none.success && json(none.messages).includes('No stalled removal of g999'), `abandon: refused for a group with no stalled removal (${json(none.messages)})`, none);
+    await call('dev.undo.failRestore', { skip: 1 }, 10_000); // the first member's restore finishes, the next breaks mid-write
+    const fr = call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e) }));
+    const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 600, 1000);
+    await call('dev.undo.failRestore', { skip: -1 }, 10_000);
+    out.answer = await Promise.race([fr, L.sleep(30_000).then(() => ({ waited: true }))]);
+    const sr = x0?.stalled?.[0];
+    out.stalled = sr ?? null;
+    check(!!sr && sr.written.length > 0 && sr.unwritten.length > 0, `abandon: the group removal STALLED with member(s) ${json(sr?.written)} written and ${json(sr?.unwritten)} not (${json(out.answer).slice(0, 200)})`, x0);
+    if (!sr || !sr.written.length) { await L.leaveWorld(); return out; }
+    const A = sr.written[0];
+    const B = sr.unwritten[0];
+    const e = (x0.sealed ?? []).find((y) => y.id === A);
+    check(!!e, `abandon: written member ${A}'s box is sealed while the removal is stalled (${json((x0.sealed ?? []).map((y) => y.id))})`, x0.sealed);
+    if (!e) { await L.leaveWorld(); return out; }
+    const P = e.cell.split(',').map(Number);
+    await cmd(`/setblock ${P.join(' ')} minecraft:chest`);
+    await cmd(`/item replace block ${P.join(' ')} container.0 with ${DIAMOND} 5`); // an admin command: the chest's contents (a restored terrain chest)
+    const u0 = await use(P, DIAMOND);
+    const h0 = await holder(P);
+    check(refused(u0, DIAMOND) && h0.holds?.[DIAMOND] === 5, `abandon: the chest at ${P.join(',')} in ${A}'s box is sealed (the hand refused, ${json(h0.holds)} kept)`, { u0, h0 });
+    const r1 = await cmd(`/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`);
+    out.abandon = r1;
+    check(r1.success !== false && json(r1.messages).includes('abandoned the stalled'), `abandon: /architect removal abandon ${sr.group} accepted (${json(r1.messages).slice(0, 300)})`, r1);
+    const x1 = await until(async () => { const x = await seal(); return !(x.sealed ?? []).length && !(x.lingering ?? []).length && !(x.stalled ?? []).length ? x : null; }, 120, 500);
+    check(!!x1 && x1.queueWritten >= x1.queueRequested - 1, `abandon: the removal left the queue and, once its queue file generation was written, nothing is sealed (written ${x1?.queueWritten}, requested ${x1?.queueRequested})`, x1);
+    const h1 = await holder(P);
+    const u1 = await use(P, DIAMOND);
+    check(h1.holds?.[DIAMOND] === 5 && !u1.error && u1.refused === 0, `abandon: the chest opens again with its items intact (${json(h1.holds)}; menu ${u1.menuOpened})`, { h1, u1 });
+    await call('dev.seal.menu', { pos: P, close: true }, 10_000).catch(() => null);
+    await cmd(`/item replace block ${P.join(' ')} container.0 with minecraft:air`); // the diamonds taken out: a replay would bring the chest's cell back
+    const h2 = await holder(P);
+    check(!h2.holds?.[DIAMOND], `abandon: the diamonds taken out (${json(h2.holds)})`, h2);
+    const s1 = await call('dev.sites.state', {}, 30_000);
+    out.records = { A: json(s1).includes(`"${A}"`), B: json(s1).includes(`"${B}"`) };
+    check(!json((s1.pending ?? []).map((p) => p.site?.id ?? p.id)).includes(`"${B}"`) && !json((s1.sites ?? []).map((p) => p.id)).includes(`"${B}"`), `abandon: unwritten member ${B}'s record dropped (left standing as it is, no record to write it again)`, s1.pending);
+    await cmd('/save-all flush');
+    await L.settle(1500);
+    await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+    const down = await haltWait();
+    check(down, 'abandon: halted after the abandon');
+    if (!down) { await L.leaveWorld().catch(() => null); return out; }
+    await L.openWorld(name);
+    await L.tp(CX + 80, 80, CZ + 56);
+    await L.settle(6000);
+    const x2 = await seal();
+    const h3 = await holder(P);
+    out.afterRestart = { seal: x2, chest: h3 };
+    check(!(x2.sealed ?? []).length && !(x2.stalled ?? []).length && !(x2.jobs ?? []).length, `abandon: after the restart nothing resumes and nothing is sealed (${json(x2.sealed)}; jobs ${json(x2.jobs)})`, x2);
+    check(/chest/.test(h3.block ?? '') && !h3.holds?.[DIAMOND], `abandon: after the restart the chest at ${P.join(',')} still stands, empty: nothing replayed (${h3.block} ${json(h3.holds)})`, h3);
+    const s2 = await call('dev.sites.state', {}, 30_000);
+    check(!json((s2.sites ?? []).map((p) => p.id)).includes(`"${B}"`) && !json((s2.pending ?? []).map((p) => p.site?.id ?? p.id)).includes(`"${B}"`), `abandon: after the restart unwritten member ${B} has no record (none came back from the journal)`, s2);
+    const r2 = await cmd(`/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`);
+    out.second = r2;
+    check(!r2.success && json(r2.messages).includes('No stalled removal'), `abandon: a second abandon is refused (${json(r2.messages)})`, r2);
+    await L.leaveWorld();
+    return out;
+  }
 }

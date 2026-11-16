@@ -576,12 +576,24 @@ public final class SiteJournal {
 		return relation(siteId, false);
 	}
 
+	/**
+	 * (slice LC3 fix 2) {@link #below} over every entry of the site (an undone one too): an abandoned removal's unwritten member whose
+	 * entries are released while another site's active entry lies under it would have that site's undo wipe the blocks it leaves standing.
+	 */
+	static @Nullable String belowAny(String siteId) {
+		return relation(siteId, true, entries(siteId));
+	}
+
 	private static @Nullable String relation(String siteId, boolean below) {
+		return relation(siteId, below, active(siteId));
+	}
+
+	private static @Nullable String relation(String siteId, boolean below, List<JournalStore.Meta> mineAll) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return null;
 		}
-		for (JournalStore.Meta m : active(siteId)) {
+		for (JournalStore.Meta m : mineAll) {
 			for (long k : m.sections()) {
 				try {
 					List<String> others = s.inSection(m.dimension(), k);

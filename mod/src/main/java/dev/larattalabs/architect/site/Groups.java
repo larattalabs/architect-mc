@@ -315,6 +315,128 @@ public final class Groups {
 		return null;
 	}
 
+	// ------------------------------------------------------------------ (slice LC3 fix 2) ops: abandon a stalled removal
+
+	/** (LC3 fix 2) A stalled removal's members: written (its restore done) and unwritten (still to write, the one that broke included). */
+	record Settle(List<String> written, List<String> unwritten) {
+	}
+
+	/** (pure) {@code r}'s members by whether their restore was written: its committed undo set, those left in its sites unwritten. */
+	static Settle settle(Removal r) {
+		List<String> written = new ArrayList<>();
+		List<String> unwritten = new ArrayList<>();
+		for (String id : r.undoSites) {
+			(r.sites.contains(id) || id.equals(r.current) ? unwritten : written).add(id);
+		}
+		return new Settle(List.copyOf(written), List.copyOf(unwritten));
+	}
+
+	/** How a removal is named to the ops command: its group, and its stage after a space for a stage undo. */
+	static String nameOf(String group, @Nullable String stage) {
+		return stage == null ? group : group + " " + stage;
+	}
+
+	/** (pure) Why {@code /architect removal abandon} refuses, or null: only a STALLED group or stage removal can be abandoned. */
+	static @Nullable String abandonRefusal(@Nullable Removal stalled, boolean running, String name, @Nullable String journalWhy) {
+		if (stalled == null) {
+			return running ? "The removal of " + name + " is running, not stalled; only a stalled removal can be abandoned (nothing was changed)"
+				: "No stalled removal of " + name + " (never stalled, finished, retried or already abandoned); nothing was changed";
+		}
+		if (journalWhy != null) {
+			return "The world journal is unavailable (" + journalWhy + "): abandoning needs it to drop the removal's records; nothing was changed";
+		}
+		return null;
+	}
+
+	/** (TEST, the command's suggestions) The stalled removals, by group and stage (null: the whole group). */
+	static List<String[]> stalledNames() {
+		List<String[]> out = new ArrayList<>();
+		STALLED.forEach(r -> out.add(new String[] {r.group, r.stage}));
+		return out;
+	}
+
+	/** (TEST, {@code dev.seal.state}) The stalled removals: group, stage, members written and not. */
+	static void stalledJson(JsonArray out) {
+		for (Removal r : STALLED) {
+			JsonObject o = new JsonObject();
+			o.addProperty("group", r.group);
+			if (r.stage != null) {
+				o.addProperty("stage", r.stage);
+			}
+			Settle st = settle(r);
+			JsonArray w = new JsonArray();
+			st.written().forEach(w::add);
+			JsonArray u = new JsonArray();
+			st.unwritten().forEach(u::add);
+			o.add("written", w);
+			o.add("unwritten", u);
+			out.add(o);
+		}
+	}
+
+	/** (units) The stalled removal of {@code group} and {@code stage}, or null. */
+	static @Nullable Removal stalledFor(String group, @Nullable String stage) {
+		return stalled(group, stage);
+	}
+
+	/** Takes {@code r} out of the stalled list (it leaves the queue file with the next save). */
+	static boolean dropStalled(Removal r) {
+		return STALLED.remove(r);
+	}
+
+	/**
+	 * (slice LC3 fix 2) Ops only ({@code /architect removal abandon <group> [stage]}): gives up a persisted STALLED group or stage removal
+	 * (a member's restore that keeps failing, its boxes sealed). Its written members are settled as after a normal finish (their pending
+	 * records and undone entries stay; the next world start releases them on their evidence). Its unwritten members (the one that broke
+	 * included) stay standing as they are, nothing written: a filled member's custody goes back into its containers (as a removal that ends
+	 * before its undo), their journal entries are released (awaited: no settle can take them back and no later removal restore them again)
+	 * and their pending records dropped. Then the removal leaves the stalled list and the queue is saved; its boxes stay sealed until that
+	 * queue file generation is written ({@link RemovalSeal}). The world is never written. Refused (nothing changed) for anything not
+	 * STALLED, when the journal is unavailable, or when an unwritten member lies on top of a site outside it (as {@link Sites#forget}).
+	 * Server thread. Answers the one ops line it logged.
+	 */
+	static String abandon(MinecraftServer server, String group, @Nullable String stage, String by) throws Sites.SiteException {
+		String name = nameOf(group, stage);
+		Removal r = stalled(group, stage);
+		boolean running = REMOVALS.stream().anyMatch(x -> x.group.equals(group) && java.util.Objects.equals(x.stage, stage));
+		String no = abandonRefusal(r, running, name, r == null ? null : dev.larattalabs.architect.journal.WorldJournal.unavailable());
+		if (no != null) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, no);
+		}
+		Settle st = settle(r);
+		for (String id : st.unwritten()) {
+			String under = SiteJournal.belowAny(id);
+			if (under != null) {
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "Unwritten member " + id + " of " + name + " lies on top of " + under
+					+ ": forget or remove that site first; nothing was changed");
+			}
+		}
+		for (String id : st.unwritten()) {
+			Site s = Sites.pendingRecord(id);
+			ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
+			if (lv != null && Fills.phase(s) != null) {
+				Fills.writeBack(lv, s); // its custody back into its containers (none taken: nothing)
+			}
+		}
+		for (String id : st.unwritten()) {
+			SiteJournal.await(SiteJournal.release(id), "abandoning " + id + "'s removal");
+		}
+		Sites.dropPending(server, st.unwritten());
+		for (String id : st.unwritten()) {
+			if (Infras.pending(id) != null) {
+				Infras.drop(server, id);
+			}
+		}
+		dropStalled(r);
+		RemovalSeal.changed();
+		Placement.save(server, false);
+		String line = "Ops: " + by + " abandoned the stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage + " of group " + group)
+			+ ": written " + st.written() + " settled as finished; unwritten " + st.unwritten() + " left standing as they are, their records and journal "
+			+ "entries dropped (nothing replays); its boxes unseal once the queue file is written";
+		Architect.LOGGER.warn(line);
+		return line;
+	}
+
 	/** A retry takes over a stalled removal: its undo and remaining members, a fresh future. */
 	private static Removal resume(Removal r, CompletableFuture<Removed> f) {
 		STALLED.remove(r);

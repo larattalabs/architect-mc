@@ -401,7 +401,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   refused, nextBefore, nextAfter}`, the hand put back after. `dev.seal.menu {pos, open?, close?}`, `dev.seal.frame {pos, item, count?}`
   (`ItemFrame.interact`), `dev.seal.transfer {pos, item, count?}` (a committed Transfer API insert). `dev.removal.pause {site | *, after?:
   cells, off?}`: a removal restore pauses once it has written `after` cells; kept in `architect/dev-removal-pause.json`, so a restart keeps it.
-  `dev.removal.undoStage {site}` (LC's, kept).
+  `dev.removal.undoStage {site}` (LC's, kept). (LC3 fix 2) `dev.seal.state` also answers `members: [{id, pending, standing, sealed}]`,
+  `lingering: [{id, need}]` (boxes kept sealed until queue file generation `need` is written), `queueRequested`, `queueWritten`,
+  `queueWriteFailing`, and `stalled: [{group, stage?, written, unwritten}]` (the removals `/architect removal abandon` takes).
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

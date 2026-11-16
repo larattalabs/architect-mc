@@ -171,6 +171,93 @@ class RemovalSealTest {
 	}
 
 	@Test
+	void aLingeringBoxUnsealsOnlyOnceAQueueGenerationThatExcludesItIsWritten(@org.junit.jupiter.api.io.TempDir Path dir) throws Exception {
+		// (LC3 fix 2, GPT P1 #1) a box that left the seal waits for a generation requested after it left; the saver's barrier completing is
+		// not enough: a failed write (logged, no exception out of the saver) leaves it sealed, and the retry's write releases it
+		Path f = dir.resolve("architect-queue.json");
+		com.google.gson.JsonObject root = new com.google.gson.JsonObject();
+		root.addProperty("version", 1);
+		long base = Math.max(Placement.writtenGen(), Placement.requestedGen());
+		RemovalSeal.Linger l = new RemovalSeal.Linger(new RemovalSeal.Sealed(OW, new Anchors.Bounds(0, 0, 0, 3, 3, 3)), base + 1);
+		assertFalse(RemovalSeal.released(l, Placement.writtenGen()), "nothing written since it left: sealed");
+		Placement.FAIL_WRITES.set(1);
+		try {
+			assertFalse(Placement.writeSave(root, f, base + 1), "the injected write fails");
+			Placement.saved().get(10, java.util.concurrent.TimeUnit.SECONDS); // the saver's barrier completes all the same
+			assertFalse(Files.exists(f), "nothing on disk");
+			assertTrue(Placement.writtenGen() < base + 1 && Placement.writeFailing(), "the failed generation is not written; a retry is due");
+			assertFalse(RemovalSeal.released(l, Placement.writtenGen()), "a failed queue write keeps the box sealed (611ee4ee unsealed it here)");
+			assertTrue(Placement.writeSave(root, f, base + 2), "the retry's write (a later generation: the state as it is then)");
+		} finally {
+			Placement.FAIL_WRITES.set(0);
+		}
+		assertTrue(Files.exists(f) && !Files.exists(dir.resolve("architect-queue.json.tmp")), "written, forced and renamed");
+		assertFalse(Placement.writeFailing(), "no retry due once a later generation is written");
+		assertTrue(RemovalSeal.released(l, Placement.writtenGen()), "the written generation excludes it: unsealed");
+		assertFalse(RemovalSeal.released(new RemovalSeal.Linger(l.box(), base + 3), Placement.writtenGen()), "a box that left later still waits");
+	}
+
+	@Test
+	void abandonSettlesOnlyAStalledRemovalItsWrittenAndUnwrittenMembers() {
+		// (LC3 fix 2, GPT P1 #2) /architect removal abandon: members A written, B broke mid-write, C never started; written A settles as a
+		// finished removal, B and C stay standing (their records and entries dropped); refused for anything not STALLED
+		Groups.Removal r = new Groups.Removal("g7", null, null, false);
+		r.undo = "u:g7";
+		r.undoSites.addAll(List.of("lot_a", "lot_b", "lot_c"));
+		r.sites.addAll(List.of("lot_b", "lot_c"));
+		r.started = true;
+		Groups.Settle st = Groups.settle(r);
+		assertEquals(List.of("lot_a"), st.written());
+		assertEquals(List.of("lot_b", "lot_c"), st.unwritten());
+		r.current = "lot_a"; // (a member being written counts as unwritten)
+		assertEquals(List.of("lot_a", "lot_b", "lot_c"), Groups.settle(r).unwritten());
+		r.current = null;
+		assertTrue(Groups.abandonRefusal(null, false, "g7", null).startsWith("No stalled removal of g7"), "unknown, finished or already abandoned");
+		assertTrue(Groups.abandonRefusal(null, true, "g7 s1", null).contains("is running, not stalled"), "a running removal");
+		assertTrue(Groups.abandonRefusal(r, false, "g7", "closed").contains("journal is unavailable"));
+		assertEquals(null, Groups.abandonRefusal(r, false, "g7", null));
+		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+		com.google.gson.JsonObject o = r.toJson();
+		o.addProperty("stalled", true);
+		a.add(o);
+		try {
+			Groups.load(a);
+			List<String[]> names = Groups.stalledNames();
+			assertEquals(1, names.size());
+			assertEquals("g7", names.get(0)[0]);
+			List<String> ids = new java.util.ArrayList<>();
+			Groups.sealedIds(ids);
+			assertTrue(ids.containsAll(List.of("lot_a", "lot_b", "lot_c")), "stalled: its whole set sealed " + ids);
+			int m0 = Groups.sealMods();
+			// the step that ends it (after the records are settled): out of the stalled list, out of the queue file, nothing sealed by it
+			Groups.Removal loaded = null;
+			for (com.google.gson.JsonElement e : Groups.toJson()) {
+				assertTrue(e.getAsJsonObject().has("stalled"));
+			}
+			for (Groups.Removal x : stalledList()) {
+				loaded = x;
+			}
+			assertTrue(Groups.dropStalled(loaded));
+			assertFalse(Groups.dropStalled(loaded), "a second drop finds nothing (the command refuses: no stalled removal)");
+			assertTrue(Groups.toJson().isEmpty(), "the next queue file holds no removal: nothing resumes or replays");
+			List<String> none = new java.util.ArrayList<>();
+			Groups.sealedIds(none);
+			assertTrue(none.isEmpty(), "nothing sealed by it (its boxes linger until that queue file is written)");
+			assertTrue(Groups.sealMods() != m0, "the index follows the change");
+		} finally {
+			Groups.reset(null);
+		}
+	}
+
+	private static List<Groups.Removal> stalledList() {
+		List<Groups.Removal> out = new java.util.ArrayList<>();
+		for (String[] n : Groups.stalledNames()) {
+			out.add(Groups.stalledFor(n[0], n[1]));
+		}
+		return out;
+	}
+
+	@Test
 	void everyExtractionAndConsumerPathAsksTheSeal() throws Exception {
 		// (LC3 fix, review 1, 3, 4, 5) out of a sealed holder, a crafter, a vault, a chained shelf
 		String mx = "java/dev/larattalabs/architect/mixin/";
@@ -191,7 +278,10 @@ class RemovalSealTest {
 		String seal = read("java/dev/larattalabs/architect/site/RemovalSeal.java");
 		assertTrue(seal.contains("chain.getAllBlocksConnectedTo(level, at)"), "a powered shelf's whole chain");
 		assertTrue(seal.contains("PlayerBlockBreakEvents.BEFORE.register"), "a player breaking a sealed holder");
-		assertTrue(seal.contains("Placement.saved()"), "an ended removal's boxes stay sealed until the queue file without it is written");
+		assertTrue(seal.contains("need = Placement.requestedGen() + 1") && seal.contains("Placement.writtenGen()"), "an ended removal's boxes stay "
+			+ "sealed until a queue file generation without it is written (LC3 fix 2: confirmed, not the saver's barrier)");
+		String pl = read("java/dev/larattalabs/architect/site/Placement.java");
+		assertTrue(pl.contains("RemovalSeal.observe();") && pl.contains("saveIfDue(srv);"), "the tick sees every ended removal and retries a failed write");
 	}
 
 	static String read(String rel) throws Exception {
