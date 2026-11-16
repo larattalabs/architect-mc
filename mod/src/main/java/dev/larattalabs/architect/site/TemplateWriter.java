@@ -131,6 +131,10 @@ final class TemplateWriter {
 	final BitSet placed = new BitSet();
 	/** (6c IRR) Positions never written (a lot site's {@link LotMask}): the cursor still passes them. Null: none (every other use). */
 	java.util.function.@org.jspecify.annotations.Nullable LongPredicate skip;
+	/** (LC2) Runs right before each cell's write (a removal's late-cargo take at that cell, in the same tick). Null: none. */
+	java.util.function.@org.jspecify.annotations.Nullable Consumer<BlockPos> beforeSet;
+	/** (TEST, LC2) Stops the step at once when true (a paused removal restore). Null: never. */
+	java.util.function.@org.jspecify.annotations.Nullable BooleanSupplier stop;
 	int minX = Integer.MAX_VALUE;
 	int minY = Integer.MAX_VALUE;
 	int minZ = Integer.MAX_VALUE;
@@ -174,6 +178,9 @@ final class TemplateWriter {
 		while (phase != DONE) {
 			if (handled > 0 && handled % CLOCK == 0 && System.nanoTime() >= deadline) {
 				return handled;
+			}
+			if (handled > 0 && stop != null && stop.getAsBoolean()) {
+				return handled; // (TEST, LC2) dev.removal.pause
 			}
 			switch (phase) {
 				case SET -> {
@@ -283,6 +290,9 @@ final class TemplateWriter {
 		BlockPos p = new BlockPos(px + cells.off[i * 3], py + cells.off[i * 3 + 1], pz + cells.off[i * 3 + 2]);
 		if (skip != null && skip.test(p.asLong())) {
 			return; // (6c IRR) the region's irrigation cell: the lot's design drops it
+		}
+		if (beforeSet != null) {
+			beforeSet.accept(p);
 		}
 		BlockState state = cells.states[i];
 		CompoundTag nbt = cells.nbt[i];

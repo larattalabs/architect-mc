@@ -327,6 +327,28 @@ public final class SliceFkDev {
 					return dev.larattalabs.architect.site.LateCargo.stateJson();
 				});
 			});
+		DevBridge.register("dev.removal.pause", 10_000, "{site, after?: [x, y, z], off?: bool} - (slice LC2) TEST: pauses site's removal restore (a "
+			+ "RestoreJob): with no after it writes nothing from its next tick on; with after it stops right after writing that cell; off resumes. "
+			+ "-> dev.removal.state (pause: {site: {after, reached, waiting}})", (req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				BlockPos p = req.has("after") && req.get("after").isJsonArray() ? new BlockPos(req.getAsJsonArray("after").get(0).getAsInt(), req.getAsJsonArray("after").get(1).getAsInt(), req.getAsJsonArray("after").get(2).getAsInt()) : null;
+				boolean off = req.has("off") && req.get("off").getAsBoolean();
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.site.LateCargo.armPause(site, p, off);
+					return dev.larattalabs.architect.site.LateCargo.stateJson();
+				});
+			});
+		DevBridge.register("dev.removal.holder", 10_000, "{pos: [x, y, z], items?: {item: count}, move?: [from, to]} - (slice LC2) TEST: the item holder "
+			+ "at pos (LateCargo's table: a container, a lectern, a campfire): items put in now (free or matching slots), or one slot's stack moved to "
+			+ "another (a player's menu) -> {holder, slots: [[slot, item, count]...]}", (req, mc) -> {
+				BlockPos p = posOf(req);
+				Map<String, Integer> items = new TreeMap<>();
+				if (req.has("items")) {
+					req.getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
+				}
+				int[] mv = req.has("move") ? new int[] {req.getAsJsonArray("move").get(0).getAsInt(), req.getAsJsonArray("move").get(1).getAsInt()} : null;
+				return ServerTasks.callOnServer(s -> dev.larattalabs.architect.site.LateCargo.devHolder(s.overworld(), p, items, mv));
+			});
 		DevBridge.register("dev.removal.state", 10_000, "{clear?: bool} - (slice LC) TEST: the armed hooks and the last late cargo handed out {site, items, "
 			+ "cells, at}", (req, mc) -> ServerTasks.callOnServer(s -> {
 				if (req.has("clear") && req.get("clear").getAsBoolean()) {

@@ -260,7 +260,12 @@ final class RestoreJob implements Placement.Job {
 				prepared = null;
 			}
 			restore = (SiteJournal.Restore) ready[0];
+			LateCargo.Pass pre = cargoPass(level, s);
+			if (pre != null) {
+				pre.cells(restore.pre()); // (LC2) the cells written next, in this tick: their late cargo out first
+			}
 			restore.writing(level, () -> SiteJournal.writeCells(level, restore.pre())); // cut plants' outside halves before the box
+			dropCargo(level, s, pre);
 			if (ready[1] != null) {
 				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
 				writer = new TemplateWriter((TemplateWriter.Cells) ready[1], min, Sites.FLAGS);
@@ -272,7 +277,13 @@ final class RestoreJob implements Placement.Job {
 				return false;
 			}
 		}
-		lateCargo(level, s); // (slice LC) the container cells this tick may write: their late cargo out first, in this tick
+		// (LC2, review finding 4) each cell this tick writes gives up its late cargo right before its write, read at the cell then (never cached)
+		if (REMOVE.equals(purpose) && LateCargo.pausedAt(siteId)) {
+			return false; // (TEST, LC2) dev.removal.pause: nothing written this tick
+		}
+		LateCargo.Pass pass = cargoPass(level, s);
+		writer.beforeSet = pass == null ? null : pass::cell;
+		writer.stop = pass == null ? null : () -> LateCargo.pausedAt(siteId);
 		TickDeferral.begin(level, held);
 		if (restore != null && restore.mask() != null) {
 			UpdateMask.begin(restore.mask());
@@ -289,11 +300,14 @@ final class RestoreJob implements Placement.Job {
 				}
 			}
 		} finally {
+			writer.beforeSet = null;
+			writer.stop = null;
 			if (restore != null) {
 				dev.larattalabs.architect.placed.Placed.endRestore();
 			}
 			UpdateMask.end();
 			TickDeferral.end();
+			dropCargo(level, s, pass);
 		}
 		if (failSkip >= 0 && REMOVE.equals(purpose)) {
 			if (failSkip == 0) {
@@ -312,11 +326,16 @@ final class RestoreJob implements Placement.Job {
 		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
-		lateCargo(level, s);
+		LateCargo.Pass last = cargoPass(level, s);
+		if (last != null) {
+			last.cells(restore.cells());
+			last.cells(restore.halves());
+		}
 		restore.writing(level, () -> {
 			SiteJournal.writeCells(level, restore.cells());
 			SiteJournal.fixHalves(level, restore.halves());
 		});
+		dropCargo(level, s, last);
 		Sites.Drops drops = Sites.Drops.of(level, s.restoreBox(), dropsBefore);
 		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(restore.cells().size(), 0, restore.holes());
 		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, restore.ring(), st)
@@ -327,21 +346,20 @@ final class RestoreJob implements Placement.Job {
 		return true;
 	}
 
-	/** (slice LC) The container cells the restore writes (found once; a reload finds them again). */
-	private @Nullable List<BlockPos> cargoCells;
+	/** (slice LC, LC2) A late-cargo pass for the cells this tick writes (a removal's restore only), or null. */
+	private LateCargo.@Nullable Pass cargoPass(ServerLevel level, Site s) {
+		return restore == null || !REMOVE.equals(purpose) ? null : new LateCargo.Pass(level, restore, s, group);
+	}
 
 	/**
-	 * (slice LC, S-M5-12) Before a tick's writes: every container cell of the restore not yet written gives up its late cargo, dropped at the
-	 * site and kept from the end's drop clear ({@link #dropsBefore}).
+	 * (slice LC, S-M5-12) After a tick's writes: the late cargo its cells gave up drops at the site, kept from the end's drop clear
+	 * ({@link #dropsBefore}, saved with the job).
 	 */
-	private void lateCargo(ServerLevel level, Site s) {
-		if (restore == null || !REMOVE.equals(purpose)) {
+	private void dropCargo(ServerLevel level, Site s, LateCargo.@Nullable Pass pass) {
+		if (pass == null) {
 			return;
 		}
-		if (cargoCells == null) {
-			cargoCells = LateCargo.containerCells(level, restore, s.restoreBox());
-		}
-		List<net.minecraft.world.item.ItemStack> cargo = LateCargo.take(level, restore, s, cargoCells);
+		List<net.minecraft.world.item.ItemStack> cargo = pass.finish();
 		if (cargo.isEmpty()) {
 			return;
 		}
@@ -503,7 +521,18 @@ final class RestoreJob implements Placement.Job {
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
 			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);
+			// (LC2, review finding 7) a removal's part: its item holders' late cargo out right before the part's writes, in this tick
+			LateCargo.Pass pass = REMOVE.equals(purpose) ? new LateCargo.Pass(level, restore, null, group) : null;
+			if (pass != null) {
+				pass.cells(part);
+			}
 			restore.writing(level, () -> SiteJournal.writeCells(level, part));
+			if (pass != null) {
+				List<net.minecraft.world.item.ItemStack> cargo = pass.finish();
+				if (!cargo.isEmpty()) {
+					LateCargo.drop(level, RoadBuilder.dropAt(inf), cargo, null);
+				}
+			}
 			cellCursor = to;
 			if (cellCursor > from) {
 				WorldJournal.kill("K7");

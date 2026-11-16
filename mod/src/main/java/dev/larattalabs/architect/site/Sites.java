@@ -1699,7 +1699,7 @@ public final class Sites {
 			// (slice LC) the late cargo of its container cells, in the write's tick (this removal is atomic; the check holds for any path)
 			List<net.minecraft.world.item.ItemStack> cargo = new ArrayList<>();
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group, force ? null : rs -> cargo.addAll(LateCargo.take(level, rs, x,
-				LateCargo.containerCells(level, rs, x.restoreBox()))));
+				LateCargo.containerCells(level, rs, x.restoreBox()), group)));
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			List<String> notes = new ArrayList<>(notesOf(level, r));
@@ -1986,7 +1986,8 @@ public final class Sites {
 				}
 				return;
 			}
-			if (be instanceof Container c && !c.isEmpty()) {
+			// (LC2) every item holder of LateCargo's table (a container, a campfire's items; the lectern above keeps its own wording)
+			if (LateCargo.holder(be) instanceof Container c && !c.isEmpty()) {
 				Map<String, Integer> fill = declared.get(p);
 				Map<String, Integer> now = fill == null ? null : Fills.plainCounts(c);
 				if (now != null && Fills.within(now, fill)) {
@@ -2502,7 +2503,7 @@ public final class Sites {
 		// (slice LC, S-M5-12) the late cargo: what its container cells hold in this tick, taken out right before the write, dropped at the site
 		List<net.minecraft.world.item.ItemStack> cargo = new ArrayList<>();
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group, rs -> cargo.addAll(LateCargo.take(level, rs, b, LateCargo.containerCells(level, rs,
-			b.restoreBox()))));
+			b.restoreBox()), group)));
 		drops.clearNew(level);
 		BlockPos where = at != null ? at : Builder.dropPos(b);
 		Builder.dropItems(level, where, items, drops);
@@ -3482,9 +3483,10 @@ public final class Sites {
 		private int clear(ServerLevel level) {
 			int n = 0;
 			for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, area)) {
-				if (!before.contains(e.getUUID())) {
-					Architect.LOGGER.info("LC2TRACE drop clear discards {} x{} at {} (area {})", e.getItem().getItem(), e.getItem().getCount(), e.blockPosition().toShortString(), area,
-						new Throwable("LC2TRACE"));
+				if (!before.contains(e.getUUID()) && !PROTECTED.containsKey(e.getUUID())) {
+					if (TRACKED.containsKey(e.getUUID())) {
+						Architect.LOGGER.info("LC2TRACE drop clear discards tracked {} at {} (area {})", e.getItem(), e.position(), area); // TEMP
+					}
 					e.discard();
 					n++;
 				}
@@ -3499,8 +3501,41 @@ public final class Sites {
 		}
 
 		private static final List<Object[]> LATER = new ArrayList<>();
+		/** (LC2) Entities a removal drops on purpose (late cargo, a player's block at its cell): no drop clear takes them for a while. */
+		private static final Map<java.util.UUID, Integer> PROTECTED = new java.util.HashMap<>();
+		/** Ticks a protected drop is spared by every drop clear (a member's clear runs within 3 ticks of its write). */
+		static final int PROTECT_TICKS = 200;
+
+		/** (LC2) Spares {@code e} from every drop clear for {@link #PROTECT_TICKS} ticks (a later member's clear, a clear 3 ticks later). */
+		static void protect(ServerLevel level, Entity e) {
+			PROTECTED.put(e.getUUID(), level.getServer().getTickCount() + PROTECT_TICKS);
+		}
+
+		/** (TEMP LC2TRACE) An entity whose fate is logged for 100 ticks. */
+		static final Map<java.util.UUID, Object[]> TRACKED = new java.util.HashMap<>();
+
+		static void track(ServerLevel level, ItemEntity e) {
+			TRACKED.put(e.getUUID(), new Object[] {e, 100});
+		}
 
 		static void tick() {
+			for (var it = TRACKED.entrySet().iterator(); it.hasNext();) { // TEMP LC2TRACE
+				var x = it.next().getValue();
+				ItemEntity e = (ItemEntity) x[0];
+				int left = (Integer) x[1] - 1;
+				x[1] = left;
+				if (left % 5 == 0 || e.isRemoved()) {
+					Architect.LOGGER.info("LC2TRACE tracked {} {} at {} removed {} ({} ticks left)", e.getUUID(), e.getItem(), e.position(), e.getRemovalReason(), left);
+				}
+				if (left <= 0 || e.isRemoved()) {
+					it.remove();
+				}
+			}
+			if (!PROTECTED.isEmpty()) {
+				net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
+				int now = srv == null ? Integer.MAX_VALUE : srv.getTickCount();
+				PROTECTED.values().removeIf(until -> until <= now);
+			}
 			for (var it = LATER.iterator(); it.hasNext();) {
 				Object[] x = it.next();
 				int left = (Integer) x[2] - 1;
@@ -3515,6 +3550,8 @@ public final class Sites {
 
 		static void reset() {
 			LATER.clear();
+			PROTECTED.clear();
+			TRACKED.clear();
 		}
 	}
 

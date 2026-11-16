@@ -143,8 +143,22 @@ public final class Infras {
 
 	/** R4 of a road or cell site removed with others (a cascade, a group): its writes at once, then the rest. */
 	static void finishRemoval(ServerLevel level, String id, String group, boolean event) throws Sites.SiteException {
-		SiteJournal.Restore r = SiteJournal.writeNow(level, id, group);
+		// (LC2, review finding 7) the late cargo of the item holders it writes, in the write's tick, dropped above the road or cell site
+		List<net.minecraft.world.item.ItemStack> cargo = new java.util.ArrayList<>();
+		net.minecraft.core.BlockPos[] first = new net.minecraft.core.BlockPos[1];
+		SiteJournal.Restore r = SiteJournal.writeNow(level, id, group, rs -> {
+			LateCargo.Pass p = new LateCargo.Pass(level, rs, null, group);
+			p.cells(rs.pre());
+			p.cells(rs.cells());
+			p.cells(rs.halves());
+			first[0] = p.first;
+			cargo.addAll(p.finish());
+		});
 		Infra i = pending.get(id);
+		if (!cargo.isEmpty()) {
+			Infra at = i != null ? i : get(id);
+			LateCargo.drop(level, at != null ? RoadBuilder.dropAt(at) : first[0], cargo, null);
+		}
 		if (event && i != null) {
 			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(level.getServer(), i, r.cells().size());
 		}

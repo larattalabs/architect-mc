@@ -2912,6 +2912,45 @@ public final class Builder {
 		return new BlockPos((b.minX() + b.maxX()) / 2, b.maxY() + 1, (b.minZ() + b.maxZ()) / 2);
 	}
 
+	/**
+	 * (LC2, F10) Where an item dropped at {@code at} spawns: on top of the block standing there (its collision shape), or a quarter block up
+	 * in a cell with none. Never inside a solid block, which vanilla pushes the item out of toward whichever neighbour is free in that tick.
+	 */
+	static double cellDropY(ServerLevel level, BlockPos at) {
+		net.minecraft.world.phys.shapes.VoxelShape sh = level.getBlockState(at).getCollisionShape(level, at);
+		return dropY(at.getY(), sh.isEmpty() ? Double.NaN : sh.max(net.minecraft.core.Direction.Axis.Y));
+	}
+
+	/** (pure) {@link #cellDropY}: {@code top} the collision shape's top within the cell (NaN: no shape). */
+	static double dropY(int y, double top) {
+		return Double.isNaN(top) ? y + 0.25 : y + top + 0.01;
+	}
+
+	/**
+	 * (LC2, F10) A player's block's items dropped at its own cell, after the cell got its before back: on top of that block (never inside it),
+	 * spared by the removal's drop clears.
+	 */
+	static void dropAtCell(ServerLevel level, BlockPos p, Map<String, Integer> items) {
+		double y = cellDropY(level, p);
+		for (var e : items.entrySet()) {
+			Item it = Cells.item(e.getKey());
+			if (it == null || e.getValue() <= 0) {
+				continue;
+			}
+			int left = e.getValue();
+			int max = new ItemStack(it).getMaxStackSize();
+			while (left > 0) {
+				int n = Math.min(max, left);
+				left -= n;
+				ItemEntity ie = new ItemEntity(level, p.getX() + 0.5, y, p.getZ() + 0.5, new ItemStack(it, n), 0, 0, 0);
+				ie.setDefaultPickUpDelay();
+				level.addFreshEntity(ie);
+				Sites.Drops.protect(level, ie);
+				Sites.Drops.track(level, ie); // TEMP LC2TRACE
+			}
+		}
+	}
+
 	static void dropItems(ServerLevel level, BlockPos at, Map<String, Integer> items, Sites.@Nullable Drops drops) {
 		for (var e : items.entrySet()) {
 			Item it = Cells.item(e.getKey());

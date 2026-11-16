@@ -209,6 +209,11 @@ export async function registerLC(steps, h) {
       spendZero();
       return out;
     }
+    if (process.env.GATE_LC_ONLY === 'lc4') { // (LC2) the sliced restore's case alone
+      out.LC4 = await replayOverTerrainChest();
+      spendZero();
+      return out;
+    }
     const W = await town('G6B LC Crash');
     if (!W) return out;
     const at = P(W.s.containers[0].at);
@@ -251,9 +256,131 @@ export async function registerLC(steps, h) {
     await L.leaveWorld();
     out.LC2 = await failThenHalt();
     out.LC3 = await cargoAtCreditSave();
+    out.LC4 = await replayOverTerrainChest();
     spendZero();
     return out;
   };
+
+  /** (LC2) lc_big: a 48-cube creative site (its restore box over SYNC_CELLS: removed by a sliced RestoreJob) with a chest and a lectern. */
+  async function bigEntry() {
+    const { Blueprint, PALETTES } = await h.imp('lib/kit.mjs');
+    const { writeBlueprint } = await h.imp('lib/write.mjs');
+    const bp = new Blueprint({ id: 'lc_big', name: 'LC Big', description: 'A large test box with a chest and a lectern (slice LC2).', type: 'storage_hall',
+      profile: [], tags: ['test'], size: [48, 48, 48], groundY: 1, front: 'south', palette: PALETTES.rustic, approach: false });
+    bp.part('floor', () => { for (let x = 0; x < 48; x++) for (let z = 0; z < 48; z++) bp.set(x, 0, z, 'minecraft:stone'); });
+    bp.part('core', () => { bp.set(2, 1, 2, 'minecraft:chest', { facing: 'south' }); bp.set(4, 1, 2, 'minecraft:lectern', { facing: 'south' }); });
+    const dir = path.join(L.LIBRARY, 'lc_big');
+    fs.rmSync(dir, { recursive: true, force: true });
+    const w = writeBlueprint(bp, dir);
+    const j = JSON.parse(fs.readFileSync(w.jsonPath, 'utf8'));
+    j.givenProgram = { sha: 'gate-fixture', opKey: 'gate.lc.big' };
+    fs.writeFileSync(w.jsonPath, `${JSON.stringify(j, null, 2)}\n`);
+    await L.cmd('/architect reload');
+    await L.settle(1500);
+  }
+
+  const holderAt = (pos) => call('dev.removal.holder', { pos }, 10_000).catch((e) => ({ error: String(e) }));
+  const total = (hd, item) => (hd?.slots ?? []).filter((s) => s[1] === item).reduce((n, s) => n + s[2], 0);
+  async function pauseWait(site, cond) {
+    for (let i = 0; i < 300; i++) {
+      const st = (await call('dev.removal.state', {}, 10_000)).pause?.[site];
+      if (st && cond(st)) return st;
+      await L.sleep(500);
+    }
+    return null;
+  }
+
+  /**
+   * (LC2, the v0.73.0 RC fix review's #5 and LC-2 #4/#6) LC4, creative: a terrain chest holding 2 diamonds, lc_big forced over it (its own
+   * chest replaces it; the snapshot keeps the terrain chest's diamonds). The removal (a sliced RestoreJob) paused before any write
+   * (dev.removal.pause): late cargo after the blocker scan, ticks before the writes: 2 diamonds into the site's own chest in the slot the
+   * terrain's sit in (contents equal to the restored ones), a book on its own lectern, and a new chest with 3 flint at an unwritten cell
+   * (a holder placed between a sliced restore's ticks). Resumed, it stops right after writing the own chest (the terrain's 2 diamonds back,
+   * its write mark set); the 2 restored diamonds moved to slot 5 (a player's menu); /save-all flush; the JVM halted; the restart writes
+   * the restore again from its start. Judged after it: diamonds = 4 (the terrain's 2 in the chest, the late 2 handed out; before LC2: 2,
+   * the late ones erased; per slot or without the mark: 6); the book and the 3 flint handed out once; the new chest gone with the write.
+   */
+  async function replayOverTerrainChest() {
+    const name = 'G6B LC Replay';
+    await L.fresh(name, G.FLAT);
+    await L.setRules('exact');
+    await bigEntry();
+    await call('dev.removal.state', { clear: true }, 10_000);
+    const g = await groundY(CX, CZ);
+    const origin = [CX, g, CZ];
+    await L.tp(CX + 24, g + 40, CZ - 16);
+    await L.settle(2000);
+    const v = await call('dev.pl.place', { blueprint: 'lc_big', origin, mode: 'instant', check: true }, 300_000);
+    const b = v.box;
+    check(Array.isArray(b), `LC4: lc_big's box at ${json(origin)}: ${json(b)} (${json(v.refusals ?? []).slice(0, 200)})`, v);
+    if (!Array.isArray(b)) { await L.leaveWorld(); return null; }
+    const PC = [b[0] + 2, b[1] + 1, b[2] + 2], PL = [b[0] + 4, b[1] + 1, b[2] + 2], PR = [b[0] + 20, b[1] + 1, b[2] + 20];
+    const mid = [Math.floor((b[0] + b[3]) / 2), b[1], Math.floor((b[2] + b[5]) / 2)];
+    await cmd(`/setblock ${PC.join(' ')} minecraft:chest[facing=south]`);
+    const t0 = await call('dev.removal.holder', { pos: PC, items: { [DIAMOND]: 2 } }, 10_000);
+    check(total(t0, DIAMOND) === 2, `LC4: a terrain chest at ${PC.join(',')} holds 2 diamonds (${json(t0.slots)})`, t0);
+    const p = await call('dev.pl.place', { blueprint: 'lc_big', origin, mode: 'instant', force: true }, 900_000);
+    let own = null;
+    for (let i = 0; i < 240 && p.placed; i++) {
+      const rec = await call('dev.pl.record', { site: p.site }, 10_000).catch(() => null);
+      own = await holderAt(PC);
+      if (rec && !rec.refused && own.holder && total(own, DIAMOND) === 0 && !Sites_placing(rec)) break;
+      await L.sleep(1000);
+    }
+    check(p.placed && own?.holder && total(own, DIAMOND) === 0, `LC4: lc_big forced over it (${p.site}): its own chest stands there empty (${json(own)})`, { p, own });
+    if (!p.placed) { await L.leaveWorld(); return null; }
+    const site = p.site;
+    await cmd('/kill @e[type=item]');
+    await call('dev.removal.pause', { site }, 10_000);
+    call('dev.pl.remove', { site }, 1_800_000).catch(() => null);
+    const w0 = await pauseWait(site, (s) => s.waiting);
+    check(!!w0, `LC4: the removal's restore paused before any write (${json(w0)})`);
+    // late cargo, after the blocker scan, ticks before the writes
+    const a = await call('dev.removal.holder', { pos: PC, items: { [DIAMOND]: 2 } }, 10_000);
+    const l = await call('dev.removal.holder', { pos: PL, items: { 'minecraft:writable_book': 1 } }, 10_000);
+    await cmd(`/setblock ${PR.join(' ')} minecraft:chest`);
+    const r = await call('dev.removal.holder', { pos: PR, items: { [FLINT]: 3 } }, 10_000);
+    check(total(a, DIAMOND) === 2 && total(l, 'minecraft:writable_book') === 1 && total(r, FLINT) === 3,
+      `LC4: late cargo while paused: 2 diamonds in the site's own chest (slot 0, as the terrain's), a book on its own lectern, a new chest with 3 flint at ${PR.join(',')}`, { a, l, r });
+    await call('dev.removal.pause', { site, after: PC }, 10_000);
+    const w1 = await pauseWait(site, (s) => s.reached && s.waiting);
+    const m0 = await holderAt(PC);
+    check(!!w1 && total(m0, DIAMOND) === 2, `LC4: the restore stopped right after writing the own chest: the terrain chest back with its 2 diamonds (${json(m0.slots)})`, { w1, m0 });
+    const mv = await call('dev.removal.holder', { pos: PC, move: [0, 5] }, 10_000);
+    const nearMid = (await call('dev.items.near', { pos: mid, radius: 64 }, 60_000)).items ?? {};
+    log(`  LC4 before the halt: chest ${json(mv.slots)}; items near ${json(nearMid)}`);
+    await cmd('/save-all flush');
+    await L.settle(1500);
+    await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+    const down = await haltWait();
+    check(down, 'LC4: halted mid-restore (the moved diamonds and the drops so far on disk)');
+    if (!down) { await L.leaveWorld(); return null; }
+    await L.openWorld(name);
+    await L.tp(CX + 24, g + 40, CZ - 16);
+    await L.settle(4000);
+    let rec = null;
+    for (let i = 0; i < 300; i++) {
+      rec = await call('dev.pl.record', { site }, 10_000).catch(() => null);
+      if (!rec || rec.refused || rec.error) break;
+      await L.sleep(1000);
+    }
+    await L.settle(3000);
+    const end = await holderAt(PC);
+    const items = (await call('dev.items.near', { pos: mid, radius: 64 }, 60_000)).items ?? {};
+    const rEnd = await holderAt(PR);
+    const res = { chest: end.slots ?? null, items: only(items, [DIAMOND, FLINT, 'minecraft:writable_book']), rAfter: rEnd.holder ?? null, recordAfter: rec };
+    log(`  LC4 after the restart: ${json(res)}`);
+    const diamonds = total(end, DIAMOND) + (items[DIAMOND] ?? 0);
+    check(total(end, DIAMOND) === 2 && (items[DIAMOND] ?? 0) === 2,
+      `LC4: the own chest's matching late cargo handed out and the moved restored diamonds not taken again: the terrain's 2 in the chest, the late 2 at the site (${diamonds} of 4; before LC2 2, per slot or without the write mark 6)`, res);
+    check((items['minecraft:writable_book'] ?? 0) === 1 && (items[FLINT] ?? 0) === 3 && !res.rAfter,
+      `LC4: the lectern's book and the 3 flint of the chest placed between ticks handed out once; that chest gone with the write (${json(res)})`, res);
+    await L.leaveWorld();
+    return res;
+  }
+
+  /** Whether a dev.pl.record answer is a site still being placed. */
+  function Sites_placing(rec) { return rec?.placing === true; }
 
   /**
    * (fix b5b, the GPT review's finding 2) LC3: the lc_hall site removed on its own (dev.pl.remove: Sites.removeDetailed, the atomic path, a
