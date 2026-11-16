@@ -4,7 +4,8 @@
 // 2026-10-28 to 2026-11-10 aborted in setup ("Could not resolve dev.larattalabs:lab_ui:0.4.0 ... No cached version available for
 // offline mode"). ensurePinnedDeps() runs before an offline build: when a pinned module is not in the home's cache it runs ONE online
 // resolve with that home (GITHUB_ACTOR/GITHUB_TOKEN from the env, else `gh auth token`; the token is only ever passed in the child's
-// environment, never written or logged), and throws a clear error naming the slot, the version and the fix when that fails.
+// environment, never written or logged), and throws a clear error naming the slot, the version and the fix when that fails. (GR-c) The
+// resolve is a throwaway project that resolves exactly the missing pins (`gradlew help`, before, downloaded nothing).
 
 //
 // (GI A46) The pins cover dev.larattalabs only; any other bump (Minecraft, Loom, the loader, Fabric API, Java-WebSocket, JUnit, ...) left
@@ -58,11 +59,56 @@ function gradleEnv(home, env, { token = true } = {}) {
   return e;
 }
 
-function defaultResolve({ home, modDir, env }) {
+// (GR-c) The resolve project: `gradlew help` in the mod resolves no configuration, so it never downloaded the pin and a fresh home kept
+// failing. A throwaway project (outside the repo) declares each missing pin in one non-transitive configuration and resolves it, with the
+// mod's own repository block (the same name, url and content filter: Gradle keys its cached metadata by the repository, so a different
+// declaration could leave a jar the mod's offline build still can't use). The credentials are read from the environment at run time.
+export const PIN_REPO = { name: 'LabUi', url: 'https://maven.pkg.github.com/larattalabs/lab-ui', group: 'dev.larattalabs' };
+export const PIN_RESOLVE_TASK = 'architectResolvePins';
+
+/** The throwaway project's files for `missing` ([{ group, module, version }]): { 'settings.gradle', 'build.gradle' }. Pure. */
+export function resolveProject(missing) {
+  const deps = missing.map((p) => `  pins '${p.group}:${p.module}:${p.version}'`).join('\n');
+  return {
+    'settings.gradle': "rootProject.name = 'architect-resolve-pins'\n",
+    'build.gradle': `configurations { pins { transitive = false } }
+repositories {
+  mavenCentral()
+  maven {
+    name = "${PIN_REPO.name}"
+    url = uri("${PIN_REPO.url}")
+    credentials {
+      username = providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR")).getOrElse("")
+      password = providers.gradleProperty("gpr.key").orElse(providers.environmentVariable("GITHUB_TOKEN")).getOrElse("")
+    }
+    content { includeGroup "${PIN_REPO.group}" }
+  }
+}
+dependencies {
+${deps}
+}
+tasks.register('${PIN_RESOLVE_TASK}') {
+  notCompatibleWithConfigurationCache('resolves the pins')
+  def files = configurations.pins
+  doLast { files.files.each { println "resolved \${it.name}" } }
+}
+`,
+  };
+}
+
+/** The pins' online resolve into `home`: the resolve project in a temp dir, run with the mod's wrapper (`spawn` stubbable). -> { ok, out } */
+export function defaultResolve({ home, modDir, env, missing = missingPins(home, modDir), spawn = spawnSync }) {
   const e = gradleEnv(home, env);
-  const r = spawnSync('./gradlew', ['--no-daemon', '-q', 'help'], { cwd: modDir, env: e, encoding: 'utf8', timeout: 15 * 60_000, maxBuffer: 16 << 20 });
-  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.split(e.GITHUB_TOKEN || '\u0000').join('***');
-  return { ok: r.status === 0, out: out.split('\n').slice(-12).join('\n') };
+  const dir = archTmpDir('architect-pins');
+  try {
+    for (const [f, text] of Object.entries(resolveProject(missing))) fs.writeFileSync(path.join(dir, f), text);
+    const r = spawn(path.join(modDir, 'gradlew'), ['--no-daemon', '-q', '--no-configuration-cache', '-p', dir, PIN_RESOLVE_TASK],
+      { cwd: modDir, env: e, encoding: 'utf8', timeout: 15 * 60_000, maxBuffer: 16 << 20 });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.split(e.GITHUB_TOKEN || '\u0000').join('***');
+    return { ok: r.status === 0, out: out.split('\n').slice(-12).join('\n') };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -85,7 +131,7 @@ export function ensurePinnedDeps({ home, modDir, slot = home, env = process.env,
   const still = r.ok ? missingPins(home, modDir) : missing;
   if (!r.ok || still.length) {
     throw new Error(`slot ${slot}: ${names.join(', ')} (dev.larattalabs, pinned in mod/gradle.properties) is not in its gradle home ${home} and the online resolve failed. `
-      + `Fix: run \`cd ${modDir} && GRADLE_USER_HOME=${home} GITHUB_ACTOR=nlaratta GITHUB_TOKEN=$(gh auth token) ./gradlew --no-daemon -q help\` once (needs a token with read:packages). Last output:\n${r.out ?? ''}`);
+      + `Fix: run \`cd ${modDir} && GRADLE_USER_HOME=${home} GITHUB_ACTOR=nlaratta GITHUB_TOKEN=$(gh auth token) ./gradlew --no-daemon -q dependencies --configuration compileClasspath\` once (it downloads the pin; \`help\` resolves nothing; needs a token with read:packages). Last output:\n${r.out ?? ''}`);
   }
   log(`setup: ${slot}: resolved ${names.join(', ')}`);
   return { checked, resolved: names, seed: seedClasspath({ home, modDir, slot, env, log, run: seedRun }) };
@@ -162,7 +208,7 @@ export function seedClasspath({ home, modDir, slot = home, env = process.env, lo
   }
   if (!r.ok) {
     throw new Error(`slot ${slot}: its gradle home ${home} can't resolve every classpath of ${modDir} offline, and one online resolve did not fix it. `
-      + `Fix: run \`cd ${modDir} && GRADLE_USER_HOME=${home} GITHUB_ACTOR=nlaratta GITHUB_TOKEN=$(gh auth token) ./gradlew --no-daemon -q help\` once, `
+      + `Fix: run \`cd ${modDir} && GRADLE_USER_HOME=${home} GITHUB_ACTOR=nlaratta GITHUB_TOKEN=$(gh auth token) ./gradlew --no-daemon -q dependencies --configuration compileClasspath\` once, `
       + `then a build. Last output:\n${r.out ?? ''}`);
   }
   fs.mkdirSync(path.dirname(marker), { recursive: true });
