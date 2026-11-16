@@ -154,8 +154,14 @@ class RepairDR2Test {
 			assertEquals(9, recorded.size());
 			assertEquals(9, RepairCore.stillOwed(js, recorded).size(), "nothing since: all still owed");
 			// a newer placement of the same block over 4 of the cells (what the stale record calls the pre-op value): it wins
-			c.site(2, G + 1, 2, 3, G + 1, 3, BRICK, Map.of(), 1);
+			UmtSim.Rec n = c.site(2, G + 1, 2, 3, G + 1, 3, BRICK, Map.of(), 1);
 			assertEquals(5, RepairCore.stillOwed(js, recorded).size(), "the newer placement's 4 cells are dropped");
+			// and the removal never settles under it (its undo released, N's own removal would bring the bricks back)
+			assertEquals(java.util.Set.of(n.id), RepairCore.shadowedBy(js, a.id, g), "N, placed after the undo, shadows the removal");
+			c.sim.remove(n, null);
+			assertEquals(java.util.Set.of(), RepairCore.shadowedBy(js, a.id, g), "N gone: the removal may settle");
 		}
+		// (the hand-down case, an upper placed before the lower's removal, is gated in game by dr-crash DR3: UMT's site clock and its undo
+		// clock differ, so the time order can't be built here)
 	}
 }

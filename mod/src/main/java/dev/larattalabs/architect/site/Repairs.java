@@ -609,12 +609,26 @@ public final class Repairs {
 			u.lagging().size(), u.wants().size(), u.foreign() > 0 ? "; " + u.foreign() + " changed since" : "");
 	}
 
-	/** (F7) Stuck removals whose boxes share cells: rolled forward top-down in commit order. */
+	/** (DR2) {@link RepairCore#shadowedBy}, a read failure counted as shadowed (never settled on a guess). */
+	static Set<String> shadowed(JournalStore js, String site, String group) {
+		try {
+			return RepairCore.shadowedBy(js, site, group);
+		} catch (IOException e) {
+			return Set.of("(journal unreadable: " + e.getMessage() + ")");
+		}
+	}
+
+	/** (F7) Stuck removals whose boxes share cells: rolled forward top-down in commit order. (DR2) Also one under a newer site. */
 	private static void stacked(JournalStore js, List<Unit> units, Set<String> stuck, List<RepairFinding> out) {
 		Set<String> seen = new HashSet<>();
 		for (Unit u : units) {
 			if (!u.stuck()) {
 				continue;
+			}
+			String ug = u.group() != null ? u.group() : SiteJournal.lastGroup(u.site());
+			for (String n : ug == null ? Set.<String>of() : shadowed(js, u.site(), ug)) {
+				out.add(new RepairFinding(RepairCode.STACKED, u.site(), u.region(), n, 0, 0, 0, List.of(), "Removed " + u.site() + " lies under newer site "
+					+ n + " (placed after its removal): its cells there are " + n + "'s, and it stays pending until " + n + " is gone"));
 			}
 			for (String o : stackedWith(js, u.site(), stuck)) {
 				if (!o.equals(u.site()) && seen.add(u.site().compareTo(o) < 0 ? u.site() + "|" + o : o + "|" + u.site())) {
@@ -919,7 +933,12 @@ public final class Repairs {
 			boolean every = true;
 			for (String m : comp) {
 				String g = SiteJournal.lastGroup(m);
-				every &= g != null && unanimous(srv, js, m, g);
+				Set<String> newer = g == null ? Set.of() : shadowed(js, m, g);
+				if (!newer.isEmpty()) {
+					Architect.LOGGER.warn("Repair {}: {}'s removal stays pending: newer site(s) {} stand over its cells (it settles once they are gone)",
+						planId, m, newer);
+				}
+				every &= g != null && newer.isEmpty() && unanimous(srv, js, m, g);
 			}
 			if (!every) {
 				if (comp.size() > 1) {
@@ -1087,7 +1106,8 @@ public final class Repairs {
 			boolean all = true;
 			for (String o : stackedWith(js, u.site(), stuck)) {
 				Unit x = by.get(o);
-				all &= x != null && x.foreign() == 0;
+				String g = SiteJournal.lastGroup(o);
+				all &= x != null && x.foreign() == 0 && g != null && shadowed(js, o, g).isEmpty(); // (DR2) none under a newer site
 			}
 			if (all) {
 				out.add(u.site());

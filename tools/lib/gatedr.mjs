@@ -24,7 +24,8 @@
 //                                                            DRK1pt halts before that cell: finished, the block and its record back
 //                                                  DR13      (P1-2) G's repair halted at DRK1; after the restart a newer placement N
 //                                                            over G's west half (the stale record's pre-op value); finishing G leaves
-//                                                            N's cells untouched (no longer owed), the record final
+//                                                            N's cells untouched (no longer owed), the record final, G pending
+//                                                            under N (STACKED names N); N removed: G lags again, repaired, settles
 //                                                  DR14      (P1-1) H's repair halted at DRK2 (after its record went final, nothing
 //                                                            saved after): after the restart the box = before (the durability barrier
 //                                                            put the writes on disk first), H settled, nothing to diagnose
@@ -322,7 +323,21 @@ export async function registerDR(steps, h) {
     const recG = JSON.parse(fs.readFileSync(path.join(L.SAVES, W, 'architect-repairs', `${dG.planId}.json`), 'utf8'));
     check(r13.applied && await hash(NB) === hN, `DR13: G's open repair finished without writing over N (wrote ${r13.written}; ${r13.message})`, r13);
     check(recG.state === 'final' && recG.stale > 0, `DR13: the record is final and names ${recG.stale} cell(s) no longer owed (${recG.state})`);
-    out.DR13 = { lagging: fG?.lagging, written: r13.written, stale: recG.stale, newer: rn.siteId };
+    // the removal never settles under the newer site (N captured G's unrestored bricks as its before): G stays pending, named STACKED
+    const dG2 = await diag(ids.G);
+    const stG = (dG2.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.G);
+    const shG = (dG2.findings ?? []).find((x) => x.code === 'STACKED' && x.site === ids.G && x.key === rn.siteId);
+    check(!/settled/.test(r13.message) && !!stG && stG.lagging === 0 && !!shG, `DR13: G stays pending under N (STUCK, 0 lagging; STACKED names ${rn.siteId}) (${json((dG2.findings ?? []).map((x) => [x.code, x.site, x.key, x.lagging]))})`);
+    // N removed: its restore brings back what it captured (G's bricks), so G lags again; repaired, G settles and its box = before
+    const rmN = await result(await api(`remove ${rn.siteId} - noforce keep`));
+    check(rmN.removed === true, `DR13: N (${rn.siteId}) removed (${json(rmN.blockers ?? [])})`);
+    await L.settle(1500);
+    const dG3 = await diag(ids.G);
+    const fG3 = (dG3.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.G);
+    const rG3 = await repair(dG3.planId, true);
+    check(!!fG3 && fG3.lagging > 0 && rG3.applied && /settled/.test(rG3.message) && await hash(BX.G) === h0.G,
+      `DR13: N gone, G lagged at ${fG3?.lagging}; repaired, settled, the box = before (${rG3.message})`, rG3);
+    out.DR13 = { lagging: fG?.lagging, written: r13.written, stale: recG.stale, newer: rn.siteId, after: fG3?.lagging };
     // DR14 (P1-1): H's repair halted at DRK2, after its record went final with nothing saved after it
     const dH = await diag(ids.H);
     const fH = (dH.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.H);

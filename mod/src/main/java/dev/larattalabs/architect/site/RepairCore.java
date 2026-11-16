@@ -275,6 +275,42 @@ final class RepairCore {
 		return new ArrayList<>(byPos.values());
 	}
 
+	/**
+	 * (DR2, P1-2) The sites standing over a stuck removal's cells that committed after its undo: an ACTIVE entry created after the undo,
+	 * with a cell where one of the removal's undone entries has one. Such a placement captured the removal's unrestored blocks as its
+	 * before; settling the removal under it (releasing its undo) would let that placement's own removal bring them back. The removal stays
+	 * pending until they are gone. An entry created before the undo is the hand-down case (F1/F7), not this.
+	 */
+	static java.util.Set<String> shadowedBy(JournalStore js, String siteId, String group) throws IOException {
+		java.util.Set<String> out = new java.util.TreeSet<>();
+		for (JournalStore.Meta m : SiteJournal.undone(siteId, group)) {
+			for (long key : m.sections()) {
+				SectionCells own = js.section(m.id(), key);
+				if (own == null) {
+					continue;
+				}
+				java.util.Set<Integer> idx = new java.util.HashSet<>();
+				for (int k = 0; k < own.size(); k++) {
+					idx.add(own.index(k));
+				}
+				for (String id : js.inSection(m.dimension(), key)) {
+					JournalStore.Meta o = js.meta(id);
+					if (o == null || !o.active() || o.site().equals(siteId) || o.createdAt() <= m.undoneAt() || out.contains(o.site())) {
+						continue;
+					}
+					SectionCells sc = js.section(id, key);
+					for (int k = 0; sc != null && k < sc.size(); k++) {
+						if (idx.contains(sc.index(k))) {
+							out.add(o.site());
+							break;
+						}
+					}
+				}
+			}
+		}
+		return out;
+	}
+
 	/** (F7) A higher UNDONE entry's cell: its layer and its after. */
 	private record Above(long layer, @Nullable Value after) {
 	}
