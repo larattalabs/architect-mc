@@ -193,6 +193,7 @@ class TerrainOrderTest {
 							rooted[i] = true;
 						}
 					}
+					prefixStands(fx, g, at, built, floating);
 					progress |= o.connected() > 0;
 					if (o.connected() < m) {
 						List<Integer> left = new ArrayList<>();
@@ -213,6 +214,57 @@ class TerrainOrderTest {
 		}
 		t.cells = n;
 		return t;
+	}
+
+	/**
+	 * The built set as a whole (not only each cell as it came): every built fill of group {@code g} (resting blocks aside) is joined
+	 * through built fills to what stays: the land, a cell that was solid and stays solid (an unbuilt fill over solid, or a built one
+	 * that replaced solid), or a floating anchor's 3x3. An unbuilt cut still standing counts for nothing: it is going.
+	 */
+	static void prefixStands(Fx fx, int g, Map<Long, Integer> at, boolean[] built, List<BlockPos> floating) {
+		int n = fx.pos().length;
+		boolean[] reached = new boolean[n];
+		java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<>();
+		for (int i = 0; i < n; i++) {
+			if (!built[i] || fx.group()[i] != g || !bears(fx, i)) {
+				continue;
+			}
+			BlockPos p = BlockPos.of(fx.pos()[i]);
+			boolean root = Builder.anchorState(fx.before()[i]);
+			for (Direction d : Direction.values()) {
+				long k = p.relative(d).asLong();
+				Integer j = at.get(k);
+				root |= j == null ? fx.solid().contains(k) : !built[j] && !fx.after()[j].isAir() && Builder.anchorState(fx.before()[j]);
+			}
+			for (BlockPos f : floating) {
+				root |= Math.abs(p.getX() - f.getX()) <= 1 && Math.abs(p.getZ() - f.getZ()) <= 1 && p.getY() == f.getY() - 1;
+			}
+			if (root) {
+				reached[i] = true;
+				q.add(i);
+			}
+		}
+		while (!q.isEmpty()) {
+			BlockPos p = BlockPos.of(fx.pos()[q.poll()]);
+			for (Direction d : Direction.values()) {
+				Integer j = at.get(p.relative(d).asLong());
+				if (j != null && built[j] && !reached[j] && bears(fx, j)) {
+					reached[j] = true;
+					q.add(j);
+				}
+			}
+		}
+		for (int i = 0; i < n; i++) {
+			if (built[i] && fx.group()[i] == g && bears(fx, i)) {
+				assertTrue(reached[i], fx.id() + ": " + BlockPos.of(fx.pos()[i]).toShortString() + " hangs in the built set");
+			}
+		}
+	}
+
+	/** A built cell that joins others: not a cut, not a resting block. */
+	static boolean bears(Fx fx, int i) {
+		BlockState a = fx.after()[i];
+		return !a.isAir() && !(Builder.kind(a) == BuildOrder.ATTACHABLE && !a.is(BlockTags.LEAVES));
 	}
 
 	/** The rules a cell must meet as it goes in, read off the world as it stands. */
