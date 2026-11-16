@@ -31246,6 +31246,30 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **Release-review fix (v0.72.0 GPT review, 2 blockers):** (1) `Fills.atStart` runs at START_SERVER_TICK (`Builder.fillsAtStart`), before any level ticks, so an FK3 replay's hopper can't push before the reconcile; and `FillGuard` asks `Fills.guardedSite` (FILLING too), so the declared containers of a site saved mid-fill stay guarded. (2) `Fills.providedFits`: provided items go only into the template's declared block, never a dropper or dispenser; a swapped live block blocks the fill (it waits, `SWAP_REFUSED`), `writeBack` returns no provided item there (destroyed), and `creative` skips it. Gate: FK3-eject (fkb-crash; a chest under a declared hopper) and a hopper swapped for a dropper mid-fill (fkb-survival, `dev.fk.swap`); units FillsFKBTest +2. Ran after merging main 47630ede (J2's `settlePendingCredits` runs first in the same START-tick `atStart`): unit-scope PASS, step-inputs 426 OK, gitleaks clean; gate change run 20261115-154050 at e8bd209b: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. Verification follow-up (a resized library head moved a rotated site's fill cells): `Fills.world` derives the template size from the site's stored box and rotation (extents swapped for odd turns), never the head; every fill path goes through it. Unit FillsFKBTest +1 (11/0); gate run 20261115-161244 at 3905f771: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. No in-game resize case (it needs a versioned library re-cut; the unit covers the transform).
 - **Leftovers:** an all-provided fill whose blocks all went before its removal never credits (`Stockpiles.credit` returns early), so `provided`/`heldProvided` stay, as FK's `filled` marker does; bundles and drag covered by the code path only.
 
+### Slice FL as built (fill locks, Steward's S-M5-17, plus S-M5-18; branch `slice/FL` off origin/slice/LC 1d934d8e; $0; strict; 2026-11-16)
+
+- **Cause (a then b), reproduced first** (run `gate-runs-FL/20261116-025520-change`, fl-survival at 1f1e1234, no fix): a lock is a lever, an
+  ATTACHABLE, so `BuildOrder` puts it after the hoppers of its row; `Builder.put` writes it powered with `Sites.FLAGS` (no neighbour update),
+  and `HopperBlock.onPlace` had already run, so line hopper 0 stayed `enabled=true` beside a `powered=true` lever until the fill tick's
+  re-assert. 64 cobblestone in the input chest reached F0 (F2 3, F3 2 from the 5 in line hopper 2); `fill_blocked`, nothing charged.
+- **Fix: hold the containers, not the order** (`site/FillHold.java`, `mixin/HopperHoldMixin.java`): every vanilla insertion into a block
+  container (a hopper's push and pull, an item entity picked up, a dropper's push) passes `HopperBlockEntity.canPlaceItemInContainer`; it is
+  refused for a declared container of a fill site whose phase is not UNLOCKED (from its placement on). Why: reordering can't be proved (a
+  starved cell is skipped, support and stage order, ST), and a lever disables only its neighbours, so a line hopper elsewhere feeds its F
+  whatever the order. The item stays where it was: no loss, no mint. Index keyed on the sites map's identity (`Sites.storeIdentity`, copy-on-write)
+  and the library revision. A player's hand into F stays FK's `fill_blocked`; the lever's power still reaches the line only at the re-assert.
+- **S-M5-18:** `LandCheck.fillCell` + `Fills.filledContainerOurs`: a CHANGED cell that is a declared container of a filled site (FILLED or
+  UNLOCKED), the block holding what was written apart from its contents, holding its fill or less (plain stacks) is SAME; more is cargo.
+- **Gate:** `tools/lib/gatem5fl.mjs` fl-survival (fl_hall gate-local: input chest, 4-hopper line, overflow chest, an F under each line hopper,
+  the lever by line hopper 0). Run 20261116-031517-change at af4498c3: fl-survival 11/0 (69 cobblestone mid-build: every F empty, no
+  `fill_blocked`, all 69 in the overflow chest; filled once, unlocked, BUILT, F exact; consumed = quote 378 = 378; land check lot changed 1 =
+  the one undeclared container with cobblestone), fk-survival 17/0, fkb-survival 30/0, lc-survival 16/0. `dev.fk.container` answers `state`;
+  `dev.fk.state` answers `held`.
+- **Units:** FillHoldTest 2/0, LandCheckFLTest 1/0; unit-scope full Gradle 1341/0 at the final head;
+  step-inputs check clean; gitleaks clean.
+- **Leftovers:** the Fabric Transfer API insert path (`ContainerSlotWrapper.insert`) is not held: a pipe mod's item in F is FK's cargo
+  (`fill_blocked`, no loss); `FillHold.held` counts refused attempts, not items.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
