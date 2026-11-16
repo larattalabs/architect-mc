@@ -109,6 +109,7 @@ import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mj
 import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
+import { loadScaleFor, loadScaledBudget } from './lib/load-timeout.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -898,6 +899,8 @@ const slotNote = { waitedSeconds: 0, slot: null, slots: null, limit: SLOTS, dir:
 // the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md "Load-aware start"): slots.load in gate-chains.json, GATE_LOAD_MAX /
 // GATE_LOAD_WAIT_MAX_MIN, --no-load-wait (max1 0)
 const LOAD_GATE = flag('--no-load-wait') ? { ...loadConfig(cfg), max1: 0 } : loadConfig(cfg);
+// (GR-b) load-scaled timeouts (tools/lib/load-timeout.mjs): ref is the configured max1 (no env override; at least rule 10's 72)
+const LOAD_SCALE = (id) => loadScaleFor(cfg, id, { max1: cfg.slots?.load?.max1 });
 async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
   const stamp = () => new Date().toISOString().slice(11, 19);
@@ -971,6 +974,15 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
   // checks take it when exact. Only when unit-kit is in this run.
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
+  // (GR-b) unit-kit's status once it has ended: a TIMEOUT/FAIL/ERROR lets the first whole-suite reader re-run the suite once for
+  // the run (kit-reuse.mjs sharedSuite) instead of every reader running its own copy
+  let unitKitStatus = null;
+  try {
+    unitKitStatus = runShared.kitJunit ? summary.steps.find((x) => x.id === 'unit-kit')?.status ?? null : null;
+  } catch {
+    // childEnv before the summary exists (setup): no step has ended
+  }
+  if (unitKitStatus && unitKitStatus !== 'PENDING' && unitKitStatus !== 'RUNNING') env.GATE_KIT_PRODUCER = unitKitStatus;
   // the sidecar suite once per run (tools/lib/sidecar-reuse.mjs, speed audit D B3): unit-sidecar writes its JUnit report here; the drivers'
   // sidecar test files take pass/fail from it when exact. Only when unit-sidecar is in this run.
   if (runShared.sidecarJunit) Object.assign(env, { GATE_SIDECAR_RESULTS: runShared.sidecarJunit, GATE_SIDECAR_TREE: runShared.sidecarTree });
@@ -1799,13 +1811,31 @@ function runProcess(sh, step, logFile) {
       clearTimeout(killTimer);
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
     } });
-    const timer = setTimeout(() => {
+    const onTimeout = (why) => {
       timedOut = true;
-      log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
+      log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}${why ? `; ${why}` : ''}): killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
       clearTimeout(killTimer); // a stall kill's timer, if both fired: one pending SIGKILL, cleared on exit
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
-    }, step.effTimeoutMin * 60_000);
+    };
+    // (GR-b) a load-scaled step (gate-chains.json timeoutLoadScale, tools/lib/load-timeout.mjs): a wall minute spends min(1, ref /
+    // load1) of its timeout, up to a wall cap of maxFactor x it; checked every GATE_TIMEOUT_POLL_MS (15 s)
+    const scale = LOAD_SCALE(step.id);
+    let loadScale = null;
+    let timer;
+    if (!scale) timer = setTimeout(() => onTimeout(null), step.effTimeoutMin * 60_000);
+    else {
+      const samples = [{ t: Date.now(), load1: os.loadavg()[0] }];
+      timer = setInterval(() => {
+        samples.push({ t: Date.now(), load1: os.loadavg()[0] });
+        // (at most maxFactor x the timeout / 15 s samples: a few hundred)
+        loadScale = loadScaledBudget({ budgetMin: step.effTimeoutMin, samples, ...scale });
+        if (loadScale.expired) {
+          clearInterval(timer);
+          onTimeout(loadScale.why);
+        }
+      }, Number(process.env.GATE_TIMEOUT_POLL_MS ?? 15_000));
+    }
     child.on('error', (e) => {
       clearTimeout(timer);
       stallTimer.stop();
@@ -1819,7 +1849,7 @@ function runProcess(sh, step, logFile) {
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
-      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, stalled });
+      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, stalled, loadScale });
     });
     sh.activeGroup = child.pid;
   });
@@ -1932,6 +1962,8 @@ async function runStep(sh, step, rec) {
   const totals = [...lines.filter((l) => !l.startsWith('# ')).join('\n').matchAll(/(\d+) FAILURE\(S\)|FAILED \((\d+)\)|(\d+) failure\(s\)|(\d+) FAILED ->/g)].map((m) => Number(m[1] ?? m[2] ?? m[3] ?? m[4]));
   const timingOnly = recordsTiming(step) && !r.timedOut && !r.stalled && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
     && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
+  // (GR-b) a load-scaled timeout's account: budget spent, wall minutes, the mean load (summary.json timeoutLoadScale)
+  if (r.loadScale) rec.timeoutLoadScale = { budgetMin: step.effTimeoutMin, usedMin: r.loadScale.usedMin, wallMin: r.loadScale.wallMin, capMin: r.loadScale.capMin, meanLoad: r.loadScale.meanLoad, ref: r.loadScale.ref, ...(r.loadScale.why ? { why: r.loadScale.why } : {}) };
   if (r.timedOut) rec.status = 'TIMEOUT';
   else if (r.stalled) {
     rec.status = 'FAIL';

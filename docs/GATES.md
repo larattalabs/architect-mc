@@ -1225,6 +1225,14 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - *Housekeeping 2 (2026-10-18):* plan-p0 is now plan-p0, -valid, -det-1..3 and -asks (37-61 s each), and the 500 claims are
   village-layout-1..4 (17-23 s each). The suite went from 214/267 s to 139/145 s (A/B/A/B, load 3-10). A driver that names
   plan-p0 or village lists the split files too.
+- *GR-b (2026-11-16).* **unit-kit ends without a complete report** (TIMEOUT/FAIL/ERROR, passed as `GATE_KIT_PRODUCER`): the first
+  whole-suite reader (20+ files) re-runs the suite once under GX's shared-suite lock; the rest wait and reuse it under the same
+  rules (complete, this tree, every file with tests and no failure: no stale PASS). Fewer files: run here, never wait. A re-run
+  that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that rule 2 re-runs.
+  **Load-scaled timeouts:** `gate-chains.json` `timeoutLoadScale.steps` (unit-kit, -sidecar, -scope) spend `min(1, ref / load1)` of
+  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (rule 10's spirit: bounded, recorded as
+  `timeoutLoadScale` in `summary.json`). Load, not CPU time: node --test children exit and Gradle's daemon is outside the group, so
+  `ps` under-counts (`tools/lib/load-timeout.mjs`; tests `kit/test/gate-load-timeout.test.mjs`, `gate-kit-producer.test.mjs`).
 
 ### Gradle in the source checkout
 
