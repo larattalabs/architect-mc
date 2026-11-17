@@ -15,10 +15,20 @@ import net.minecraft.world.item.Item;
  * @param percent paid cells built over paid cells, 0 to 100 (100 with no paid cell): cheap to poll
  * @param outstanding what the region's targets still need, summed (their stockpile bills)
  * @param parts per plan part with held or paid cells (in the plan's order of first target): its state and targets
+ * @param terrainPerTick (8a, feature {@code terrainConstruction}) the world's effective staged-terrain rate, cells per tick per target
+ *                       ({@code terrainPerTick} in architect-world.json, default 16, clamped 1-64), so a caller can say "about N min" as
+ *                       {@code (terrainCells - terrainBuilt) / (terrainPerTick * 20)} seconds while loaded (docs/CONTRACT.md "Phase 8a" §3,
+ *                       §6). From 8a, {@code built}, {@code done} and {@code percent} count staged terrain cells with the paid ones. 0 until
+ *                       slice ST fills it (never divide by it unchecked). Since NEXT.
  */
-public record RegionBuild(boolean built, boolean done, double percent, Map<Item, Integer> outstanding, List<PartBuild> parts) {
+public record RegionBuild(boolean built, boolean done, double percent, Map<Item, Integer> outstanding, List<PartBuild> parts, int terrainPerTick) {
 	public RegionBuild {
 		outstanding = Map.copyOf(outstanding);
 		parts = List.copyOf(parts);
+	}
+
+	/** The 1.38.0 shape: no terrain rate ({@link #terrainPerTick} 0). */
+	public RegionBuild(boolean built, boolean done, double percent, Map<Item, Integer> outstanding, List<PartBuild> parts) {
+		this(built, done, percent, outstanding, parts, 0);
 	}
 }

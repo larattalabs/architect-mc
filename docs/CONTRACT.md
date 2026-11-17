@@ -32863,3 +32863,35 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Replay ($0, P2 paid s3-pay, -2, -3, -4, s6-pay briefs and plans):** s6's `form.hollow_mountain` is shown full ("mountain"); s3's `connector.wall` and `form.relief` are fields-only (the brief names neither), and every field those recorded parts wrote (where, height, thickness, gates; around, radius, maxCut, maxFill) is on their fields lines. Affordances were not recorded, so the land selection was not replayed.
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
+
+## Phase 8a: construction mode for forms and relief
+
+The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) lives in the coordinator's side-session notes
+(`architect-8a-contract-draft.md`); its rows are 8aF, TO, ST, HB and QX, merged as one batch. Noah started 8a before 7c closed.
+
+### Slice 8aF as built (branch `slice/8aF` off origin/main d7d000ca; versions NEXT; $0; light; recorded 2026-11-15)
+
+- **Kit.** `markSurvival` adds `staged: true` to every op a terrain kind wrote (the ops that get `free`), except fluid ops (8c's) and a
+  brush stroke's (the player's instant tool: reading taken; "natural-only strokes inside a region" are left to ST). `walkKinds` adds
+  `stagedTerrain` (appended to `KINDS_FORMAT2`, kit and `IrStale`), so an older mod or kit refuses the IR `PLAN_STALE`.
+- **"Terrain parts in their own tile entries"**: ARTL v2 cells already carry their group, but a group can mix a terrain IR part with paid ones
+  (`town` = its `pads` + streets and props), so the per-cell class says it: **class 3 `CLASS_STAGED`** = a free-pass cell of a staged op (held
+  wins: a terrace's cut and fill stay `HELD` with its walls). Counted free, so `survival.cells`, `cost.survival` and every bill are unchanged.
+  The mod decodes it (`Packed.STAGED`, `freePass`) and `RegionTargets.split` writes it in the free pass exactly as `FREE` until ST builds
+  it as targets. Groups, journal entries and put-down are unchanged.
+- **API (NEXT, binary compatible)**: `PartBuild.terrainCells/terrainBuilt`, `RegionBuild.terrainPerTick`, `Quote.terrainCells` (old constructors
+  kept: 0 or empty until ST/QX); feature `terrainConstruction` from the helper's `region.terrainConstruction`; `RegionTargets.WAIT_KIND_TERRAIN
+  = "terrain"` pinned by a test. Dev hooks `dev.region.terrain` and `dev.terrain.rate` are ST's (they need its targets and rate).
+- **Ran**: compile; `unit-scope --run` (kit 132 files, 1071 pass; Gradle 689: one failure, `RegionFluidsLFTest` pinned `bubbleColumns` last,
+  fixed and re-run green; sidecar 566 of 568, the two `eval.e2e` sim runs timed out under the parallel dumps' load and pass 4/4 alone); api-compat `--baselines` 8 of 8 clean; gitleaks clean. Byte identity, all 454 committed plan fixtures
+  against d7d000ca: **creative IRs byte-identical (454/454)**; **survival IRs identical once `staged` and `stagedTerrain` are stripped
+  (454/454; 231 carry marks)**; rs/'s survival tiles cell-identical with class 3 read as 0 (rs01 5,586 staged cells, survival_village
+  20,394). No fixture moves, so no `*_MOVED` list changes; `asks-survival.md` is unchanged (its counts are free/held/paid).
+- **§0 drift (91ce29bf -> d7d000ca)**: versions only (v0.72.0: API 1.64.0, mod 0.72.0, kit 0.67.0); `bySupport` still BOX-only (Builder),
+  `blocksPerTick` 4, `PartBuild`/`RegionBuild`/`Quote`/`RegionTargets` unchanged; QL-b/QL-c changed the quote's land, not the free rule.
+  The free pass covers pads (always), relief, forms, scatter and stamps as §0 says. x01 plans 32,035 free cells on a flat survey
+  (§0's 32,078 is cells placed in game).
+- **For ST**: build `CLASS_STAGED` cells as fed held targets per (tile x group), separate from that group's paid/held target; fill
+  `terrainCells/terrainBuilt`, `terrainPerTick`, the typed wait (`WAIT_KIND_TERRAIN`) and the dev hooks. **TO** orders them; **HB**'s RL book
+  marks them free; **QX** fills `Quote.terrainCells` from the plan's staged counts (the kit would need to count class 3 apart: today it is
+  inside `free`).

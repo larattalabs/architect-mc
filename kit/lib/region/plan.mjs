@@ -333,14 +333,20 @@ export function opBounds(op, blobs, bytesOf = null) {
  * (6c RS, §3, §4) A survival plan's IR marks: each op a terrain kind wrote gets `free: true` (TERRAIN_OPS; relief, scatter and stamp ops by
  * kind; every op of a brush stroke), and the member `survival` names the target groups: `groups` (sorted ids), `parts` (IR part id -> group
  * index: a plan part, so its own parts build together; the first connector of a shared route part; a bundled program's IR part itself) and
- * `pads` (the lots' pad parts, whose free cells are always the free pass). Mutates `ir`.
+ * `pads` (the lots' pad parts, whose free cells are always the free pass). (8aF) A terrain kind's op also gets `staged: true` (not a fluid op,
+ * not a brush stroke's), so walkKinds adds `stagedTerrain` and its free cells evaluate as CLASS_STAGED. Mutates `ir`.
  */
 export function markSurvival(ir, r, programId) {
   const all = programId === 'brush';
   ir.parts.forEach((p, i) => {
     const src = r.parts[i];
     p.ops.forEach((op, j) => {
-      if (all || TERRAIN_OPS.has(src.ops[j]) || op.op === 'relief' || op.op === 'scatter' || op.op === 'stamp') op.free = true;
+      if (all || TERRAIN_OPS.has(src.ops[j]) || op.op === 'relief' || op.op === 'scatter' || op.op === 'stamp') {
+        op.free = true;
+        // (8aF, docs/CONTRACT.md "Phase 8a" §1, §6) a terrain kind's op is staged in survival (built over time, slice ST): never a fluid op
+        // (8c's) nor a brush stroke's (the player's instant tool; 8aF's reading, see its as-built)
+        if (!all && op.op !== 'fluid') op.staged = true;
+      }
     });
   });
   const partOf = r.meta.planCheck?.partOf ?? null;

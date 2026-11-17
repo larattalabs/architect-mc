@@ -30,7 +30,7 @@ public final class Packed {
 
 	/**
 	 * Decoded cells: positions ({@link BlockPos#asLong}), state index into {@code states}, cond (0-3), walk; (6c RS) a survival IR's tile
-	 * (ARTL version 2) also each cell's class ({@link #FREE}, {@link #HELD}, {@link #PAID}) and group (an index into the IR's
+	 * (ARTL version 2) also each cell's class ({@link #FREE}, {@link #HELD}, {@link #PAID}, (8aF) {@link #STAGED}) and group (an index into the IR's
 	 * {@code survival.groups}); null in a creative tile.
 	 */
 	public record Tile(long[] pos, int[] state, byte[] cond, boolean[] walk, List<BlockState> states, List<String> stateIds, String sha, byte @Nullable [] cls,
@@ -53,6 +53,16 @@ public final class Packed {
 	public static final byte FREE = 0;
 	public static final byte HELD = 1;
 	public static final byte PAID = 2;
+	/**
+	 * (8aF, docs/CONTRACT.md "Phase 8a" §3) A staged terrain cell: a free cell of an op the IR marks {@code staged} (kit CLASS_STAGED). Until
+	 * slice ST it is written in the free pass exactly as {@link #FREE}. Since NEXT.
+	 */
+	public static final byte STAGED = 3;
+
+	/** (8aF) Whether a class is written in the free pass today ({@link #FREE} or {@link #STAGED}). */
+	public static boolean freePass(byte c) {
+		return c == FREE || c == STAGED;
+	}
 
 	private Packed() {
 	}
@@ -148,7 +158,7 @@ public final class Packed {
 				byte[] cl = new byte[n];
 				for (int i = 0; i < n; i++) {
 					int c = r.u8();
-					if (c > PAID) {
+					if (c > STAGED) {
 						throw new IllegalArgumentException("ARTL class " + c + " in section " + sx + "," + sy + "," + sz);
 					}
 					cl[i] = (byte) c;

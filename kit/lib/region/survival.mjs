@@ -18,6 +18,11 @@ export const TERRAIN_BLOCKS = new Set(['dirt', 'grass_block', 'coarse_dirt', 'ro
 export const CLASS_FREE = 0;
 export const CLASS_HELD = 1;
 export const CLASS_PAID = 2;
+/**
+ * (8aF, docs/CONTRACT.md "Phase 8a" §3) a free cell an op marked `staged` wrote (a terrain kind's, not held, not a fluid op's): today
+ * written in the free pass as CLASS_FREE is (the mod reads it so); slice ST builds these cells over time as the part's terrain targets.
+ */
+export const CLASS_STAGED = 3;
 
 /** A material's kind for the free rule. */
 export const MK_AIR = 0;

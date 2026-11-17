@@ -12,9 +12,19 @@ import java.util.List;
  * @param cells the targets' cells (paid and held)
  * @param built of them, built
  * @param freeCells the part's cells written at once in the free pass
+ * @param terrainCells (8a, feature {@code terrainConstruction}) the part's staged terrain cells: a survival region's land (relief, pads'
+ *                     cut and fill, forms, scatter and stamps) built over time, free (docs/CONTRACT.md "Phase 8a" §6). 0 with none, in a
+ *                     creative region, and until slice ST builds staged terrain. Since NEXT.
+ * @param terrainBuilt of them, built (0 until slice ST). While {@code state} is {@code building}, Steward's NPC avoids the part's box
+ *                     (S-8a-1). Since NEXT.
  */
-public record PartBuild(String part, String state, List<String> targets, long cells, long built, long freeCells) {
+public record PartBuild(String part, String state, List<String> targets, long cells, long built, long freeCells, long terrainCells, long terrainBuilt) {
 	public PartBuild {
 		targets = List.copyOf(targets);
+	}
+
+	/** The 1.38.0 shape: no staged terrain ({@link #terrainCells} and {@link #terrainBuilt} 0). */
+	public PartBuild(String part, String state, List<String> targets, long cells, long built, long freeCells) {
+		this(part, state, targets, cells, built, freeCells, 0, 0);
 	}
 }
