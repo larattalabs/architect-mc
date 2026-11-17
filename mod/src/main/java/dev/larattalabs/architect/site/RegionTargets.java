@@ -1295,6 +1295,12 @@ public final class RegionTargets {
 
 	// ------------------------------------------------------------------ (8a ST) the staged terrain step
 
+	/**
+	 * (8a HB, TEST: {@code dev.terrain.rate {hold}}, this JVM only) Every staged terrain target writes nothing while set, so a gate holds a
+	 * region's land at 0 or part built (Remove, undo and the halt at a fraction). Never set in production.
+	 */
+	public static volatile boolean terrainHold;
+
 	/** (8a ST) Per survival region (its group): the feed tick its terrain budget was last spent in, and how much of it. Server thread. */
 	private static final Map<String, long[]> TERRAIN_SPENT = new HashMap<>();
 	/** (8a ST) Per region group and part: the last feed tick a staged target of the part wrote a cell. Server thread. */
@@ -1325,7 +1331,7 @@ public final class RegionTargets {
 	 * support: the plan's own floating block) is released: the rest is written in its order, unsupported, so the region completes.
 	 */
 	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.@Nullable Purse purse, long ticks) {
-		int budget = terrainLeft(t.group(), ticks);
+		int budget = terrainHold ? 0 : terrainLeft(t.group(), ticks);
 		if (budget <= 0) {
 			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
 			return;
