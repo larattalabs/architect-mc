@@ -31357,7 +31357,11 @@ without them; slabs unpickupable and untransferable from declared containers; st
   re-take is shown by units and source only (no in-game crash point of its own: rule 18 not met there).
 - **PSV merged** (origin/slice/PSV f68b7716, its fix round READY): LC3's copies dropped (requestedGen, WRITTEN_GEN, failedGen, FAIL_WRITES,
   writeSave(gen) with PSV's folder sync, saveIfDue's retry half, the load resets); kept `saveWanted`/`wantSave` (saveIfDue's tail) and
-  `RemovalSeal.observe`; `save` answers its generation. RemovalSealTest's barrier call became `flushSaves()` (PSV removed `saved()`). GATE4
+  `RemovalSeal.observe`; `save` answers its generation. RemovalSealTest's barrier call became `flushSaves()` (PSV removed `saved()`). Gate at the merge 7a32ff45
+  (`20261117-035015-change`; `-034504` errored in setup: the run dir's gradle home lacked lab_ui 0.5.0, refreshed from b7's): rl-crash 110/0,
+  hf-crash 56/0, ps-crash 81/0, psv-crash 48/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 91/0, fl-survival 11/0.
+  Units on the merge: unit-scope full Gradle + kit PASS; sidecar (main's code, no change here) 945/948 at load 47, jobs.test PASS on a
+  re-run, proc-cpu's child CPU-time check (190 ms vs > 300) failing under load. The rule-17 retake change (49a5fcc0, after the merge run): lc3-undo 91/0 (`20261117-050654-change`; dirty = this as-built only); its targeted units PASS.
 - **Gate** (`--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3r4`): `20261117-013955-change`
   at d5c5aefa: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0 (the shared fixture), lc3-seal
   40/0, fl-survival 11/0; lc3-undo 40/1, stopped (`failRestore skip 0` never breaks a survival site's at-once deconstruct: the removal
