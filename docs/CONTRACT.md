@@ -32919,6 +32919,14 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Conservation** comes from the audit's standing parts (stock, paid cells standing, crate stock, item entities, containers, inventory) over the fixture box.
 - **Gate:** adp-defer (A deferred, with SAC1/SAC2; B with SAC1/ADP1 roll-back; live; C), adp-forward (ADP2, ADP3, SAC2: one town each),
   adp-complete (own crate, finish, the Regions.adopt refusal), adp-road. Units: StockpileAdoptADPTest (fate table with FINISH, overCapacity); unit-scope PASS.
-- **Failing-first recipe (base, not pushed):** a temp branch with origin/main's `Stockpiles.java` plus only `inAdoptSave = "ADP1"` around its
-  first `saveWithWorld` and the kill hook. Run the adp-* steps there; expected FAIL on A/ADP1/complete/road. Leftover: the paid standing of a BUILT
-  road out of range (`rescan` never loads a chunk) and RegionAdopt's other callers of `crateStands` (none left).
+- **Failing-first (base temp branch, not pushed):** origin/main's `Stockpiles`/`Builder`/`RegionAdopt`, plus only the ADP1 hook around
+  the base's first save. `artifacts/gate-runs-adp/20261117-052037-change` (in ADPrev): adp-defer 9 FAIL, adp-complete 7 (the deferred crate's
+  cell restored, Regions.adopt PLACED), adp-road 3 (no road record; refund 0, 40 gravel lost). `20261117-052858-change` (ADP1 row only):
+  the crate's 3 items and house_3's paid record were lost.
+- **Fixed runs** (strict, change --only, --no-cache --shards 1 --no-turbo, 9080:9081):
+  - `20261117-053539-change` at 29a22104 (saveConfirmed): adp-defer 43/0, adp-forward 71/0, adp-complete 16/0, adp-road 8/0.
+  - `20261117-060425-change` at ddf1c772 (T0 042da098 barrier): 13 PASS (adp-* as above; sad-survival 56, sad-crash 26, rl-crash 110,
+    hf-crash 56, ad-crash 33, ad-ingame 35, sad-instant 10, ps-crash 81, gr-survival 12; 0 FAIL).
+  - `20261117-070358-change` at c3a31d3f (T0 2c2b093c merged): sad-crash 26/0, adp-defer 43/0, adp-forward 71/0, adp-complete 16/0, adp-road 8/0.
+  - Units: unit-scope kit + Gradle PASS at c3a31d3f; step-inputs clean.
+- **Leftovers:** the paid standing of a BUILT road out of range (`rescan` never loads a chunk); the overflow drop's mint window (TXN).
