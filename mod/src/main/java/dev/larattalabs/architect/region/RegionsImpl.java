@@ -1033,8 +1033,10 @@ public final class RegionsImpl implements Regions {
 			String planId = ack.getAsJsonObject("result").get("planId").getAsString();
 			PLAN_SERVER.put(planId, s);
 			CompletableFuture<JsonObject> done = PLANNING.computeIfAbsent(planId, k -> new CompletableFuture<>());
-			// the checker and the renders: mega_bench full resolution up to 120 s + 30 s; (6c T1) a plan with passes may take 120 s alone
-			long timeout = checkOf(r) ? 600 : 300;
+			// the checker and the renders: mega_bench full resolution up to 120 s + 30 s; (6c T1) a plan with passes may take 120 s alone;
+			// (WR2) the sidecar limits a plan by CPU time with a wall-clock backstop of at least 600 s (sidecar planWallBackstopMs): wait past
+			// it (plus the check's 180 s), so a loaded machine's slow plan, or the sidecar's own stop, answers before this does
+			long timeout = checkOf(r) ? 900 : 660;
 			return done.orTimeout(timeout, java.util.concurrent.TimeUnit.SECONDS).thenCompose(planned -> irOf(link, planned).thenApply(irJson -> {
 				JsonObject doctor = DOCTOR_NEXT_PLAN;
 				if (doctor != null) {
@@ -3243,6 +3245,12 @@ public final class RegionsImpl implements Regions {
 			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
 		return onServer(s, () -> {
+			if (dev.larattalabs.architect.site.Placement.loadFailed()) {
+				// (PSV fix round, GPT P1 2) the queue file failed to load: no undo can be recorded, so nothing is touched (no mined cell put back,
+				// no batch cancelled, the region's state as it was)
+				Architect.LOGGER.warn("Region {}: removal refused, nothing changed: {}", l.rec().id, dev.larattalabs.architect.site.Groups.UNRECORDABLE);
+				return CompletableFuture.completedFuture(new RemoveResult(false, List.of(dev.larattalabs.architect.site.Groups.UNRECORDABLE), Map.of()));
+			}
 			ServerLevel lv = l.level(s);
 			if (lv != null && l.rec().survival()) {
 				dev.larattalabs.architect.site.RegionFreeDrops.restoreMined(lv, l); // (6c RS §9) mined free cells back first

@@ -890,6 +890,19 @@ public final class Fills {
 	}
 
 	/**
+	 * (PSV fix round, GPT should-fix) Whether {@code s}'s key holds custody (billed or provided items) in its stockpile's ledger: what a
+	 * removal that ends unwritten gives back, whatever the record's phase says (custody is taken for a ledger fill marker with no phase too).
+	 */
+	static boolean holdsCustody(@Nullable Site s) {
+		Stockpiles.Pile pile = s == null || s.construction() == null ? null : Stockpiles.pileOf(s);
+		if (pile == null) {
+			return false;
+		}
+		String key = Builder.creditKey(s);
+		return !pile.ledger().custody(key).isEmpty() || !pile.ledger().provided(key).isEmpty();
+	}
+
+	/**
 	 * A removal that ends without removing {@code s} (or a custody found at load whose site still stands, no removal holding it): its
 	 * custody written back into its containers by their declarations, free, and dropped from the ledger.
 	 */

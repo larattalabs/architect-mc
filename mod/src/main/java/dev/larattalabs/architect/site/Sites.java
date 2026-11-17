@@ -1735,6 +1735,9 @@ public final class Sites {
 			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
 		}
 		SiteJournal.requireAvailable();
+		if (Placement.loadFailed()) {
+			throw new Sites.SiteException(Groups.UNRECORDABLE); // (PSV fix round, GPT P1 2) before anything is touched (no refund tally, no handover)
+		}
 		List<String> cover = SiteJournal.coveringSites(id);
 		if (!cover.isEmpty()) {
 			if (covered == Covered.REFUSE) {

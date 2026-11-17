@@ -394,6 +394,15 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-17 (slice LC3 round 4; TEST):** `dev.undo.failRestore {stallBefore: site}`: the next group or stage removal ends STALLED just
+  before it writes that member ("" disarms; for a member a survival site deconstructs at once, which `skip` never breaks); `dev.journal.killAt`
+  takes AB1..AB4 (`/architect removal abandon`: custody back in memory; inside its save, chunks on disk, ledger not; save confirmed, no
+  record dropped; records dropped, queue not saved); `dev.seal.state`'s `stalled` entries add `current`.
+- **2026-11-17 (slice PSV fix round):** `dev.queue.writes` takes `failAtPreSave?: n` (TEST): the next undo pre-save's queue write and the n-1
+  after it fail (the failure starts after R1, the preflight already written); the answer adds `failAtPreSave` (left armed).
+- **2026-11-16 (slice PSV):** new (`StockpileDev`, generated headless too) `dev.queue.writes {fail?: n}`: TEST, the next n queue file
+  (`architect-queue.json`) writes fail before writing (0 clears) -> `{requestedGen, writtenGen, writeFailing, failWrites, loadFailed}`.
+  A failing write keeps a group removal's (and a removal job's) undo commit waiting; Placement retries every 5 s.
 - **2026-11-16 (slice LC3; TEST, in `SliceFkDev`, generated headless too):** `dev.seal.state {}` -> `{sealed: [{id, dim, box}], refused:
   {path: n}, pause: {site: after}, jobs: [{site, kind, progress, cells}]}` (the removal seal now, its refusals since the start). `dev.seal.holder
   {pos}` -> `{holder, kind, block, holds, sealed}`. `dev.seal.use {pos, item?, count?, contents?: {item: n}, face?}`: the first player

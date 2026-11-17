@@ -134,7 +134,7 @@ async function freshFlat(name) {
 
 /** A design group of one item whose sim design returns the composite castle; the installed entry id and the group. */
 async function installCastle(tag) {
-  const req = { name: `CM-b ${tag}`, bible: 'oak', items: [{ itemKey: 'lot_keep', type: 'castle', name: 'Keep', size: [96, 64, 96], ext: { 'architect:sim': 'composite', lot: 'keep' } }] };
+  const req = { name: `CM-b ${tag}`, bible: 'oak', items: [{ itemKey: 'lot_keep', type: 'castle', name: 'Keep', size: [96, 64, 96], ext: { 'architect:sim': 'composite', lot: 'keep', 'architect_mc:allowComposite': true } }] };
   const gid = await result(await api(`group cmb${tag} ${b64(req)}`), 120_000);
   if (typeof gid !== 'string') throw new Error(`group refused: ${JSON.stringify(gid)}`);
   let g = null;
@@ -159,42 +159,9 @@ async function verifyAll(sites) {
   }
   return out;
 }
-/**
- * Every module verifies, but for vanilla's own physics: CM-a's castle stands its four corner towers on two rows of the ground's dirt_path
- * outside the hall floor (7 x 2 cells under each tower, 28 in each end module, 0 in the centre), and the game turns a dirt path under a solid
- * block into dirt. Those cells, and only those, may differ: each listed mismatch names dirt_path and dirt, at most 28 per module, every
- * mismatch listed. (A design leftover of CM-a's castle; the placement writes the template exactly, the game changes it.)
- */
-const PATH_UNDER_TOWERS = 28;
-/** BlueprintTransform.rotateBlock: a template-local (x, z) in the rotated footprint. */
-function rotateBlock(x, z, sx, sz, turns) {
-  switch (((turns % 4) + 4) % 4) {
-    case 1: return [sz - 1 - z, x];
-    case 2: return [sx - 1 - x, sz - 1 - z];
-    case 3: return [z, sx - 1 - x];
-    default: return [x, z];
-  }
-}
-/**
- * The world cells of the path under CM-a's four corner towers for a castle placed at (ox, oy, oz) with `turns`: union row 0, x 0..6 and
- * 114..120 (the towers' x), z 0..1 and 23..24 (the towers' z outside the hall's stone floor, z 2..22): 7 x 2 x 2 = 28 per end module.
- */
-function towerPathCells(ox, oy, oz, turns) {
-  const out = new Set();
-  for (const ux of [0, 1, 2, 3, 4, 5, 6, 114, 115, 116, 117, 118, 119, 120]) {
-    for (const uz of [0, 1, 23, 24]) {
-      const [rx, rz] = rotateBlock(ux, uz, U.x, U.z, turns);
-      out.add(`${ox + rx},${oy},${oz + rz}`);
-    }
-  }
-  return out;
-}
-const PAIR = /^(-?\d+), (-?\d+), (-?\d+) entry \S+ after \{id:"minecraft:dirt_path"\} null now \{id:"minecraft:dirt"\} null$/;
-/** Only that exact pair, only on those cells, at most 28 per module, every mismatch listed; anything else is a mismatch. */
-function vanillaOnly(v, ox, oy, oz, turns) {
-  const allowed = towerPathCells(ox, oy, oz, turns);
-  return Object.values(v).every((x) => x.mismatches === 0 || (x.mismatches <= PATH_UNDER_TOWERS && x.first.length === x.mismatches
-    && x.first.every((l) => { const m = PAIR.exec(l); return !!m && allowed.has(`${m[1]},${m[2]},${m[3]}`); })));
+/** Every module verifies exactly (7c CS: CM-a's castle stands its corner towers on stone, so the game changes no cell; the old dirt_path allowance is gone). */
+function allVerify(v) {
+  return Object.values(v).every((x) => x.mismatches === 0);
 }
 
 // ------------------------------------------------------------------ ingame
@@ -249,7 +216,7 @@ steps.ingame = async () => {
   if (grp1) {
     const v = await verifyAll(grp1.sites);
     const seam = await api(`stack ${X0 + 40} ${gy + 3} ${Z0 + 2}`);
-    check(vanillaOnly(v, X0, gy, Z0, 0) && seam.length === 2, `every module verifies (mismatches ${Object.values(v).map((x) => x.mismatches).join('/')}: only vanilla's dirt_path -> dirt under CM-a's corner towers) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
+    check(allVerify(v) && seam.length === 2, `every module verifies (mismatches ${Object.values(v).map((x) => x.mismatches).join('/')}) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
     out.wholeFirst = { group: g1, verify: v, seam };
   }
   const r1 = g1 ? await result(await api(`remove ${g1} ${OWNER} noforce`), 600_000) : null;
@@ -268,8 +235,8 @@ steps.ingame = async () => {
   const grp2b = g2 ? await groupOf(g2) : null;
   const left = (grp2b?.stages ?? []).filter((s) => s.name !== 'east').flatMap((s) => s.sites ?? []);
   const vLeft = await verifyAll(left.length ? left : (grp2b?.sites ?? []).slice(0, 2));
-  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && vanillaOnly(vLeft, X0, gy, Z0, 1) && Object.keys(vLeft).length === 2,
-    'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back; vanilla\'s path under the towers only)', { u, stages: grp2b?.stages, vLeft });
+  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && allVerify(vLeft) && Object.keys(vLeft).length === 2,
+    'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back)', { u, stages: grp2b?.stages, vLeft });
   const r2 = g2 ? await result(await api(`remove ${g2} ${OWNER} noforce`), 600_000) : null;
   await L.settle(1500);
   const e2 = await eflat(area1, h1, c1);
@@ -315,6 +282,16 @@ steps.ingame = async () => {
   check(!p5.placed && s5.some((n) => n.startsWith('NOT_ALLOWED') && n.includes(`composite ${E}`)) && !p6.placed && s6.some((n) => n.startsWith('NOT_ALLOWED') && n.includes(`composite ${E}`)) && (await hashOf(area)) === h0,
     'survival: a construction request and an actorless INSTANT are refused NOT_ALLOWED naming the composite; nothing placed', { s5, s6 });
   out.survival = { construction: s5, actorless: s6 };
+  // (7c CS) the library delete: a hidden module alone refuses; the composite takes its modules to the trash with it
+  const mod1 = `${E}__west`;
+  // (result() answers the unwrapped value, a boolean here; an immediate answer without a pending key is its {value} object)
+  const val = (x) => (x && typeof x === 'object' && 'value' in x ? x.value : x);
+  const dm = { value: val(await result(await api(`delete ${mod1}`), 30_000)) };
+  const dc = { value: val(await result(await api(`delete ${E}`), 60_000)) };
+  await L.settle(1500);
+  const libLeft = [E, `${E}__west`, `${E}__centre`, `${E}__east`].filter((id) => fs.existsSync(path.join(LIBRARY, id)));
+  check(dm.value === false && dc.value === true && libLeft.length === 0, `delete: the module ${mod1} alone refuses (${dm.value}); the composite deletes (${dc.value}) with its 3 modules (left in the library: ${libLeft.join(', ') || 'none'})`, { dm: dm.value, dc: dc.value, left: libLeft });
+  out.delete = { module: dm.value, composite: dc.value, left: libLeft };
   await L.leaveWorld();
   return out;
 };
@@ -385,7 +362,7 @@ steps.crash = async () => {
   const grp = g ? await groupOf(g) : null;
   const v = await verifyAll(grp?.sites ?? sites.map((s) => s.id));
   const h1 = await hashOf(area);
-  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && vanillaOnly(v, X0, gy, Z0, 0) && h1 === hC,
+  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && allVerify(v) && h1 === hC,
     `after the restart the composite's batch resumed: 3 modules stand in group ${g} (${(grp?.stages ?? []).map((s) => `${s.name}:${s.state}`).join(' ')}), each verifies, and the area equals the clean placement's hash`, { sites: sites.map((s) => [s.id, s.blueprint]), v, same: h1 === hC });
   out.resumed = { group: g, verify: v, sameAsClean: h1 === hC };
   const r = g ? await result(await api(`remove ${g} ${OWNER} noforce`), 600_000) : null;

@@ -161,9 +161,11 @@ steps.unit = async () => {
   // ((chore AR) asks-gap-after.txt stays CL's record, which kit/test/cl.test.mjs item 3 holds against its before table (only the three climbs
   // differ); the after table compares with it without what later slices moved: K3's walls, LF's lifts, GM-c's drawbridge and LP's tunnels
   // (fl-norm k3AskLine, lfAskLine, atAskLine), BF's forms and US's rule.suspended (arAskLine), their gap rows and the tally line)
+  // ((release v0.74.0) and CF2's LOTS_SHORT code on its five recorded parts (sp2-norm cf2AskLine; CF2 landed in v0.73.0))
   const { AR_GAP_ROW, arAskLine, atAskLine, k3AskLine, lfAskLine } = await import('./lib/fl-norm.mjs');
+  const { cf2AskLine } = await import('./lib/sp2-norm.mjs');
   const later = (t) => t.split('\n').filter((l) => !/^# 59 asks:/.test(l) && !/^\s+(?:connector\.(?:lift|drawbridge)|tunnel\.under)\s+\d+$/.test(l) && !AR_GAP_ROW.test(l))
-    .map((l) => arAskLine(atAskLine(k3AskLine(lfAskLine(l))))).join('\n');
+    .map((l) => cf2AskLine(arAskLine(atAskLine(k3AskLine(lfAskLine(l)))))).join('\n');
   out.asks = { moved, malformed: after.malformed, committedAfter: later(fs.readFileSync(path.join(F, 'asks-gap-after.txt'), 'utf8')) === later(after.text) };
   const climbs = ['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair'];
   check(after.malformed === 0 && (JSON.stringify(moved) === JSON.stringify(climbs) || (onMain && moved.length === 0)) && out.asks.committedAfter,

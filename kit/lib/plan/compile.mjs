@@ -67,7 +67,9 @@ import { readPaletteRule } from './palette.mjs';
 import { isFreeZone, resolveFreeZone, freeGeometry, aroundSites, bodyKeepRects, whereParts } from './free.mjs';
 import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region/frontage.mjs';
 // (7b SL) layout.elevated: a lots zone whose lots are site lots on the land's affordances (elevated.mjs)
-import { emitElevatedZone, isElevatedZone, resolveElevatedZone } from './elevated.mjs';
+import { emitElevatedZone, formHostOf, isElevatedZone, landAfterForms, resolveElevatedZone } from './elevated.mjs';
+// ((slice R2) forms as land: a form-hosted elevated zone's lots read the plan's draft land after the forms)
+import { localWorld } from '../fluids/body.mjs';
 // (7b LP) port links between site lots (the link pass)
 import { LINK_STAGE, LinkError, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
 import { authoredRef } from './authored.mjs';
@@ -340,6 +342,8 @@ export function featureGeom(env, f, geomOf, from) {
     const n = near(pick);
     return { rect: pick.bbox, aim: [n.x, n.z], avoid: null, body: pick, what: `${pick.kind} (${pick.area} columns)` };
   }
+  // ((slice CAVE) a cave locates an elevated zone only (elevated.mjs, cave.mjs): its lots carved into the cave's walls)
+  if (f.cave !== undefined) return { error: { code: 'NO_FEATURE', message: 'a cave feature locates a lots zone with layout elevated (its lots carved into the cave\'s walls), nothing else' } };
   return { error: { code: 'NO_FEATURE', message: `feature ${Object.keys(f)[0]} is not compiled in v0` } };
 }
 
@@ -742,7 +746,7 @@ function resolveSpikesAround(env, f, geomOf, taken, keep) {
   const j = judge([{ what: 'count', value: want - sites.length, ...tCount }]);
   return { klass: j.klass, sites: sites.map((s) => s.centre), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((acc, s) => ({ minX: Math.min(acc.minX, s.rect.minX), minZ: Math.min(acc.minZ, s.rect.minZ), maxX: Math.max(acc.maxX, s.rect.maxX), maxZ: Math.max(acc.maxZ, s.rect.maxZ) }), sites[0].rect),
     deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: j.failed.what === 'count' ? 'NO_ROOM' : 'TOLERANCE', message: `${want - sites.length} of ${want} site(s) found round ${a.footprint.what}`, evidence: { what: 'count', value: want - sites.length } }] : [],
-    notes: [`around ${a.footprint.what}: ${sites.length} site(s) in the band [${a.ring.join(', ')}]${want >= 3 ? ', evenly by angle' : ''}`] };
+    notes: [`around ${a.footprint.what}: ${sites.length} site(s) in the band [${a.ring.join(', ')}]${want >= 3 ? ', evenly by angle' : ''}`, ...(a.notes ?? [])] };
 }
 
 // ------------------------------------------------------------------ (D1) districts zones
@@ -1068,7 +1072,14 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   };
   const budgetHit = (cap) => ({ class: 'incomplete', reasons: [{ code: 'BUDGET', message: `the check ran out of ${cap} before this part had an answer`, evidence: { cap } }] });
   const okClass = (id) => ['fits', 'adjusted'].includes(answers.get(id)?.class);
+  const deferredZones = new Set(); // ((slice R2) form-hosted elevated zones, answered only after the forms emit)
   const depState = (p) => {
+    // ((R2) a zone or form placed against a form-hosted zone would stand on its provisional answer: blocked until that zone is placed by
+    // its form instead; connectors resolve after the forms emit and read its final answer; rules (rule.suspended) scope it before)
+    if (deferredZones.size && (p.family === 'zone' || p.family === 'form')) {
+      const on = p.deps.filter((d) => deferredZones.has(d));
+      if (on.length) return { class: 'blocked', blockedBy: on, reasons: [{ code: 'DEPENDENCY', message: `depends on ${on.join(', ')}, an elevated zone on a form part whose lots are found only after the forms are written: locate this part by the form instead`, evidence: { blockedBy: on, onForm: true } }] };
+    }
     const bad = p.deps.filter((d) => !okClass(d));
     if (!bad.length) return null;
     const inc = bad.filter((d) => answers.get(d)?.class === 'incomplete');
@@ -1163,6 +1174,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const terracedPlan = V.parts.some((q) => q.family === 'zone' && q.verdict === 'compile' && (q.part?.terraces !== undefined || (Array.isArray(q.part?.program?.districts) && q.part.program.districts.some((d) => d?.terraces !== undefined))));
   const zonesAccepted = []; // {id, rect}
   const formsAccepted = []; // footprint rects of the forms placed so far
+  const formHosted = new Map(); // ((slice R2) a grown form's id -> the elevated zones standing on it (not in its way at emit))
   const hTaken = new Set(); // ((6c FL) those of H parts: the broken variant zoneIgnoresBody leaves them out of its zone's mask)
   // ---- (6c HY-a) the hydrology pass, only when the plan has a course, race or ditch part (CONTRACT HY §5: every other plan is
   // byte-identical, D1's `wet` tag included): run here, before the zones resolve, so D1's tag reads its field; registered on the
@@ -1232,8 +1244,19 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // (7b SL) an elevated zone: its lots placed as site lots on the affordances of its frozen volume (never cached; the first plan
       // asks for the volume and answers incomplete VOLUME)
       const loc = locatorOf(env, p.part.where, geomOf, { within0: 32 });
-      const z = resolveElevatedZone(env, p, { loc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], tol: tolOf(p.part, 'count'), suspended: suspendedZones.has(p.id) });
+      // ((R2) a zone on a form part: the form's own footprint is not in its way; the zone resolves again after the forms emit)
+      const host = formHostOf(p, byId);
+      const hostRect = host ? geomOf(host.id)?.rect ?? null : null;
+      // (a grown form (F3: a giant tree or mushroom) places at emit, so at step 2 the zone aims where the form's own locator does)
+      let hloc = loc;
+      if (host && !hostRect && loc.error && isF3(byId.get(host.id))) {
+        hloc = locatorOf(env, byId.get(host.id).part.where, geomOf, { within0: 24 });
+        if (!formHosted.has(host.id)) formHosted.set(host.id, new Set());
+        formHosted.get(host.id).add(p.id);
+      }
+      const z = resolveElevatedZone(env, p, { loc: hloc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !hostRect || !meets(q, hostRect))], tol: tolOf(p.part, 'count'), suspended: suspendedZones.has(p.id), ...(host ? { host } : {}) });
       res.set(p.id, { ...z, elevated: true });
+      if (z.deferred) deferredZones.add(p.id);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
       continue;
@@ -1518,6 +1541,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       emitDZone(p, z, {});
       continue;
     }
+    if (z.elevated && z.deferred) continue; // ((R2) a form-hosted zone: emitted after the forms, below)
     if (z.elevated) {
       // (7b SL) an elevated zone: one site lot per lot placed at resolve (no street, no pad, no props)
       const cp0 = checkpoint(r);
@@ -1650,7 +1674,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     notes.push(`relief_pads: ${unblended.length} pad(s) blended by the default relief (their relief form did not run)`);
   }
   // terrace and spikes; (6c F3) the grown forms, placed here on the zones' layouts (forms/hooks.mjs)
-  const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, keepBy: (x, y, z) => keptBy(keep, x, y, z), stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
+  const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, ...(formHosted.size ? { formHosted } : {}), keep, keepBy: (x, y, z) => keptBy(keep, x, y, z), stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
   for (const p of order) {
     if (p.family !== 'form' || p.kind === 'relief' || p.kind === 'hidden_room' || isHPart(p) || !emitOk(p.id)) continue;
     if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); else if (p.kind in CAVE) f3CaveEmit(f3C(), p); continue; }
@@ -1696,6 +1720,47 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
   }
 
+  // ---- (slice R2) forms as land: each form-hosted elevated zone (its locator inside or near a form part) resolved again on the land
+  // after the forms (the frozen volume with the plan's draft writes so far), then emitted as site lots cut from that land. A plan
+  // without one runs none of this.
+  for (const p of order) {
+    const z0 = res.get(p.id);
+    if (!z0?.elevated || !z0.deferred || !emitOk(p.id)) continue;
+    deferredZones.delete(p.id);
+    const vol = (env.ctx.volumes ?? []).find((v) => v.decoded && v.box.minX === z0.volBox.minX && v.box.minY === z0.volBox.minY && v.box.minZ === z0.volBox.minZ
+      && v.box.maxX === z0.volBox.maxX && v.box.maxY === z0.volBox.maxY && v.box.maxZ === z0.volBox.maxZ)?.decoded;
+    const hostOk = okClass(z0.host.id) && geom.has(z0.host.id);
+    if (!vol || !hostOk) {
+      res.set(p.id, { ...z0, deferred: false, klass: hostOk ? 'incomplete' : 'blocked' });
+      ans(p, hostOk ? { class: 'incomplete', reasons: [{ code: 'VOLUME', message: 'the land the lots stand on was not read yet', evidence: { missing: true } }] }
+        : { class: 'blocked', blockedBy: [z0.host.id], reasons: [{ code: 'DEPENDENCY', message: `depends on ${z0.host.id}, whose form did not stand`, evidence: { blockedBy: [z0.host.id] } }] });
+      continue;
+    }
+    const { land, changed } = landAfterForms(vol, localWorld(r, z0.volBox));
+    // (the zone keeps step 2's rect, so its volume is the one the plan read)
+    const loc = { aim: null };
+    const hostRect = geomOf(z0.host.id)?.rect ?? null;
+    const taken = zonesAccepted.filter((o) => o.id !== p.id).map((o) => o.rect).concat(formsAccepted.filter((q) => !hostRect || !meets(q, hostRect)));
+    const z = resolveElevatedZone(env, p, { loc, taken, tol: tolOf(p.part, 'count'), suspended: suspendedZones.has(p.id), host: z0.host, land, rect: z0.rect });
+    z.notes = [...(z.notes ?? []), `the land after the forms: ${changed} cell(s) of the zone's volume written by the plan before its lots`];
+    res.set(p.id, { ...z, elevated: true });
+    ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
+    if (!['fits', 'adjusted'].includes(z.klass)) { geom.delete(p.id); continue; }
+    const cp0 = checkpoint(r);
+    try {
+      // (the host form's own region part may write inside the lots' boxes (the island's rock over a hanging lot, the oak's logs through a
+      // treehouse): the lot's host, as a trunk's tree is SL's)
+      const hostPart = Object.keys(partOf).filter((k) => partOf[k] === z0.host.id && r.partIds.has(k)).sort()[0] ?? null;
+      const lots = emitElevatedZone(r, p, { ...z, hostPart }, { stage: stageOf('lots') });
+      zoneEmit.set(p.id, { elevated: true, lots, prefix: '' });
+      geom.set(p.id, { rect: z.rect });
+      mark(p.id, addedSince(r, cp0));
+    } catch (e) {
+      rollback(r, cp0);
+      ans(p, { class: 'refused', reasons: [{ code: 'NO_FEATURE', message: `the zone's site lots failed: ${e.message}` }] });
+      geom.delete(p.id);
+    }
+  }
   // ---- (7a K1) the K1 context (docs/CONTRACT.md "Phase 7a slice K1" §4's compile order), then step 2: wall lines and gates placed
   // `at` an endpoint, open before routing
   const makeK = () => ({

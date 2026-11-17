@@ -21,17 +21,19 @@ export function branchWalkRules({ ir, vw, branchWalks, want, findings, metrics, 
     const fy = m.feetY, id = m.id;
     const row = { walk: id, part: m.part, cells: m.path.length, deck: 0, headroom: 0, railed: 0, rails: m.rails.length, hangers: m.hangers.length, maxSpan: 0, anchored: 0, lamps: m.lamps.length, maxLampGap: 0, inLots: 0 };
     const noDeck = [], low = [], noRail = [], loose = [], inLot = [];
-    m.path.forEach(([x, , z]) => {
-      if (P.floor[vw.get(x, fy - 1, z)]) row.deck++; else noDeck.push([x, fy - 1, z]);
-      if (P.passable[vw.get(x, fy, z)] && P.passable[vw.get(x, fy + 1, z)]) row.headroom++; else low.push([x, fy, z]);
+    // ((CN) a stepped walk: each deck cell at its own feet y (the path's), a step's higher cell a stair)
+    m.path.forEach(([x, py, z]) => {
+      const y = Number.isInteger(py) ? py : fy, b = vw.get(x, y - 1, z);
+      if (P.floor[b] || P.stairs?.[b]) row.deck++; else noDeck.push([x, y - 1, z]);
+      if (P.passable[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)]) row.headroom++; else low.push([x, y, z]);
     });
     for (const [x, y, z] of m.rails) if (P.barrier[vw.get(x, y, z)]) row.railed++; else noRail.push([x, y, z]);
     let last = -1;
     for (const h of [...m.hangers].sort((a, b) => a.i - b.i)) {
       row.maxSpan = Math.max(row.maxSpan, h.i - last); last = h.i;
-      const [x, , z] = h.at;
+      const [x, hy, z] = h.at;
       let ok = true;
-      for (let y = fy + 1; y <= h.top; y++) if (P.passable[vw.get(x, y, z)] && vw.get(x, y, z) === vw.base(x, y, z)) { ok = false; break; }
+      for (let y = hy + 1; y <= h.top; y++) if (P.passable[vw.get(x, y, z)] && vw.get(x, y, z) === vw.base(x, y, z)) { ok = false; break; }
       if (ok && !P.solid[vw.get(x, h.top + 1, z)]) ok = false;
       if (ok) row.anchored++; else loose.push([x, h.top, z]);
     }
@@ -39,7 +41,7 @@ export function branchWalkRules({ ir, vw, branchWalks, want, findings, metrics, 
     let lastLamp = -1;
     for (const l of [...m.lamps].sort((a, b) => a.i - b.i)) { row.maxLampGap = Math.max(row.maxLampGap, l.i - lastLamp); lastLamp = l.i; }
     row.maxLampGap = Math.max(row.maxLampGap, m.path.length - 1 - lastLamp);
-    const cells = [...m.path.map(([x, , z]) => [x, fy - 1, z]), ...m.rails, ...m.lamps.map((l) => l.at), ...m.hangers.flatMap((h) => Array.from({ length: h.top - fy }, (_, k) => [h.at[0], fy + 1 + k, h.at[2]]))];
+    const cells = [...m.path.map(([x, y, z]) => [x, y - 1, z]), ...m.rails, ...m.lamps.map((l) => l.at), ...m.hangers.flatMap((h) => Array.from({ length: h.top - h.at[1] }, (_, k) => [h.at[0], h.at[1] + 1 + k, h.at[2]]))];
     for (const c of cells) for (const q of boxes) if (inBox(q.b, ...c)) { row.inLots++; if (inLot.length < 8) inLot.push([...c, q.id]); }
     if (noDeck.length) push('M10:branch_walk', m, noDeck.length, noDeck.slice(0, 8), `branch walk ${id}: ${noDeck.length} of ${row.cells} deck cell(s) not a floor at y ${fy - 1}`);
     if (low.length) { push('M10:branch_walk', m, low.length, low.slice(0, 8), `branch walk ${id}: ${low.length} of ${row.cells} deck cell(s) without 2 clear over the walk`); push('M6', m, low.length, low.slice(0, 8), `branch walk ${id}: ${low.length} deck cell(s) without 2 clear over the walk`); }

@@ -132,18 +132,17 @@ final class SetDialog {
 		}
 	}
 
-	/** A stepper: kit Buttons (18 px) around the value; returns the x after it. */
+	/** A stepper: lab-ui's shared {@link dev.larattalabs.labui.client.widget.Stepper} (slice UI; it was drawn here); returns the x after it. */
 	private int stepper(GuiGraphicsExtractor g, String id, String value, int valueW, boolean minus, boolean plus, Runnable dec, Runnable inc, boolean on,
 		int x, int y, int mx, int my) {
-		int bw = Button.MIN_H + 2;
-		Button m = new Button("−", dec);
-		m.disabled(!minus);
-		x += button(g, id + "-", m, x, y, bw, mx, my) + 3;
-		g.text(font(), value, x + (valueW - font().width(value)) / 2, y + 5, on ? UiBits.ink() : UiStyle.mutedText(), false);
-		x += valueW + 3;
-		Button p = new Button("+", inc);
-		p.disabled(!plus);
-		return x + button(g, id + "+", p, x, y, bw, mx, my);
+		var st = new dev.larattalabs.labui.client.widget.Stepper(dec, inc).value(value).valueWidth(valueW).dimmed(!on).canDecrease(minus, on ? "At the lowest" : "Off: turn its option on first")
+			.canIncrease(plus, on ? "At the highest" : "Off: turn its option on first");
+		int w = st.draw(g, font(), x, y, mx, my(my));
+		s.control(id + "-", "−", st.minus(), false);
+		s.control(id + "+", "+", st.plus(), false);
+		s.tip(st.minus(), mx, my(my));
+		s.tip(st.plus(), mx, my(my));
+		return x + w;
 	}
 
 	// ------------------------------------------------------------------ the dialog
@@ -160,7 +159,7 @@ final class SetDialog {
 		int ty = top - 2;
 		String title = "Design a set";
 		g.text(font, title, x, ty + 5, UiStyle.clayText(), false);
-		muted(g, "One style bible for every building, several designed at once; landmarks first, the rest see their renders.", x + font.width(title)
+		muted(g, "One Style for every building, several designed at once; landmarks first, the rest see their renders.", x + font.width(title)
 			+ 10, ty + 5, w - font.width(title) - 10);
 		// the body: it scrolls above a rule, the footer's status line below it
 		int by = ty + Chip.H + 4;
@@ -203,7 +202,7 @@ final class SetDialog {
 		Bible picked = f.bible == null ? null : SetFeature.bible(f.bible).orElse(null);
 		String be = errors.get("bible");
 		if (f.newBible) {
-			String go = f.bibleJob == null ? "Draft bible" : "Drafting…";
+			String go = f.bibleJob == null ? "Draft a Style" : "Drafting…";
 			int gw = Button.width(font, go);
 			s.textField(g, Focus.SET_PROMPT, promptView, f.prompt, fx, y, fw - gw - 6, new TextFieldView.Style(null, 0,
 				"what the place is, e.g. hellish evil lair, mining facility", null, null, 0, 1));
@@ -343,13 +342,17 @@ final class SetDialog {
 		}).selected(f.newBible);
 		int reserved = more.width(font) + 4 + fresh.width(font) + 4;
 		int cx = x;
+		int shown = 0;
 		for (String id : ids) {
 			Bible b = all.stream().filter(k -> k.id().equals(id)).findFirst().orElseThrow();
 			Chip c = new Chip(label(b), () -> pick(f, b.id())).selected(id.equals(current)).swatch(StylePaint.rgb(b.roles().get("wall")));
 			int cw = c.width(font);
 			if (cx > x && cx + cw > x + w - reserved) {
+				// (slice UI, SD leftover) a chip that no longer fits is counted on the browse chip, not dropped silently
+				more.label("+" + (ids.size() - shown) + " · browse " + all.size() + "…");
 				break;
 			}
+			shown++;
 			cw = Math.min(cw, x + w - reserved - cx);
 			c.draw(g, font, cx, y, cw, mx, my(my));
 			s.control("set:bible:" + id, c.label(), c, c.isSelected());
@@ -386,7 +389,7 @@ final class SetDialog {
 		if (SetFeature.bible(b.id()).isPresent()) {
 			pick(f, b.id());
 		} else {
-			styleNote = b.name() + " is a palette, not a style bible: a set needs a bible (pick one, or New from a prompt…)";
+			styleNote = b.name() + " is a palette, not a full Style: a set needs a full Style (pick one, or New from a prompt…)";
 		}
 	}
 
@@ -439,11 +442,18 @@ final class SetDialog {
 		int ox = x + CollapsibleSection.INDENT;
 		int ow = w - CollapsibleSection.INDENT;
 		y += 3;
+		// (slice UI, SD leftover "inside Options the columns are ragged") one grid: the toggles in a column as wide as the widest, then the
+		// second labels, then the steppers and choices, so Redirects, Revisions and Budget line up
+		int colA = Math.max(LABEL_W, Math.max(new Chip("Critique and revise: off").width(font), new Chip("Massing first: off").width(font)));
+		int colB = Math.max(font.width("Redirects"), font.width("Revisions")) + 6;
+		int col2 = ox + colA + 10;
+		int col3 = col2 + colB;
 		if (m4c) {
 			Chip c = new Chip(f.massingFirst ? "Massing first: on" : "Massing first: off", mToggle).selected(f.massingFirst);
-			int cx = ox + chip(g, "set:massing_first", c, ox, y, mx, my) + 10;
+			chip(g, "set:massing_first", c, ox, y, mx, my);
+			int cx = col2;
 			g.text(font, "Redirects", cx, y + 5, f.massingFirst ? UiStyle.clayText() : UiStyle.mutedText(), false);
-			cx += font.width("Redirects") + 4;
+			cx = col3;
 			cx = stepper(g, "set:redirects", Integer.toString(f.maxRedirects), font.width("10") + 2, rMinus, rPlus, rDec, rInc, f.massingFirst, cx, y, mx,
 				my) + 10;
 			muted(g, f.massingFirst ? "each shape waits for your approval in the Designs tab" : "the detail at once", cx, y + 5, ox + ow - cx);
@@ -451,9 +461,10 @@ final class SetDialog {
 		}
 		if (m5a) {
 			Chip c = new Chip(f.critique ? "Critique and revise: on" : "Critique and revise: off", cToggle).selected(f.critique);
-			int cx = ox + chip(g, "set:critique", c, ox, y, mx, my) + 10;
+			chip(g, "set:critique", c, ox, y, mx, my);
+			int cx = col2;
 			g.text(font, "Revisions", cx, y + 5, f.critique ? UiStyle.clayText() : UiStyle.mutedText(), false);
-			cx += font.width("Revisions") + 4;
+			cx = col3;
 			for (int n : CritiqueRules.REVISION_CHOICES) {
 				Chip r = new Chip(Integer.toString(n), () -> f.maxRevisions = n).selected(f.critique && f.maxRevisions == n);
 				r.disabled(!f.critique);
@@ -464,9 +475,9 @@ final class SetDialog {
 				+ 5, ox + ow - cx);
 			y += ROW;
 		}
-		label(g, "Budget", ox, y);
-		int bx = stepper(g, "set:budget", budget, Math.max(font.width("none"), font.width("$1000")) + 2, f.budgetUsd != null, bPlus, bDec, bInc, true, ox
-			+ LABEL_W, y, mx, my) + 10;
+		label(g, "Budget", col2, y);
+		int bx = stepper(g, "set:budget", budget, Math.max(font.width("none"), font.width("$1000")) + 2, f.budgetUsd != null, bPlus, bDec, bInc, true, col3,
+			y, mx, my) + 10;
 		String be = errors.get("budget");
 		if (be != null) {
 			g.text(font, TextUtil.ellipsize(font, be, ox + ow - bx), bx, y + 5, UiBits.errorText(), false);
@@ -476,11 +487,11 @@ final class SetDialog {
 		}
 		y += ROW;
 		if (m4c) {
-			label(g, "Context", ox, y);
+			label(g, "Context", col2, y);
 			String ce = errors.get("context");
 			TextFieldView.Style cs = new TextFieldView.Style(null, 0, ce != null ? ce : "the site, its purpose, the neighbours, the street side: it goes "
 				+ "into every brief", null, f.context.length() > 200 ? f.context.length() + "/" + SetSpec.MAX_CONTEXT : null, UiStyle.mutedText(), 2);
-			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, ox + LABEL_W, y, ow - LABEL_W, cs);
+			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, col3, y, ox + ow - col3, cs);
 			y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
 		}
 		return y;
@@ -553,7 +564,8 @@ final class SetDialog {
 			return "estimate: " + f.estimateError;
 		}
 		if (f.estimate == null) {
-			return f.estimating ? "estimating…" : "estimate: fill in the buildings";
+			// (slice UI, SD leftover) name the real blocker: no Style picked comes before the buildings
+			return f.estimating ? "estimating…" : f.bible == null && !f.newBible ? "estimate: pick a Style first" : "estimate: fill in the buildings";
 		}
 		var e = f.estimate;
 		String base = String.format(Locale.ROOT, "Estimate: $%.2f–%.2f · %.0f–%.0f min", e.usdLow(), e.usdHigh(), e.minutesLow(), e.minutesHigh());
@@ -590,14 +602,14 @@ final class SetDialog {
 	/** One line on the bible job drafting the new bible. */
 	static @Nullable String bibleJobLine(@Nullable String jobId) {
 		if (jobId == null) {
-			return "Describe the place; the helper drafts a bible (roles, prose, components, a sample sheet), then it is picked here.";
+			return "Describe the place; the helper drafts a Style (roles, prose, components, a sample sheet), then it is picked here.";
 		}
 		var raw = Sidecar.state().bibleJob(jobId);
 		if (raw == null) {
-			return "Bible job " + jobId + ": queued";
+			return "Drafting the Style: queued";
 		}
 		BibleJob j = Wire4b.bibleJob(raw);
-		return "Bible job " + j.id() + " (" + j.bibleId() + "): " + j.status().name().toLowerCase(Locale.ROOT) + (j.step().isEmpty() ? "" : " · "
+		return "Drafting the Style: " + j.status().name().toLowerCase(Locale.ROOT) + (j.step().isEmpty() ? "" : " · "
 			+ j.step()) + j.error().map(e -> " · " + e).orElse("");
 	}
 }

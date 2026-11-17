@@ -55,7 +55,10 @@ public interface Library {
 	 */
 	CompletableFuture<Reskin> reskinCollection(String bibleId, @Nullable Integer version, CollectionRef from);
 
-	/** Moves a user entry to {@code architect/library-trash/} (as the UI does) and reloads. Bundled entries refuse (false). Thread-safe. */
+	/**
+	 * Moves a user entry to {@code architect/library-trash/} (as the UI does) and reloads. Bundled entries refuse (false). Thread-safe.
+	 * (7c CS, since 1.65.0) A composite's hidden module entries go to the trash with it; a hidden module alone refuses (false).
+	 */
 	CompletableFuture<Boolean> delete(String entryId);
 
 	/**

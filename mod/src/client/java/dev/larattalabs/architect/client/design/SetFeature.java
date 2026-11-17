@@ -248,11 +248,11 @@ public final class SetFeature {
 			return CompletableFuture.failedFuture(new IllegalStateException("the set dialog is not open"));
 		}
 		if (f.prompt.value().isBlank()) {
-			f.sendError = "Describe the place first (the bible's prompt)";
+			f.sendError = "Describe the place first (the Style's prompt)";
 			return CompletableFuture.failedFuture(new IllegalStateException(f.sendError));
 		}
 		if (!has("bibles")) {
-			f.sendError = "The helper does not make bibles (needs phase 4b)";
+			f.sendError = "This design helper can't draft Styles: update Architect";
 			return CompletableFuture.failedFuture(new IllegalStateException(f.sendError));
 		}
 		JsonObject r = new JsonObject();
@@ -266,14 +266,14 @@ public final class SetFeature {
 		f.sending = true;
 		return Sidecar.link().send(m).handle((ack, err) -> {
 			f.sending = false;
-			String id = result(ack, err, "jobId", "Bible not started");
+			String id = result(ack, err, "jobId", "The Style draft did not start");
 			if (id == null) {
 				f.sendError = message;
 				throw new CompletionException(new IllegalStateException(message));
 			}
 			f.bibleJob = id;
 			f.sendError = null;
-			say("Drafting a bible (" + id + "): the Designs tab shows its progress", false);
+			say("Drafting a Style: the Designs tab shows its progress", false);
 			return id;
 		});
 	}

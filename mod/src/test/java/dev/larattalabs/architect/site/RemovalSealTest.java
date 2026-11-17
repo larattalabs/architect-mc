@@ -183,7 +183,7 @@ class RemovalSealTest {
 		Placement.FAIL_WRITES.set(1);
 		try {
 			assertFalse(Placement.writeSave(root, f, base + 1), "the injected write fails");
-			Placement.saved().get(10, java.util.concurrent.TimeUnit.SECONDS); // the saver's barrier completes all the same
+			Placement.flushSaves(); // the saver is idle all the same (PSV removed the barrier Placement.saved())
 			assertFalse(Files.exists(f), "nothing on disk");
 			assertTrue(Placement.writtenGen() < base + 1 && Placement.writeFailing(), "the failed generation is not written; a retry is due");
 			assertFalse(RemovalSeal.released(l, Placement.writtenGen()), "a failed queue write keeps the box sealed (611ee4ee unsealed it here)");

@@ -175,6 +175,21 @@ export interface BriefOptions {
   site?: { section: string[]; size: { x: number; y: number; z: number } };
 }
 
+/**
+ * (7c CS) The brief's lines for an inverted lot (DesignRequest.inverted, a rule.suspended lot): build standing, turn it over with
+ * `bp.invert()`, write the floor furniture after the flip (PLAYBOOK §7, kit/designs/site/fit_suspend_inverted.mjs is the example).
+ */
+export function invertedSection(): string[] {
+  return [
+    '## Inverted lot',
+    '',
+    '- This lot hangs **inverted** (an upside-down settlement): the house hangs under the rock with its old floor against the ceiling. Build it standing as usual, then call `bp.invert()`: rows flip (y to H - 1 - y), every state gets its flipped twin (stairs and slabs top/bottom, doors re-paired, lanterns hanging), ports and the interior flip too; the site\'s keep cells stay.',
+    '- `bp.invert()` refuses a block with no flipped twin (torches, carpets, beds, signs, rails, plants, candles, ...): write that furniture **after** the flip, on the new floor, and set the spots after it too.',
+    '- The example is `kit/designs/site/fit_suspend_inverted.mjs` (a cottage hung by its old floor slab, a ladder up from the walk port, furniture written after the flip). Leave the hang points unwritten.',
+    '',
+  ];
+}
+
 /** (7b DS) The build and render args of a site-bound design (relative to the scratch dir). */
 export const SITE_BUILD_ARGS = ' --site site/site.arvx --lot site/site.json';
 
@@ -460,6 +475,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '',
     ...contextSection(req.context),
     ...(site ? site.section : []),
+    // (7c CS) an inverted lot (rule.suspended): the house hangs upside down from the site's hang points
+    ...(site && req.inverted ? invertedSection() : []),
     ...(bound ? massingBindingSection(bound.record, m, isWallLotRequest(req)) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
     // (Style unification U5a) a materials-only request: the Style's hints as guidance (the hybrid default; never set mode)

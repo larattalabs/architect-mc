@@ -16,6 +16,9 @@
 //                              its bill); a stockpile, the conservation sum; Sites.placeConnector (AUTO): a construction site, fed in waves:
 //                              PLACED and built, the target's bill equal to the check's, the world equal to the twin cell for cell, items in =
 //                              items out (exact once built and once removed: every item back), Remove E-flat 0
+//     kinds     (cn-ingame)    (7c CN) a dev client, creative: a ladder, a catwalk and a rock stair, each on the land it fits (fixtures/plan/cn/),
+//                              marked and placed by the player's path (the ladder started from the hub's Build a link…), PLACED, the realised
+//                              world equal to the check's virtual world (strict), removed by /architect region remove as the player, E-flat 0
 //     report                   REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7c-cx/<step>.json in the main checkout (GATE7CCX_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -204,6 +207,98 @@ steps.ingame = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (7c CN) the other kinds in game, the hub's button, the player's remove
+
+const CN_KINDS = [['ladder', 'cn/cn01_ladder'], ['catwalk', 'cn/cn02_catwalk'], ['rock_stair', 'cn/cn03_rock_stair']];
+
+/** Wait until the region is gone from dev.region.state or REMOVED. */
+async function waitGone(region) {
+  for (let i = 0; i < 600; i++) {
+    const st = await call('dev.region.state', { region }, 60_000).catch(() => null);
+    const s = st?.view?.state;
+    if (!s || ['REMOVED', 'PARTIAL', 'FAILED'].includes(s)) return s ?? 'gone';
+    await L.sleep(1000);
+  }
+  return 'timeout';
+}
+
+steps.kinds = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  for (const [kind, name] of CN_KINDS) {
+    const o = out[kind] = {};
+    const fx = G.fixture(ctx, name);
+    const s = await G.site(ctx, `cn ${kind}`, fx, { creative: true });
+    const a = s.wp.anchors.cx_from, b = s.wp.anchors.cx_to;
+    const box = boxOf(s.W);
+    await L.call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
+    await L.settle(3000);
+    const before = path.join(OUT, `cn-${kind}-before.arwd.gz`), after = path.join(OUT, `cn-${kind}-after.arwd.gz`);
+    await call('dev.region.dump', { box, file: before, light: false }, 1_800_000);
+    const pre = await G.snap(ctx, box, `cn-${kind}-pre`);
+    await L.tp(a[0] - 4, a[1] + 2, a[2] - 6);
+    await L.settle(1500);
+    if (kind === 'ladder') {
+      // the hub's "Build a link…" (Library, Placed here): the same connector mode as the key, the screen closed
+      await call('dev.ui.open', { tab: 'library' }, 10_000);
+      await L.settle(800);
+      await call('dev.ui.click', { control: 'library:placed' }, 10_000);
+      // (the hit boxes are drawn per frame: wait until the Placed view's footer has the button)
+      let ui = null;
+      for (let i = 0; i < 20; i++) {
+        await L.settle(500);
+        ui = await call('dev.ui.state', {}, 10_000);
+        if ((ui.controls ?? []).some((c) => c.id === 'build_link')) break;
+      }
+      o.hubControls = (ui?.controls ?? []).filter((c) => /build_link|import|reload|library:/.test(c.id)).map((c) => [c.id, c.state]);
+      await call('dev.ui.click', { control: 'build_link' }, 10_000);
+      await L.settle(500);
+      const m = await plotState();
+      o.hub = { active: m.active, connector: m.connector, phase: m.phase };
+      check(m.active && m.connector === 'rope_bridge' && m.phase === 'first_corner', `the hub's Build a link… (Library, Placed here) starts the connector mode: ${m.connector}, ${m.phase}`, o.hub);
+    } else {
+      await call('dev.cx.key', { press: true }, 10_000);
+    }
+    await call('dev.cx.key', { kind }, 10_000);
+    await call('dev.plot.corner', { x: a[0], y: a[1], z: a[2], confirm: true }, 10_000);
+    await call('dev.plot.corner', { x: b[0], y: b[1], z: b[2], confirm: true }, 10_000);
+    // (this kind's answer: the marker keeps the previous kind's lastConnector until the new one comes back)
+    const mine = (st) => st.lastConnector?.kind === kind && JSON.stringify(st.lastConnector?.from) === JSON.stringify(a) && JSON.stringify(st.lastConnector?.to) === JSON.stringify(b);
+    const r1 = await waitMarker((st) => mine(st) && (st.lastConnector.placed === true || (!!st.lastConnector.refused && st.phase === 'second_corner')));
+    const lc = r1.lastConnector;
+    o.placed = lc;
+    check(mine(r1) && lc?.placed === true && /^\S+$/.test(lc.siteId ?? '') && !r1.active, `a ${kind} marked between ${json(a)} and ${json(b)}: placed by the player's path (${lc?.siteId ?? lc?.refused})`, lc);
+    if (!mine(r1) || !lc?.placed) continue;
+    const region = lc.siteId;
+    const st = await L.waitRegion(region, 3_600_000);
+    o.state = st.view.state;
+    check(st.view.state === 'PLACED', `the ${kind}'s region ${region}: ${st.view.state} (${st.view.cellsWritten ?? '?'} cells)`);
+    await L.settle(4000);
+    await call('dev.region.dump', { box, file: after, light: false }, 1_800_000);
+    const checkId = checkIdOf(lc.notes);
+    const RV = await import('./lib/realised-virtual.mjs');
+    const rv = await RV.realisedVsVirtual(planDir(checkId), after, before, { lots: true });
+    o.virtual = { checkId, written: rv.written, differ: rv.differ, kept: rv.kept, first: rv.first, keptFirst: rv.keptFirst };
+    const ok = RV.realisedOk(rv, [], { strict: true });
+    if (rv.kept) log(`  kept cells (the realise left them as they were): ${json(rv.keptFirst)}`);
+    check(!!checkId && rv.written > 0 && ok.pass, `the ${kind}: the realised world equals the check's virtual world (strict): ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}`, { loose: ok.loose, first: rv.first.slice(0, 3) });
+    await L.tp(a[0] - 6, a[1] + 6, a[2] - 10);
+    await L.settle(1500);
+    o.shot = await shot(`${kind}`).catch((e) => { log(`  shot ${kind}: ${e.message}`); return { error: String(e) }; });
+    check((lc.notes ?? []).some((n) => n === `remove it with /architect region remove ${region}`), `the placed answer names its remove command`, lc.notes);
+    // the player's remove: /architect region remove with no id, as the player (the link remembered as theirs, removed as its owner)
+    const c = await call('dev.command', { cmd: '/architect region remove', asPlayer: true }, 120_000);
+    o.command = { success: c.success, messages: c.messages };
+    const gone = await waitGone(region);
+    await L.settle(2000);
+    const e = await G.diff(ctx, box, pre);
+    o.eflat = { gone, mismatches: e.mismatches, list: e.list.slice(0, 8) };
+    check(['REMOVED', 'gone'].includes(gone) && e.mismatches === 0, `/architect region remove (no id, as the player) removed the ${kind} (${gone}): E-flat ${e.mismatches}`, { command: o.command, ...o.eflat });
+  }
+  return out;
+};
+
 // ------------------------------------------------------------------ survival (strict: the verifier re-runs it)
 
 const place = (s, o = {}) => call('dev.cx.place', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: o.opKey ?? 'gate.cx', ...o }, 1_800_000);
@@ -289,7 +384,7 @@ steps.survival = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'ingame', 'survival']) {
+  for (const s of ['unit', 'ingame', 'kinds', 'survival']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

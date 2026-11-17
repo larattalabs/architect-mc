@@ -22,7 +22,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { withDesignId } from './designs.js';
+import { compositeRole, withDesignId } from './designs.js';
 import { ClientError, RefusedError } from './errors.js';
 import { readJson, writeFileAtomic } from './util/fsx.js';
 
@@ -51,7 +51,7 @@ export type VersionRefusal = 'bundled' | 'no_source' | 'massing';
 
 export class VersionRefused extends RefusedError {
   constructor(
-    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved' | 'adopted_polish' | 'site_bound',
+    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved' | 'adopted_polish' | 'site_bound' | 'composite',
     message: string,
   ) {
     // (0b) a typed refusal: VERSION_REFUSED with the sub-code (no_entry / no_version stay plain errors on the wire too)
@@ -180,6 +180,10 @@ export class EntryVersions {
       throw new VersionRefused('no_entry', `no library entry "${entryId}"`);
     }
     if (json.massing === true) throw new VersionRefused('massing', `${entryId} is a massing (massings keep their own versions)`);
+    // (7c CS) a composite (or one of its hidden modules) is one entry at version 1 with its module entries: a new version of it would
+    // need its modules versioned with it, which no path does; a variant or re-skin of it is a new composite entry instead
+    const role = compositeRole(json);
+    if (role) throw new VersionRefused('composite', role === 'module' ? `${entryId} is a hidden module of composite ${String(json.compositeOf)}: it gets no versions of its own` : `${entryId} is a composite (past the cap, with its module entries): it gets no new versions; make a variant or re-skin of it instead`);
     if (json.imported === true || !fs.existsSync(path.join(this.dir(entryId), `${entryId}.mjs`))) throw new VersionRefused('no_source', `${entryId} has no source (${entryId}.mjs): an imported structure cannot get versions`);
     return json;
   }

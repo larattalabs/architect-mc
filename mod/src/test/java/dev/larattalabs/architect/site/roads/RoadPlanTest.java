@@ -105,4 +105,33 @@ class RoadPlanTest {
 				(x, y, z) -> y == 63 && Math.abs(z) == 2, lamp)), "our own dirt path verge: posts");
 		}
 	}
+
+	/**
+	 * (7c CN) The walkway's side cells follow each waypoint segment's dominant axis, as the kit models a ground road (lib/region/vworld.mjs,
+	 * geom.mjs segmentAxis): a width-2 road whose last segment is diagonal (dominant x, so its side cell is south of every cell, the end
+	 * included). Before CN the end cell's side followed its last step (a z step: west), so the kit's dirt path south of the end stayed grass.
+	 */
+	@Test
+	void sideCellsFollowTheSegmentAxis() {
+		int[] xs = {0, 6, 6, 11};
+		int[] zs = {0, 0, 1, 6};
+		int[] ys = {64, 64, 64, 64};
+		RoadPlan.Plan p = RoadPlan.plan(xs, ys, zs, 2, false, false, world(RoadPlan.DIRT), NONE, null, false, null, null);
+		java.util.Set<String> walk = new java.util.TreeSet<>();
+		for (RoadPlan.Cell c : p.cells()) {
+			walk.add(c.x() + "," + c.z());
+		}
+		java.util.Set<String> model = new java.util.TreeSet<>();
+		java.util.List<int[]> line = RoadPlan.line(xs, ys, zs);
+		for (int[] c : line) {
+			int s = c[3];
+			int dx = xs[s + 1] - xs[s];
+			int dz = zs[s + 1] - zs[s];
+			int[] ax = Math.abs(dx) >= Math.abs(dz) && dx != 0 ? new int[] {Integer.signum(dx), 0} : new int[] {0, Integer.signum(dz)};
+			model.add(c[0] + "," + c[2]);
+			model.add((c[0] - ax[1]) + "," + (c[2] + ax[0]));
+		}
+		assertTrue(walk.contains("11,7"), "the end cell's side cell is south of it (the last segment's axis is x): " + walk);
+		assertEquals(model, walk, "the walkway is the kit's model: every centre cell and its side cell right of the segment's axis");
+	}
 }

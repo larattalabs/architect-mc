@@ -7,7 +7,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
-import { COMPOSITE_EXT, rewriteCompositeWire } from '../src/designs.js';
+import { COMPOSITE_EXT, compositeRole, rewriteCompositeWire } from '../src/designs.js';
+import { RefusedError } from '../src/errors.js';
 import { allowsComposite, EXT_ALLOW_COMPOSITE, GroupRequest } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
@@ -103,6 +104,49 @@ describe.skipIf(!hasKit)('a design job returning a Composite (sim backend, real 
     const d = h.sc.designs.get(it0.designId)!;
     expect(d.request.ext?.[EXT_ALLOW_COMPOSITE]).toBe(true);
     expect(h.sc.checkPlan(d).limits.allowComposite).toBe(true);
+  }, 600_000);
+
+  it('(7c CS) a composite gets no new versions (polish, versionOf, revert, follow refused composite); a re-skin variant is a new composite with the flag', async () => {
+    h = await harness();
+    const lib = h.sc.config.libraryDir;
+    const item = { ...request({ type: 'castle', name: 'Keep', notes: undefined, maxSize: { x: 96, y: 64, z: 96 } }), itemKey: 'lot_keep', ext: { 'architect:sim': 'composite', [EXT_ALLOW_COMPOSITE]: true } };
+    const g = h.sc.groups.create(GroupRequest.parse({ name: 'C', bible: 'oak', items: [item] }));
+    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.groups.get(g.id)!.status), 600_000);
+    const id = h.sc.groups.get(g.id)!.items[0]!.entryId!;
+    expect(id).toBeTruthy();
+    const mid = `${id}__west`;
+    expect(compositeRole(readJson(path.join(lib, id, `${id}.blueprint.json`)))).toBe('composite');
+    expect(compositeRole(readJson(path.join(lib, mid, `${mid}.blueprint.json`)))).toBe('module');
+    const refusal = (f: () => unknown): [string, string] => {
+      try {
+        f();
+      } catch (e) {
+        if (e instanceof RefusedError) return [e.code, e.detail];
+        throw e;
+      }
+      throw new Error('not refused');
+    };
+    for (const e of [id, mid]) {
+      expect(refusal(() => h!.sc.polishes.request(e, {}))).toEqual(['VERSION_REFUSED', 'composite']);
+      expect(refusal(() => h!.sc.requestDesign(request({ type: 'castle', notes: 'taller towers', versionOf: { entryId: e } })))).toEqual(['VERSION_REFUSED', 'composite']);
+      expect(refusal(() => h!.sc.versions.revert(e, 1))).toEqual(['VERSION_REFUSED', 'composite']);
+      expect(refusal(() => h!.sc.follows.follow(e, 0))).toEqual(['NOT_ALLOWED', 'composite']);
+    }
+    // a hidden module is no variant source
+    expect(() => h!.sc.requestVariant(mid, 'desert')).toThrow(/hidden module of composite/);
+    // a re-palette of the composite (its request allows one): built again as a composite, a new entry with its own module entries
+    const v = h.sc.requestVariant(id, 'desert');
+    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 600_000);
+    const vf = h.sc.variants.get(v.id)!;
+    expect(vf.error ?? null).toBeNull();
+    const vid = vf.blueprintId!;
+    expect(vid).not.toBe(id);
+    const ve = readJson(path.join(lib, vid, `${vid}.blueprint.json`));
+    expect(ve).toMatchObject({ id: vid, variantOf: id, size: { x: 121, y: 15, z: 27 } });
+    const vw = (ve.ext as Record<string, unknown>)[COMPOSITE_EXT] as { modules: string[] };
+    expect(vw.modules).toEqual([`${vid}__west`, `${vid}__centre`, `${vid}__east`]);
+    for (const m of vw.modules) expect(readJson(path.join(lib, m, `${m}.blueprint.json`))).toMatchObject({ id: m, compositeOf: vid, version: 1 });
+    expect(fs.existsSync(path.join(lib, vid, `${vid}.composite.json`))).toBe(true);
   }, 600_000);
 
   it('(7c SR) without allowComposite a Composite return is refused in the check round: past maxSize, the item fails, nothing installs', async () => {

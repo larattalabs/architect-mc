@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program', 'bible.format3', 'plan.bigForms', 'design.composite', 'plan.hiddenRooms', 'region.m15', 'region.templates', 'plan.aqueduct', 'region.compose', 'region.planImages', 'plan.suspendedBuilds', 'design.fill', 'region.author', 'plan.shapePromotion', 'design.fillProvided'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program', 'bible.format3', 'plan.bigForms', 'design.composite', 'plan.hiddenRooms', 'region.m15', 'region.templates', 'plan.aqueduct', 'region.compose', 'region.planImages', 'plan.suspendedBuilds', 'design.fill', 'region.author', 'plan.shapePromotion', 'design.fillProvided', 'design.inverted'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -370,6 +370,25 @@ export function siteSize(s: SiteSpec): { x: number; y: number; z: number } {
   return quarter ? { x: wz, y: wy, z: wx } : { x: wx, y: wy, z: wz };
 }
 
+/**
+ * (7c CS) Why an inverted request (or group item) can't be designed: it needs a suspend site (an inverted lot hangs from the site's hang
+ * points; a versionOf takes the entry's own site), and is never a massing. Undefined when it is fine or not inverted.
+ */
+export function invertedProblem(req: { inverted?: true | undefined; site?: { fit: string } | undefined; massing?: boolean | undefined; versionOf?: unknown }): string | undefined {
+  if (!req.inverted) return undefined;
+  if (req.massing) return 'inverted is for a site-aware design, not a massing';
+  if (!req.site) return req.versionOf ? 'inverted with versionOf needs a site-bound entry (its own suspend site) or a suspend site' : 'inverted needs a suspend site (an inverted lot hangs from its site\'s hang points): this request has no site';
+  if (req.site.fit !== 'suspend') return `inverted needs a suspend site: this site's fit is ${req.site.fit}`;
+  return undefined;
+}
+
+/** (7c CS) Is a library entry's sidecar JSON an inverted design (the kit's `inverted: true`, or its request's `inverted`)? */
+export function isInvertedEntry(json: Record<string, unknown> | undefined): boolean {
+  if (!json) return false;
+  const r = json.request;
+  return json.inverted === true || (!!r && typeof r === 'object' && (r as { inverted?: unknown }).inverted === true);
+}
+
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
   profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
@@ -404,6 +423,7 @@ export const DesignRequest = DesignRequestBase.extend({
   reserved: Reserved.optional().describe("(6c IRR, S-IRR-2) the lot's cells the design must leave as given (an irrigated farm's water and its edges): the brief names them, the checker refuses a design writing one (kit build.mjs --reserved)"),
   opKey: OpKey.optional().describe("(7a K3, feature design.opKeys) the caller's operation key, scoped by (owner, \"design\", opKey): the same key and body answers the first design (adopted, in any state; never a second job, never VERSION_REFUSED busy); another body is refused op_key_conflict. The body is the request as sent without opKey and without versionOf's siteNow, siteEdits and baseVersion"),
   site: SiteSpec.optional().describe("(7b DS, feature site.design) a site-aware design: built INTO this site (the template is the lot box, checked on the composite; the scratch gets site/ and the brief a Site section). With versionOf: a paid adaptation of that entry to the site. Excludes massing and fromMassing"),
+  inverted: z.literal(true).optional().describe("(7c CS, feature design.inverted) the lot hangs inverted (a rule.suspended lot, the artifact's $.lots[].inverted): needs a suspend site (or a versionOf of a site-bound entry); the brief's Site section says so (build it standing, then bp.invert(), floor furniture after the flip), and the entry records inverted: true. Absent = as before"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.site && (r.massing || r.fromMassing)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware design has no massing pass (7b DS): send it as one design' });
   if (r.site && r.critique?.mode === 'polish') ctx.addIssue({ code: 'custom', path: ['critique'], message: 'a site-aware design is changed by versionOf, not polish (7b DS): critique mode polish is refused' });
@@ -532,6 +552,7 @@ export const GroupItemInput = DesignRequestBase.extend({
   count: z.number().int().min(1).max(MAX_GROUP_ITEMS).optional().describe('(0b, C1) placements of this item: <key>, <key>#2 ... <key>#n; every copyCap-th starts a new archetype, the others are $0 copies'),
   copyOf: ItemKey.optional().describe("(0b, C1) this item is a copy of that item's archetype (counts toward its copyCap)"),
   effort: ItemEffort.optional().describe('(0b, C8) default auto'),
+  inverted: z.literal(true).optional().describe('(7c CS) the item\'s lot hangs inverted: needs a suspend site (DesignRequest.inverted)'),
   site: SiteSpec.optional().describe('(7b DS) a site-aware item: designed into this site in one pass, no massing of its own (7b SL: in a massingFirst group it waits for the group\'s massing step, then designs in the same group); no count or copyOf: its site variants are Designs.siteVariant'),
 }).superRefine(noDuplicateFeatures).superRefine((it, ctx) => {
   if (it.site && ((it.count ?? 1) > 1 || it.copyOf !== undefined)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware item is one placement: its site variants come from Designs.siteVariant, not count or copyOf' });
@@ -1059,7 +1080,7 @@ export const AckMsg = z.object({
   ok: z.boolean(),
   error: z.string().optional(),
   code: z.string().optional().describe('(0b) a typed refusal: COPY_REFUSED | VERSION_REFUSED (the mod maps it to Reason)'),
-  detail: z.string().optional().describe('(0b) the refusal sub-code (landmark, unknown, self, cap; bundled, no_source, massing, copy, busy, site_mismatch, group, base_moved; (6c PT2) adopted_polish)'),
+  detail: z.string().optional().describe('(0b) the refusal sub-code (landmark, unknown, self, cap; bundled, no_source, massing, copy, busy, site_mismatch, group, base_moved; (6c PT2) adopted_polish; (7c CS) composite)'),
   result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}; job.run: {jobId}; blob.put: {blobId, size, complete}'),
 });
 export const ErrorMsg = z.object({ ...envelope('error'), message: z.string(), re: z.string().optional() });
@@ -1683,7 +1704,10 @@ export function toProtocol1(full: Record<string, unknown>): Record<string, unkno
   const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;
   if (full.type === 'design.upsert') full = { ...full, design: v1Status(full.design) };
-  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)).map(v1Status) };
+  // (r074 fix) and any design protocol 1 cannot read (an open type: protocol 1 has the 11 presets only) is left out of the snapshot,
+  // as its design.upsert is: one such design used to make ServerMessageV1 refuse the whole snapshot, so a protocol-1 hello (the
+  // version probe) got no answer at all
+  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)).map(v1Status).filter((d) => DesignV1.safeParse(d).success) };
   const r = ServerMessageV1.safeParse(full);
   return r.success ? (r.data as Record<string, unknown>) : undefined;
 }

@@ -139,7 +139,7 @@ public final class Placement {
 	private static void tick(MinecraftServer srv) {
 		server = srv;
 		RemovalSeal.observe(); // (LC3 fix 2) what ended since the last check lingers sealed until its generation is written
-		saveIfDue(srv); // (LC3 fix 2) before the grace: a lingering seal waits on it
+		saveIfDue(srv); // (slice PSV) a failed queue write's retry; an undo waiting on its pre-save, and (LC3 fix 2) a lingering seal, wait on it
 		if (srv.getTickCount() < START_GRACE_TICKS) {
 			return;
 		}
@@ -466,14 +466,17 @@ public final class Placement {
 		return loadFailed;
 	}
 
-	/** Writes the queue file: batches, jobs with their cursors, group removals. {@code clean}: the server is stopping. */
-	static void save(MinecraftServer srv, boolean clean) {
+	/**
+	 * Writes the queue file: batches, jobs with their cursors, group removals. {@code clean}: the server is stopping. Answers this save's
+	 * generation (slice PSV; {@link #written}), or {@link #NOT_SAVED} when nothing is saved this session ({@link #loadFailed}).
+	 */
+	static long save(MinecraftServer srv, boolean clean) {
 		if (loadFailed) {
 			if (!refusedLogged) {
 				refusedLogged = true;
 				Architect.LOGGER.error("Placement: not saved: {} failed to load this session; the file is kept as it is", FILE);
 			}
-			return;
+			return NOT_SAVED;
 		}
 		JsonObject root = new JsonObject();
 		root.addProperty("version", 1);
@@ -485,15 +488,15 @@ public final class Placement {
 		root.add("jobs", jobs);
 		root.add("removals", Groups.toJson());
 		Path f = file(srv);
-		long gen = ++requestedGen; // (LC3 fix 2) this save's generation: the state as it is now
-		saveWanted = false;
+		long gen = ++requestedGen; // (slice PSV) this save's generation: the state as it is now
+		saveWanted = false; // (LC3 fix 2)
 		// phase 4e: the file holds the queued cell sites' cells (a 256x256 pad is megabytes of JSON): it is written off the
 		// server thread, the latest state winning; a clean stop waits for it and writes at once
 		PENDING_SAVE.set(new Object[] {root, f, gen});
 		if (clean) {
 			flushSaves();
 			writeSave(root, f, gen);
-			return;
+			return gen;
 		}
 		SAVER.execute(() -> {
 			Object[] w = PENDING_SAVE.getAndSet(null);
@@ -501,36 +504,154 @@ public final class Placement {
 				writeSave((JsonObject) w[0], (Path) w[1], (Long) w[2]);
 			}
 		});
+		return gen;
 	}
 
+	/** (slice PSV) {@link #save}'s answer when nothing is saved this session (the file failed to load): never {@link #written}. */
+	static final long NOT_SAVED = -1;
+
 	/**
-	 * (slice LC3 fix 2) Queue file generations: every {@link #save} takes the next number ({@link #requestedGen}, server thread); a write
-	 * that completed (written, forced to disk, renamed; no exception) raises {@link #writtenGen} to its number. The saves coalesce (the
-	 * latest state wins), and a generation's file holds every change made before it was requested, so {@code writtenGen >= g} means the
-	 * state as of generation {@code g}'s request is on disk. A failed write raises nothing and asks for a retry ({@link #failedGen}).
-	 * The removal seal keeps a box that left it until a generation requested after that is written ({@link RemovalSeal}).
+	 * (slice PSV, lifted from LC3 fix 2) Queue file generations: every {@link #save} takes the next number ({@link #requestedGen}, server
+	 * thread); a write that completed (written, forced to disk, renamed; no exception) raises {@link #writtenGen} to its number. The saves
+	 * coalesce (the latest state wins), and a generation's file holds every change made before it was requested, so {@code writtenGen >= g}
+	 * means the state as of generation {@code g}'s request is on disk. A failed write raises nothing and asks for a retry ({@link #failedGen},
+	 * every 5 s from the tick). An undo's pre-save (Groups' preSaved, RestoreJob's groupSaved) waits until its generation is written.
 	 */
 	private static long requestedGen;
 	private static final java.util.concurrent.atomic.AtomicLong WRITTEN_GEN = new java.util.concurrent.atomic.AtomicLong();
 	private static volatile long failedGen;
-	/** A save asked for outside a save point (the seal's linger); the tick saves. */
+	/** (LC3 fix 2) A save asked for outside a save point (the seal's linger); the tick saves. */
 	private static boolean saveWanted;
 	private static long retryAt;
 	private static boolean failLogged;
-	/** (TEST, units) The next writes that fail before writing: a full disk, a read-only world folder. */
+	/** (TEST, units and the dev hook {@code dev.queue.failWrites}) The next writes that fail before writing: a full disk, a read-only world folder. */
 	static final java.util.concurrent.atomic.AtomicInteger FAIL_WRITES = new java.util.concurrent.atomic.AtomicInteger();
 
-	/** (LC3 fix 2) The last generation requested (server thread). */
+	/**
+	 * (PSV fix round, TEST: the dev hook's {@code failAtPreSave}) Armed (> 0): the next undo pre-save (Groups' preSaved, RestoreJob's
+	 * groupSaved) sets {@link #FAIL_WRITES} to this many, so the failure starts after R1 (the preflight already written): the replan path.
+	 */
+	static final java.util.concurrent.atomic.AtomicInteger FAIL_AT_PRESAVE = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** (PSV fix round, TEST) The directory sync after the rename ({@link #forceDir}); the units swap it to watch or fail it. */
+	interface DirSync {
+		void force(Path dir) throws IOException;
+	}
+
+	static volatile DirSync DIR_SYNC = Placement::forceDir;
+	private static volatile boolean dirSyncUnsupportedLogged;
+
+	/**
+	 * (PSV fix round, GPT P1 1) The rename made durable: the parent directory forced to disk (a file's fsync does not persist its directory
+	 * entry; Linux fsync(2)). A directory that can't be opened for reading (Windows: an AccessDeniedException) is best effort: logged once, the
+	 * file's own force stands. A directory that opens and fails its force is a failed write.
+	 */
+	static void forceDir(Path dir) throws IOException {
+		java.nio.channels.FileChannel ch;
+		try {
+			ch = java.nio.channels.FileChannel.open(dir, java.nio.file.StandardOpenOption.READ);
+		} catch (IOException | UnsupportedOperationException e) {
+			if (!dirSyncUnsupportedLogged) {
+				dirSyncUnsupportedLogged = true;
+				Architect.LOGGER.warn("Placement: the queue file's folder {} can't be synced on this platform ({}); the rename is best effort", dir, e.toString());
+			}
+			return;
+		}
+		try (ch) {
+			ch.force(true);
+		}
+	}
+
+	/** (PSV fix round) Whether a write at or after generation {@code gen} failed and none since covers it (the generation is not on disk). */
+	static boolean failed(long gen) {
+		return gen > 0 && failedGen >= gen && !written(gen);
+	}
+
+	/**
+	 * (PSV fix round, GPT P1 3) A removal's preflight: before it touches anything (fluids, custody, crate stock, refund tallies), a queue save
+	 * it asked for is confirmed written and no write has failed since. {@link #ready} answers false while one is pending or writes fail (then it
+	 * asks again once Placement's retry wrote the file); the caller checks {@link #loadFailed} first. Server thread; not saved.
+	 */
+	static final class Preflight {
+		long gen;
+
+		boolean ready(java.util.function.LongSupplier save) {
+			if (gen > 0) {
+				if (written(gen)) {
+					if (!writeFailing()) {
+						return true;
+					}
+					gen = 0; // a later write failed: wait for the retry, then ask again
+					return false;
+				}
+				if (!failed(gen)) {
+					return false; // pending (the saver is off the server thread)
+				}
+				gen = 0;
+			}
+			if (writeFailing()) {
+				return false;
+			}
+			gen = save.getAsLong();
+			return false;
+		}
+	}
+
+	/**
+	 * (PSV fix round) An undo's pre-save: {@link #save}, with the TEST arm {@link #FAIL_AT_PRESAVE} applied first (its failures start with this
+	 * write). Server thread.
+	 */
+	static long preSave(MinecraftServer srv) {
+		int n = FAIL_AT_PRESAVE.getAndSet(0);
+		if (n > 0) {
+			FAIL_WRITES.set(n);
+			Architect.LOGGER.info("Placement: TEST: the undo pre-save's write and the next {} fail", n - 1);
+		}
+		return save(srv, false);
+	}
+
+	/** (PSV) The last generation requested (server thread). */
 	static long requestedGen() {
 		return requestedGen;
 	}
 
-	/** (LC3 fix 2) The highest generation whose write completed. Any thread. */
+	/** (PSV) The highest generation whose write completed. Any thread. */
 	static long writtenGen() {
 		return WRITTEN_GEN.get();
 	}
 
-	/** (LC3 fix 2) Whether the latest write failed and no later one has completed (a retry is due). */
+	/** (PSV) Whether generation {@code gen} (a {@link #save}'s answer) is on disk: a later completed write counts. {@link #NOT_SAVED} never is. */
+	static boolean written(long gen) {
+		return gen != NOT_SAVED && WRITTEN_GEN.get() >= gen;
+	}
+
+	/**
+	 * (slice PSV, TEST: the dev hook {@code dev.queue.writes}) Sets the next queue writes to fail ({@code fail} >= 0; null leaves it) and
+	 * answers the generations: requested, written, whether a write is failing, the injected failures left. Server thread.
+	 */
+	public static JsonObject devWrites(@Nullable Integer fail) {
+		return devWrites(fail, null);
+	}
+
+	/** {@link #devWrites}; {@code failAtPreSave} (PSV fix round, TEST: >= 0; 0 disarms): the next undo pre-save arms that many failures. */
+	public static JsonObject devWrites(@Nullable Integer fail, @Nullable Integer failAtPreSave) {
+		if (fail != null) {
+			FAIL_WRITES.set(Math.max(0, fail));
+		}
+		if (failAtPreSave != null) {
+			FAIL_AT_PRESAVE.set(Math.max(0, failAtPreSave));
+		}
+		JsonObject o = new JsonObject();
+		o.addProperty("requestedGen", requestedGen);
+		o.addProperty("writtenGen", writtenGen());
+		o.addProperty("writeFailing", writeFailing());
+		o.addProperty("failWrites", Math.max(0, FAIL_WRITES.get()));
+		o.addProperty("loadFailed", loadFailed);
+		o.addProperty("failAtPreSave", Math.max(0, FAIL_AT_PRESAVE.get()));
+		return o;
+	}
+
+	/** (PSV) Whether the latest write failed and no later one has completed (a retry is due). */
 	static boolean writeFailing() {
 		return failedGen > WRITTEN_GEN.get();
 	}
@@ -540,7 +661,7 @@ public final class Placement {
 		saveWanted = true;
 	}
 
-	/** (LC3 fix 2) The tick's save point: a wanted save, or a failed write's retry (every 5 s while it fails). Server thread. */
+	/** (PSV) The tick's save point: a failed write's retry, every 5 s while it fails; (LC3 fix 2) a wanted save. Server thread. */
 	private static void saveIfDue(MinecraftServer srv) {
 		if (loadFailed) {
 			return;
@@ -548,8 +669,8 @@ public final class Placement {
 		if (writeFailing()) {
 			if (!failLogged) {
 				failLogged = true;
-				Architect.LOGGER.error("Placement: the queue file could not be written (generation {}); retrying every 5 s; boxes whose removal ended stay "
-					+ "sealed until it is written", failedGen);
+				Architect.LOGGER.error("Placement: the queue file could not be written (generation {}); retrying every 5 s; an undo waiting on it "
+					+ "is not committed, and boxes whose removal ended stay sealed, until it is written", failedGen);
 			}
 			if (srv.getTickCount() >= retryAt) {
 				retryAt = srv.getTickCount() + 100;
@@ -573,14 +694,6 @@ public final class Placement {
 		return t;
 	});
 
-	/**
-	 * (fix/drain-holders) Completes once every save queued so far is written (a failed write is logged): the saver is one thread and runs
-	 * in order. Off the server thread, unlike {@link #flushSaves}.
-	 */
-	static java.util.concurrent.CompletableFuture<Void> saved() {
-		return java.util.concurrent.CompletableFuture.runAsync(() -> { }, SAVER);
-	}
-
 	/** Waits until the queued saves are written. */
 	static void flushSaves() {
 		try {
@@ -594,8 +707,8 @@ public final class Placement {
 	}
 
 	/**
-	 * Writes one generation of the queue file: a temporary file forced to disk, then renamed over the file (LC3 fix 2: the generation counts
-	 * as written only once both are done). Answers whether it was written.
+	 * Writes one generation of the queue file: a temporary file forced to disk, renamed over the file, then the folder forced (slice PSV and
+	 * its fix round: the generation counts as written only once all three are done). Answers whether it was written.
 	 */
 	static synchronized boolean writeSave(JsonObject root, Path f, long gen) {
 		try {
@@ -612,6 +725,8 @@ public final class Placement {
 				ch.force(true);
 			}
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			// (PSV fix round, GPT P1 1) the rename durable before the generation counts: the directory entry forced too
+			DIR_SYNC.force(f.toAbsolutePath().getParent());
 		} catch (IOException | RuntimeException e) {
 			failedGen = Math.max(failedGen, gen);
 			Architect.LOGGER.warn("Could not save {} (generation {})", f, gen, e);
@@ -626,8 +741,8 @@ public final class Placement {
 		JOBS.clear();
 		loadFailed = false;
 		refusedLogged = false;
-		saveWanted = false; // (LC3 fix 2) a new world: no retry carried over (the generations only grow)
-		failedGen = Math.min(failedGen, WRITTEN_GEN.get());
+		saveWanted = false; // (LC3 fix 2) a new world: no retry carried over
+		failedGen = Math.min(failedGen, WRITTEN_GEN.get()); // (PSV) a new world: no retry carried over (the generations only grow)
 		failLogged = false;
 		retryAt = 0;
 		Path f = file(srv);
