@@ -12081,8 +12081,9 @@ record ItemCount(Item item, int count) {}
   `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
 - **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
   owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. **(Slice OVF)** A keyed refund
-  (every case below, and a region's keyed charge and scoop) never overflows: all of it is returned, past capacity if need be (nothing
-  new enters until the stock fits again), so its key and its items land in one ledger write and nothing drops. Only unkeyed
+  (every case below, and a region's keyed charge and scoop) never overflows: all of it is returned, past capacity if need be (until the
+  stock fits again nothing new enters, except a delivery of an item the owner's active, unpaused builds still miss, up to what they
+  miss), so its key and its items land in one ledger write and nothing drops. Only unkeyed
   give-backs still overflow. For a stockpile target:
   - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
     returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
