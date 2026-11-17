@@ -32842,3 +32842,28 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   downloaded nothing); real check on a fresh home: lab_ui 0.5.0 fetched, same repo id, offline seed passed with no online fallback; +2 units.
 - **Checks:** kit 1539/1539, Gradle build (incl. devserver) pass, ApiCSTest 9/9; step-inputs clean; gitleaks clean. Leftover: slot-outside's
   "several slots" (same-ms ticket id `t-<ms>-<pid>`) and "load gate" tests flake under load, pre-existing.
+
+### Slice ADP as built (branch `slice/ADP` off origin/main 02b43fc1; a pre-existing item loss in `Stockpiles.adopt`, found writing CRM; no API change; $0; strict; recorded 2026-11-17)
+
+- **The bug:** adoptCrates restored every crate's cell, released its journal kind and cleared every target's crate reference even when the
+  crate's block entity did not read as its owner's crate (missing, another owner's tag, read off the server thread): its stock was lost. Reproduced
+  in game on base (adp-defer, run `gate-runs-adp/20261117-032924-change` at dfaf3a91): the shared crate's tag changed, adoptCrates restored the cell,
+  its 3 items gone, house_4 cleared into the feed order, house_3 left a dangling reference.
+- **Fix:** `crateFate(read, credited)`: JOIN (read, not credited: credit, take, restore, release, as before), JOINED (credited by an earlier call,
+  block gone: release only, never the cell again), DEFER (else: block, stock, journal entry, references untouched; logged; the next adoptCrates
+  retries). References are cleared only by `clearsReference(namesJoined(...), crateStandsAt(...))`, in adoptCrates' second half and in
+  `repairJoinedCrates` at the start (which now also keeps a credited reference whose crate still stands; an ordinary start still reads no block).
+- **Unloaded chunks:** a server-thread `getBlockEntity` loads the chunk (javap of `Level.getBlockEntity`), so an unloaded crate is read, not
+  lost; no chunk-load retry was built (a deferral is now only an unreadable crate, which a chunk load does not fix). The in-game case found the real
+  unloaded-chunk loss one step earlier: the site selection used `crateStands` (false when unloaded), so a BUILT site on an out-of-range crate got no
+  paid record and kept a reference; the selection now reads the crate where it stands (`crateStandsAt`).
+- **Callers checked:** the API `adoptCrates` (Steward's survival adoption) and `dev.stockpile.adopt` (server thread); `repairJoinedCrates`
+  (guarded as above); roads only carry their group's crate (`RoadBuilder` refuses a construction road without one). No `joinCrate` exists.
+- **Leftover:** `RegionAdopt.java:183` "refused while the crate stands" uses `crateStands` (an unloaded or retagged crate passes the guard).
+- **Rules 17/18 (2026-11-17):** adp-defer halts at SAC1 and SAC2 in both the deferred (A) and the unloaded (B) case and asserts conservation
+  (stockpile stock + placed + dropped, plus the crate's stock + placed) after every case; failing-first on base (`artifacts/gate-runs-adp/
+  20261117-043607-change` in the slice worktree: 15 FAIL, A SAC2 loses all 691 items). DEFER mutates nothing; JOIN keeps SAD's save-together
+  protocol (ledger credit, crate and cell saved in one world save before any record changes) until TXN lands.
+- **Checks:** StockpileAdoptADPTest (+2), unit-scope kit + Gradle PASS at 4b8ee4d1 (Java unchanged since); strict gate (change --only,
+  --no-cache --shards 1 --no-turbo, 9080:9081) `gate-runs-adp/20261117-033537-change` at 4b8ee4d1: rl-crash 110/0, hf-crash 56/0,
+  sad-survival 56/0, sad-crash 26/0 PASS; adp-defer at cf8ddc5f (crash points + conservation) `20261117-044612-change` 42/0 PASS.
