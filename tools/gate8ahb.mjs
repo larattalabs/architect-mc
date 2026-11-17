@@ -532,7 +532,7 @@ steps.join = async () => {
   await L.openWorld(s.world);
   await L.tp(Math.floor((s.W.claim[0] + s.W.claim[2]) / 2), 110, Math.floor((s.W.claim[1] + s.W.claim[3]) / 2));
   await L.settle(6000);
-  await call('dev.journal.killAt', { point: '' }, 10_000).catch(() => null);
+  await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
   const a1 = await audit();
   const b1 = balance(a1);
   out.after = { uncleanStart: a1.uncleanStart, reconciled: a1.reconciled, balance: b1 };
