@@ -32796,4 +32796,9 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
 - **Ran** (f9903a02, ST merged): Gradle build 1359 tests 0 failures; scoped kit 74/74 (1 skipped); step-inputs check; gitleaks clean. Final
   gate-runs-hb/20261117-034128-change: hb-remove 22/0, hb-halt 14/0, hb-growth 28/0 (`--shards 1 --no-turbo --no-cache`, 9018/9019).
+- **Fix round run** (16fb55ad, gate-runs-hb/20261117-043357-change): hb-halt 15/0 and hb-growth 30/0 (RegionView.waiting typed `terrain`
+  from the growth's batch at 0 and 50%); hb-remove 24/3, all in the new xr01crash row. Its first draft held RL's save on join off as well
+  (`noPeriodic` alone), so the paid targets that joined after the case's save had no book and stood unpaid after the restart (387 units):
+  a test artefact (production always saves on join, RL), now `{noPeriodic, joinSave}`. Its BUILT staged target c4 was read by its book
+  and left BUILT (log line). PENDING: hb-remove (xr01crash) re-run, paused by the coordinator.
 - **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%.

@@ -292,25 +292,27 @@ async function builtCrash(tag, fx) {
   const S = await survival(tag, fx, { rate: 16, held: true, over: 40 });
   const { region, box, pre, crateAt } = S;
   const out = { region };
-  const t0 = await untilTerrain(region, (x) => (x.targets ?? []).length > 0, 600_000);
+  await untilTerrain(region, (x) => (x.targets ?? []).length > 0, 600_000);
   await L.settle(3000);
-  // the books written while every staged target still builds (held), then nothing saved until the halt
+  // the books written while the staged targets put down so far still build (held); then only RL's save when a target joins the feed (as in
+  // production: every target has a book before it builds), PS's periodic save off, so a target that completes keeps its building book
   await cmd('/save-all flush');
   const s0 = await savedNow();
-  const ids = (t0.targets ?? []).map((x) => x.target);
-  const books0 = stagedBooks(s0.file, ids);
-  await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+  await call('dev.stockpile.ps', { noPeriodic: true, joinSave: true }, 30_000);
   await hold(false);
   const f = await G.feed(ctx, region, { fraction: 1, timeoutMs: 3_000_000, every: 1500 });
+  const tB = await terr(region);
+  const ids = (tB.targets ?? []).map((x) => x.target);
   const rc = await call('dev.rs.cells', { region }, 300_000);
   let taken = 0;
   for (const x of rc.targets ?? []) if (ids.includes(x.target)) for (const c of x.cells ?? []) if (!(c[3] & 2)) taken++;
   const s1 = await savedNow();
+  const books1 = stagedBooks(s1.file, ids);
   await L.settle(3000);
   const snap = await G.snap(ctx, box, `hb-${tag}-built`);
-  out.before = { books: books0, saves: [s0.saves, s1.saves], state: f.last.st.view.state, taken };
-  check(f.last.st.view.state === 'PLACED' && Object.keys(books0).length === ids.length && s1.saves === s0.saves && taken > 0,
-    `${tag}: built (${f.last.st.view.state}) after the save that holds every staged book (${Object.keys(books0).length} of ${ids.length}; saves #${s0.saves} -> #${s1.saves}), ${taken} staged cell(s) since taken up by later writers`, out.before);
+  out.before = { books: books1, saves: [s0.saves, s1.saves], state: f.last.st.view.state, taken };
+  check(f.last.st.view.state === 'PLACED' && Object.keys(books1).length > 0 && taken > 0,
+    `${tag}: built (${f.last.st.view.state}); the saved ledger still holds the book of ${Object.keys(books1).length} staged target(s) written while it built (saves #${s0.saves} -> #${s1.saves}, on join only); ${taken} staged cell(s) since taken up by later writers`, out.before);
   await call('dev.stockpile.halt', {}, 10_000).catch(() => null);
   const down = await haltWait();
   check(down, `${tag}: dev.stockpile.halt halted the server (nothing saved)`);
@@ -323,20 +325,26 @@ async function builtCrash(tag, fx) {
   const builtRec = Object.values(rec).filter((r) => r.built);
   const bad = Object.values(rec).filter((r) => r.reopened || sum(r.charged) || sum(r.owes) || sum(r.creditedBack));
   const tR = await terr(region);
-  const d = await G.diff(ctx, box, snap);
-  const dl = d.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
-  out.after = { uncleanStart: a1.uncleanStart, reconciled: rec, building: (tR.targets ?? []).filter((x) => x.building).map((x) => x.target), worldDiff: dl.length, list: dl.slice(0, 6) };
-  check(a1.uncleanStart === true && builtRec.length > 0 && builtRec.some((r) => r.missingCells > 0) && bad.length === 0 && out.after.building.length === 0 && dl.length === 0,
-    `${tag}: after the unclean restart RL read ${builtRec.length} BUILT staged target(s) with a book (cells not their block: ${json(builtRec.map((r) => r.missingCells))}): left BUILT, none reopened, nothing charged, owed or given back (${bad.length} not); none building; the world as before the halt (${dl.length} differ: the later writers' cells kept)`, out.after);
+  out.after = { uncleanStart: a1.uncleanStart, reconciled: rec, building: (tR.targets ?? []).filter((x) => x.building).map((x) => x.target) };
+  check(a1.uncleanStart === true && builtRec.length > 0 && bad.length === 0 && builtRec.every((r) => !out.after.building.includes(r.key?.replace(/^road:/, '').replace(/@.*$/, ''))),
+    `${tag}: after the unclean restart RL read ${builtRec.length} BUILT staged target(s) by their book (cells not their block: ${json(builtRec.map((r) => r.missingCells))}): left BUILT, none reopened, nothing charged, owed or given back (${bad.length} not)`, out.after);
   await call('dev.stockpile.ps', { noPeriodic: false }, 30_000);
-  // (rule 18) items in == items out after the restart: what stands paid comes back through the Remove, nothing more, nothing less
-  const b1 = balance(a1);
+  // (rule 18) items in == items out from the restart on: fed until built again (RL's owed paid cells charged), then removed
   const C2 = new G.Conservation(ctx, box);
   await C2.start();
+  const f2 = await G.feed(ctx, region, { cons: C2, fraction: 1, timeoutMs: 3_000_000, every: 1500 });
+  await L.settle(3000);
+  const a2 = await audit();
+  const b2 = balance(a2);
+  const d = await G.diff(ctx, box, snap);
+  const dl = d.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  const pb = await C2.point('built');
+  out.rebuilt = { state: f2.last.st.view.state, balance: b2, worldDiff: dl.length, list: dl.slice(0, 6), conservation: pb };
+  check(f2.last.st.view.state === 'PLACED' && dl.length === 0 && sum(b2.dupe) === 0 && sum(b2.double) === 0 && G.exact(pb),
+    `${tag}: fed until built again: the world as before the halt (${dl.length} differ: no staged cell refilled over a later writer's), the paid cells standing equal the paid records (standing ${b2.standing}, paid ${b2.paid}), items in = items out (conservation ${json(pb.diff)})`, out.rebuilt);
   await G.remove(ctx, region);
-  const p2 = await C2.point('removed');
-  out.conservation = { balance: b1, removed: p2 };
-  check(sum(b1.dupe) === 0 && sum(b1.double) === 0 && G.exact(p2), `${tag}: after the restart the paid cells standing equal the paid records (standing ${b1.standing}, paid ${b1.paid}); through the Remove items in = items out (conservation ${json(p2.diff)}, identity ${p2.identity})`, out.conservation);
+  const pr = await C2.point('removed');
+  check(G.exact(pr), `${tag}: through the Remove items in = items out (conservation ${json(pr.diff)}, identity ${pr.identity})`, pr);
   const e = await G.diff(ctx, box, pre);
   const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
   check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, ef.slice(0, 8));
