@@ -24,8 +24,9 @@ import org.junit.jupiter.api.io.TempDir;
  * (slice T0, "finish the no-drop rule", the GPT check of 2e685bec) A live unkeyed give-back on a full pile (a construction swap's old
  * block, the feed's empty bucket) enters the stock, past capacity if need be, and drops nothing. A drop is saved with the world before the
  * ledger: when the ledger write then fails and the process crashes, the item lies on the ground while the old durable book still holds
- * the paid cell, and the reconcile at the next start credits it into the stock again. Counted on the ground plus in the stock across the
- * live give-back, the failed ledger write, the restart and the reconcile: exactly once.
+ * the paid cell, and the reconcile at the next start credits it into the stock again. Asserted: the live give-back credits the stock
+ * ({@code stock}, {@code returned}) with nothing over, the failed ledger write and the restart lose that in-memory credit, and the
+ * reconcile's credit brings the total to exactly one refund on disk.
  *
  * <p>The live paths run as the purse runs them ({@code swapGiveBack}, {@code feedPay}: Purse.giveBackPaid and Purse.pay delegate to them);
  * the reconcile's part through the code reconcile itself calls ({@code refundAtStart}, {@code consumeAtStart}). {@code reconcile} needs a
@@ -63,13 +64,6 @@ class DurableT0nTest {
 		return p;
 	}
 
-	/** What the live give-back dropped: the world save keeps it (saved with the chunks, before the ledger). */
-	int ground(String item) {
-		int n = Stockpiles.LAST_DROP.getOrDefault(item, 0);
-		Stockpiles.LAST_DROP.clear();
-		return n;
-	}
-
 	/** The ledger write after the world save fails, the process crashes; the restart loads the durable ledger (the old book). */
 	Stockpiles.Pile failThenRestart() {
 		DurableFile.FAIL_BEFORE_RENAME.set(1);
@@ -89,17 +83,19 @@ class DurableT0nTest {
 		Stockpiles.Pile p = full("\"" + COBBLE + "\":64");
 		p.ledger.pay("site:t1@1", PLANKS, 4); // the paid cell, standing in the durable book
 		assertTrue(Stockpiles.writeConfirmed(null).ok());
-		Stockpiles.LAST_DROP.clear();
-		// the live swap: the cell's old block given back out of the record (Purse.giveBackPaid)
-		Stockpiles.swapGiveBack(null, p, "t1", Map.of(PLANKS, 4), -1, BlockPos.ZERO);
-		int ground = ground(PLANKS);
-		p = failThenRestart();
+		// the live swap: the cell's old block given back out of the record (Purse.giveBackPaid), on a pile with no room
+		assertEquals(Map.of(PLANKS, 4), Stockpiles.swapGiveBack(null, p, "t1", Map.of(PLANKS, 4), -1, BlockPos.ZERO));
+		assertEquals(4, p.ledger.stock(PLANKS), "the old block entered the stock, past capacity: nothing to drop");
+		assertEquals(4, p.ledger.returned().getOrDefault(PLANKS, 0), "booked as returned");
+		assertTrue(p.ledger.refundOverflow().isEmpty(), "refundOverflow never grows");
+		assertTrue(p.ledger.identityHolds());
+		p = failThenRestart(); // the live credit was in memory only: lost with the crash, and no item lies on the ground
+		assertEquals(0, p.ledger.stock(PLANKS));
 		// the next start: the old book still holds the cell paid and standing; the reconcile redoes the swap's give-back
 		Stockpiles.refundAtStart(p, "t1", Map.of(PLANKS, 4), -1, Stockpiles.capacity(null, p));
-		int stock = onDisk(PLANKS);
-		assertEquals(0, ground, "nothing dropped");
-		assertEquals(4, ground + stock, "the old block refunded exactly once (never a ground item and a stock credit)");
-		assertTrue(Stockpiles.get(OWNER).ledger.refundOverflow().isEmpty(), "refundOverflow never grows");
+		assertEquals(4, onDisk(PLANKS), "the old block refunded exactly once in all");
+		assertEquals(4, Stockpiles.get(OWNER).ledger.returned().getOrDefault(PLANKS, 0));
+		assertTrue(Stockpiles.get(OWNER).ledger.refundOverflow().isEmpty());
 	}
 
 	@Test
@@ -107,16 +103,19 @@ class DurableT0nTest {
 		Stockpiles.Pile p = full("\"" + COBBLE + "\":64,\"" + WATER + "\":1");
 		assertTrue(Stockpiles.writeConfirmed(null).ok());
 		Stockpiles.testCapacity = 1; // the bucket, once poured, has no room
-		Stockpiles.LAST_DROP.clear();
 		// the live feed places the water (Purse.pay): its empty bucket comes back
 		Stockpiles.feedPay(null, p, "site:t1@1", List.of(new SurvivalItems.Cost(WATER, 1)), 1, null, BlockPos.ZERO);
-		int ground = ground(BUCKET);
-		p = failThenRestart();
+		assertEquals(0, p.ledger.stock(WATER));
+		assertEquals(1, p.ledger.stock(BUCKET), "the empty bucket entered the stock, past capacity: nothing to drop");
+		assertEquals(1, p.ledger.returned().getOrDefault(BUCKET, 0), "booked as returned");
+		assertTrue(p.ledger.refundOverflow().isEmpty() && p.ledger.identityHolds());
+		p = failThenRestart(); // lost with the crash: the water bucket is back in the old ledger, no bucket anywhere
+		assertEquals(1, p.ledger.stock(WATER));
+		assertEquals(0, p.ledger.stock(BUCKET));
 		// the next start: the cell stands ahead of the old book; the reconcile charges it
 		assertTrue(Stockpiles.consumeAtStart(p, WATER, 1, 1, new TreeMap<>()));
-		int stock = onDisk(BUCKET);
-		assertEquals(0, ground, "nothing dropped");
-		assertEquals(1, ground + stock, "the empty bucket exactly once");
+		assertEquals(1, onDisk(BUCKET), "the empty bucket exactly once in all");
+		assertEquals(0, Stockpiles.get(OWNER).ledger.stock(WATER));
 	}
 
 	@Test

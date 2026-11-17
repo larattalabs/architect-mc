@@ -1777,8 +1777,6 @@ public final class Stockpiles {
 
 	/** Dev: overflow units dropped as entities this session, per owner (the gate counts the entities against it). */
 	static final Map<String, Integer> OVERFLOW_DROPPED = new ConcurrentHashMap<>(); // (dev, historical) nothing drops since slice T0: stays 0
-	/** (TEST) what a give-back dropped: nothing since slice T0 finished the no-drop rule (stays empty; the no-drop test reads it). */
-	static final Map<String, Integer> LAST_DROP = new ConcurrentHashMap<>();
 
 	// ------------------------------------------------------------------ the owner feed loop
 
