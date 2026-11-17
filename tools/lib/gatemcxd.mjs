@@ -54,6 +54,10 @@ export async function registerCXD(steps, h) {
 
   /** A site's crate: paused (its stock stays unused), filled with part of its bill. Returns the crate's cell and the items given. */
   async function fill(tag, site) {
+    for (let i = 0; i < 120; i++) { // a batch's site converts over ticks: wait until it builds
+      if ((await siteState(site))?.state === 'building') break;
+      await L.sleep(1000);
+    }
     const pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000);
     check(!pz?.refused, `${tag}: ${site} paused (${json(pz?.refused ?? 'paused')})`);
     const st0 = await siteState(site);
