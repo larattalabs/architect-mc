@@ -109,6 +109,7 @@ export async function registerLCAP(steps, h) {
     const u = await approve(sha, { maxBill: q.bom, maxBillPerLot: { la: bA, zz: {} } });
     out.U = u;
     check(u.reason === 'BILL_CAP' && u.detail === 'unknown_lot:zz', `U: a lot cap naming an unknown lot is refused BILL_CAP, detail ${u.detail} (${u.refused ?? 'accepted'})`, u);
+    if (!u.refused) { spendZero(); return out; } // accepted (no lot caps): the rest would realise over this region
     // O: lb one plank under its own bill: refused before any write
     const under = { ...bB, [PL]: bB[PL] - 1 };
     const o = await approve(sha, { maxBill: q.bom, maxBillPerLot: { la: bA, lb: under } });
