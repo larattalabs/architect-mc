@@ -260,11 +260,13 @@ async function crashAndRemove(tag, fx) {
   let trK = null, first = null;
   for (let i = 0; i < 240 && !first; i++) {
     trK = await call('dev.region.terrain', { region, check: true }, 300_000);
-    first = (trK.targets ?? []).find((t) => !t.building) ?? null;
+    // (round 5) the target that reached ST1 (its marker, written before the halt), not just the first one BUILT after
+    first = (trK.targets ?? []).find((t) => t.target === trK.st1Target && !t.building) ?? null;
     if (!first) await sleep(500);
   }
   out.afterST1 = (trK?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells, t.writes, t.missing]);
-  check(!!first && first.writes === 0 && (first.missing ?? 0) === 0 && first.built === first.cells, `${tag}: after ST1 the halted target (${first?.target}) completes from the saved world: ${first?.built} of ${first?.cells} cells standing, ${first?.writes} written again, ${first?.missing} missing (${json(out.afterST1)})`);
+  out.st1Target = trK?.st1Target ?? null;
+  check(!!trK?.st1Target && !!first && first.writes === 0 && (first.missing ?? 0) === 0 && first.built === first.cells, `${tag}: after ST1 the halted target (${first?.target}) completes from the saved world: ${first?.built} of ${first?.cells} cells standing, ${first?.writes} written again, ${first?.missing} missing (${json(out.afterST1)})`);
   const pK = await C.point('after ST1');
   check(G.exact(pK), `${tag}: items in = items out after the ST1 crash (conservation ${json(pK.diff)}, identity ${pK.identity})`);
   let tr = null;
@@ -382,6 +384,10 @@ async function depositCrash(tag, fx) {
   const staged = new Set((tr?.targets ?? []).map((t) => t.target));
   const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
   for (const id of st0.feedOrder ?? []) if (!staged.has(id)) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+  // (round 5) the staged targets held too until the deposit is in, so the barrier that follows comes after it
+  for (const id of staged) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+  const held = await call('dev.region.terrain', { region }, 120_000);
+  out.heldAtDeposit = (held.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]);
   const [item, n] = Object.entries(need).sort((a, b) => b[1] - a[1])[0] ?? [];
   if (item) await L.cmd(`/give @s ${item} ${Math.min(64, n)}`);
   await L.cmd('/save-all flush'); // the baseline: players, chunks and the ledger on disk
@@ -391,7 +397,8 @@ async function depositCrash(tag, fx) {
   out.need = need;
   const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
   out.deposit = { moved: ins.moved, accepted: ins.accepted ?? null, refused: ins.refused ?? null };
-  check(ins.moved > 0, `${tag}: ${ins.moved} item(s) moved from the inventory into the stockpile while the island builds (no staged target BUILT yet: ${json((tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]))})`, out.deposit);
+  check(ins.moved > 0 && (held.targets ?? []).every((t) => t.building), `${tag}: ${ins.moved} item(s) moved from the inventory into the stockpile while every staged target is held unfinished (${json(out.heldAtDeposit)})`, out.deposit);
+  for (const id of staged) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000);
   let done = null;
   for (let i = 0; i < 1200; i++) {
     done = await call('dev.region.terrain', { region }, 120_000);

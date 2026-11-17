@@ -501,10 +501,16 @@ class TerrainOrderTest {
 		assertEquals(RegionTargets.READY, rule(p, "minecraft:oak_leaves[persistent=true,distance=7]", null, "minecraft:air", world, Set.of(), List.of()));
 		// a written leaf a neighbour changed (its distance), or a waterlogged leaf planned dry, is set to its planned state: our own block
 		BlockState planned = st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=false]");
-		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=4,waterlogged=false]"), planned, () -> false));
-		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=true]"), planned, () -> false));
-		assertFalse(RegionTargets.mayReplace(false, st("minecraft:cobblestone"), planned, () -> false), "a player's block is not ours to replace");
-		assertTrue(RegionTargets.mayReplace(true, st("minecraft:cobblestone"), planned, () -> false), "the tile's planned before is");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=4,waterlogged=false]"), planned, false, () -> false),
+			"a volatile property's drift (distance) is ours");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=false,distance=1,waterlogged=false]"), planned, true, () -> false),
+			"a cell this run wrote is ours whatever its state");
+		assertFalse(RegionTargets.mayReplace(false, st("minecraft:cobblestone"), planned, true, () -> false), "a player's block is not ours to replace");
+		assertTrue(RegionTargets.mayReplace(true, st("minecraft:cobblestone"), planned, false, () -> false), "the tile's planned before is");
+		// (round 5, GPT check P2) another writer's block of the same type in another state is not ours (round 4's block-type rule took it)
+		BlockState logY = st("minecraft:oak_log[axis=y]");
+		assertFalse(RegionTargets.mayReplace(false, st("minecraft:oak_log[axis=x]"), logY, false, () -> false), "a foreign oak_log[axis=x] is left alone");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_log[axis=x]"), logY, true, () -> false), "the same cell, written by this run, is ours");
 		// a barrier that throws takes the same retry delay as one that fails
 		RegionTargets.Plan pl = new RegionTargets.Plan(0L, new java.util.BitSet(), new int[] {1}, null);
 		int[] calls = {0};

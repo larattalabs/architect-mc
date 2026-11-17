@@ -84,6 +84,8 @@ public final class RegionTargets {
 		boolean floatingRead;
 		/** (round 4) Cells this run wrote this session (the halted target's recovery check: a target whose cells survived writes none). */
 		int writes;
+		/** (round 5) Which queue cells this run wrote this session: the evidence a drifted cell is ours ({@link #ours}). */
+		final BitSet wrote = new BitSet();
 		/** (8a ST) The feed turn before which a built target's durability barrier is not tried again (after a failed one). */
 		long durableRetryAt = Long.MIN_VALUE;
 
@@ -1185,7 +1187,7 @@ public final class RegionTargets {
 		Construction c = t.construction();
 		if (r.built.cardinality() == r.size()) {
 			// (8a ST, GPT final review) a staged target completes only through its durability barrier, on any path
-			if (!pl.terrain || mayComplete(pl, ticks, () -> terrainDurable(srv))) {
+			if (!pl.terrain || mayComplete(pl, ticks, () -> terrainDurable(srv, t.id()))) {
 				r.soilSame = true;
 				RoadBuilder.complete(srv, level, t, r, null);
 			}
@@ -1396,7 +1398,7 @@ public final class RegionTargets {
 			int kk = r.queue[q];
 			boolean planned = before != null && kk >= 0 && kk < before.size() && now.is(before.states[kk].getBlock());
 			final BlockState here = now, want = r.target[q];
-			if (!mayReplace(planned, here, want, () -> Builder.free(level, p, here, want))) {
+			if (!mayReplace(planned, here, want, pl.wrote.get(q), () -> Builder.free(level, p, here, want))) {
 				r.blockedSince.putIfAbsent(q, Builder.ticksNow());
 				continue;
 			}
@@ -1411,6 +1413,7 @@ public final class RegionTargets {
 			}
 			write(level, r, q, p);
 			pl.writes++;
+			pl.wrote.set(q);
 			budget--;
 			placed++;
 		}
@@ -1428,7 +1431,7 @@ public final class RegionTargets {
 		SiteWaits.observe(srv, level, t.id(), placed > 0 ? WaitCalc.Outcome.PLACED : WaitCalc.Outcome.IDLE);
 		if (r.built.cardinality() == n) {
 			Infra cur = Infras.get(t.id());
-			if (cur != null && mayComplete(pl, ticks, () -> terrainDurable(srv))) {
+			if (cur != null && mayComplete(pl, ticks, () -> terrainDurable(srv, t.id()))) {
 				r.soilSame = true;
 				RoadBuilder.complete(srv, level, cur, r, null);
 			}
@@ -1443,7 +1446,7 @@ public final class RegionTargets {
 	 * flushed, as a stockpile's save with the world): a crash can then never leave a BUILT target whose cells the saved world lost (with no
 	 * stockpile there is no ledger reconcile to reopen it). An undurable write leaves it building: it completes at a later turn.
 	 */
-	static boolean terrainDurable(MinecraftServer srv) {
+	static boolean terrainDurable(MinecraftServer srv, @Nullable String target) {
 		// (round 4) T0's world barrier (Stockpiles.barrier: players, then a flushed chunk save known durable, then the ledger through
 		// DurableFile; refused under /save-off, after a failed load or on any failed step): OK only. IN_DOUBT (the ledger renamed, its folder's
 		// force failed) is not known durable: the target stays building and the barrier runs again later
@@ -1451,10 +1454,26 @@ public final class RegionTargets {
 		TERRAIN_SAVES.incrementAndGet();
 		LAST_BARRIER = b;
 		if (b.ok()) {
+			if ("ST1".equals(dev.larattalabs.architect.journal.WorldJournal.armed()) && target != null) {
+				// (round 5, TEST) which target reached ST1, written before the halt so the gate asserts on that target
+				try {
+					java.nio.file.Files.writeString(srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(ST1_MARK),
+						target, java.nio.charset.StandardCharsets.UTF_8);
+				} catch (java.io.IOException e) {
+					Architect.LOGGER.warn("ST1: the marker could not be written: {}", e.toString());
+				}
+			}
 			// (rule 18, TEST kill point ST1) a crash at the barrier: everything saved, the target not yet marked BUILT
 			dev.larattalabs.architect.journal.WorldJournal.kill("ST1");
 		}
 		return b.ok();
+	}
+
+	/** (round 5, TEST) The file, in the world's architect dir, naming the target that reached kill point ST1. */
+	static final String ST1_MARK = "st1-target.txt";
+
+	static boolean terrainDurable(MinecraftServer srv) {
+		return terrainDurable(srv, null);
 	}
 
 	/**
@@ -1462,8 +1481,18 @@ public final class RegionTargets {
 	 * (a written leaf whose distance a neighbour changed, a waterlogged leaf planned dry: set to its planned state, as the INSTANT twin holds
 	 * it, instead of waiting for ever), or what a builder may replace ({@code free}: air, a fluid, a plant).
 	 */
-	static boolean mayReplace(boolean planned, BlockState now, BlockState target, java.util.function.BooleanSupplier free) {
-		return planned || now.getBlock() == target.getBlock() || free.getAsBoolean();
+	static boolean mayReplace(boolean planned, BlockState now, BlockState target, boolean wrote, java.util.function.BooleanSupplier free) {
+		return planned || ours(now, target, wrote) || free.getAsBoolean();
+	}
+
+	/**
+	 * (round 5, GPT check P2) Evidence that a cell holding {@code now} is this target's own write in a drifted state: this run wrote it this
+	 * session ({@code wrote}), or it differs from the planned state only in properties the journal reads as volatile (a leaf's distance, a
+	 * grass top's snowy: {@link dev.larattalabs.architect.journal.StillOurs#holds}). Never the block type alone: another writer's
+	 * {@code oak_log[axis=x]} on a cell planned {@code oak_log[axis=y]} is not ours.
+	 */
+	static boolean ours(BlockState now, BlockState target, boolean wrote) {
+		return now.getBlock() == target.getBlock() && (wrote || dev.larattalabs.architect.journal.StillOurs.holds(now, null, target, null));
 	}
 
 	/** (round 4, dev) The last staged terrain barrier's result. */
@@ -1670,6 +1699,14 @@ public final class RegionTargets {
 		o.addProperty("terrainPerTick", SurvivalWorld.terrainPerTick());
 		o.addProperty("stagedBuild", Packed.stagedBuild());
 		o.addProperty("gameTime", srv.overworld().getGameTime());
+		try {
+			java.nio.file.Path mark = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(ST1_MARK);
+			if (java.nio.file.Files.exists(mark)) {
+				o.addProperty("st1Target", java.nio.file.Files.readString(mark, java.nio.charset.StandardCharsets.UTF_8).trim()); // (round 5, TEST)
+			}
+		} catch (java.io.IOException e) {
+			o.addProperty("st1Target", "unreadable: " + e);
+		}
 		var lb = LAST_BARRIER;
 		if (lb != null) {
 			JsonObject b = new JsonObject();
@@ -1936,7 +1973,7 @@ public final class RegionTargets {
 		}
 		// (round 4, GPT final review) a staged target finished by hand (creative /architect site finish) is marked BUILT only through the
 		// world barrier too: under /save-off, or a failed save, its cells stand and it stays building (the feed completes it later)
-		if (isTerrain(i) && !terrainDurable(srv)) {
+		if (isTerrain(i) && !terrainDurable(srv, i.id())) {
 			Architect.LOGGER.warn("Region target {}: finished, but the world barrier refused; it is marked built at a later turn", i.id());
 			return n;
 		}
