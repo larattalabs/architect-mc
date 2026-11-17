@@ -216,11 +216,37 @@ public final class RegionDurability {
 		for (Path d : dirs) {
 			try {
 				DurableFile.confirmChain(d, 2);
+				confirmContents(d);
 			} catch (IOException | RuntimeException e) {
 				left.add("folder " + d + " (its entry could not be confirmed: " + e + ")");
 			}
 		}
 		return left;
+	}
+
+	/** Region folders whose entries (the .mca files') and .mcc payloads were forced in this process. */
+	private static final Set<Path> CONTENTS_CONFIRMED = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * (T0 review 2 finding 5) Once a process, before the first barrier publishes over a region folder: the folder forced (every region file's
+	 * entry in it) and every {@code .mcc} payload in it forced. A force that failed in an earlier session left no debt behind (debts are not
+	 * persisted); this re-confirms what that session may have left only in the page cache.
+	 */
+	static void confirmContents(Path dir) throws IOException {
+		if (CONTENTS_CONFIRMED.contains(dir)) {
+			return;
+		}
+		try (java.nio.file.DirectoryStream<Path> ds = java.nio.file.Files.newDirectoryStream(dir, "*.mcc")) {
+			for (Path p : ds) {
+				failIfAsked(p);
+				try (FileChannel c = FileChannel.open(p, StandardOpenOption.READ)) {
+					DurableFile.FORCER.file(c);
+				}
+			}
+		}
+		failIfAsked(dir);
+		DurableFile.FORCER.dir(dir);
+		CONTENTS_CONFIRMED.add(dir);
 	}
 
 	/** A world save starts (saveAllChunks' head). */

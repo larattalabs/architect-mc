@@ -232,9 +232,10 @@ public final class DurableFile {
 	}
 
 	/**
-	 * (review P1-7) An ordinary, unforced save of the same file: temp and rename only (the ledger's autosave cost is unchanged), with this
-	 * file's {@value #MEMBER} kept in it. The generation is installed, not written: a later {@link #confirm} (the next load) or OK write
-	 * acknowledges it. False when it was not renamed (an IO failure or an obsolete generation).
+	 * An unforced save of the same file: temp and rename only, with this file's {@value #MEMBER} kept in it. The generation is installed,
+	 * not written, and it <b>un-acknowledges</b> every earlier generation (T0 review 2 finding 6: a power loss may tear the unforced file
+	 * that replaced them): {@link #written} answers false until a forced write or {@link #confirm} covers it. The ledger no longer uses it.
+	 * False when it was not renamed (an IO failure or an obsolete generation).
 	 */
 	public synchronized boolean writeUnforced(JsonObject root, long gen) {
 		if (gen < installed.get()) {
@@ -242,6 +243,9 @@ public final class DurableFile {
 		}
 		try {
 			install(root, gen, false);
+			// (T0 review 2 finding 6) the unforced file replaced the acknowledged one: after a power loss it may be torn, so nothing counts
+			// as written until a forced write or confirm() covers it
+			written.set(0);
 			return true;
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Could not save {}: {}", file, e.toString());

@@ -70,7 +70,7 @@ class DurableT0FixTest {
 	}
 
 	/** A forcer that records each folder forced, failing the ones named. */
-	static final class Recording implements DurableFile.Forcer {
+	static class Recording implements DurableFile.Forcer {
 		final List<Path> dirs = new ArrayList<>();
 		final Set<Path> failDirs;
 
@@ -438,14 +438,54 @@ class DurableT0FixTest {
 	void p1_3_aFailedChunkWriteIsOwedResubmittedAndServedToALoad() {
 		String k = ChunkDebt.key("w/minecraft:overworld/chunk", 3, -4);
 		AtomicInteger resubmitted = new AtomicInteger();
-		ChunkDebt.writeFailed(k, "tag", resubmitted::incrementAndGet, "disk full");
+		long a = ChunkDebt.submitted(k, 0);
+		ChunkDebt.pendingData(k, a);
+		ChunkDebt.writeFailed(k, "tag", ChunkDebt.writing(k), resubmitted::incrementAndGet, "disk full");
 		ChunkDebt.saveFailed(k, "reported"); // vanilla's report that follows keeps the snapshot
 		assertEquals(1, ChunkDebt.owed().size());
 		assertEquals("tag", ChunkDebt.snapshot(k), "a load of the owed chunk gets the snapshot, not the older file");
 		assertEquals(1, ChunkDebt.retry());
 		assertEquals(1, resubmitted.get());
-		ChunkDebt.written(k);
-		assertTrue(ChunkDebt.owed().isEmpty(), "paid by the next write that reached the region file");
+		long again = ChunkDebt.submitted(k, a); // the resubmission keeps its number
+		ChunkDebt.pendingData(k, again);
+		ChunkDebt.written(k, ChunkDebt.writing(k));
+		assertTrue(ChunkDebt.owed().isEmpty(), "paid by the write of that snapshot");
+	}
+
+	@Test
+	void r2_3_anOlderQueuedWriteNeverClearsANewerSerializationFailure() {
+		String k = ChunkDebt.key("w/minecraft:overworld/chunk", 1, 1);
+		// snapshot A queued; then a hopper adds items and snapshot B's serialization fails (marked saved first); then A is written
+		ChunkDebt.remark(k, () -> {
+		}, "B's serialization failed");
+		ChunkDebt.saveFailed(k, "reported");
+		ChunkDebt.written(k); // A (queued before B) reaches the region file
+		assertEquals(1, ChunkDebt.owed().size(), "A is older than B: B stays owed");
+	}
+
+	@Test
+	void r2_3_onlyAWriteAtLeastAsNewAsTheFailurePaysAndAResubmissionNeverReplacesNewerData() {
+		String k = ChunkDebt.key("w/minecraft:overworld/chunk", 2, 2);
+		long a = ChunkDebt.submitted(k, 0);
+		ChunkDebt.pendingData(k, a);
+		ChunkDebt.remark(k, () -> {
+		}, "B's serialization failed"); // after A was submitted
+		ChunkDebt.written(k, ChunkDebt.writing(k));
+		assertEquals(1, ChunkDebt.owed().size(), "A is numbered before B's failure");
+		long c = ChunkDebt.submitted(k, 0); // the barrier's re-mark makes the chunk save again: C
+		ChunkDebt.pendingData(k, c);
+		ChunkDebt.written(k, ChunkDebt.writing(k));
+		assertTrue(ChunkDebt.owed().isEmpty(), "C is newer than B's failure: paid");
+		// a failed write's snapshot is never resubmitted over newer data submitted since
+		String k2 = ChunkDebt.key("w/minecraft:overworld/chunk", 9, 9);
+		long d = ChunkDebt.submitted(k2, 0);
+		ChunkDebt.pendingData(k2, d);
+		AtomicInteger resub = new AtomicInteger();
+		ChunkDebt.writeFailed(k2, "D", ChunkDebt.writing(k2), resub::incrementAndGet, "disk full");
+		ChunkDebt.submitted(k2, 0); // E, newer, still in flight
+		ChunkDebt.retry();
+		assertEquals(0, resub.get(), "D would replace E's pending data");
+		assertNull(ChunkDebt.snapshot(k2), "a load reads E (pending), not D");
 	}
 
 	@Test
@@ -471,6 +511,107 @@ class DurableT0FixTest {
 		ChunkDebt.written(k); // the reloaded chunk saved
 		assertEquals(1, ChunkDebt.owed().size(), "stale: owed until an operator clears it");
 		assertEquals(1, ChunkDebt.forgiveAll());
+	}
+
+	@Test
+	void r2_2_anOutdatedSnapshotNeverPaysANewerFailure() throws IOException {
+		List<Object> written = new ArrayList<>();
+		PlayerSaves.worldOpened((u, snap) -> {
+			written.add(snap);
+			dat(u);
+			return true;
+		});
+		save(id, steve, false); // deposit one diamond: the save with one diamond left fails its replace
+		PlayerSaves.saving(id, steve); // deposit the second; the logout save fails before its capture (no temp file)
+		PlayerSaves.failed("the temp file could not be made");
+		PlayerSaves.done();
+		assertNotNull(step(Set.of(), () -> {
+		}), "the kept snapshot (one diamond) is older than the newest failure: it never pays it");
+		assertTrue(written.isEmpty(), "and is never written over the file");
+	}
+
+	@Test
+	void r2_1_anOrdinarySaveNeverPublishesTheLedgerOverADebt() throws IOException {
+		Path f = tmp.resolve(Stockpiles.FILE);
+		Files.writeString(f, "{\"format\":2,\"nextId\":2,\"stockpiles\":[" + PILE + "]}", StandardCharsets.UTF_8);
+		Stockpiles.loadFrom(tmp);
+		long g = Stockpiles.writeConfirmed(null).gen();
+		save(id, steve, false); // a player's logout save fails: owed
+		Stockpiles.save(); // the autosave's (or a save with the world's) ledger write
+		assertEquals(g, DurableFile.readGen(f, "stockpiles"), "held: no credit reaches the disk over the owed save");
+	}
+
+	@Test
+	void r2_1_payoutsWaitWhileASaveIsOwed() throws IOException {
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		assertTrue(sp.contains("dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {\n\t\trequireNoDebt();")
+			&& sp.contains("ServerPlayer to) throws Sites.SiteException {\n\t\trequireNoDebt();"), "withdraw and dissolve refuse first");
+	}
+
+	@Test
+	void r2_4_aFolderWhoseEntryForceFailedBeforeTheFirstRenameIsForcedAfterARestart() throws IOException {
+		Path root = tmp.toAbsolutePath().normalize();
+		Path f = root.resolve("a/state.json");
+		DurableFile.FORCER = new Recording(Set.of(root)); // a's entry in its parent can't be forced: REFUSED, nothing installed
+		assertEquals(DurableFile.Outcome.REFUSED, new DurableFile("s", f).write(doc(1), 1).outcome());
+		Recording rec = new Recording(Set.of());
+		DurableFile.FORCER = rec;
+		DurableFile d = new DurableFile("s", f); // the restart: a exists, no generation loads
+		assertTrue(d.write(doc(2), d.request()).ok());
+		assertTrue(rec.dirs.contains(root), "a's entry forced before the write is acknowledged: " + rec.dirs);
+	}
+
+	@Test
+	void r2_5_aRegionFolderAndItsMccAreReconfirmedAfterARestart() throws IOException {
+		Path world = tmp.resolve("world").toAbsolutePath().normalize();
+		Path region = Files.createDirectories(world.resolve("region"));
+		Files.writeString(region.resolve("r.0.0.mca"), "x");
+		Files.writeString(region.resolve("c.1.1.mcc"), "payload");
+		RegionDurability.worldOpened(world);
+		RegionDurability.open(region.resolve("r.0.0.mca"), "chunk"); // an existing region file opened after the restart
+		AtomicInteger files = new AtomicInteger();
+		Recording rec = new Recording(Set.of()) {
+			@Override
+			public void file(FileChannel ch) throws IOException {
+				files.incrementAndGet();
+				super.file(ch);
+			}
+		};
+		DurableFile.FORCER = rec;
+		assertTrue(RegionDurability.confirmFolders("chunk").isEmpty());
+		assertTrue(rec.dirs.contains(region), "the region folder forced: its .mca entries, whatever an earlier session left: " + rec.dirs);
+		assertEquals(1, files.get(), "and its .mcc payload");
+	}
+
+	@Test
+	void r2_6_anUnforcedReplacementUnacknowledgesTheEarlierGeneration() throws IOException {
+		Path f = tmp.resolve("s.json");
+		DurableFile d = new DurableFile("s", f);
+		long g7 = d.request();
+		assertTrue(d.write(doc(7), g7).ok());
+		assertTrue(d.writeUnforced(doc(8), d.request()));
+		assertFalse(d.written(g7), "the unforced file replaced it: a power loss may tear it");
+		assertTrue(d.confirm().ok());
+		assertTrue(d.written(g7));
+	}
+
+	@Test
+	void r2_6_theLedgersOrdinarySaveIsForced() throws IOException {
+		Path f = tmp.resolve(Stockpiles.FILE);
+		Files.writeString(f, "{\"format\":2,\"nextId\":2,\"stockpiles\":[" + PILE + "]}", StandardCharsets.UTF_8);
+		Stockpiles.loadFrom(tmp);
+		Stockpiles.writeConfirmed(null);
+		Stockpiles.save();
+		DurableFile lf = Stockpiles.ledgerFile();
+		assertEquals(lf.installedGen(), lf.writtenGen(), "every ledger replacement is acknowledged");
+	}
+
+	@Test
+	void r2_7_8_theUnloadRewritesAnOwedChunkAndTheBarrierStopsTheTimer() throws IOException {
+		String m = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/ChunkMapDebtMixin.java"));
+		assertTrue(m.contains("method = \"lambda$scheduleUnload$0\"") && m.contains("chunk.markUnsaved(); // an owed chunk is rewritten by its unload save"));
+		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/DurableBarrier.java"));
+		assertTrue(b.contains("if (!timerWasOn && SaveTiming.on()) {") && b.contains("SaveTiming.stop();"));
 	}
 
 	// ---------------------------------------------------------------- native entries (P1-4)
