@@ -32960,6 +32960,6 @@ so two module lots that share items can't each be held to their own measured bou
   and passes at 53c020a2 (`20261117-165207-change`: lcap-survival 32/0, bc-cap 10/0, bcd-grow 19/0; rl-crash 109/1 on RL5 F10, a gravel
   drop near the road cell, then 110/0 alone in `20261117-171227-change`).
 - Third round (unreadable sites): `LotCapLCAPTest` 12/12; the same case on 537838fb's API FAILs (`orphanGroup("rg9", null)` true for a built
-  region whose group is missing). Gates below.
+  region whose group is missing). Gradle full 1371 (0 failed, 1 skipped); `20261117-184144-change` at a5c5f281: lcap-survival 32/0 (row Z passes), bc-cap 10/0.
 - Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves an orphan record (it writes nothing; removed alone);
   lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).
