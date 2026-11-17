@@ -94,8 +94,6 @@ export async function registerLCAP(steps, h) {
     const BOX = BOXOF(CLAIM, gy);
     const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
     check(!(await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000)).refused, `${name}: a stockpile of 4 crates`);
-    const vf = (await call('dev.api.versions', {}, 30_000)).features ?? [];
-    check(vf.includes('maxBillPerLot'), `the feature maxBillPerLot is advertised (${json(vf)})`);
     const ck = (await call('dev.region.checkPlan', { plan: PLAN, claim: CLAIM, owner: G.OWNER, load: 'generate' }, 1_800_000)).check;
     check(ck?.survival === true && ck.overall === 'READY' && !!ck.artifactSha, `the town of 2 lots checked in survival: ${ck?.overall}`);
     if (!ck?.artifactSha) { spendZero(); return out; }

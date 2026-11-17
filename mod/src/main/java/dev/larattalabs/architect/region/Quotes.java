@@ -270,9 +270,9 @@ public final class Quotes {
 		// (LCAP, S-M5-16) each lot's own bill (its lot:, fill: and mech: pieces) against its own cap, then the whole bill against maxBill
 		String[] lotOver = lotCaps == null ? null : lotOver(q.bomParts(), lotCaps);
 		if (lotOver != null) {
-			throw new RegionsImpl.RegionException(Reason.BILL_CAP, "lot " + lotOver[0] + "'s bill at put-down is past its maxBillPerLot (" + lotOver[1] + ")" + (q.exact()
-				? "" : "; the bill is an upper bound: " + String.join("; ", q.notes().stream().filter(n -> n.contains("lot " + lotOver[0]) || n.contains("not loaded")).toList())),
-				"lot:" + lotOver[0]);
+			List<String> why = q.exact() ? List.of() : q.notes().stream().filter(n -> n.contains("lot " + lotOver[0]) || n.contains("not loaded")).toList();
+			throw new RegionsImpl.RegionException(Reason.BILL_CAP, "lot " + lotOver[0] + "'s bill at put-down is past its maxBillPerLot (" + lotOver[1] + ")" + (why.isEmpty()
+				? "" : "; the bill is an upper bound: " + String.join("; ", why)), "lot:" + lotOver[0]);
 		}
 		if (cap == null) {
 			return;

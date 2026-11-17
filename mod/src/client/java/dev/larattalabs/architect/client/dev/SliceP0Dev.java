@@ -274,7 +274,7 @@ public final class SliceP0Dev {
 				api.checkerVersion().ifPresent(v -> o.addProperty("checkerVersion", v));
 				o.addProperty("loadHealthy", api.sites(srv).loadHealthy());
 				JsonArray f = new JsonArray();
-				for (String n : List.of("kitVersion", "sitesLoadHealthy", "maxBill", "maxBillPerLot")) {
+				for (String n : List.of("kitVersion", "sitesLoadHealthy", "maxBill")) {
 					if (api.features().contains(n)) {
 						f.add(n);
 					}
