@@ -213,11 +213,90 @@ public final class TxnServer {
 		return !c.holds().isEmpty() && c.holds().holder(resource) != null;
 	}
 
-	/** Whether the container cell {@code pos} of {@code level} is a box an open txn holds (the hold mixins, Fills). O(1) with none open. */
+	/**
+	 * Whether the cell {@code pos} of {@code level} is a box or crate an open txn holds, for any writer but that txn's own adapter (the hold
+	 * mixins, Fills). Server side only: an integrated server's client thread shares this static core, and its own block updates are never a
+	 * write (slice T2a). O(1) with none open; while any is open, a per-dimension cell index before any string is built.
+	 */
 	public static boolean boxHeld(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
-		TxnCore c = core;
-		return level != null && !c.holds().isEmpty() && c.holds().holder(TestMove.box(level.dimension().identifier().toString(), pos)) != null;
+		TxnEntry t = cellHolder(level, pos);
+		return t != null && t != WRITER;
 	}
+
+	/** The txn holding the cell, or null (no txn open, a client level, no hold there). The holder's own writes are not exempted here. */
+	public static @Nullable TxnEntry cellHolder(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
+		TxnCore c = core;
+		if (level == null || c.holds().isEmpty() || level.isClientSide()) {
+			return null;
+		}
+		return c.holds().cellHolder(level.dimension().identifier().toString(), pos.getX(), pos.getY(), pos.getZ());
+	}
+
+	/**
+	 * (slice T2a) The txn whose adapter is writing now: its own held cells accept its writes (a test.move take or put-back, a crate take,
+	 * T2b's restore of the crate cell). Every other writer is refused while it holds them. Server thread.
+	 */
+	private static @Nullable TxnEntry WRITER;
+
+	/** Runs {@code r} as {@code t}'s own write: {@link #boxHeld} answers false for the cells {@code t} holds while it runs. */
+	public static void asHolder(TxnEntry t, Runnable r) {
+		TxnEntry was = WRITER;
+		WRITER = t;
+		try {
+			r.run();
+		} finally {
+			WRITER = was;
+		}
+	}
+
+	/** (slice T2a) {@code held(other) tx-<n>: <cell>} when a held cell of {@code level} lies in the box (inclusive), else null. */
+	public static @Nullable String regionHeld(net.minecraft.world.level.@Nullable Level level, int x0, int y0, int z0, int x1, int y1, int z1) {
+		TxnCore c = core;
+		if (level == null || c.holds().isEmpty() || level.isClientSide()) {
+			return null;
+		}
+		String dim = level.dimension().identifier().toString();
+		if (!c.holds().anyCell(dim)) {
+			return null;
+		}
+		String r = c.holds().cellIn(dim, x0, y0, z0, x1, y1, z1);
+		TxnEntry t = r == null ? null : c.holds().holder(r);
+		return t == null || t == WRITER ? null : Holds.other(t, r);
+	}
+
+	/** {@code held(other) tx-<n>: <cell>} for a held cell, else null. */
+	public static @Nullable String cellWhy(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
+		return regionHeld(level, pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ());
+	}
+
+	/** (slice T2a) A command's refusal over a held cell: "&lt;what&gt; refused: an open transaction holds it (held(other) tx-n: ...)". */
+	public static com.mojang.brigadier.exceptions.CommandSyntaxException commandRefused(String what, String why) {
+		return new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
+			net.minecraft.network.chat.Component.literal(what + " refused: an open transaction holds it (" + why + ")")).create();
+	}
+
+	/** Throws {@code e} unchecked (a mixin into a method that does not declare it; brigadier's caller does). */
+	@SuppressWarnings("unchecked")
+	public static <E extends Throwable> RuntimeException sneaky(Throwable e) throws E {
+		throw (E) e;
+	}
+
+	private static boolean backstopLogged;
+
+	/**
+	 * (slice T2a) A write refused by a backstop (the container mutators, a block entity's load): the named paths refuse earlier, so one that
+	 * reaches here is an unlisted writer (another mod). Logged once per session with its stack, then counted in dev.txn.state.
+	 */
+	public static void backstop(String what, net.minecraft.core.BlockPos pos) {
+		BACKSTOPS.incrementAndGet();
+		if (!backstopLogged) {
+			backstopLogged = true;
+			Architect.LOGGER.warn("Txn: {} at {} refused: an open txn holds the box (an unlisted writer; logged once)", what, pos.toShortString(),
+				new Throwable("the writer"));
+		}
+	}
+
+	static final AtomicInteger BACKSTOPS = new AtomicInteger();
 
 	/** {@code held(other) tx-<n>: <where>} for a held resource, else null (§3.12.10). */
 	public static @Nullable String heldWhy(String resource) {
@@ -356,6 +435,7 @@ public final class TxnServer {
 		EVENTS.forEach(ev::add);
 		o.add("events", ev);
 		o.addProperty("recovered", recovered);
+		o.addProperty("backstops", BACKSTOPS.get());
 		return o;
 	}
 }

@@ -32,6 +32,7 @@
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery
+//     txnholds  (txn-holds)            slice T2a: every writer against ~35 held boxes; state, block entity, slots, drops unchanged (tools/lib/gatetxn.mjs)
 //     txncore   (txn-core)             slice T1: the txn core's TEST kind (dev.txn.run) halted at each kill point, bare and +save; recovery
 //                                      exactly once, the conservation report (report-only) against the baseline (tools/lib/gatetxn.mjs)
 //     report                            REPORT.md over the step JSONs

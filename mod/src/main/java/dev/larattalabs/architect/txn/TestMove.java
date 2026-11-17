@@ -94,7 +94,16 @@ public final class TestMove {
 		}
 		dim = level.dimension().identifier().toString(); // the hold key boxHeld builds, exactly
 		TxnCore c = TxnServer.core();
-		TxnCore.Started s = c.begin(NAME, key, List.of(box(dim, from), box(dim, to)), null);
+		// (T2a) a double chest's half is held with its partner: the combined container reaches this half's slots through the other
+		java.util.LinkedHashSet<String> res = new java.util.LinkedHashSet<>();
+		for (BlockPos p : List.of(from, to)) {
+			res.add(box(dim, p));
+			BlockPos q = TestMoveCells.partner(p, level.getBlockState(p));
+			if (q != null) {
+				res.add(box(dim, q));
+			}
+		}
+		TxnCore.Started s = c.begin(NAME, key, List.copyOf(res), null);
 		o.addProperty("begin", s.status().name());
 		if (s.detail() != null) {
 			o.addProperty("detail", s.detail());
@@ -113,16 +122,23 @@ public final class TestMove {
 		}
 		BlockEntity sb = level.getBlockEntity(from);
 		BlockEntity db = level.getBlockEntity(to);
-		// (T1b) single plain chests only: the T1 holds don't cover a double chest's partner, per-type writers or other BE types (§6.1, T2)
+		// (T2a) only the types whose every writer the holds refuse (§6.1); a double chest's partner must be a chest too
 		String cell = TestMoveCells.refusal(from, sb);
 		if (cell == null) {
 			cell = TestMoveCells.refusal(to, db);
+		}
+		if (cell == null) {
+			cell = partnerRefusal(level, from);
+		}
+		if (cell == null) {
+			cell = partnerRefusal(level, to);
 		}
 		if (cell != null) {
 			o.addProperty("refused", cell);
 			return o;
 		}
-		if (Sites.ownsCell(dim, from) || Sites.ownsCell(dim, to)) {
+		if (Sites.ownsCell(dim, from) || Sites.ownsCell(dim, to) || s.entry().resources.stream().map(Holds::cell)
+			.anyMatch(h -> h != null && Sites.ownsCell(h.dim(), new BlockPos(h.x(), h.y(), h.z())))) {
 			o.addProperty("refused", "an Architect site or road covers a cell (the TEST kind stays clear of every legacy writer)");
 			return o;
 		}
@@ -157,6 +173,12 @@ public final class TestMove {
 		return o;
 	}
 
+	/** Why the partner of a double chest's half at {@code p} can't be held with it, or null (a single cell, or a chest partner). */
+	static @Nullable String partnerRefusal(ServerLevel level, BlockPos p) {
+		BlockPos q = TestMoveCells.partner(p, level.getBlockState(p));
+		return q == null ? null : TestMoveCells.refusal(q, level.getBlockEntity(q));
+	}
+
 	static JsonArray pos(BlockPos p) {
 		JsonArray a = new JsonArray();
 		a.add(p.getX());
@@ -170,10 +192,10 @@ public final class TestMove {
 		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
 	}
 
-	/** The chest at {@code p} (its own 27 slots), or null when the cell no longer holds a chest block entity. */
+	/** The container at {@code p} (its own slots; a double chest's half alone), or null when the cell no longer holds a held type. */
 	static @Nullable Container container(ServerLevel level, BlockPos p) {
 		BlockEntity be = level.getBlockEntity(p);
-		return be != null && be.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.CHEST && be instanceof Container c ? c : null;
+		return be != null && TestMoveCells.HELD_TYPES.contains(be.getType()) && be instanceof Container c ? c : null;
 	}
 
 	static Item item(String id) {
@@ -329,6 +351,15 @@ public final class TestMove {
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
+			TxnServer.asHolder(t, () -> applyHeld(t, e)); // (T2a) the holder's own write: its held cells accept it
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			TxnServer.asHolder(t, () -> compensateHeld(t, e));
+		}
+
+		private void applyHeld(TxnEntry t, Effect e) {
 			ServerLevel level = level(e);
 			LevelChunk ch = level == null ? null : chunkFor(t, level, posOf(e));
 			Container c = level == null ? null : container(level, posOf(e));
@@ -338,6 +369,13 @@ public final class TestMove {
 			boolean take = "test.take".equals(e.op());
 			Map<String, Integer> items = new TreeMap<>(e.items());
 			String cell = take ? TestMoveCells.refusal(posOf(e), level.getBlockEntity(posOf(e))) : null;
+			if (cell == null && take) {
+				cell = partnerRefusal(level, posOf(e));
+			}
+			BlockPos q = take ? TestMoveCells.partner(posOf(e), level.getBlockState(posOf(e))) : null;
+			if (cell == null && q != null && !t.resources.contains(box(e.data().get("dim").getAsString(), q))) {
+				cell = "the cell became half of a double chest whose partner the txn does not hold"; // (T2a) the prepare re-judges both halves
+			}
 			if (cell != null) {
 				throw new IllegalStateException(cell); // the prepare re-judges the cell: it may have become half of a double chest since the plan
 			}
@@ -361,8 +399,7 @@ public final class TestMove {
 			c.setChanged();
 		}
 
-		@Override
-		public void compensate(TxnEntry t, Effect e) {
+		private void compensateHeld(TxnEntry t, Effect e) {
 			ServerLevel level = level(e);
 			LevelChunk ch = level == null ? null : chunkFor(t, level, posOf(e));
 			Container c = level == null ? null : container(level, posOf(e));

@@ -44,6 +44,8 @@ public final class TxnDev {
 				yield o;
 			}
 			case "conservation" -> conservation(srv, player, req);
+			case "cells" -> cells(player, req);
+			case "poke" -> poke(player, req);
 			default -> throw new IllegalArgumentException("unknown dev.txn op " + op);
 		};
 	}
@@ -87,6 +89,87 @@ public final class TxnDev {
 		}
 		return TestMove.run(srv, dim, pos(req.getAsJsonArray("from")), pos(req.getAsJsonArray("to")), items, req.has("key") ? req.get("key")
 			.getAsString() : null);
+	}
+
+	/**
+	 * (slice T2a) dev.txn.cells {cells: [[x,y,z], ..]}: per cell its block state, block entity type and identity (a replaced block entity
+	 * shows a new id), its slots ({@code "<slot>": "<item> x<n>"}) and the item entities within 2 blocks: what txn-holds compares.
+	 */
+	static JsonObject cells(ServerPlayer player, JsonObject req) {
+		ServerLevel level = (ServerLevel) player.level();
+		JsonObject o = new JsonObject();
+		for (JsonElement el : req.getAsJsonArray("cells")) {
+			BlockPos p = pos(el.getAsJsonArray());
+			JsonObject c = new JsonObject();
+			c.addProperty("state", level.getBlockState(p).toString());
+			BlockEntity be = level.getBlockEntity(p);
+			if (be != null) {
+				c.addProperty("be", String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
+				c.addProperty("beId", System.identityHashCode(be));
+				if (be instanceof net.minecraft.world.Container k) {
+					JsonObject sl = new JsonObject();
+					for (int i = 0; i < k.getContainerSize(); i++) {
+						net.minecraft.world.item.ItemStack st = k.getItem(i);
+						if (!st.isEmpty()) {
+							sl.addProperty(String.valueOf(i), id(st.getItem()) + " x" + st.getCount());
+						}
+					}
+					c.add("slots", sl);
+				}
+			}
+			int n = 0;
+			for (var e : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(p).inflate(2))) {
+				n += e.getItem().getCount();
+			}
+			c.addProperty("drops", n);
+			o.add(p.getX() + "," + p.getY() + "," + p.getZ(), c);
+		}
+		return o;
+	}
+
+	/**
+	 * (slice T2a) dev.txn.poke {pos, how}: one raw write at a cell, as another mod would make it (no command, no player): {@code setBlock}
+	 * (air), {@code destroyBlock}, {@code removeBlock}, {@code removeBlockEntity}, {@code setItem} (slot 0 emptied), {@code removeItem} (slot
+	 * 0), {@code clearContent}, {@code load} (the block entity loaded from empty data). Answers what the call returned. TEST only.
+	 */
+	static JsonObject poke(ServerPlayer player, JsonObject req) {
+		ServerLevel level = (ServerLevel) player.level();
+		BlockPos p = pos(req.getAsJsonArray("pos"));
+		String how = req.get("how").getAsString();
+		JsonObject o = new JsonObject();
+		BlockEntity be = level.getBlockEntity(p);
+		net.minecraft.world.Container k = be instanceof net.minecraft.world.Container c ? c : null;
+		switch (how) {
+			case "setBlock" -> o.addProperty("result", level.setBlock(p, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3));
+			case "destroyBlock" -> o.addProperty("result", level.destroyBlock(p, true));
+			case "removeBlock" -> o.addProperty("result", level.removeBlock(p, false));
+			case "removeBlockEntity" -> {
+				level.removeBlockEntity(p);
+				o.addProperty("result", level.getBlockEntity(p) == null ? "removed" : "kept");
+			}
+			case "setItem" -> {
+				if (k != null) {
+					k.setItem(0, net.minecraft.world.item.ItemStack.EMPTY);
+				}
+				o.addProperty("result", k != null);
+			}
+			case "removeItem" -> o.addProperty("result", k == null ? "no container" : k.removeItem(0, 64).toString());
+			case "clearContent" -> {
+				if (k != null) {
+					k.clearContent();
+				}
+				o.addProperty("result", k != null);
+			}
+			case "load" -> {
+				if (be != null) {
+					be.loadWithComponents(net.minecraft.world.level.storage.TagValueInput.create(net.minecraft.util.ProblemReporter.DISCARDING,
+						level.registryAccess(), new net.minecraft.nbt.CompoundTag()));
+				}
+				o.addProperty("result", be != null);
+			}
+			default -> throw new IllegalArgumentException("unknown poke " + how);
+		}
+		return o;
 	}
 
 	static BlockPos pos(JsonArray a) {
