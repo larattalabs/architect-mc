@@ -776,8 +776,15 @@ public final class Groups {
 			// a construction site deconstructs at once (its refunds were tallied before the undo, rule 7), one per tick
 			Map<String, Integer> items = r.decItems.getOrDefault(id, Map.of());
 			long[] at = r.decAt.get(id);
+			// (slice CXD, P1-1/P1-2) the crate's stock settles first, before this member's restore or refunds are written (its saves persist
+			// nothing of them); held (a save not confirmed, or its drop not checked yet): nothing of the member is written, tried next tick
+			CrateOwed.Settle crate = CrateOwed.settle(level, Builder.creditKey(s), null);
+			if (crate.held()) {
+				r.handed = handedHere;
+				return;
+			}
 			try {
-				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
+				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere, crate.given());
 				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
 				credit(server, r, id); // 6c Y: its stockpile refunds, once its restore is written (once per key)
 			} catch (Sites.SiteException e) {
@@ -1258,6 +1265,16 @@ public final class Groups {
 				return;
 			}
 		}
+	}
+
+	/** (slice CXD) Whether a live group removal (in this session's queue) holds {@code siteId}: its own settle resolves the site's records. */
+	static boolean holds(String siteId) {
+		for (Removal r : REMOVALS) {
+			if (r.sites.contains(siteId) || r.undoSites.contains(siteId) || r.planIds.contains(siteId) || r.decItems.containsKey(siteId)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {

@@ -1314,6 +1314,9 @@ public final class Adopt {
 			throw e;
 		}
 		Sites.markPending(server, b, "removed");
+		if (dec != null && CrateOwed.settle(level, Builder.creditKey(b), drops).held()) { // (slice CXD) before the restore and the refunds
+			CrateOwed.idle(Builder.creditKey(b));
+		}
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
 		Sites.Removed done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), Sites.statsOf(undone.work(), b.id()), Map.of(), List.of(),
 			List.of());

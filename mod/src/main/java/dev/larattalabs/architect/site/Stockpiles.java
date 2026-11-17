@@ -218,6 +218,7 @@ public final class Stockpiles {
 
 	static void init() {
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
+		CrateOwed.init(); // (slice CXD) a record's tagged drop loading from disk
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
 		SiteWaits.source((srv, level, target) -> {
@@ -2101,7 +2102,15 @@ public final class Stockpiles {
 					o.addProperty("simulation", ts.getTicketDebugString(key, true));
 					return o;
 				}
-				case "owed" -> o.add("owed", CrateOwed.json()); // (slice CXD) the open crate-stock records and the counters
+				case "owed" -> {
+					if (req.has("failDrops")) { // (slice CXD, TEST) the next n settle drop barriers count as refused
+						CrateOwed.testFailDrops = req.get("failDrops").getAsInt();
+					}
+					if (req.has("forceNext")) { // (slice CXD, TEST) the next CXD barrier's outcome: IN_DOUBT or REFUSED (after the real write)
+						CrateOwed.testForce = dev.larattalabs.architect.site.DurableFile.Outcome.valueOf(req.get("forceNext").getAsString());
+					}
+					o.add("owed", CrateOwed.json()); // (slice CXD) the open crate-stock records and the counters
+				}
 				case "saved" -> {
 					JsonObject f = savedJson();
 					o.add("file", f == null ? new JsonObject() : f);

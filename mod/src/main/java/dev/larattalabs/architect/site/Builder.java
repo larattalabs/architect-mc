@@ -843,6 +843,17 @@ public final class Builder {
 		return s != null && s.building();
 	}
 
+	/** (slice CXD) Whether an open owed record fences this site's crate ({@link CrateOwed#fenced}). */
+	static boolean crateFenced(Site s) {
+		Construction c = s.construction();
+		return c != null && c.crate() != null && CrateOwed.fenced(crateOwner(s), new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()));
+	}
+
+	/** (slice CXD) Whether the crate of {@code owner} at {@code pos} is fenced (it takes no item). Any thread reads a snapshot-safe answer. */
+	public static boolean crateFenced(String owner, BlockPos pos) {
+		return CrateOwed.fenced(owner, pos);
+	}
+
 	static @Nullable CrateBlockEntity crate(ServerLevel level, Site s, boolean load) {
 		Construction c = s.construction();
 		if (c == null || c.crate() == null) {
@@ -1728,15 +1739,15 @@ public final class Builder {
 
 	static void tick(MinecraftServer srv) {
 		fillsAtStart(srv); // a no-op after the first tick's START listener ran it
-		if (CrateOwed.pending()) {
-			Architect.LOGGER.warn("Crate stock: a capture was left uncommitted by its removal; dropped (the crate was never touched)");
-			CrateOwed.dropPending(); // (slice CXD) the safety net: a caller that threw between capture and commit
-		}
+		CrateOwed.tick(srv); // (slice CXD) the leftover capture net, in-doubt cancels, the start's checks and idle records
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
 			if (s.construction() == null || !s.building() || Stockpiles.fed(s)) {
 				continue; // 6c Y: a stockpile's targets are fed by its owner loop (Stockpiles.tick), in feed order
+			}
+			if (crateFenced(s)) {
+				continue; // (slice CXD) an owed record names its crate: no consumption, no completion until it resolves
 			}
 			ServerLevel level = Sites.levelOf(srv, s);
 			Run r = level == null ? null : run(srv, s);
@@ -2352,6 +2363,11 @@ public final class Builder {
 		if (s == null || c == null || !s.building() || c.crate() == null || !crate.getBlockPos().equals(new BlockPos(c.crate().x(), c.crate().y(),
 			c.crate().z()))) {
 			BlockPos p = crate.getBlockPos();
+			String owed = CrateOwed.claimOrphan(level, crate); // (slice CXD, P1-2) never paid apart from its owed record
+			if (owed != null) {
+				player.sendSystemMessage(Component.literal("[Architect] " + owed));
+				return;
+			}
 			Map<String, Integer> left = crate.ledger().takeStock();
 			dev.larattalabs.architect.placed.Placed.set(level, p, Blocks.AIR.defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
 			dropItems(level, p, left, null);
@@ -2893,7 +2909,6 @@ public final class Builder {
 			Stockpiles.saveCreditPending(level.getServer()); // (J1, N1's shape) before the site's record goes; (J2) a refused save leaves it pending
 		}
 		dropItems(level, d.at(), d.all(), drops);
-		CrateOwed.settle(level, creditKey(s), drops); // (slice CXD) the crate's stock, once, after the commit and the restore
 		forget(level.getServer(), s.id());
 		Construction c = s.construction();
 		if (c != null) {

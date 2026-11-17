@@ -85,7 +85,7 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	/** Whether one unit of {@code stack} would go in. Server side only (false on the client). */
 	public boolean wouldAccept(ItemStack stack) {
-		return !stack.isEmpty() && taken.isEmpty() && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
+		return !stack.isEmpty() && taken.isEmpty() && !Builder.crateFenced(siteId, getBlockPos()) && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
 	}
 
 	/**
@@ -93,7 +93,7 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 	 * the units taken. Server thread.
 	 */
 	public int insert(ItemStack stack) {
-		if (stack.isEmpty() || !taken.isEmpty() || !plain(stack) || level == null || level.isClientSide()) {
+		if (stack.isEmpty() || !taken.isEmpty() || level == null || level.isClientSide() || Builder.crateFenced(siteId, getBlockPos()) || !plain(stack)) {
 			return 0; // (PS, N2) a stack with components is never booked
 		}
 		String item = itemId(stack);

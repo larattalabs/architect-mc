@@ -1694,6 +1694,11 @@ public final class Sites {
 			}
 		}
 		for (Site x : all) {
+			// (slice CXD, P1-1) the crate's stock settles before this site's restore and refunds; held: the record is the tick's (the site is
+			// gone; the record stays owed and fences its crate)
+			if (x.construction() != null && CrateOwed.settle(level, Builder.creditKey(x), drops).held()) {
+				CrateOwed.idle(Builder.creditKey(x));
+			}
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
@@ -2479,13 +2484,13 @@ public final class Sites {
 	 * deconstruct items (tallied before the undo was planned) drop at its crate's cell. Fires SITE_REMOVED.
 	 */
 	static Removed finishGroupDeconstruct(ServerLevel level, Site b, String group, Map<String, Integer> items, @Nullable BlockPos at,
-		Map<String, Integer> handed) throws SiteException {
+		Map<String, Integer> handed, Map<String, Integer> crateGiven) throws SiteException {
 		Drops drops = Drops.before(level, b.restoreBox());
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
 		drops.clearNew(level);
 		BlockPos where = at != null ? at : Builder.dropPos(b);
 		Builder.dropItems(level, where, items, drops);
-		Map<String, Integer> crate = CrateOwed.settle(level, Builder.creditKey(b), drops); // (slice CXD) the crate's stock, once
+		Map<String, Integer> crate = crateGiven; // (slice CXD) settled by Groups before this member's restore
 		if (!crate.isEmpty()) {
 			Map<String, Integer> all = new java.util.TreeMap<>(items);
 			crate.forEach((k, v) -> all.merge(k, v, Integer::sum));

@@ -360,6 +360,11 @@ public final class RoadBuilder {
 			if (!i.building() || i.placing() || Stockpiles.fed(i) || RegionTargets.is(i)) {
 				continue; // 6c Y: a stockpile's roads are fed by its owner loop; (6c RS) a region's targets only by it
 			}
+			Construction ic = i.construction();
+			if (ic != null && ic.crate() != null && i.group() != null && CrateOwed.fenced(SiteGroupRec.CRATE_PREFIX + i.group(), new BlockPos(ic.crate().x(),
+				ic.crate().y(), ic.crate().z()))) {
+				continue; // (slice CXD) its group's crate is fenced by an owed record
+			}
 			ServerLevel level = Sites.levelOf(srv, i.dimension());
 			Builder.Run r = level == null ? null : run(srv, i);
 			if (r == null) {
