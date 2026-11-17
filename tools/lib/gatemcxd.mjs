@@ -63,15 +63,21 @@ export async function registerCXD(steps, h) {
     const st0 = await siteState(site);
     const give = {};
     for (const [k, v] of Object.entries(st0?.bom ?? {}).slice(0, 3)) give[k] = Math.max(1, Math.floor(v / 2));
-    const ins = await call('dev.crate.insert', { site, items: give, exact: true }, 120_000);
-    await call('dev.wait', { ms: 2000 }, 30_000);
     if (build) {
-      // (P1-1) partly built: its builder places part of the stock (refunds standing), then paused again
+      // (P1-1) partly built: a first part delivered and placed (refunds standing), paused, then the stock that stays in the crate
+      const first = {};
+      for (const [k, v] of Object.entries(give)) first[k] = Math.max(1, Math.floor(v / 2));
+      await call('dev.crate.insert', { site, items: first, exact: true }, 120_000);
       await call('dev.stockpile.pause', { site, paused: false }, 60_000);
-      await call('dev.wait', { ms: 1500 }, 30_000); // ~3 cells a second: a few placed, most still in the crate
+      for (let i = 0; i < 30; i++) {
+        if (sum((await siteState(site))?.ledger?.stock) === 0) break;
+        await L.sleep(500);
+      }
       await call('dev.stockpile.pause', { site, paused: true }, 60_000);
       await call('dev.wait', { ms: 1000 }, 30_000);
     }
+    const ins = await call('dev.crate.insert', { site, items: give, exact: true }, 120_000);
+    await call('dev.wait', { ms: 2000 }, 30_000);
     const st1 = await siteState(site);
     if (build) check(sum(st1.ledger?.placed) > 0 && sum(st1.ledger?.stock) > 0, `${tag}: partly built: ${sum(st1.ledger?.placed)} placed, ${sum(st1.ledger?.stock)} still in the crate`);
     const cp = [st1.crate.x, st1.crate.y, st1.crate.z];
