@@ -368,21 +368,27 @@ async function depositCrash(tag, fx) {
   const crateAt = await G.pile(ctx, s, 3);
   await call('dev.terrain.rate', { n: 4 }, 30_000); // slow enough that the deposit lands before the first staged target completes
   await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-  await L.cmd('/give @p minecraft:oak_planks 64');
-  await L.cmd('/give @p minecraft:cobblestone 64');
-  await L.tp(crateAt[0][0] + 0.5, crateAt[0][1] + 1, crateAt[0][2] + 2.5);
+  await L.tp(crateAt[0][0] + 0.5, crateAt[0][1] + 1, crateAt[0][2] + 2.5); // within 16 blocks of the crates (Insert from inventory's reach)
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let tr = null, need = {};
+  for (let i = 0; i < 600; i++) {
+    tr = await call('dev.region.terrain', { region }, 120_000);
+    const ts = tr.targets ?? [];
+    need = (await G.pileState(ctx)).outstanding ?? {};
+    if (ts.some((t) => t.building && t.built > 0) && !ts.some((t) => !t.building) && Object.keys(need).length) break;
+    await sleep(250);
+  }
+  // every paid target paused (HF's rule): they take nothing, so the stock moves only by the deposit; the staged ones keep building
+  const staged = new Set((tr?.targets ?? []).map((t) => t.target));
+  const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  for (const id of st0.feedOrder ?? []) if (!staged.has(id)) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+  const [item, n] = Object.entries(need).sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (item) await L.cmd(`/give @s ${item} ${Math.min(64, n)}`);
   await L.cmd('/save-all flush'); // the baseline: players, chunks and the ledger on disk
   const C = new G.Conservation(ctx, box);
   C.area = { min: [box[0] - 24, box[1], box[2] - 24], max: [box[3], box[4], box[5]] }; // the crates and the player stand west of the claim
   await C.start();
-  const region = await G.realise(ctx, ck.check.artifactSha, entries);
-  let tr = null;
-  for (let i = 0; i < 600; i++) {
-    tr = await call('dev.region.terrain', { region }, 120_000);
-    const ts = tr.targets ?? [];
-    if (ts.some((t) => t.building && t.built > 0) && !ts.some((t) => !t.building)) break;
-    await sleep(250);
-  }
+  out.need = need;
   const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
   out.deposit = { moved: ins.moved, accepted: ins.accepted ?? null, refused: ins.refused ?? null };
   check(ins.moved > 0, `${tag}: ${ins.moved} item(s) moved from the inventory into the stockpile while the island builds (no staged target BUILT yet: ${json((tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]))})`, out.deposit);
