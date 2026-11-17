@@ -33002,3 +33002,14 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
 - **In game** (headless, 9026:9027, `dev.stockpile.barrier` `failPlayerReplace` / `failChunkWrite` / `reps` / `forgive`): each injected failure REFUSED, then OK at the next barrier (debt paid); an ordinary save kept `{store, gen}` on disk.
 - **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 4 (Noah: "one more small round"; T0's barrier).**
+  - The staged barrier is T0's `Stockpiles.barrier()` (slice/T0 2c2b093c, merged): players, then chunks, then the ledger. Only OK
+    completes a target; REFUSED or IN_DOUBT keeps it building. This closes the deposit-doubling P1.
+  - Creative `/architect site finish` goes through the barrier too. A barrier that throws takes the same 100-turn retry.
+  - A staged write may set our own block's drifted state to its planned one (no stall on a written leaf whose distance changed). A
+    persistent leaf may go in beside any leaf a log holds.
+  - ST1 can now be armed. The halted target's own recovery is checked: it must complete with 0 cells written again.
+  - x03hdeposit (a deposit, a staged barrier, a crash) fails first on the old code (gate-runs-ST/20261117-060258-change: 2 lanterns
+    minted) and passes with the barrier.
+  - Final strict gate on 200bfc51 (gate-runs-ST/20261117-063123-change): sta-ingame 54/54, rs-survival-smoke 40/0, rl-crash 110/0.
+  - Barrier cost on the built x01 world (3 runs): players 11-142 ms, chunks 10-108 ms, ledger 9-12 ms.
