@@ -940,7 +940,10 @@ public final class Stockpiles {
 		// (ADP, rule 17) 1. the credits, in memory only (no crate, cell or drop touched), then saved confirmed. A crash inside that save (ADP1:
 		// the chunks written, the ledger not) or before it leaves the crates full and nothing credited; after it (ADP2) the start's repair finishes
 		// each credited crate whose record still names it (FINISH). The crates' stock is credited without a cap: what is over capacity drops last
-		saveConfirmed(srv); // nothing pending: a refused save refuses the adoption before anything changes
+		DurableBarrier.Result pre = barrier(srv); // (T0) nothing pending: a refused barrier refuses the adoption before anything changes
+		if (!pre.ok()) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the world could not be saved (" + pre.outcome() + ": " + pre.reason() + "); nothing adopted");
+		}
 		JsonObject before = p.ledger.toJson();
 		Set<String> deferred = new TreeSet<>();
 		Map<String, CrateBlockEntity> take = new LinkedHashMap<>();
@@ -993,13 +996,17 @@ public final class Stockpiles {
 		if (credited) {
 			changed(p);
 			inAdoptSave = "ADP1";
+			DurableBarrier.Result r1;
 			try {
-				saveConfirmed(srv);
-			} catch (IllegalStateException ex) {
-				restoreLedger(p, before); // the credits go: the crates stay theirs (a later save never writes a credit whose crate was not taken)
-				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the credits could not be saved (" + ex.getMessage() + "); nothing adopted");
+				r1 = barrier(srv); // (T0) players, chunks, then the ledger, confirmed
 			} finally {
 				inAdoptSave = null;
+			}
+			if (!r1.ok()) {
+				// REFUSED or IN_DOUBT: the credits go from memory, the crates stay theirs. Were an in-doubt credit on disk, a crash before the next
+				// save leaves it with its crate full and named by its records: the start's repair finishes it (FINISH), never twice
+				restoreLedger(p, before);
+				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the credits could not be saved (" + r1.outcome() + ": " + r1.reason() + "); nothing adopted");
 			}
 		}
 		WorldJournal.kill("ADP2"); // (ADP, test) the credits saved, the crates still full
@@ -1016,13 +1023,15 @@ public final class Stockpiles {
 		if (!take.isEmpty()) {
 			changed(p);
 			inAdoptSave = "ADP3";
+			DurableBarrier.Result r2;
 			try {
-				saveConfirmed(srv);
-			} catch (IllegalStateException ex) {
-				// the credits are on disk; the records keep naming the crates, so the start's repair or the next adoptCrates finishes them
-				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the taken crates could not be saved (" + ex.getMessage() + "); finished later");
+				r2 = barrier(srv);
 			} finally {
 				inAdoptSave = null;
+			}
+			if (!r2.ok()) {
+				// the credits are on disk; the records keep naming the crates, so the start's repair or the next adoptCrates finishes them
+				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the taken crates could not be saved (" + r2.outcome() + ": " + r2.reason() + "); finished later");
 			}
 		}
 		// 3. only then do the records lose their crates (Sites' writes save architect-sites.json at once). A crash between (SAC2) is repaired at
@@ -1235,14 +1244,13 @@ public final class Stockpiles {
 			return 0;
 		}
 		changed(p);
-		try {
-			saveConfirmed(srv);
+		DurableBarrier.Result r = barrier(srv);
+		if (r.ok()) {
 			return n;
-		} catch (IllegalStateException ex) {
-			Architect.LOGGER.error("Stockpile {}: the finished takes could not be saved ({}); their references stay, tried again at the next start", p.owner,
-				ex.getMessage());
-			return -1;
 		}
+		Architect.LOGGER.error("Stockpile {}: the finished takes could not be saved ({}: {}); their references stay, tried again at the next start", p.owner,
+			r.outcome(), r.reason());
+		return -1;
 	}
 
 	/**
@@ -1703,21 +1711,6 @@ public final class Stockpiles {
 		}
 		Site s = Sites.pendingRecord(key.substring(5, at));
 		return s != null && key.equals(Builder.creditKey(s));
-	}
-
-	/**
-	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
-	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
-	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
-	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
-	 */
-	static void saveConfirmed(MinecraftServer srv) {
-		if (unsaved || loadFailed) {
-			saveWithWorld(srv);
-		}
-		if (unsaved || loadFailed) {
-			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
-		}
 	}
 
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
@@ -3060,12 +3053,6 @@ public final class Stockpiles {
 				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
 				Runtime.getRuntime().halt(7);
 			}
-			String adp = inAdoptSave;
-			if (adp != null && adp.equals(WorldJournal.armed())) {
-				// (ADP, TEST kill points ADP1, ADP3) a crash inside adoptCrates' credit or take save: the players and the chunks on disk, the ledger not
-				Architect.LOGGER.error("Stockpiles: kill point {}: adoptCrates' save flushed its chunks, halting before the ledger write (dev.journal.killAt)", adp);
-				Runtime.getRuntime().halt(7);
-			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
 				Architect.LOGGER.error("Stockpiles: kill point FK3: the chunks flushed, halting before the ledger write (dev.journal.killAt)");
@@ -3242,6 +3229,12 @@ public final class Stockpiles {
 	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
 	 */
 	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		String adp = inAdoptSave;
+		if (adp != null && adp.equals(WorldJournal.armed())) {
+			// (ADP, TEST kill points ADP1, ADP3) a crash inside adoptCrates' credit or take barrier: the players and the chunks on disk, the ledger not
+			Architect.LOGGER.error("Stockpiles: kill point {}: adoptCrates' barrier flushed its chunks, halting before the ledger write (dev.journal.killAt)", adp);
+			Runtime.getRuntime().halt(7);
+		}
 		Path d = dir;
 		if (d == null) {
 			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
