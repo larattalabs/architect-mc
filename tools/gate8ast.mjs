@@ -188,8 +188,9 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
   const p = await C.point('built');
   // what the build consumed from the stockpile against the quote: equal when the quote is exact, within it otherwise
+  // (what was fed and is no longer in the stock went into the build: the conservation sum below shows nothing else left or appeared)
   const ps1 = crates > 0 ? await G.pileState(ctx) : {};
-  const consumed = G.minus(ps1.consumed ?? {}, ps0.consumed ?? {});
+  const consumed = G.minus(G.minus(f.inserted, ps1.stock ?? {}), G.minus({}, ps0.stock ?? {}));
   const targetsBill = (rs.targets ?? []).reduce((a, t) => G.plus(a, t.bom), {});
   const qb = quote.bom ?? {};
   const within = Object.entries(consumed).every(([k, v]) => v <= (qb[k] ?? 0));
