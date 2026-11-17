@@ -27,11 +27,11 @@ import org.jspecify.annotations.Nullable;
  * {@link #failed} (the exception vanilla logged).</li>
  * <li>A failure is owed with its snapshot. A later successful save pays it unless the player's data was loaded from the older file since
  * (the debt is then <b>stale</b>): a respawn's new object (vanilla's {@code restoreFrom}) carries the same session on, so it pays; a login
- * reads the file, so a debt that could not first write its snapshot there turns stale and only an operator clears it.</li>
+ * reads the file, so it is first written the snapshot, or served it when that write fails ({@link #loadInstead}); only a debt with no
+ * snapshot turns stale there, and only an operator clears a stale debt.</li>
  * <li>An offline player's snapshot is rewritten at the head of every barrier ({@link #step}: {@code PlayerList.saveAll} only visits online
- * players) and before that player's data is loaded again ({@link #loading}), so a rejoin never loads the older file while a snapshot waits.
- * If that rewrite fails at a load, the snapshot is stale (the new session moves on from the older file): it is never written over the new
- * session and the debt stays (every barrier refuses) until an operator clears it.</li>
+ * players) and before that player's data is loaded again ({@link #loadInstead}), so a rejoin never loads the older file while a snapshot
+ * waits: if that rewrite fails, the login loads the snapshot itself.</li>
  * <li>{@link #step} (the barrier's players step) requires every online player acknowledged in this round, nothing owed, and each acknowledged
  * file present and forced, then {@code playerdata/} forced.</li>
  * </ul>
@@ -157,18 +157,40 @@ public final class PlayerSaves {
 		Architect.LOGGER.error("Player durability: the save of {} failed ({}); owed (no ledger is published) until a later save of it succeeds", c.id, why);
 	}
 
-	/** Before the player's data is loaded (a login): a kept snapshot is written first, so the login reads it, never the older file. */
+	/** Before the player's data is loaded (a login): {@link #loadInstead}, its answer dropped (the mixin serves it). */
 	public static void loading(UUID id) {
+		loadInstead(id);
+	}
+
+	/**
+	 * (TXN review 4 item 2) A login is about to read the player's {@code .dat}: an owed snapshot is written there first; if that fails, the
+	 * snapshot itself is answered and the login loads it instead of the older file ({@code PlayerSaveFailMixin} serves it to vanilla's
+	 * {@code load(.., ".dat")}, before its data fixer). Either way the joining session starts from the snapshot, so the debt stays payable
+	 * by its later save. Only a debt with no snapshot (the save threw before it) leaves the older file to load: that debt turns stale, never
+	 * paid by a save (every barrier refuses) until an operator clears it. Null: read the file.
+	 */
+	public static @Nullable Object loadInstead(UUID id) {
 		Debt d = OWED.get(id);
 		if (d == null || d.stale) {
-			return;
+			return null;
 		}
-		if (d.snapshot == null || !rewrite(id, d)) {
+		if (d.snapshot == null) {
 			d.stale = true;
-			Architect.LOGGER.error("Player durability: {} logs in while its last save is owed and could not be written; the older file is loaded. The debt"
+			Architect.LOGGER.error("Player durability: {} logs in while its failed save is owed without a snapshot; the older file is loaded. The debt"
 				+ " stays (no ledger is published) until an operator clears it", id);
+			return null;
 		}
+		if (rewrite(id, d)) {
+			return null; // the file holds the snapshot now
+		}
+		SERVED.incrementAndGet();
+		Architect.LOGGER.warn("Player durability: {} logs in while its last save is owed and could not be written; the kept snapshot is loaded"
+			+ " instead of the older file (still owed until a save of this session succeeds)", id);
+		return d.snapshot;
 	}
+
+	/** (dev) logins served a kept snapshot instead of the older file. */
+	static final AtomicLong SERVED = new AtomicLong();
 
 	private static boolean rewrite(UUID id, Debt d) {
 		Writer w = writer;
@@ -215,6 +237,7 @@ public final class PlayerSaves {
 			return why.size() + " player save(s) not durable: " + (why.size() > 4 ? why.subList(0, 4) + " ..." : why);
 		}
 		try {
+			DurableFile.confirmChain(dir, 2); // (TXN review 4 item 1) playerdata's entry in the world, the world's in its parent, once a session
 			for (UUID id : List.copyOf(UNFORCED)) {
 				Path f = dat.apply(id);
 				if (!Files.isRegularFile(f)) {
@@ -258,6 +281,7 @@ public final class PlayerSaves {
 		o.addProperty("owed", OWED.size());
 		o.addProperty("unforced", UNFORCED.size());
 		o.addProperty("rewritten", REWRITTEN.get());
+		o.addProperty("served", SERVED.get());
 		o.addProperty("round", ROUND.get());
 		return o;
 	}

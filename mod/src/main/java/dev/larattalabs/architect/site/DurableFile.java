@@ -43,7 +43,9 @@ import org.jspecify.annotations.Nullable;
  * happened, a later force failed: the new file may or may not survive a power loss). IN_DOUBT is never "not committed": the caller must
  * treat the snapshot as possibly on disk, and {@link #inDoubt} answers it until a later write is OK.</li>
  * <li>An obsolete generation (older than the one installed) never replaces the file (review P2-9).</li>
- * <li>A folder the write creates has its own entry forced in its parent before the snapshot is renamed into it (review P1-6).</li>
+ * <li>A folder the write creates has its own entry forced in its parent before the snapshot is renamed into it (review P1-6), and the
+ * file's folder and its parent have their entries confirmed once a process even when they already existed ({@link #confirmChain}, TXN
+ * review 4 item 1: an earlier session may have crashed before its force).</li>
  * <li>A folder that can't be opened for reading is best effort only on Windows (logged once); elsewhere the open's failure is the force's
  * (review P1-5).</li>
  * </ul>
@@ -191,9 +193,7 @@ public final class DurableFile {
 				FORCER.file(ch);
 			}
 			FORCER.dir(dir);
-			if (dir.getParent() != null) {
-				FORCER.dir(dir.getParent());
-			}
+			confirmChain(dir, 2);
 		} catch (IOException | RuntimeException e) {
 			failing = true;
 			inDoubtGen = Math.max(inDoubtGen, g);
@@ -280,6 +280,7 @@ public final class DurableFile {
 		createDirs(dir);
 		if (forced) {
 			forceDirsCreated();
+			confirmChain(dir, 2); // (TXN review 4 item 1) its folder's entry and its parent's, even when an earlier session made them
 		}
 		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
 			ByteBuffer b = ByteBuffer.wrap(bytes);
@@ -321,6 +322,25 @@ public final class DurableFile {
 				FORCER.dir(parent);
 			}
 			newDirs.remove(p);
+		}
+	}
+
+	/** Folders whose own entry (in their parent) was forced in this process: a folder an earlier session made may never have been. */
+	private static final Set<Path> CHAIN_CONFIRMED = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * (TXN review 4 item 1) {@code dir}'s entry and those of its next {@code levels - 1} ancestors confirmed: each one's parent forced, once a
+	 * process (a folder that already exists may come from an earlier session that crashed before its parent's force). Before anything in it
+	 * is acknowledged: the ledger's {@code world/architect}, {@code playerdata}, the region folders. Throws as a failed force.
+	 */
+	public static void confirmChain(Path dir, int levels) throws IOException {
+		Path d = dir.toAbsolutePath().normalize();
+		for (int i = 0; i < levels && d != null && d.getParent() != null; i++, d = d.getParent()) {
+			if (CHAIN_CONFIRMED.contains(d)) {
+				continue;
+			}
+			FORCER.dir(d.getParent());
+			CHAIN_CONFIRMED.add(d);
 		}
 	}
 

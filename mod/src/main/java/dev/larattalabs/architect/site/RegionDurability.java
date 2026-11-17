@@ -201,6 +201,28 @@ public final class RegionDurability {
 	/** (slice T0, dev) new files and folders forced by {@link #forceNew}. */
 	static final AtomicLong NEW_FORCED = new AtomicLong();
 
+	/**
+	 * (TXN review 4 item 1) Every live region file's folder of these storage types confirmed ({@link DurableFile#confirmChain}: the region
+	 * folder's entry and its parent's, once a process). Answers the folders that could not be. Server thread, before the ledger.
+	 */
+	public static List<String> confirmFolders(String... types) {
+		List<String> left = new ArrayList<>();
+		java.util.Set<Path> dirs = new java.util.HashSet<>();
+		for (State s : LIVE) {
+			if (typed(s.type, types) && inWorld(s.path) && s.path.toAbsolutePath().getParent() != null) {
+				dirs.add(s.path.toAbsolutePath().normalize().getParent());
+			}
+		}
+		for (Path d : dirs) {
+			try {
+				DurableFile.confirmChain(d, 2);
+			} catch (IOException | RuntimeException e) {
+				left.add("folder " + d + " (its entry could not be confirmed: " + e + ")");
+			}
+		}
+		return left;
+	}
+
 	/** A world save starts (saveAllChunks' head). */
 	public static void saveStarted() {
 		epoch++;

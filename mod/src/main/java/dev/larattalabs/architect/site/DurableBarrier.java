@@ -171,6 +171,7 @@ public final class DurableBarrier {
 			RegionDurability.retryOwed();
 			java.util.List<String> undurable = new java.util.ArrayList<>(RegionDurability.undurable("chunk", "entities"));
 			undurable.addAll(ChunkDebt.owed());
+			undurable.addAll(RegionDurability.confirmFolders("chunk", "entities")); // (TXN review 4 item 1) region folders' entries
 			return undurable.isEmpty() ? null : undurable.size() + " chunk write(s) or region file(s) not durable: " + (undurable.size() > 4
 				? undurable.subList(0, 4) + " ..." : undurable);
 		}
