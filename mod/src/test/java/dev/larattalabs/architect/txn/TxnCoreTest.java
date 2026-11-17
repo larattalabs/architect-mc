@@ -213,4 +213,32 @@ class TxnCoreTest {
 		assertTrue(w.core.open().isEmpty(), "confirmed: committed forward");
 		assertEquals(12, TxnCrashModel.items(w.store("ledger").mem, "stock").get("planks"));
 	}
+
+	/** §5.2: each open txn's amount counts once, by its probes; a booking over a compensated source is a violation; UNKNOWN is unread. */
+	@Test
+	void conservationCountsTransitOnceByProbes() {
+		TxnCrashModel.World w = world();
+		w.unknown.add("chunk:Y");
+		TxnEntry t = TxnCrashModelTest.begin(w, "move", null, "box:X", "box:Y");
+		w.core.plan(t, TxnCrashModelTest.fx("take", EffectClass.B, "chunk:X", Map.of("planks", 12), "crate", Effect.TRANSIT).prepare());
+		w.core.plan(t, TxnCrashModelTest.fx("put", EffectClass.B, "chunk:Y", Map.of("planks", 12), Effect.TRANSIT, "chest"));
+		TxnCrashModelTest.run(w, t); // taken, the put held (UNKNOWN)
+		Conservation c = new Conservation().add("x", TxnCrashModel.items(w.store("chunk:X").mem, "items")).inTransit(w.core);
+		assertEquals(List.of("tx-1/1 (put)"), c.unreadList(), "an UNKNOWN probe is unread: inconclusive");
+		JsonObject r = c.report(Map.of("planks", 12L));
+		assertEquals("inconclusive", r.get("verdict").getAsString());
+		w.unknown.clear();
+		Conservation c2 = new Conservation().add("x", TxnCrashModel.items(w.store("chunk:X").mem, "items")).inTransit(w.core);
+		assertEquals(12L, c2.total().get("planks"), "taken, not booked: in transit");
+		assertEquals("match", c2.report(Map.of("planks", 12L)).get("verdict").getAsString());
+		// a sink booked while its source was given back: the forward violation row
+		JsonObject y = w.store("chunk:Y").edit();
+		TxnCrashModel.put(y, "receipts", "tx-1/1");
+		w.store("chunk:Y").set(y);
+		JsonObject x = w.store("chunk:X").edit();
+		TxnCrashModel.put(x, "receipts", "tx-1/0!c");
+		w.store("chunk:X").set(x);
+		Conservation c3 = new Conservation().inTransit(w.core);
+		assertEquals(1, c3.violations().size(), c3.violations().toString());
+	}
 }

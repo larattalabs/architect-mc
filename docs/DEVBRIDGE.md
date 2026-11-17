@@ -776,3 +776,13 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
   for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
   drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
+- **2026-11-17 (slice T1, the txn core):** new (`TxnDevHooks`, generated headless too; TEST and dev only) `dev.txn.state {}` (the core:
+  `open: [{id, kind, phase, decision, held, heldAt, resources}]`, `openCount`, `heldCount`, `quarantined`, `done`, `loadFailed`,
+  `unsynced`, `next`, `file {path, exists, writtenGen, installedGen, inDoubt}`, `holds`, the last `events`, `recovered`),
+  `dev.txn.points {kind?}` (the kill points reached this session: `TX:<kind>:<step>`, recovery's `TX:recover:<kind>:<step>`),
+  `dev.txn.trace {on?}` (on: record every point reached; off: answer them in order), `dev.txn.run {from, to, items, key?, dimension?}` (the
+  TEST kind `test.move` between two containers: `{begin, id, persist, status, phase, decision, held}`, or `refused` / `detail` / `replayed`),
+  `dev.txn.failPersist {n?}` (the next n txn.json writes refused before the rename), `dev.txn.resolve {id, how: commit|abort}` (ops resolve,
+  §3.6's refusals) and `dev.txn.conservation {owner?, min, max, baseline?}` (report-only, docs/TXN-DESIGN.md §5: parts, `total`, `unread`,
+  `violations`; with `baseline` a `diff` and a `verdict`: match, differs or inconclusive; never fails). `dev.journal.killAt` takes every
+  `TX:` point (and `+save`). Driven by `tools/lib/gatetxn.mjs` (step `txn-core`).
