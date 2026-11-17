@@ -32892,12 +32892,13 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 
 #### Slice ADP fix round (GPT review NOT SAFE; rule 15/20; recorded 2026-11-17; in-game rows pending the pause)
 
-- **P1 (the inherited SAD window):** adopt is now credit, save, take, save, records. The credits are booked in memory only (no crate, cell
-  or drop touched) and saved with `saveConfirmed` (OVF's method, copied verbatim at CXD's anchor: identical text, so the merge dedupes).
-  A refused save puts the ledger back and refuses the call. Then the takes (stock out, cell restored, kind released) are saved confirmed, and only
-  then are the records cleared. The intent marker is a record that still names a credited crate: `finishTakes` (start repair) or FINISH (the next
-  call) takes a crate that still stands as its owner's, never credited twice. Kill points ADP1 (inside the credit's save), ADP2 (between),
-  ADP3 (inside the take's save). Off the server thread adoptCrates refuses.
+- **P1 (the inherited SAD window):** adopt is now credit, barrier, take, barrier, records. The credits are booked in memory only (no crate, cell
+  or drop touched) and saved through T0's `Stockpiles.barrier()` (merged from slice/T0 042da098: players, chunks, then the ledger, confirmed;
+  ADP's `saveConfirmed` copy is dropped). On REFUSED or IN_DOUBT the ledger is put back in memory and the call is refused; an in-doubt credit that
+  did land is finished at the start. Then the takes (stock out, cell restored, kind released) go through a barrier, and only then are the records cleared.
+  The intent marker is a record that still names a credited crate: `finishTakes` (start repair, its own barrier) or FINISH (the next call) takes
+  a crate that still stands as its owner's, never credited twice. Kill points ADP1 (inside the credit barrier's ledger step), ADP2 (between),
+  ADP3 (inside the take's) are accepted by `dev.journal.killAt`. Off the server thread adoptCrates refuses.
 - **Overflow:** credited uncapped and dropped last (`overCapacity`, after the records). A crash between the drop's entity write and its ledger
   write mints the overflow (it never loses it). Leftover (TXN). Steward's "did not fit" message is unchanged.
 - **P2:** BUILT construction roads on the crate are selected (their paid record is keyed; they join no feed). `Builder.complete` never restores
