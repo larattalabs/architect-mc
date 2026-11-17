@@ -27,9 +27,9 @@ public final class TxnDevHooks {
 		op("dev.txn.trace", "trace", "{on?: bool} - (slice T1) on: start recording every kill point reached; off: stop and answer them in order");
 		op("dev.txn.run", "run", "{from: [x,y,z], to: [x,y,z], items: {item: n}, key?, dimension?} - (slice T1) TEST kind test.move: the items from one "
 			+ "container to another through a txn (take B with its chunk receipt, the barrier, PREPARED_DONE, the decision, put B, the barrier, "
-			+ "EFFECTS_DONE, retirement) -> begin, id, persist, status, phase, decision, held (or refused / detail / replayed)");
+			+ "EFFECTS_DONE, retirement) -> begin, txn (the id), persist, status, phase, decision, held (or refused / detail / replayed)");
 		op("dev.txn.failPersist", "failPersist", "{n?: 1} - (slice T1) TEST: the next n txn.json writes are refused before the rename (model R)");
-		op("dev.txn.resolve", "resolve", "{id, how: commit|abort} - (slice T1) ops resolve (§3.6): abort refused once decided or when the decision probe "
+		op("dev.txn.resolve", "resolve", "{txn, how: commit|abort} - (slice T1) ops resolve (§3.6): abort refused once decided or when the decision probe "
 			+ "is APPLIED or UNKNOWN; commit only from PREPARED_DONE -> refused, state");
 		op("dev.txn.conservation", "conservation", "{owner?, min: [x,y,z], max: [x,y,z], baseline?: {item: n}} - (slice T1) REPORT ONLY (§5): parts "
 			+ "(stock, paidStanding, containers, entities, inventory, crateScan, inTransit by the open txns' probes), total, unread (inconclusive), "

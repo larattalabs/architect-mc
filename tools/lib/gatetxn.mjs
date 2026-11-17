@@ -53,7 +53,7 @@ export async function registerTXN(steps, h) {
     out.trace = { run: r0, points };
     const w0 = await where();
     const c0 = await report(BASE);
-    check(r0.status === 'DONE' && units(w0.b) === units(ITEMS), `trace: a move A -> B through the txn: ${r0.status} (${r0.id}); B holds ${json(w0.b)}`, r0);
+    check(r0.status === 'DONE' && units(w0.b) === units(ITEMS), `trace: a move A -> B through the txn: ${r0.status} (${r0.txn}); B holds ${json(w0.b)}`, r0);
     check(points.length >= 8 && points.every((p) => p.startsWith('TX:test.move:')), `trace: ${points.length} kill points of the forward path: ${points.join(' ')}`, points);
     check(c0.verdict === 'match', `trace: conservation ${c0.verdict} (diff ${json(c0.diff)})`, c0);
 

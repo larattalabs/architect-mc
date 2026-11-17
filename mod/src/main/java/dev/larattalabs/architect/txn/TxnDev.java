@@ -38,7 +38,7 @@ public final class TxnDev {
 			}
 			case "resolve" -> {
 				JsonObject o = new JsonObject();
-				String why = TxnServer.core().resolve(req.get("id").getAsString(), req.get("how").getAsString());
+				String why = TxnServer.core().resolve(req.get("txn").getAsString(), req.get("how").getAsString());
 				o.addProperty("refused", why);
 				o.add("state", TxnServer.state());
 				yield o;

@@ -111,10 +111,10 @@ public final class TestMove {
 		}
 		if (s.status() != TxnCore.Begin.NEW) {
 			if (s.entry() != null) {
-				o.addProperty("id", s.entry().id);
+				o.addProperty("txn", s.entry().id);
 			}
 			if (s.done() != null) {
-				o.addProperty("id", s.done().id());
+				o.addProperty("txn", s.done().id());
 				o.add("result", s.done().result());
 				o.addProperty("replayed", true);
 			}
@@ -128,7 +128,7 @@ public final class TestMove {
 		payload.addProperty("to", box(dim, to));
 		c.payload(t, "test_moved", payload);
 		DurableFile.Outcome p = c.persist(t);
-		o.addProperty("id", t.id);
+		o.addProperty("txn", t.id);
 		o.addProperty("persist", p.name());
 		if (p == DurableFile.Outcome.OK) {
 			o.addProperty("status", c.drive(t).name());
