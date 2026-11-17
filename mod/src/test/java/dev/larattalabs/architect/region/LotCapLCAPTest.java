@@ -175,4 +175,36 @@ class LotCapLCAPTest {
 		assertEquals("lot:b", new dev.larattalabs.architect.api.SiteWait("s1", true, 0L, List.of(), 0, dev.larattalabs.architect.api.SiteWait.BILL_CAP, List.of(), "lot:b")
 			.capScope());
 	}
+
+	@Test
+	void theIdsARecordNamesAreNeverHandedOutAgain() {
+		// (LCAP, RG2a) a record saved before its batch was queued names a batch and a group nobody holds: seeded at load, they are skipped
+		RegionRec orphan = new RegionRec("rg9", "p1", "sha", "steward", new JsonObject(), "minecraft:overworld", new int[] {0, 60, 0, 31, 90, 31}, 1L);
+		orphan.batchId = "b905";
+		orphan.groupId = "g907";
+		RegionsImpl.seedReservedIds(List.of(orphan));
+		java.util.Set<String> live = Set.of("b904", "g906");
+		java.util.function.Predicate<String> batchTaken = id -> live.contains(id) || dev.larattalabs.architect.site.RegionIds.batchReserved(id);
+		java.util.function.Predicate<String> groupTaken = id -> live.contains(id) || dev.larattalabs.architect.site.RegionIds.groupReserved(id);
+		assertEquals(906, dev.larattalabs.architect.site.RegionIds.firstFree("b", 904, batchTaken), "b904 queued, b905 the orphan's: b906");
+		assertEquals(908, dev.larattalabs.architect.site.RegionIds.firstFree("g", 906, groupTaken), "g906 held, g907 the orphan's: g908");
+		dev.larattalabs.architect.site.RegionIds.clear();
+		assertEquals(905, dev.larattalabs.architect.site.RegionIds.firstFree("b", 904, batchTaken), "the world stopped: nothing reserved");
+	}
+
+	@Test
+	void anOrphanRecordOwnsNoGroupButItsOwn() {
+		JsonObject mine = new JsonObject(), other = new JsonObject();
+		mine.addProperty(dev.larattalabs.architect.site.RegionItems.EXT_REGION, "rg9");
+		other.addProperty(dev.larattalabs.architect.site.RegionItems.EXT_REGION, "rg10");
+		assertEquals(true, RegionsImpl.orphanGroup("rg9", null), "never queued");
+		assertEquals(true, RegionsImpl.orphanGroup("rg9", group(other)), "another region's group");
+		assertEquals(false, RegionsImpl.orphanGroup("rg9", group(mine)));
+		assertEquals(false, RegionsImpl.orphanGroup("rg9", group(new JsonObject())), "a group with no region key: the old path");
+	}
+
+	private static dev.larattalabs.architect.site.SiteGroupRec group(JsonObject ext) {
+		return new dev.larattalabs.architect.site.SiteGroupRec("g1", null, ext, List.of(), List.of(), dev.larattalabs.architect.site.SiteGroupRec.ACTIVE, false, null,
+			null, 0L, Map.of(), 0L);
+	}
 }

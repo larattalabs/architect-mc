@@ -812,7 +812,8 @@ public final class Batches {
 	}
 
 	private static String newId() {
-		while (BATCHES.containsKey("b" + next)) {
+		// (LCAP, RG2a) an id a saved region record names is skipped too (RegionIds)
+		while (BATCHES.containsKey("b" + next) || RegionIds.batchReserved("b" + next)) {
 			next++;
 		}
 		return "b" + next++;
@@ -1812,6 +1813,7 @@ public final class Batches {
 		CANCELLED.values().forEach(fs -> fs.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		CANCELLED.clear();
 		Composites.reset();
+		RegionIds.clear();
 		next = 1;
 		tick = 0;
 	}

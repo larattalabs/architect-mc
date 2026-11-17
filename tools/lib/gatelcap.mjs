@@ -250,8 +250,74 @@ export async function registerLCAP(steps, h) {
     out.identity = { audit: a1.identity, inserted: sum(inserted), consumed: sum(used), returned: sum(back), stock: sum(ps.stock), unaccounted: left };
     check(a1.identity !== false && Object.values(left).every((v) => v === 0),
       `items in = items out: inserted ${sum(inserted)} + returned ${sum(back)} = consumed ${sum(used)} + stock ${sum(ps.stock)} (audit identity ${a1.identity}; unaccounted ${json(left)})`, out.identity);
+    // Z (RG2a, the fix round's P1): a crash between the record save and the queue save; a restart; another build; then the orphan record
+    // removed: the other build is untouched (its ids are its own, and the removal cancels only the orphan's own work) and builds
+    await L.leaveWorld();
+    out.Z = await rg2a();
     await L.leaveWorld();
     spendZero();
     return out;
   };
+
+  async function rg2a() {
+    const nameZ = 'G6B LCAP RG2a';
+    const o = {};
+    inserted = {};
+    await L.fresh(nameZ, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await G.designs(ctx);
+    await L.tp(CX + 80, 80, CZ + 56);
+    const gy = await groundY();
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    check(!(await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000)).refused, `Z: a stockpile of 4 crates in ${nameZ}`);
+    const ckA = (await call('dev.region.checkPlan', { plan: PLAN, claim: CLAIM, owner: G.OWNER, load: 'generate' }, 1_800_000)).check;
+    check(!!ckA?.artifactSha, `Z: town A checked (${ckA?.overall})`);
+    if (!ckA?.artifactSha) return o;
+    await cmd('/save-all flush').catch(() => null);
+    await call('dev.journal.killAt', { point: 'RG2a' });
+    const ka = await approve(ckA.artifactSha, {}).catch((e) => ({ refused: String(e) }));
+    log(`Z: town A realised, armed RG2a: ${json(ka).slice(0, 200)}`);
+    await restart(nameZ);
+    const orphan = ((await call('dev.region.list')).regions ?? [])[0]?.id;
+    const recO = orphan ? (await call('dev.region.state', { region: orphan }, 60_000)).record : null;
+    o.orphan = { id: orphan, batchId: recO?.batchId, groupId: recO?.groupId, state: recO?.state };
+    check(!!orphan && !!recO?.batchId, `Z: after the RG2a halt the record stands with no batch queued: ${orphan} (batch ${recO?.batchId}, group ${recO?.groupId})`, o.orphan);
+    if (!orphan) return o;
+    // town B, beside A's claim, a plain survival realise
+    const CLAIM2 = [CX + 200, CZ, CX + 359, CZ + 111];
+    const ckB = (await call('dev.region.checkPlan', { plan: { ...PLAN, planId: 'lcap_town_b' }, claim: CLAIM2, owner: G.OWNER, load: 'generate' }, 1_800_000)).check;
+    const rB = ckB?.artifactSha ? await approve(ckB.artifactSha, {}) : { refused: `no artifact (${ckB?.overall})` };
+    const regionB = rB.region;
+    const recB = regionB ? (await call('dev.region.state', { region: regionB }, 60_000)).record : null;
+    o.B = { region: regionB, refused: rB.refused, batchId: recB?.batchId, groupId: recB?.groupId };
+    check(!!regionB && recB?.batchId !== recO.batchId && recB?.groupId !== recO.groupId,
+      `Z: town B realised (${regionB ?? rB.refused}) with ids of its own: batch ${recB?.batchId} (orphan ${recO.batchId}), group ${recB?.groupId} (orphan ${recO.groupId})`, o.B);
+    if (!regionB) return o;
+    // the orphan removed
+    const rm = await call('dev.region.remove', { region: orphan }, 600_000).catch((e) => ({ refused: String(e) }));
+    let gone = false;
+    for (let i = 0; i < 60 && !gone; i++) { gone = !((await call('dev.region.list')).regions ?? []).some((r) => r.id === orphan); if (!gone) await L.sleep(2000); }
+    const stB = await call('dev.region.state', { region: regionB }, 60_000);
+    o.remove = { rm, gone, bMissing: stB.missing === true, bState: stB.record?.state, bQueue: stB.queue ?? null };
+    check(gone && stB.missing !== true && stB.record?.state === 'PLACING', `Z: the orphan ${orphan} removed (${gone}); town B untouched: ${stB.missing ? 'missing' : stB.record?.state}`, o.remove);
+    // town B builds to the end
+    await L.tp(CX + 280, 80, CZ + 56);
+    let st = null;
+    const end = Date.now() + 1_800_000;
+    while (Date.now() < end) {
+      st = await call('dev.region.state', { region: regionB }, 60_000);
+      if (st.view?.state === 'PLACED' && (await G.rsState(ctx, regionB)).build?.done === true) break;
+      await wave();
+      await L.sleep(3000);
+    }
+    o.B.end = st?.view?.state;
+    check(st?.view?.state === 'PLACED', `Z: town B built after the orphan's removal: ${st?.view?.state}`, o.B);
+    const az = await audit();
+    const pz = await pile();
+    const left = G.minus(G.minus(G.plus(inserted, pz.ledger?.returned ?? {}), pz.ledger?.consumed ?? {}), pz.stock ?? {});
+    o.identity = { audit: az.identity, inserted: sum(inserted), consumed: sum(pz.ledger?.consumed), stock: sum(pz.stock), unaccounted: left };
+    check(az.identity !== false && Object.keys(left).length === 0, `Z: items in = items out: inserted ${sum(inserted)} = consumed ${sum(pz.ledger?.consumed)} + stock ${sum(pz.stock)} (audit identity ${az.identity}; unaccounted ${json(left)})`, o.identity);
+    return o;
+  }
 }

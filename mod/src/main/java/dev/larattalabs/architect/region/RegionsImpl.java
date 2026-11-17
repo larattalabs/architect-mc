@@ -259,6 +259,9 @@ public final class RegionsImpl implements Regions {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Regions unreadable: {}", e.toString());
 		}
+		// (LCAP, RG2a) the batch and group ids every record names are never handed out again: a record saved before its batch was queued (a
+		// crash at RG2a) names ids no batch or group holds, and a later build must not take them
+		seedReservedIds(REGIONS.values().stream().map(Live::rec).toList());
 		Prepare.resumeAll(s);
 		PlanChecks.started(s); // (6c P0) check keys, artifacts, pins and tombstones
 		TOMBS.values().forEach(t -> PlanChecks.regionRemoved(t, true)); // (C36) a REMOVED region whose artifact is still held, unpinned
@@ -3286,7 +3289,8 @@ public final class RegionsImpl implements Regions {
 				dev.larattalabs.architect.site.RegionFreeDrops.restoreMined(lv, l); // (6c RS §9) mined free cells back first
 			}
 			QBatch b = Batches.get(l.rec().batchId);
-			if (b != null && b.running()) {
+			// (LCAP, RG2a) only this region's own batch: a record whose batch was never queued (a crash at RG2a) names an id another build may hold
+			if (b != null && b.running() && ownsBatch(l, b)) {
 				return ArchitectApi.get().sites(s).cancelBatch(b.id).thenCompose(x -> removeGroup(s, l, o));
 			}
 			return removeGroup(s, l, o);
@@ -3299,7 +3303,47 @@ public final class RegionsImpl implements Regions {
 	 */
 	private static final Map<String, RegionState> BEFORE_REMOVAL = new java.util.concurrent.ConcurrentHashMap<>();
 
+	/** (LCAP, RG2a) The batch and group ids these records name, reserved (Batches, Sites). */
+	static void seedReservedIds(java.util.Collection<RegionRec> recs) {
+		List<String> batches = new ArrayList<>(), groups = new ArrayList<>();
+		for (RegionRec r : recs) {
+			if (r.batchId != null) {
+				batches.add(r.batchId);
+			}
+			if (r.groupId != null) {
+				groups.add(r.groupId);
+			}
+		}
+		dev.larattalabs.architect.site.RegionIds.reserve(batches, groups);
+	}
+
+	/** (LCAP, RG2a) Whether batch {@code b} is region {@code l}'s own (its ext names the region). */
+	static boolean ownsBatch(Live l, QBatch b) {
+		return b.ext != null && b.ext.get(RegionItems.EXT_REGION) instanceof JsonElement e && e.isJsonPrimitive() && e.getAsString().equals(l.rec().id);
+	}
+
+	/**
+	 * (LCAP, RG2a) A region whose record names a group that is not its own: none exists (its batch was never queued: a crash at RG2a), or
+	 * the group names another region. Its record alone is removed; nothing of the group is touched. A group with no region key keeps the
+	 * old path.
+	 */
+	static boolean orphanGroup(String regionId, @Nullable SiteGroupRec grp) {
+		return grp == null || grp.ext() != null && grp.ext().get(RegionItems.EXT_REGION) instanceof JsonElement e && e.isJsonPrimitive()
+			&& !e.getAsString().equals(regionId);
+	}
+
 	private static CompletableFuture<RemoveResult> removeGroup(MinecraftServer s, Live l, RemoveOptions o) {
+		if (orphanGroup(l.rec().id, Sites.group(l.rec().groupId))) {
+			// (LCAP, RG2a) an orphan record: it wrote nothing; another build's group or batch under its ids is never cancelled or removed
+			Architect.LOGGER.warn("Region {}: its group {} is not its own (never queued, or another region's): only its record is removed", l.rec().id,
+				l.rec().groupId);
+			if (l.rec().state != RegionState.REMOVING) {
+				BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
+			}
+			l.rec().state = RegionState.REMOVING;
+			finishRemoval(l, true, System.currentTimeMillis(), "orphan record", false);
+			return CompletableFuture.completedFuture(new RemoveResult(true, List.of(), Map.of(), 0, 0, Map.of(), List.of()));
+		}
 		// (6c D3, Steward's RC) the owner rule first: a refused caller changes nothing (the region's state and its sites' stay as they
 		// were) and is answered with the rule's blocker. Before, the region went REMOVING and then ended PARTIAL with nothing removed
 		// (main since C23's refusal path)
