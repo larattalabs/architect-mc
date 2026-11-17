@@ -3318,7 +3318,12 @@ public final class Stockpiles {
 			throw new IllegalStateException(off);
 		}
 		if (!loadFailed) {
-			saveWithWorld(srv);
+			// (v0.79.0 release review P1) T0's barrier: players, then chunks (a swallowed serialization failure is an owed save, not a
+			// durable write), then the ledger confirmed; anything short of OK refuses the repair before it releases anything
+			DurableBarrier.Result r = barrier(srv);
+			if (!r.ok()) {
+				throw new IllegalStateException("Stockpiles: the world was not saved: " + r.outcome() + " " + r.reason());
+			}
 			return;
 		}
 		if (testRefuseSave) {
@@ -3337,6 +3342,10 @@ public final class Stockpiles {
 		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
 		if (!undurable.isEmpty()) {
 			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable " + undurable);
+		}
+		java.util.List<String> owed = DurableBarrier.owedSaves(); // (v0.79.0 review P1) a swallowed chunk or player save failure
+		if (!owed.isEmpty()) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: owed saves " + owed);
 		}
 	}
 
