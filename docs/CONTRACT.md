@@ -32790,5 +32790,7 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   RL nothing charged or owed, RegionView terrainCells kept, terrainBuilt = the world, rate 4, part building, typed wait again; resumed to
   the INSTANT twin (0 differ), E-flat 0. hb-growth: a growth's pads over stepped land staged, verges wait typed `terrain`; undoRevision at
   0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
+- **Ran** (f9903a02, ST merged): Gradle build 1359 tests 0 failures; scoped kit 74/74 (1 skipped); step-inputs check; gitleaks clean. Final
+  gate-runs-hb/20261117-034128-change: hb-remove 22/0, hb-halt 14/0, hb-growth 28/0 (`--shards 1 --no-turbo --no-cache`, 9018/9019).
 - **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the BUILT-with-holes
   reopen is unit-checked only (no halt caught a target that finished after the save).
