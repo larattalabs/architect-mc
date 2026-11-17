@@ -541,7 +541,7 @@ export async function registerFK(steps, h) {
     const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${site}@`));
     const paid = B.paid?.[key] ?? {};
     check(!!key && sum(paid) > 0, `${tag}: ${site}'s paid record on disk: ${key} (${sum(paid)} units)`);
-    // (slice OVF) CS1o: the stockpile full (capacity 0 stacks, TEST; kept across the reopen: the same client), so the whole refund is past
+    // (slice OVF) CS1o: the stockpile full (capacity 0 stacks, TEST; for the halted run), so the whole refund is past
     // capacity. Before OVF it dropped as items before the credit's save: the halt left them in the saved chunks and the start dropped them again
     if (full) await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
     await call('dev.journal.killAt', { point }, 10_000);
@@ -559,7 +559,10 @@ export async function registerFK(steps, h) {
     const gone = await fk(site).then((x) => x?.state ?? 'gone', () => 'gone');
     const res = { key, paid: sum(paid), back: sum(back), diff: G.minus(back, paid), pending: F.pendingCredit ?? null, custody: F.custody ?? null, items: only(items, FK), site: gone };
     if (full) {
-      // every item entity at the crates (the overflow's drop point) and at the site: none (the refund is all in the stock, once)
+      // every item entity at the crates (the overflow's drop point) and at the site: none (the refund is all in the stock, once). The
+      // restart is a new server process, so the TEST capacity is back at the crates' (the start's settle credited within it); set to 0
+      // again, the pile reads over capacity and says so
+      await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
       const P = await pile();
       const atCrates = (await call('dev.items.near', { pos: W.crates[0], radius: 16 }, 60_000)).items ?? {};
       const ents = G.plus(atCrates, items);
