@@ -32881,3 +32881,19 @@ crate, across a crash at any step. The full contract is the coordinator's notes 
 - **Replay ($0, P2 paid s3-pay, -2, -3, -4, s6-pay briefs and plans):** s6's `form.hollow_mountain` is shown full ("mountain"); s3's `connector.wall` and `form.relief` are fields-only (the brief names neither), and every field those recorded parts wrote (where, height, thickness, gates; around, radius, maxCut, maxFill) is on their fields lines. Affordances were not recorded, so the land selection was not replayed.
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
+
+### Slice CXD as built (branch `slice/CXD` off origin/main 02b43fc1, slice/T0 042da098 merged; no API change; $0; strict; recorded 2026-11-17)
+- `CrateOwed` (new): the `crateOwed` records in stockpiles.json, the capture / commit / settle / put-back / start resolution, the pure
+  `resolve` table; the crate's `CxdTaken` marker (refuses inserts); `Ledger.restoreStock`. Every prepareDeconstruct caller commits its
+  captures once (removeDetailed folded into J2's pre-commit save; Groups after R1; Adopt.undoDeltas); a refused save refuses the removal.
+- Confirmed saves go through T0's `Stockpiles.barrier` (OK only: REFUSED and IN_DOUBT count as not saved). A settle closes its records
+  on disk before anything drops (rule 17): a crash at CXDS loses the stock, never doubles it. Groups' queue carries no crate stock.
+- Groups puts back only before its R2 is submitted (`r.txn == null`). A capture left uncommitted is dropped at the next tick.
+- Units `CrateOwedCXDTest` (7): the table, a two-store crash sim at every step with an autosave anywhere before (main's flow shown red:
+  doubled and lost), a second crash mid-resolution, put-back, the queue, the file round trip. Written after the code (the sim's main
+  model is the red). unit-scope (kit + full gradle) PASS.
+- In game `cxd-crash` 68/0 (20261117-051506 and, after T0, 20261117-060735): S1-S4 single site at CXD1..CXD4, S3s/S4s +save, G3/G3s/G4/G4s
+  a group's shared crate; rows seen: PRESENT close, MARKED putBack, PRESENT/ABSENT/MARKED drop; items in = items out in every case.
+- Regressions PASS (20261117-052245): sad-survival, sad-crash, rl-crash, hf-crash, ps-crash, fk-crash, x-resume; sad-crash again after T0.
+- Not in game: CXDB and CXDS (armed only after the first tick; the units cover them). Leftovers: RoadBuilder.beforeRemove, the complete()
+  leftovers and the orphan-crate right-click (take and drop in one tick); a marked crate orphaned in CXDS's window.
