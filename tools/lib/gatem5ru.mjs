@@ -235,7 +235,7 @@ export async function registerRU(steps, h) {
       const fp = await feedPart(tag, T.region, 0.5);
       check(Boolean(fp.busy) && fp.busy.startsWith('revising'), `${tag}: the growth still writing at the undo (busy ${fp.busy}): the cancel path`);
       // the baseline: the ledger and the chunks saved; nothing consumed since (the build stalled)
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
       await call('dev.wait', { ms: 2000 }, 30_000);
       const live = await pile();
       await call('dev.journal.killAt', { point }, 10_000);

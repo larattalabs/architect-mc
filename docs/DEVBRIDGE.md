@@ -88,7 +88,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 |---|---|
 | `dev.camera` | {x,y,z, yaw,pitch \| lookAt:{x,y,z} \| anchor:name, fov?:30-110 (default: the player's FOV option), mode?:spectator\|creative\|keep, feet?:false, hideHud?, closePause?:true} - put the camera (eye) exactly there; fails if it can't. anchor fills x/y/z/yaw/pitch from dev.anchors (cam_* = eye, others = feet) |
 | `dev.click` | {x, y, button?: 0} - a mouse click at GUI coordinates on the open screen |
-| `dev.command` | {cmd, asPlayer?: false} - run a command as the player with full permissions (asPlayer: with the player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result} |
+| `dev.command` | {cmd, asPlayer?: false} - run a command as the player with full permissions (asPlayer: with the player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result}. A command that did not run (no result callback: unknown, incomplete or not permitted; on the integrated client the dedicated-only `/save-all`, `/op` and the like are unknown) answers `ok: false` with the error text and still carries `cmd`, `messages`, `success: false`, `result: null` (`dev.call` throws a DevError whose `response` has them) |
 | `dev.help` | {} -> {commands, screens} |
 | `dev.hud` | {hidden: bool} - hide/show the HUD (like F1) |
 | `dev.gui.scale` | {scale: 0 (auto) - 6} - set the GUI scale as Options > Video Settings does -> {guiScale, guiWidth, guiHeight} (UI-2b) |
@@ -191,6 +191,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.site.state` | {site} - a construction site: state, queue length, built count, BOM rows, ledger, blocked cells, notes, the last deconstruct's tally; since 6c Y2 also `wait` ({gameTime, waiting, waitingSince, nextNeeded, moreUnits}: C25), `order` (the distinct items of the unbuilt cells in build order, first 12: the gate's cross-check of nextNeeded) and `nextCells` (the first 12 unbuilt cells: x, y, z, block, solid) |
 | `dev.survival.set` | {on: bool} - set the survival toggle (dev hook: bypasses the permission rule; the Status tab and /architect survival enforce it) |
 | `dev.survival.state` | {} - this world's survival toggle, blocksPerTick, and whether the player may change it |
+| `dev.stockpile.save` | {} - a save barrier that works on the integrated client: `Stockpiles.saveWithWorld` on the server thread (the players, the chunks flushed, then `<world>/architect/stockpiles.json`); answers once the file is written -> {written, path, bytes, saves} (a world with no stockpile keeps no file: `written: false`, `why`); `ok: false` when stockpiles.json failed to load this session or the write failed. Generated headless too |
 
 ### Architect screen
 
@@ -394,6 +395,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-16 (slice M1, S-M5-19):** `dev.command` answers `ok: false` with the error text when the command did not run (no result
+  callback: unknown, incomplete or not permitted), instead of `ok: true, success: false`; the reply keeps `cmd`, `messages`,
+  `success: false` and `result: null` beside the error (client and headless). On the integrated client `/save-all` and `/op` are
+  not commands, so a caller that sent them as a no-op catches the DevError (Architect's drivers do). New `dev.stockpile.save {}`:
+  an explicit ledger save with the world, answered when `stockpiles.json` is written (`{written, path, bytes, saves}`).
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

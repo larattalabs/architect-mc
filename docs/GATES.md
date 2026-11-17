@@ -82,8 +82,37 @@ and replace stricter habits where they differ (the DEV MODE section below still 
 14. **More parallel slices** (same decision). Keep 6-8 slices in progress at once as files and ports allow, and pre-brief the next
    ones so a free slot never sits empty. Rule 11's once-per-release strict verifier and GPT review are unchanged.
 
+15. **Review per strict slice** (Noah via parent session, 2026-11-16: "Review per strict slice"; he did not pick auto-dropping a
+   failed slice). As soon as a strict slice is built and its targeted strict scenarios pass, the coordinator runs that slice's own GPT
+   review in the background, on its diff only (`codex exec ... -s read-only`, the second-opinion skill's framing), while other work
+   goes on. Its P1 findings are fixed (one fix-verification pass) before the slice joins a batch. Rule 11's per-release GPT review
+   stays: this adds a check and removes none. Light slices get none.
+16. (Overnight delegation, 2026-11-16: ended with Noah's wrap-up.)
+17. **Persist before mutate** (Noah via parent session, 2026-11-17, rules 17-24). No world, stockpile or in-memory change that
+   affects items, billing or refunds happens before a durable, *confirmed* record of it. Executor completion or a queued save is not
+   persistence. Once TXN lands, use the transaction layer (docs/TXN-DESIGN.md).
+18. **Crash points and conservation in every strict slice.** Inject a crash at each save point of the operation and assert
+   conservation (stockpile + world + ledger balance; items in == items out) after every strict scenario, failing-first. Once TXN's
+   harness exists, use it.
+19. **Verify review premises in code.** Before recommending a design built on a reviewer's framing (e.g. "legacy crates"), check
+   the claim against the code.
+20. **The review-round guard.** After a NOT SAFE GPT review: one fix round, then one final GPT pass. If that still finds a P1, the
+   slice goes to Noah via the parent: no further rounds, and no dropping it from a release without his OK.
+21. (Spending: pending Noah's direct confirmation; until then the spend rules above stand.)
+22. **Review sheets for Noah are one self-contained HTML file**, images inlined as data URIs (JPEG if large;
+   `tools/sheet-inline.mjs`).
+23. **Each slice keeps its run scripts and temp files in its own worktree**, never a shared scratchpad path.
+24. **Gate build caches are refreshed** in every gate worktree whenever lab-ui or a pinned dependency changes.
+
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
+
+### gitleaks config (`.gitleaks.toml`)
+
+`gitleaks detect --source .` (git history) and `--no-git --source .` (tree) read the repo's `.gitleaks.toml` by default. It extends
+the default ruleset (`useDefault = true`) and allowlists 10 reviewed false positives of `generic-api-key`, each scoped to one file
+and the exact string (gate-step names in CONTRACT.md, `steward.bN.vplan` opKeys in `tools/gate6dgr.mjs` and `tools/gate7agj.mjs`,
+a fixture token in `sidecar/test/variants.test.ts`). No directory is excluded and no rule is off; add new entries the same way.
 
 ### Scoped unit suites (`tools/unit-scope.mjs`)
 
@@ -302,6 +331,31 @@ separate from the run's own `--lock`, which still guards one runner's run dir an
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
 
+**Outside callers (Steward), slice SLOT (2026-11-15).** Steward's in-game clients (e2e and slice flows) take a slot from the same
+queue, so FIFO, the slot limit, the load gate and turbo exclusivity apply to them. They take **one slot per client**, with one
+acquire before each client launch. A 2-client run makes 2 acquires under the same driver pid:
+```
+node "$ARCHITECT_DIR/tools/slot.mjs" acquire --who steward --worktree "$PWD" --label <flow or step> --pid <driver pid> \
+     [--max-wait-min N] [--no-load-wait]       # stdout: {"slot":3,"ticket":"t-<enqueuedAt>-<pid>","path":...,"waitedSeconds":...}
+node "$ARCHITECT_DIR/tools/slot.mjs" release --ticket <ticket>   # frees only that ticket's slot
+node "$ARCHITECT_DIR/tools/slot.mjs" status --json               # holders (who/worktree/label/pid/ticket), queue, load, turbo
+```
+- **`acquire`:** queues a ticket and blocks until it is that ticket's turn: no turbo run queued, reserving or running; a free
+  slot; the load gate (max1 72, settle 120 s). Waiting is logged on stderr. Settle also spaces one driver's own clients:
+  client 2 starts at least 120 s after client 1.
+- **Load alone never fails it:** as for a gate run, the load gate gives up at the cap and starts (`loadWait.gaveUp`).
+- **`--pid`:** the slot's holder. Use the e2e driver's node pid (alive for the whole run), not a relaunching client. The slot
+  frees when that pid dies; a waiter that dies loses its queue ticket.
+- **`--max-wait-min`:** 15 by default, capped at 15 (rule 10). On timeout (full slots, turbo, the queue ahead) it exits 2 with
+  `waited 15 min for a slot (load N / max1 72; turbo none|queued|reserving|running (pid ..); holders: ..)` on stderr. Exit 3: the
+  holder pid is dead. Exit 4: a release freed nothing.
+- **Status:** `status --json` `turbo` has `queued`, `reserving` and `running`. A turbo run waits for Steward holders like gate runs.
+- **Slots dir:** `GATE_SLOTS_DIR`, else `<this checkout>/../.gate-slots` from the script's own path (gate-run's dir); any cwd works.
+- *As built:* `tools/slot.mjs` over `tools/lib/slots.mjs`: `acquireSlot(dir, { who, label, pid, worktree, maxWaitMin, noLoadWait })`
+  -> `{ slot, ticket, path }`, `releaseTicket(dir, ticket)`, `slotStatus(dir)`, `resolveSlotsDir()`. No second queue: it is
+  turbo.mjs's `acquire`; `tryAcquire` writes `me.holdPid` and `me.slotExtra` (who, label, ticket); `liveHolders` sums one pid's
+  shards; gate-run's `freeRunSlots` counts slots, not pids. Each client counts as 1 shard. Tests: `kit/test/slot-outside.test.mjs`.
+
 ### Load-aware start (2026-11-12)
 
 On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot
@@ -518,6 +572,14 @@ A bump of `lab_ui_version` is therefore resolved per slot automatically; a faile
 command to run by hand. Another pinned dev.larattalabs dependency is one row in `PINS`. A run that aborts in setup runs no step: the
 nightly's `SUMMARY.md` and `nightly.log` then start with `SETUP ABORT: <reason>`, and `summary.json` and `artifacts/nightly/latest.json`
 carry `setupAbort: true` (with `setupAbortReason`), so it cannot be read as a test failure. No notification is sent.
+
+### Review sheets for Noah (2026-11-15)
+
+Noah via the parent session: a sheet meant for Noah (a before/after UI sheet, a blind A/B pick sheet) is **one self-contained HTML
+file**: his preview receives only the HTML, so relative `img/` paths show nothing. Write it with `writeSheet(file, html)` from
+`tools/lib/sheet-inline.mjs` (local `<img src>` inlined as data URIs; a PNG over 300 KB re-encoded as JPEG with `sips`), or
+convert an existing one with `node tools/sheet-inline.mjs <sheet.html> [--out <file>]` (it fails if an image is missing).
+Keep the answer key in its own file, never in the sheet.
 
 ### UI gallery (nightly only)
 
@@ -1200,6 +1262,14 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - *Housekeeping 2 (2026-10-18):* plan-p0 is now plan-p0, -valid, -det-1..3 and -asks (37-61 s each), and the 500 claims are
   village-layout-1..4 (17-23 s each). The suite went from 214/267 s to 139/145 s (A/B/A/B, load 3-10). A driver that names
   plan-p0 or village lists the split files too.
+- *GR-b (2026-11-16).* **unit-kit ends without a complete report** (TIMEOUT/FAIL/ERROR, passed as `GATE_KIT_PRODUCER`): the first
+  whole-suite reader (20+ files) re-runs the suite once under GX's shared-suite lock; the rest wait and reuse it under the same
+  rules (complete, this tree, every file with tests and no failure: no stale PASS). Fewer files: run here, never wait. A re-run
+  that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that rule 2 re-runs.
+  **Load-scaled timeouts:** `gate-chains.json` `timeoutLoadScale.steps` (unit-kit, -sidecar, -scope) spend `min(1, ref / load1)` of
+  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (rule 10's spirit: bounded, recorded as
+  `timeoutLoadScale` in `summary.json`). Load, not CPU time: node --test children exit and Gradle's daemon is outside the group, so
+  `ps` under-counts (`tools/lib/load-timeout.mjs`; tests `kit/test/gate-load-timeout.test.mjs`, `gate-kit-producer.test.mjs`).
 
 ### Gradle in the source checkout
 

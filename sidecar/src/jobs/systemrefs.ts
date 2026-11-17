@@ -221,6 +221,39 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
   return out;
 }
 
+/**
+ * (CB) plan/0#compact's parts, for a caller that shows its kind defs on demand (the composer, compose.ts composerPlanParts): the compact
+ * schema (the same object renderBlock renders, x-catalogue removed) and the compact catalogue text. `planCompactBlock(parts)` with
+ * nothing omitted is plan/0#compact's block byte for byte (a unit says so).
+ */
+export async function planCompactParts(kitDir: string): Promise<{ schema: Record<string, Json>; catalogueText: string; entries: Array<Record<string, Json>> }> {
+  const p = parseSystemRefs(['plan/0#compact'])[0]!;
+  let schema: Record<string, Json>;
+  try {
+    schema = JSON.parse(fs.readFileSync(path.join(kitDir, 'schemas', p.doc.file), 'utf8')) as Record<string, Json>;
+  } catch {
+    throw refuse('system_ref_unavailable', `systemRefs: "${p.ref}" is not in this helper's kit (no readable schemas/${p.doc.file})`);
+  }
+  const kinds = kindDefNames(schema);
+  let catalogue: Record<string, Json>;
+  try {
+    catalogue = await kitCatalogue(kitDir);
+  } catch {
+    throw refuse('system_ref_unavailable', `systemRefs: "${p.ref}" needs the kit's capability catalogue (lib/plan/catalogue.mjs), which this helper's kit lacks`);
+  }
+  const x = schema['x-catalogue'];
+  const entries = isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : [];
+  delete schema['x-catalogue'];
+  return { schema: inlineTrivialRefs(dropKindDescriptions(schema, kinds)), catalogueText: compactCatalogueText(catalogue), entries };
+}
+
+/** (CB) plan/0#compact's block from its parts, with the `$defs` named in `omit` left out (each served on demand by the caller). */
+export function planCompactBlock(parts: { schema: Record<string, Json>; catalogueText: string }, omit: ReadonlySet<string> = new Set(), title = "Architect's plan schema (plan/0), compact"): string {
+  let schema = parts.schema;
+  if (omit.size && isObj(schema.$defs)) schema = { ...schema, $defs: Object.fromEntries(Object.entries(schema.$defs).filter(([k]) => !omit.has(k))) };
+  return `## ${title}\n\n${JSON.stringify(schema)}\n\n## Capability catalogue of plan/0, compact\n\n${parts.catalogueText}`;
+}
+
 /** The ref blocks, joined; '' for no refs. Throws RefusedError (FIELD_LIMIT) for a bad ref. */
 export async function expandSystemRefs(kitDir: string, refs: readonly string[] | undefined): Promise<string> {
   if (!refs?.length) return '';

@@ -5,7 +5,8 @@
 // bytes it returns; tools/region.mjs writes the files.
 import { dirtyKeys } from '../region/revise.mjs';
 import { evalTile } from '../realise.mjs';
-import { canonicalJson, sha256Hex, FLAG_MISSING, FLAG_WATER } from '../region/pack.mjs';
+import { asColumns, canonicalJson, sha256Hex, FLAG_MISSING, FLAG_WATER } from '../region/pack.mjs';
+import { STREET_RULES } from '../region/village.mjs';
 import { windowFromSurvey } from '../region/survey.mjs';
 import { encodePng } from '../png.mjs';
 import { planCatalogue, PLAN_API } from './catalogue.mjs';
@@ -59,13 +60,113 @@ export function survivalCostOf(st) {
   return o;
 }
 
-/** The overall result (§3). */
+/** The overall result (§3). (CF2) A required zone short of its lots (`lotsShort`) answers NEEDS_REPAIR too, though it stays adjusted. */
 export function overallOf(answers, { malformed = false } = {}) {
   if (malformed) return 'MALFORMED';
   if (answers.some((a) => a.class === 'incomplete')) return 'INCOMPLETE';
   if (answers.some((a) => a.required && ['unsupported', 'refused', 'blocked', 'malformed'].includes(a.class))) return 'REQUIRED_BLOCKED';
-  if (answers.some((a) => !OK.has(a.class))) return 'NEEDS_REPAIR';
+  if (answers.some((a) => !OK.has(a.class) || lotsShort(a))) return 'NEEDS_REPAIR';
   return 'READY';
+}
+
+/** (CF2) The reason code a required zone short of its lots carries (its class stays fits/adjusted: the lots it placed still build). */
+export const LOTS_SHORT = 'LOTS_SHORT';
+
+/** (CF2) Whether an answer is a fits/adjusted part carrying the LOTS_SHORT reason (a repair target). */
+export function lotsShort(a) {
+  return OK.has(a?.class) && Array.isArray(a.reasons) && a.reasons.some((r) => r?.code === LOTS_SHORT);
+}
+
+/**
+ * (CF2) How many of a required zone's `stated` lots may go unplaced before the zone is a repair target: the zone's own
+ * `tolerance.count.max` when the plan states one, else a third of its lots (floor). The kit's default count tolerance (max 0, no
+ * ceiling) is soft and unbounded, so without this a zone placing 3 of 9 lots answered READY.
+ */
+export function lotsShortAllowed(zone, stated) {
+  const m = zone?.tolerance?.count?.max;
+  return typeof m === 'number' && m >= 0 ? m : Math.floor(stated / 3);
+}
+
+/**
+ * (CF3) The lot width the terrace nudge measures a slope by: an M lot (13 across). Ground is steep for a street when such a lot on it,
+ * at the rect's mean grade, would rise more than a street lot may (STREET_RULES.maxSlope, 3): its rise x 13 > 3 x its longer side.
+ */
+export const SLOPE_LOT = 13;
+
+/** (CF3) The ground's rise (max - min, dry known columns) over a rect [x0, z0, x1, z1] of a survey's columns, or null when none. */
+export function groundRise(cols, rect) {
+  if (!cols || !Array.isArray(rect) || rect.length < 4) return null;
+  const r = cols.resolution;
+  const i0 = Math.max(0, Math.ceil((rect[0] - cols.minX) / r)), i1 = Math.min(cols.width - 1, Math.floor((rect[2] - cols.minX) / r));
+  const j0 = Math.max(0, Math.ceil((rect[1] - cols.minZ) / r)), j1 = Math.min(cols.depth - 1, Math.floor((rect[3] - cols.minZ) / r));
+  let lo = Infinity, hi = -Infinity;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const k = i + j * cols.width;
+    if (cols.flags[k] & (FLAG_WATER | FLAG_MISSING)) continue;
+    const g = cols.ground[k];
+    if (g < lo) lo = g;
+    if (g > hi) hi = g;
+  }
+  return hi >= lo ? hi - lo : null;
+}
+
+/** (CF3) Whether ground rising `rise` over a rect is steep for a street (SLOPE_LOT): rise x 13 > maxSlope x the rect's longer side. */
+export function steepFor(rise, rect) {
+  if (typeof rise !== 'number' || !Array.isArray(rect)) return false;
+  const side = Math.max(rect[2] - rect[0] + 1, rect[3] - rect[1] + 1);
+  return rise * SLOPE_LOT > STREET_RULES.maxSlope * side;
+}
+
+/**
+ * (CF3) A LOTS_SHORT zone's terrace nudge: its parts that lost lots on steep ground (steepFor) with no `terraces` of their own nor
+ * from the zone (compile's `d.terraces ?? zone.terraces`): `{ids, rise}` (ids: the districts, or the zone itself for a lots zone; an
+ * unplaced district is measured over the zone's rect), or null.
+ */
+export function terraceNudge(a, zone, cols) {
+  if (!cols || !zone || zone.terraces !== undefined) return null;
+  const g = a.geometry ?? {};
+  const ds = Array.isArray(zone.program?.districts) ? zone.program.districts : null;
+  const ids = [];
+  let rise = 0;
+  const at = (id, rect) => { const n = groundRise(cols, rect); if (steepFor(n, rect)) { ids.push(id); rise = Math.max(rise, n); } };
+  if (!ds) at(zone.id, g.rect);
+  else for (const d of ds) {
+    if (d?.terraces !== undefined || typeof d?.id !== 'string') continue;
+    const placed = g.districts?.[d.id];
+    if (placed && !(placed.unplaced?.length > 0)) continue;
+    at(d.id, placed?.rect ?? g.rect);
+  }
+  return ids.length ? { ids, rise } : null;
+}
+
+/**
+ * (CF2) Marks each required zone (fits/adjusted, not grown) whose unplaced lots (its count deviation) exceed lotsShortAllowed with a
+ * LOTS_SHORT reason naming how many lots did not fit. Optional zones, and zones within the allowance, are left as they are. In place.
+ * (CF3) With the plan survey (`survey`, bytes or columns), a zone whose short parts stand on steep ground without terraces (terraceNudge)
+ * gets a suggestion in the message and `evidence.terraces` {ids, rise}: add `terraces` to the zone, or to each district.
+ */
+export function markLotsShort(answers, plan, survey = null) {
+  let cols = null;
+  const zones = Array.isArray(plan?.zones) ? plan.zones : [];
+  for (const a of answers) {
+    if (!a.required || !OK.has(a.class) || !String(a.block ?? '').startsWith('zone') || a.geometry?.grown) continue;
+    const dev = (a.deviations ?? []).find((d) => d?.what === 'count');
+    const unplaced = typeof dev?.value === 'number' ? dev.value : 0;
+    if (!(unplaced > 0)) continue;
+    const placed = (a.geometry?.lots ?? []).filter((l) => typeof l?.id === 'string').length;
+    const stated = placed + unplaced;
+    const allowed = lotsShortAllowed(zones.find((z) => z?.id === a.part), stated);
+    if (unplaced <= allowed) continue;
+    const ids = Array.isArray(a.geometry?.unplaced) ? a.geometry.unplaced : Object.values(a.geometry?.districts ?? {}).flatMap((d) => d?.unplaced ?? []);
+    const zone = zones.find((z) => z?.id === a.part);
+    if (survey && !cols) { try { cols = asColumns(survey); } catch { cols = null; survey = null; } }
+    const nudge = terraceNudge(a, zone, cols);
+    const tip = !nudge ? '' : Array.isArray(zone.program?.districts)
+      ? `; ${nudge.ids.join(', ')} ${nudge.ids.length > 1 ? 'stand' : 'stands'} on ground rising ${nudge.rise} blocks, too steep for a street, without terraces: add \`terraces\` to the zone (so every district is terraced) or to each district`
+      : `; the zone stands on ground rising ${nudge.rise} blocks, too steep for a street, without terraces: add \`terraces\` to the zone`;
+    a.reasons = [...(a.reasons ?? []), { code: LOTS_SHORT, message: `${unplaced} of the zone's ${stated} lots did not fit (${placed} placed; at most ${allowed} may be left out): give the zone more room (a larger size, districts, a terrace, a bigger form) or fewer lots${tip}`,
+      evidence: { what: 'count', lots: stated, placed, unplaced, allowed, ...(ids.length ? { ids: ids.filter((x) => typeof x === 'string') } : {}), ...(nudge ? { terraces: nudge } : {}) } }];
+  }
 }
 
 /**
@@ -173,6 +274,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };
   }
+  // (CF2) a required zone short of its lots: a repair target (NEEDS_REPAIR), its class and geometry kept
+  markLotsShort(answers, inputs.plan ?? ir.params.plan, survey);
   const overall = overallOf(answers);
   const totals = answers.reduce((t, a) => {
     if (!a.cost) return t;

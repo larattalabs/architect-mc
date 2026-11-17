@@ -209,7 +209,14 @@ public final class ConnectorPlace {
 			}
 			Mode mode = survival ? Mode.CONSTRUCTION : Mode.INSTANT;
 			return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(ck.artifactSha(), mode, actor, Map.of(), r.opKey(),
-				new JsonObject())), server).thenCompose(f -> f).thenApply(region -> new PlaceResult(true, Optional.of(region), List.of(), notes));
+				new JsonObject())), server).thenCompose(f -> f).thenApply(region -> {
+				if (actor != null) {
+					// ((7c CN) the player-facing remove: /architect region remove, as the link's owner, names this region by default)
+					dev.larattalabs.architect.region.RegionCommands.rememberRegion(actor.getName().getString(), region);
+					notes.add("remove it with /architect region remove " + region);
+				}
+				return new PlaceResult(true, Optional.of(region), List.of(), notes);
+			});
 		}).whenComplete((res, t) -> {
 			if (t == null) {
 				out.complete(res);

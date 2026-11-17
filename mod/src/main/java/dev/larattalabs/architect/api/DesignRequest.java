@@ -59,6 +59,13 @@ import org.jspecify.annotations.Nullable;
  *     designed in one pass with no massing of its own (since 1.53.0, 7b SL: in a massingFirst group it waits for the group's massing step,
  *     then designs in the same group), and it has no count or copyOf (its site variants are
  *     {@link Designs#siteVariant}). A versionOf of a site-bound entry without a site is built into the entry's own site
+ * @param inverted (7c CS, since 1.65.0, a helper with {@code "design.inverted"}, feature {@code "invertedDesigns"}) the lot hangs inverted:
+ *     a {@code rule.suspended} lot (the plan artifact's {@code $.lots[].inverted}, {@link LotSpec}'s lot). The design job is told so
+ *     (its brief's Site section: the house is built standing and turned over with {@code bp.invert()}, hung by its old floor from the
+ *     site's hang points, the floor furniture written after the flip); the entry's recorded request carries it (its blueprint has
+ *     {@code inverted: true} once the design is turned over), and a versionOf of it in a suspend site stays inverted. Needs a
+ *     {@link #site()} whose fit is {@link FitMode#SUSPEND} (else refused, nothing sent). False (every older constructor) = as before; a
+ *     false value is not sent, so the request's wire (and an opKey's body) is unchanged
  *
  * <p>Binary compatibility (Steward's U1 review): every earlier canonical constructor stays as a secondary one (the 14-argument
  * 1.1.0 one Steward calls among them); a later change to this record keeps them all and adds its own.
@@ -67,7 +74,8 @@ public record DesignRequest(String type, String style, @Nullable String material
 	@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
 	@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
 	@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
-	@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette, @Nullable String opKey, @Nullable SiteSpec site) {
+	@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette, @Nullable String opKey, @Nullable SiteSpec site,
+	boolean inverted) {
 	/** The most characters of a context (text, or JSON as text). */
 	public static final int MAX_CONTEXT = 4000;
 	/**
@@ -134,6 +142,25 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** The most reserved cells a request carries. */
 	public static final int MAX_RESERVED = Limits.RESERVED_CELLS_MAX;
 
+	/** The 1.53.0 constructor (no inverted). Kept for binary compatibility. */
+	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
+		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
+		@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
+		@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette, @Nullable String opKey, @Nullable SiteSpec site) {
+		this(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile, bibleVersion, massing,
+			fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, false);
+	}
+
+	/**
+	 * (7c CS) A copy for a lot that hangs inverted ({@code true}) or not: see {@link #inverted()}. Needs a suspend site
+	 * ({@link #withSite}). Since 1.65.0.
+	 */
+	public DesignRequest withInverted(boolean on) {
+		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, on);
+	}
+
 	/** The 1.52.0 constructor (no site). Kept for binary compatibility. */
 	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
 		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
@@ -150,7 +177,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest withSite(@Nullable SiteSpec s) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, s);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, s, inverted);
 	}
 
 	/** The 1.41.0 constructor (no opKey). Kept for binary compatibility. */
@@ -169,7 +196,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest withOpKey(@Nullable String key) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, key, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, key, site, inverted);
 	}
 
 	/** The 1.37.0 constructor (no palette). Kept for binary compatibility. */
@@ -188,7 +215,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest withPalette(@Nullable JsonElement p) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, p == null || p.isJsonNull() ? null : p, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, p == null || p.isJsonNull() ? null : p, opKey, site, inverted);
 	}
 
 	/**
@@ -225,7 +252,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy whose design leaves {@code r}'s cells of the lot as given (null = none). Since 1.37.0. */
 	public DesignRequest withReserved(@Nullable Reserved r) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r, palette, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r, palette, opKey, site, inverted);
 	}
 
 	/** The 1.6.0 constructor (no versionOf). */
@@ -243,7 +270,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest versionOf(String entryId, @Nullable String siteId) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId, reserved, palette, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId, reserved, palette, opKey, site, inverted);
 	}
 
 	/** The 1.3.0 constructor (no critique). */
@@ -273,19 +300,19 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with an open type's profile. Since 1.2.0. */
 	public DesignRequest withProfile(List<String> rules) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, rules,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 
 	/** A copy designed with a style bible (null version = its latest). Since 1.2.0. */
 	public DesignRequest withBible(@Nullable String bibleId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bibleId, group, profile,
-			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site);
+			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 
 	/** A copy that is (true) or is not (false) a massing job. Since 1.3.0. */
 	public DesignRequest massing(boolean on) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site);
+			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 
 	/** A copy that is the detail pass of the massing's latest version. Since 1.3.0. */
@@ -296,7 +323,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy that is the detail pass of one massing version (null = its latest). Since 1.3.0. */
 	public DesignRequest fromMassing(@Nullable String massingId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site);
+			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -307,12 +334,12 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive} (null = none). Since 1.3.0. */
 	public DesignRequest withContext(@Nullable JsonElement ctx) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite, reserved, palette, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 
 	/** A copy critiqued as {@code spec} (null or OFF = none). Since 1.6.0. */
 	public DesignRequest critique(@Nullable CritiqueSpec spec) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite, reserved, palette, opKey, site);
+			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite, reserved, palette, opKey, site, inverted);
 	}
 }

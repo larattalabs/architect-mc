@@ -17,6 +17,7 @@
 		"MovingPistonBlockMixin",
 		"PistonBaseBlockMixin",
 		"PistonMovingBlockEntityMixin",
+		"PlayerSaveFailMixin",
 		"RegionFileFlushMixin",
 		"RegionStorageBarrierMixin",
 		"SaveEpochMixin",

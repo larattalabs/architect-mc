@@ -23,7 +23,7 @@ camp_to_city/camp_city zone.standard fits
 camp_to_city/city_wall connector.wall fits
 castle_city/castle zone.standard adjusted
 castle_city/curtain_wall connector.wall fits
-cat_sanctuary/sanctuary zone.standard adjusted
+cat_sanctuary/sanctuary zone.standard adjusted LOTS_SHORT
 cliff_monks/monastery zone.standard fits
 cliff_monks/sea_stair connector.path fits
 cliff_monks/ledge_path connector.path fits
@@ -45,17 +45,17 @@ fishing_village/village zone.standard fits
 grid_city/grid_city zone.standard fits
 harbour/harbour zone.standard fits
 harvest_hamlet/hamlet zone.standard fits
-hidden_village/hollow zone.standard adjusted
+hidden_village/hollow zone.standard adjusted LOTS_SHORT
 hidden_village/cave_ladders connector.ladder blocked DEPENDENCY
 hidden_village/waterfall_curtain form.waterfall adjusted
 hidden_village/mossy_palette rule.palette refused NO_FEATURE
-ice_village/village zone.standard adjusted
+ice_village/village zone.standard adjusted LOTS_SHORT
 lone_hermit/hermitage zone.standard fits
 looks_old/hold zone.standard fits
 mage_exiles/enclave zone.standard fits
 mage_exiles/shared_stone_base rule.palette refused TOLERANCE
 market_town/town zone.standard fits
-metropolis/capital zone.standard adjusted
+metropolis/capital zone.standard adjusted LOTS_SHORT
 metropolis/city_wall connector.wall fits
 mining_town/mining_town zone.standard fits
 mining_town/street_1 connector.street fits
@@ -76,7 +76,7 @@ one_block/gentle_terraces form.terrace refused OVERLAP
 one_block/copper_only rule.palette refused TOLERANCE
 organic_hamlet/hamlet zone.standard fits
 pirate_cove/cove zone.standard fits
-redstone_gate/fortress zone.standard adjusted
+redstone_gate/fortress zone.standard adjusted LOTS_SHORT
 redstone_gate/moat connector.channel fits
 redstone_gate/curtain_wall connector.wall adjusted
 redstone_gate/main_gate connector.gate refused NO_ROOM

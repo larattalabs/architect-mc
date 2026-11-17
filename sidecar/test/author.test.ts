@@ -122,7 +122,8 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
     const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', KIT, '--backend', 'sim'], {});
     fs.mkdirSync(cfg.dataDir, { recursive: true });
     cfg.simStepMs = 10;
-    cfg.regions.planMs = 8000; // the timers probe ends on the plan's wall clock
+    cfg.regions.planMs = 8000; // the busy probe ends on the plan's CPU time
+    cfg.regions.planWallMs = 8000; // ((WR2) the timers probe, idle, ends on the wall-clock backstop)
     sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
     fs.mkdirSync(cfg.regions.programsDir, { recursive: true });
     sc.subscribe((m: Outbound) => events.push(m));

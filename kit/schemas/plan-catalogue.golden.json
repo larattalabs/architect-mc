@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 24,
- "api": "1.64.0",
- "kitVersion": "0.67.0",
+ "catalogueVersion": 26,
+ "api": "1.65.0",
+ "kitVersion": "0.71.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -576,6 +576,13 @@
    "schemaVersion": 0,
    "state": "supported",
    "note": "LP: between site lots' cellar doors; else refused."
+  },
+  {
+   "id": "ladder.port",
+   "sinceApi": "1.65.0",
+   "schemaVersion": 0,
+   "state": "supported",
+   "note": "PL2 (no limits member: the composer's compact budget; rise 2+, at most 24 rungs, player only): a connector.ladder with one end a site lot (its walk port, facing out or down) and the other the ground under it ({anchor} or {feature}) or a form part (its foot on the form): a one-ended port link, written at realise against the bound entry's port; NO_CLIMB under 2, SPAN past 24 rungs; not in survival."
   },
   {
    "id": "channel.moat",
@@ -1252,6 +1259,13 @@
    "schemaVersion": 1,
    "state": "supported",
    "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge."
+  },
+  {
+   "id": "feature.cave",
+   "sinceApi": "1.65.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "CAVE: a cave the claim's land already has (the site analysis's caves in the template pick's claim window; minFloor, pick largest or nearest to `to`). Only an elevated zone's near locator: its lots are carve_into site lots dug into the cave's walls, the door on the cave floor."
   },
   {
    "id": "endpoint.part",

@@ -163,11 +163,17 @@ class Api7bFTest {
 		Class<?>[] design = Arrays.copyOf(Arrays.stream(DesignRequest.class.getRecordComponents()).map(c -> c.getType()).toArray(Class<?>[]::new), 26);
 		assertEquals(String.class, design[25]);
 		DesignRequest.class.getConstructor(design);
+		// (7c CS) DesignRequest's site is the 27th component, inverted the 28th; the 27-argument constructor is kept
+		DesignRequest.class.getConstructor(Arrays.copyOf(Arrays.stream(DesignRequest.class.getRecordComponents()).map(c -> c.getType()).toArray(Class<?>[]::new), 27));
 		for (Class<?> c : List.of(LotSpec.class, PlaceRequest.class, DesignRequest.class)) {
 			var rc = c.getRecordComponents();
-			assertEquals("site", rc[rc.length - 1].getName(), c.getSimpleName());
-			assertEquals(SiteSpec.class, rc[rc.length - 1].getType(), c.getSimpleName());
+			int at = c == DesignRequest.class ? rc.length - 2 : rc.length - 1;
+			assertEquals("site", rc[at].getName(), c.getSimpleName());
+			assertEquals(SiteSpec.class, rc[at].getType(), c.getSimpleName());
 		}
+		var drc = DesignRequest.class.getRecordComponents();
+		assertEquals("inverted", drc[drc.length - 1].getName());
+		assertEquals(boolean.class, drc[drc.length - 1].getType());
 	}
 
 	@Test

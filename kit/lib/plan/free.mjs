@@ -151,10 +151,17 @@ function polarBase(cells, c, widen = 12) {
   return out;
 }
 
-/** The step from c toward the claim's centre (`closed: false` leaves out the arc there; south when c is the centre). */
-function stepToward(env, c) {
-  const cc = centreOf(env.claim);
-  return cc[0] === c[0] && cc[1] === c[1] ? 64 : stepOf(cc[0] - c[0], cc[1] - c[1]);
+/**
+ * The step from c toward the claim's centre (`closed: false` leaves out the arc there; south when c is the centre). ((WR2, WR's rule for
+ * walls) a ring whose innermost radius `base[k] + r0` holds the claim's centre has no side facing the town: null (closed), noted.)
+ */
+function stepToward(env, c, base, r0, notes) {
+  const cc = centreOf(env.claim), dx = cc[0] - c[0], dz = cc[1] - c[1], k = stepOf(dx, dz);
+  if (isqrt(dx * dx + dz * dz) < base[k] + r0) {
+    notes?.push(`closed: false ignored: the ring encloses the claim's centre (${cc[0]}, ${cc[1]}), so it has no side facing the town; it stays closed`);
+    return null;
+  }
+  return dx === 0 && dz === 0 ? 64 : k;
 }
 
 /** Candidate centres about `aim`: aim first, then rings of `step` out to `reach` (Chebyshev; then z, then x). */
@@ -212,7 +219,7 @@ export function resolveFreeZone(env, p, geomOf, o0) {
     const base = polarBase(fp.cells, c, ignore ? 0 : 12).map((v) => (ignore ? v - 3 : v));
     // the footprint itself is no zone land (nothing is written in the hub); a body's (KC) is already cut
     if (!zone.ext?.[UNSAFE]?.zoneIgnoresBody) for (const [x, z] of fp.cells) if (F.in(x, z)) F.mask[F.k(x, z)] = 0;
-    const open = around.closed === false ? stepToward(env, c) : null;
+    const open = around.closed === false ? stepToward(env, c, base, Math.max(2, r0), notes) : null;
     const s = ringSearch(F, { c, specs, shared, base, hub: false, open, r0: Math.max(2, r0), r1: Math.max(r0, r1), step: 2 });
     if (!s.best) {
       // a body in the way (KC's later-part row): OVERLAP {kind: body} with the band that clears it, re-checked alone
@@ -225,7 +232,7 @@ export function resolveFreeZone(env, p, geomOf, o0) {
       const why = s.fails[0];
       return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ring round ${fp.what} in the band [${r0}, ${r1}] fits (${why ? why.message : 'no radius tried'})`, evidence: { ring: [r0, r1], tried: s.tried } }], ...(wf.length ? { wouldFit: wf } : {}) };
     }
-    return fin(s.best, c, { around: { feature: fp.what, offset: s.best.R, ring: [r0, r1], footprint: fp }, mask: around.closed === false ? 'open' : null });
+    return fin(s.best, c, { around: { feature: fp.what, offset: s.best.R, ring: [r0, r1], footprint: fp }, mask: open !== null ? 'open' : null });
   }
 
   // ---- the locator: a rect target (inside), or a point to centre on (near, adjacent, the claim, a sketch)
@@ -397,7 +404,8 @@ export function aroundSites(env, part, geomOf, keep, { foot, count, fit }) {
   const at = (k, off) => { const [x, z] = polarCell(c, k, base[k] + off + half); return { minX: x - half, minZ: z - half, maxX: x - half + foot - 1, maxZ: z - half + foot - 1 }; };
   const sites = [];
   const okSite = (q) => q.minX >= env.claim.minX + MARGIN && q.maxX <= env.claim.maxX - MARGIN && q.minZ >= env.claim.minZ + MARGIN && q.maxZ <= env.claim.maxZ - MARGIN && clearOfFoot(q) && !sites.some((s) => meets({ minX: s.rect.minX - 8, minZ: s.rect.minZ - 8, maxX: s.rect.maxX + 8, maxZ: s.rect.maxZ + 8 }, q)) && fit(q);
-  const gap = around.closed === false ? stepToward(env, c) : null;
+  const notes = [];
+  const gap = around.closed === false ? stepToward(env, c, base, r0, notes) : null;
   const inGap = (k) => gap !== null && (((k - gap) % TURN) + TURN) % TURN <= 21 || (gap !== null && (((gap - k) % TURN) + TURN) % TURN <= 21);
   if (count >= 3) {
     const span = gap !== null ? TURN - 43 : TURN;
@@ -418,7 +426,7 @@ export function aroundSites(env, part, geomOf, keep, { foot, count, fit }) {
       for (let off = r0; off <= r1; off += 2) { const q = at(k, off); if (okSite(q)) { sites.push({ rect: q, centre: centreOf(q), step: k, off }); break; } }
     }
   }
-  return { sites, footprint: fp, ring: [r0, r1] };
+  return { sites, footprint: fp, ring: [r0, r1], notes };
 }
 
 void arrRect; void inside; void FL_RULES;

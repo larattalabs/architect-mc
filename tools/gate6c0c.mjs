@@ -102,7 +102,7 @@ steps.base = async () => {
     for (const r of ['random_tick_speed 0', 'mob_griefing false', 'advance_time false', 'advance_weather false', 'spawn_mobs false', 'spawn_monsters false']) await cmd(`/gamerule ${r}`);
     await cmd('/time set 6000');
     await tp(0.5, 120, 0.5);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   }
   if (!fs.existsSync(path.join(SAVES, SURV, 'level.dat'))) {
@@ -110,7 +110,7 @@ steps.base = async () => {
     for (const r of ['random_tick_speed 0', 'mob_griefing false', 'advance_time false', 'advance_weather false', 'spawn_mobs false', 'spawn_monsters false']) await cmd(`/gamerule ${r}`);
     await cmd('/time set 6000');
     await call('dev.survival.set', { on: true });
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   }
   return { worlds: [FLAT, FOREST, SURV], seed: SEED };
@@ -630,7 +630,7 @@ steps.downgrade = async () => {
       await sleep(1000);
     }
     check(rv && rv.state === 'BUILDING' && rv.built > 0 && rv.built < rv.queued, `downgrade a: ${roadId} half built (${rv?.built}/${rv?.queued})`);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     fs.writeFileSync(f, JSON.stringify({ roadId, min, max, h0, half: rv }, null, 2));
     return { roadId, built: rv };

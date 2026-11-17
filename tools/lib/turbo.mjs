@@ -116,7 +116,11 @@ export function liveHolders(dir, opts = {}) {
   const by = new Map();
   for (const { i, holder } of readSlots(dir, opts)) {
     if (!holder) continue;
-    const h = by.get(holder.pid) ?? { ...holder, slots: [] };
+    const had = by.get(holder.pid);
+    const h = had ?? { ...holder, slots: [] };
+    // one pid may hold several shared slots (an outside caller's driver, one per client: tools/lib/slots.mjs): their shards add up.
+    // A turbo run writes the same record to every slot, so it counts once
+    if (had && !holder.turbo && !h.turbo && Number.isInteger(holder.shards)) h.shards = (Number.isInteger(h.shards) ? h.shards : 0) + holder.shards;
     h.slots.push(i);
     by.set(holder.pid, h);
   }
@@ -146,13 +150,30 @@ export function liveTickets(dir, { alive = pidAlive, prune = true } = {}) {
 const before = (a, b) => a.enqueuedAt < b.enqueuedAt || (a.enqueuedAt === b.enqueuedAt && a.pid < b.pid);
 export const describeRun = (h) => `pid ${h.pid} ${h.turbo ? 'TURBO ' : ''}${h.chain ?? '?'} ${h.worktree ?? ''}${h.state === 'reserving' ? ' (reserving the machine)' : ''}${h.startedAt ? ` since ${h.startedAt}` : h.enqueuedAt ? ` queued ${new Date(h.enqueuedAt).toISOString()}` : ''}`;
 
+/** (M1) The enqueue times of the tickets the held slot files carry (outside callers' `ticket: t-<ms>-<pid>`). */
+function heldTicketTimes(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((f) => /^slot-\d+\.json$/.test(f)); } catch { return []; }
+  const out = [];
+  for (const f of names) {
+    try {
+      const t = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).ticket;
+      const m = typeof t === 'string' && /^t-(\d+)-\d+$/.exec(t);
+      if (m) out.push(Number(m[1]));
+    } catch { /* a slot file being written or removed: skip it */ }
+  }
+  return out;
+}
+
 /** me: { pid, worktree, chain, turbo }. Writes the ticket under the mutex and sets me.enqueuedAt there, later than every live
  * ticket's: the order is the order of enqueueing, so a ticket can never appear ahead of one already queued (which could otherwise
  * deadlock a reserving turbo run against it). */
 export async function enqueue(dir, me) {
   fs.mkdirSync(queueDir(dir), { recursive: true });
   const r = await withMutex(dir, () => {
-    me.enqueuedAt = Math.max(Date.now(), ...liveTickets(dir, { prune: false }).map((t) => t.enqueuedAt + 1));
+    // (M1) also later than every held slot's ticket: one holder pid acquiring twice in the same millisecond would otherwise get
+    // the same ticket id t-<ms>-<pid> as the slot it already holds (the first ticket leaves the queue once its slot is taken)
+    me.enqueuedAt = Math.max(Date.now(), ...liveTickets(dir, { prune: false }).map((t) => t.enqueuedAt + 1), ...heldTicketTimes(dir).map((t) => t + 1));
     writeAtomic(ticketFile(dir, me), me);
     return true;
   }, { tries: 400 });
@@ -253,7 +274,9 @@ export async function tryAcquire(dir, me, { slots, fill = slots, decide = async 
       const held = loadGate(me, others, { load, loadNow, now: now?.() ?? Date.now() });
       if (held) return { acquired: false, waitingOn: [held], load: true, load1: Math.round((loadNow ?? (() => os.loadavg()[0]))() * 10) / 10 };
       const d = await decide(n);
-      writeAtomic(slotFile(dir, n), { pid: me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports });
+      // an outside caller (tools/lib/slots.mjs, Steward) waits in its own process but the slot is held by me.holdPid (its long-lived client
+      // parent), so a crash frees it; me.slotExtra adds its who/label/ticket
+      writeAtomic(slotFile(dir, n), { pid: me.holdPid ?? me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports, ...(me.slotExtra ?? {}) });
       fs.rmSync(ticketFile(dir, me), { force: true });
       return { acquired: true, slot: n, slots: [n] };
     }

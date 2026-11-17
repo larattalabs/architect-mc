@@ -337,7 +337,7 @@ steps.base = async () => {
     await setRules();
     await tp(0.5, 200, 0.5);
     await cmd('/kill @e[type=!minecraft:player]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   }
   execFileSync('node', [path.join(root, 'tools', 'gate6a-stubs.mjs'), LIBRARY]);
@@ -490,7 +490,7 @@ async function prepared(base, program, params = {}, name = `${base} Prepared`) {
   // prepare again: nothing left (resumable, idempotent)
   const again = await prepare(p1.planId);
   out.again = again.stats;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G6A Preparing', name);
   out.world = name;
@@ -517,7 +517,7 @@ steps.megaA = async () => {
   ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
   saveCtx();
   // a copy of the realised world for post-mortems (the undo releases the journal's entries at the next start)
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G6A MegaA', 'G6A MegaA Realised');
   await openWorld('G6A MegaA');
@@ -900,7 +900,7 @@ steps.eflat = async () => {
   out.edit = { at: edit };
   await tp(0.5, 160, 0.5);
   // copies for the stage undo and the lot undo (slice: those two run at release, UmtGateMovesTest covers them)
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   if (!SLICE) {
     copyWorld('G6A EFlat', 'G6A EFlat Stage');
@@ -1040,7 +1040,7 @@ steps.inv3 = async () => {
   const bb = boxOf(all.find((x) => x.id === upper).box);
   const cell = [bb[0] + 1, bb[1] + 1, bb[2] + 1];
   await cmd(`/setblock ${cell.join(' ')} minecraft:gold_block`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G6A Inv3', 'G6A Inv3 B');
   await openWorld('G6A Inv3');
@@ -1342,7 +1342,7 @@ steps.staged = async () => {
     await api(`sapprove ${group} ways`);
     st = await waitRegion(region, 900_000);
     const placedLots = st.view.lots.filter((l) => l.state === 'placed').map((l) => l.siteId);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     // the columns each lot writes are its site's snapshot box (the building and its approach; the IR's lot box is larger)
     const sites = [];

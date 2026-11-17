@@ -105,7 +105,7 @@ export function siteLot(r, id, opts = {}) {
   const what = `site lot ${id}`;
   if (typeof id !== 'string' || !SITE_LOT_ID.test(id)) throw new Error(`site lot id '${id}' must match ${SITE_LOT_ID}`);
   if (r.lotIds.has(id)) throw new Error(`lot id '${id}' is used twice`);
-  const { fit, max, ports, brief, stage, box: given, host = null, ext, part = null, y = null, inverted = false } = opts;
+  const { fit, max, ports, brief, stage, box: given, host = null, ext, part = null, y = null, inverted = false, land = null } = opts;
   if (!FIT_IDS.includes(fit)) throw new Error(`${what}: fit must be one of ${FIT_IDS.join(', ')}`);
   let a = opts.affordance ?? null;
   if (typeof a === 'string') {
@@ -143,9 +143,18 @@ export function siteLot(r, id, opts = {}) {
     throw new Error(`${what}: its site volume (the box + ${SITE_MARGIN}) leaves the claim`);
   }
   let vol = null, sha = null;
-  const read = Object.entries(r.volumesUsed).map(([name, u]) => ({ name, u, d: r._volumeDecoded?.get(name) })).filter((x) => x.d);
+  // ((slice R2, forms as land) `land`: a volume-shaped land (plan/elevated.mjs landAfterForms: the frozen volume with the plan's writes so
+  // far) that covers the site volume; the site is cut from it into its own side blob. Absent: as before, byte for byte)
+  const read = land ? [] : Object.entries(r.volumesUsed).map(([name, u]) => ({ name, u, d: r._volumeDecoded?.get(name) })).filter((x) => x.d);
   const exact = read.find((x) => sameBox(x.u.box, vb));
-  if (exact) {
+  if (land) {
+    if (!inside(land.box, vb)) throw new Error(`${what}: its site volume (the box + ${SITE_MARGIN}) leaves the land it was found on`);
+    const bytes = cropVolume(land, vb);
+    sha = sha256Hex(bytes);
+    const blob = `site_${id}`;
+    if (!r.sideBlobs[blob]) r._sideBlob(blob, 'volume', gzipPinned(bytes));
+    vol = { box: vb, width: vb.maxX - vb.minX + 1, height: vb.maxY - vb.minY + 1, depth: vb.maxZ - vb.minZ + 1, classes: null, _src: land };
+  } else if (exact) {
     vol = exact.d; sha = exact.d.sha;
   } else {
     const cover = read.filter((x) => inside(x.u.box, vb)).sort((p, q) => (p.name < q.name ? -1 : p.name > q.name ? 1 : 0))[0];

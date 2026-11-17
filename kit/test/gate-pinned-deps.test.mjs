@@ -128,3 +128,50 @@ test('seed: ensurePinnedDeps runs it after the pins (both paths); LAB_UI_DIR ski
   ensurePinnedDeps({ home: c.home, modDir: c.modDir, env: { LAB_UI_DIR: '/x' }, seedRun });
   assert.equal(n, 1);
 });
+
+// (GR-c) the online resolve downloads the pin: `gradlew help` resolved no configuration, so a fresh run home never got lab_ui
+import { defaultResolve, resolveProject, PIN_REPO, PIN_RESOLVE_TASK } from '../../tools/lib/pinned-deps.mjs';
+
+test('GR-c: the resolve project declares exactly the missing pins, the mod\'s repository block, and no credential value', () => {
+  const files = resolveProject([{ group: 'dev.larattalabs', module: 'lab_ui', version: '0.5.0' }]);
+  const b = files['build.gradle'];
+  assert.match(b, /pins 'dev\.larattalabs:lab_ui:0\.5\.0'/);
+  assert.match(b, /transitive = false/);
+  assert.ok(b.includes(`name = "${PIN_REPO.name}"`) && b.includes(PIN_REPO.url) && b.includes('includeGroup "dev.larattalabs"'));
+  assert.match(b, /environmentVariable\("GITHUB_TOKEN"\)/, 'the token is read at run time');
+  assert.ok(b.includes(`tasks.register('${PIN_RESOLVE_TASK}')`));
+  assert.match(files['settings.gradle'], /rootProject\.name/);
+  // the mod's own block: same name, url and content filter (Gradle keys cached metadata by repository)
+  const mod = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'mod', 'build.gradle'), 'utf8');
+  assert.ok(mod.includes(`name = "${PIN_REPO.name}"`) && mod.includes(`url = uri("${PIN_REPO.url}")`) && mod.includes(`includeGroup "${PIN_REPO.group}"`),
+    'PIN_REPO matches mod/build.gradle');
+});
+
+test('GR-c: defaultResolve runs the pins task in a temp project with the home and the token in the env only; the token is masked', () => {
+  const { modDir, home } = fixture('0.5.0', ['0.4.0']);
+  const seen = {};
+  const spawn = (cmd, args, opts) => {
+    const dir = args[args.indexOf('-p') + 1];
+    seen.cmd = cmd;
+    seen.args = args;
+    seen.env = opts.env;
+    seen.dir = dir;
+    seen.files = fs.readdirSync(dir).sort();
+    seen.build = fs.readFileSync(path.join(dir, 'build.gradle'), 'utf8');
+    return { status: 0, stdout: 'resolved lab_ui-0.5.0.jar\nauth sekret-token-123\n', stderr: '' };
+  };
+  const r = defaultResolve({ home, modDir, env: { GITHUB_TOKEN: 'sekret-token-123', GITHUB_ACTOR: 'a' }, missing: missingPins(home, modDir), spawn });
+  assert.equal(r.ok, true);
+  assert.equal(seen.cmd, path.join(modDir, 'gradlew'));
+  assert.ok(seen.args.includes(PIN_RESOLVE_TASK) && seen.args.includes('--no-daemon') && !seen.args.includes('help') && !seen.args.includes('--offline'));
+  assert.ok(!seen.dir.startsWith(modDir), 'the project is outside the repo');
+  assert.deepEqual(seen.files.filter((f) => f.endsWith('.gradle')), ['build.gradle', 'settings.gradle']);
+  assert.match(seen.build, /lab_ui:0\.5\.0/);
+  assert.ok(!seen.build.includes('sekret-token-123'), 'the token is never written');
+  assert.equal(seen.env.GRADLE_USER_HOME, home);
+  assert.equal(seen.env.GITHUB_TOKEN, 'sekret-token-123');
+  assert.ok(!r.out.includes('sekret-token-123') && r.out.includes('***'), 'the token is masked in the output');
+  assert.equal(fs.existsSync(seen.dir), false, 'the temp project is removed');
+  const bad = defaultResolve({ home, modDir, env: { GITHUB_TOKEN: 't' }, missing: missingPins(home, modDir), spawn: () => ({ status: 1, stdout: '', stderr: '401' }) });
+  assert.equal(bad.ok, false);
+});

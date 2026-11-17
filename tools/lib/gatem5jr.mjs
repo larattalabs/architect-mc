@@ -65,7 +65,7 @@ export async function registerJR(steps, h) {
 
   /** The saved baseline: /save-all flush, then the ledger as the file holds it and the save count. */
   async function baseline(tag) {
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
     const s = await savedNow();
     const live = await pile();
@@ -242,7 +242,7 @@ export async function registerJR(steps, h) {
     check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `${tag}: the town built in survival (${f0.waves} waves)`);
     const S0 = await cellsOf(W.BOX);
     // saved as v0.63.0 saves it: the ledger without JR's fields, then the upgrade's load on this build
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
     await L.leaveWorld();
     const file = path.join(W.dir, 'architect', 'stockpiles.json');

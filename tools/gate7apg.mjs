@@ -252,7 +252,7 @@ steps.passage = async () => {
   const out = {};
   await L.fresh('G6B PG Passage', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   // (GM §6: the planner can't know the hour; the day held so a portcullis rests open while the gate runs)
   await cmd('/gamerule doDaylightCycle false');
   await cmd('/time set noon');

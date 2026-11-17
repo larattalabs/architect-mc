@@ -58,7 +58,7 @@ function kitTree(root) {
  * `args` as given to `node --test` (files, maybe --test-skip-pattern). -> null (run them yourself), or a result shaped like the
  * drivers' nodeTest: { code: 0, pass, fail: 0, failing: [], names: [], notes: [], comments: [], reused }.
  */
-export function kitReuse(root, args, { startShared = false } = {}) {
+export function kitReuse(root, args, { startShared = false, shared = {} } = {}) {
   // (speed audit A) every fallback says why, so a driver that runs the files itself is never silent about it
   const no = (why) => { console.log(`  kit: not reused (${why}): running ${args.filter((a) => !a.startsWith('--')).map((f) => path.basename(f)).join(' ') || 'the files'} here`); return null; };
   let file = process.env.GATE_KIT_RESULTS;
@@ -73,9 +73,19 @@ export function kitReuse(root, args, { startShared = false } = {}) {
   if (kt === null) return no('this checkout\'s kit tree can\'t be read');
   // (GX) unit-kit's report unusable (not in the run, timed out, killed): the run's shared kit suite, once for every reader
   if (!file || !tree || (tree === kt && !report(file))) {
-    const why = !file || !tree ? 'no unit-kit in this run' : 'unit-kit\'s report is missing or incomplete';
-    const sh = sharedSuite(root, kt, { start: startShared });
-    if (!sh.file) return no(`${why}; ${sh.why}`);
+    const ended = file && tree ? producerEnded() : null;
+    const why = !file || !tree ? 'no unit-kit in this run' : `unit-kit's report is missing or incomplete${ended ? ` (unit-kit ${ended})` : ''}`;
+    // (GR-b) unit-kit ended without a complete report (TIMEOUT, killed): a reader of the whole suite starts (or waits for) the
+    // shared re-run, so the suite runs once more for the run, not once per reader
+    const start = startShared || (!!ended && files.length >= SHARED_MIN_FILES);
+    // a reader of a few files never waits for a running shared suite (it would hold its lane for a whole suite): it runs them
+    const sh = sharedSuite(root, kt, { ...shared, start, wait: start || files.length >= SHARED_MIN_FILES });
+    if (!sh.file) {
+      // the re-run ended incomplete too: a whole-suite reader fails here with the reason instead of running its own copy (every
+      // such reader doing so is the N copies GR-b removed); the run is red anyway (unit-kit is not a PASS)
+      if (ended && start && sh.incomplete) return failFast(files, `unit-kit ${ended} and the shared kit re-run ended incomplete too (${sh.why}): not run again here`);
+      return no(`${why}; ${sh.why}`);
+    }
     console.log(`  kit: ${why}: using the run's shared kit suite (${sh.why})`);
     file = sh.file;
     tree = kt;
@@ -99,6 +109,20 @@ export function kitReuse(root, args, { startShared = false } = {}) {
   return { code: 0, pass, fail: 0, failing: [], names: [], notes: [], comments: [], reused };
 }
 
+/** (GR-b) unit-kit's status once it has ended without a PASS (the runner sets GATE_KIT_PRODUCER at a reader's start), else null. */
+function producerEnded(env = process.env) {
+  const s = env.GATE_KIT_PRODUCER;
+  return s && s !== 'PASS' && s !== 'CACHED' && s !== 'RUNNING' ? s : null;
+}
+
+/** (GR-b) a reader that names this many kit files (the whole-suite checks name every file, ~190) is a whole-suite reader. */
+export const SHARED_MIN_FILES = 20;
+
+function failFast(files, why) {
+  console.log(`  kit: FAIL: ${why}`);
+  return { code: 1, pass: 0, fail: files.length, failing: [`✖ kit: ${why}`], names: [], notes: [], comments: [], reused: null, failFast: why };
+}
+
 // ------------------------------------------------------------------ (GX) the run's shared kit suite
 //
 // When unit-kit's report can't serve (unit-kit not in the run, or it timed out or was killed, so its report is incomplete), each
@@ -108,6 +132,10 @@ export function kitReuse(root, args, { startShared = false } = {}) {
 // kit tree; every other reader waits for it and reads its report under exactly the rules above (complete, the tree, every file
 // present with tests and no failure). A reader that doesn't start it uses it only when it is running or done. A failed or
 // incomplete shared suite serves nothing: the readers run their files themselves, as before.
+// (GR-b) Since 2026-11-16 a whole-suite reader (SHARED_MIN_FILES files or more) also starts it when unit-kit was in the run but ended
+// (GATE_KIT_PRODUCER: TIMEOUT, FAIL, ERROR) without a complete report: one re-run for the run, not one per reader (r073: 3 whole
+// suites plus subsets at load 140). A reader of fewer files never waits for a running one (it runs its few files); a whole-suite
+// reader whose shared re-run also ended incomplete fails its check with the reason instead of running a copy.
 
 const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const alive = (pid) => {
@@ -120,7 +148,7 @@ const alive = (pid) => {
 };
 
 /** -> { file, why } (file null: not available). The whole kit suite of this checkout, once per run and kit tree. */
-export function sharedSuite(root, tree, { start = false, dir = process.env.GATE_KIT_SHARED_DIR, timeoutMs = 3_600_000, pollMs = 2000, run = runSuite } = {}) {
+export function sharedSuite(root, tree, { start = false, wait = true, dir = process.env.GATE_KIT_SHARED_DIR, timeoutMs = 3_600_000, pollMs = 2000, run = runSuite } = {}) {
   if (!dir) return { file: null, why: 'no shared dir (not a gate run)' };
   fs.mkdirSync(dir, { recursive: true });
   const base = path.join(dir, `kit-${tree.slice(0, 16)}`);
@@ -131,7 +159,7 @@ export function sharedSuite(root, tree, { start = false, dir = process.env.GATE_
   for (;;) {
     if (fs.existsSync(done)) {
       const d = JSON.parse(fs.readFileSync(done, 'utf8'));
-      return d.complete ? { file: junit, why: `run by pid ${d.pid} in ${Math.round(d.seconds)} s${Date.now() - t0 > 200 ? `, waited ${Math.round((Date.now() - t0) / 100) / 10} s` : ''}` } : { file: null, why: `the shared kit suite ended incomplete (exit ${d.code})` };
+      return d.complete ? { file: junit, why: `run by pid ${d.pid} in ${Math.round(d.seconds)} s${Date.now() - t0 > 200 ? `, waited ${Math.round((Date.now() - t0) / 100) / 10} s` : ''}` } : { file: null, incomplete: true, why: `the shared kit suite ended incomplete (exit ${d.code})` };
     }
     let holder = null;
     try {
@@ -159,14 +187,23 @@ export function sharedSuite(root, tree, { start = false, dir = process.env.GATE_
       fs.rmSync(lock, { recursive: true, force: true });
       continue;
     }
+    // (GR-b) wait false (kitReuse: a reader of a few files) runs them itself rather than holding its lane for a whole suite
+    if (!wait) return { file: null, why: `a shared kit suite is running (pid ${holder.pid}); not waiting for it for a few files` };
     if (Date.now() - t0 > timeoutMs) return { file: null, why: `waited ${Math.round(timeoutMs / 60000)} min for the shared kit suite (pid ${holder.pid})` };
     sleepMs(pollMs);
   }
 }
 
+/** (GR-b) the re-run's env: unit-kit's own (no GATE_KIT_PRODUCER, so a kit test inside it never starts or waits on this run's lock). */
+export function suiteEnv(env = process.env) {
+  const e = { ...env };
+  delete e.GATE_KIT_PRODUCER;
+  return e;
+}
+
 function runSuite(root, junit, timeoutMs) {
   const files = fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).sort().map((f) => `kit/test/${f}`);
-  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), '--test-reporter=dot', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...files], { cwd: root, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 2 ** 20 });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), '--test-reporter=dot', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...files], { cwd: root, env: suiteEnv(), encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 2 ** 20 });
   return { code: r.status };
 }
 

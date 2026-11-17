@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkDesign, DesignBook, designBaseId, freeLibraryId, installDesign, minimalEnv, parseBuildJson, refreshKit, renderPreviews, slugify, withDesignId } from '../src/designs.js';
-import { DesignRequest, DesignRequestV1, GroupItemInput, MAX_SIZE_MIN_XZ, parseClientMessage } from '../src/protocol.js';
+import { DesignRequest, DesignRequestV1, GroupItemInput, MAX_SIZE_MIN_XZ, parseClientMessage, toProtocol1 } from '../src/protocol.js';
 import { prepareScratch } from '../src/scratch.js';
 import { Store } from '../src/store.js';
 import type { Outbound } from '../src/protocol.js';
-import { copyKit, request, rmrf, tempDir } from './helpers.js';
+import { copyKit, makeSidecar, request, rmrf, tempDir } from './helpers.js';
 
 const req = (over: Record<string, unknown> = {}) => DesignRequest.parse(request(over));
 
@@ -102,6 +102,28 @@ describe('the request schema', () => {
       expect(DesignRequest.safeParse(request({ type: 'gatehouse', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
       expect(DesignRequestV1.safeParse(request({ type: 'tower', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
       expect(GroupItemInput.safeParse(request({ type: 'tower', itemKey: 'tower_1', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
+    }
+  });
+
+  it('(r074 fix) a protocol-1 snapshot leaves out an open-type design instead of dropping the whole frame', async () => {
+    // A protocol-1 client (the devserver's and the launcher's version probe) got no snapshot at all once one open-type design (a
+    // composite group's castle, apitest's hellish_lair) was among the recent designs: ServerMessageV1 refused the frame, so the probe
+    // waited 23 s ("busy") and the server's link started late (plan refused SIDECAR_UNAVAILABLE in every crash step of v0.74.0).
+    const h = makeSidecar(['--backend', 'sim']);
+    try {
+      const preset = h.sc.designs.create(req({ type: 'cabin' }));
+      const open = h.sc.designs.create(req({ type: 'castle' }));
+      const s2 = h.sc.snapshot(2) as unknown as { designs: Array<{ id: string }> };
+      expect(s2.designs.map((d) => d.id)).toEqual(expect.arrayContaining([preset.id, open.id]));
+      const s1 = toProtocol1({ v: 1, ...(h.sc.snapshot(1) as Record<string, unknown>) }) as { version?: string; designs: Array<{ id: string }> } | undefined;
+      expect(s1).toBeDefined();
+      expect(s1!.version).toBeTruthy();
+      expect(s1!.designs.map((d) => d.id)).toEqual([preset.id]);
+      // an open type's upsert stays protocol 2 only, as before
+      expect(toProtocol1({ v: 1, type: 'design.upsert', design: structuredClone(h.sc.designs.get(open.id)) })).toBeUndefined();
+      expect(toProtocol1({ v: 1, type: 'design.upsert', design: structuredClone(h.sc.designs.get(preset.id)) })).toBeDefined();
+    } finally {
+      await h.close();
     }
   });
 

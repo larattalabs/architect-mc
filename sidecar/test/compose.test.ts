@@ -13,10 +13,9 @@ import { FEATURES, JOB_SYSTEM_MAX } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
-import { composeSystem } from '../src/jobs/systemrefs.js';
 import {
   bestRound,
-  COMPOSE_REFS,
+  composerSystem,
   COMPOSE_ROUNDS,
   callerOptions,
   EXT_HINTS,
@@ -51,6 +50,8 @@ import {
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
+/** (CB) the worst case: every on-demand kind def requested */
+const WORST = { brief: '', all: true };
 const LANDS = path.join(KIT, 'test', 'fixtures', 'tc');
 const TEXT = fs.existsSync(path.join(KIT, 'prompts', 'composer.md')) ? composerText(KIT) : { system: 'x', answer: '## How to answer', repair: 'Answer again.' };
 const COMPOSE_SYSTEM = TEXT.system;
@@ -155,7 +156,7 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(p).toContain('{"zones":[{"id":"harbour"}]}');
     expect(composeSystemText(TEXT, 'Keep a wall.')).toBe(`${TEXT.system}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
     // the largest caller's rules still keep the whole system under the bound
-    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX)));
+    const big = await composerSystem(KIT, TEXT, { callerSystem: 'r'.repeat(CALLER_SYSTEM_MAX), needs: WORST }).then((x) => x.system);
     expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
   });
 
@@ -174,7 +175,7 @@ describe('the composer\'s pure parts (7c CO)', () => {
     const sysText = composeSystemText(TEXT, 'Keep a wall.', fam);
     expect(sysText).toBe(`${TEXT.system}\n\n${fam}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
     expect(composeSystemText(TEXT, 'Keep a wall.')).toBe(`${TEXT.system}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
-    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), fam));
+    const big = await composerSystem(KIT, TEXT, { callerSystem: 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), families: fam, needs: WORST }).then((x) => x.system);
     // the families count against the caller's rules: 28,000 with them, 30,000 without
     expect(callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), 'architect_mc:composeVocab': 'families' }).vocab).toBe('families');
     expect(() => callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX + 1), 'architect_mc:composeVocab': 'families' })).toThrow(/FIELD_LIMIT: ext\["architect_mc:composeSystem"\] is 28001 characters \(at most 28000 with ext\["architect_mc:composeVocab"\] "families"\)/);
@@ -220,10 +221,15 @@ describe('the composer\'s pure parts (7c CO)', () => {
   });
 
   it('keeps the structured job\'s system prompt under the 120,000 bound (plan/0#compact + the composer\'s)', async () => {
-    const sys = await composeSystem(KIT, COMPOSE_REFS, COMPOSE_SYSTEM);
+    const sys = await composerSystem(KIT, TEXT, { needs: WORST }).then((x) => x.system);
     console.log(`7c CO: the composer's system prompt is ${sys.length} characters (COMPOSE_SYSTEM ${COMPOSE_SYSTEM.length}; JOB_SYSTEM_MAX ${JOB_SYSTEM_MAX})`);
     expect(sys.length).toBeLessThan(JOB_SYSTEM_MAX);
-    expect(sys.endsWith(COMPOSE_SYSTEM)).toBe(true);
+    // (CB) the core first, then the composer's text, then the kinds
+    expect(sys.startsWith("## Architect's plan schema (plan/0), compact")).toBe(true);
+    expect(sys).toContain(`\n\n${COMPOSE_SYSTEM}\n\n## Kind schemas for this request`);
+    // (CW2) the reason is the player's summary (player words, not the plan's workings); a wall round a zone leaves `closed` unwritten
+    expect(TEXT.answer).toMatch(/reason: one or two sentences the player reads: what they get, as they will see it\. Never the plan's workings/);
+    expect(TEXT.system).toContain('or leave `closed` unwritten, as for any wall round a zone; `closed: false` only for an edge zone open to the rest of the town.');
   });
 });
 
@@ -309,8 +315,11 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(q1.prompt).toContain('brief: a few homes beside a winding lane');
     expect(q1.prompt).toContain('## Site affordances');
     expect(q1.prompt).not.toContain('## Planning images');
-    expect(q1.system.endsWith(COMPOSE_SYSTEM)).toBe(true);
-    expect(q1.system).toContain("Architect's plan schema (plan/0), compact");
+    // (CB) the job's system is composerSystem's, byte for byte (no systemRefs): the core, the composer's, the fields-only kinds
+    expect(q1.system).toBe((await composerSystem(KIT, TEXT, { needs: { brief: 'a few homes beside a winding lane', affordances: rankAffordances(s.affordances ?? []) } })).system);
+    expect(q1.system).toContain(`\n\n${COMPOSE_SYSTEM}\n\n`);
+    expect(q1.system).toContain('## Other kinds, fields only');
+    expect(s.kindsShown).toBeDefined();
     // round 2's prompt: round 1's plan, the typed answer (UNKNOWN_REF on lane) and the long text of connector.path and zone.standard
     const q2 = queries(s.rounds[1]!.jobId)[0]!;
     expect(q2.prompt.startsWith(q1.prompt)).toBe(true);
@@ -356,6 +365,21 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(res.summary).toBe('r1');
     expect(res.reason).toMatch(/^no round's plan checked READY; the best is round 2/);
     expect(res.leftOut).toEqual([]);
+  }, 600_000);
+
+  it('(CF2) a required zone short of its lots (LOTS_SHORT) checks NEEDS_REPAIR and the repair round runs with its reason; fewer lots check READY', async () => {
+    const halls = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `hall_${i + 1}`, type: 'hall', size: [17, 15] }));
+    const SHORT = { schemaVersion: 'plan/0', zones: [{ id: 'town', required: true, size: { preset: 'M' }, program: { lots: halls(8), layout: 'street', shared: 'none' } }] };
+    const FEWER = { ...SHORT, zones: [{ ...SHORT.zones[0]!, program: { ...SHORT.zones[0]!.program, lots: halls(4) } }] };
+    const { designId } = await compose('a hall quarter', { ext: { 'architect:simCompose': [{ plan: SHORT, reason: 'r1' }, { plan: FEWER, reason: 'r2' }] } });
+    const d = await playMod(designId);
+    const s = st(designId);
+    expect(s.rounds.map((r) => (r.check as { overall: string }).overall)).toEqual(['NEEDS_REPAIR', 'READY']);
+    const town = ((s.rounds[0]!.check as { parts: Array<Record<string, unknown>> }).parts).find((p) => p.part === 'town')!;
+    expect(town.class).toBe('adjusted');
+    expect((d.result as Record<string, unknown>).outcome).toBe('COMPOSED');
+    const q2 = queries(s.rounds[1]!.jobId)[0]!;
+    expect(q2.prompt).toMatch(/- town: adjusted \(zone\.standard\), required\n {2}- LOTS_SHORT: 4 of the zone's 8 lots did not fit/);
   }, 600_000);
 
   it('a caller\'s repair rounds (2, then 0), hints and rules reach the rounds', async () => {
@@ -519,7 +543,10 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     // without the key: no families block (today's system)
     const { designId: plain } = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: GOOD, reason: 'r' }], 'architect_mc:skipPick': true } });
     await playMod(plain);
-    expect(queries(st(plain).rounds[0]!.jobId)[0]!.system.endsWith(COMPOSE_SYSTEM)).toBe(true);
+    // ((CB) the system now ends with the kinds block: the composer's text, then the fields-only kinds)
+    const ps = queries(st(plain).rounds[0]!.jobId)[0]!.system;
+    expect(ps).not.toContain('## Block families (vocab/1)');
+    expect(ps).toContain(`\n\n${COMPOSE_SYSTEM}\n\n## Other kinds, fields only`);
   }, 600_000);
 
   it('opKey: the same key and body adopt the first design; another body (images) conflicts', async () => {

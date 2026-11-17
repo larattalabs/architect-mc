@@ -293,6 +293,127 @@ export async function registerFK(steps, h) {
     return { [items[i]]: 18, 'minecraft:paper': 4 };
   }
 
+  // ------------------------------------------------------------------ (slice FKR, S-M5-15) fk-approved: the fill through realiseApproved
+
+  /** The same town as plan/0 (one zone near the claim's centre), checked into an artifact; cottage_1 is one of its provisional lots. */
+  const APPROVED = { schemaVersion: 'plan/0', planId: 'gate_fkr', zones: [{ id: 'town', required: true, program: { lots: TOWN.map(({ landmark, ...l }) => l) }, where: { near: { anchor: 'claim_center', within: 8 } } }] };
+  const lockedLever = (s) => (s.locks ?? []).length > 0 && (s.locks ?? []).every((l) => /powered=true/.test(l.state ?? ''));
+
+  async function approvedCheck(tag) {
+    const ck = await call('dev.region.checkPlan', { plan: APPROVED, claim: CLAIM, owner: G.OWNER, load: 'generate' }, 1_800_000);
+    const lot = ck.check?.parts?.find((p) => p.part === 'town');
+    check(ck.check?.overall === 'READY' && !!ck.check?.artifactSha, `${tag}: Regions.checkPlan of the plan/0 town: ${ck.check?.overall ?? ck.refused} (town ${lot?.class}), artifact ${ck.check?.artifactSha?.slice(0, 12) ?? '-'}`, ck.check ?? ck);
+    return ck.check;
+  }
+
+  steps.fkapproved = async () => {
+    await ensure();
+    const out = {};
+    // survival: a fresh world, the stockpile, fk_hall; the plan checked (survival), quoted by its artifact, realised by realiseApproved
+    const name = 'G6B FK Approved';
+    await G.survivalBase(ctx);
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await entry();
+    await L.tp(CX + 80, 80, CZ + 56);
+    const gy = await groundY();
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+    check(!cr.refused, `fk-approved: a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
+    const c = await approvedCheck('fk-approved');
+    if (!c?.artifactSha) { await L.leaveWorld(); return out; }
+    out.check = { overall: c.overall, survival: c.survival, sha: c.artifactSha };
+    check(c.survival === true, `fk-approved: the check answered in survival (${c.survival})`);
+    const lots = { cottage_1: 'fk_hall' };
+    const q = await call('dev.region.quote', { sha: c.artifactSha, lotEntries: lots }, 300_000);
+    out.quote = { bom: q.bom, fill: q.bomParts?.['fill:cottage_1'], exact: q.exact, refused: q.refused, parts: Object.keys(q.bomParts ?? {}) };
+    check(!q.refused && G.same(q.bomParts?.['fill:cottage_1'], FILL), `Regions.quoteApproved(artifact, cottage_1: fk_hall): the piece fill:cottage_1 is the declaration's items ${json(q.bomParts?.['fill:cottage_1'])} (exact ${q.exact})`, out.quote);
+    const ps0 = await pile();
+    const ra = await call('dev.region.realiseApproved', { sha: c.artifactSha, lotEntries: lots, opKey: 'gate.fkr.1' }, 300_000);
+    out.region = ra.region ?? ra.refused ?? ra;
+    check(!!ra.region, `Regions.realiseApproved with cottage_1 (a provisional lot) bound to fk_hall: region ${ra.region ?? json(ra)}`);
+    if (!ra.region) { await L.leaveWorld(); return out; }
+    const site = await fkSite();
+    check(!!site, `fk_hall's site (the approved lot) joined the feed (${site})`);
+    if (!site) { await L.leaveWorld(); return out; }
+    await blocksBuilt('fk-approved', site);
+    await L.sleep(9000);
+    let s = await fk(site);
+    out.beforeFill = s;
+    check(s.state === 'BUILDING' && !s.phase && s.containers.length === 4 && s.containers.every((c2) => sum(c2.holds) === 0) && lockedLever(s) && s.filled !== true,
+      `every cell stands, the fill not fed: BUILDING (${s.state}, phase ${s.phase ?? 'none'}), the hoppers empty, the lever locked (${(s.locks ?? []).map((l) => l.state).join(',')}), not filled`, s);
+    const f = await filled(site);
+    s = f.s;
+    out.afterFill = s;
+    check(s.state === 'BUILT' && s.phase === 'UNLOCKED' && exactly(s) && leverUnlocked(s) && s.filled === true && !s.wait?.blocked && G.same(only(s.paid, FK), FILL),
+      `the fill fed: filled once and unlocked, then BUILT (${s.state}, ${s.phase}); each hopper exactly its declaration (${s.containers.map((c2) => json(c2.holds)).join(' ')}); the lever ${s.locks.map((l) => l.state).join(',')}; the marker ${s.filled}; paid under ${s.key}: ${json(only(s.paid, FK))}`, s);
+    const r0 = await G.feed({ L }, ra.region, { fraction: 1, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done, timeoutMs: 900_000, every: 2500 });
+    const ps1 = await pile();
+    const consumed = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+    out.consumed = consumed;
+    const s1 = await fk(site);
+    check(r0.last.st.view.state === 'PLACED' && s1.state === 'BUILT' && s1.phase === 'UNLOCKED' && G.same(consumed, q.bom), `the region PLACED after the unlock (the site ${s1.state}, ${s1.phase}); consumed equals quoteApproved item for item, the fill included (consumed ${sum(consumed)}, quote ${sum(q.bom)}; differ ${json(G.minus(consumed, q.bom))})`, { consumed, quote: q.bom });
+    // a cargo put-in: one clay ball over a hopper's declaration refuses the removal, nothing written
+    const hB = s1.containers[1].at;
+    await hand(hB, { add: { [CLAY]: 1 } });
+    const psB = await pile();
+    const refused = await call('dev.region.remove', { region: ra.region, requester: G.OWNER }, 600_000);
+    await L.settle(2000);
+    const stB = await call('dev.region.state', { region: ra.region }, 60_000);
+    const psB2 = await pile();
+    const sB = await fk(site);
+    out.cargo = { refused, state: stB.view?.state, holds: sB.containers.map((x) => x.holds) };
+    check(stB.view?.state === 'PLACED' && refused.removed !== true && json(refused).includes('cargo') && G.same(psB.ledger?.returned, psB2.ledger?.returned) && G.same(sB.containers[1].holds, G.plus(FILL_OF(1), { [CLAY]: 1 })) && sum(sB.custody) === 0,
+      `one clay ball over the declaration at ${hB}: the removal refused as cargo, nothing written (the region ${stB.view?.state}; refunded nothing; no custody): ${json(refused).slice(0, 240)}`, out.cargo);
+    await hand(hB, { take: { [CLAY]: 1 } });
+    // Regions.remove of the whole region: the hoppers' contents captured into custody, refunded with the blocks once
+    const near = s1.containers[0].at.split(',').map(Number);
+    await cmd('/kill @e[type=item]');
+    const psR0 = await pile();
+    const rm = await G.remove(ctx, ra.region);
+    const stR = await call('dev.region.state', { region: ra.region }, 60_000);
+    const psR1 = await pile();
+    const back = G.minus(G.plus(psR1.ledger?.returned, psR1.ledger?.refundOverflow), G.plus(psR0.ledger?.returned, psR0.ledger?.refundOverflow));
+    const items = (await call('dev.items.near', { pos: near, radius: 24 }, 60_000)).items ?? {};
+    out.removed = { rm, state: stR.view?.state, back, items: only(items, FK), custody: psR1.ledger?.custody ?? null };
+    check(['REMOVED', undefined].includes(stR.view?.state) && G.same(back, consumed) && G.same(only(back, FK), FILL) && sum(only(items, FK)) === 0 && !psR1.ledger?.custody,
+      `Regions.remove (${stR.view?.state ?? 'gone'}): what came back = consumed, item for item (${sum(back)} = ${sum(consumed)}; differ ${json(G.minus(back, consumed))}), the hoppers' fill among it (${json(only(back, FK))}); none dropped (${json(only(items, FK))}); no custody left`, out.removed);
+    // items in = items out: everything delivered since the start is in the stockpile again (stock, or the refund's overflow)
+    const dIn = G.minus(psR1.ledger?.delivered, ps0.ledger?.delivered);
+    const dOut = G.plus(G.minus(psR1.stock, ps0.stock), G.minus(psR1.ledger?.refundOverflow, ps0.ledger?.refundOverflow));
+    out.conservation = { in: sum(dIn), out: sum(dOut), diff: G.minus(dIn, dOut) };
+    check(G.same(dIn, dOut), `items in = items out: delivered since the start ${sum(dIn)} = in the stockpile now ${sum(dOut)} (differ ${json(out.conservation.diff)})`, out.conservation);
+    await L.leaveWorld();
+
+    // the creative instant variant: the same artifact flow in a creative world: the lot's site filled and unlocked at once; Remove exact
+    const CW = 'G6B FK Approved Creative';
+    await L.fresh(CW, G.FLAT);
+    await entry();
+    await L.tp(CX + 80, 80, CZ + 56);
+    const g = await groundY();
+    const BOX = BOXOF(CLAIM, g);
+    const h0 = await hashOf(BOX);
+    const cc = await approvedCheck('fk-approved creative');
+    const rc = cc?.artifactSha ? await call('dev.region.realiseApproved', { sha: cc.artifactSha, lotEntries: lots, opKey: 'gate.fkr.c' }, 300_000) : {};
+    const stc = rc.region ? await L.waitRegion(rc.region, 3_600_000) : null;
+    const cSite = stc?.view?.lots?.find((l) => l.id === 'cottage_1')?.siteId ?? null;
+    const cs = cSite ? await fk(cSite) : {};
+    out.creative = { region: rc.region ?? rc, state: stc?.view?.state, site: cSite, fk: cs };
+    check(stc?.view?.state === 'PLACED' && ['INSTANT', 'BUILT'].includes(cs.state) && cs.phase === 'UNLOCKED' && exactly(cs) && leverUnlocked(cs) && (cs.containers ?? []).length === 4,
+      `creative: realiseApproved PLACED (${stc?.view?.state}); cottage_1's site ${cSite} filled at once (${(cs.containers ?? []).map((x) => json(x.holds)).join(' ')}), unlocked (${(cs.locks ?? []).map((l) => l.state).join(',')}), ${cs.state}`, out.creative);
+    if (rc.region) {
+      const rmc = await G.remove(ctx, rc.region);
+      const h1 = await hashOf(BOX);
+      const ci = (await call('dev.items.near', { pos: (cs.containers?.[0]?.at ?? `${CX},${g},${CZ}`).split(',').map(Number), radius: 24 }, 60_000)).items ?? {};
+      out.creative.removed = { rmc, h0, h1, items: only(ci, FK) };
+      check(rmc.removed !== false && h1 === h0 && sum(only(ci, FK)) === 0, `creative: Regions.remove is exact: the claim box's hash as before; none of the fill's items dropped (${json(only(ci, FK))})`, out.creative.removed);
+    }
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
   // ------------------------------------------------------------------ fk-crash
 
   async function restart(name) {
@@ -321,7 +442,7 @@ export async function registerFK(steps, h) {
     const acc = await deliver({ fill: true });
     check(G.same(acc, FILL), `${tag}: the fill's items delivered to the stockpile while it is paused (${json(acc)})`);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
@@ -364,7 +485,7 @@ export async function registerFK(steps, h) {
     const at = (await fk(site)).containers[0].at.split(',').map(Number);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     const consumed = G.minus(B.consumed, W.ps0.ledger?.consumed ?? {});
     await call('dev.journal.killAt', { point }, 10_000);
@@ -413,7 +534,7 @@ export async function registerFK(steps, h) {
     const at = (await fk(site)).containers[0].at.split(',').map(Number);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${site}@`));
     const paid = B.paid?.[key] ?? {};

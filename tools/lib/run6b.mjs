@@ -249,7 +249,7 @@ export async function ensureBase(name) {
     await openWorld(own, { mode: 'creative', preset: spec.preset, seed: spec.seed, cheats: true });
     await setRules(spec.preset === 'flat' ? 'exact' : 'default');
     await tp(0.5, 200, 0.5);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   } catch (e) {
     let moved = 'left in place (the game may still hold it; the next run moves it aside as unstamped)';
@@ -330,7 +330,7 @@ export async function makeClaimWorld(seed, claim, yRange) {
     await tp(cx + dx, yRange[1], cz + dz);
     await call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
   }
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   const dir = path.join(SAVES, name);
   const mark = { seed: String(seed), claim, preset: 'normal', baseRecipe: recipeHash(baseRecipe(baseSpec(base))), host: gateHost(), madeAt: new Date().toISOString(), levelDatSha256: sha256File(path.join(dir, 'level.dat')) };

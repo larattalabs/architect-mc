@@ -23,6 +23,8 @@ import path from 'node:path';
 
 export async function registerPS(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff } = h;
+  // (BC-c) the towns realise under a maxBill (the put-down quote); read back after every restart
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER, log });
   const ctx = { L, OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pos = (m) => Object.fromEntries(Object.entries(m ?? {}).filter(([, v]) => v > 0));
@@ -43,6 +45,7 @@ export async function registerPS(steps, h) {
     await L.openWorld(path.basename(W.dir));
     await L.tp(W.at[0], W.at[1], W.at[2]);
     await call('dev.wait', { ms: 3000 }, 30_000);
+    await caps.afterRestart(tag); // (BC-c) the reconcile inside the region's maxBill
     return { diskLedger: ledgerOf(disk), diskFormat: disk.format };
   }
 
@@ -75,7 +78,7 @@ export async function registerPS(steps, h) {
       out.ssprobe = pr;
     }
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...W.at);
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
     for (const id of st0.feedOrder ?? []) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
@@ -112,7 +115,7 @@ export async function registerPS(steps, h) {
       await ps({ noPeriodic, resetPeriodic: true });
       await fill(lines[k]);
       const cPre = await totals(); // just before the flush: what the flush saves (the line has barely started)
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
       const s0 = await saved();
       const c0 = await totals();
       const tStart = Date.now();
@@ -147,12 +150,12 @@ export async function registerPS(steps, h) {
     for (const [tag, noCreditSave] of [['K5E0', true], ['K5E', false]]) {
       const W = await survivalWorld(`G6B PS ${tag}`);
       const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-      const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+      const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
       const S0 = await cellsOf(W.BOX);
       const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
       check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `${tag}: fed until built (${f.waves} waves): ${f.last.st.view.state}`);
       await ps({ noPeriodic: true, noCreditSave });
-      await cmd('/save-all flush'); // the ledger saved with the consumption (as an autosave after the build)
+      await cmd('/save-all flush').catch(() => null); // the ledger saved with the consumption (as an autosave after the build)
       await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const a0 = await audit();
@@ -207,7 +210,7 @@ export async function registerPS(steps, h) {
   async function singlePart(out, name = 'G6B PS single', cases = [['RR0', 'road', true], ['RR', 'road', false], ['SD0', 'site', true]]) {
     const W = await survivalWorld(name);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...W.at);
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {}; // the feed's targets, before any is built
     const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
@@ -225,7 +228,7 @@ export async function registerPS(steps, h) {
       if (!id) { check(false, `${tag}: no ${kind} left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
       used.add(id);
       await ps({ noPeriodic: true, noCreditSave });
-      await cmd('/save-all flush');
+      await cmd('/save-all flush').catch(() => null);
       await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const a0 = await audit();

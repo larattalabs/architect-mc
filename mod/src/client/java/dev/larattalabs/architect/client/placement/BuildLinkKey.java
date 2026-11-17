@@ -89,11 +89,22 @@ public final class BuildLinkKey {
 		if (mc.player == null || mc.gui.screen() != null || BuildPlacement.active() || PlotMarker.active()) {
 			return;
 		}
+		start();
+	}
+
+	/**
+	 * Starts the connector mode as the key does (the remembered drop's port as the first end, else both ends marked): the key and the
+	 * hub's "Build a link…" (7c CN; Library, Placed). The placed toast names the region and its remove command.
+	 */
+	public static void start() {
 		SiteFit.Drop d = drop();
 		int[] from = d == null ? null : new int[] {d.at().getX(), d.at().getY(), d.at().getZ()};
 		drops = null;
-		PlotMarker.startConnector(from, r -> Toasts.push(Toasts.Level.INFO, "Link placed", r.siteId().orElse("?") + (r.notes().isEmpty() ? "" : ": "
-			+ r.notes().get(0))), () -> {
+		PlotMarker.startConnector(from, r -> {
+			String id = r.siteId().orElse("?");
+			Toasts.push(Toasts.Level.INFO, "Link placed", id + (r.notes().isEmpty() ? "" : ": " + r.notes().get(0)) + " (to take it off: /architect region remove "
+				+ id + ")");
+		}, () -> {
 		});
 	}
 }

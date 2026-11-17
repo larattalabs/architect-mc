@@ -436,6 +436,18 @@ export interface InstallInput {
 /** (7c CM-b) The ext key of a composite's CompositeInfo wire (the mod's `CompositeInfo.EXT_KEY`, the kit's `COMPOSITE_EXT`). */
 export const COMPOSITE_EXT = 'architect_mc:composite';
 
+/**
+ * (7c CS) What a library entry's sidecar JSON is in a composite: `'composite'` (the entry with a CompositeInfo wire in ext), `'module'`
+ * (one of its hidden module entries, `compositeOf` set), else undefined. A composite is one entry at version 1 with its modules: no
+ * path makes a new version of it (polish, versionOf, revert, follow are refused `composite`), and a variant or re-skin is a new entry.
+ */
+export function compositeRole(json: Record<string, unknown> | undefined): 'composite' | 'module' | undefined {
+  if (!json) return undefined;
+  if (typeof json.compositeOf === 'string') return 'module';
+  const ext = json.ext;
+  return ext && typeof ext === 'object' && !Array.isArray(ext) && (ext as Record<string, unknown>)[COMPOSITE_EXT] !== undefined ? 'composite' : undefined;
+}
+
 /** (7c CM-b) A built composite's files: the manifest and each module's hidden entry (as the kit wrote them). */
 export interface CompositeFiles {
   manifest: string;

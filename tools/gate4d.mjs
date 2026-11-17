@@ -305,7 +305,7 @@ async function basePrepared(mark) {
   check(lots.every((l, i) => JSON.stringify(l.at) === JSON.stringify(m.lots[i].at) && l.rot === m.lots[i].rot), `base: the prepared world's 12 lots fit where they did when it was made (level.dat sha256 ${levelSha.slice(0, 16)})`, { levelSha });
   ctx.lots = lots;
   saveCtx();
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   return { rules, center: m.center, lots, far: m.far, prepared: { levelSha } };
 }
@@ -364,7 +364,7 @@ async function baseFresh() {
   ctx.far = far;
   ctx.rules = rules;
   saveCtx();
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   // the context beside the level.dat: copied into the snapshot store, the next run restores this world instead of generating it
   fs.writeFileSync(path.join(SAVES, BASE, BASE_MARK), `${JSON.stringify({ minecraft: mcVersion(), recipe: 1, center, lots, far, rules, madeAt: new Date().toISOString() }, null, 1)}\n`);

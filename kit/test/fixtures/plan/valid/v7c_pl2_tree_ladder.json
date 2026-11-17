@@ -1,0 +1,69 @@
+{
+ "about": "(slice PL2, a one-ended port link) a ladder from the ground up to a treehouse's walk port ($0): R2's x02 (a wrap_trunk site lot on a region-made giant oak) plus a connector.ladder from claim_center (the ground under the port) to the lot's walk_w; routed to the site's port at plan time, written at realise against the bound entry's port (the link pass, IR v2).",
+ "on": "flat",
+ "volume": {},
+ "covers": [
+  "form.giant_tree",
+  "ladder.port"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "pl2_tree_ladder",
+  "zones": [
+   {
+    "id": "canopy",
+    "kind": "standard",
+    "required": true,
+    "label": "Treehouse",
+    "size": {
+     "preset": "S"
+    },
+    "where": {
+     "inside": {
+      "part": "oak"
+     }
+    },
+    "program": {
+     "layout": "elevated",
+     "lots": [
+      {
+       "id": "treehouse",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small treehouse wrapped round the giant oak's trunk."
+      }
+     ]
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "oak",
+    "kind": "giant_tree",
+    "preset": "oak",
+    "where": {
+     "near": {
+      "anchor": "claim_center",
+      "within": 24
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "up",
+    "kind": "ladder",
+    "from": {
+     "anchor": "claim_center"
+    },
+    "to": {
+     "part": "treehouse",
+     "port": "walk_w"
+    }
+   }
+  ]
+ }
+}

@@ -186,8 +186,8 @@ walled_town/town zone.standard fits free 65447 held 843 paid-items 54
 walled_town/town_wall connector.wall fits free 0 held 0 paid-items 5416
 walled_town cost.bom 5470 items; survival true
 war_camp/camp zone.standard fits free 36564 held 795 paid-items 54
-war_camp/camp_palisade connector.wall fits free 0 held 0 paid-items 3768
+war_camp/camp_palisade connector.wall fits free 0 held 26 paid-items 5510
 war_camp/camp_relief form.relief fits free 1356 held 0 paid-items 0
-war_camp cost.bom 3822 items; survival true
+war_camp cost.bom 5564 items; survival true
 winter_festival/town zone.standard fits free 41787 held 831 paid-items 54
 winter_festival cost.bom 54 items; survival true

@@ -18,6 +18,11 @@ gate anything:
   scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
   the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
   the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
+- **rules 17-20, 22-24 (Noah, 2026-11-17; docs/GATES.md "Speed rules"):** persist before mutate (a confirmed durable record before
+  any item, billing or refund change; executor completion is not persistence; TXN once it lands); crash points at each save plus a
+  conservation assertion after every strict scenario, failing-first; verify review premises in code; review guard (one fix round,
+  one final GPT pass, then Noah; no auto-drop); self-contained HTML review sheets; run scripts and temp files in the slice's own
+  worktree; refresh gate build caches when lab-ui or a pinned dependency changes;
 - a Steward RC runs on every release (its areas follow what changed);
 - test-tooling slices (GX, TS) are allowed when they save more wall time than they cost; the coordinator briefs them;
 - the full set runs nightly.

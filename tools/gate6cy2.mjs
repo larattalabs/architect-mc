@@ -201,7 +201,7 @@ async function base() {
   }
   ctx.lots = lots;
   saveCtx();
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   return { center, lots };
 }
@@ -310,7 +310,7 @@ async function waiting() {
   const stD = await until(D, (s) => s.wait.waiting, 'D waiting');
   const startsD = (await waitEvents(D, 'SITE_WAITING')).filter((e) => e.wait.waiting).length;
   const sinceD = stD.wait.waitingSince;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await sleep(1500);
   await leaveWorld();
   const wf = path.join(SAVES, 'GY2 Wait', 'architect', 'waits.json');

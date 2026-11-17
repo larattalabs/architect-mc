@@ -142,8 +142,11 @@ steps.unit = async () => {
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved, onMain };
   fs.writeFileSync(path.join(OUT, 'k2-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
-  const asksMoved = u.moved.filter((f) => f.startsWith('asks/') && (f === 'asks/castle_city.json' || !(f in F7A_MOVED)));
-  check((JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) || (onMain && asksMoved.length === 0)) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)}${onMain ? ' (K2 on the base: its walk is the base\'s own)' : ''} (the foundation's own aside: F7A_MOVED)`);
+  // ((release v0.74.0) and SP2's named movers, as every byte-identity helper reads them: WR's asks/war_camp.json (its palisade ring
+  // encloses the claim's centre, so it stays closed: still fits) and CF/CF2's answer-text and LOTS_SHORT movers)
+  const { SP2_MOVED } = await import('./lib/sp2-norm.mjs');
+  const asksMoved = u.moved.filter((f) => f.startsWith('asks/') && (f === 'asks/castle_city.json' || !(f in F7A_MOVED || f in SP2_MOVED)));
+  check((JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) || (onMain && asksMoved.length === 0)) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)}${onMain ? ' (K2 on the base: its walk is the base\'s own)' : ''} (the foundation's and SP2's own aside: F7A_MOVED, SP2_MOVED)`);
   // the compact plan/0 (recorded; the bound is 100,000 (6d RV raised it, 2026-10-26))
   out.compact = compactOf(path.join(root, 'kit'));
   check(out.compact !== null && out.compact <= 100_000, `the compact plan/0: ${out.compact} characters (the bound 100,000, the coordinator's 2026-10-23)`);

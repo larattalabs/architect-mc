@@ -38,7 +38,8 @@ const save = (name, obj) => fs.writeFileSync(path.join(OUT, `${name}.json`), JSO
 const load = (name) => JSON.parse(fs.readFileSync(path.join(OUT, `${name}.json`), 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const cmd = async (c, asPlayer = false) => {
-  const r = await call('dev.command', { cmd: c, asPlayer });
+  // (S-M5-19) a command that did not run (not permitted as the player: a parse failure) answers ok: false; its reply keeps success: false
+  const r = await call('dev.command', { cmd: c, asPlayer }).catch((e) => { if (e?.response?.success === false) return e.response; throw e; });
   // success = dispatched without an exception; result = the command's return value (0 = refused / did nothing)
   return { cmd: c, success: r.success, result: r.result, messages: r.messages };
 };

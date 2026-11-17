@@ -255,7 +255,7 @@ steps.lotext = async () => {
   const snapshot = (by) => JSON.stringify(Object.keys(by).sort().map((k) => [k, by[k].ext]));
   const e1 = snapshot(by1);
   // save and reload
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G6B X LotExt');
   const by2 = await sitesByLot();
@@ -423,7 +423,7 @@ steps.removal = async () => {
   check(tomb?.state === 'REMOVED' && tomb.removedAt >= t0 - 1000 && tomb.removedAt <= Date.now(), `removal (b): Regions.get shows REMOVED with its time (${tomb?.state}, ${tomb?.removedAt})`);
   const grp = await api(`sgroup ${g}`);
   check(grp?.state === 'REMOVED' && grp.removedAt > 0, `removal (b): the group lookup shows REMOVED with its time (${grp?.state}, ${grp?.removedAt})`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G6B X Removal');
   const tomb2 = await api(`rget ${reg2}`);

@@ -217,7 +217,7 @@ async function flatWorld(name, x, z, { survival = false } = {}) {
   copyWorld(FLAT_BASE, name);
   await openWorld(name);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   for (const r of ['spawn_mobs false', 'spawn_monsters false', 'mob_griefing false', 'random_tick_speed 0']) await cmd(`/gamerule ${r}`).catch(() => {});
   await rule('graceMs', 600000);
   await tp(x + 0.5, 0, z + 0.5);
@@ -535,7 +535,7 @@ steps.flow = async () => {
   const pick = (s) => json({ a: [s.a?.version, s.a?.ext, s.a?.owner], c: [s.c?.version, s.c?.ext], ba: [s.ba.state, s.ba.siteId], bc: [s.bc.state, s.bc.siteId], ea: s.ea.versions?.length,
     recA: s.recA, recC: s.recC, od: s.od, keptA: s.keptA, hA: s.hA, hC: s.hC });
   const s0 = await snap();
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld(world);
   await tp(X + 0.5, gy + 25, Z + 0.5);

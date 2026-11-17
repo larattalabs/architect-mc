@@ -5,10 +5,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import dev.larattalabs.architect.api.Reason;
+import dev.larattalabs.architect.api.SiteWait;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.region.GateMech;
 import dev.larattalabs.architect.region.RegionsImpl;
+import dev.larattalabs.architect.survival.StockLedger;
 import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
 import java.util.List;
 import java.util.Map;
@@ -192,7 +194,40 @@ public final class MechCharges {
 		}
 		Map<String, Integer> bill = items(e.get("bill"));
 		String owner = l.rec().owner;
-		if (!Stockpiles.charge(srv, owner, bill)) {
+		// (BC-c) its bill counts against the region's maxBill while it builds: past it, the item waits (nothing charged or written)
+		Stockpiles.Pile capPile = Stockpiles.get(owner);
+		int rid = BillCaps.ridOf(b.ext);
+		ServerLevel level0 = Sites.levelOf(srv, i.dimension);
+		long now = level0 == null ? 0L : level0.getGameTime();
+		// (fix b5b, review finding 3) a charge the ledger booked before a crash lost this record: settled from the ledger, not charged again
+		StockLedger.Charge booked = capPile == null || !e.has(CHARGE_KEY) ? null : capPile.ledger().charged(e.get(CHARGE_KEY).getAsString());
+		if (booked != null) {
+			settle(e, booked, now);
+			RegionsImpl.saveRec(l);
+			i.ext.remove(RegionTargets.EXT_WAITS_FOR);
+			i.ext.remove(EXT_BILL_WAIT);
+			dev.larattalabs.architect.Architect.LOGGER.warn("Region {}: the gate mechanism of lot {}'s charge {} was booked before its record was saved: settled from the ledger",
+				l.rec().id, lot, booked.items());
+			return false;
+		}
+		Map<String, Integer> capOver = BillCaps.chargeOver(BillCaps.ofRegion(l, rid), capPile == null ? null : capPile.ledger(), bill);
+		if (!capOver.isEmpty()) {
+			JsonObject w = new JsonObject();
+			w.addProperty("target", capPile == null ? "stockpile" : Stockpiles.PREFIX + capPile.id());
+			w.addProperty("kind", SiteWait.BILL_CAP);
+			w.add("missing", json(capOver));
+			String say = RegionWaitTags.capital(subjectOf(l, i)) + " waits bill_cap: its bill is past the region's maxBill by " + capOver;
+			w.addProperty("say", say);
+			i.ext.add(RegionTargets.EXT_WAITS_FOR, w);
+			Batches.waitFor(b, i, Reason.SITE_BUSY, say + " (its whole bill is charged at once)", billWaitMoved(i));
+			return true;
+		}
+		if (!e.has(CHARGE_KEY)) {
+			// (fix b5b) the charge's key, saved before the debit: the ledger books the debit under it (one save), so a replay finds it
+			e.addProperty(CHARGE_KEY, creditKey(l, lot) + ":charge@" + now);
+			RegionsImpl.saveRec(l);
+		}
+		if (!Stockpiles.charge(srv, owner, bill, e.get(CHARGE_KEY).getAsString(), rid)) {
 			// (WE, Steward's ask on 0.53.0) The move from the lot or wall wait to this one keeps the reason (SITE_BUSY), so Batches.waitFor would
 			// not announce it. It is announced here, once per move: ITEM_WAITING again, with waitsFor {kind: bill, missing, say} naming what the
 			// stockpile lacks. The marker (the stage wait clears waitsFor on every poll, so it cannot tell a move from a poll) is not cleared
@@ -214,13 +249,60 @@ public final class MechCharges {
 		}
 		i.ext.remove(RegionTargets.EXT_WAITS_FOR);
 		i.ext.remove(EXT_BILL_WAIT);
-		e.add("charged", json(bill));
-		ServerLevel level = Sites.levelOf(srv, i.dimension);
-		e.addProperty("chargedAt", level == null ? 0L : level.getGameTime());
+		settle(e, new StockLedger.Charge(bill, rid), now);
 		RegionsImpl.saveRec(l);
 		dev.larattalabs.architect.Architect.LOGGER.info("Region {}: the gate mechanism of lot {} took its bill {} from the stockpile of {}", l.rec().id, lot,
 			bill, owner);
 		return false;
+	}
+
+	/** (fix b5b) A mechanism entry's charge key ({@code <credit key>:charge@<game time>}), saved before its debit. */
+	static final String CHARGE_KEY = "chargeKey";
+
+	/** (fix b5b, pure) A mechanism entry charged: its bill, its rid (BC-c, BC-d: counted against that rid's cap; 0 absent), the time. */
+	public static void settle(JsonObject e, StockLedger.Charge c, long at) {
+		e.add("charged", json(c.items()));
+		if (c.rid() != 0) {
+			e.addProperty("rid", c.rid());
+		} else {
+			e.remove("rid");
+		}
+		e.addProperty("chargedAt", at);
+	}
+
+	/**
+	 * (fix b5b, review finding 3) At the first tick (before the caps are read): every survival region's charge the ledger booked whose record
+	 * was not saved (a crash between the two saves) is settled from the ledger, so its cap counts it before anything else draws.
+	 */
+	public static void settleBooked(MinecraftServer srv) {
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			if (!l.rec().survival() || l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVED) {
+				continue;
+			}
+			Stockpiles.Pile pile = Stockpiles.get(l.rec().owner);
+			if (pile == null) {
+				continue;
+			}
+			ServerLevel level = l.level(srv);
+			long now = level == null ? 0L : level.getGameTime();
+			boolean changed = dev.larattalabs.architect.region.RegionFluids.settleBooked(l, pile.ledger(), now);
+			if (l.rec().survival.get(KEY) instanceof JsonObject m) {
+				for (var en : m.entrySet()) {
+					if (en.getValue() instanceof JsonObject e && !e.has("chargedAt") && e.has(CHARGE_KEY)) {
+						StockLedger.Charge c = pile.ledger().charged(e.get(CHARGE_KEY).getAsString());
+						if (c != null) {
+							settle(e, c, now);
+							changed = true;
+							dev.larattalabs.architect.Architect.LOGGER.warn("Region {}: the gate mechanism of lot {}'s charge {} was booked before its record was saved: "
+								+ "settled from the ledger at the start", l.rec().id, en.getKey(), c.items());
+						}
+					}
+				}
+			}
+			if (changed) {
+				RegionsImpl.saveRec(l);
+			}
+		}
 	}
 
 	/** Per {@code <region>:mech:<lot>}, the bills an owner's survival regions still have to charge (the stockpile's need). */

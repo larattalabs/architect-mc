@@ -156,6 +156,13 @@ public final class DevBridge {
 			Architect.LOGGER.warn("devserver: {} failed", type, cause);
 		}
 		out.addProperty("error", msg == null ? cause.getClass().getSimpleName() : msg);
+		if (cause instanceof DevException de && de.detail() != null) {
+			de.detail().entrySet().forEach(e -> {
+				if (!out.has(e.getKey())) {
+					out.add(e.getKey(), e.getValue());
+				}
+			});
+		}
 		return out;
 	}
 
@@ -174,8 +181,20 @@ public final class DevBridge {
 
 	/** A user-facing error (sent back verbatim). */
 	public static final class DevException extends RuntimeException {
+		private final JsonObject detail;
+
 		public DevException(String message) {
+			this(message, null);
+		}
+
+		/** (S-M5-19) With {@code detail}: its fields go into the error reply beside {@code ok: false} and {@code error} (never over them). */
+		public DevException(String message, JsonObject detail) {
 			super(message);
+			this.detail = detail;
+		}
+
+		public JsonObject detail() {
+			return detail;
 		}
 	}
 }

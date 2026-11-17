@@ -151,7 +151,7 @@ class JobRowsTest {
 		JobRow d1 = row(f, "architect_mc:design/d1");
 		assertEquals(JobState.DONE, d1.state());
 		assertEquals("Cabin, rustic", d1.title());
-		assertTrue(d1.linkLabel().contains("gen_cabin"));
+		assertEquals("Architect · Library", d1.linkLabel(), "(slice UI) no helper id in player text");
 		d1.link().run();
 		assertEquals(JobRows.Action.of("open_entry", "gen_cabin"), ran.get(0));
 		assertTrue(d1.endedAt() > 0);
@@ -180,9 +180,9 @@ class JobRowsTest {
 		JsonObject imp = j("{id:'v2', path:'/tmp/x/tower.schem', status:'building', step:'reading', createdAt:" + NOW + "}");
 		JobRows.Feed f = feed(List.of(), List.of(bible, parts), List.of(), List.of(variant, imp), List.of(), List.of(), 0);
 		JobRow b1 = row(f, "architect_mc:bible/b1");
-		assertEquals("bible", b1.kind());
+		assertEquals("style", b1.kind(), "(slice UI) the player word");
 		assertEquals(JobState.RUNNING, b1.state());
-		assertEquals("Bible Harbour v1", b1.title());
+		assertEquals("Style Harbour v1", b1.title());
 		assertNotNull(b1.cancel());
 		JobRow b2 = row(f, "architect_mc:bible/b2");
 		assertEquals("parts", b2.kind());

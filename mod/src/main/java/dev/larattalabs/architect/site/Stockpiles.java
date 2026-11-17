@@ -1240,9 +1240,22 @@ public final class Stockpiles {
 	}
 
 	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items) {
+		return charge(srv, owner, items, null, 0);
+	}
+
+	/**
+	 * (fix b5b, review finding 3) {@link #charge} under {@code key} (a region's fluids or a gate mechanism; null: unkeyed): the debit and the key
+	 * are one ledger change in one save, and a key the ledger already holds debits nothing (true: the charge stands; the caller settles its
+	 * record from {@link StockLedger#charged}).
+	 */
+	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items, @Nullable String key, int rid) {
 		Pile p = get(owner);
 		if (p == null) {
 			return items.values().stream().allMatch(n -> n <= 0);
+		}
+		if (key != null && p.ledger.charged(key) != null) {
+			Architect.LOGGER.warn("Stockpile {}: region charge {} was booked before (its record not saved): not charged again", p.owner, key);
+			return true;
 		}
 		Map<String, Integer> reserved = LAST_RESERVED.getOrDefault(p.id, Map.of());
 		for (var e : items.entrySet()) {
@@ -1252,13 +1265,17 @@ public final class Stockpiles {
 		}
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
-		for (var e : new TreeMap<>(items).entrySet()) {
-			p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+		if (key != null) {
+			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over);
+		} else {
+			for (var e : new TreeMap<>(items).entrySet()) {
+				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+			}
 		}
 		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
-		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}", p.owner, items);
+		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
 		return true;
 	}
 
@@ -1691,15 +1708,16 @@ public final class Stockpiles {
 			public void step(Object t, Builder.Run r, FeedOrder.Reserve reserve) {
 				// (BC, S-M5-9) the region's maxBill: what its group may still draw (its draws counted from the ledger, then as this step pays)
 				BillCaps.Cap billCap = BillCaps.of(t);
-				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap.group());
+				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap); // (BC-c) the region's own charges too
 				boolean[] capHit = {false};
+				boolean[] settling = {false}; // (BC-c) an owed cell stands: it is charged whatever the cap (refusing it would mint)
 				Builder.Purse purse = new Builder.Purse() {
 					@Override
 					public int stock(String item) {
 						int n = reserve.available(item, p.ledger::stock);
-						if (billCap != null) {
+						if (billCap != null && !settling[0]) {
 							int left = billCap.left(drawn, item);
-							if (left < n) {
+							if (left < n || left <= 0) { // (BC-c) at or past the cap with no stock either: still the cap's wait
 								capHit[0] = true;
 								return left;
 							}
@@ -1754,7 +1772,12 @@ public final class Stockpiles {
 				};
 				// (RL) what it owes after a crash is charged first: an owed cell is built only once paid
 				r.attachOwed(owedOf(p, keyOf(t), r));
-				r.settleOwed(level, purse, SurvivalWorld.blocksPerTick() * 4);
+				settling[0] = true;
+				try {
+					r.settleOwed(level, purse, SurvivalWorld.blocksPerTick() * 4);
+				} finally {
+					settling[0] = false;
+				}
 				int before = r.built.cardinality();
 				if (t instanceof Site s) {
 					Builder.stepFed(srv, level, s, r, purse);
@@ -1800,21 +1823,18 @@ public final class Stockpiles {
 	}
 
 	/**
-	 * (8a HB) RL's save on join, before the pass's steps: the ledger saved with the world (players, chunks, then the ledger). True when the
-	 * ledger on the disk now holds the joined targets' books; false (the save refused, failed or the ledger could not load) holds the pass.
+	 * (8a HB) RL's save on join, before the pass's steps, through the world barrier (slice T0: players, then chunks, then the ledger as a
+	 * confirmed DurableFile write, its books refreshed first). True only when the barrier is OK: the ledger on the disk then holds the joined
+	 * targets' books. REFUSED (save-off, a failed load or step) or IN_DOUBT holds the pass (rule 17: no step mutates the stock before a
+	 * confirmed record); a later tick tries again.
 	 */
 	static boolean joinSave(MinecraftServer srv) {
-		if (loadFailed) {
+		DurableBarrier.Result r = barrier(srv);
+		if (!r.ok()) {
+			Architect.LOGGER.warn("Stockpiles: the save on join was {} ({}); the feed waits for it", r.outcome(), r.reason());
 			return false;
 		}
-		long before = saves;
-		try {
-			saveWithWorld(srv);
-		} catch (IllegalStateException e) {
-			Architect.LOGGER.warn("Stockpiles: the save on join was refused ({}); the feed waits for it", e.getMessage());
-			return false;
-		}
-		return saves > before;
+		return true;
 	}
 
 	/**
@@ -2169,6 +2189,35 @@ public final class Stockpiles {
 					}
 					o.addProperty("format", FORMAT);
 					return o;
+				}
+				case "save" -> {
+					// (S-M5-19) a save barrier that works on the integrated client (where /save-all is not a command): an explicit ledger save
+					// with the world (players, chunks flushed, then stockpiles.json), on this, the server thread; answers once the file is written
+					Path d = dir;
+					if (d == null) {
+						throw new IllegalStateException("dev.stockpile.save: no world is open");
+					}
+					if (loadFailed) {
+						throw new IllegalStateException("dev.stockpile.save: not saved: " + FILE + " failed to load this session (" + loadFailedWhy + "); the file is kept as it is");
+					}
+					int before = saves;
+					saveWithWorld(srv);
+					Path f = d.resolve(FILE);
+					boolean written = saves > before;
+					if (!written && !(PILES.isEmpty() && !Files.exists(f))) {
+						throw new IllegalStateException("dev.stockpile.save: " + f + " was not written (the log says why)");
+					}
+					o.addProperty("written", written);
+					o.addProperty("path", f.toString());
+					try {
+						o.addProperty("bytes", Files.exists(f) ? Files.size(f) : 0L);
+					} catch (IOException e) {
+						throw new java.io.UncheckedIOException(e);
+					}
+					o.addProperty("saves", saves);
+					if (!written) {
+						o.addProperty("why", "no stockpile in this world: no file is kept");
+					}
 				}
 				case "ss" -> {
 					// (SS, TEST) the region-file durability probe, with the mixins applied (SaveProbe)
@@ -2758,6 +2807,35 @@ public final class Stockpiles {
 	}
 
 	/**
+	 * (BC-c) After the reconcile, on the first server tick (the regions load after the stockpiles' SERVER_STARTED listener): the reconcile
+	 * charged every standing cell whatever its region's {@code maxBill} (conservation wins: the blocks exist, and leaving one unpaid would mint
+	 * it). A capped region whose group's draws (its targets' paid records and the region's own charges) are now past the cap is named in a WARN
+	 * and in the target's reconcile record ({@code capOver}, {@code capRegion}); its targets draw no more of the items over and wait
+	 * {@code bill_cap} (their feed step derives the wait; {@code nextNeeded} gives the units the cap must rise to finish). Server thread.
+	 */
+	static void capsAfterReconcile(MinecraftServer srv) {
+		if (LAST_RECONCILE.isEmpty()) {
+			return;
+		}
+		for (Pile p : List.copyOf(PILES.values())) {
+			for (Object t : bookTargets(p)) {
+				JsonObject o = LAST_RECONCILE.get(idOf(t));
+				BillCaps.Cap cap = o == null ? null : BillCaps.of(t);
+				if (cap == null) {
+					continue;
+				}
+				Map<String, Integer> over = cap.overshoot(BillCaps.drawn(p.ledger, cap));
+				o.addProperty("capRegion", cap.region());
+				o.add("capOver", Builder.counts(over));
+				if (!over.isEmpty()) {
+					Architect.LOGGER.warn("Stockpile {}: the reconcile of {} left region {}'s draws past its maxBill by {}: its standing cells were charged "
+						+ "(the blocks exist); the region's targets draw no more of it and wait bill_cap", p.owner, o.get("key").getAsString(), cap.region(), over);
+				}
+			}
+		}
+	}
+
+	/**
 	 * (J2, RL6) The old blocks' cost of the ahead cells that are a construction delta's swaps, as {@link Builder}'s refundSwap counts it (a
 	 * swap cell, its old block known, not free), less a cell a player placed (its PT record: the reconcile leaves it uncharged and gives
 	 * nothing back for it either).
@@ -2992,6 +3070,57 @@ public final class Stockpiles {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
 		}
+	}
+
+	/** (slice T0) The ledger's durable file (its generations persisted in it), made for the world's dir on first use. */
+	private static @Nullable DurableFile ledgerFile;
+
+	/** (slice T0) The explicit-save flag the world-save callback reads (the barrier writes the ledger itself). Server thread. */
+	static void explicitSave(boolean on) {
+		explicitSave = on;
+	}
+
+	/**
+	 * (slice T0, docs/TXN-DESIGN.md §3.1) The world barrier: players, then chunks, then the ledger through {@link DurableFile}; refused under
+	 * {@code /save-off}, after a failed load or on any failed step ({@link DurableBarrier}). Server thread.
+	 */
+	public static DurableBarrier.Result barrier(MinecraftServer srv) {
+		return DurableBarrier.run(srv);
+	}
+
+	/**
+	 * (slice T0) The ledger written as a confirmed snapshot ({@link DurableFile}: temp, force, rename, folder force, its generation in the
+	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
+	 */
+	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		Path d = dir;
+		if (d == null) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
+		}
+		if (loadFailed) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
+		}
+		Path f = d.resolve(FILE);
+		if (PILES.isEmpty() && !Files.exists(f)) {
+			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
+		}
+		try {
+			refreshBooks(srv);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		DurableFile df = ledgerFile;
+		if (df == null || !df.file().equals(f)) {
+			df = new DurableFile("stockpiles", f);
+			ledgerFile = df;
+		}
+		DurableFile.Result r = df.write(toJson(), df.request());
+		if (r.ok()) {
+			saves++;
+			unsaved = false;
+			lastSaveTick = ticks;
+		}
+		return r;
 	}
 
 	/** Logs every save (dev: ARCHITECT_TRACE_STOCKPILE=1; the gate's clean-stop check reads it). */

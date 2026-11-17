@@ -95,7 +95,7 @@ import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof
 import { SiteVariants, siteVariantView } from './sitevariants.js';
 import { Programs, programView } from './programs.js';
 import { entrySite, keepSiteVolume, siteVolumeFile, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
-import { allowsComposite, siteSize } from './protocol.js';
+import { allowsComposite, invertedProblem, isInvertedEntry, siteSize } from './protocol.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -872,6 +872,10 @@ export class Sidecar {
     }
     // (Style unification U1) materials only: a palette the kit cannot build is refused now, not after a design round
     if (req.palette !== undefined) checkPaletteSpec(this.config.kitDir, req.palette);
+    // (7c CS) an inverted lot: a suspend site (given, or the site-bound entry's own); a versionOf of an inverted entry stays inverted
+    if (req.versionOf && !req.inverted && isInvertedEntry(this.versions.top(req.versionOf.entryId)) && req.site?.fit === 'suspend') req = { ...req, inverted: true };
+    const inv = invertedProblem(req);
+    if (inv) throw new ClientError(inv);
     // (7b DS) a site-aware design: the kit must build into a site, and the frozen volume is kept now (the blob may be GC'd later)
     if (req.site) this.acceptSite(req.site, req.versionOf?.entryId);
     if (req.bible) {

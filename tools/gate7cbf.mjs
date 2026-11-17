@@ -17,6 +17,10 @@
 //                           x01's affordances answered by Regions.affordances, x02's lake standing still water, Remove E-flat 0 over the
 //                           box. Survival (the RS survival base): x01 and the island alone each checked in survival (every form part's
 //                           bill empty), realised from an empty stockpile: PLACED with 0 items consumed or outstanding, Remove E-flat 0
+//     survival (bf-survival) (slice R2, strict: survival accounting) the RS survival base: x02 (the crater with a lake) checked in
+//                           survival (the crater's bill its lake shell's, held), an INSTANT twin, realised and fed from the owner's
+//                           stockpile in waves: PLACED and built, the targets' bills equal the check's, the world equal to the twin cell
+//                           for cell, the conservation sum exact built and removed, Remove E-flat 0
 //     report                REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7c-bf/<step>.json in the main checkout (GATE7CBF_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -222,11 +226,88 @@ steps.ingame = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (slice R2) survival: a crater lake's shell bills its pond's blocks
+
+/**
+ * (R2, strict: survival accounting) x02 (the free crater with a lake) in survival: its INSTANT twin; checked in survival, the crater
+ * part's bill is its lake shell's (H's rule: the pond's shell is a construction target; the bowl, rim and sources are free terrain); a
+ * stockpile and the conservation sum; realised and fed in waves: PLACED and built, the crater's targets built and their bills equal the
+ * check's cost.survival.bom item for item, the world equal to the twin cell for cell, items in = items out once built and once removed
+ * (every item back), Remove E-flat 0.
+ */
+async function survivalLake(tag, fx, partId) {
+  const out = { tag };
+  const T = await G.twin(ctx, `bf-${tag}`, fx, {});
+  const s = await G.site(ctx, `bf ${tag}`, fx);
+  const box = boxOf(s.W);
+  const pre = await G.snap(ctx, box, `bf-${tag}-pre`);
+  const ck = await G.check(ctx, `bf-${tag}`, s);
+  const a = (ck.check?.parts ?? []).find((q) => q.part === partId);
+  const sv = a?.cost?.survival;
+  out.check = { overall: ck.check?.overall, survival: ck.check?.survival, part: { class: a?.class, survival: sv, lake: a?.geometry?.lake ?? null } };
+  check(ck.check?.survival === true && ck.check?.overall === 'READY' && ['fits', 'adjusted'].includes(a?.class) && sum(sv?.bom) > 0 && sv?.held > 0 && !!a?.geometry?.lake?.body,
+    `${tag} (survival): Regions.checkPlan in survival: ${ck.check?.overall}; ${partId} ${a?.class}: free ${sv?.free}, held ${sv?.held} behind the lake shell's bill ${json(sv?.bom)} (lake ${json(a?.geometry?.lake?.body)})`, out.check);
+  if (!ck.check?.artifactSha) return out;
+  const crateAt = await G.pile(ctx, s, 3);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  const region = await G.realise(ctx, ck.check.artifactSha);
+  out.region = region;
+  const p0 = await C.point('realised');
+  // held until supplied: before any feed the crater's target stands unbuilt
+  // (the targets appear once the region is queued; the billed one, the shell, waits for its items: the free ones may build at once)
+  const billed = (rs) => (rs?.targets ?? []).filter((t) => t.part === partId && sum(t.bom) > 0);
+  const w0 = await G.waitFor(ctx, region, (st, rs) => billed(rs).length > 0 || ['PLACED', 'FAILED', 'PARTIAL'].includes(st.view.state), { timeoutMs: 600_000, every: 2000 });
+  await L.sleep(15_000);
+  const rs0 = await G.rsState(ctx, region);
+  const st0 = await L.call('dev.region.state', { region }, 60_000);
+  out.held = { state: st0?.view?.state, targets: (rs0.targets ?? []).filter((t) => t.part === partId).map((t) => ({ target: t.target, cells: t.cells, built: t.built, bom: t.bom })) };
+  check(w0.ok && billed(rs0).length > 0 && billed(rs0).every((t) => !t.built) && st0?.view?.state !== 'PLACED',
+    `${tag} (survival): before any item is fed the lake shell's billed target waits unbuilt (held), the region not PLACED (${st0?.view?.state}): ${json(out.held.targets.map((t) => [t.target, t.cells, t.built, t.bom]))}`, out.held);
+  const f = await G.feed(ctx, region, { cons: C, fraction: 0.5, timeoutMs: 2_400_000 });
+  const st = f.last.st, rs = f.last.rs;
+  out.feed = { waves: f.waves, inserted: f.inserted };
+  out.build = rs.build && { built: rs.build.built, done: rs.build.done, percent: rs.build.percent, parts: (rs.build.parts ?? []).map((q) => [q.part, q.state, q.targets?.length]) };
+  check(st.view.state === 'PLACED' && rs.build?.built && rs.build?.done && rs.build?.percent === 100 && f.waves >= 2, `${tag} (survival): realiseApproved and fed in ${f.waves} waves (${sum(f.inserted)} items): ${st.view.state}, build ${json(out.build)}`);
+  const targets = (rs.targets ?? []).filter((t) => t.part === partId).map((t) => ({ target: t.target, part: t.part, cells: t.cells, built: t.built, bom: t.bom }));
+  out.targets = targets;
+  check(targets.length > 0 && targets.every((t) => t.built), `${tag} (survival): the lake shell's target is built: ${json(targets.map((t) => [t.target, t.cells, t.built, t.bom]))}`, targets);
+  const bills = G.billsOf(ck, rs);
+  out.bills = bills;
+  const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => !G.same(bills.want[p], bills.got[p]));
+  check(differ.length === 0 && G.same(bills.want[partId], sv?.bom) && G.same(bills.got[partId], sv?.bom),
+    `${tag} (survival): ${partId}'s cost.survival.bom against its targets' bills put down: ${differ.length ? `differs ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : `equal, item for item (${json(bills.got[partId])})`}`, bills);
+  const pb = await C.point('built');
+  out.builtPoint = pb;
+  check(G.exact(p0) && G.exact(pb), `${tag} (survival): items in = items out once built: every item fed is in the stockpile or standing as a paid block (the conservation sum ${json(pb.diff)}, identity ${pb.identity})`, pb);
+  await L.settle(5000);
+  const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
+  out.twin = d;
+  check(d.mismatches === 0, `${tag} (survival): the realised world equals its INSTANT twin cell for cell (the crates aside): ${d.mismatches} differ`, d.list);
+  const rm = await G.remove(ctx, region);
+  out.removed = { removed: rm.removed, refund: rm.refund, kept: rm.kept };
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  out.eflat = { mismatches: ef.length, list: ef.slice(0, 8) };
+  check(rm.removed && ef.length === 0, `${tag} (survival): Regions.remove: E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
+  const pr = await C.point('removed');
+  out.removedPoint = pr;
+  check(G.exact(pr), `${tag} (survival): items in = items out once removed: every item back (the conservation sum ${json(pr.diff)}, identity ${pr.identity}; refund ${json(rm.refund)}, the bill ${json(sv?.bom)})`, pr);
+  out.conservation = C.points;
+  return out;
+}
+
+steps.survival = async () => {
+  await ensure();
+  spendZero();
+  return { s02: await survivalLake('s02', fixture('x02_crater_lake'), 'crater') };
+};
+
 // ------------------------------------------------------------------ the report
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'ingame']) {
+  for (const s of ['unit', 'ingame', 'survival']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
