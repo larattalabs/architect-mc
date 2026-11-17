@@ -440,8 +440,9 @@ public final class Repairs {
 				// first 64 diffs; OK cells change the classification lines when they change (a random tick inside the scope never stales it)
 				md.update((w.pos() + "=" + r.get(w.pos()) + "|" + r.pt(w.pos()) + "|" + markOf(r, w.pos()) + ";").getBytes(StandardCharsets.UTF_8));
 			}
-			boolean took = c == RepairCore.Cell.FOREIGN && survival && RepairCore.takenSince(RepairCore.Cell.OK, markOf(r, w.pos()), w, true)
-				== RepairCore.Cell.FOREIGN && RepairCore.classify(r, w) == RepairCore.Cell.OK;
+			// (DR2 round after OVF) taken by its mark alone, whatever the cell reads now (the undo's value, or air over a pre-op block): a repair
+			// settles the removal around it, never writes it, and withholds its refund share
+			boolean took = c == RepairCore.Cell.FOREIGN && RepairCore.takenAfter(markOf(r, w.pos()), w, survival);
 			if (took) {
 				taken++;
 			}
@@ -644,8 +645,8 @@ public final class Repairs {
 		if (u.foreign() > 0) {
 			out.add(new RepairFinding(RepairCode.FOREIGN, u.site(), u.region(), null, u.foreign(), 0, u.foreign(), u.foreignDiffs(), u.site()
 				+ ": " + u.foreign() + " cell(s) hold neither the journal's value nor the operation's pre-op value (players' or the world's): left"
-				+ (u.taken() > 0 ? "; " + u.taken() + " of them a player took from the pending removal (its stored refund holds them: it stays "
-					+ "pending, never paid twice)" : "")));
+				+ (u.taken() > 0 ? "; " + u.taken() + " of them a player took from the pending removal: a repair settles it around them and "
+					+ "withholds their refund share (never paid twice)" : "")));
 			StringBuilder f = new StringBuilder();
 			u.foreignDiffs().forEach(d -> f.append(d.pos().asLong()).append(':').append(d.found()).append(','));
 			lines.add("foreign " + u.site() + " " + f);
@@ -868,7 +869,11 @@ public final class Repairs {
 		Map<String, Integer> credit = new TreeMap<>();
 		for (Unit u : todo) {
 			if (settles.contains(u.site())) {
-				pendingCreditOf(u.site()).forEach((k, v) -> credit.merge(k, v, Integer::sum)); // (DR-S) it books only as the removal settles
+				// (DR-S) it books only as the removal settles; (DR2 round after OVF) less its taken cells' share
+				Map<String, Integer> share = u.taken() > 0 ? shareOf(u.site(), takenNow(srv, u.site(), u.group())) : Map.of();
+				Map<String, Integer> pc = new TreeMap<>(pendingCreditOf(u.site()));
+				(share == null ? Map.<String, Integer>of() : share).forEach((k, v) -> pc.computeIfPresent(k, (x, n) -> n - v > 0 ? n - v : null));
+				pc.forEach((k, v) -> credit.merge(k, v, Integer::sum));
 			}
 		}
 		for (String[] c : now.custody()) {
@@ -951,11 +956,12 @@ public final class Repairs {
 	 * ({@code written}, then {@code settling} with the credit keys of the removals it settles, read while their records still stand).
 	 */
 	private static RepairResult run(MinecraftServer srv, String planId, Path path, JsonObject o, List<RepairCore.Want> all, int left) {
+		kill("DRK0", "the record durable, nothing written");
 		int written = write(srv, all);
 		Set<String> touched = new LinkedHashSet<>();
 		all.forEach(w -> touched.add(w.site()));
 		try {
-			Stockpiles.durableBarrier(srv);
+			worldSaved(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Repair {}: wrote {} cell(s) but the world's save was refused ({}); nothing settled, the record stays open", planId,
 				written, e.getMessage());
@@ -963,6 +969,7 @@ public final class Repairs {
 				java.util.Locale.ROOT, "Repair %s wrote %,d cell(s), but the world's save was refused (%s): nothing settled and nothing credited. The "
 					+ "record stays open; /architect repair ... confirm %s finishes it.", planId, written, e.getMessage(), planId), List.copyOf(touched));
 		}
+		kill("DRK3", "the barrier saved the writes and the ledger, the record not yet at written");
 		o.addProperty("phase", "written");
 		o.addProperty("written", (o.has("writtenBefore") ? o.get("writtenBefore").getAsInt() : 0) + written);
 		durableOrWarn(planId, path, o);
@@ -977,6 +984,7 @@ public final class Repairs {
 			asked.add(e.getAsJsonObject().get("site").getAsString());
 		}
 		Set<String> done = new HashSet<>();
+		Map<String, List<RepairCore.Want>> takenBy = new LinkedHashMap<>(); // (DR2 round after OVF) per settled survival removal
 		for (String site : asked) {
 			if (!stuckNow.contains(site) || js == null || done.contains(site)) {
 				continue;
@@ -984,6 +992,7 @@ public final class Repairs {
 			Set<String> comp = stackedWith(js, site, stuckNow);
 			done.addAll(comp);
 			boolean every = true;
+			Map<String, List<RepairCore.Want>> tk = new LinkedHashMap<>();
 			for (String m : comp) {
 				String g = SiteJournal.lastGroup(m);
 				Set<String> newer = g == null ? Set.of() : shadowed(js, m, g);
@@ -991,7 +1000,14 @@ public final class Repairs {
 					Architect.LOGGER.warn("Repair {}: {}'s removal stays pending: newer site(s) {} stand over its cells (it settles once they are gone)",
 						planId, m, newer);
 				}
-				every &= g != null && newer.isEmpty() && unanimous(srv, js, m, g);
+				List<RepairCore.Want> taken = new ArrayList<>();
+				every &= g != null && newer.isEmpty() && unanimous(srv, js, m, g, taken);
+				if (!taken.isEmpty() && shareOf(m, taken) == null) {
+					every = false; // (DR2 round after OVF) a share it can't prove (a road's record): the whole credit stays pending, as before
+					Architect.LOGGER.warn("Repair {}: {}'s removal stays pending: players took {} of its blocks and their share can't be proven", planId, m,
+						taken.size());
+				}
+				tk.put(m, taken);
 			}
 			if (!every) {
 				if (comp.size() > 1) {
@@ -1002,6 +1018,7 @@ public final class Repairs {
 			for (String m : comp) {
 				release.addAll(SiteJournal.undone(m, SiteJournal.lastGroup(m)).stream().map(JournalStore.Meta::id).toList());
 				settled.add(m);
+				takenBy.put(m, tk.getOrDefault(m, List.of()));
 			}
 		}
 		// (DR-S) the settled survival removals' credit keys, read before their records go; (DR2) kept in the record first, with an earlier
@@ -1026,6 +1043,39 @@ public final class Repairs {
 			o.add("settledBefore", sb);
 			o.addProperty("phase", "settling");
 			durableOrWarn(planId, path, o);
+			kill("DRK4", "the settling record durable, nothing withheld or released");
+		}
+		// (DR2 round after OVF, the GPT review's P1) a settled survival removal a player took blocks from: its pending credit keeps what was
+		// restored or removed, the taken cells' share moves to its held key (the player holds those blocks), confirmed on disk before the
+		// release (speed rule 17): released first, a stop would let the start book the whole pending credit, the taken blocks included
+		JsonObject withheld = o.has("withheld") && o.get("withheld").isJsonObject() ? o.getAsJsonObject("withheld") : new JsonObject();
+		boolean split = false;
+		for (String site : settled) {
+			List<RepairCore.Want> taken = takenBy.getOrDefault(site, List.of());
+			String k = pendingKeyOf(site);
+			Map<String, Integer> share = shareOf(site, taken);
+			if (k == null || taken.isEmpty() || share == null) {
+				continue;
+			}
+			Map<String, Integer> held = Stockpiles.withhold(k, share);
+			withheld.add(site, Builder.counts(held));
+			split = true;
+			Architect.LOGGER.warn("Repair {}: players took {} of {}'s standing blocks after its removal: their share {} is withheld from {} (held as {}{})",
+				planId, taken.size(), site, held, k, Stockpiles.TAKEN, k);
+		}
+		if (split) {
+			try {
+				ledgerSaved(srv);
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Repair {}: the withheld share's save was refused ({}); nothing released, the record stays open", planId,
+					e.getMessage());
+				return new RepairResult(planId, false, written, Map.of(), List.of(), left, path.toString(), Reason.JOURNAL_UNAVAILABLE, "Repair " + planId
+					+ " wrote its cells, but the ledger's save was refused (" + e.getMessage() + "): nothing settled and nothing credited; the record "
+					+ "stays open; confirm finishes it", List.copyOf(touched));
+			}
+			o.add("withheld", withheld);
+			durableOrWarn(planId, path, o);
+			kill("DRK5", "the withheld share on disk, nothing released");
 		}
 		// every settled group released after all are judged (a lower removal's later undo is the upper's expected value: F1)
 		if (!release.isEmpty()) {
@@ -1041,6 +1091,9 @@ public final class Repairs {
 			}
 			Architect.LOGGER.warn("Repair {}: {}'s removal settled (released, its restore written by the repair)", planId, site);
 		}
+		if (!settled.isEmpty()) {
+			kill("DRK6", "released, the pending credits not booked");
+		}
 		// survival: a rolled-forward removal's stored credit (J2 2a's, or a group removal's decCredit held pending, slice DR-S) books once, keyed
 		// to the removals this repair settled only, then saved with the world; custody under the cap. What is credited is what left the
 		// pending credits and the custody for the stock: returned plus overflow (dropped as items)
@@ -1051,6 +1104,7 @@ public final class Repairs {
 		if (!keys.isEmpty()) {
 			try {
 				Stockpiles.bookPendingFor(srv, keys).forEach((k, v) -> credited.merge(k, v, Integer::sum));
+				ledgerSaved(srv); // (speed rule 17) the booking confirmed on disk before the record goes final
 			} catch (IllegalStateException e) {
 				saveRefused = true; // booked in memory; on disk still pending: the next start (or this record, resumed) books it once
 				Architect.LOGGER.error("Repair {}: the credits' save was refused ({}); the record stays open", planId, e.getMessage());
@@ -1076,10 +1130,14 @@ public final class Repairs {
 		if (cust) {
 			try {
 				Stockpiles.saveCredit(srv);
+				ledgerSaved(srv);
 			} catch (IllegalStateException e) {
 				saveRefused = true;
 				Architect.LOGGER.error("Repair {}: the custody credit's save was refused ({}); the record stays open", planId, e.getMessage());
 			}
+		}
+		if (!keys.isEmpty() || cust) {
+			kill("DRK7", "the credits on disk, the record not final");
 		}
 		JsonObject prior = o.has("credited") && o.get("credited").isJsonObject() ? o.getAsJsonObject("credited") : null;
 		if (o.get("creditedUnsaved") instanceof JsonObject un && bookedBefore) {
@@ -1178,14 +1236,14 @@ public final class Repairs {
 		units.forEach(u -> by.put(u.site(), u));
 		Set<String> out = new LinkedHashSet<>();
 		for (Unit u : units) {
-			if (!u.stuck() || u.foreign() > 0 || js == null) {
-				continue;
+			if (!u.stuck() || u.foreign() > u.taken() || js == null || u.taken() > 0 && Infras.pending(u.site()) != null) {
+				continue; // (DR2 round after OVF) a player's taken cells alone never keep it pending: their share is withheld (a road's can't be proven)
 			}
 			boolean all = true;
 			for (String o : stackedWith(js, u.site(), stuck)) {
 				Unit x = by.get(o);
 				String g = SiteJournal.lastGroup(o);
-				all &= x != null && x.foreign() == 0 && g != null && shadowed(js, o, g).isEmpty(); // (DR2) none under a newer site
+				all &= x != null && x.foreign() <= x.taken() && g != null && shadowed(js, o, g).isEmpty(); // (DR2) none under a newer site
 			}
 			if (all) {
 				out.add(u.site());
@@ -1215,29 +1273,14 @@ public final class Repairs {
 	 * saved with their chunks; the chunks loaded as needed). The start's settle keeps such a survival removal pending.
 	 */
 	static int takenAfterUndo(MinecraftServer srv, String site, String group) {
-		JournalStore js = WorldJournal.storeOrNull();
-		if (js == null) {
-			return 0;
-		}
-		try {
-			int n = 0;
-			Map<String, LevelReader> readers = new LinkedHashMap<>();
-			int[] budget = {Integer.MAX_VALUE};
-			for (RepairCore.Want x : RepairCore.removalWants(js, site, group)) {
-				LevelReader r = readerFor(srv, readers, x.dim(), budget, new HashSet<>());
-				if (r != null && r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) && RepairCore.takenSince(RepairCore.Cell.OK, markOf(r, x.pos()),
-					x, true) == RepairCore.Cell.FOREIGN) {
-					n++;
-				}
-			}
-			return n;
-		} catch (IOException e) {
-			return 0;
-		}
+		return takenNow(srv, site, group).size();
 	}
 
-	/** Whether every cell a stuck removal owns now holds what its undo wrote. */
-	private static boolean unanimous(MinecraftServer srv, JournalStore js, String site, String group) {
+	/**
+	 * Whether every cell a stuck removal owns now holds what its undo wrote; (DR2 round after OVF) a survival removal's cell a player took
+	 * after its undo ({@link RepairCore#takenAfter}) is no blocker: it is added to {@code taken} (never written; its share withheld).
+	 */
+	private static boolean unanimous(MinecraftServer srv, JournalStore js, String site, String group, List<RepairCore.Want> taken) {
 		boolean survival = pendingKeyOf(site) != null;
 		try {
 			List<RepairCore.Want> w = RepairCore.removalWants(js, site, group);
@@ -1246,7 +1289,14 @@ public final class Repairs {
 			Set<Long> loaded = new HashSet<>();
 			for (RepairCore.Want x : w) {
 				LevelReader r = readerFor(srv, readers, x.dim(), budget, loaded);
-				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) || cellOf(r, x, survival) != RepairCore.Cell.OK
+				if (r == null || !r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4)) {
+					return false;
+				}
+				if (RepairCore.takenAfter(markOf(r, x.pos()), x, survival)) {
+					taken.add(x);
+					continue;
+				}
+				if (cellOf(r, x, survival) != RepairCore.Cell.OK
 					|| x.pt() != null && dev.larattalabs.architect.placed.TrackingRule.on && !r.pt(x.pos())) { // (DR2 fix, P1-5) a restored player's record missing: not settled
 					return false;
 				}
@@ -1254,6 +1304,64 @@ public final class Repairs {
 			return true;
 		} catch (IOException e) {
 			return false;
+		}
+	}
+
+	/**
+	 * (DR2 round after OVF) A stuck survival removal's taken cells' refund share ({@link RepairCore#takenShare} over its pending record's
+	 * queue), or null when it can't be proven (a road's record, or none): the caller then keeps the removal pending as before.
+	 */
+	static @Nullable Map<String, Integer> shareOf(String site, List<RepairCore.Want> taken) {
+		if (taken.isEmpty()) {
+			return Map.of();
+		}
+		Site s = Sites.pendingRecord(site);
+		if (s == null || s.construction() == null) {
+			return null;
+		}
+		return RepairCore.takenShare(s.restoreBox(), s.construction().queue(), s.construction().free(), taken);
+	}
+
+	/** (DR2 round after OVF) A stuck removal's taken cells now (their marks; the chunks loaded as needed), for the dry run's preview. */
+	private static List<RepairCore.Want> takenNow(MinecraftServer srv, String site, String group) {
+		JournalStore js = WorldJournal.storeOrNull();
+		List<RepairCore.Want> out = new ArrayList<>();
+		if (js == null || pendingKeyOf(site) == null) {
+			return out;
+		}
+		try {
+			Map<String, LevelReader> readers = new LinkedHashMap<>();
+			int[] budget = {Integer.MAX_VALUE};
+			for (RepairCore.Want x : RepairCore.removalWants(js, site, group)) {
+				LevelReader r = readerFor(srv, readers, x.dim(), budget, new HashSet<>());
+				if (r != null && r.ensure(Journal.x(x.pos()) >> 4, Journal.z(x.pos()) >> 4) && RepairCore.takenAfter(markOf(r, x.pos()), x, true)) {
+					out.add(x);
+				}
+			}
+		} catch (IOException e) {
+			return out;
+		}
+		return out;
+	}
+
+	/**
+	 * (DR2 round after OVF, speed rule 17) The repair's saves, in two helpers so that TXN's T0 barrier replaces them in one place:
+	 * {@link #worldSaved} the durability barrier (the written chunks, then the ledger, on disk), {@link #ledgerSaved} the ledger's confirmed
+	 * save ({@link Stockpiles#saveConfirmed}: it throws unless the ledger reached the disk). Both throw on a refusal.
+	 */
+	private static void worldSaved(MinecraftServer srv) {
+		Stockpiles.durableBarrier(srv);
+	}
+
+	private static void ledgerSaved(MinecraftServer srv) {
+		Stockpiles.saveConfirmed(srv);
+	}
+
+	/** (DR2 round after OVF, TEST) kill point {@code name} if armed ({@code dev.repair op killAt}): halts the JVM, nothing saved. */
+	private static void kill(String name, String what) {
+		if (name.equals(killPoint)) {
+			Architect.LOGGER.error("Repair: kill point {} ({}): halting the JVM", name, what);
+			Runtime.getRuntime().halt(7);
 		}
 	}
 

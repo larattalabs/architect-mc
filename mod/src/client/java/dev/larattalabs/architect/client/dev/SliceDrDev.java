@@ -27,7 +27,7 @@ public final class SliceDrDev {
 		DevBridge.register("dev.repair", 120_000, "{op: diagnose|repair|state|log|killAt|snap|unwrite|ledger, scope?: {kind: site|region|here|all, id?, x?, y?, z?, "
 			+ "continuation?}, planId?, apply?: false, actor?: player|none, armed?: true} - (DR) TEST: Sites.diagnose / Sites.repair through the API "
 			+ "(actor: the first player, or none), the auto-diagnose's suspects, ops line and SITE_REPAIRED count (state), the repair records (log); "
-			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written; (DR2) point DRK1pt: before its first player's block, DRK2: after its record is final); (DR-S) snap {name, min, max} keeps a "
+			+ "killAt arms DRK1 (the next repair halts after its record is durable and half its cells are written; (DR2) point DRK1pt: before its first player's block, DRK2: after its record is final; (DR2 round after OVF) DRK0: the record durable, nothing written, DRK3: after the barrier, DRK4: the settling record durable, DRK5: the withheld share saved, DRK6: released, nothing booked, DRK7: the credits saved, the record not final); (DR-S) snap {name, min, max} keeps a "
 			+ "box's cells, unwrite {name, min, max} puts back the cells changed since (the lost-writes fault), ledger {owner, key, paid?, custody?} "
 			+ "injects a paid record or custody, saved with the world", (req, mc) -> ServerTasks.callOnServer(
 				s -> s).thenCompose(s -> run(s, req)));
@@ -46,6 +46,9 @@ public final class SliceDrDev {
 			case "killAt" -> ServerTasks.callOnServer(x -> {
 				// (DR2) point: DRK1 (default: half the cells), DRK1pt (before the first player's block), DRK2 (after the record is final)
 				String point = req.has("point") ? req.get("point").getAsString() : "DRK1";
+				if (!point.matches("DRK[0-7]|DRK1pt")) {
+					throw new DevBridge.DevException("point must be DRK0..DRK7 or DRK1pt");
+				}
 				boolean armed = !req.has("armed") || req.get("armed").getAsBoolean();
 				Repairs.killDRK1 = armed && "DRK1".equals(point);
 				Repairs.killPoint = armed && !"DRK1".equals(point) ? point : null;
