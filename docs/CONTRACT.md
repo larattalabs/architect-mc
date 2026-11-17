@@ -32876,3 +32876,55 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **In game** (headless, 9026:9027, `dev.stockpile.barrier` `failPlayerReplace` / `failChunkWrite` / `reps` / `forgive`): each injected failure REFUSED, then OK at the next barrier (debt paid); an ordinary save kept `{store, gen}` on disk.
 - **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+
+### Slice TXN (design)
+
+Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
+GATES rules 17 and 18. It has had three rounds: GPT round 1 (§10); round 2, with the GPT pass, Steward's review and Noah's decisions (§11, §8); and
+round 3, with the third GPT pass and Steward's round 2 (§12).
+- **The audit (§1):** 38 paths. 33 move items or billing, and 31 of those have a known P/A/R crash window. On main, neither the
+  ledger nor the journal is ever forced.
+- **T0 primitives (§3.1):**
+  - `DurableFile` (OK / REFUSED / IN_DOUBT), with a persisted `store` id and `gen`, forcing the file and its directory. Load
+    re-forces before any generation counts, and best effort is only the Windows limit;
+  - a **global** barrier over save epochs: every chunk, entity and player write acknowledged, new `.mca` and `playerdata`
+    directories forced, `.mcc` and save-off refused; then the ledger, carrying its epoch.
+  - Player saves are acknowledged positively (the replace's result and a read-back hash).
+  - IO debt is retried: a failed chunk is re-dirtied or its snapshot requeued, and the chunk pinned; offline players' snapshots are
+    rewritten.
+- **The layer (§3.2-§3.7):**
+  - intents in `architect/txn.json`, written before any mutation;
+  - effect classes, each with its receipt:
+    - L (a ledger key);
+    - B and W (receipts in a chunk attachment that survives BE replacement);
+    - D (the journal undo group, the decision);
+    - R (a record ref or tombstone, with a persisted gen);
+    - P (a player attachment and an acknowledged save);
+    - O (owed collectibles, which replace every drop);
+  - an immutable `decision` (commit / abort / abandon with its split), kept separate from the `phase` progress (`PREPARED`,
+    `PREPARED_DONE`, `EFFECTS_DONE`, `ABORTING`, `RETIRING`), and a phase × decision × evidence recovery table;
+  - `done` keeps the semantic key, the result and pending event payloads, in a bounded result cache;
+  - retirement on persisted awaits;
+  - holds honoured by every writer, indefinite and ops-only;
+  - abandon is a takeover of the same txn (T5).
+- **The harness (§4):** `TxnCrashModel` over the participants' version histories, failures and recovery prefixes. `txn-crash-<kind>`
+  takes the baseline first, traces on a copy, and runs every point × {bare, +save, +async, fail}.
+- **Conservation (§5):** exactly once per open txn, by its probes; owed counted; no loss term; base units after `Equivalents`.
+  Report-only until T1 runs clean for one batch.
+- **API (additive, Since NEXT; Steward review):**
+  - `SiteWait.TXN_HELD`;
+  - `RemoveResult.replayed()`;
+  - a parallel `SiteEvents.TXN_EVENT` carrying `txnId` and `eventId` (events at least once; the ids are for tracing; consumers stay
+    idempotent on their own state);
+  - `Refusal.detail`, with `held(decided)` and `held(other)` details;
+  - `Stockpile.owed()` / `Owed` and `Stockpiles.collectOwed`;
+  - a `SITE_BUSY` detail;
+  - `owed` in the stockpile view;
+  - futures complete at `EFFECTS_DONE`, and views read UNDOING until then.
+- **Downgrade** across TXN is unsupported.
+- **Migration (§6):**
+  1. merge PSV, OVF, ST/HB, then LC3 (likely without abandon) and DR2 (which drops its owed drops for OVF);
+  2. T0, then T1;
+  3. CXD (T2), ADP (T3), group removals (T4), abandon (T5);
+  4. deltas, fills, take-ups and repair (T6); leftovers and player moves (T7).
+- **Noah's decisions** (via the parent session, 2026-11-17) are in §8. No question is open.
