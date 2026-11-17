@@ -203,6 +203,30 @@ class LotCapLCAPTest {
 		assertEquals(false, RegionsImpl.orphanGroup("rg9", group(new JsonObject())), "a group with no region key: the old path");
 	}
 
+	@Test
+	void aBuiltRegionWithItsGroupMissingIsNoOrphanWhenTheSitesFileWasUnreadable() {
+		// (LCAP, review P1) the sites file unreadable at load leaves every group missing: a built region is never removed as an orphan
+		RegionRec built = new RegionRec("rg9", "p1", "sha", "steward", new JsonObject(), "minecraft:overworld", new int[] {0, 60, 0, 31, 90, 31}, 1L);
+		built.batchId = "b1";
+		built.groupId = "g1";
+		built.state = dev.larattalabs.architect.api.RegionState.PLACED;
+		assertEquals(RegionsImpl.OrphanAction.NORMAL, RegionsImpl.orphanAction(built, null, true), "queued (built): the normal removal, which refuses");
+		assertEquals(RegionsImpl.OrphanAction.NORMAL, RegionsImpl.orphanAction(built, null, false), "a group merely missing is no orphan");
+		RegionRec orphan = RegionRec.fromJson(built.toJson());
+		orphan.unqueued = true; // saved at RG2a, the batch never queued
+		assertEquals(RegionsImpl.OrphanAction.REFUSE, RegionsImpl.orphanAction(orphan, null, true), "the sites file unreadable: refused");
+		assertEquals(RegionsImpl.OrphanAction.ORPHAN, RegionsImpl.orphanAction(orphan, null, false));
+		JsonObject mine = new JsonObject();
+		mine.addProperty(dev.larattalabs.architect.site.RegionItems.EXT_REGION, "rg9");
+		assertEquals(RegionsImpl.OrphanAction.NORMAL, RegionsImpl.orphanAction(orphan, group(mine), false), "its own group stands: the normal removal");
+		// the evidence round-trips; a record without it (before LCAP, or queued) reads as queued
+		assertEquals(true, RegionRec.fromJson(orphan.toJson()).unqueued);
+		JsonObject legacy = built.toJson();
+		assertFalse(legacy.has("unqueued"), "written only while true");
+		assertFalse(RegionRec.fromJson(legacy).unqueued);
+		assertFalse(RegionsImpl.SITES_UNREADABLE.isBlank());
+	}
+
 	private static dev.larattalabs.architect.site.SiteGroupRec group(JsonObject ext) {
 		return new dev.larattalabs.architect.site.SiteGroupRec("g1", null, ext, List.of(), List.of(), dev.larattalabs.architect.site.SiteGroupRec.ACTIVE, false, null,
 			null, 0L, Map.of(), 0L);

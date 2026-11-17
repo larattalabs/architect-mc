@@ -1903,6 +1903,7 @@ public final class RegionsImpl implements Regions {
 		rec.batchId = ids[0];
 		rec.groupId = ids[1];
 		rec.state = RegionState.PLACING;
+		rec.unqueued = true; // (LCAP, RG2a) the evidence an orphan needs: cleared with the save after the queue
 		try {
 			saveConfirmed(live);
 		} catch (IOException e) {
@@ -1919,6 +1920,7 @@ public final class RegionsImpl implements Regions {
 		rec.groupId = b.group;
 		rec.batchId = b.id;
 		rec.state = RegionState.PLACING;
+		rec.unqueued = false;
 		save(live);
 		WorldJournal.kill("RG2"); // the region record is written, no tile started
 		SiteEvents.REGION_STATE.invoker().onState(view(live));
@@ -3332,8 +3334,35 @@ public final class RegionsImpl implements Regions {
 			&& !e.getAsString().equals(regionId);
 	}
 
+	/** (LCAP, RG2a) What a removal does with a record's group: an orphan's record alone, a refusal, or the normal removal. */
+	enum OrphanAction { ORPHAN, REFUSE, NORMAL }
+
+	/**
+	 * (LCAP, RG2a; review P1) A region is an orphan only when its record says it was saved before its batch was queued ({@link RegionRec#unqueued})
+	 * and its group is missing or another region's; a group that is merely missing (a built region, the sites file unreadable) is never one.
+	 * With the sites file unreadable an orphan's cleanup is refused (its group can't be told apart). Pure.
+	 */
+	static OrphanAction orphanAction(RegionRec rec, @Nullable SiteGroupRec grp, boolean sitesLoadFailed) {
+		if (!rec.unqueued) {
+			return OrphanAction.NORMAL;
+		}
+		if (sitesLoadFailed) {
+			return OrphanAction.REFUSE;
+		}
+		return orphanGroup(rec.id, grp) ? OrphanAction.ORPHAN : OrphanAction.NORMAL;
+	}
+
+	/** (LCAP, review P1) The refusal of an orphan's cleanup while the sites file is unreadable. */
+	static final String SITES_UNREADABLE = "sites_unreadable: the sites file (architect-sites.json) could not be read at load, so whether this region's group "
+		+ "was ever queued can't be told: nothing removed (fix or restore the sites file, then remove it again)";
+
 	private static CompletableFuture<RemoveResult> removeGroup(MinecraftServer s, Live l, RemoveOptions o) {
-		if (orphanGroup(l.rec().id, Sites.group(l.rec().groupId))) {
+		OrphanAction act = orphanAction(l.rec(), Sites.group(l.rec().groupId), Sites.loadFailed());
+		if (act == OrphanAction.REFUSE) {
+			Architect.LOGGER.warn("Region {}: removal refused, nothing changed (state {}): {}", l.rec().id, l.rec().state, SITES_UNREADABLE);
+			return CompletableFuture.completedFuture(new RemoveResult(false, List.of(SITES_UNREADABLE), Map.of()));
+		}
+		if (act == OrphanAction.ORPHAN) {
 			// (LCAP, RG2a) an orphan record: it wrote nothing; another build's group or batch under its ids is never cancelled or removed
 			Architect.LOGGER.warn("Region {}: its group {} is not its own (never queued, or another region's): only its record is removed", l.rec().id,
 				l.rec().groupId);

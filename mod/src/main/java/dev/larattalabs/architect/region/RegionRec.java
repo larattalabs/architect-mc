@@ -25,6 +25,11 @@ public final class RegionRec {
 	public final long createdAt;
 	public String groupId = "";
 	public String batchId = "";
+	/**
+	 * (LCAP, RG2a) Saved before its batch was queued and not since: the record names a batch and group nobody may hold yet. Written only
+	 * while true ({@code "unqueued": true}); absent (every record before LCAP, and every record once its batch is queued): false.
+	 */
+	public boolean unqueued;
 	public RegionState state = RegionState.PLACING;
 	public int maxChunks;
 	public boolean generate;
@@ -207,6 +212,9 @@ public final class RegionRec {
 		o.addProperty("createdAt", createdAt);
 		o.addProperty("groupId", groupId);
 		o.addProperty("batchId", batchId);
+		if (unqueued) {
+			o.addProperty("unqueued", true); // (LCAP, RG2a)
+		}
 		o.addProperty("state", state.name());
 		o.addProperty("maxChunks", maxChunks);
 		o.addProperty("generate", generate);
@@ -316,6 +324,7 @@ public final class RegionRec {
 				"createdAt").getAsLong());
 		r.groupId = o.get("groupId").getAsString();
 		r.batchId = o.get("batchId").getAsString();
+		r.unqueued = o.has("unqueued") && o.get("unqueued").getAsBoolean(); // (LCAP, RG2a) absent: queued
 		r.state = RegionState.valueOf(o.get("state").getAsString());
 		r.maxChunks = o.get("maxChunks").getAsInt();
 		r.generate = o.get("generate").getAsBoolean();

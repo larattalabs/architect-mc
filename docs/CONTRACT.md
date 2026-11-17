@@ -32931,7 +32931,10 @@ so two module lots that share items can't each be held to their own measured bou
 - **RG2a orphans (second fix round).** A crash at RG2a leaves a record naming a batch and group id nobody holds. At load the ids every
   region record names are reserved (`site/RegionIds`; `Batches.newId` and `Sites.newGroupId` skip them), so a later build never shares
   them. A removal cancels only a batch whose ext names the region, and a region whose group is missing or names another region is an
-  orphan: only its record is removed (it wrote nothing). `dev.journal.killAt` accepts `RG2a`. lcap-survival's row Z: RG2a halt, town B
+  orphan: only its record is removed (it wrote nothing). Third round (review P1): an orphan needs the record's own evidence,
+  `unqueued: true` (written by the RG2a pre-save, cleared by the save after the queue; absent = queued, so every older record is queued);
+  a group that is merely missing is never one, and with the sites file unreadable (`Sites.loadFailed`) an unqueued record's removal is
+  refused (`sites_unreadable`, nothing changed). `dev.journal.killAt` accepts `RG2a`. lcap-survival's row Z: RG2a halt, town B
   with its own ids, the orphan removed, B built, items in = items out.
 - **LCAP-Q1, which cap.** `SiteWait.capScope` (appended component; the 1.59.0 constructor kept): for `BILL_CAP`, `"region"`
   (`SiteWait.CAP_REGION`), `"lot:<id>"`, or both comma-joined, lot first; null otherwise. A gate mechanism's `bill_cap` wait carries the same
@@ -32956,5 +32959,7 @@ so two module lots that share items can't each be held to their own measured bou
   FAILs on 4b3dee91 + the driver (`gate-runs-LCAP-pre2/20261117-163845-change`: B took the orphan's b1/g1, the orphan's removal FAILED B)
   and passes at 53c020a2 (`20261117-165207-change`: lcap-survival 32/0, bc-cap 10/0, bcd-grow 19/0; rl-crash 109/1 on RL5 F10, a gravel
   drop near the road cell, then 110/0 alone in `20261117-171227-change`).
+- Third round (unreadable sites): `LotCapLCAPTest` 12/12; the same case on 537838fb's API FAILs (`orphanGroup("rg9", null)` true for a built
+  region whose group is missing). Gates below.
 - Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves an orphan record (it writes nothing; removed alone);
   lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).
