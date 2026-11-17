@@ -32895,3 +32895,19 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   `terrainCells/terrainBuilt`, `terrainPerTick`, the typed wait (`WAIT_KIND_TERRAIN`) and the dev hooks. **TO** orders them; **HB**'s RL book
   marks them free; **QX** fills `Quote.terrainCells` from the plan's staged counts (the kit would need to count class 3 apart: today it is
   inside `free`).
+
+### Slice TO as built (branch `slice/TO` off `slice/8aF` 483882d6; pure order, not wired; $0; light; recorded 2026-11-15)
+
+- **`BuildOrder.forTerrain`** (pure) -> `Terrain(order, connected, cuts)`: cuts first, top down; fills by SO's support BFS (ties by y), each only
+  when connected; loose and resting blocks only over a placed solid fill or solid land; a leaf only next to a placed log or an already held leaf;
+  a floating part seeds from its anchor's 3x3. Cells nothing reaches yet follow `connected`. ST's entry: `RegionTargets.terrainOrder`.
+- **Leaf decision: by order alone.** INSTANT leaves are `persistent=true` (F3's M18; every leaf state in v72), so a written leaf never decays; a
+  temporary state is not the journal's planned after, so `planUndo` would skip it on a mid-build Remove. "A log within 4" reads as "held through
+  standing leaves": v72's leaves reach 8 face steps, and a branch log reached only through leaves must not deadlock.
+- **Tests** (`TerrainOrderTest`, 10): x01-x03, v04 spire, v05 ice spikes, v72 grove, v06 terrace (cells via `kit/test/terrain-order-cells.mjs`), as
+  one target and by tile; each cell checked as it goes in, and the whole built set checked after each target prefix. Coverage caveat: no fixture
+  has a loose or resting cell, and no grove leaf touches land, so the gravity and leaf rules rest on synthetic cases (the leaf one mutation-checked).
+- **For ST**: by tile in feed order x03 needs 2 rounds (1,356 cells: tile 18,31 comes before the anchor's 18,32), v72 7, v04 2. Build `connected`,
+  re-order the rest once the part's other targets stand; feed a floating part from its anchor's tile.
+- **Leftovers**: under 8aF the crater's and terrace's cells are HELD and F3's trees PAID, so only x01/x03/v05 stage (tests take the rest by part);
+  `f3/s01_steward_glade` throws in survival (`compileSurvival`: `opMats[i] is not iterable`); `unit-mod`'s step inputs miss the kit helper.
