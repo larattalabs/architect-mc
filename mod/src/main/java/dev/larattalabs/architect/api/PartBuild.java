@@ -14,9 +14,9 @@ import java.util.List;
  * @param freeCells the part's cells written at once in the free pass
  * @param terrainCells (8a, feature {@code terrainConstruction}) the part's staged terrain cells: a survival region's land (relief, pads'
  *                     cut and fill, forms, scatter and stamps) built over time, free (docs/CONTRACT.md "Phase 8a" §6). 0 with none, in a
- *                     creative region. Its staged targets are among {@code targets}. Since NEXT.
+ *                     creative region. Its staged targets are among {@code targets}. Since 1.68.0.
  * @param terrainBuilt of them, built. While {@code state} is {@code building}, Steward's NPC avoids the part's box
- *                     (S-8a-1). Since NEXT.
+ *                     (S-8a-1). Since 1.68.0.
  */
 public record PartBuild(String part, String state, List<String> targets, long cells, long built, long freeCells, long terrainCells, long terrainBuilt) {
 	public PartBuild {

@@ -48,7 +48,7 @@ import org.jspecify.annotations.Nullable;
  *     The plan's count over its survey (plan.json's {@code survivalStaged}; the world is not read, so an upper bound): a group with none is
  *     left out. F3's region-made trees stay paid (in {@code bom}, not here). At {@link RegionBuild#terrainPerTick} cells a tick (default 16)
  *     a group takes about {@code cells / (terrainPerTick * 20)} seconds while loaded. Empty for a creative quote and for a plan planned
- *     before NEXT. Since NEXT.
+ *     before 1.68.0. Since 1.68.0.
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
 	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain, java.util.Map<String, Long> terrainCells) {

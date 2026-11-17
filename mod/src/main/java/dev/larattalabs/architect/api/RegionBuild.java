@@ -20,7 +20,7 @@ import net.minecraft.world.item.Item;
  *                       {@code (terrainCells - terrainBuilt) / (terrainPerTick * 20)} seconds while loaded (docs/CONTRACT.md "Phase 8a" §3,
  *                       §6). From 8a, {@code built}, {@code done} and {@code percent} count staged terrain cells with the paid ones
  *                       ({@code percent} = (paid built + terrain built) / (paid + terrain)). 0 from the old constructor (never divide by
- *                       it unchecked). Since NEXT.
+ *                       it unchecked). Since 1.68.0.
  */
 public record RegionBuild(boolean built, boolean done, double percent, Map<Item, Integer> outstanding, List<PartBuild> parts, int terrainPerTick) {
 	public RegionBuild {
