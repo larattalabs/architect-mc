@@ -2991,7 +2991,7 @@ public final class RegionsImpl implements Regions {
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
-			r.position, r.busy, Revisions.views(r));
+			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason);
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
@@ -3278,6 +3278,8 @@ public final class RegionsImpl implements Regions {
 			BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
 		}
 		l.rec().state = RegionState.REMOVING;
+		l.rec().removalStop = dev.larattalabs.architect.api.RemovalStop.NONE; // (DR-S) this removal's stop, when it stops, replaces it
+		l.rec().removalStopReason = null;
 		save(l);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 		// (C23) the region's end state is set by groupEnded (Groups.GROUP_ENDED), from the removal itself, not from this future:
@@ -3330,11 +3332,20 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
+	/** (DR-S) Records how a removal stopped: NOT_STARTED (nothing written: the region keeps its state) or PARTIAL, with its reason. */
+	static void stopOf(RegionRec r, boolean notStarted, @Nullable String why) {
+		r.removalStop = notStarted ? dev.larattalabs.architect.api.RemovalStop.NOT_STARTED : dev.larattalabs.architect.api.RemovalStop.PARTIAL;
+		r.removalStopReason = why == null || why.isBlank() ? null : why;
+	}
+
 	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why, boolean untouched) {
 		if (REGIONS.get(l.rec().id) != l || l.rec().state != RegionState.REMOVING) {
 			return;
 		}
 		RegionState before = BEFORE_REMOVAL.remove(l.rec().id);
+		if (!removed) {
+			stopOf(l.rec(), untouched && before != null, why); // (DR-S) NOT_STARTED apart from PARTIAL, typed on RegionView
+		}
 		if (!removed && untouched && before != null) {
 			// (6c D3, Steward's RC) stopped before it wrote anything: the region stays as it was
 			l.rec().state = before;

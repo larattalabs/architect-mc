@@ -776,3 +776,23 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
   for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
   drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
+
+## Slice DR (diagnose and repair)
+
+- `dev.repair {op, scope?, planId?, apply?, actor?, armed?}` (TEST, `SliceDrDev`): `op: diagnose` runs `Sites.diagnose` through the API
+  (`scope: {kind: site|region|here|all, id?, x?, y?, z?, continuation?}`) and answers the diagnosis (planId, findings with code, site,
+  region, key, counts, the first 64 diffs); `op: repair` runs `Sites.repair(planId, actor, apply)` (`actor: player`, the first player,
+  or `none`); `op: state` answers `startDone`, `pending` (`suspectsPending`), `suspects`, the auto-diagnose's `opsLine` and the
+  SITE_REPAIRED count with the last site and region; `op: log` the repair records; `op: killAt` arms kill point **DRK1** (the next
+  repair halts the JVM once its record is durable and half its cells are written; `armed: false` disarms). Used by `dr-crash`.
+- (slice DR2, TEST) `op: killAt {point}`: `DRK1` (the default, as above), `DRK1pt` (halts before the repair's first cell restoring a
+  player's record), `DRK2` (halts after the record is final, nothing saved after it). (Round after OVF) `DRK0` (the record durable, nothing written), `DRK3` (after the durability barrier), `DRK4` (the
+  `settling` record durable), `DRK6` (released, nothing booked), `DRK7` (the credits
+  saved, the record not final); any other point is refused (DR2 ship: `DRK5`, the taken-share split, went with the settle, deferred to TXN T6). `op: state` also answers `autoMaxLoads`, the most
+  chunks the auto-diagnose loaded in one tick this session.
+- (slice DR-S, TEST) `op: snap {name, min, max}` keeps a box's block states (this session); `op: unwrite {name, min, max}` puts back the cells
+  of the box that changed since the snapshot (no neighbour updates, no drops, no player record; cells with block entity data skipped): the
+  lost-writes fault, cell exact; `op: ledger {owner, key, paid?, custody?}` pays `paid` under `key` and holds `custody` under it in that
+  stockpile's ledger, saved with the world (PAID_ORPHAN, CUSTODY). Used by `dr-survival`.
+- (DR2 fix round, TEST) `dev.stockpile.ps {capacity: n}` (since the round after OVF, OVF's own switch) sets every stockpile's room to
+  `n` stacks (`-1` off; reset at a stop): a keyed refund then enters the stock past capacity (OVF). Used by `dr-survival` (DR7c).

@@ -673,6 +673,11 @@ public final class StockLedger {
 		return i > "delta:".length() - 1 && i < key.length() - 1 ? key.substring(i + 1) : null;
 	}
 
+	/** (DR-S) Whether {@code key} is a fed target's ({@code site:id@placedAt} or {@code road:id@placedAt}). */
+	public static boolean isTargetKey(String key) {
+		return targetKey(key);
+	}
+
 	/** A feed target's credit key ({@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}): capped by its record. */
 	static boolean targetKey(String key) {
 		return (key.startsWith("site:") || key.startsWith("road:")) && key.indexOf('@') > 0;

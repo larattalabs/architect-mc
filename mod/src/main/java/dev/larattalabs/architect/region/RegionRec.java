@@ -41,6 +41,9 @@ public final class RegionRec {
 	/** (6c X, C20) The realise's operation key and its body hash ({@link RegionKeys}); null without one. */
 	/** (6c X, C22) When the removal finished (epoch ms; 0: not removed): the REMOVED tombstone's time. */
 	public long removedAt;
+	/** (DR-S) How the last removal stopped (RegionView.removalStop) and its reason; NONE when none stopped since the last removal began. */
+	public dev.larattalabs.architect.api.RemovalStop removalStop = dev.larattalabs.architect.api.RemovalStop.NONE;
+	public @Nullable String removalStopReason;
 	public @Nullable String opKey;
 	public @Nullable String opHash;
 	/**
@@ -260,6 +263,12 @@ public final class RegionRec {
 		if (removedAt > 0) {
 			o.addProperty("removedAt", removedAt);
 		}
+		if (removalStop != dev.larattalabs.architect.api.RemovalStop.NONE) { // (DR-S) additive
+			o.addProperty("removalStop", removalStop.name());
+			if (removalStopReason != null) {
+				o.addProperty("removalStopReason", removalStopReason);
+			}
+		}
 		if (opKey != null) {
 			o.addProperty("opKey", opKey);
 			o.addProperty("opHash", opHash);
@@ -355,6 +364,14 @@ public final class RegionRec {
 			o.getAsJsonObject("stats").entrySet().forEach(e -> r.stats.add(e.getKey(), e.getValue()));
 		}
 		r.removedAt = o.has("removedAt") ? o.get("removedAt").getAsLong() : 0L;
+		if (o.has("removalStop")) { // (DR-S)
+			try {
+				r.removalStop = dev.larattalabs.architect.api.RemovalStop.valueOf(o.get("removalStop").getAsString());
+			} catch (IllegalArgumentException e) {
+				r.removalStop = dev.larattalabs.architect.api.RemovalStop.NONE;
+			}
+			r.removalStopReason = o.has("removalStopReason") ? o.get("removalStopReason").getAsString() : null;
+		}
 		if (o.get("consented") instanceof JsonArray cs) {
 			cs.forEach(e -> r.consented.add(e.getAsString()));
 		}

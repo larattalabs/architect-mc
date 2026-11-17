@@ -32782,8 +32782,17 @@ LEFTOVERS R2/CN "the region ladder becomes a port" and CL's "a ladder ending at 
 - **Leftovers:** rest landings for taller ladders; a path from the foot to the other endpoint; a ladder that emits a port (chaining); the composer line (CB); inverted lots' hatch row (the site's default port is row 0); M8's general walk warning on the rung column (as CL's ladders).
 
 ## Slice DR, diagnose and repair: reverted from v0.74.0
+## Slice DR, diagnose and repair (branch `slice/DR` off main de4c88ac / v0.72.0; 2026-11-15; DEV MODE, strict; versions NEXT; $0, sim only; contract accepted by Steward and Noah, side notes `architect-DR-contract.md`)
 
-Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release review NOT SAFE: four P1s in repair durability, DRK1 recovery, mined cells read as lagging, lost player ownership on resume). It returns with DR-S as a redo (DR2). Its as-built record is in git history at 693ccc6a.
+### Slice DR as built
+
+- **Core** (`site/RepairCore.java`, world-agnostic): per-cell classifier, no vote (OK / FOREIGN: a PT record or anything else / LAGGING: the op's exact pre-op value, StillOurs' equivalences); XR's top-writer owner pick; a stuck removal expects its group's writes (F1's later write), its pre-op values include a higher undone entry's after (F7); commit order; plan id; the auto-diagnose bound (committed after the last completed save, or a job running at it).
+- **Server** (`site/Repairs.java`, `RepairCommands.java`): diagnose after the start's settles, 256 chunk loads a call (UNREAD + continuation). Repair: an op actor (PERMISSION), busy first (SITE_BUSY), re-diagnose (REPAIR_STALE), the record durable (fsync, atomic rename) before any write, LAGGING cells only through `SiteJournal.writeCells` with PT restore, DRK1; a stuck removal settles (released, SITE_REMOVED) only with every stuck removal stacked with it unanimous; an open record is named and finished. Auto-diagnose: the marker records `saved=`/`jobs=` at each AFTER_SAVE; 8 chunk loads a tick; one ops line; never repairs. Ops-only commands; >2,000 cells confirms twice.
+- **API (NEXT, additive):** `Sites.diagnose`, `repair(planId, actor, apply)`, `suspects()`, `suspectsPending()`; records `DiagnoseScope`, `Diagnosis`, `RepairFinding`, `CellDiff`, `RepairResult`, `RepairSuspect`; enum `RepairCode`; `Reason.REPAIR_STALE`; `SiteEvents.SITE_REPAIRED`; features `diagnoseRepair`, `repairSuspects`; `dev.repair` (genHooks too).
+- **Gate** `dr-crash` (chain `dr`; cell sites over the region-file line, a halt, a pre-removal region file put back): `artifacts/gate-runs-DR/20261115-224154-change` at ca48a6cb **74/0**: DR1 (108 rolled forward, released, box = before), DR2 (108, a lost placement), DR3 (lower first kept, then both settle), DR6 (PT block and glass left), DR9 (SITE_BUSY, PERMISSION null and deopped), DR10 (DRK1, finished), DR11 (clean: no line, no suspects). Runs 1-2 failed on harness wiring (headless hook; a relative record path). Later commits: the feature-list order and docs only.
+- **Units:** `RepairCoreDRTest`; `UmtRepairP7Test` (P7: F5, H-core, F7; 150 CRASH seeds: 7,373 cells rolled forward, 121 stuck records settled, idempotent); UMT.md retags F5, F7, H-core. Gradle 1344/0 at HEAD; kit 1476/1477 then the TJ probe test fixed (feature names before `"apiVersion");`); sidecar 910/921 under load, the 3 timed-out files 50/50 on re-run; api-compat 8/8; step-inputs 427 clean; gitleaks clean.
+- **Re-scoped (open contract item for the coordinator):** survival repair is NOT built. `Repairs.fed()` skips every construction record, standing or pending, so a stuck survival removal is neither reported nor repaired, and J2 2a's pending credit is never booked by a repair. Groups' `decCredit` lives only in the queued removal (dropped when it ends), so a region removal's credit has no store to roll forward from. DR4, DR5 (BOOK), DR7 (CUSTODY repair in game) and DR8 (PAID_ORPHAN in game) are not gated. The CUSTODY/PAID_ORPHAN diagnose and the credit calls exist but are unexercised in game. Crate and scaffold cells are excluded from the wants.
+- **Leftovers:** a stuck removal with foreign cells stays pending until the next start's normal settle (each repair of it writes an empty record); `diagnose all` lists a placement cell a player mined back to its pre-op value as LAGGING; a region scope reads entries by their group's region.
 
 ### Slice UI as built (branch `slice/UI` off origin/main d7d000ca; LEFTOVERS "UI"; no API change; $0; light; recorded 2026-11-15)
 
@@ -32932,3 +32941,94 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - Known pre-existing risk until TXN: a construction delta credits its refund after `Sites.replace` writes the new version, and a crash
   at CS1 inside that credit's save loses the refund (startup never replays the delta's conversion). As a keyed credit it is now owed stock
   in full, so the overflow part is lost along with the rest instead of lying on the ground.
+
+### Slice DR-S as built
+
+- **Branch** `slice/DRS` off `slice/DR`, `slice/LC` merged (clean: DR builds no `SiteJournal.Restore`, so LC's `boxCells` needed no change). The survival half of DR; strict; $0.
+- **Stuck survival removals are DR's** (`Repairs.fed` skips only a *standing* construction site or fed target: RL's). A pending construction record rolls forward like any removal. Scaffold and crate cells are in its wants (`RepairCore.removalWants`). A cell holding a container with items is FOREIGN and is never written over. `stuckSites` leaves out a member of a still-queued group removal.
+- **Credits booked once, key-scoped** (`Stockpiles.bookPendingFor`). Only the keys of the removals a repair settled are booked, through `Stockpiles.credit`: once per key, custody included, capped by the record. Then `saveCredit`. The result's `credited` is what came back (returned plus overflow). The dry run previews only what a settling removal books.
+- **Groups' decCredit is durable.** `Groups.plan` holds each site/road credit pending in its pile's ledger. It saves it with the world before the commit; a refused save ends the removal unwritten. The hold is dropped when the removal ends without an undo or its commit fails; `Groups.credit` books it through the ledger as before. Mech keys (`region:...:mech:`) stay in the removal only.
+- **`settlePendingCredits` knows road keys**, via `Stockpiles.pendingAction` (pure). A standing road drops its key, a pending road leaves it, a gone road books it. A credit of nothing drops its paid record (before, `creditRefund`'s early return left a PAID_ORPHAN).
+- **BOOK** (report only) names the fed targets RL's reconcile left alone after this unclean stop (`Stockpiles.UNRECONCILED`: the book indexes another queue, or the reconcile failed). It does not compare a book with the world at runtime: a building target's book lags the world by design between saves.
+- **DR's leftovers fixed.** Placement LAGGING is bounded: `Repairs.mayLag` counts only entries committed after the unclean stop's last completed save (or with a job at it) and before this start. A cell a player mined is no longer LAGGING. No record is written when nothing would be written, credited or settled.
+- **TEST hooks:** `dev.repair` snap/unwrite (the lost-writes fault, cell exact, through `Placed.set`) and ledger (inject a paid record or custody).
+- **Gate:** `dr-survival` (tools/lib/gatedrs.mjs, chain `dr`). Re-run creatively: `dr-crash` 74/0 and `lc-crash` 17/0 (`artifacts/gate-runs-DRS/20261116-035610-change`). `dr-survival` **54/0** (`artifacts/gate-runs-DRS/20261116-042825-change`). DR5: RL charged 142 at the start; no BOOK, nothing for the lot. DR4a: the lot stuck at 54 of 143 cells, repaired; its J2 pending credit of 142 booked once. DR4b: 11 members booked 309 at the start; the stuck lot repaired, credited 142 from its durable decCredit; 451 back = 451 pending on disk. DR8: ledger unchanged. DR7: 4 = 4. Each: a second diagnose and repair change nothing. Runs 2-3 failed on harness wiring (the bridge's `id`, a stub hall lot, the state view without `credited`).
+- **Units:** `RepairSurvivalDRSTest` (pending action per key kind; a held group credit booked once under the cap with its custody; the placement bound) plus DR's `RepairCoreDRTest`, `UmtRepairP7Test` and LC's `LateCargoTest`. Full Gradle build green. `api-compat --baselines` 8/8. No API change: BOOK already existed.
+- **API (NEXT, additive; feature `removalStop`):** `RegionView.removalStop()`, an enum `RemovalStop` (`NONE|NOT_STARTED|PARTIAL`), and `removalStopReason()`; the 1.43.0 constructor is kept and says NONE. NOT_STARTED means the removal stopped before anything was written: the region keeps its state (Groups.end's `untouched`, RegionsImpl.finishRemoval). It is saved additively in `region.json` and cleared when a removal begins. Unit: `RemovalStopDRSTest`. Not gated in game (no gate runs left).
+- **A refused save changes nothing** (the coordinator's strict fix):
+  - A survival group removal now saves first (`Groups.probe`): the world and ledger are saved before its fluid drain and a stage's irrigation drain. A refused save ends the removal NOT_STARTED.
+  - The player blocks in region targets are now found for the tally (`dropPlayerBlocks`/`dropPlayerMatches` with `apply` false) and dropped only after the credit hold's save.
+  - The custody save's refusal now writes the custody back.
+  - The tally was not moved ahead of the drain: a drain can change the cells it counts (a lot's irrigation sources).
+  - Residual: if the disk fails between the probe and the hold's save, the drain is done and the region ends PARTIAL, but nothing drops.
+  - Unit `GroupsSaveFirstDRSTest`. In game, DR12 in `dr-survival` 59/0 (`artifacts/gate-runs-DRS/20261116-045540-change`): with every explicit save refused (`dev.stockpile.ps refuseSave`, TEST), a player's block in a road cell stood, nothing dropped, the box and the ledger file were unchanged, and the region stayed PLACED with NOT_STARTED. DR4b's removal then dropped that block. flat_village has no fluid body, so the drain's order is shown by the unit only.
+- **Leftovers:** a mech key's credit has no durable record outside the queued removal. A player mining a removal's restored cell after the crash and before the repair is counted restored, so the full credit books (the normal removal's rule). A legacy crate holding stock keeps its stuck removal pending (FOREIGN). The `region` scope still reads entries by their group's region. v0.73.0 is not on main yet: merge `origin/main` once it lands.
+
+### Slice DR2 as built
+
+- **Branch** `slice/DR2` off origin/main 97d04b80 (v0.74.0): the v0.74.0 revert of DR reverted, DR-S's own commits cherry-picked (not slice/LC). DR's API back at `NEXT`. Strict; $0. Fixes the GPT release review's four DR P1s and two should-fixes.
+- **P1-1 durability barrier.** `Repairs.run` writes the cells, then calls `Stockpiles.durableBarrier`: the world's chunks are flushed and known durable (SS), then the ledger. Only then does anything settle. The record goes `phase: written`, then `settling` with the settled removals' credit keys (read before their records go), then `final`. A refused save leaves the record open with nothing released (JOURNAL_UNAVAILABLE). A crash before the barrier leaves a resumable repair. Gate: kill point **DRK2** (after final, nothing saved after): DR14.
+- **P1-2 revalidated resume.** `finishOpen` refuses SITE_BUSY for every site the record names. It replays only cells the journal still owes now (`RepairCore.stillOwed`): same commit, still the cell's owner, and a removal's site still stuck under the recorded undo group. A newer placement or a later removal wins. The cells are classified again. A stuck removal never settles under a site placed after its undo (`RepairCore.shadowedBy`; that site captured its unrestored blocks as its before): it stays pending, named STACKED, on a fresh repair as on a resume (`settling` agrees). Gate DR13: a newer placement N over a stale DRK1 record is untouched (108 no longer owed), G stays pending under N; N removed, G lags again, repaired, settles, box = before.
+- **P1-3 mined cells.** A player's break of a journal-owned cell (`PlayerBlockBreakEvents.BEFORE`, `SiteJournal.owned`) is marked in its chunk (`MinedCells`, attachment `architect_mc:mined`, saved with the chunk; at most 1024 a chunk, marks over 24 h dropped). A cell at its pre-op value with a mark at or after the commit is FOREIGN (`RepairCore.minedSince`). A repair's write clears the mark. The auto-diagnose now uses DR-S's `mayLag` bound too. Gate DR16: the marker's `saved=` is rewritten to just before B3, so B3's cells are on disk and in the bound. One cell mined before the halt and one after the restart: both FOREIGN, none written.
+- **P1-4.** `wantJson`/`wantOf` keep `Want.pt` (placer, build). Gate DR10: kill point **DRK1pt** halts before a PT cell; the bricks and their record are back after the resume.
+- **Should-fixes.** `AutoRun` reads a site chunk by chunk across ticks, at most 8 loads a tick (`autoMaxLoads` 8 in game). Journal read failures, and cells whose level or chunk was not read, are UNREAD findings in the planId lines and a suspect `unread`, never a false clean.
+- **API (NEXT, DR's):** `RepairSuspect.reason` may be `unread`. Otherwise DR's and DR-S's members are unchanged. `api-compat --baselines` 8/8.
+- **Gate** (`--only --no-cache`, ports 9074:9075, 1 shard): rl-crash 110/0, dr-survival 59/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0 (`artifacts/gate-runs-DR2/20261116-130216-change`), and dr-crash **107/0** with the shadow rule (`20261116-133553-change`; 104/0 before it in `20261116-132715-change`; the first dr-crash failed DR13 on harness wiring, `naturalOnly`; an earlier launch ran no step: the run slot lacked lab_ui 0.5.0).
+- **Units:** `RepairDR2Test` (minedSince, MinedCells persist/prune/cap, Pt round trip, stillOwed for a placement and a removal under a newer placement or after a removal) plus DR's and DR-S's units. The full Gradle build is green: `RegionFileFlushSSTest` now counts the barrier's explicit save. gitleaks clean.
+- **Leftovers:**
+  - Non-player changes (`/setblock`, explosions, fire) to a pre-op value are not marked.
+  - The mark listener runs after `RegionFreeDrops.before`, which cancels a free-pass cell's break: those breaks are not marked (no drop there, so no dupe).
+  - `shadowedBy`'s hand-down case (an upper placed before the lower's removal) is gated in game only (DR3); UMT's clocks can't order it.
+  - The barrier is a full flushed save (seconds on a large world).
+  - A lag not repaired before the next completed save stops being diagnosed (DR-S's bound).
+
+### Slice DR2 fix round as built (the GPT review's NOT SAFE)
+
+- **P1-1 overflow once (pre-existing outside DR).** `Stockpiles.credit` no longer spawns a keyed refund's overflow: it is owed in the ledger (`StockLedger.oweDrop`, `owedDrops`) in the same change as the key's credit, spawned only after a save wrote that ledger (`OverflowDrops.spawnOwed`, items tagged by key), then saved at once; the entry leaves the ledger only in that save, after its chunk and entity writes are durable (a refused save takes the items back). A start resolves an owed entry by the tag (`ENTITY_LOAD` before ticking; the drop chunk ticketed until its entities load): found, cleared; absent, spawned. Every keyed refund had the CS1 window (deconstruct, group member, road, delta, put-down, the start's pending credits, a region's keyed charge and scoop): all go through it. Kill point **OV1**; TEST `dev.stockpile.ps capacity`. Gate DR7c (CS1: 4 flint once, was 8), DR7o (OV1: found on disk, none respawned).
+- **P1-2 save-off.** `Stockpiles.savingOff` (a level with `noSave`): `repair` and `finishOpen` refuse JOURNAL_UNAVAILABLE before any record or cell; the barrier throws too. Never forced. Gate DR14s.
+- **P1-3 evicted marks.** `MinedCells.lost`: the newest time among marks dropped by the cap or the 24 h expiry (saved, `l`). An unmarked cell whose owner committed at or before it is FOREIGN, never LAGGING (`Reader.evicted`).
+- **P1-4 a mined stuck survival removal.** Breaks of a pending removal's standing placed block are marked (`SiteJournal.pendingRemovalStands`). A survival removal's cell mined (or its chunk's watermark) after the undo is FOREIGN even at the undo's value (`RepairCore.takenSince`, `Repairs.cellOf`, in `unanimous` too): it never settles, reported "a player took". The start's settle keeps such a site or road pending (`Repairs.takenAfterUndo`; the same J2 dupe outside DR). Gate DR4c (a third cottage).
+- **P1-5 stacked PT.** `removalWants` carries the lower writer's restored record with `laterWrite` (`Sites.laterPt`); `Repairs.write` runs `Placed.restoreUnchanged` after a PT cell's write; `unanimous` wants the record back (tracking on).
+- **Should-fixes.** The credit audit is cumulative across resumes (`creditedAudit`; a refused attempt's under `creditedUnsaved`). The plan id hashes every lagging and foreign cell as observed (state, record, mark): `obs` lines.
+- **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at 9aed58ed9): rl-crash 110/0, dr-crash 108/0, dr-survival 81/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, all PASS on the first run (`artifacts/gate-runs-DR2f/20261116-143132-change`).
+- **Units:** `RepairDR2FixTest` (P1-3, P1-4, P1-5 and the audit fail with the fixes reverted; P1-1 models the protocol over the ledger file). Full build green.
+- **Leftovers:** a survival removal a player took from stays pending for good (its refund held); keyless give-backs (a swap's old block, a bucket, RL's reconcile) still drop at once; ledger writes under /save-off outside a repair (pre-existing); unresolved placement damage across saves (DR-S's bound) not kept; `restoreUnchanged` in repair only exercised in game.
+
+
+### Slice DR2 round after OVF as built (the final review's NOT SAFE; Noah: one more round, OVF's owed stock wins, TXN decision 7)
+
+- **Merged** `origin/slice/OVF` (956baac4) into DR2 (a merge, no rewrite). **Dropped** DR2's overflow handoff for OVF's owed stock: `OverflowDrops`
+  (spawn after save, resolve by tag), `StockLedger.OwedDrop`/`oweDrop`/`owedDrop`/`owedDropKeys`/`clearOwedDrop` and the ledger's `owedDrops`
+  field, `Stockpiles.dropKeyed` (credit, keyed charge, scoop), kill point OV1, the ps stats `owedDrops`/`resolvedFound`/`resolvedSpawned`,
+  gate DR7o, RepairDR2FixTest's two P1-1 units. DR7c now expects OVF's model (CS1 into a full pile: no entity, credited once past capacity).
+- **P1 (premise checked in code):** `settling` skipped any unit with a foreign cell, `cellOf` made a taken cell FOREIGN and the start
+  forced KEEP, so nothing ever settled such a removal. A cell is *taken* by its mark after the undo alone (`RepairCore.takenAfter`,
+  whatever it reads) and is never written. **Not shipped (see "DR2 ship" below):** the taken-share settle (settle around taken cells,
+  their share withheld under `taken:<key>`) was removed before the ship; such a removal stays pending, its whole refund held. Deferred
+  to TXN T6.
+- **Rule 17:** the repair's saves go through `Repairs.worldSaved` (the barrier) and `ledgerSaved` (`saveConfirmed`; the booking and the
+  custody credit now confirmed too), the T0 switch point. **Rule 18:** kill points DRK0 (record), DRK3 (barrier), DRK4 (settling),
+  DRK6 (released), DRK7 (credits), beside DRK1/DRK1pt/DRK2; `dev.repair killAt` refuses other names (DRK5, the split, went with the settle).
+- **Gate** dr-survival (as shipped): DR4c halts at DRK0 and DRK3, resuming after each; nothing booked, the whole credit pending; items in ==
+  items out on disk (returned + pending + custody) after every case and every stop.
+- **Units:** `RepairDR2OvfTest` (as shipped: 2, the settle case flipped to "stays pending").
+- **Gate, with the settle (superseded)** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at e4b1c91f, `artifacts/gate-runs-DR2r/20261117-063325-change`): bcc-over 17/0,
+  rl-crash 110/0, dr-crash 108/0, dr-survival 110/0 (DR4c: booked 141 + held 1 oak log = 142 pending; 284 = 284 after each stop), hf-crash
+  56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0, x-resume 35/0: 9/9 on the first run.
+- **Leftovers:** a removal a player took from stays pending for good, its whole refund held (TXN T6); an evicted mark's watermark counts
+  every unmarked cell of its chunk as taken; a repair resumed after its release reports "Repaired : wrote 0" with no site named (cosmetic).
+
+### Slice DR2 ship: the taken-share settle deferred to TXN T6 (Noah, 2026-11-17)
+
+- The last GPT review found two P1s in the settle: a bed head (any multi-block) pays twice, and `takenShare` priced weathered/variant
+  blocks wrong. Noah: DR2 ships without it; **the taken-share settle is deferred to TXN T6.**
+- **Removed:** `RepairCore.takenShare`, `Repairs.shareOf`, `Stockpiles.withhold`/`TAKEN`, the repair's split step and kill point DRK5,
+  the dry run's "less the share" preview. **Seam:** `Repairs.unanimous` and `Repairs.settling` treat a taken cell as a blocker again
+  (the removal stays pending, its whole refund held, never paid twice); T6 restores the settle there.
+- **Kept:** `takenAfter` (classification, FOREIGN "a player took"), `worldSaved`/`ledgerSaved`, kill points DRK0/3/4/6/7.
+- **Coverage note:** DRK4, DRK6 and DRK7 fire only on a settle, so no gate walks them in game now (DR4c walks DRK0 and DRK3).
+- **Units:** full Gradle build green (1399 tests, 0 failures). **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9044:9045, at
+  c2a7f970, `artifacts/gate-runs-DR2b/20261117-163016-change`): bcc-over 17/0, rl-crash 110/0, dr-crash 108/0, dr-survival 94/0 (DR4c:
+  142 pending kept whole, nothing booked, 284 = 284 after each stop), hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0,
+  x-resume 35/0: 9/9 on the first run.
+

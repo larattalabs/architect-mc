@@ -150,6 +150,38 @@ public final class SiteJournal {
 		return false;
 	}
 
+	/**
+	 * (DR2 fix, P1-4) Whether {@code pos} is a cell of a removal still pending (its record kept unsettled: a stuck removal) whose placed block
+	 * still stands there ({@code now} holds the undone entry's {@code after}): a player's break of it is the player's, never a repair's.
+	 */
+	public static boolean pendingRemovalStands(String dimension, long pos, net.minecraft.world.level.block.state.BlockState now,
+		java.util.function.Supplier<net.minecraft.nbt.@Nullable CompoundTag> nbt) {
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			return false;
+		}
+		long key = Sections.key(pos);
+		int i = Sections.index(pos);
+		for (String id : s.inSection(dimension, key)) {
+			JournalStore.Meta m = s.meta(id);
+			if (m == null || m.status() != Journal.Status.UNDONE || m.undoGroup() == null || Sites.pendingRecord(m.site()) == null && Infras.pending(m
+				.site()) == null || !m.undoGroup().equals(lastGroup(m.site()))) {
+				continue;
+			}
+			try {
+				SectionCells sc = s.section(id, key);
+				int k = sc == null ? -1 : sc.find(i);
+				Journal.Value after = k < 0 ? null : sc.after(k);
+				if (after != null && WorldJournal.holds(now, nbt, after)) {
+					return true;
+				}
+			} catch (IOException e) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** The site that owns {@code pos} (the top active entry's site there), or null. */
 	static @Nullable String ownerSite(String dimension, long pos) {
 		try {

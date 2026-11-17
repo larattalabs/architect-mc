@@ -98,6 +98,8 @@ public final class Stockpiles {
 	static final java.util.ArrayDeque<Double> PERIODIC_MS = new java.util.ArrayDeque<>();
 	/** (PS, TEST) the gate's before-the-fix cases: the periodic save off; a finished undo's refund not saved at its credit. */
 	static volatile boolean testNoPeriodic, testNoCreditSave;
+	/** (DR-S, TEST) every explicit save with the world refused (SS's refusal), until turned off. */
+	static volatile boolean testRefuseSave;
 	/** (RL, TEST) RL's save when a target joins the feed off: set with {@code noPeriodic}, unless {@code joinSave} says otherwise. */
 	static volatile boolean testNoJoinSave;
 	/** (PS) the next saveWithWorld is the periodic one (not logged at INFO). Server thread. */
@@ -338,6 +340,7 @@ public final class Stockpiles {
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
+			testCapacity = -1;
 			SERVER = null;
 			PILES.clear();
 			dir = null;
@@ -1464,21 +1467,24 @@ public final class Stockpiles {
 		for (Pile p : List.copyOf(PILES.values())) {
 			for (String key : p.ledger.pendingKeys()) {
 				String what;
-				if (p.ledger.credited(key)) {
+				PendingAction a = pendingAction(key, p.ledger.credited(key), standingSite(key) != null, pendingSite(key));
+				if (a == PendingAction.DROP && p.ledger.credited(key)) {
 					p.ledger.dropPending(key);
 					what = "already credited";
-				} else if (standingSite(key) != null) {
+				} else if (a == PendingAction.DROP) {
 					p.ledger.dropPending(key);
 					what = "its site stands (the removal never settled)";
-				} else if (pendingSite(key)) {
-					continue; // its removal is still pending (its restore resumes): left for the next start
+				} else if (a == PendingAction.LEAVE) {
+					continue; // its removal is still pending (its restore resumes, or a repair rolls it forward): left for the next start
 				} else {
 					ServerLevel level = Sites.levelOf(srv, p.dimension);
 					if (level == null) {
 						continue;
 					}
-					Builder.creditRefund(level, p.owner, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)), null);
-					p.ledger.dropPending(key); // (a credit of nothing standing books NONE: nothing pending either)
+					// (DR-S) through credit() itself: a credit of nothing standing (no custody either) books NONE and drops its paid record too,
+					// which Builder.creditRefund's early return kept (a PAID_ORPHAN after the settle)
+					credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
+					p.ledger.dropPending(key);
 					what = "its removal settled: credited now";
 				}
 				changed(p);
@@ -1495,19 +1501,94 @@ public final class Stockpiles {
 		}
 	}
 
-	/** (J2) The standing site whose credit key is {@code key}, or null. */
-	private static @Nullable Site standingSite(String key) {
+	/** (J2) The standing site (or, slice DR-S, road) whose credit key is {@code key}, or null. */
+	private static @Nullable Object standingSite(String key) {
 		for (Site s : Sites.all()) {
 			if (key.equals(Builder.creditKey(s))) {
 				return s;
 			}
 		}
-		return null;
+		Infra i = key.startsWith("road:") ? Infras.get(targetIdOf(key)) : null;
+		return i != null && key.equals(RoadBuilder.creditKey(i)) ? i : null;
 	}
 
-	/** (J2) Whether a pending record (a removal not settled yet) has the credit key {@code key}. */
+	/** (DR-S) The target id of a {@code site:} or {@code road:} credit key ({@code site:s12@123} -> s12), or "" for any other key. */
+	static String targetIdOf(String key) {
+		int c = key.indexOf(':');
+		int at = key.lastIndexOf('@');
+		return (key.startsWith("site:") || key.startsWith("road:")) && at > c + 1 ? key.substring(c + 1, at) : "";
+	}
+
+	/**
+	 * (DR-S) What the start (or a repair) does with a pending credit, pure: {@code DROP} when credited already or its target stands (the
+	 * removal never settled: its custody goes back), {@code LEAVE} while its target is a pending record (its restore resumes or a repair rolls
+	 * it forward) or the key is no target's ({@code region:...:mech:} keys are never held pending), else {@code BOOK} (its removal settled).
+	 */
+	enum PendingAction {
+		DROP, LEAVE, BOOK
+	}
+
+	static PendingAction pendingAction(String key, boolean credited, boolean standing, boolean pending) {
+		if (credited) {
+			return PendingAction.DROP;
+		}
+		if (standing) {
+			return PendingAction.DROP;
+		}
+		if (pending || !dev.larattalabs.architect.survival.StockLedger.isTargetKey(key)) {
+			return PendingAction.LEAVE;
+		}
+		return PendingAction.BOOK;
+	}
+
+	/**
+	 * (DR-S) A repair's booking: only {@code keys}' pending credits (the removals it settled), each once by the credit's key rule, custody
+	 * included, under the cap; a key with nothing standing drops its paid record (as a credit of nothing does). The ledger is then saved with
+	 * the world. Returns per item what left the pending credits for the stock (slice OVF: all of it enters the stock, past capacity if need be).
+	 */
+	static Map<String, Integer> bookPendingFor(MinecraftServer srv, java.util.Collection<String> keys) {
+		Map<String, Integer> out = new TreeMap<>();
+		boolean any = false;
+		for (Pile p : List.copyOf(PILES.values())) {
+			for (String key : keys) {
+				if (!p.ledger.pendingKeys().contains(key)) {
+					continue;
+				}
+				PendingAction a = pendingAction(key, p.ledger.credited(key), standingSite(key) != null, pendingSite(key));
+				if (a == PendingAction.LEAVE) {
+					continue;
+				}
+				if (a == PendingAction.DROP) {
+					p.ledger.dropPending(key);
+				} else {
+					ServerLevel level = Sites.levelOf(srv, p.dimension);
+					if (level == null) {
+						continue;
+					}
+					StockLedger.Credit c = credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
+					c.returned().forEach((k, v) -> out.merge(k, v, Integer::sum));
+					c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
+					p.ledger.dropPending(key);
+					Architect.LOGGER.warn("Stockpile {}: pending credit {}: its removal was rolled forward by a repair: credited {} (overflow {})", p.owner, key,
+						c.returned(), c.overflow());
+				}
+				changed(p);
+				any = true;
+			}
+		}
+		if (any) {
+			saveCredit(srv);
+		}
+		return out;
+	}
+
+	/** (J2) Whether a pending record (a removal not settled yet; slice DR-S: a pending road too) has the credit key {@code key}. */
 	private static boolean pendingSite(String key) {
 		int at = key.lastIndexOf('@');
+		if (key.startsWith("road:") && at > 5) {
+			Infra i = Infras.pending(key.substring(5, at));
+			return i != null && key.equals(RoadBuilder.creditKey(i));
+		}
 		if (!key.startsWith("site:") || at < 0) {
 			return false;
 		}
@@ -2276,6 +2357,9 @@ public final class Stockpiles {
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
 					}
+					if (req.has("refuseSave")) {
+						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
+					}
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
@@ -2297,6 +2381,7 @@ public final class Stockpiles {
 						}
 					}
 					o.addProperty("noPeriodic", testNoPeriodic);
+					o.addProperty("refuseSave", testRefuseSave);
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -2609,7 +2694,15 @@ public final class Stockpiles {
 	 * its run; after an unclean stop (the running marker was there) each target with a book is reconciled with the loaded world
 	 * ({@link #reconcile}). Then the file is saved once (the books now say what stands). Server thread.
 	 */
+	/**
+	 * (DR-S) The fed targets RL's reconcile left alone after this start's unclean stop (their book unusable, or the reconcile failed): their
+	 * saved book may disagree with the world, and nothing settled it. Diagnose reports each as {@code BOOK} (report only: RL owns it). Per
+	 * target id: {owner, credit key, why}. Cleared at each start.
+	 */
+	static final Map<String, String[]> UNRECONCILED = new ConcurrentHashMap<>();
+
 	static void reconcileAtStart(MinecraftServer srv) {
+		UNRECONCILED.clear();
 		repairJoinedCrates(srv); // (SAD, SAC2) first: no reader below follows a reference to a crate the ledger already joined
 		LAST_RECONCILE.clear();
 		long t0 = System.nanoTime();
@@ -2631,6 +2724,9 @@ public final class Stockpiles {
 				if (r == null || !b.fits(r.queue)) {
 					Architect.LOGGER.warn("Stockpile {}: {}'s cell book indexes another queue; not reconciled", p.owner, idOf(t));
 					p.ledger.book(key, null);
+					if (unclean) {
+						UNRECONCILED.put(idOf(t), new String[] {p.owner, key, "its cell book indexes another queue"}); // (DR-S) BOOK
+					}
 					continue;
 				}
 				r.attachOwed(b.owed());
@@ -2639,6 +2735,7 @@ public final class Stockpiles {
 						moved |= reconcile(srv, level, p, t, key, r, b);
 						any = true;
 					} catch (RuntimeException e) {
+						UNRECONCILED.put(idOf(t), new String[] {p.owner, key, "its reconcile failed (" + e + ")"}); // (DR-S) BOOK
 						Architect.LOGGER.error("Stockpile {}: the reconcile of {} failed", p.owner, idOf(t), e);
 					}
 				}
@@ -2837,9 +2934,70 @@ public final class Stockpiles {
 	 * scoop): the loaded chunks are saved with it, as autosave saves them (its BEFORE_SAVE writes the file), so a crash after it never finds
 	 * the ledger ahead of the world (consumption recorded for blocks the saved world lost). Server thread.
 	 */
+	/**
+	 * (DR2, P1-1) A repair's durability barrier: the world's chunks flushed and known durable (SS's check), then the ledger, as
+	 * {@link #saveWithWorld}; with the ledger off (its load failed) the chunks alone, still checked. Throws when the save is refused (a chunk
+	 * write not durable, TEST refuseSave). Server thread.
+	 */
+	static void durableBarrier(MinecraftServer srv) {
+		if (!srv.isSameThread()) {
+			throw new IllegalStateException("Stockpiles: a repair's save runs on the server thread");
+		}
+		String off = savingOff(srv);
+		if (off != null) {
+			// (DR2 fix, P1-2) saveAllChunks skips a level with noSave (/save-off) unless forced, and RegionDurability tracks only the writes
+			// attempted: the barrier would pass over chunks still dirty in memory. Never forced (an op's backup window): refused
+			throw new IllegalStateException(off);
+		}
+		if (!loadFailed) {
+			saveWithWorld(srv);
+			return;
+		}
+		if (testRefuseSave) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
+		}
+		explicitSave = true;
+		SaveTiming.explicit = true;
+		try {
+			srv.saveAllChunks(true, true, false);
+		} finally {
+			explicitSave = false;
+			SaveTiming.explicit = false;
+		}
+		RegionDurability.retryOwed();
+		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
+		if (!undurable.isEmpty()) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable " + undurable);
+		}
+	}
+
+	/**
+	 * (DR2 fix, P1-2) Why the world's chunks can't be saved now (a level with saving off, {@code /save-off}), or null. A save then writes
+	 * nothing of that level, yet reports no undurable write.
+	 */
+	static @Nullable String savingOff(MinecraftServer srv) {
+		List<String> off = new ArrayList<>();
+		for (ServerLevel l : srv.getAllLevels()) {
+			if (l.noSave()) {
+				off.add(l.dimension().identifier().toString());
+			}
+		}
+		return savingOffMessage(off);
+	}
+
+	/** (pure) {@link #savingOff}'s message over the levels with saving off. */
+	static @Nullable String savingOffMessage(List<String> levelsOff) {
+		return levelsOff.isEmpty() ? null : "saving is off (/save-off) in " + String.join(", ", levelsOff)
+			+ ": the world can't be saved, so a repair can't be made durable; /save-on, then repair";
+	}
+
 	static void saveWithWorld(MinecraftServer srv) {
 		boolean quiet = quietSave;
 		quietSave = false;
+		if (testRefuseSave && !quiet) {
+			// (DR-S, TEST dev.stockpile.ps refuseSave) as SS refuses an explicit save whose chunk writes are not durable: nothing written
+			throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
+		}
 		if (loadFailed) {
 			refusedSave();
 			return; // (PS, F6) nothing of the stockpiles is written this session
