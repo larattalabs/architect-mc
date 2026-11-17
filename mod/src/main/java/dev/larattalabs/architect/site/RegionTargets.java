@@ -1631,13 +1631,19 @@ public final class RegionTargets {
 					r.rescan(level, false, true);
 				}
 				int missing = 0;
-				for (int q = 0; q < r.size() && level != null; q++) {
+				JsonArray firstMissing = new JsonArray();
+				for (int q = 0; q < r.size() && level != null && !i.building(); q++) {
 					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
 					if (now != null && !r.matches(now, q)) {
-						missing += i.building() ? 0 : 1; // a BUILT target's cell that does not hold its planned state
+						missing++; // a BUILT target's cell that does not hold its planned state
+						if (firstMissing.size() < 5) {
+							BlockPos p = r.pos(q);
+							firstMissing.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + now + " planned " + r.target[q]);
+						}
 					}
 				}
 				x.addProperty("missing", missing);
+				x.add("firstMissing", firstMissing);
 				for (int q = r.built.nextSetBit(0); q >= 0 && level != null; q = r.built.nextSetBit(q + 1)) {
 					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
 					int sup = now == null ? READY : support(level, r, pl, q, before, now);

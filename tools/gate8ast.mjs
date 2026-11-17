@@ -166,7 +166,9 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   // support order: every standing staged cell supported, at every deep sample and at the end
   const deep = samples.filter((x) => x.unsupported !== null);
   const bad = deep.filter((x) => x.unsupported > 0);
-  const finalBad = (final.targets ?? []).reduce((a, t) => a + (t.unsupported ?? 0) + (t.missing ?? 0), 0); // (GPT review) BUILT targets checked too
+  // (GPT review) BUILT targets checked too (their runs read the world); a BUILT cell vanilla changed since is the twin row's, and the crash row's
+  const finalBad = (final.targets ?? []).reduce((a, t) => a + (t.unsupported ?? 0), 0);
+  out.missingAtEnd = (final.targets ?? []).map((t) => [t.target, t.missing ?? 0, t.firstMissing ?? []]);
   const released = (final.targets ?? []).filter((t) => t.released).map((t) => t.target);
   out.support = { deep: deep.length, bad: bad.slice(0, 4), finalBad, released };
   check(deep.length >= 1 && bad.length === 0 && finalBad === 0, `${tag}: in support order: every standing staged cell supported by the world at ${deep.length} half-built sample(s) and at the end (${finalBad} unsupported; ${released.length} target(s) released: ${released.join(' ')})`, out.support);
