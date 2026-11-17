@@ -32863,3 +32863,55 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Replay ($0, P2 paid s3-pay, -2, -3, -4, s6-pay briefs and plans):** s6's `form.hollow_mountain` is shown full ("mountain"); s3's `connector.wall` and `form.relief` are fields-only (the brief names neither), and every field those recorded parts wrote (where, height, thickness, gates; around, radius, maxCut, maxFill) is on their fields lines. Affordances were not recorded, so the land selection was not replayed.
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
+
+## Slice LCAP: a per-lot bill cap (branch `slice/LCAP` off main 5a782f9d / v0.76.0; 2026-11-17; DEV MODE, strict: survival billing; versions NEXT; $0)
+
+Steward's S-M5-16 (steward-mc `docs/ARCHITECT-ASKS.md` at a51262b): v0.75.0's `maxBill` is one per-item cap over a whole realise or revision,
+so two module lots that share items can't each be held to their own measured bound, and survival composed towns leave every module lot out
+(`ComposedModules.MATERIALS_WAIT_FOR_LOT_CAP`). LCAP adds an optional per-lot cap beside `maxBill`. Additive API, feature `"maxBillPerLot"`.
+
+### 1. API (since NEXT)
+
+- `RealiseRequest.maxBillPerLot` and `ApprovedRealise.maxBillPerLot`: `Map<String lotId, Map<String itemId, Integer count>>`, appended as the
+  last record component; null is no lot cap. The 1.60.0 canonical constructors stay (they leave it null), and `withMaxBillPerLot(..)` is new
+  on both; `withMaxBill` and `withConsent` keep it. Copies are sorted; a blank lot id, a null cap or a negative count is refused
+  (`IllegalArgumentException`), as for `maxBill`. A null `maxBillPerLot` leaves no member in an opKey's body, so a realise keyed before LCAP
+  keeps its hash. `realiseApproved` carries it to the realise it makes.
+- `Quote.lotBill(String lot)` (and `Quote.lotBill(JsonObject bomParts, String lot)`, `Quote.LOT_PIECES`): one lot's own bill, the sum of
+  its `lot:<lot>`, `fill:<lot>` and `mech:<lot>` pieces. It is what the cap is checked against, so `quoteApproved` (and `quote`) already give
+  Steward each lot's bound; `quoteApproved` takes no cap of its own (it is read-only, nothing to refuse).
+- No new `Reason`: a refusal is `Reason.BILL_CAP` with `ArchitectRefused.detail()` telling the cases apart (the region-wide cap's stays
+  `""`). One reason keeps every cap refusal on the path Steward already handles; the detail is the sub-code.
+
+### 2. Semantics
+
+- **Which lots, which bill.** A lot cap covers one lot of this realise or revision: at put-down its quote pieces (`lot:`, `fill:`, `mech:`;
+  never the region's tiles, its 4e roads or its fluids, which stay under `maxBill` only); while it builds, the draws of the targets of that
+  rid whose ext `architect_mc:lot` names the lot (the lot's construction site, its fill included, and a gatehouse's mechanism item) plus that
+  lot's gate mechanism charge (`survival.mech.<lot>`, same rid). An item a lot's cap does not name may not be drawn by that lot (as
+  `maxBill`). A lot with no entry (a pad) has an empty bill: any cap fits it.
+- **With `maxBill`: both apply.** `maxBill` still covers the whole realise, the capped lots included. A lot draws only what both leave (the
+  purse answers the smaller room). So Steward passes `maxBill` = the rest of the region's bill + the sum of its lot caps (not "the rest"
+  alone), and each module lot's measured bound in `maxBillPerLot`. Either may be null: lot caps with no `maxBill` cap only those lots.
+- **A lot cap above `maxBill`** (for an item) is accepted, not refused: the tighter cap wins. An item a lot cap names but `maxBill` does not
+  is capped at 0 by `maxBill`.
+- **An unknown lot** (not one of the plan's lots; for a revision, its own lots and its refills, so a town lot of an earlier rid is unknown)
+  refuses `BILL_CAP`, detail `unknown_lot:<id>`, message naming the plan's lots. Checked first, before the quote is read.
+- **Past a lot's cap at put-down** refuses `BILL_CAP`, detail `lot:<id>` (the first such lot by id), message
+  `lot <id>'s bill at put-down is past its maxBillPerLot (oak_planks 43 > 42, ...)`: each item past it with the lot's bill against its cap,
+  plus the inexact notes for that lot. The lot caps are checked before `maxBill`; all of it before anything is reserved, journaled or
+  written. Survival only: in creative nothing is consumed and the caps are ignored, unknown lots included.
+- **While it builds:** a lot past its cap waits `SiteWait.BILL_CAP` like a region cap (`nextNeeded` the larger of the two caps' units over);
+  its gate mechanism waits `bill_cap` (`waitsFor.kind: bill_cap`). A reconcile past a lot cap (standing cells, charged anyway) is named in
+  the reconcile record (`capLot`, `lotCapOver`) and a WARN, as BC-c does for the region cap.
+- **Per revision (BC-d) and persistence.** The lot caps are part of the rid's cap entry: `survival.caps.<rid> {maxBill?, lots?: {<lot>:
+  {item: n}}}`, recorded with `maxBill` in one write and replacing the rid's entry whole (a plain revision clears both). They ride BC-d's
+  persistence unchanged: the region record (`region.json`, fsync + atomic rename) is saved with them before the first tile (kill point RG2)
+  or as the revision's publication (RV3), and every enforcement point reads them off the live record after a restart.
+
+### 3. Tests
+
+- Units `LotCapLCAPTest` (7): the request members and old shapes, the keyed body hash, `Quote.lotBill`, the refusal's measure (the shared
+  item, an unnamed item, a pad, an unknown lot), both caps and the tighter one, the per-rid record, and the record's save and reload
+  (`RegionStore.writeJson` + `RegionRec.fromJson`) with the overshoot after it. Updated: `Api114Test` (component order), `ApiRulesTest`.
+- In game `lcap-survival` (`tools/lib/gatelcap.mjs`, via `tools/gate6dgr.mjs lcapsurvival`): the steps in its header.

@@ -211,12 +211,19 @@ public final class MechCharges {
 			return false;
 		}
 		Map<String, Integer> capOver = BillCaps.chargeOver(BillCaps.ofRegion(l, rid), capPile == null ? null : capPile.ledger(), bill);
+		// (LCAP, S-M5-16) a gatehouse's mechanism counts against its lot's cap too (its mech:<lot> piece); a K1 swing gate has no lot
+		Map<String, Integer> lotOver = i.ext.get("architect_mc:lot") instanceof JsonPrimitive lp ? BillCaps.chargeOver(BillCaps.ofLot(l, rid, lp.getAsString()),
+			capPile == null ? null : capPile.ledger(), bill) : Map.of();
+		capOver = BillCaps.mergeOver(capOver, lotOver);
 		if (!capOver.isEmpty()) {
 			JsonObject w = new JsonObject();
 			w.addProperty("target", capPile == null ? "stockpile" : Stockpiles.PREFIX + capPile.id());
 			w.addProperty("kind", SiteWait.BILL_CAP);
 			w.add("missing", json(capOver));
 			String say = RegionWaitTags.capital(subjectOf(l, i)) + " waits bill_cap: its bill is past the region's maxBill by " + capOver;
+			if (!lotOver.isEmpty()) {
+				say = RegionWaitTags.capital(subjectOf(l, i)) + " waits bill_cap: its bill is past its lot's maxBillPerLot (or the region's maxBill) by " + capOver;
+			}
 			w.addProperty("say", say);
 			i.ext.add(RegionTargets.EXT_WAITS_FOR, w);
 			Batches.waitFor(b, i, Reason.SITE_BUSY, say + " (its whole bill is charged at once)", billWaitMoved(i));

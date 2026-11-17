@@ -43,7 +43,9 @@ public final class ApiRules {
 		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
 		"quoteTerrain",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion");
+		"apiVersion",
+		// (LCAP, S-M5-16) RealiseRequest/ApprovedRealise.maxBillPerLot (a per-lot cap beside maxBill) and Quote.lotBill
+		"maxBillPerLot");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:

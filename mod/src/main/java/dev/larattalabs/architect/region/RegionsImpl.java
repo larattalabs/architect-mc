@@ -1667,7 +1667,7 @@ public final class RegionsImpl implements Regions {
 		}
 		if (survival) {
 			survivalRefusal(s, p, r);
-			Quotes.capRefusal(s, p, r); // (BC, S-M5-9) a bill past maxBill: refused before any write
+			Quotes.capRefusal(s, p, r); // (BC, S-M5-9) a bill past maxBill (LCAP: or one lot's past its own cap): refused before any write
 		}
 		String why = WorldJournal.unavailable();
 		if (why != null) {
@@ -1721,8 +1721,9 @@ public final class RegionsImpl implements Regions {
 		if (survival) {
 			JsonObject sv = new JsonObject();
 			sv.addProperty("on", true);
-			if (r.maxBill() != null) {
-				dev.larattalabs.architect.site.BillCaps.record(sv, 0, r.maxBill(), 0); // (BC, BC-d) its own targets (rid 0) draw within it
+			if (r.maxBill() != null || r.maxBillPerLot() != null) {
+				// (BC, BC-d) its own targets (rid 0) draw within it; (LCAP) each capped lot's targets within their lot's cap too
+				dev.larattalabs.architect.site.BillCaps.record(sv, 0, r.maxBill(), r.maxBillPerLot(), 0);
 			}
 			rec.survival = sv; // (6c RS) its tiles put targets down, its lots and roads are construction items
 		}

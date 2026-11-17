@@ -880,13 +880,14 @@ public final class Revisions {
 		if (level == null) {
 			throw RegionsImpl.refusal(Reason.NOT_LOADED, rec.dimension + " is not loaded");
 		}
-		if (rec.survival() && r.maxBill() != null) {
-			// (BC, S-M5-9) the revision's bill past its maxBill: refused before any write
+		if (rec.survival() && (r.maxBill() != null || r.maxBillPerLot() != null)) {
+			// (BC, S-M5-9; LCAP) the revision's bill past its maxBill, or one lot's past its own cap: refused before any write
 			Quotes.capRefusal(s, p, r);
 		}
 		if (rec.survival()) {
 			// (BC-d) its cap covers only this revision's targets and draws; one without a maxBill is uncapped (its rid's entry cleared)
-			dev.larattalabs.architect.site.BillCaps.record(rec.survival, rid, r.maxBill(), rec.headRid);
+			// (LCAP) its per-lot caps in the same rid entry, saved with it (region.json, the publication below) before any write
+			dev.larattalabs.architect.site.BillCaps.record(rec.survival, rid, r.maxBill(), r.maxBillPerLot(), rec.headRid);
 		}
 		Path w = l.world();
 		Path rd = dir(w, id, rid);

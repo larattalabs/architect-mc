@@ -257,12 +257,13 @@ public final class SliceP0Dev {
 				return o;
 			});
 		});
-		DevBridge.register("dev.bc.cap", 30_000, "{region, rid?, set?: {item: n}} - (BC, BC-d, TEST) a survival region's maxBill for one rid (default: the highest capped rid): its cap, its draws and "
-			+ "its targets' waits; set replaces the cap first (draws past the approved bound) -> {maxBill, billBase, drawn, targets: [{id, waiting, "
-			+ "blocked, nextNeeded}]}", (req, mc) -> {
+		DevBridge.register("dev.bc.cap", 30_000, "{region, rid?, lot?, set?: {item: n}} - (BC, BC-d, LCAP, TEST) a survival region's maxBill for one rid (default: the highest capped rid): its cap, its draws and "
+			+ "its targets' waits; set replaces the cap first (draws past the approved bound; with lot, that lot's cap alone) -> {maxBill, billBase, drawn, caps, "
+			+ "lotCap?: {lot, maxBill, paid, charged, drawn, overshoot}, targets: [{id, rid, lot?, waiting, blocked, nextNeeded}]}", (req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");
+				String lot = Fields.of(req).optStr("lot", null);
 				Map<String, Integer> set = req.get("set") instanceof JsonObject ? capOf(wrapSet(req)) : null;
-				return ServerTasks.callOnServer(srv -> dev.larattalabs.architect.site.BillCaps.devState(srv, region, req.has("rid") ? Integer.valueOf(req.get("rid").getAsInt()) : null, set));
+				return ServerTasks.callOnServer(srv -> dev.larattalabs.architect.site.BillCaps.devState(srv, region, req.has("rid") ? Integer.valueOf(req.get("rid").getAsInt()) : null, lot, set));
 			});
 		DevBridge.register("dev.api.versions", 30_000, "{} - (BC) ArchitectApi.apiVersion/kitVersion/checkerVersion, Sites.loadHealthy and the BC features "
 			+ "-> {apiVersion, kitVersion, checkerVersion, loadHealthy, features}", (req, mc) -> ServerTasks.callOnServer(srv -> {
@@ -273,7 +274,7 @@ public final class SliceP0Dev {
 				api.checkerVersion().ifPresent(v -> o.addProperty("checkerVersion", v));
 				o.addProperty("loadHealthy", api.sites(srv).loadHealthy());
 				JsonArray f = new JsonArray();
-				for (String n : List.of("kitVersion", "sitesLoadHealthy", "maxBill")) {
+				for (String n : List.of("kitVersion", "sitesLoadHealthy", "maxBill", "maxBillPerLot")) {
 					if (api.features().contains(n)) {
 						f.add(n);
 					}
@@ -281,7 +282,7 @@ public final class SliceP0Dev {
 				o.add("features", f);
 				return o;
 			}));
-		DevBridge.register("dev.region.realiseApproved", 300_000, "{sha, lotEntries?: {lot: entry}, fill?: [entry...] (every provisional lot, the first that fits), opKey?, maxBill?: {item: n} (BC)} - "
+		DevBridge.register("dev.region.realiseApproved", 300_000, "{sha, lotEntries?: {lot: entry}, fill?: [entry...] (every provisional lot, the first that fits), opKey?, maxBill?: {item: n} (BC), maxBillPerLot?: {lot: {item: n}} (LCAP)} - "
 			+ "(6c P0) Regions.realiseApproved -> {region} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String sha = f.nonBlank("sha");
@@ -295,11 +296,12 @@ public final class SliceP0Dev {
 					a.forEach(e -> fill.add(e.getAsString()));
 				}
 				Map<String, Integer> cap = capOf(req); // (BC, S-M5-9)
+				Map<String, Map<String, Integer>> lotCaps = lotCapsOf(req); // (LCAP, S-M5-16)
 				return ServerTasks.callAsPlayer((level, player) -> {
 					if (!fill.isEmpty()) {
 						ArchitectApi.get().regions().artifact(sha).ifPresent(a -> RegionsImpl.fitLots(a.planId(), fill).forEach(lots::putIfAbsent));
 					}
-					return ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(sha, Mode.INSTANT, null, lots, key, new JsonObject(), cap));
+					return ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(sha, Mode.INSTANT, null, lots, key, new JsonObject(), cap, lotCaps));
 				}).thenCompose(x -> wrap(x, id -> {
 					JsonObject o = new JsonObject();
 					o.addProperty("region", id);
@@ -462,6 +464,20 @@ public final class SliceP0Dev {
 		}
 		Map<String, Integer> out = new java.util.TreeMap<>();
 		mb.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsInt()));
+		return out;
+	}
+
+	/** (LCAP, S-M5-16) A request's {@code maxBillPerLot} ({lot: {item: n}}), or null. */
+	static @org.jspecify.annotations.Nullable Map<String, Map<String, Integer>> lotCapsOf(JsonObject req) {
+		if (!(req.get("maxBillPerLot") instanceof JsonObject m)) {
+			return null;
+		}
+		Map<String, Map<String, Integer>> out = new java.util.TreeMap<>();
+		m.entrySet().forEach(e -> {
+			Map<String, Integer> c = new java.util.TreeMap<>();
+			e.getValue().getAsJsonObject().entrySet().forEach(x -> c.put(x.getKey(), x.getValue().getAsInt()));
+			out.put(e.getKey(), c);
+		});
 		return out;
 	}
 
