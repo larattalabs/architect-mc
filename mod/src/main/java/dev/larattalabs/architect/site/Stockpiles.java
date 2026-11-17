@@ -1683,9 +1683,10 @@ public final class Stockpiles {
 					}
 					// (DR-S) through credit() itself: a credit of nothing standing (no custody either) books NONE and drops its paid record too,
 					// which Builder.creditRefund's early return kept (a PAID_ORPHAN after the settle)
-					credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
+					StockLedger.Credit c = credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
 					p.ledger.dropPending(key);
-					what = "its removal settled: credited now";
+					// (Steward DR2-DOUBLE) an empty credit says so: nothing was credited
+					what = c.returned().isEmpty() ? "its removal settled: nothing to credit" : "its removal settled: credited now " + c.returned();
 				}
 				changed(p);
 				any = true;
