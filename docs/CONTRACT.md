@@ -32958,3 +32958,30 @@ LEFTOVERS "R2 7c-region-2", with HR's hidden_village, CL's ladder to a walk port
 - **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at 9aed58ed9): rl-crash 110/0, dr-crash 108/0, dr-survival 81/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, all PASS on the first run (`artifacts/gate-runs-DR2f/20261116-143132-change`).
 - **Units:** `RepairDR2FixTest` (P1-3, P1-4, P1-5 and the audit fail with the fixes reverted; P1-1 models the protocol over the ledger file). Full build green.
 - **Leftovers:** a survival removal a player took from stays pending for good (its refund held); keyless give-backs (a swap's old block, a bucket, RL's reconcile) still drop at once; ledger writes under /save-off outside a repair (pre-existing); unresolved placement damage across saves (DR-S's bound) not kept; `restoreUnchanged` in repair only exercised in game.
+
+
+### Slice DR2 round after OVF as built (the final review's NOT SAFE; Noah: one more round, OVF's owed stock wins, TXN decision 7)
+
+- **Merged** `origin/slice/OVF` (956baac4) into DR2 (a merge, no rewrite). **Dropped** DR2's overflow handoff for OVF's owed stock: `OverflowDrops`
+  (spawn after save, resolve by tag), `StockLedger.OwedDrop`/`oweDrop`/`owedDrop`/`owedDropKeys`/`clearOwedDrop` and the ledger's `owedDrops`
+  field, `Stockpiles.dropKeyed` (credit, keyed charge, scoop), kill point OV1, the ps stats `owedDrops`/`resolvedFound`/`resolvedSpawned`,
+  gate DR7o, RepairDR2FixTest's two P1-1 units. DR7c now expects OVF's model (CS1 into a full pile: no entity, credited once past capacity).
+- **P1 (premise checked in code):** `settling` skipped any unit with a foreign cell, `cellOf` made a taken cell FOREIGN and the start
+  forced KEEP, so nothing ever settled such a removal. Now a cell is *taken* by its mark after the undo alone (`RepairCore.takenAfter`,
+  whatever it reads); taken cells never block a repair's settle and are never written. Their share (`RepairCore.takenShare`: the tally's
+  cost of each paid, queued, non-free cell's placed block, never below what the tally paid) moves from the pending credit to
+  `taken:<key>` (`Stockpiles.withhold`, once per key, never past the pending), held for good (a non-target key: the start LEAVEs it);
+  the rest books. The split is saved confirmed before the release. A road with taken cells stays pending (its share unproven). The
+  start still KEEPs such a removal (conservative); a repair settles it.
+- **Rule 17:** the repair's saves go through `Repairs.worldSaved` (the barrier) and `ledgerSaved` (`saveConfirmed`; the booking and the
+  custody credit now confirmed too), the T0 switch point. **Rule 18:** kill points DRK0 (record), DRK3 (barrier), DRK4 (settling),
+  DRK5 (split), DRK6 (released), DRK7 (credits), beside DRK1/DRK1pt/DRK2; `dev.repair killAt` refuses other names.
+- **Gate** dr-survival: DR4c halts at DRK0, DRK3-DRK7 in turn, resuming after each; booked = pending - share, share = the block the
+  player took; items in == items out on disk (returned + pending + custody) after every case and every stop.
+- **Units:** `RepairDR2OvfTest` (5; the settle case fails on 16f29895: `expected [s1] but was []`), the full Gradle suite green on the merge (1397) and after the fix (1402).
+- **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at e4b1c91f, `artifacts/gate-runs-DR2r/20261117-063325-change`): bcc-over 17/0,
+  rl-crash 110/0, dr-crash 108/0, dr-survival 110/0 (DR4c: booked 141 + held 1 oak log = 142 pending; 284 = 284 after each stop), hf-crash
+  56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0, x-resume 35/0: 9/9 on the first run.
+- **Leftovers:** the start KEEPs a taken removal until a repair (auto-diagnose names it); an evicted mark's watermark counts every unmarked
+  cell of its chunk as taken (their refund withheld, never paid twice); a road with taken cells stays pending; the held `taken:` keys stay in
+  the ledger for good; a repair resumed after its release reports "Repaired : wrote 0" with no site named (cosmetic).
