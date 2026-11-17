@@ -1457,8 +1457,9 @@ public final class RegionTargets {
 			if ("ST1".equals(dev.larattalabs.architect.journal.WorldJournal.armed()) && target != null) {
 				// (round 5, TEST) which target reached ST1, written before the halt so the gate asserts on that target
 				try {
-					java.nio.file.Files.writeString(srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(ST1_MARK),
-						target, java.nio.charset.StandardCharsets.UTF_8);
+					java.nio.file.Path adir = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect");
+					java.nio.file.Files.createDirectories(adir); // (a world with no stockpile has no architect dir yet)
+					java.nio.file.Files.writeString(adir.resolve(ST1_MARK), target, java.nio.charset.StandardCharsets.UTF_8);
 				} catch (java.io.IOException e) {
 					Architect.LOGGER.warn("ST1: the marker could not be written: {}", e.toString());
 				}
