@@ -2,6 +2,7 @@ package dev.larattalabs.architect.site;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonObject;
@@ -287,6 +288,103 @@ class StockpileOverflowOVFTest {
 		assertTrue(sp.contains("o.addProperty(\"overCapacity\", overCapacity(srv, p));"), "the pile's view carries the state");
 		String screen = Files.readString(Path.of("src/client/java/dev/larattalabs/architect/client/survival/CrateScreen.java"));
 		assertTrue(screen.contains("Stockpiles.capacityLabel("), "the stockpile panel shows the label");
+	}
+
+	// ------------------------------------------------------------------ the GPT review's fix round (OVF NOT SAFE)
+
+	/** Finding 1: a construction delta's refund is held pending and saved before the record names the delta (D8), then booked once. */
+	@Test
+	void aDeltaRefundIsPendingOnDiskBeforeItsRecordAndBooksOnce() throws Exception {
+		String d = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SiteDeltas.java"));
+		int cb = d.indexOf("beforeRecord.accept(id);");
+		int d8 = d.indexOf("// D8: the record at b");
+		assertTrue(cb > 0 && d8 > cb && d.indexOf("Sites.replace(server, nb);", d8) > d8, "the hold runs after D7 and before D8 writes the record");
+		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
+		int at = b.indexOf("public static SiteDeltas.Result applyConstructionDelta(");
+		int hold = b.indexOf("Stockpiles.holdPendingDelta(owner, \"delta:\" + id + \":\" + r.siteId(), owed, owedAt)", at);
+		int save = b.indexOf("Stockpiles.savePendingDelta(srv);", hold);
+		int apply = b.indexOf("SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, \"delta\", hold);", at);
+		assertTrue(hold > at && save > hold && apply > save, "the hold and its save are applyChecked's beforeRecord");
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		assertTrue(sp.contains("key.startsWith(\"delta:\") && deltaFate(key, Stockpiles::deltaApplied) == DeltaFate.DROP"), "the start resolves a pending delta");
+		// the start's rule: booked when the history names the entry, dropped otherwise
+		assertEquals(Stockpiles.DeltaFate.BOOK, Stockpiles.deltaFate("delta:e7:s1", (site, e) -> site.equals("s1") && e.equals("e7")));
+		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta:e7:s1", (site, e) -> false));
+		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta::s1", (site, e) -> true));
+		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta:e7:", (site, e) -> true));
+		// the ledger: pending saved (with the paid record), CS1 after D8 (the record durable, the credit not), the start books it once;
+		// a second crash inside the start's save books it once again from the same pending
+		String key = "delta:e7:s1";
+		Map<String, Integer> owed = Map.of(PLANKS, 30, FLINT, 4);
+		StockLedger l = paid();
+		l.holdPending(key, owed, 9L);
+		Disk disk = save(l, Map.of());
+		Map<String, Integer> start = held(disk.load(), Map.of());
+		credit(l, key, owed, new TreeMap<>()); // the in-session credit, its save halted at CS1
+		for (int crash = 0; crash < 2; crash++) {
+			StockLedger r = disk.load();
+			assertTrue(r.pendingKeys().contains(key), "pending on disk");
+			Map<String, Integer> w = new TreeMap<>();
+			credit(r, key, r.pendingItems(key), w);
+			assertEquals(plus(start, owed), held(r, w), "the delta's refund once (crash " + crash + ")");
+			assertTrue(w.isEmpty() && r.credited(key) && r.pendingKeys().isEmpty());
+			if (crash == 1) {
+				StockLedger fin = save(r, w).load();
+				assertTrue(fin.credited(key) && fin.credit(key, owed, FULL, MAX).already());
+			}
+		}
+	}
+
+	/** Finding 2: a keyed booking's retry never trusts an unsaved in-memory key: it saves first (and throws while nothing can be saved). */
+	@Test
+	void aKeyedRetryAfterARefusedSaveSavesFirst() throws Exception {
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		String scoop = body(sp, "public static Map<String, Integer> scoop(");
+		int early = scoop.indexOf("if (p.ledger.credited(key)) {");
+		assertTrue(early > 0 && scoop.indexOf("saveConfirmed(srv);", early) > early && scoop.indexOf("saveConfirmed(srv);", early) < scoop.indexOf("return Map.of();", early),
+			"the scoop's retry saves before it returns");
+		assertTrue(scoop.contains("saveConfirmed(srv); // (OVF) the caller persists the drain"), "the scoop's booking is confirmed on disk");
+		String charge = body(sp, "public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items, @Nullable String key, int rid) {");
+		int ce = charge.indexOf("if (key != null && p.ledger.charged(key) != null) {");
+		assertTrue(ce > 0 && charge.indexOf("saveConfirmed(srv);", ce) < charge.indexOf("return true;", ce), "a keyed charge's retry saves before it returns");
+		assertTrue(charge.contains("saveConfirmed(srv); // (OVF) keyed"), "a keyed charge is confirmed on disk");
+		// saveConfirmed: nothing unsaved passes; a session that can't save throws (the caller's drained/charged record is never written)
+		java.lang.reflect.Field lf = Stockpiles.class.getDeclaredField("loadFailed");
+		lf.setAccessible(true);
+		boolean wasUnsaved = Stockpiles.unsaved;
+		try {
+			Stockpiles.unsaved = false;
+			Stockpiles.saveConfirmed(null);
+			lf.set(null, true);
+			Stockpiles.unsaved = true;
+			assertThrows(IllegalStateException.class, () -> Stockpiles.saveConfirmed(null));
+		} finally {
+			lf.set(null, false);
+			Stockpiles.unsaved = wasUnsaved;
+		}
+	}
+
+	/** Should-fix 3: over capacity, an active build's missing item still goes in (up to its need); a paused-only need and the rest are refused. */
+	@Test
+	void anActiveBuildNeverDeadlocksOverCapacity() {
+		String STONE = "minecraft:stone";
+		StockLedger l = new StockLedger();
+		// the review's case: refunds left 500 stacks of planks in a 432-stack (16 crate) pile; two active targets need stone supports first
+		l.holdCustody("fluid:f9", Map.of(PLANKS, 500 * 64));
+		l.credit("fluid:f9", Map.of(), 432, MAX);
+		assertTrue(l.usedStacks(MAX) > 432);
+		dev.larattalabs.architect.survival.Equivalents eq = dev.larattalabs.architect.survival.Equivalents.bundled();
+		ToIntFunction<String> all = it -> it.equals(STONE) ? 20 : it.equals(PLANKS) ? 500 * 64 : it.equals(FLINT) ? 5 : 0;
+		ToIntFunction<String> active = it -> it.equals(STONE) ? 20 : it.equals(PLANKS) ? 500 * 64 : 0; // the flint: a paused target's only
+		assertEquals(null, l.accept(STONE, all, eq, 432, MAX, false), "the old rule: refused, the build deadlocks");
+		int in = 0;
+		while (l.accept(STONE, all, active, eq, 432, MAX, true) != null) {
+			in++;
+		}
+		assertEquals(20, in, "the active builds' stone goes in, up to what they miss");
+		assertEquals(null, l.accept(FLINT, all, active, eq, 432, MAX, false), "a paused target's need waits");
+		assertEquals(null, l.accept("minecraft:dirt", all, active, eq, 432, MAX, false), "nothing else");
+		assertTrue(l.identityHolds());
 	}
 
 	/** No keyed path drops overflow before (or after) its save. */

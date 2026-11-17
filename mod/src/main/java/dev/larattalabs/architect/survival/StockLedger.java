@@ -335,12 +335,23 @@ public final class StockLedger {
 	 */
 	public Ledger.@Nullable Accepted accept(String item, ToIntFunction<String> unbuilt, Equivalents eq, int capacityStacks, ToIntFunction<String> maxStack,
 		boolean commit) {
+		return accept(item, unbuilt, it -> 0, eq, capacityStacks, maxStack, commit);
+	}
+
+	/**
+	 * (slice OVF) {@link #accept}, and while the stock is over capacity (a keyed refund left it there) a unit still goes in when the owner's
+	 * <b>active</b> (unpaused) targets miss it ({@code activeUnbuilt.applyAsInt(item) > stock}), up to what they still miss: an active build
+	 * never deadlocks on a missing item it can't be given. Everything else is refused over capacity, as before.
+	 */
+	public Ledger.@Nullable Accepted accept(String item, ToIntFunction<String> unbuilt, ToIntFunction<String> activeUnbuilt, Equivalents eq, int capacityStacks,
+		ToIntFunction<String> maxStack, boolean commit) {
 		Ledger.Accepted a = null;
-		if (missing(item, unbuilt) > 0 && room(item, capacityStacks, maxStack) >= 1) {
+		boolean over = usedStacks(maxStack) > capacityStacks;
+		if (missing(item, unbuilt) > 0 && (over ? missing(item, activeUnbuilt) >= 1 : room(item, capacityStacks, maxStack) >= 1)) {
 			a = new Ledger.Accepted(item, 1, false);
 		} else {
 			for (Equivalents.Path p : eq.paths(item)) {
-				if (missing(p.item(), unbuilt) > 0 && room(p.item(), capacityStacks, maxStack) >= p.count()) {
+				if (missing(p.item(), unbuilt) > 0 && (over ? missing(p.item(), activeUnbuilt) >= p.count() : room(p.item(), capacityStacks, maxStack) >= p.count())) {
 					a = new Ledger.Accepted(p.item(), p.count(), true);
 					break;
 				}
@@ -654,6 +665,11 @@ public final class StockLedger {
 	}
 
 	/** (JR) The site id of a construction delta's credit key ({@code delta:<entry>:<siteId>}), or null. */
+	/** (OVF) {@link #deltaSite}, public: the site of a construction delta's credit key, or null. */
+	public static @Nullable String deltaSiteOf(String key) {
+		return deltaSite(key);
+	}
+
 	static @Nullable String deltaSite(String key) {
 		if (!key.startsWith("delta:")) {
 			return null;

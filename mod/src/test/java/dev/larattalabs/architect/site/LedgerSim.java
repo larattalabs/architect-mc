@@ -578,6 +578,22 @@ final class LedgerSim {
 		}
 	}
 
+	/** (OVF) {@link #unbuiltAll} over the active (unpaused) targets: what an insert over capacity may still bring. */
+	Map<String, Integer> unbuiltActive() {
+		Map<String, Integer> out = new TreeMap<>();
+		for (Tgt t : targets.values()) {
+			if (t.removed || t.leaving || t.paused || t.run == null) {
+				continue;
+			}
+			t.run.unbuilt.forEach((k, v) -> {
+				if (v > 0) {
+					add(out, k, v);
+				}
+			});
+		}
+		return out;
+	}
+
 	/** {@code Stockpiles.unbuiltAll}: the unbuilt cost of every building target not being removed. */
 	Map<String, Integer> unbuiltAll() {
 		Map<String, Integer> out = new TreeMap<>();
@@ -604,9 +620,20 @@ final class LedgerSim {
 		int got = 0;
 		for (int k = 0; k < n; k++) {
 			Map<String, Integer> need = unbuiltAll();
-			Ledger.Accepted a = ledger.accept(item, x -> need.getOrDefault(x, 0), EQ, cap(), LedgerSim::maxStack, true);
+			Map<String, Integer> active = unbuiltActive();
+			boolean over = ledger.usedStacks(LedgerSim::maxStack) > cap();
+			Map<String, Integer> was = ledger.stock();
+			Ledger.Accepted a = ledger.accept(item, x -> need.getOrDefault(x, 0), x -> active.getOrDefault(x, 0), EQ, cap(), LedgerSim::maxStack, true);
 			if (a == null) {
 				break;
+			}
+			if (over) {
+				// (OVF, the insertion invariant) over capacity nothing goes in but what the active targets still miss, up to that
+				if (active.getOrDefault(a.item(), 0) - was.getOrDefault(a.item(), 0) < a.count()) {
+					violation("capacity", "an insert of " + a.count() + " " + a.item() + " over capacity that no active target misses (active " + active.getOrDefault(a.item(), 0)
+						+ ", stock " + was.getOrDefault(a.item(), 0) + ")");
+				}
+				refundOver = Math.max(refundOver, ledger.usedStacks(LedgerSim::maxStack));
 			}
 			add(in, a.item(), a.count());
 			got++;

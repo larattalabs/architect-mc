@@ -841,9 +841,21 @@ public final class Stockpiles {
 	 * needs nothing more).
 	 */
 	static Map<String, Integer> unbuiltAll(MinecraftServer srv, Pile p) {
+		return unbuilt(srv, p, false);
+	}
+
+	/** (OVF) {@link #unbuiltAll} over the active (unpaused) targets only, with the regions' and mechanisms' pending charges. */
+	static Map<String, Integer> unbuiltActive(MinecraftServer srv, Pile p) {
+		return unbuilt(srv, p, true);
+	}
+
+	private static Map<String, Integer> unbuilt(MinecraftServer srv, Pile p, boolean activeOnly) {
 		Map<String, Integer> out = new TreeMap<>();
 		for (Object t : targets(srv, p)) {
 			if (Groups.leaving(idOf(t))) {
+				continue;
+			}
+			if (activeOnly && (t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused())) {
 				continue;
 			}
 			Builder.Run r = run(srv, t);
@@ -1183,7 +1195,11 @@ public final class Stockpiles {
 		if (need.isEmpty()) {
 			return null;
 		}
-		Ledger.Accepted a = p.ledger.accept(item, it -> need.getOrDefault(it, 0), Equivalents.bundled(), capacity(srv, p), Stockpiles::maxStack, commit);
+		int cap = capacity(srv, p);
+		// (OVF) over capacity: only what the active (unpaused) targets still miss goes in (their builds never deadlock), up to that
+		Map<String, Integer> active = p.ledger.usedStacks(Stockpiles::maxStack) > cap ? unbuiltActive(srv, p) : Map.of();
+		Ledger.Accepted a = p.ledger.accept(item, it -> need.getOrDefault(it, 0), it -> active.getOrDefault(it, 0), Equivalents.bundled(), cap,
+			Stockpiles::maxStack, commit);
 		if (a != null && commit) {
 			changed(p);
 		}
@@ -1280,6 +1296,7 @@ public final class Stockpiles {
 		}
 		if (key != null && p.ledger.charged(key) != null) {
 			Architect.LOGGER.warn("Stockpile {}: region charge {} was booked before (its record not saved): not charged again", p.owner, key);
+			saveConfirmed(srv); // (OVF) booked in memory only (its save refused): never returned as standing before the ledger is on disk
 			return true;
 		}
 		Map<String, Integer> reserved = LAST_RESERVED.getOrDefault(p.id, Map.of());
@@ -1299,7 +1316,11 @@ public final class Stockpiles {
 			dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		}
 		changed(p);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		if (key != null) {
+			saveConfirmed(srv); // (OVF) keyed: the caller records the charge only once the ledger holds it on disk
+		} else {
+			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		}
 		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
 		return true;
 	}
@@ -1325,7 +1346,11 @@ public final class Stockpiles {
 	 */
 	public static Map<String, Integer> scoop(MinecraftServer srv, @Nullable String owner, String key, int lavaSources, int grates) {
 		Pile p = get(owner);
-		if (p == null || p.ledger.credited(key)) {
+		if (p == null) {
+			return Map.of();
+		}
+		if (p.ledger.credited(key)) {
+			saveConfirmed(srv); // (OVF) booked before; a refused save left it in memory only: the drain waits until it is on disk
 			return Map.of();
 		}
 		int cap = capacity(srv, p);
@@ -1333,7 +1358,7 @@ public final class Stockpiles {
 		// (OVF) keyed: the lava buckets and bars enter the stock past capacity if need be (never dropped: once across any crash)
 		StockLedger.Credit c = scoopInto(p.ledger, key, lavaSources, grates, cap, Stockpiles::maxStack, over);
 		changed(p);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		saveConfirmed(srv); // (OVF) the caller persists the drain only after the scoop is on disk (a refusal throws: retried, once)
 		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
 		Map<String, Integer> out = new TreeMap<>(c.returned());
 		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
@@ -1416,6 +1441,54 @@ public final class Stockpiles {
 		return any;
 	}
 
+	/**
+	 * (slice OVF, review finding 1) A construction delta's refund held pending under its key ({@code delta:<entry>:<site>}) in the owner's
+	 * ledger, to be saved before the new version's record. Returns whether it was held (the owner has a stockpile and the key is new).
+	 */
+	static boolean holdPendingDelta(@Nullable String owner, String key, Map<String, Integer> items, BlockPos at) {
+		Pile p = get(owner);
+		if (p == null || p.ledger.credited(key)) {
+			return false;
+		}
+		p.ledger.holdPending(key, items, at.asLong());
+		changed(p);
+		return true;
+	}
+
+	/**
+	 * (OVF) The pending delta credit's save (with the world). A save SS refuses is logged and the delta goes on: the pending credit stays in
+	 * memory and the credit's own save right after D8 (or the next one whose forces succeed) writes it with the booking.
+	 */
+	static void savePendingDelta(MinecraftServer srv) {
+		try {
+			saveWithWorld(srv);
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a construction delta's pending credit was not saved ({}); written with its credit", e.getMessage());
+		}
+	}
+
+	/** (OVF) What the start does with a pending delta credit: book it (its delta stands in the site's history) or drop it. */
+	enum DeltaFate { BOOK, DROP }
+
+	/**
+	 * (OVF) The fate of the pending credit {@code key} ({@code delta:<entry>:<site>}): BOOK when {@code applied} says the site's history names
+	 * the entry (the new version's record reached the disk), else DROP (the delta never committed: its refund was never owed). Pure.
+	 */
+	static DeltaFate deltaFate(String key, java.util.function.BiPredicate<String, String> applied) {
+		String site = StockLedger.deltaSiteOf(key);
+		String entry = site == null ? null : key.substring("delta:".length(), key.length() - site.length() - 1);
+		return site != null && !entry.isEmpty() && applied.test(site, entry) ? DeltaFate.BOOK : DeltaFate.DROP;
+	}
+
+	/** (OVF) Whether site {@code id}'s history (standing or pending) names delta entry {@code entry}. */
+	private static boolean deltaApplied(String id, String entry) {
+		Site s = Sites.get(id);
+		if (s == null) {
+			s = Sites.pendingRecord(id);
+		}
+		return s != null && s.versioning().history().stream().anyMatch(h -> entry.equals(h.deltaEntry()));
+	}
+
 	/** (J2) The removal ended unwritten (its save refused): its pending credits dropped. */
 	static void dropPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
 		for (Builder.Deconstruction d : decs) {
@@ -1442,6 +1515,9 @@ public final class Stockpiles {
 				if (p.ledger.credited(key)) {
 					p.ledger.dropPending(key);
 					what = "already credited";
+				} else if (key.startsWith("delta:") && deltaFate(key, Stockpiles::deltaApplied) == DeltaFate.DROP) {
+					p.ledger.dropPending(key);
+					what = "its construction delta never committed (not in the site's history): dropped";
 				} else if (standingSite(key) != null) {
 					p.ledger.dropPending(key);
 					what = "its site stands (the removal never settled)";
@@ -1488,6 +1564,21 @@ public final class Stockpiles {
 		}
 		Site s = Sites.pendingRecord(key.substring(5, at));
 		return s != null && key.equals(Builder.creditKey(s));
+	}
+
+	/**
+	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
+	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
+	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
+	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
+	 */
+	static void saveConfirmed(MinecraftServer srv) {
+		if (unsaved || loadFailed) {
+			saveWithWorld(srv);
+		}
+		if (unsaved || loadFailed) {
+			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
+		}
 	}
 
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */

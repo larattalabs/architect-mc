@@ -3346,7 +3346,21 @@ public final class Builder {
 			}
 			dropItems(level, dropPos(before), drop, null);
 		}
-		SiteDeltas.Result res = SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta");
+		// (slice OVF, review finding 1) the removed paid cells' refund, from the before state (what the loop below books), held pending in the
+		// ledger and saved with the world inside applyChecked after its journal commit and before the record names the delta (D8): a crash
+		// after D8 (CS1 in the credit's save below) finds it pending, and the start books it once (Stockpiles.settlePendingCredits: the site's
+		// history names the entry); a crash before D8 drops it unless the start rolls the delta forward. The start never replays the delta's
+		// conversion, so without it the refund was lost
+		Map<String, Integer> owed = stockpiled ? removedRefund(c, was, oldBox, paidBefore) : Map.of();
+		String owner = before.owner();
+		BlockPos owedAt = dropPos(before);
+		java.util.function.Consumer<String> hold = owed.isEmpty() ? null : id -> {
+			if (Stockpiles.holdPendingDelta(owner, "delta:" + id + ":" + r.siteId(), owed, owedAt)) {
+				Stockpiles.savePendingDelta(srv);
+				WorldJournal.kill("OVD1"); // (OVF, TEST) the pending delta credit saved, the record not
+			}
+		};
+		SiteDeltas.Result res = SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta", hold);
 		Site s = Sites.get(r.siteId());
 		String entry = s.versioning().history().get(s.versioning().history().size() - 1).deltaEntry();
 		Anchors.Bounds box = s.restoreBox();
@@ -3451,10 +3465,14 @@ public final class Builder {
 		Site.History last = h.remove(h.size() - 1);
 		h.add(last.withRevertible(false));
 		Site built = s.withConstruction(nc).withVersioning(new Site.Versioning(s.versioning().version(), h, 0, 0, s.versioning().deviations()));
+		String deltaKey = "delta:" + entry + ":" + s.id();
+		if (stockpiled && !owed.equals(refunded)) {
+			Architect.LOGGER.warn("Construction delta of {}: the refund held pending {} differs from the loop's {}", s.id(), owed, refunded);
+		}
 		Sites.replace(srv, built);
 		RUNS.remove(s.id());
 		if (stockpiled) {
-			if (creditRefund(level, s.owner(), "delta:" + entry + ":" + s.id(), refunded, dropPos(s), null)) {
+			if (creditRefund(level, s.owner(), deltaKey, refunded, dropPos(s), null)) {
 				Stockpiles.saveCredit(srv); // (J1, N1's shape) the delta's construction is already written: its refund is saved with it now
 			}
 		} else {
@@ -3465,6 +3483,24 @@ public final class Builder {
 			.cardinality(), refunded);
 		return new SiteDeltas.Result(true, s.id(), res.from(), res.to(), res.written(), res.kept(), res.reshaped(), List.of(), res.notes(), before, built,
 			refunded);
+	}
+
+	/**
+	 * (slice OVF) The refund a construction delta owes before it writes anything: its removed (or now air) cells' paid blocks, from their before
+	 * states ({@code was}), as the conversion loop books them ({@link #refundRemoved}). Pure of the level.
+	 */
+	static Map<String, Integer> removedRefund(SiteDeltas.Check c, Map<Long, BlockState> was, Anchors.Bounds oldBox, BitSet paidBefore) {
+		Map<String, Integer> out = new TreeMap<>();
+		for (var e : c.plan().outcome().write().entrySet()) {
+			BlockPos p = BlockPos.of(e.getKey());
+			BlockState target = WorldJournal.state(e.getValue());
+			Byte kind = c.ghost().get(e.getKey());
+			if (target.isAir() || kind == null || kind == SiteDeltas.REMOVED) {
+				boolean wasPaid = oldBox.contains(p.getX(), p.getY(), p.getZ()) && paidBefore.get(boxIndexOld(oldBox, p));
+				refundRemoved(wasPaid, was.get(e.getKey()), out);
+			}
+		}
+		return out;
 	}
 
 	/**

@@ -48,7 +48,8 @@ class StockpileSaveJ1Test {
 		assertTrue(credit >= 0 && save > credit && save < dec.indexOf("forget("), "a deconstruct's credit is saved before its record goes");
 		String cr = StockpileSaveHFTest.body(b, "static boolean creditRefund(");
 		assertTrue(cr.contains("!c.already()"), "creditRefund answers whether a credit booked now (once per key)");
-		int delta = b.indexOf("\"delta:\" + entry + \":\" + s.id()");
+		// (OVF) the key is built once (deltaKey) and also held pending before the record (StockpileOverflowOVFTest)
+		int delta = b.indexOf("creditRefund(level, s.owner(), deltaKey, refunded, dropPos(s), null)");
 		assertTrue(delta >= 0 && b.indexOf("Stockpiles.saveCredit(srv);", delta) - delta < 200, "a delta's refund is saved with its construction");
 
 		String rj = read(SITE + "RestoreJob.java");

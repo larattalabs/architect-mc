@@ -1003,6 +1003,16 @@ public final class SiteDeltas {
 	}
 
 	static Result applyChecked(ServerLevel level, Check c, boolean overwrite, String kind) throws Sites.SiteException {
+		return applyChecked(level, c, overwrite, kind, null);
+	}
+
+	/**
+	 * {@link #applyChecked}; (slice OVF) {@code beforeRecord} runs with the delta's journal entry id after D7 (the entry ACTIVE) and before D8
+	 * writes the record whose history names it: a construction delta's refund is held pending and saved there, so it is on disk no later
+	 * than the version that owes it.
+	 */
+	static Result applyChecked(ServerLevel level, Check c, boolean overwrite, String kind, java.util.function.@Nullable Consumer<String> beforeRecord)
+		throws Sites.SiteException {
 		long tA = System.nanoTime();
 		Planned p = c.plan();
 		MinecraftServer server = level.getServer();
@@ -1114,6 +1124,9 @@ public final class SiteDeltas {
 		SiteJournal.await(s.submit(t2), "the update of " + b.id());
 		long tD7 = System.nanoTime();
 		WorldJournal.kill("D7");
+		if (beforeRecord != null) {
+			beforeRecord.accept(id); // (OVF) the refund owed by this version, pending in the ledger, saved before the record names it
+		}
 		// D8: the record at b
 		Site.Versioning v = updating.versioning().withUpdating(0);
 		if (folded != null) {
