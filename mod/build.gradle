@@ -126,6 +126,11 @@ test {
 		events "failed"
 		exceptionFormat "full"
 	}
+	// (8a ST) tests that run the kit with node (TerrainOrderTest's kit/test/terrain-order-cells.mjs, PlanCatalogueTest, the delta kit test):
+	// the kit and its plan fixtures are their inputs, so a kit change never leaves the test task UP-TO-DATE on a stale PASS
+	inputs.dir("../kit/lib").withPropertyName("kitLib").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.files("../kit/test/terrain-order-cells.mjs", "../kit/test/plan-helpers.mjs").withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/plan").withPropertyName("kitPlanFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test

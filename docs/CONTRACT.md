@@ -32864,6 +32864,7 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
 
+
 ## Phase 8a: construction mode for forms and relief
 
 The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) lives in the coordinator's side-session notes
@@ -32928,3 +32929,112 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   regenerated and diffed: **asks-survival.md byte-identical** (2,646,636 staged cells, none of it in the table); api-compat; gitleaks.
 - **For ST/HB**: a terrace's and crater's terrain is HELD under 8aF, so it is not in `terrainCells`; if ST stages held terrain, count it
   into `staged` in `realise.mjs` and the quote follows. Revisions quote the revision plan's staged cells (not net of built ones).
+### Slice ST as built (branch `slice/ST` off `slice/TO` c9e22901; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Targets.** `RegionTargets.split` gives each group's class 3 cells a target of their own per tile (`regionTarget.terrain: true`, every cell
+  held, none in `freeCells`), put down ahead of the group's paid/held one. `Packed.freePass` is FREE only; `-Darchitect.stagedTerrain=false`
+  (dev) writes class 3 in the free pass again and drops the feature. Its queue is TO's `terrainOrder` read against the world at put-down.
+- **Building (reading taken).** No re-order of the persisted queue: each turn scans the queue from its first unbuilt cell (at most 4,096) and
+  writes each cell the world now supports by TO's rules read live (a cut once the cut above is gone; loose/resting over solid; a leaf by a
+  log or leaf; a fill on a replaced solid, beside solid land or a log, or under a floating anchor's 3x3), so TO's rounds (x03's tile 18,31)
+  wait on the cells beside them with no re-order. A target that wrote nothing for 100 turns while no other staged target of its part wrote
+  is released (the rest in order, unsupported) so a region always completes. Runs: 4,096-cell slabs of the order (no bill, so no start rule).
+- **Rate.** `terrainPerTick` in architect-world.json (default 16, clamped 1-64, kept by the toggle and budget rewrites), shared by a region's
+  staged targets per tick; `RegionBuild.terrainPerTick` reads it (javadoc fixed: per region, not per target). A staged target of an owner with
+  no stockpile (an all-free plan needs none) is built by the road tick.
+- **Waits.** A lot or road waits for a staged target of an earlier or its own stage under its box + 8: `SITE_BUSY`, `waitsFor {target, part,
+  kind: "terrain", terrainCells, terrainBuilt, say}`. A paid/held target of the same tile item waits (before it starts) for a staged target it
+  meets. `Drift.checkStage` skips columns under a building staged target. A tile all targets keeps its held-leaves entry.
+- **Counts.** `PartBuild.terrainCells/terrainBuilt` (staged targets' cells, not in `cells`/`built`); `percent` = (paid + terrain built) / (paid
+  + terrain). Dev: `dev.region.terrain {region, check?}` (targets, cursor, connected, stall, released, unsupported, gameTime, the waits),
+  `dev.terrain.rate {n?}`. Feature `terrainConstruction`: the helper's `region.terrainConstruction` AND `Packed.stagedBuild()`.
+- **F3 trees stay paid** (Noah, "Keep paid"; the contract's exception): under 8aF a tree group holds paid cells, so its free cells are HELD,
+  never class 3; ST changes nothing there. `kit/test/st-8a.test.mjs` pins s01_steward_glade: no staged log or leaf, every log class 2.
+- **Kit fix.** `compileSurvival` read its per-op flags by IR op index while the evaluator reads compiled ops (a fluid op's decor bed is a
+  second compiled op), so every flag after a bed shifted and the last threw (s01). Now through each compiled op's IR op. Moves the survival
+  tiles of v73, f3/c01 and f3/u05 (coral ponds): fluid-op cells now class 0 (the fluids gate's), their shells now paid, their corals no
+  longer paid; creative IRs and every other fixture unchanged. Gradle's `test` now declares kit/lib, the kit helpers and the plan fixtures.
+- **Ran.** Units (full: build.gradle): kit 1484/1484, gradle build PASS (StagedTargetsTest 5, StagedTerrainFoundationTest 5, TerrainOrderTest
+  10, SurvivalWorldTest 3), sidecar green (4 files timed out under load 22-28 and passed alone, 29/29 + 7/7); gitleaks clean. st-ingame
+  (artifacts/gate-runs-ST/20261116-031304-change, -032158-change, -071816-change): rs01 over raised land (relief at 2/tick), x01 (32,078
+  staged cells at 16/tick), x03's island with no stockpile and x03h (the hamlet) all pass staged targets, the rate, support at every half-built
+  sample, percent, creative twins with no target, twin equality (0 differ), conservation exact and E-flat 0. The typed wait is seen on
+  x03h's props tile (`waitsFor {target c4, part isle, kind terrain, terrainCells 7200, ...}`); no fixture has a lot on a cutting staged pad
+  (their pads cut nothing; rs01's lots start after its relief by the stage chain), so the lot-specific wait is unit-proven only.
+- **x03h's bill row (resolved; pre-existing, not ST's).** The check bills part `hamlet` 49 dirt for 49 paid grass cells of its green over the
+  flat land's grass: a realise skips them (no target bills them, nothing is consumed). They are kept by position (plan.json
+  `survivalTerrain`), so `Regions.quoteApproved` leaves them out: the check's `cost.survival.bom` is an upper bound by design (SA/BC A11). The
+  same mismatch with `-Darchitect.stagedTerrain=false` (gate-runs-ST/20261117-012402-change). The gate row now compares what a build consumed
+  with the quote (exact for x01, x03, x03h; within it for rs01); `kit/test/st-8a.test.mjs` pins the 49 kept cells. Final st-ingame:
+  gate-runs-ST/20261117-013030-change, 37/37 PASS (`--shards 1 --no-turbo --no-cache`).
+- **GPT review round (rule 15, 6 P1s).**
+  - (1) A stall releases only a fill's reach. Cuts, loose and resting blocks, and leaves keep their support, and a support in an unloaded
+    chunk neither writes nor releases.
+  - (2) The road tick's no-stockpile path skips a target that is leaving (C29).
+  - (3) A staged target's chunks are saved and flushed before it is marked BUILT.
+  - (4) A staged cell matches only its own block in its planned state (volatile properties aside).
+  - (5) A leaf needs a standing log, a built leaf of its target, or a leaf a log holds, in the live rule and in TO's `forTerrain`. A mined
+    before is no support. Floating anchors are read once the region is live.
+  - (6) Survival flags follow the compiled op only in IRs that `markSurvival` marks `survival.opMap: "compiled"` (those with a fluid op's
+    decor). Unmarked, already-accepted IRs keep the legacy mapping they were quoted with.
+  - The legacy mis-bill shipped from v0.41.0 (RS-a a07e7da6 and F3-c f07c0726, 2026-10-20) through v0.74.0: in coral-pond plans, shells were
+    billed free and coral paid (v73: 182 shell cells free that should be paid, 95 coral cells paid that should be free; c01: 36 coral; u05: 23
+    coral).
+  - Tests: TerrainOrderTest (+3), st-8a (+1).
+  - The gate step is now `sta-ingame`; 7b's `st-ingame` key was shadowed by it.
+  - Added x01crash: a halt with one target BUILT; after the restart 0 cells are missing; then a half-built Remove gives E-flat 0.
+  - Strict round: rs-survival-smoke, rl-crash and bf-ingame PASS (gate-runs-ST/20261117-021150-change). sta-ingame 41/41 PASS
+    (gate-runs-ST/20261117-031444-change). The run before it caught grass on a cell planned dirt counted as built; fixed.
+  - A BUILT target's cells that a later writer took up (rs01's terrace stairs and fences, XR) read as `missing` in the evidence. They are
+    not holes: the twin row covers them.
+  - Left: the ledger book marks staged cells free (HB); the fluids barrier's wait and `RegionView.waiting` are untyped (QX/HB).
+- **Round 3 (GPT final review; Noah's "3rd round").**
+  - The durability barrier now gates both completion paths. A failed barrier keeps the target building and is retried 100 turns later.
+    It refuses while any level has saving off.
+  - The leaf rule is vanilla's: distance = 1 + the lowest neighbour's distance, and a leaf goes in only when that is under 7. A persistent
+    leaf still needs a log or a built leaf of its own target. TO's land does the same.
+  - A support in an unloaded chunk is read by loading that chunk (2 loads per turn), so it is never an endless stall.
+  - A staged cell matches only its exact planned state.
+  - Tests: TerrainOrderTest has 16; each new test asserts the old behaviour it replaces.
+  - Strict gate on 4555c9af PASS (gate-runs-ST/20261117-035805-change): sta-ingame 44/44, rs-survival-smoke 40/0, rl-crash 90/0. It
+    includes x03saveoff (no target BUILT while saving is off; all BUILT after `/save-on`) and x01crash (dev.stockpile.halt with one target
+    BUILT: 0 cells missing after the restart; a half-built Remove: E-flat 0).
+  - Rule 18 on e5cfd83c (gate-runs-ST/20261117-045658-change): 41/42. Kill point ST1 can't be armed: `dev.journal.killAt`'s accepted-points
+    check (JournalDev.java:98) refuses `ST1`. So x01crash stopped at its first row, and the ST1 and post-crash conservation rows didn't run.
+    x03saveoff and its conservation row passed. Not fixed: code changes are on hold for Noah.
+  - **Open P1 (final GPT check, for Noah).** The barrier saves chunks, not players, and AFTER_SAVE then publishes the stockpile ledger. A
+    crash after a deposit can therefore leave the ledger ahead of player.dat (a doubled deposit). The stockpile's own save with the world
+    saves the players first.
+
+### Slice T0 as built (branch `slice/T0` off origin/main 5a782f9d; one fix round after the NOT SAFE GPT review of 042da098 plus TXN review 3 items 1 and 5; no API package change; $0; strict; recorded 2026-11-16)
+
+- **DurableFile** (`site/DurableFile.java`): temp, file force, atomic rename, folder force; OK / REFUSED / IN_DOUBT. `_durable` is `{store: the file's own persisted UUID, type: label, gen}` (`id()`, `satisfies(id, gen)`); a folder open that fails is IN_DOUBT off Windows; each new folder's entry is forced in its parent before the rename, and the file's folder and its parent are confirmed once a process even when an earlier session made them (`confirmChain`; also `playerdata/` and every live region folder before the barrier acknowledges); an older generation never replaces a newer one; a loaded generation counts as written only after `confirm()` forces the file and folders again; `writeUnforced` un-acknowledges the generations it replaces.
+- **Ledger** (`Stockpiles`): every write, the ordinary `save()` too, goes through the one DurableFile, forced (store and gen kept; about 8 ms per ordinary save); rebuilt at load, dropped at stop. While any player or chunk save is owed (`DurableBarrier.owedDebts`) no ordinary save publishes, and withdraw and dissolve are refused.
+- **Barrier** (`Stockpiles.barrier()` / `DurableBarrier`): players, chunks, ledger; refused when nested, under `/save-off`, after a failed load, on any failed step; the chunk step scopes `explicitSave` and `SaveTiming.explicit` (restored, never reset).
+- **Players** (`PlayerSaves`, `PlayerSaveFailMixin`): the real `safeReplaceOrMoveFile` result per player; a failure is owed with its snapshot (numbered by save attempt; a snapshot older than the newest failed attempt never pays) until a later save succeeds (a respawn's `restoreFrom` copy too) or the snapshot is rewritten (offline: at each barrier and before a login reads the file); a login whose rewrite fails is served the snapshot in place of the older `.dat` (`loadInstead`, before vanilla's data fixer), so a reconnect never starts from older state; only a debt with no snapshot turns stale at a login (an operator's `forgive` clears it); every online player acknowledged, its `.dat` present and forced, then `playerdata/`.
+- **Chunks** (`ChunkDebt`; `IOWorkerDebtMixin`, `ChunkSaveFailMixin`, `ChunkMapDebtMixin`): every IO-worker submission is numbered (`ChunkDebt.Seqd`) and only a write at least as new as the failed attempt pays; a failed region write is owed with its snapshot, resubmitted at each barrier and served to a load unless newer data was submitted since; a failed serialization marks the chunk unsaved at the next barrier (or re-serializes the kept chunk object once it unloaded), and an owed chunk's unload save rewrites it; every `reportChunkSaveFailure` is owed until a later write succeeds, and stale (never paid by a write) once the chunk reloads from the older file without a snapshot.
+- **Native entries** (`RegionFileFlushMixin`, `RegionCreateMixin`, `RegionDurability.forceNew`): `.mcc` payloads and their folder, new `.mca` files' and region folders' entries forced; owed and retried on failure (an owed `.mcc` the commit deleted is paid); every live region folder and its `.mcc` files forced again once a process (debts are not persisted).
+- **Tests:** `DurableT0FixTest` (37; review 2's 10 fail on be9bc649 by assertion, its folder test on 2c2b093c; each finding failing-first: 10 fail by assertion on 042da098, the registry ones fail to compile there; the respawn, stale-chunk and `.mcc` ones fail on b345a16f; the folder-chain and login-served ones on 2c2b093c, the reconnect conservation model (deposit, failed logout replace, reconnect, barrier, crash: items in == items out) compiles only with `loadInstead`), `DurableT0Test` (6), full mod suite 1402 green, api-compat 8/8.
+- **In game** (headless, 9026:9027, `dev.stockpile.barrier` `failPlayerReplace` / `failChunkWrite` / `reps` / `forgive`): each injected failure REFUSED, then OK at the next barrier (debt paid); an ordinary save kept `{store, gen}` on disk.
+- **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
+- **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 4 (Noah: "one more small round"; T0's barrier).**
+  - The staged barrier is T0's `Stockpiles.barrier()` (slice/T0 2c2b093c, merged): players, then chunks, then the ledger. Only OK
+    completes a target; REFUSED or IN_DOUBT keeps it building. This closes the deposit-doubling P1.
+  - Creative `/architect site finish` goes through the barrier too. A barrier that throws takes the same 100-turn retry.
+  - A staged write may set our own block's drifted state to its planned one (no stall on a written leaf whose distance changed). A
+    persistent leaf may go in beside any leaf a log holds.
+  - ST1 can now be armed. The halted target's own recovery is checked: it must complete with 0 cells written again.
+  - x03hdeposit (a deposit, a staged barrier, a crash) fails first on the old code (gate-runs-ST/20261117-060258-change: 2 lanterns
+    minted) and passes with the barrier.
+  - Final strict gate on 200bfc51 (gate-runs-ST/20261117-063123-change): sta-ingame 54/54, rs-survival-smoke 40/0, rl-crash 110/0.
+  - Barrier cost on the built x01 world (3 runs): players 11-142 ms, chunks 10-108 ms, ledger 9-12 ms.
+
+- **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose failed save left no snapshot) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart (folders and `.mcc` are re-confirmed instead); an owed chunk whose kept object can't be serialized again stays owed; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 5 (small fix after ST's final GPT check, which found no P1).** slice/T0 a4531467 is merged.
+  - A drifted-state reset now touches only a cell with evidence it is ours: this run wrote it this session, or it differs from the
+    planned state only in volatile properties. A foreign `oak_log[axis=x]` on a cell planned `oak_log[axis=y]` is left alone (unit test).
+  - x03hdeposit holds the staged targets until the deposit is in, then releases them.
+  - The target that reaches ST1 is recorded in a marker file and asserted on: c1 completed with 0 cells written again.
+  - Runs: sta-ingame 54/54 (gate-runs-ST/20261117-080333-change); rl-crash 110/0 (gate-runs-ST/20261117-073445-change). In that earlier
+    run sta-ingame failed only because the ST1 marker needed the world's architect dir, which a no-stockpile world doesn't have; fixed.

@@ -338,9 +338,12 @@ public final class Stockpiles {
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
+			ChunkDebt.worldClosed(); // (slice T0)
+			PlayerSaves.worldClosed();
 			SERVER = null;
 			PILES.clear();
 			dir = null;
+			ledgerFile = null; // (slice T0) the next world reads its own
 			ticks = 0;
 			lastSaveTick = 0;
 		});
@@ -684,6 +687,7 @@ public final class Stockpiles {
 	 * inventory) or dropped. Returns what went out per item.
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -849,6 +853,7 @@ public final class Stockpiles {
 
 	/** {@code withdraw}: credit only, into the player's inventory (what doesn't fit drops at the player). Returns what came out. */
 	public static Map<String, Integer> withdraw(MinecraftServer srv, String owner, Map<String, Integer> items, ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -880,6 +885,18 @@ public final class Stockpiles {
 			saveLedgerFirst(srv); // (J1, HF's window, audit F5) the Take saved now, the ledger before the player
 		}
 		return out;
+	}
+
+	/**
+	 * (slice T0 review 2 finding 1) A payout (items out of the ledger into a player or the world) is refused while a player or chunk save is
+	 * owed: its ledger save would publish every credit over that debt, and holding it would leave the items both paid and still in stock.
+	 */
+	private static void requireNoDebt() throws Sites.SiteException {
+		java.util.List<String> owed = DurableBarrier.owedDebts();
+		if (!owed.isEmpty()) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, owed.size() + " player or chunk save(s) could not be written; stockpile payouts wait until"
+				+ " they are (" + owed.get(0) + ")");
+		}
 	}
 
 	/** (PS, F6) A new stockpile or crate is refused while the file failed to load: it would be lost (never saved) and reuse the file's ids. */
@@ -2779,13 +2796,14 @@ public final class Stockpiles {
 			maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
 			// disk ahead of the world's chunks either
-			explicitSave = true;
+			boolean wasExplicit = explicitSave(true);
+			boolean wasTiming = SaveTiming.explicit;
 			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
-				explicitSave = false;
-				SaveTiming.explicit = false;
+				explicitSave(wasExplicit); // (slice T0 review P2-10) restored, never reset: a nested save keeps the outer one's scope
+				SaveTiming.explicit = wasTiming;
 			}
 			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
 			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
@@ -2919,6 +2937,13 @@ public final class Stockpiles {
 			refusedSave();
 			return; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
 		}
+		java.util.List<String> owed = DurableBarrier.owedDebts();
+		if (!owed.isEmpty()) {
+			// (slice T0 review 2 finding 1) a player or chunk save is owed: no ledger is published over it (an autosave, a save with the world,
+			// the stop's save), so its credits never reach the disk ahead of what they came from; the ledger stays pending
+			refuseUndurable("a ledger save", owed);
+			return;
+		}
 		MinecraftServer sv = SERVER;
 		if (sv != null && sv.isSameThread()) {
 			try {
@@ -2944,11 +2969,15 @@ public final class Stockpiles {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
-			Files.createDirectories(d);
-			Path tmp = d.resolve(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
-			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
+			// forced like the barrier's write: an unforced replacement could leave a torn file over an acknowledged generation. Cost: one file
+			// and one folder force per ordinary save (the barrier's ledger step measured p50 8 ms on this machine)
+			DurableFile df = ledger(f);
+			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
+			if (put.outcome() == DurableFile.Outcome.REFUSED) {
+				throw new IOException("the ledger's write was refused: " + put.reason());
+			}
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
@@ -2960,12 +2989,90 @@ public final class Stockpiles {
 		}
 	}
 
+	/** (slice T0) The ledger's durable file (its generations persisted in it), made for the world's dir on first use. */
+	private static @Nullable DurableFile ledgerFile;
+
+	/**
+	 * (slice T0) The ledger's one DurableFile for {@code f}: every ledger write (the barrier's and the ordinary save's) goes through it, so the
+	 * store id and generation are never dropped. Made at load ({@link #loadFrom}) and forgotten when the world stops.
+	 */
+	static DurableFile ledger(Path f) {
+		DurableFile df = ledgerFile;
+		if (df == null || !df.file().equals(f)) {
+			df = new DurableFile("stockpiles", f);
+			ledgerFile = df;
+		}
+		return df;
+	}
+
+	/** (slice T0) The ledger's DurableFile of the world loaded now, or null (dev, units). */
+	static @Nullable DurableFile ledgerFile() {
+		return ledgerFile;
+	}
+
+	/**
+	 * (slice T0) Sets the explicit-save flag the world-save callback reads (the barrier writes the ledger itself) and answers the one it
+	 * replaces, so a caller restores it (review P2-10: a nested save never clears an outer one's). Server thread.
+	 */
+	static boolean explicitSave(boolean on) {
+		boolean was = explicitSave;
+		explicitSave = on;
+		return was;
+	}
+
+	/**
+	 * (slice T0, docs/TXN-DESIGN.md §3.1) The world barrier: players, then chunks, then the ledger through {@link DurableFile}; refused under
+	 * {@code /save-off}, after a failed load or on any failed step ({@link DurableBarrier}). Server thread.
+	 */
+	public static DurableBarrier.Result barrier(MinecraftServer srv) {
+		return DurableBarrier.run(srv);
+	}
+
+	/**
+	 * (slice T0) The ledger written as a confirmed snapshot ({@link DurableFile}: temp, force, rename, folder force, its generation in the
+	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
+	 */
+	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		Path d = dir;
+		if (d == null) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
+		}
+		if (loadFailed) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
+		}
+		Path f = d.resolve(FILE);
+		if (PILES.isEmpty() && !Files.exists(f)) {
+			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
+		}
+		try {
+			refreshBooks(srv);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		DurableFile df = ledger(f);
+		DurableFile.Result r = df.write(toJson(), df.request());
+		if (r.ok()) {
+			saves++;
+			unsaved = false;
+			lastSaveTick = ticks;
+		}
+		return r;
+	}
+
 	/** Logs every save (dev: ARCHITECT_TRACE_STOCKPILE=1; the gate's clean-stop check reads it). */
 	static final boolean TRACE_SAVES = System.getenv("ARCHITECT_TRACE_STOCKPILE") != null;
 
 	private static void load(MinecraftServer server) {
 		SERVER = server;
 		RegionDurability.worldOpened(server.getWorldPath(LevelResource.ROOT)); // (SS) only this world's region files count
+		ChunkDebt.worldClosed(); // (slice T0) nothing of an earlier world is owed in this one
+		Path playerDir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+		PlayerSaves.worldOpened((id, snapshot) -> { // (slice T0, TXN item 5) an owed offline player's kept snapshot, written as vanilla writes it
+			Files.createDirectories(playerDir);
+			Path tmp = Files.createTempFile(playerDir, id + "-", ".dat");
+			net.minecraft.nbt.NbtIo.writeCompressed((net.minecraft.nbt.CompoundTag) snapshot, tmp);
+			return net.minecraft.util.Util.safeReplaceOrMoveFile(playerDir.resolve(id + ".dat"), tmp, playerDir.resolve(id + ".dat_old"), false);
+		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 	}
 
@@ -2978,7 +3085,9 @@ public final class Stockpiles {
 		loadFailedWhy = null;
 		refusedLogged = false;
 		Path f = dir.resolve(FILE);
+		ledgerFile = null; // (slice T0 review P1-7) nothing of another session's or world's acknowledgements carries over
 		if (!Files.isRegularFile(f)) {
+			ledger(f);
 			return;
 		}
 		String why = loadFile(f);
@@ -2991,7 +3100,9 @@ public final class Stockpiles {
 			Architect.LOGGER.error("Stockpiles: could not load {} ({}). No stockpile is loaded and none is saved this session, so the file is kept as it"
 				+ " is; fix it or restore {} and reopen the world", f, why, FILE + ".bak");
 			SaveGuards.failed(FILE, why);
+			return;
 		}
+		ledger(f); // its store id and generation read back, the generation confirmed (forced again) before it counts as written
 	}
 
 	/** (PS) Loads the file into the registry; null when it loaded (then it is kept as {@code .bak}), else why not (the registry unchanged or partial). */

@@ -1,6 +1,7 @@
 package dev.larattalabs.architect.site;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
@@ -393,6 +394,170 @@ class TerrainOrderTest {
 			}
 		}
 		return s;
+	}
+
+	// ------------------------------------------------------------------ (8a ST, GPT review P1 1, 4, 5) the live rule
+
+	/** {@link RegionTargets#supportRule} over a map of the world (absent: air; {@code unloaded}: no chunk), no target cell built. */
+	static int rule(BlockPos p, String after, String was, String now, Map<BlockPos, String> world, Set<BlockPos> unloaded, List<BlockPos> floating)
+		throws Exception {
+		Map<BlockPos, BlockState> w = new HashMap<>();
+		for (var e : world.entrySet()) {
+			w.put(e.getKey(), st(e.getValue()));
+		}
+		return RegionTargets.supportRule(p, st(after), was == null ? null : st(was), st(now), o -> unloaded.contains(o) ? null : w.getOrDefault(o,
+			Blocks.AIR.defaultBlockState()), o -> false, o -> false, o -> false, floating);
+	}
+
+	@Test
+	void aLeafNeedsALogNeverTheGround() throws Exception {
+		BlockPos p = new BlockPos(0, 65, 0);
+		Map<BlockPos, String> world = new HashMap<>();
+		world.put(p.below(), "minecraft:stone");
+		String leaf = "minecraft:oak_leaves[persistent=true,distance=1]";
+		assertEquals(RegionTargets.MANDATORY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "a leaf on stone with no log waits");
+		world.put(p.east(), "minecraft:oak_log");
+		assertEquals(RegionTargets.READY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "beside a standing log it goes in");
+		world.remove(p.east());
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=2]");
+		assertEquals(RegionTargets.READY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "beside a leaf a log holds");
+		world.put(p.east(), "minecraft:oak_leaves[persistent=true,distance=7]");
+		assertEquals(RegionTargets.MANDATORY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "not beside a leaf no log holds");
+		// TO's order too: one leaf over solid ground, no log anywhere, is never connected
+		Map<BlockPos, String> c = new java.util.LinkedHashMap<>();
+		c.put(p, leaf);
+		int[] k = {0};
+		order(c, ground(64), List.of(), k);
+		assertEquals(0, k[0], "forTerrain: a leaf with no log is not connected");
+	}
+
+	@Test
+	void aLeafGoesInOnlyWhereVanillaHoldsIt() throws Exception {
+		BlockPos p = new BlockPos(0, 65, 0);
+		Map<BlockPos, String> world = new HashMap<>();
+		String free = "minecraft:oak_leaves[persistent=false,distance=6]";
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=6]");
+		assertEquals(RegionTargets.MANDATORY, rule(p, free, null, "minecraft:air", world, Set.of(), List.of()),
+			"beside a leaf at distance 6 a non-persistent leaf would be at 7 and decay: it waits");
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=5]");
+		assertEquals(RegionTargets.READY, rule(p, free, null, "minecraft:air", world, Set.of(), List.of()), "at 5 it would be at 6: held");
+		// TO's land: a leaf beside a logless external leaf (distance 7) is not connected
+		assertEquals(BuildOrder.LAND_NONE, RegionTargets.terrainLand(st("minecraft:oak_leaves[persistent=true,distance=7]")));
+		assertEquals(BuildOrder.LAND_NONE, RegionTargets.terrainLand(st("minecraft:oak_leaves[persistent=false,distance=6]")));
+		assertEquals(BuildOrder.LAND_LEAF, RegionTargets.terrainLand(st("minecraft:oak_leaves[persistent=false,distance=2]")));
+		Map<BlockPos, String> c = new java.util.LinkedHashMap<>();
+		c.put(p, "minecraft:oak_leaves[persistent=true,distance=1]");
+		int n = 1;
+		long[] pos = {p.asLong()};
+		BlockState[] after = {st(c.get(p))}, before = {Blocks.AIR.defaultBlockState()};
+		BlockState logless = st("minecraft:oak_leaves[persistent=true,distance=7]");
+		BuildOrder.Terrain o = RegionTargets.terrainOrder(pos, after, before, q -> q.equals(p.west()) ? logless : Blocks.AIR.defaultBlockState(), List.of());
+		assertEquals(0, o.connected(), "forTerrain: a logless external leaf holds nothing");
+		assertEquals(1, n);
+	}
+
+	@Test
+	void anUnknownSupportIsReadByLoadingItsChunk() throws Exception {
+		// a loaded, isolated fill at a chunk's edge: five air neighbours, the sixth in a chunk not loaded (stone there)
+		BlockPos p = new BlockPos(15, 66, 0);
+		BlockState stone = Blocks.STONE.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
+		java.util.function.Function<BlockPos, BlockState> loaded = o -> o.getX() >= 16 ? null : air;
+		java.util.function.Function<BlockPos, BlockState> disk = o -> o.getX() >= 16 ? stone : air;
+		int[] none = {0};
+		assertEquals(RegionTargets.UNKNOWN, RegionTargets.supportRule(p, stone, null, air, RegionTargets.loadingWorld(loaded, disk, none), o -> false, o -> false,
+			o -> false, List.of()), "with no load allowed: unknown (the rule before: a wait for ever)");
+		int[] one = {1};
+		assertEquals(RegionTargets.READY, RegionTargets.supportRule(p, stone, null, air, RegionTargets.loadingWorld(loaded, disk, one), o -> false, o -> false,
+			o -> false, List.of()), "its chunk loaded to read it: supported");
+		assertEquals(0, one[0], "one load spent");
+	}
+
+	@Test
+	void aFailedBarrierNeverCompletesOnTheNextTurn() {
+		RegionTargets.Plan pl = new RegionTargets.Plan(0L, new java.util.BitSet(), new int[] {1}, null);
+		int[] calls = {0};
+		assertFalse(RegionTargets.mayComplete(pl, 1000, () -> {
+			calls[0]++;
+			return false;
+		}), "a failed save: still building");
+		assertFalse(RegionTargets.mayComplete(pl, 1001, () -> {
+			calls[0]++;
+			return true;
+		}), "the next turn does not complete without a barrier");
+		assertEquals(1, calls[0], "nor tries one before the retry");
+		assertTrue(RegionTargets.mayComplete(pl, 1000 + RegionTargets.DURABLE_RETRY, () -> {
+			calls[0]++;
+			return true;
+		}), "a later successful barrier completes it");
+		assertEquals(2, calls[0]);
+	}
+
+	@Test
+	void roundFourPersistentLeafRewriteAndThrowingBarrier() throws Exception {
+		// a persistent leaf (it never decays) beside a leaf a log holds at distance 6: it goes in (round 3's rule kept it waiting for ever)
+		BlockPos p = new BlockPos(0, 65, 0);
+		Map<BlockPos, String> world = new HashMap<>();
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=6]");
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:oak_leaves[persistent=true,distance=7]", null, "minecraft:air", world, Set.of(), List.of()));
+		// a written leaf a neighbour changed (its distance), or a waterlogged leaf planned dry, is set to its planned state: our own block
+		BlockState planned = st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=false]");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=4,waterlogged=false]"), planned, false, () -> false),
+			"a volatile property's drift (distance) is ours");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=false,distance=1,waterlogged=false]"), planned, true, () -> false),
+			"a cell this run wrote is ours whatever its state");
+		assertFalse(RegionTargets.mayReplace(false, st("minecraft:cobblestone"), planned, true, () -> false), "a player's block is not ours to replace");
+		assertTrue(RegionTargets.mayReplace(true, st("minecraft:cobblestone"), planned, false, () -> false), "the tile's planned before is");
+		// (round 5, GPT check P2) another writer's block of the same type in another state is not ours (round 4's block-type rule took it)
+		BlockState logY = st("minecraft:oak_log[axis=y]");
+		assertFalse(RegionTargets.mayReplace(false, st("minecraft:oak_log[axis=x]"), logY, false, () -> false), "a foreign oak_log[axis=x] is left alone");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_log[axis=x]"), logY, true, () -> false), "the same cell, written by this run, is ours");
+		// a barrier that throws takes the same retry delay as one that fails
+		RegionTargets.Plan pl = new RegionTargets.Plan(0L, new java.util.BitSet(), new int[] {1}, null);
+		int[] calls = {0};
+		assertFalse(RegionTargets.mayComplete(pl, 500, () -> {
+			calls[0]++;
+			throw new IllegalStateException("injected flush failure");
+		}));
+		assertFalse(RegionTargets.mayComplete(pl, 501, () -> {
+			calls[0]++;
+			return true;
+		}), "no barrier on the next turn after a throw");
+		assertEquals(1, calls[0]);
+	}
+
+	@Test
+	void mandatoryRulesAreNotReleasableAndUnloadedSupportIsUnknown() throws Exception {
+		BlockPos p = new BlockPos(0, 66, 0);
+		// a loose block over air: mandatory (release never writes it), over an unloaded chunk: unknown
+		assertEquals(RegionTargets.MANDATORY, rule(p, "minecraft:sand", null, "minecraft:air", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNKNOWN, rule(p, "minecraft:sand", null, "minecraft:air", Map.of(), Set.of(p.below()), List.of()));
+		// a fill nothing reaches: the only releasable wait; with a neighbour in an unloaded chunk: unknown (no release on a missing chunk)
+		assertEquals(RegionTargets.UNREACHED, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNKNOWN, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(p.west()), List.of()));
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(), List.of(new BlockPos(0, 67, 0))),
+			"under a floating anchor's 3x3");
+		// a fill over a support it replaces counts only while that support still stands
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:dirt", "minecraft:grass_block", "minecraft:grass_block", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNREACHED, rule(p, "minecraft:dirt", "minecraft:grass_block", "minecraft:air", Map.of(), Set.of(), List.of()),
+			"its before mined since: no support");
+	}
+
+	@Test
+	void aStagedCellMatchesOnlyItsWholeState() throws Exception {
+		BlockState snow2 = st("minecraft:snow[layers=2]"), snow3 = st("minecraft:snow[layers=3]");
+		BlockState logY = st("minecraft:oak_log[axis=y]"), logX = st("minecraft:oak_log[axis=x]");
+		assertTrue(dev.larattalabs.architect.journal.Copper.is(snow2, snow3.getBlock()), "the block-only rule (before ST's fix) reads it built");
+		assertFalse(Builder.Run.stagedMatches(snow2, snow3), "a snow layer of the wrong thickness is not built");
+		assertFalse(Builder.Run.stagedMatches(logX, logY), "a log on the wrong axis is not built");
+		assertTrue(Builder.Run.stagedMatches(snow3, snow3));
+		assertFalse(Builder.Run.stagedMatches(st("minecraft:grass_block"), st("minecraft:dirt")), "grass on a cell planned dirt is not built (INSTANT wrote dirt)");
+		// (GPT final review) every property counts for a cell not yet written by its target
+		assertFalse(Builder.Run.stagedMatches(st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=true]"), st(
+			"minecraft:oak_leaves[persistent=true,distance=1,waterlogged=false]")), "waterlogged leaves planned dry are not built");
+		assertFalse(Builder.Run.stagedMatches(st("minecraft:frosted_ice[age=3]"), st("minecraft:frosted_ice[age=0]")), "frosted ice of another age is not built");
+		assertTrue(dev.larattalabs.architect.journal.StillOurs.holds(st("minecraft:frosted_ice[age=3]"), null, st("minecraft:frosted_ice[age=0]"), null)
+			|| dev.larattalabs.architect.journal.StillOurs.holds(st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=true]"), null, st(
+				"minecraft:oak_leaves[persistent=true,distance=1,waterlogged=false]"), null), "the journal's leniency (the rule before) reads one of them built");
 	}
 
 	@Test

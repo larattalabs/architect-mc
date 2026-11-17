@@ -361,6 +361,9 @@ export function markSurvival(ir, r, programId) {
   ir.parts.forEach((p, i) => { parts[p.id] = groups.indexOf(ids[i]); });
   const pads = [...new Set((ir.lots ?? []).map((l) => l.part))].filter((x) => parts[x] !== undefined).sort();
   ir.survival = { format: 1, groups, parts, pads };
+  // (8a ST, GPT review P1) a fluid op with decor compiles a second op (its bed): the survival flags are read per compiled op's own IR op.
+  // Marked only where the two mappings differ, so an IR accepted before the fix (no mark) evaluates as it was quoted (lib/realise.mjs)
+  if (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid' && Array.isArray(o.decor) && o.decor.length))) ir.survival.opMap = 'compiled';
   // (6c RS-b, §6.4, §7.2) the tunnels' bores: per bore its group, its start walk cell, its cardinal heading and its box, so the mod builds
   // the group's target ring by ring along the heading (a ring's lining, then the carve behind it). Only a plan with a tunnel has it.
   const bores = (r.meta.tunnels ?? []).filter((t) => parts[t.part] !== undefined).map((t) => ({ group: groups[parts[t.part]], from: [...t.from], dir: [...t.dir], box: [t.box.minX, t.box.minY, t.box.minZ, t.box.maxX, t.box.maxY, t.box.maxZ] }));

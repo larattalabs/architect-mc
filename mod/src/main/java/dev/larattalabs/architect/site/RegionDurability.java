@@ -29,8 +29,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * covered, and every owed path. A stockpile save with the world, and the world save's ledger write, refuse to publish while it is not
  * empty.</li>
  * <li><b>World scope:</b> only files under the running world's directory count; everything is forgotten when the world closes.</li>
- * <li><b>Not tracked (inherited from vanilla):</b> an oversized chunk's external {@code .mcc} payload (vanilla never forces it or its
- * rename), and a chunk write that fails before it reaches the region file (vanilla reports it; there is nothing a force could save).</li>
+ * <li><b>Forced here, not by vanilla</b> (slice T0 review P1-4, {@link #forceNew}): an oversized chunk's external {@code .mcc} payload and
+ * its folder entry, and a new region file's (and new region folder's) entry. A chunk write that fails before it reaches the region file is
+ * {@link ChunkDebt}'s: owed until a later write of that chunk succeeds.</li>
  * </ul>
  * A file's writes and flushes run on its storage's IO worker, one task at a time; the counters are atomic or volatile anyway.
  */
@@ -145,11 +146,13 @@ public final class RegionDurability {
 				continue;
 			}
 			long started = epoch;
+			if (p.getFileName().toString().endsWith(".mcc") && !java.nio.file.Files.exists(p)) {
+				OWED.remove(p, e.getValue()); // the chunk went back inline (the commit deleted its .mcc); the region file's write covers it
+				continue;
+			}
 			try {
 				failIfAsked(p);
-				try (FileChannel c = FileChannel.open(p, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
-					c.force(true);
-				}
+				forcePath(p);
 				OWED.remove(p, e.getValue());
 				credit(started);
 				RETRIED.incrementAndGet();
@@ -158,6 +161,92 @@ public final class RegionDurability {
 			}
 		}
 		return left;
+	}
+
+	/** A file forced, or a folder (its entries; slice T0: a new region file's or an oversized chunk's .mcc entry). */
+	private static void forcePath(Path p) throws IOException {
+		if (java.nio.file.Files.isDirectory(p)) {
+			DurableFile.forceDir(p);
+			return;
+		}
+		try (FileChannel c = FileChannel.open(p, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+			c.force(true);
+		}
+	}
+
+	/**
+	 * (slice T0 review P1-4) A file or folder vanilla never forces, forced now: an oversized chunk's external {@code .mcc} payload (after its
+	 * rename, with the region folder), a new region file's folder entry, a new region folder's entry in its parent. A force that fails leaves
+	 * the path owed (as a close's), so {@link #undurable} lists it and {@link #retryOwed} retries it before each ledger save. Any thread.
+	 */
+	public static boolean forceNew(Path p, String type) {
+		try {
+			failIfAsked(p);
+			forcePath(p);
+			NEW_FORCED.incrementAndGet();
+			return true;
+		} catch (IOException | RuntimeException e) {
+			OWED.put(p, type);
+			dev.larattalabs.architect.Architect.LOGGER.error("Region durability: {} could not be forced ({}); owed until a ledger save's retry forces it", p,
+				e.toString());
+			return false;
+		}
+	}
+
+	/** {@link #forceNew(Path, String)} with the storage type of a region file's state. */
+	public static boolean forceNew(State s, Path p) {
+		return forceNew(p, s.type);
+	}
+
+	/** (slice T0, dev) new files and folders forced by {@link #forceNew}. */
+	static final AtomicLong NEW_FORCED = new AtomicLong();
+
+	/**
+	 * (TXN review 4 item 1) Every live region file's folder of these storage types confirmed ({@link DurableFile#confirmChain}: the region
+	 * folder's entry and its parent's, once a process). Answers the folders that could not be. Server thread, before the ledger.
+	 */
+	public static List<String> confirmFolders(String... types) {
+		List<String> left = new ArrayList<>();
+		java.util.Set<Path> dirs = new java.util.HashSet<>();
+		for (State s : LIVE) {
+			if (typed(s.type, types) && inWorld(s.path) && s.path.toAbsolutePath().getParent() != null) {
+				dirs.add(s.path.toAbsolutePath().normalize().getParent());
+			}
+		}
+		for (Path d : dirs) {
+			try {
+				DurableFile.confirmChain(d, 2);
+				confirmContents(d);
+			} catch (IOException | RuntimeException e) {
+				left.add("folder " + d + " (its entry could not be confirmed: " + e + ")");
+			}
+		}
+		return left;
+	}
+
+	/** Region folders whose entries (the .mca files') and .mcc payloads were forced in this process. */
+	private static final Set<Path> CONTENTS_CONFIRMED = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * (T0 review 2 finding 5) Once a process, before the first barrier publishes over a region folder: the folder forced (every region file's
+	 * entry in it) and every {@code .mcc} payload in it forced. A force that failed in an earlier session left no debt behind (debts are not
+	 * persisted); this re-confirms what that session may have left only in the page cache.
+	 */
+	static void confirmContents(Path dir) throws IOException {
+		if (CONTENTS_CONFIRMED.contains(dir)) {
+			return;
+		}
+		try (java.nio.file.DirectoryStream<Path> ds = java.nio.file.Files.newDirectoryStream(dir, "*.mcc")) {
+			for (Path p : ds) {
+				failIfAsked(p);
+				try (FileChannel c = FileChannel.open(p, StandardOpenOption.READ)) {
+					DurableFile.FORCER.file(c);
+				}
+			}
+		}
+		failIfAsked(dir);
+		DurableFile.FORCER.dir(dir);
+		CONTENTS_CONFIRMED.add(dir);
 	}
 
 	/** A world save starts (saveAllChunks' head). */
@@ -196,7 +285,7 @@ public final class RegionDurability {
 		}
 		OWED.forEach((p, t) -> {
 			if (typed(t, types) && inWorld(p)) {
-				out.add(t + " " + p + " (a close's force did not return)");
+				out.add(t + " " + p + " (a force did not return: a close's, a new file's or folder's)");
 			}
 		});
 		return out;

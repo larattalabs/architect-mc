@@ -19,8 +19,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <ul>
  * <li>Writes: every write of the region file's channel goes through {@code writeHeader} ({@code write} after its sectors, {@code clear});
  * {@code padToFullSector} runs only in {@code close}, which forces. A bytecode test pins this.</li>
- * <li>Not tracked, as in vanilla: an oversized chunk's payload ({@code writeToExternalFile}, its own .mcc channel and rename, which vanilla
- * never forces). The region file's stub and header still go through {@code writeHeader}.</li>
+ * <li>(slice T0, review P1-4) An oversized chunk's payload ({@code writeToExternalFile}: its own .mcc channel and rename, which vanilla
+ * never forces) is forced after the write commits, with its folder ({@link RegionDurability#forceNew}: owed when that fails). The region
+ * file's stub and header still go through {@code writeHeader}.</li>
  * </ul>
  */
 @Mixin(RegionFile.class)
@@ -32,6 +33,39 @@ public abstract class RegionFileFlushMixin {
 		+ "Lnet/minecraft/world/level/chunk/storage/RegionFileVersion;Z)V", at = @At("RETURN"))
 	private void architect$open(RegionStorageInfo info, Path path, Path externalFileDir, RegionFileVersion version, boolean sync, CallbackInfo ci) {
 		architect$state = RegionDurability.open(path, info.type());
+	}
+
+	@org.spongepowered.asm.mixin.Shadow
+	@org.spongepowered.asm.mixin.Final
+	private Path externalFileDir;
+
+	@org.spongepowered.asm.mixin.Shadow
+	private Path getExternalChunkPath(net.minecraft.world.level.ChunkPos pos) {
+		throw new AssertionError();
+	}
+
+	@Unique
+	private boolean architect$external;
+
+	@Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Ljava/nio/ByteBuffer;)V", at = @At("HEAD"), require = 1)
+	private void architect$writeStarts(net.minecraft.world.level.ChunkPos pos, java.nio.ByteBuffer buf, CallbackInfo ci) {
+		architect$external = false; // a write that threw before its RETURN never leaves the flag set for the next one
+	}
+
+	@Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Ljava/nio/ByteBuffer;)V", at = @At(value = "INVOKE",
+		target = "Lnet/minecraft/world/level/chunk/storage/RegionFile;writeToExternalFile(Ljava/nio/file/Path;Ljava/nio/ByteBuffer;)Lnet/minecraft/world/level/chunk/storage/RegionFile$CommitOp;"),
+		require = 1)
+	private void architect$external(net.minecraft.world.level.ChunkPos pos, java.nio.ByteBuffer buf, CallbackInfo ci) {
+		architect$external = true;
+	}
+
+	@Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Ljava/nio/ByteBuffer;)V", at = @At("RETURN"), require = 1)
+	private void architect$externalCommitted(net.minecraft.world.level.ChunkPos pos, java.nio.ByteBuffer buf, CallbackInfo ci) {
+		if (architect$external) {
+			architect$external = false;
+			RegionDurability.forceNew(architect$state, getExternalChunkPath(pos)); // the .mcc's data (renamed into place by the commit)
+			RegionDurability.forceNew(architect$state, externalFileDir); // and its entry
+		}
 	}
 
 	@Inject(method = "writeHeader", at = @At("HEAD"))

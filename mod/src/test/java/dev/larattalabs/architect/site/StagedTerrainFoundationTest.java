@@ -59,10 +59,10 @@ class StagedTerrainFoundationTest {
 	}
 
 	@Test
-	void classThreeIsStagedAndWrittenInTheFreePassUntilST() {
+	void classThreeIsStagedAndATargetFromST() {
 		Packed.Tile t = Packed.decode(artl(Packed.STAGED, Packed.FREE));
 		assertArrayEquals(new byte[] {Packed.STAGED, Packed.FREE}, t.cls());
-		assertTrue(Packed.freePass(Packed.STAGED));
+		assertEquals(!Packed.stagedBuild(), Packed.freePass(Packed.STAGED), "(8a ST) a staged cell is the free pass only with staged terrain off");
 		assertTrue(Packed.freePass(Packed.FREE));
 		assertFalse(Packed.freePass(Packed.HELD));
 		assertFalse(Packed.freePass(Packed.PAID));
@@ -88,7 +88,7 @@ class StagedTerrainFoundationTest {
 
 	@Test
 	void theFeatureFollowsTheHelper() {
-		assertTrue(ApiRules.features(2, List.of("job.run", "region.plan", "region.survival", "region.terrainConstruction")).contains("terrainConstruction"));
+		assertEquals(Packed.stagedBuild(), ApiRules.features(2, List.of("job.run", "region.plan", "region.survival", "region.terrainConstruction")).contains("terrainConstruction"));
 		assertFalse(ApiRules.features(2, List.of("job.run", "region.plan", "region.survival")).contains("terrainConstruction"));
 		assertFalse(ApiRules.JAVA_FEATURES.contains("terrainConstruction"));
 	}
