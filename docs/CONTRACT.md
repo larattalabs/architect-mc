@@ -31331,6 +31331,31 @@ without them; slabs unpickupable and untransferable from declared containers; st
   `success` flag, the same seal-state lag). Fixed (`dev.seal.state` rebuilds the set first) and re-run `20261116-141426-change` at 50a59d77:
   lc3-undo 30/0, lc3-seal 40/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
+#### LC3 round 4 (the GPT final pass, NOT SAFE at f6a982f6: abandon's custody P1, FK-b's guard P2; $0, strict)
+
+- **P1 durable custody return:** `Groups.abandonSteps` orders the abandon: every unwritten pending member's custody back (memory), then ONE
+  save confirmed durable (`Stockpiles.saveWithWorldConfirmed`: players, chunks flushed with every write known durable (SS), then the ledger's
+  temporary file forced and renamed; false on a refused, undurable or failed write, or stockpiles that failed to load), and only then the
+  journal release, `Sites.dropPending`/`Infras.drop` and the stalled list plus queue save. An unconfirmed save stops before any record changes
+  (the command answers so; still stalled and sealed; re-runnable). Refused up front when a filled member's stockpiles failed to load.
+- **Idempotent return** (`Fills.writeBackAbandoned`): a declared slot already holding its item counts as written back (a crash between the
+  save's chunks and its ledger); billed items with no declared slot are credited to the stockpile (a ledger change in the same save), never
+  dropped. A retried stalled removal (`retakeCustody`, before `resume`) takes custody again for an unwritten filled member holding none (a
+  crash after the save, before the records), so its restore refunds it once.
+- **P2:** the abandoned member keeps no record, so FillGuard would guard nothing: its provided items are settled by FK-b's rule, never
+  written back (held ones released and destroyed; any provided stack in its declared containers stripped).
+- **Kill points** (`dev.journal.killAt`): AB1 custody back in memory; AB2 inside the save (chunks on disk, ledger not); AB3 save confirmed,
+  no record dropped; AB4 records dropped, queue not saved. `dev.seal.state` stalled entries carry `current`.
+- **Units:** `AbandonCustodyTest`: a crash model over the recorded steps (once at every prefix; f6a982f6's order strands the custody and
+  fails it; an unconfirmed save touches no record), the idempotent return, the strip, `needsRetake`, the load-failed refusal.
+- **lc3-undo** adds the abandon crash cases on FK-b's filled town (`fkbFixture`, exported from gatem5fkb.mjs), the removal STALLED at its
+  member (`dev.undo.failRestore {stallBefore}`, new: a survival site deconstructs at once, so no RestoreJob breaks): clean (plus a restart) and AB1-AB4 (halted, restarted: still stalled; abandoned again): the billed items once (containers
+  plus stock gained = the bill), no custody or held slabs left, nothing dropped, no provided slab in the containers (f6a982f6's writeBack put the
+  16 slabs back there, unguarded), loose or with the player.
+- **Leftovers:** the ledger's `filled`/`provided`/paid records of an abandoned member's key stay (keyed by placement, inert); the retry's
+  re-take is shown by units and source only; the queue save at the end is still LC3's (PSV rebase pending).
+- **Gate:** RESULTS
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
