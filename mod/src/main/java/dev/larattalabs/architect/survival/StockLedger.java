@@ -16,7 +16,8 @@ import org.jspecify.annotations.Nullable;
  * <b>consumed</b> (placed by the builder), <b>withdrawn</b> (taken out as credit, or handed to a player by a dissolve) and
  * <b>dropped</b> (taken out of stock and dropped as items: a forced crate removal's excess, a dissolve at a crate, an adopted
  * crate's overflow). At every moment, per item: {@code stock = delivered + returned - consumed - withdrawn - dropped >= 0}.
- * <b>refundOverflow</b> counts refunds that never entered the stock (no room): it is outside the identity.
+ * <b>refundOverflow</b> counts unkeyed give-backs that never entered the stock (no room): it is outside the identity. (Slice OVF) A keyed
+ * credit (refund, region charge or scoop) never overflows: all of it enters the stock, past capacity if need be.
  *
  * <p>Capacity is counted in stacks: {@code usedStacks} is the sum over items of {@code ceil(stock / maxStackSize)}; a unit enters
  * only while it fits (a partly filled stack takes more of its item; a new stack needs a free one). Stock above capacity (a crate
@@ -334,12 +335,23 @@ public final class StockLedger {
 	 */
 	public Ledger.@Nullable Accepted accept(String item, ToIntFunction<String> unbuilt, Equivalents eq, int capacityStacks, ToIntFunction<String> maxStack,
 		boolean commit) {
+		return accept(item, unbuilt, it -> 0, eq, capacityStacks, maxStack, commit);
+	}
+
+	/**
+	 * (slice OVF) {@link #accept}, and while the stock is over capacity (a keyed refund left it there) a unit still goes in when the owner's
+	 * <b>active</b> (unpaused) targets miss it ({@code activeUnbuilt.applyAsInt(item) > stock}), up to what they still miss: an active build
+	 * never deadlocks on a missing item it can't be given. Everything else is refused over capacity, as before.
+	 */
+	public Ledger.@Nullable Accepted accept(String item, ToIntFunction<String> unbuilt, ToIntFunction<String> activeUnbuilt, Equivalents eq, int capacityStacks,
+		ToIntFunction<String> maxStack, boolean commit) {
 		Ledger.Accepted a = null;
-		if (missing(item, unbuilt) > 0 && room(item, capacityStacks, maxStack) >= 1) {
+		boolean over = usedStacks(maxStack) > capacityStacks;
+		if (missing(item, unbuilt) > 0 && (over ? missing(item, activeUnbuilt) >= 1 : room(item, capacityStacks, maxStack) >= 1)) {
 			a = new Ledger.Accepted(item, 1, false);
 		} else {
 			for (Equivalents.Path p : eq.paths(item)) {
-				if (missing(p.item(), unbuilt) > 0 && room(p.item(), capacityStacks, maxStack) >= p.count()) {
+				if (missing(p.item(), unbuilt) > 0 && (over ? missing(p.item(), activeUnbuilt) >= p.count() : room(p.item(), capacityStacks, maxStack) >= p.count())) {
 					a = new Ledger.Accepted(p.item(), p.count(), true);
 					break;
 				}
@@ -361,6 +373,11 @@ public final class StockLedger {
 	 * empty bucket back (N-H-1): it is credited unkeyed through {@link #giveBack}; what does not fit is in {@code overflowOut}.
 	 */
 	public boolean consume(String item, int n, int capacityStacks, ToIntFunction<String> maxStack, Map<String, Integer> overflowOut) {
+		return consume(item, n, capacityStacks, maxStack, overflowOut, false);
+	}
+
+	/** (OVF) {@link #consume}; {@code unbounded}: the empty bucket enters the stock past capacity (a keyed charge's: never dropped). */
+	private boolean consume(String item, int n, int capacityStacks, ToIntFunction<String> maxStack, Map<String, Integer> overflowOut, boolean unbounded) {
 		if (n <= 0) {
 			return true;
 		}
@@ -369,7 +386,7 @@ public final class StockLedger {
 		}
 		add(consumed, item, n);
 		if (item.endsWith("_bucket") && !item.equals(BUCKET) && item.startsWith("minecraft:")) {
-			Credit c = giveBack(Map.of(BUCKET, n), capacityStacks, maxStack);
+			Credit c = giveBack(Map.of(BUCKET, n), capacityStacks, maxStack, unbounded);
 			c.overflow().forEach((k, v) -> overflowOut.merge(k, v, Integer::sum));
 		}
 		return true;
@@ -386,7 +403,7 @@ public final class StockLedger {
 			return false;
 		}
 		for (var e : new TreeMap<>(items).entrySet()) {
-			consume(e.getKey(), e.getValue(), capacityStacks, maxStack, overflowOut);
+			consume(e.getKey(), e.getValue(), capacityStacks, maxStack, overflowOut, true); // (OVF) its bucket never overflows
 		}
 		charges.put(key, new Charge(Map.copyOf(new TreeMap<>(items)), rid));
 		return true;
@@ -398,8 +415,9 @@ public final class StockLedger {
 	}
 
 	/**
-	 * Credits refunds under {@code key}, once (§4): up to capacity into {@code returned}, the rest into {@code refundOverflow}
-	 * (the caller drops it as items). A key credited before credits nothing ({@link Credit#already}).
+	 * Credits refunds under {@code key}, once (§4), into {@code returned}: (slice OVF) all of it, past capacity if need be (the stock then
+	 * reads over capacity and nothing new enters until it fits), so {@link Credit#overflow} is empty and nothing drops. A key credited
+	 * before credits nothing ({@link Credit#already}).
 	 */
 	public Credit credit(String key, Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack) {
 		if (credited.contains(key)) {
@@ -422,16 +440,16 @@ public final class StockLedger {
 		if (deltaOf != null) {
 			// (JR) a construction delta's refund: from its site's record (taken out of it, as a retake)
 			Map<String, Integer> in = fromPaid(deltaOf, items);
-			Credit c = giveBack(in, capacityStacks, maxStack);
+			Credit c = giveBack(in, capacityStacks, maxStack, true);
 			return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
 		}
 		if (!targetKey(key)) {
-			return giveBack(items, capacityStacks, maxStack);
+			return giveBack(items, capacityStacks, maxStack, true);
 		}
 		// (JR) never more than the saved ledger says this target consumed; the record is spent with its refund (no record: the legacy pool)
 		Map<String, Integer> rec = paid.remove(key);
 		Map<String, Integer> in = capRecordThenLegacy(items, rec == null ? new TreeMap<>() : new TreeMap<>(rec), placedAtOf(key));
-		Credit c = giveBack(in, capacityStacks, maxStack);
+		Credit c = giveBack(in, capacityStacks, maxStack, true);
 		return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
 	}
 
@@ -717,6 +735,14 @@ public final class StockLedger {
 
 	/** Credits items with no key (a swap's old block as it happens, a bucket's container): up to capacity, the rest overflow. */
 	public Credit giveBack(Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack) {
+		return giveBack(items, capacityStacks, maxStack, false);
+	}
+
+	/**
+	 * (slice OVF) {@link #giveBack}; {@code unbounded}: everything enters the stock, past capacity if need be, and nothing overflows. A keyed
+	 * credit's (its key and its stock land in one ledger write: exactly once across any crash, with no item entity to pay twice or lose).
+	 */
+	private Credit giveBack(Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack, boolean unbounded) {
 		Map<String, Integer> in = new TreeMap<>();
 		Map<String, Integer> over = new TreeMap<>();
 		for (var e : new TreeMap<>(items).entrySet()) {
@@ -724,7 +750,7 @@ public final class StockLedger {
 			if (n <= 0) {
 				continue;
 			}
-			int fit = Math.min(n, room(e.getKey(), capacityStacks, maxStack));
+			int fit = unbounded ? n : Math.min(n, room(e.getKey(), capacityStacks, maxStack));
 			if (fit > 0) {
 				add(returned, e.getKey(), fit);
 				in.put(e.getKey(), fit);
