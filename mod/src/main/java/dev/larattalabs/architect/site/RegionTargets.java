@@ -1458,7 +1458,12 @@ public final class RegionTargets {
 		srv.saveAllChunks(true, true, false);
 		TERRAIN_SAVES.incrementAndGet();
 		RegionDurability.retryOwed();
-		return RegionDurability.undurable("chunk", "entities").isEmpty();
+		boolean ok = RegionDurability.undurable("chunk", "entities").isEmpty();
+		if (ok) {
+			// (rule 18, TEST kill point ST1) a crash at the barrier: its chunks saved and flushed, the target not yet marked BUILT
+			dev.larattalabs.architect.journal.WorldJournal.kill("ST1");
+		}
+		return ok;
 	}
 
 	private static boolean SAVE_OFF_SAID;

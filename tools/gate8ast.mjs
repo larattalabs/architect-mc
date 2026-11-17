@@ -237,7 +237,22 @@ async function crashAndRemove(tag, fx) {
   const ck = await G.check(ctx, tag, s);
   if (!ck.check?.artifactSha) { check(false, `${tag}: no artifact (${ck.check?.overall})`); return out; }
   await call('dev.terrain.rate', { n: 16 }, 30_000);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  // (rule 18) the crash at the barrier itself: ST1 halts once the first target's chunks are saved, before it is marked BUILT
+  await call('dev.journal.killAt', { point: 'ST1' }, 10_000);
   const region = await G.realise(ctx, ck.check.artifactSha, {});
+  const downST1 = await haltWait();
+  check(downST1, `${tag}: kill point ST1 halted the server at the first target's durability barrier (chunks saved, not BUILT)`);
+  await L.openWorld(s.world);
+  await L.settle(4000);
+  await call('dev.journal.killAt', { point: null }, 10_000).catch(() => {});
+  await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
+  const trK = await call('dev.region.terrain', { region, check: true }, 300_000);
+  out.afterST1 = (trK.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells, t.missing]);
+  check((trK.targets ?? []).length > 0 && (trK.targets ?? []).every((t) => (t.missing ?? 0) === 0), `${tag}: after ST1 every staged target reads its cells from the saved world (a target halted at its barrier is still building, none missing: ${json(out.afterST1)})`);
+  const pK = await C.point('after ST1');
+  check(G.exact(pK), `${tag}: items in = items out after the ST1 crash (conservation ${json(pK.diff)}, identity ${pK.identity})`);
   let tr = null;
   for (let i = 0; i < 600; i++) {
     tr = await call('dev.region.terrain', { region }, 120_000);
@@ -272,6 +287,8 @@ async function crashAndRemove(tag, fx) {
   await L.settle(3000);
   const e = await G.diff(ctx, box, pre);
   out.eflat = { mismatches: e.mismatches, list: e.list.slice(0, 8) };
+  const pE = await C.point('removed');
+  check(G.exact(pE), `${tag}: items in = items out after the crash, the restart and the removal (conservation ${json(pE.diff)}, identity ${pE.identity})`);
   check(tr2 && tr2.built < tr2.cells && e.mismatches === 0, `${tag}: removed half built (${tr2?.built} of ${tr2?.cells} staged cells): E-flat ${e.mismatches} over the box (no staged write after the removal started)`, out.eflat);
   return out;
 }
@@ -288,6 +305,8 @@ async function saveOff(tag, fx) {
   const ck = await G.check(ctx, tag, s);
   if (!ck.check?.artifactSha) { check(false, `${tag}: no artifact (${ck.check?.overall})`); return out; }
   await call('dev.terrain.rate', { n: 16 }, 30_000);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
   await L.cmd('/save-off');
   const region = await G.realise(ctx, ck.check.artifactSha, {});
   let tr = null, heldAt = null;
@@ -312,6 +331,8 @@ async function saveOff(tag, fx) {
   await G.remove(ctx, region);
   const e = await G.diff(ctx, box, pre);
   check(e.mismatches === 0, `${tag}: Regions.remove: E-flat ${e.mismatches}`, e.list.slice(0, 8));
+  const p = await C.point('removed');
+  check(G.exact(p), `${tag}: items in = items out (conservation ${json(p.diff)}, identity ${p.identity})`);
   return out;
 }
 
