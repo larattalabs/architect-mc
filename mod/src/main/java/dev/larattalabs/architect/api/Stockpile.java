@@ -15,8 +15,11 @@ import net.minecraft.world.level.Level;
  * <p>Since 1.66.0 (slice OVF): a keyed refund (a removal's deconstruct, a construction delta's, a region's charge or scoop) never
  * overflows: all of it enters the stock, past capacity if need be, and nothing drops at the crate. {@code usedStacks} can then exceed
  * {@code capacityStacks}; until it fits again nothing new enters, except a delivery of an item the owner's active (unpaused) builds
- * still miss, up to what they miss, so an active build never deadlocks. {@code refundOverflow} counts only unkeyed give-backs (a swap's old
- * block, a consumed lava bucket's empty bucket).
+ * still miss, up to what they miss, so an active build never deadlocks.
+ *
+ * <p>Since NEXT (slice T0): every give-back enters the stock, unkeyed ones too (a swap's old block, an empty bucket, a start reconcile's
+ * refund), past capacity if need be; nothing drops at a crate. {@code refundOverflow} is a historical counter (give-backs that did not fit
+ * before then): read and kept, it no longer grows.
  *
  * @param crates the crate cells (missing ones included, see {@code missingCrates})
  * @param capacityStacks 27 stacks per present crate

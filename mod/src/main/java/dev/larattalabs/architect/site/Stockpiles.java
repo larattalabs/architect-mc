@@ -1495,9 +1495,8 @@ public final class Stockpiles {
 			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over); // (OVF) keyed: its empty buckets never overflow
 		} else {
 			for (var e : new TreeMap<>(items).entrySet()) {
-				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over, true); // (slice T0) its empty buckets enter the stock
 			}
-			dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		}
 		changed(p);
 		if (key != null) {
@@ -1736,31 +1735,50 @@ public final class Stockpiles {
 	/** (J1, TEST) kill point AS1: the next unflushed world save halts after its chunk writes, before the ledger's. */
 	static volatile boolean haltBeforeAutosaveLedger;
 
-	/** Credits without a key (a swap's old block, a bucket's container) as it happens. */
+	/** The feed's charge of a placed cell's cost under the target's credit key (the live Purse.pay). */
+	static void feedPay(MinecraftServer srv, Pile p, String key, List<SurvivalItems.Cost> costs, int cap, @Nullable Map<String, Integer> drawn,
+		BlockPos fallback) {
+		Map<String, Integer> over = new TreeMap<>();
+		for (SurvivalItems.Cost c : costs) {
+			// (slice T0) a filled bucket's empty one enters the stock, past capacity if need be: never dropped (a drop saved with the world before a
+			// failed ledger write would exist twice once the reconcile charges the cell again)
+			if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over, true)) {
+				p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
+				if (drawn != null) {
+					drawn.merge(c.item(), c.count(), Integer::sum);
+				}
+			}
+		}
+	}
+
+	/** (RL, audit F7) A construction swap's old block, live (Purse.giveBackPaid): out of the target's paid record, capped by it, credited. */
+	static Map<String, Integer> swapGiveBack(MinecraftServer srv, Pile p, String targetId, Map<String, Integer> items, long placedAt, BlockPos fb) {
+		Map<String, Integer> back = p.ledger.fromPaid(targetId, items, placedAt); // (JR-b)
+		Stockpiles.changed(p); // (PS) the record moved
+		if (!back.equals(items)) {
+			Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back, items);
+		}
+		if (!back.isEmpty()) {
+			Stockpiles.giveBack(srv, p, back, fb);
+		}
+		return back;
+	}
+
+	/**
+	 * Credits without a key (a swap's old block, a bucket's container) as it happens: (slice T0) all of it, past capacity if need be, as OVF
+	 * credits a keyed refund; nothing drops. A drop would be saved with the world before the ledger: after a failed ledger write and a crash
+	 * the item would lie on the ground while the old book's reconcile credited it into the stock again.
+	 */
 	static StockLedger.Credit giveBack(MinecraftServer srv, Pile p, Map<String, Integer> items, BlockPos fallback) {
-		StockLedger.Credit c = p.ledger.giveBack(items, capacity(srv, p), Stockpiles::maxStack);
-		dropOverflow(srv, p, c.overflow(), fallback);
+		StockLedger.Credit c = p.ledger.giveBack(items, capacity(srv, p), Stockpiles::maxStack, true);
 		changed(p);
 		return c;
 	}
 
-	static void dropOverflow(MinecraftServer srv, Pile p, Map<String, Integer> over, BlockPos fallback) {
-		if (over.isEmpty()) {
-			return;
-		}
-		ServerLevel level = Sites.levelOf(srv, p.dimension);
-		if (level != null) {
-			Builder.dropItems(level, dropAt(srv, p, fallback), over, null);
-			OVERFLOW_DROPPED.merge(p.id, sumOf(over), Integer::sum);
-		}
-	}
-
-	private static int sumOf(Map<String, Integer> m) {
-		return m.values().stream().mapToInt(Integer::intValue).sum();
-	}
-
 	/** Dev: overflow units dropped as entities this session, per owner (the gate counts the entities against it). */
-	static final Map<String, Integer> OVERFLOW_DROPPED = new ConcurrentHashMap<>();
+	static final Map<String, Integer> OVERFLOW_DROPPED = new ConcurrentHashMap<>(); // (dev, historical) nothing drops since slice T0: stays 0
+	/** (TEST) what a give-back dropped: nothing since slice T0 finished the no-drop rule (stays empty; the no-drop test reads it). */
+	static final Map<String, Integer> LAST_DROP = new ConcurrentHashMap<>();
 
 	// ------------------------------------------------------------------ the owner feed loop
 
@@ -1948,17 +1966,7 @@ public final class Stockpiles {
 
 					@Override
 					public void pay(List<SurvivalItems.Cost> costs) {
-						Map<String, Integer> over = new TreeMap<>();
-						String key = keyOf(t);
-						for (SurvivalItems.Cost c : costs) {
-							if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over)) {
-								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
-								if (drawn != null) {
-									drawn.merge(c.item(), c.count(), Integer::sum);
-								}
-							}
-						}
-						dropOverflow(srv, p, over, fallback);
+						feedPay(srv, p, keyOf(t), costs, cap, drawn, fallback);
 					}
 
 					@Override
@@ -1968,17 +1976,7 @@ public final class Stockpiles {
 
 					@Override
 					public Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fb) {
-						// (RL, audit F7) a swap's old block: out of the target's paid record, capped by it
-						Map<String, Integer> back = p.ledger.fromPaid(targetId, items, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt()); // (JR-b)
-						Stockpiles.changed(p); // (PS) the record moved
-						if (!back.equals(items)) {
-							Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back,
-								items);
-						}
-						if (!back.isEmpty()) {
-							Stockpiles.giveBack(srv, p, back, fb);
-						}
-						return back;
+						return swapGiveBack(srv, p, targetId, items, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt(), fb);
 					}
 
 					@Override

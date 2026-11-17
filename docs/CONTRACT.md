@@ -12077,14 +12077,17 @@ record ItemCount(Item item, int count) {}
 ### 4. Ledger and refund routing (C24)
 
 - **Identity, per item, at every tick:** `stock = delivered + returned - consumed - withdrawn - dropped >= 0`.
-  `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it) is outside the identity.
+  `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it, before slice T0; it no longer grows) is
+  outside the identity.
   `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
 - **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
   owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. **(Slice OVF)** A keyed refund
   (every case below, and a region's keyed charge and scoop) never overflows: all of it is returned, past capacity if need be (until the
   stock fits again nothing new enters, except a delivery of an item the owner's active, unpaused builds still miss, up to what they
-  miss), so its key and its items land in one ledger write and nothing drops. Only unkeyed
-  give-backs still overflow. For a stockpile target:
+  miss), so its key and its items land in one ledger write and nothing drops. **(Slice T0, "finish the no-drop rule")** Unkeyed
+  give-backs (a construction swap's old block, the feed's and a charge's empty buckets, the start reconcile's refunds) enter the stock the
+  same way: every give-back enters the stock, nothing drops, and `refundOverflow` no longer grows (a historical counter, read and kept on
+  load). For a stockpile target:
   - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
     returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
   - construction-delta refunds (removed cells at the start, `refundSwap` at the swap) and a survival revert's refunds;

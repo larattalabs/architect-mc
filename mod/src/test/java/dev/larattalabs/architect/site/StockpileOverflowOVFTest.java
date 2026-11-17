@@ -104,8 +104,10 @@ class StockpileOverflowOVFTest {
 		StockLedger.Credit f = d.credit("fluid:f1", Map.of(), FULL, MAX);
 		assertEquals(Map.of(FLINT, 3), f.returned());
 		assertTrue(f.overflow().isEmpty() && d.identityHolds());
-		// an unkeyed give-back (a swap's old block) still overflows as before (out of scope)
-		assertFalse(paid().giveBack(Map.of(PLANKS, 5), FULL, MAX).overflow().isEmpty());
+		// (slice T0) an unkeyed give-back (a swap's old block) enters the stock as well: nothing overflows, refundOverflow does not grow
+		StockLedger g = paid();
+		assertTrue(g.giveBack(Map.of(PLANKS, 5), FULL, MAX).overflow().isEmpty());
+		assertTrue(g.refundOverflow().isEmpty() && g.identityHolds());
 	}
 
 	/** K0 / K1 / CS1 / K2: a crash at every point of the keyed credit's handoff. */
@@ -241,12 +243,14 @@ class StockpileOverflowOVFTest {
 		assertTrue(over.isEmpty() && c.overflow().isEmpty(), "the scoop's lava buckets and bars too");
 		assertEquals(Map.of(LAVA, 2, BARS, 3), c.returned());
 		assertTrue(r.identityHolds());
-		// an unkeyed consume's bucket still overflows (the feed's pay: out of scope)
+		// (slice T0) an unkeyed consume's bucket (the feed's pay) enters the stock too: nothing overflows
 		StockLedger u = new StockLedger();
 		u.giveBack(Map.of(LAVA, 1), 99, MAX);
 		Map<String, Integer> o2 = new TreeMap<>();
 		u.consume(LAVA, 1, FULL, MAX, o2);
-		assertEquals(Map.of("minecraft:bucket", 1), o2);
+		assertEquals(Map.of(), o2);
+		assertEquals(1, u.stock("minecraft:bucket"));
+		assertTrue(u.refundOverflow().isEmpty() && u.identityHolds());
 	}
 
 	/** Adoption into a pile a refund left over capacity drops the adopted crate's stock (as for any full pile): booked, identity holds. */

@@ -16,8 +16,10 @@ import org.jspecify.annotations.Nullable;
  * <b>consumed</b> (placed by the builder), <b>withdrawn</b> (taken out as credit, or handed to a player by a dissolve) and
  * <b>dropped</b> (taken out of stock and dropped as items: a forced crate removal's excess, a dissolve at a crate, an adopted
  * crate's overflow). At every moment, per item: {@code stock = delivered + returned - consumed - withdrawn - dropped >= 0}.
- * <b>refundOverflow</b> counts unkeyed give-backs that never entered the stock (no room): it is outside the identity. (Slice OVF) A keyed
- * credit (refund, region charge or scoop) never overflows: all of it enters the stock, past capacity if need be.
+ * <b>refundOverflow</b> is a historical counter: unkeyed give-backs that never entered the stock (no room) before slice T0; it is read and
+ * kept on load, outside the identity, and no longer grows. (Slice OVF) A keyed credit (refund, region charge or scoop) never overflows;
+ * (slice T0) neither does an unkeyed one (a swap's old block, an empty bucket, a reconcile's refund): every give-back enters the stock,
+ * past capacity if need be, and nothing drops.
  *
  * <p>Capacity is counted in stacks: {@code usedStacks} is the sum over items of {@code ceil(stock / maxStackSize)}; a unit enters
  * only while it fits (a partly filled stack takes more of its item; a new stack needs a free one). Stock above capacity (a crate
@@ -373,7 +375,7 @@ public final class StockLedger {
 	 * empty bucket back (N-H-1): it is credited unkeyed through {@link #giveBack}; what does not fit is in {@code overflowOut}.
 	 */
 	public boolean consume(String item, int n, int capacityStacks, ToIntFunction<String> maxStack, Map<String, Integer> overflowOut) {
-		return consume(item, n, capacityStacks, maxStack, overflowOut, false);
+		return consume(item, n, capacityStacks, maxStack, overflowOut, true); // (slice T0) its empty bucket enters the stock, never dropped
 	}
 
 	/** (OVF) {@link #consume}; {@code unbounded}: the empty bucket enters the stock past capacity (a keyed charge's: never dropped). */
@@ -735,7 +737,7 @@ public final class StockLedger {
 
 	/** Credits items with no key (a swap's old block as it happens, a bucket's container): up to capacity, the rest overflow. */
 	public Credit giveBack(Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack) {
-		return giveBack(items, capacityStacks, maxStack, false);
+		return giveBack(items, capacityStacks, maxStack, true); // (slice T0) all of it, past capacity if need be: nothing over
 	}
 
 	/**
@@ -757,7 +759,6 @@ public final class StockLedger {
 				in.put(e.getKey(), fit);
 			}
 			if (n - fit > 0) {
-				add(refundOverflow, e.getKey(), n - fit);
 				over.put(e.getKey(), n - fit);
 			}
 		}
