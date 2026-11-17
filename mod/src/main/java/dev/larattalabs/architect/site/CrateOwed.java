@@ -273,6 +273,7 @@ final class CrateOwed {
 		}
 		if (back) {
 			Stockpiles.unsaved = true;
+			WorldJournal.kill("CXDB"); // (TEST) put back in memory (the crate's ledger, the marker cleared), before its save
 			try {
 				Stockpiles.saveWithWorld(srv);
 			} catch (IllegalStateException e) {
@@ -283,6 +284,21 @@ final class CrateOwed {
 		if (drop.isEmpty()) {
 			return given;
 		}
+		// (rule 17, persist before mutate) the records closed and that ledger written, confirmed, before any item moves: a crash after it
+		// loses the drop (never a dupe; the HF/J1 order); a write that fails leaves them open (the next start resolves them)
+		for (Rec r : drop) {
+			OPEN.remove(r.key());
+		}
+		Stockpiles.unsaved = true;
+		Stockpiles.save();
+		if (Stockpiles.unsaved || Stockpiles.loadFailed()) {
+			for (Rec r : drop) {
+				OPEN.put(r.key(), r);
+			}
+			Architect.LOGGER.error("Crate stock: the ledger write closing {} owed record(s) failed; they stay open and resolve at the next start", drop.size());
+			return given;
+		}
+		WorldJournal.kill("CXDS"); // (TEST) the records closed on disk, nothing dropped yet: the accepted loss window
 		for (Rec r : drop) {
 			ServerLevel level = Sites.levelOf(srv, r.dim());
 			Outcome o = outs.get(r);
@@ -307,12 +323,14 @@ final class CrateOwed {
 			if (r.shared()) {
 				SiteJournal.releaseKind(r.crateOwner(), WorldJournal.CRATE); // the group's crate went (its own entry, phase 4e)
 			}
-			OPEN.remove(r.key());
 			Builder.dropItems(level, r.pos(), items, drops);
 			items.forEach((k, v) -> given.merge(k, v, Integer::sum));
 		}
-		Stockpiles.unsaved = true;
-		Stockpiles.saveLedgerFirst(srv);
+		try {
+			Stockpiles.saveWithWorld(srv); // the players and the chunks (the drop, the restored cell); the ledger again (unchanged since)
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Crate stock: the save after the drop was refused ({}); the world writes it later", e.getMessage());
+		}
 		return given;
 	}
 

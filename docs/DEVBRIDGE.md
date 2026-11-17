@@ -776,3 +776,8 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
   for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
   drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
+- **2026-11-17 (slice CXD, durable crate extraction):** `dev.stockpile.owed` {} -> `owed`: the open crate-stock owed records
+  (`open`: key, site, siteKey, crateOwner, dim, crate, items), `pending` captures, and this session's `settled`, `putBack` and
+  `resolvedAtStart` counts. `dev.journal.killAt` takes CXD1 (a removal's crate stock captured, its record not saved), CXD2 (the
+  record saved confirmed, the crate not emptied), CXD3 (the stock taken: the crate's ledger and its `CxdTaken` marker; the removal not
+  committed) and CXD4 (committed and the member restored, the stock not settled). Driven by `tools/lib/gatemcxd.mjs` (`cxd-crash`).

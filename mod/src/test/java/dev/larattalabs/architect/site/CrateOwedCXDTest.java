@@ -99,13 +99,13 @@ class CrateOwedCXDTest {
 		});
 		st.add(() -> s.commit()); // the removal's commit
 		st.add(() -> s.mem.crate = false); // the undo's write restores the crate cell (an own crate's CRATE entry; CXD4 after it)
-		st.add(() -> { // settle: the record closed, the stock dropped, the cell restored (in memory)
-			s.mem.record = false;
+		st.add(() -> s.mem.record = false); // settle (rule 17): the record closed ...
+		st.add(() -> s.ledger()); // ... and that ledger written, confirmed (CXDS after it: the accepted loss window)
+		st.add(() -> { // then the stock dropped, the cell restored (in memory)
 			s.mem.ground += s.mem.recordItems;
 			s.mem.crate = false;
 		});
-		st.add(() -> s.ledger()); // saveLedgerFirst: the ledger ... (LF1 after it: the accepted loss window)
-		st.add(() -> s.chunks()); // ... then the chunks
+		st.add(() -> s.chunks()); // then the players and the chunks
 		return st;
 	}
 
@@ -191,17 +191,21 @@ class CrateOwedCXDTest {
 	@Test
 	void everyKillPointPaysOnce() {
 		int n = cxdSteps(new Sim()).size();
-		int lf1 = n - 1; // killed after saveLedgerFirst's ledger write, before its chunks: the accepted loss window (HF/J1's order)
+		int cxds = n - 2; // killed after the closing ledger write (CXDS) or after the drop before its chunks: the accepted loss window
 		for (int kill = 0; kill <= n; kill++) {
 			for (int auto = -1; auto < kill; auto++) {
+				if (auto >= cxds - 2 && auto <= cxds) {
+					continue; // the settle's close, its ledger write and the drop run in one call: no autosave between them
+				}
 				World d = crash(CrateOwedCXDTest::cxdSteps, kill, auto);
 				restartCxd(d);
 				String at = "killed after step " + kill + ", autosave after " + auto;
 				assertTrue(d.items() <= S, at + ": never a dupe (" + d.items() + ")");
-				if (kill != lf1 || auto >= lf1 - 2) {
+				boolean window = (kill == cxds || kill == cxds + 1) && auto < cxds; // no autosave of the drop's chunks before the halt
+				if (!window) {
 					assertEquals(S, d.items(), at + ": paid once");
 					assertFalse(d.crate && d.marked, at + ": no marked crate left standing");
-				} // (in LF1's window an empty marked crate can stand, its site gone: an orphan, taken away by a right-click)
+				} // (in CXDS's window an empty marked crate can stand, its site gone: an orphan, taken away by a right-click)
 			}
 		}
 	}
