@@ -411,9 +411,110 @@ export async function registerLC3(steps, h) {
     check(!(s2.sealed ?? []).length, `group undo: nothing sealed once it ended (${json(s2.sealed)}); refusals ${json(s2.refused)}`, s2);
     await L.leaveWorld();
     out.abandon = await abandonCase();
+    out.abandonCrash = {};
+    for (const p of [null, 'AB1', 'AB2', 'AB3', 'AB4']) out.abandonCrash[p ?? 'clean'] = await abandonCrashCase(p);
     spendZero();
     return out;
   };
+
+  /**
+   * (LC3 round 4, GPT P1 + P2) The abandon of an unwritten survival-filled member (FK-b's town: cottage_1 = fk_hall provided 1, its custody
+   * of 4 x 18 filter items and 16 module-provided slabs taken at the removal's start). The group removal forced STALLED at its first restore
+   * (failRestore skip 0: no member written). `point` (null: none) is a kill point armed for the abandon: AB1 its custody back in memory,
+   * nothing saved; AB2 inside its save, the chunks flushed, the ledger not; AB3 the save confirmed, no record dropped; AB4 the records dropped,
+   * the queue not saved. After the restart the removal is still stalled and the abandon runs again. Every case: the billed items exist ONCE
+   * (in its containers, plus what found no slot credited to the stock), no custody left, nothing dropped; no provided slab in its containers
+   * (its record is gone, nothing guards them: destroyed, FK-b's rule), loose or with the player.
+   */
+  async function abandonCrashCase(point) {
+    const tag = `abandon-crash ${point ?? 'clean'}`;
+    const { fkbFixture, SLAB, SLABS, BILL } = await import('./gatem5fkb.mjs');
+    const F = fkbFixture(h);
+    const says = (r, t) => json(r?.messages ?? []).replace(/\s/g, '').includes(t.replace(/\s/g, ''));
+    const out = { point };
+    const W = await F.town(`G6B LC3 AB ${point ?? 'X'}`);
+    const b = await F.built(W, tag);
+    if (!b) { await L.leaveWorld(); return out; }
+    const site = b.site;
+    const cells = (b.s.containers ?? []).map((c) => F.P(c.at));
+    const ofSite = (m) => Object.entries(m ?? {}).filter(([k]) => k.startsWith(`site:${site}@`)).reduce((a, [, v]) => G.plus(a, v), {});
+    const inBoxes = async () => { let m = {}; for (const at of cells) m = G.plus(m, (await holder(at)).holds ?? {}); return m; };
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/kill @e[type=item]');
+    await cmd('/save-all flush');
+    await call('dev.undo.failRestore', { skip: 0 }, 10_000);
+    call('dev.region.remove', { region: W.region, requester: G.OWNER }, 3_600_000).catch(() => null);
+    const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 600, 1000);
+    await call('dev.undo.failRestore', { skip: -1 }, 10_000);
+    const sr = x0?.stalled?.[0];
+    out.stalled = sr ?? null;
+    const p0 = await F.pile();
+    const custody0 = ofSite(p0.ledger?.custody);
+    const held0 = ofSite(p0.ledger?.heldProvided);
+    const stock0 = F.only(p0.stock, F.FK);
+    const box0 = await inBoxes();
+    out.before = { custody0, held0, box0, current: sr?.current ?? null };
+    check(!!sr && sr.unwritten.includes(site) && G.same(custody0, BILL) && held0[SLAB] === SLABS && !F.sum(box0),
+      `${tag}: the removal STALLED with ${site} unwritten${sr?.current === site ? ' (its restore the one that broke)' : ''}: its custody ${json(custody0)} = the bill, held slabs ${json(held0)}, its containers empty ${json(box0)}`, out.before);
+    if (!sr || !sr.unwritten.includes(site)) { await L.leaveWorld(); return out; }
+    await cmd('/save-all flush');
+    const abandon = `/architect removal abandon ${sr.group}${sr.stage ? ' ' + sr.stage : ''}`;
+    if (point) {
+      await call('dev.journal.killAt', { point }, 10_000);
+      cmd(abandon).catch(() => null);
+      const down = await haltWait();
+      check(down, `${tag}: halted at kill point ${point}`);
+      if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld().catch(() => null); return out; }
+      const S = F.savedLedger(W.name);
+      out.saved = { custody: ofSite(S?.custody), held: ofSite(S?.heldProvided) };
+      await L.openWorld(W.name);
+      await L.tp(CX + 80, 60, CZ + 56);
+      await L.settle(6000);
+      const x1 = await seal();
+      out.afterHalt = { stalled: x1.stalled ?? [], box: await inBoxes() };
+      log(`  ${tag}: at the halt ${json(out.saved)}; after the restart ${json(out.afterHalt).slice(0, 400)}`);
+      check((x1.stalled ?? []).length === 1, `${tag}: after the restart the removal is still stalled, sealed (re-runnable): ${json(x1.stalled)}`, out.afterHalt);
+    }
+    const r1 = await cmd(abandon);
+    out.abandon = r1;
+    check(r1.success !== false && says(r1, 'abandoned the stalled'), `${tag}: ${abandon} accepted (${json(r1.messages).slice(0, 300)})`, r1);
+    const x2 = await until(async () => { const x = await seal(); return !(x.sealed ?? []).length && !(x.lingering ?? []).length && !(x.stalled ?? []).length ? x : null; }, 120, 500);
+    check(!!x2, `${tag}: the removal left the queue, nothing sealed or lingering`, x2);
+    const verify = async (when) => {
+      const p1 = await F.pile();
+      const custody1 = ofSite(p1.ledger?.custody);
+      const held1 = ofSite(p1.ledger?.heldProvided);
+      const stockD = G.minus(F.only(p1.stock, F.FK), stock0);
+      const box1 = await inBoxes();
+      const items = (await call('dev.items.near', { pos: cells[0], radius: 24 }, 60_000)).items ?? {};
+      const sl = await F.slabsNear(cells[0]);
+      const res = { box1, stockD, custody1, held1, items: F.only(items, F.ALL), slabs: sl };
+      log(`  ${tag} ${when}: ${json(res).slice(0, 600)}`);
+      check(G.same(G.plus(F.only(box1, F.FK), stockD), BILL) && !F.sum(custody1) && !F.sum(held1) && !F.sum(F.only(items, F.ALL)),
+        `${tag} ${when}: the custody exists once: its containers ${json(F.only(box1, F.FK))} + the stock gained ${json(stockD)} = the bill; no custody or held slabs left; nothing dropped`, res);
+      check(!box1[SLAB] && sl.entities === 0 && sl.player === 0,
+        `${tag} ${when}: no provided slab in its containers (its record dropped, nothing guards them: settled by FK-b's rule), loose or with the player (${json(box1)})`, res);
+      return res;
+    };
+    out.after = await verify('after the abandon');
+    if (!point) {
+      await cmd('/save-all flush');
+      await L.settle(1500);
+      await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+      if (await haltWait()) {
+        await L.openWorld(W.name);
+        await L.tp(CX + 80, 60, CZ + 56);
+        await L.settle(6000);
+        const x3 = await seal();
+        check(!(x3.stalled ?? []).length && !(x3.sealed ?? []).length, `${tag}: after a restart nothing resumes or is sealed`, x3);
+        out.restarted = await verify('after a restart');
+      } else {
+        check(false, `${tag}: halted after the abandon`);
+      }
+    }
+    await L.leaveWorld();
+    return out;
+  }
 
   // (LC3 fix 2, GPT P1 #2) /architect removal abandon: a group removal forced STALLED (member A written, B's restore broken mid-write) keeps
   // a chest in A's box sealed; abandoned, the chest opens with its items, nothing replays after a halt and a restart, a second abandon refused

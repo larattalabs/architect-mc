@@ -35,8 +35,12 @@ const BILL = Object.fromEntries(FILTERS.map((k) => [k, 18]));
 const SLABS = 16;
 const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
 
-export async function registerFKB(steps, h) {
-  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root } = h; // h.hashOf: the creative box's hash
+/**
+ * (slice LC3 round 4) The FK-b survival town (cottage_1: fk_hall provided 1) and its helpers, shared with lc3-undo's abandon crash cases
+ * (tools/lib/gatem5lc3.mjs).
+ */
+export function fkbFixture(h) {
+  const { L, call, check, cmd, log, json, G, groundY, CX, CZ, CLAIM, root } = h;
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
@@ -160,6 +164,32 @@ export async function registerFKB(steps, h) {
     return { s, fed };
   }
 
+  /** A town built, filled and PLACED; its fk site. */
+  async function built(W, tag, skip, { pre = null } = {}) {
+    const site = await fkSite(skip);
+    check(!!site, `${tag}: fk_hall's site joined the feed (${site})`);
+    if (!site) return null;
+    await blocksBuilt(tag, site);
+    const fed0 = pre ? await pre(site) : {};
+    const f = await filled(site);
+    f.fed = G.plus(fed0, f.fed);
+    const r0 = await G.feed({ L }, W.region, { fraction: 1, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done, timeoutMs: 900_000, every: 2500 });
+    check(r0.last.st.view.state === 'PLACED', `${tag}: the town PLACED`);
+    return { site, s: await fk(site), fed: f.fed };
+  }
+
+  return { pile, fk, hand, P, ledgerOf, savedLedger, only, FK, ALL, slabsOf, exactly, slabsNear, entry, grow, town, fkSite, deliver, blocksBuilt, filled, built, sum, ctx };
+}
+
+export { SLAB, SLABS, BILL, FILTERS };
+
+export async function registerFKB(steps, h) {
+  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root } = h; // h.hashOf: the creative box's hash
+  const ctx = { L, OUT: h.OUT, imp: h.imp };
+  const F = fkbFixture(h);
+  const { pile, fk, hand, P, ledgerOf, savedLedger, only, FK, ALL, slabsOf, exactly, slabsNear, entry, grow, town, fkSite, deliver, blocksBuilt, filled, sum } = F;
+  const built = (W, tag, skip, { swap = false } = {}) => F.built(W, tag, skip, { pre: swap ? (site) => swapCase(tag, site) : null });
+
   /**
    * (FK-b fix) A declared hopper swapped for an empty dropper between the builder's rescans, the site resumed in the same server task
    * with its bill in the stock: the fill finds the swapped block and writes nothing (no provided item ever in the dropper); the hopper
@@ -189,20 +219,6 @@ export async function registerFKB(steps, h) {
       `${tag}: a declared hopper swapped for an empty dropper mid-fill (${at}): the fill saw the swap (${r1 - r0} refused attempt(s)) and wrote nothing: the dropper holds ${json(inDropper)}, no slab in any container (${slabsOf(s1)}), phase ${s1.phase ?? 'none'}, no slab loose or with the player`, res);
     await cmd(`/setblock ${P(at).join(' ')} minecraft:hopper[facing=down]`);
     return fed;
-  }
-
-  /** A town built, filled and PLACED; its fk site. */
-  async function built(W, tag, skip, { swap = false } = {}) {
-    const site = await fkSite(skip);
-    check(!!site, `${tag}: fk_hall's site joined the feed (${site})`);
-    if (!site) return null;
-    await blocksBuilt(tag, site);
-    const fed0 = swap ? await swapCase(tag, site) : {};
-    const f = await filled(site);
-    f.fed = G.plus(fed0, f.fed);
-    const r0 = await G.feed({ L }, W.region, { fraction: 1, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done, timeoutMs: 900_000, every: 2500 });
-    check(r0.last.st.view.state === 'PLACED', `${tag}: the town PLACED`);
-    return { site, s: await fk(site), fed: f.fed };
   }
 
   // ------------------------------------------------------------------ fkb-unit
