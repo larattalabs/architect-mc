@@ -145,4 +145,64 @@ class QueueWritePSVFixTest {
 		Groups.Removal back = Groups.Removal.fromJson(r.toJson());
 		assertEquals(stock, back.decStock.get("s1"), "the carried stock is saved with the removal");
 	}
+
+	/**
+	 * (v0.77.0 release review P1 2, fix a1) A pre-save whose write failed stays failed once a later write succeeds: the plan is dropped and
+	 * tallied again, never committed with the tally made before the failure. On 5252ded7 the later write cleared failed(g): preSaved answered
+	 * written and committed the stale tally (a plank mined meanwhile paid out twice).
+	 */
+	@Test
+	void aPreSaveFailureStaysFailedAfterALaterWriteSucceeds(@TempDir Path dir) {
+		clean(dir);
+		Path f = dir.resolve(Placement.FILE);
+		Groups.Removal r = new Groups.Removal("g1", null, null, false);
+		r.planGroup = "u:group-g1:1";
+		r.planned = r.planGroup;
+		r.plannedSites.add("s1");
+		r.planIds = List.of("s1");
+		r.decItems.put("s1", Map.of("minecraft:oak_planks", 9));
+		r.decAt.put("s1", new long[] {1});
+		long gen = nextGen();
+		r.preSave = gen;
+		Placement.FAIL_WRITES.set(1);
+		assertFalse(Placement.writeSave(new JsonObject(), f, gen), "the pre-save's write fails");
+		// a later write (Placement's retry, or any other save) succeeds before the removal looks again (the saver is off the server thread,
+		// and a large undo does not look while its commit is built)
+		assertTrue(Placement.writeSave(new JsonObject(), f, gen + 1));
+		assertTrue(Placement.written(gen), "the later write covers the generation");
+		assertTrue(Placement.failed(gen), "the failure is sticky until the plan is made again (5252ded7: cleared by the later write)");
+		assertFalse(Groups.preSaved(null, r), "no commit of the plan made before the failure");
+		assertNull(r.planned, "the plan is dropped");
+		assertEquals(0, r.preSave, "made again: the next pre-save is a new generation");
+		assertTrue(r.decItems.isEmpty(), "the tally goes: R1 tallies again against the world");
+		long again = nextGen();
+		assertTrue(Placement.writeSave(new JsonObject(), f, again));
+		assertFalse(Placement.failed(again), "the replan's own pre-save, written, is not failed");
+		assertTrue(Groups.preSaveWritten(again));
+	}
+
+	/**
+	 * (v0.77.0 release review P1 1, fix a2) A removal that ends before its undo with a legacy crate's stock carried (its pre-save failed, the
+	 * plan dropped, the rescan refused) stays STALLED, the stock saved with it: the crate it came from is gone (prepareDeconstruct restores the
+	 * crate's cell as it takes the stock) and a crate's stock never comes from a stockpile, so it can't be given back safely. On 5252ded7 the
+	 * removal left the queue and the stock was lost.
+	 */
+	@Test
+	void anEndAfterADroppedPlanKeepsTheCarriedCrateStockStalled() {
+		Groups.Removal r = new Groups.Removal("g1", null, null, false);
+		r.sites.add("s1");
+		r.started = true;
+		Map<String, Integer> stock = Map.of("minecraft:oak_planks", 5);
+		r.decItems.put("s1", Groups.withStock(r, "s1", Map.of("minecraft:oak_planks", 7), stock));
+		r.decAt.put("s1", new long[] {42});
+		Groups.dropPlan(r); // the pre-save failed
+		assertEquals(stock, r.decStock.get("s1"));
+		assertTrue(Groups.stallsAtEnd(r, false), "the carried stock keeps the removal STALLED (5252ded7: it left the queue, the stock lost)");
+		com.google.gson.JsonObject o = r.toJson();
+		o.addProperty("stalled", true);
+		Groups.Removal back = Groups.Removal.fromJson(o);
+		assertEquals(stock, back.decStock.get("s1"), "saved with it: a retry carries it into its deconstruct items once");
+		assertFalse(Groups.stallsAtEnd(r, true), "a removal that ended removed dropped it with its deconstruct items");
+		assertFalse(Groups.stallsAtEnd(new Groups.Removal("g2", null, null, false), false), "nothing carried, no undo: it ends");
+	}
 }

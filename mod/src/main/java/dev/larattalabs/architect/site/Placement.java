@@ -562,9 +562,14 @@ public final class Placement {
 		}
 	}
 
-	/** (PSV fix round) Whether a write at or after generation {@code gen} failed and none since covers it (the generation is not on disk). */
+	/**
+	 * (PSV fix round; v0.77.0 fix a1) Whether a write at or after generation {@code gen} failed. Sticky: a later write that succeeds does not
+	 * clear it (before, it did, so an undo whose pre-save failed and whose look came after the retry committed the tally made before the
+	 * failure: a block mined meanwhile paid out twice). The holder replans, which takes a new generation (above {@link #failedGen}).
+	 * Conservative: a write failing after {@code gen} was written counts too (a replan, never a stale commit).
+	 */
 	static boolean failed(long gen) {
-		return gen > 0 && failedGen >= gen && !written(gen);
+		return gen > 0 && failedGen >= gen;
 	}
 
 	/**

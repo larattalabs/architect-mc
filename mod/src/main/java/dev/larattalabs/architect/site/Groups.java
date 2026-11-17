@@ -1493,6 +1493,7 @@ public final class Groups {
 		}
 		if (r.stage == null) {
 			boolean untouched = !result.removed() && r.undo == null && r.planned == null && r.current == null && r.undoSites.isEmpty() && r.restoredCells == 0
+				&& r.decStock.isEmpty() // (v0.77.0 fix a2) a crate's stock taken: its cell was written
 				&& result.restored() == 0 && result.handedDown().isEmpty() && !dev.larattalabs.architect.region.RegionFluids.drainStarted(r.group);
 			if (untouched) {
 				UNTOUCHED.add(r.group);
@@ -1501,8 +1502,12 @@ public final class Groups {
 			}
 		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
-		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {
-			STALLED.add(r); // (6c X, C22) restorations are still pending: the retry resumes them
+		if (stallsAtEnd(r, result.removed())) {
+			STALLED.add(r); // (6c X, C22) restorations are still pending, or (v0.77.0 fix a2) a crate's stock is carried: the retry resumes them
+			if (r.undo == null) {
+				Architect.LOGGER.warn("Removal of group {}: ended before its undo holding a crate's stock {}; it stays stalled (the stock saved with it) "
+					+ "until a retry", r.group, r.decStock);
+			}
 		}
 		long t0 = System.nanoTime();
 		SiteGroupRec g = Sites.group(r.group);
@@ -1540,6 +1545,23 @@ public final class Groups {
 		}
 		r.futures.forEach(f -> f.complete(result));
 		Placement.lap("end:futures", t0);
+	}
+
+	/**
+	 * (6c X, C22) Whether a removal that ends stays in {@link #STALLED} (kept in the queue file, its members sealed) for a retry to resume:
+	 * its restorations are still pending; or (v0.77.0 fix a2) it ends before its undo holding a legacy crate's stock ({@link Removal#decStock}:
+	 * a pre-save failed, the plan was dropped, then the rescan refused). That stock can't be given back safely: prepareDeconstruct restores the
+	 * crate's cell as it takes the stock (the crate is gone; putting one back would write outside the journal), and a crate's stock never comes
+	 * from a stockpile. Stalled, it stays saved with the removal and a retry carries it into the deconstruct items once ({@link #withStock}).
+	 */
+	static boolean stallsAtEnd(Removal r, boolean removed) {
+		if (removed) {
+			return false;
+		}
+		if (r.undo == null) {
+			return !r.decStock.isEmpty();
+		}
+		return r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null);
 	}
 
 	// ------------------------------------------------------------------ persistence
