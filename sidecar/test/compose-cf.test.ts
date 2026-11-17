@@ -5,15 +5,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { JOB_SYSTEM_MAX } from '../src/protocol.js';
-import { composeSystem } from '../src/jobs/systemrefs.js';
 import {
-  affordanceList, CALLER_SYSTEM_MAX, COMPOSE_REFS, composerText, composeSystemText, EVIDENCE_LINE_MAX, EVIDENCE_PART_MAX, EVIDENCE_TOTAL_MAX,
+  affordanceList, CALLER_SYSTEM_MAX, composerSystem, composerText, composeSystemText, EVIDENCE_LINE_MAX, EVIDENCE_PART_MAX, EVIDENCE_TOTAL_MAX,
   evidenceText, FAMILIES_MAX, partAnswerLine, repairPrompt, vocabFamiliesText,
 } from '../src/compose.js';
 import { LAND_ANALYSIS_MAX_MS, LAND_ANALYSIS_MIN_MS, landAnalysisMs } from '../src/regions.js';
 import { SIDECAR_ROOT } from './helpers.js';
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
+/** (CB) the worst case: every on-demand kind def requested */
+const WORST = { brief: '', all: true };
 const HAS_KIT = fs.existsSync(path.join(KIT, 'prompts', 'composer.md'));
 
 // the caravan calibration's answer (P1 diagnosis): the message blamed the slope, the evidence held the sealed ring
@@ -54,7 +55,7 @@ describe('7c CF composer feedback', () => {
     expect(text.system).toContain('A zone on a hilltop or steep high ground can use `layout: "spiral"`');
     expect(text.system).not.toContain('a reserved layout (a spiral');
     const fam = vocabFamiliesText(KIT);
-    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(text, 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), fam));
+    const big = await composerSystem(KIT, text, { callerSystem: 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), families: fam, needs: WORST }).then((x) => x.system);
     console.log(`7c CF: the composer's system with the families and 28k caller rules is ${big.length} characters`);
     expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
   });

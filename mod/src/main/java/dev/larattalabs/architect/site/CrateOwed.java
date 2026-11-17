@@ -147,7 +147,7 @@ final class CrateOwed {
 	}
 
 	/**
-	 * Steps 2 and 3: the captures saved confirmed ({@link Stockpiles#saveConfirmed}), then each crate's stock taken (its ledger, the
+	 * Steps 2 and 3: the captures saved confirmed ({@link #confirmed}: T0's barrier), then each crate's stock taken (its ledger, the
 	 * marker; the crate block stays until the settle). A refused save drops the captures (nothing was taken) and throws.
 	 */
 	static void commit(MinecraftServer srv) {
@@ -156,7 +156,7 @@ final class CrateOwed {
 		}
 		WorldJournal.kill("CXD1"); // (TEST) captured, the record not saved
 		try {
-			Stockpiles.saveConfirmed(srv);
+			confirmed(srv);
 		} catch (IllegalStateException e) {
 			dropPending();
 			throw e;
@@ -240,7 +240,7 @@ final class CrateOwed {
 		Sites.@Nullable Drops drops) {
 		if (Stockpiles.unsaved) {
 			try {
-				Stockpiles.saveWithWorld(srv);
+				confirmed(srv);
 			} catch (IllegalStateException e) {
 				Architect.LOGGER.error("Crate stock: {} owed record(s) left open (the save before them was refused: {}); resolved at the next start",
 					rs.size(), e.getMessage());
@@ -279,7 +279,7 @@ final class CrateOwed {
 			Stockpiles.unsaved = true;
 			WorldJournal.kill("CXDB"); // (TEST) put back in memory (the crate's ledger, the marker cleared), before its save
 			try {
-				Stockpiles.saveWithWorld(srv);
+				confirmed(srv); // the barrier: players, chunks (the crate's ledger put back), then the ledger (the record closed)
 			} catch (IllegalStateException e) {
 				Architect.LOGGER.error("Crate stock: the put-back's save was refused ({}); the next start resolves the record again", e.getMessage());
 			}
@@ -294,11 +294,13 @@ final class CrateOwed {
 			OPEN.remove(r.key());
 		}
 		Stockpiles.unsaved = true;
-		Stockpiles.save();
-		if (Stockpiles.unsaved || Stockpiles.loadFailed()) {
+		DurableBarrier.Result closed = Stockpiles.barrier(srv); // nothing else pending: the chunks hold nothing new, the ledger the close
+		if (!closed.ok()) {
+			// REFUSED, or IN_DOUBT (the close may be on disk): reopened, nothing dropped; a crash with the close on disk loses the drop (never a dupe)
 			for (Rec r : drop) {
 				OPEN.put(r.key(), r);
 			}
+			Stockpiles.unsaved = true;
 			Architect.LOGGER.error("Crate stock: the ledger write closing {} owed record(s) failed; they stay open and resolve at the next start", drop.size());
 			return given;
 		}
@@ -330,12 +332,22 @@ final class CrateOwed {
 			Builder.dropItems(level, r.pos(), items, drops);
 			items.forEach((k, v) -> given.merge(k, v, Integer::sum));
 		}
-		try {
-			Stockpiles.saveWithWorld(srv); // the players and the chunks (the drop, the restored cell); the ledger again (unchanged since)
-		} catch (IllegalStateException e) {
-			Architect.LOGGER.error("Crate stock: the save after the drop was refused ({}); the world writes it later", e.getMessage());
+		DurableBarrier.Result after = Stockpiles.barrier(srv); // the players and the chunks (the drop, the restored cell); the ledger again
+		if (!after.ok()) {
+			Architect.LOGGER.error("Crate stock: the save after the drop was {} ({}); the world writes it later", after.outcome(), after.reason());
 		}
 		return given;
+	}
+
+	/**
+	 * (slice T0's barrier) A confirmed save: {@link Stockpiles#barrier} (players, then chunks, then the ledger through DurableFile); anything
+	 * but OK (REFUSED, IN_DOUBT: the write may or may not be on disk) throws, and its caller treats it as not saved.
+	 */
+	static void confirmed(MinecraftServer srv) {
+		DurableBarrier.Result r = Stockpiles.barrier(srv);
+		if (!r.ok()) {
+			throw new IllegalStateException("Stockpiles: the ledger was not confirmed on disk (" + r.outcome() + (r.reason() == null ? "" : ": " + r.reason()) + ")");
+		}
 	}
 
 	/** The crate of {@code r}'s owner at its cell (its chunk loaded), or null. */

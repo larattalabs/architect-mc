@@ -1632,7 +1632,7 @@ public final class Sites {
 		if (custody || pendingHeld || crateHeld) {
 			try {
 				if (crateHeld) {
-					CrateOwed.commit(server); // its confirmed save (Stockpiles.saveConfirmed) writes the custody and the credits too
+					CrateOwed.commit(server); // its confirmed save (T0's barrier) writes the custody and the credits too
 				} else {
 					Stockpiles.saveWithWorld(server);
 				}

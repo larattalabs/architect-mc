@@ -1465,21 +1465,6 @@ public final class Stockpiles {
 		return s != null && key.equals(Builder.creditKey(s));
 	}
 
-	/**
-	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
-	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
-	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
-	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
-	 */
-	static void saveConfirmed(MinecraftServer srv) {
-		if (unsaved || loadFailed) {
-			saveWithWorld(srv);
-		}
-		if (unsaved || loadFailed) {
-			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
-		}
-	}
-
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
 	static volatile int creditSaves;
 	/** (J1, dev) the autosaves' wait for their chunk writes before the ledger write: count, last and max (ms). */
@@ -2975,6 +2960,57 @@ public final class Stockpiles {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
 		}
+	}
+
+	/** (slice T0) The ledger's durable file (its generations persisted in it), made for the world's dir on first use. */
+	private static @Nullable DurableFile ledgerFile;
+
+	/** (slice T0) The explicit-save flag the world-save callback reads (the barrier writes the ledger itself). Server thread. */
+	static void explicitSave(boolean on) {
+		explicitSave = on;
+	}
+
+	/**
+	 * (slice T0, docs/TXN-DESIGN.md §3.1) The world barrier: players, then chunks, then the ledger through {@link DurableFile}; refused under
+	 * {@code /save-off}, after a failed load or on any failed step ({@link DurableBarrier}). Server thread.
+	 */
+	public static DurableBarrier.Result barrier(MinecraftServer srv) {
+		return DurableBarrier.run(srv);
+	}
+
+	/**
+	 * (slice T0) The ledger written as a confirmed snapshot ({@link DurableFile}: temp, force, rename, folder force, its generation in the
+	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
+	 */
+	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		Path d = dir;
+		if (d == null) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
+		}
+		if (loadFailed) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
+		}
+		Path f = d.resolve(FILE);
+		if (PILES.isEmpty() && CrateOwed.none() && !Files.exists(f)) { // (CXD) an owed crate record is written with no stockpile too
+			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
+		}
+		try {
+			refreshBooks(srv);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		DurableFile df = ledgerFile;
+		if (df == null || !df.file().equals(f)) {
+			df = new DurableFile("stockpiles", f);
+			ledgerFile = df;
+		}
+		DurableFile.Result r = df.write(toJson(), df.request());
+		if (r.ok()) {
+			saves++;
+			unsaved = false;
+			lastSaveTick = ticks;
+		}
+		return r;
 	}
 
 	/** Logs every save (dev: ARCHITECT_TRACE_STOCKPILE=1; the gate's clean-stop check reads it). */

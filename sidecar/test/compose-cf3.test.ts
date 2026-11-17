@@ -5,11 +5,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { JOB_SYSTEM_MAX } from '../src/protocol.js';
-import { composeSystem } from '../src/jobs/systemrefs.js';
-import { CALLER_SYSTEM_MAX, COMPOSE_REFS, composerText, composeSystemText, FAMILIES_MAX, LOTS_SHORT, repairPrompt, vocabFamiliesText, type ComposeRound } from '../src/compose.js';
+import { CALLER_SYSTEM_MAX, composerSystem, composerText, composeSystemText, FAMILIES_MAX, LOTS_SHORT, repairPrompt, vocabFamiliesText, type ComposeRound } from '../src/compose.js';
 import { SIDECAR_ROOT } from './helpers.js';
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
+/** (CB) the worst case: every on-demand kind def requested */
+const WORST = { brief: '', all: true };
 const HAS_KIT = fs.existsSync(path.join(KIT, 'prompts', 'composer.md'));
 const TIP = 'upper, gate stand on ground rising 30 blocks, too steep for a street, without terraces: add `terraces` to the zone (so every district is terraced) or to each district';
 const SHORT = { part: 'town', class: 'adjusted', block: 'zone.standard', required: true, deviations: [{ what: 'count', value: 4, max: 0, exceeds: true }],
@@ -30,7 +31,7 @@ describe('CF3 the terraces nudge', () => {
     expect(text.system).toContain('`terraces: {}` (`rise`, `retain`, `stairs` when asked): on the zone, so every district is terraced, or on each district; a district without terraces on a steep slope loses most of its lots');
     for (const w of ['monastery', 'cliff', 'lake', 'chapel', 'cloister', 'refectory']) expect(text.system.toLowerCase()).not.toContain(w);
     const fam = vocabFamiliesText(KIT);
-    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(text, 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), fam));
+    const big = await composerSystem(KIT, text, { callerSystem: 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), families: fam, needs: WORST }).then((x) => x.system);
     console.log(`CF3: the composer's system with the families and 28k caller rules is ${big.length} characters`);
     expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
   });
