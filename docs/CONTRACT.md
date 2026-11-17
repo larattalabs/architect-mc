@@ -33418,8 +33418,8 @@ so two module lots that share items can't each be held to their own measured bou
   the stock under that keyed credit (no drop; a WARN if the ledger credits less). The caller saves as before (Groups' loops: no barrier per member); at
   the start one barrier follows every write-back and the receipts go once it is OK. `FillsWriteBackT2Test` (6, one on the real `StockLedger`): the legacy
   flow red (chunk saved, ledger not: paid twice), as built exact in every crash combination.
-- **Ran:** Gradle full 1564 (0 failed, 1 skipped); `gate-runs-T2/20261117-220929-change` at 41fbaec6, 9050:9051, `--no-cache --shards 1
-  --no-turbo`: txn-core 75/0, txn-holds 41/0; `gate-runs-T2-fk/20261117-221359-change` (9052:9053): fk-crash 66/0, fkb-crash 48/0.
+- **Ran:** Gradle full 1565 at afe39a21 (0 failed, 1 skipped); `gate-runs-T2/20261117-220929-change` at 41fbaec6, 9050:9051, `--no-cache --shards 1
+  --no-turbo`: txn-core 75/0, txn-holds 41/0; `gate-runs-T2-fk/20261117-230353-change` at afe39a21 (9052:9053): fk-crash 66/0, fkb-crash 48/0.
 - **Leftovers:** crate holds and CXD as txn kinds (T2b); write-back receipts stay in the chunk when the barrier is refused (stale, never
   read again under a later key); an Architect placement over a held cell is refused cell by cell (not up front); player open/break of a held
   box is T1's mixins, not exercised in game.
