@@ -555,14 +555,16 @@ final class InfraJob implements Placement.Job {
 					return false;
 				}
 				case WRITE -> {
+					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+					int n = 0;
+					// (8a ST) held leaves also when the main entry is a target (a tile all staged terrain): its free pass is gone, its leaves stay
+					boolean leavesNow = cursor == 0 && leafPos.length > 0;
 					if (!writeMain) {
 						cursor = positions.length; // (6c RS) the main entry is a target: nothing written at put-down
 					} else if (positions.length == 0 && cursor == 0) {
 						readBack();
 					}
-					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-					int n = 0;
-					if (writeMain && cursor == 0 && leafPos.length > 0) {
+					if (leavesNow) {
 						// held leaves first (persistent, no neighbour updates), before any log under them goes
 						for (int i = 0; i < leafPos.length; i++) {
 							long p = leafPos[i];

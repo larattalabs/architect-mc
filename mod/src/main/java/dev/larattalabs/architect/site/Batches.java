@@ -1229,6 +1229,7 @@ public final class Batches {
 	 * SITE_BUSY): {@code announce} fires ITEM_WAITING though the reason is the same. The caller says when (once per move, never per poll).
 	 */
 	static void waitFor(QBatch b, QItem i, Reason why, String msg, boolean announce) {
+		TypedWaits.settle(i); // (8a HB) an untyped wait clears a stale architect_mc:waitsFor
 		boolean first = i.status != QItem.Status.WAITING;
 		boolean changed = first || announce || !why.name().equals(i.reason);
 		if (dev.larattalabs.architect.batch.WaitLimit.count(b, i, first, RegionItems.uncounted(b, why), RECHECK)) {

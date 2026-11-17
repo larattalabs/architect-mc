@@ -14,7 +14,7 @@ import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
 import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
-import { CLASS_HELD, CLASS_PAID, CREATIVE_ONLY, MK_DIRT_PATH, TERRAIN_BLOCKS, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
+import { CLASS_HELD, CLASS_PAID, CLASS_STAGED, CREATIVE_ONLY, MK_DIRT_PATH, TERRAIN_BLOCKS, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
 
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp', 'fluid'];
@@ -24,7 +24,8 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns',
+  'stagedTerrain']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -47,6 +48,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (7a LF) 'bubbleColumns': a fluid op with a `bubble` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], a lift's column): each cell
 // is written as its bubble_column state over its source (it wins the cell, as a grate's bars). A mod or kit before LF would write still
 // water (no lift), so it refuses the plan PLAN_STALE.
+// (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
+// cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
+// before 8a would write them at once, so it refuses the plan PLAN_STALE.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -153,6 +157,7 @@ export function walkKinds(ir) {
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
+  if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.staged === true))) k.add('stagedTerrain'); // (8aF)
   return [...k].sort();
 }
 
@@ -300,6 +305,10 @@ export function compileIR(ir, opts = {}) {
   const ops = [];
   const SV = ir.survival && typeof ir.survival === 'object' ? ir.survival : null;
   const opMats = [];
+  // (8a ST) each compiled op's IR op (a fluid op's decor bed is a second compiled op of the same IR op): survival's per-op flags and
+  // materials are read through it, so a bed op shifts nothing after it
+  const opSrc = [];
+  let irOp = 0;
   for (const p of ir.parts ?? []) {
     const pi = parts.length;
     parts.push({ id: p.id, stage: p.stage, set: p.set ?? 'terrain' });
@@ -455,11 +464,13 @@ export function compileIR(ir, opts = {}) {
           ops.push({ ...base, index: ops.length, cond: 3, kind: 2, colIndex: bi, minX: bx0, maxX: bx1, minZ: bz0, maxZ: bz1 });
         }
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
+      while (opSrc.length < ops.length) opSrc.push(irOp);
+      irOp++;
     }
   }
   if (ops.length >= OP_SLOTS) throw new Error('IR: too many ops');
   track = null;
-  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats) : null, reach: compileReach(ir.reach) };
+  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats, SV.opMap === 'compiled' ? opSrc : null) : null, reach: compileReach(ir.reach) };
   compiled.set(ir, c);
   return c;
 }
@@ -470,7 +481,13 @@ export function compileIR(ir, opts = {}) {
  * flag, each material's kind, and each group's hold: a group holds its free cells (§4.3) when one of its non-pad parts has an op that can
  * write a paid cell (from the op's candidate materials, statically).
  */
-function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
+/**
+ * (6c RS) The survival classes' inputs. (8a ST) `opSrc`: each compiled op's IR op, used when the IR says `survival.opMap: 'compiled'`
+ * (markSurvival from slice ST, an IR with a fluid op's decor bed). Without it (an IR accepted before ST) the flags are read by IR op index
+ * as kit 0.41.0-NEXT did: from F3-c (v0.41.0) a decor bed shifted every flag after it (a coral pond's shells read free, its coral paid), and
+ * an IR whose last compiled op is a bed throws here; such IRs evaluate as they were quoted and billed.
+ */
+function compileSurvival(sv, irParts, parts, ops, mats, opMats, opSrc = null) {
   const groups = Array.isArray(sv.groups) ? sv.groups.map(String) : [];
   const map = sv.parts && typeof sv.parts === 'object' ? sv.parts : {};
   const pads = new Set(Array.isArray(sv.pads) ? sv.pads : []);
@@ -482,23 +499,26 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
     groupOfPart[i] = g;
     padPart[i] = pads.has(p.id) ? 1 : 0;
   });
-  const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length);
-  let k = 0;
-  for (const p of irParts) for (const o of p.ops ?? []) {
+  const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length), opStaged = new Uint8Array(ops.length);
+  const irOps = [];
+  for (const p of irParts) for (const o of p.ops ?? []) irOps.push(o);
+  for (let k = 0; k < (opSrc ? ops.length : irOps.length); k++) {
+    const o = irOps[opSrc ? opSrc[k] : k];
+    if (!o) continue;
     opFree[k] = o.free === true || o.op === 'relief' || o.op === 'scatter' || o.op === 'stamp' ? 1 : 0;
     opFluid[k] = o.op === 'fluid' ? 1 : 0;
-    k++;
+    opStaged[k] = o.staged === true && o.op !== 'fluid' ? 1 : 0; // (8aF) a staged terrain op (never a fluid op: 8c's)
   }
   const mk = Int8Array.from(mats.map((m) => materialKind(m)));
   const hold = new Uint8Array(groups.length);
   for (let i = 0; i < ops.length; i++) {
     const pi = ops[i].part;
     if (padPart[pi] || hold[groupOfPart[pi]]) continue;
-    for (const m of opMats[i]) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
+    for (const m of opSrc ? opMats[opSrc[i]] ?? [] : opMats[i]) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
   }
   const items = new Array(mats.length).fill(null);
   return {
-    groups, groupOfPart, padPart, opFree, opFluid, mk, hold,
+    groups, groupOfPart, padPart, opFree, opFluid, opStaged, mk, hold,
     itemsAt: (m) => (items[m] ??= itemsOf(mats[m])),
     charged: mats.map((m) => chargedOf(m)),
     creative: mats.map((m) => CREATIVE_ONLY.has(blockName(m))),
@@ -935,15 +955,20 @@ export function evalTile(ir, key, heights, opts = {}) {
               const free = freeCell(kind, S.opFree[opi] === 1, S.opFluid[opi] === 1, yBase + s * 16 + (p >> 8), ground, wet);
               // a fluid op's cells are never held: the fluids gate writes them in its waves (a target writing a reach's sources after the gate
               // cleared the reaches not yet due would let them flow early)
-              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : 0) : CLASS_PAID;
-              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
+              // (8aF) a free-pass cell of a staged op is CLASS_STAGED (counted free; the mod writes it in the free pass until slice ST)
+              const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : S.opStaged[opi] === 1 ? CLASS_STAGED : 0) : CLASS_PAID;
+              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, staged: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
               if (cls === CLASS_PAID) {
                 st.paid++;
                 for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c);
                 if (keepTerrain && S.terrain[m]) { let a = st.terrain.get(m); if (!a) st.terrain.set(m, (a = [])); a.push(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15)); }
               }
               else if (cls === CLASS_HELD) st.held++;
-              else st.free++;
+              else {
+                st.free++;
+                // (8a QX) a staged cell is counted free and, apart, as staged: the quote's time side (Quote.terrainCells); it bills nothing
+                if (cls === CLASS_STAGED) st.staged++;
+              }
               if (S.opFluid[opi] && S.charged[m]) st.charged.set(S.charged[m], (st.charged.get(S.charged[m]) ?? 0) + 1);
               if (S.creative[m]) { const b = blockName(C.mats[m]); st.creativeOnly.set(b, (st.creativeOnly.get(b) ?? 0) + 1); }
               SCRATCH_C[n] = cls;
@@ -1022,7 +1047,7 @@ export function evalTile(ir, key, heights, opts = {}) {
     S.groups.forEach((gid, g) => {
       const st = svStats[g];
       if (!st) return;
-      sv[gid] = { free: st.free, held: st.held, paid: st.paid, bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}),
+      sv[gid] = { free: st.free, held: st.held, paid: st.paid, ...(st.staged ? { staged: st.staged } : {}), bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}),
         // (BC, A11) the paid terrain cells by state: [x, y, z, ...] per state, with each cell's items
         ...(st.terrain.size ? { terrain: [...st.terrain].map(([m, cells]) => ({ state: C.mats[m], items: Object.fromEntries(S.itemsAt(m)), cells })) } : {}) };
     });

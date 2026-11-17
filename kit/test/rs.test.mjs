@@ -9,7 +9,7 @@ import { region, TERRAIN_OPS } from '../lib/region/program.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { evalTile, KINDS_FORMAT2, MEMBERS_FORMAT2, staleReason, walkKinds } from '../lib/realise.mjs';
 import { unpack } from '../lib/region/pack.mjs';
-import { CLASS_FREE, CLASS_HELD, CLASS_PAID, FREE_NATURAL, itemsOf as regionItemsOf } from '../lib/region/survival.mjs';
+import { CLASS_FREE, CLASS_HELD, CLASS_PAID, CLASS_STAGED, FREE_NATURAL, itemsOf as regionItemsOf } from '../lib/region/survival.mjs';
 import { FREE_EXCEPT, CREATIVE_ONLY } from '../lib/vocab/survival.mjs';
 import { itemsOf as bomItemsOf } from '../lib/connectors/bom.mjs';
 import { BLOCKS } from '../lib/blocks.mjs';
@@ -79,7 +79,8 @@ test('item 1: the free rule per written cell (§4.1, §7): every row on a flat c
   const { ir, cells } = await plan(rows);
   assert.ok(ir.survival && ir.requires.includes('survival') && ir.format === 2, 'a survival IR: the member, requires survival, format 2');
   const cls = (x, y, z) => at(cells, x, y, z)?.cls;
-  assert.equal(cls(4, 65, 4), CLASS_FREE, 'a terrain kind\'s natural fill: free, the free pass');
+  // ((8aF) a terrain kind's free-pass cell is CLASS_STAGED: the mod writes it in the free pass until slice ST builds it over time)
+  assert.equal(cls(4, 65, 4), CLASS_STAGED, 'a terrain kind\'s natural fill: free, the free pass (staged, 8aF)');
   assert.equal(cls(8, 64, 4), CLASS_FREE, 'a cut: free');
   assert.equal(cls(12, 66, 4), CLASS_PAID, 'a wall\'s body: paid');
   assert.equal(cls(13, 65, 4), CLASS_PAID, 'a natural stone a wall writes (not a terrain kind): paid');
@@ -92,7 +93,7 @@ test('item 1: the free rule per written cell (§4.1, §7): every row on a flat c
   assert.equal(cls(31, 66, 4), CLASS_PAID, 'a dirt path over the surface: paid (dirt)');
   assert.equal(cls(50, 65, 50), CLASS_PAID, 'the pad part\'s planks: paid');
   const padCells = [...cells.values()].filter((c) => c.group === 'pads' && !c.state.startsWith('minecraft:oak_planks'));
-  assert.ok(padCells.length > 30 && padCells.every((c) => c.cls === CLASS_FREE), `the pad's cut and fill: the free pass though its part holds (${padCells.length} cells)`);
+  assert.ok(padCells.length > 30 && padCells.every((c) => c.cls === CLASS_STAGED), `the pad's cut and fill: the free pass though its part holds (staged, 8aF) (${padCells.length} cells)`);
   assert.equal(cls(44, 63, 4), CLASS_FREE, 'a water source: free');
   assert.equal(cls(44, 64, 4), CLASS_FREE, 'its ice cap: free (N-RS-4)');
   assert.equal(cls(46, 63, 4), CLASS_FREE, 'a lava source: no target cell (charged when its body is written)');

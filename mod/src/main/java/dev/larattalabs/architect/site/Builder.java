@@ -636,7 +636,9 @@ public final class Builder {
 			if (soilFamily && (built.get(i) || tilled.get(i) || paidBefore.get(i)) && ownSoil(target[i]) && ownSoil(now)) {
 				return true;
 			}
-			return Copper.is(now, target[i].getBlock());
+			// (8a ST) a staged terrain cell is built only when it holds the planned state (a snow layer's thickness, a log's axis), not just
+			// its block, so a rescan never counts a cell the tile changed only in its state as built
+			return exactState ? stagedMatches(now, target[i]) : Copper.is(now, target[i].getBlock());
 		}
 
 		/**
@@ -667,6 +669,18 @@ public final class Builder {
 
 		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
 		boolean soilSame;
+		/**
+		 * (8a ST) Whether a staged terrain cell holding {@code now} is built as {@code target}: exactly its planned state. Never the journal's
+		 * leniency: grass on a cell planned dirt (a relief's grass top made dirt) is not built, so it is written as its INSTANT twin.
+		 */
+		static boolean stagedMatches(BlockState now, BlockState target) {
+			// (GPT final review) the whole state, every property: a cell no staged write made yet (waterlogged leaves planned dry, frosted ice
+			// of another age) is not built, so it is written as the INSTANT twin writes it
+			return now == target;
+		}
+
+		/** (8a ST) A staged terrain target's run: a cell matches only its whole planned state ({@link #matches}). */
+		boolean exactState;
 
 		static boolean soil(BlockState s) {
 			return s.is(net.minecraft.world.level.block.Blocks.DIRT) || s.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK) || s.is(

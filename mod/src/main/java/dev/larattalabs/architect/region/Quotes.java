@@ -245,7 +245,26 @@ public final class Quotes {
 		notes.add("the region's cells are the kit's bill over the plan survey; lots and roads are measured over the land now (loaded chunks), "
 			+ "before the plan's own tiles write");
 		JsonObject bom = bill.bom();
-		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bom, bill.parts, bound, bill.exact, notes, clamp(terrain, bom));
+		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bom, bill.parts, bound, bill.exact, notes, clamp(terrain, bom),
+			stagedCells(p.planned().get("survivalStaged") instanceof JsonObject st ? st : null));
+	}
+
+	/**
+	 * (8a QX, docs/CONTRACT.md "Phase 8a" §5) {@link Quote#terrainCells} from plan.json's {@code survivalStaged} (group -> the staged terrain
+	 * cells over the plan survey, ARTL class 3): the time side only, so nothing here touches the bill. A group with no positive count is left
+	 * out; a plan planned before QX (no field) gives an empty map, not a refusal. The world is not read: an upper bound, as {@code survival.cells}.
+	 */
+	static Map<String, Long> stagedCells(@org.jspecify.annotations.Nullable JsonObject staged) {
+		Map<String, Long> out = new TreeMap<>();
+		if (staged == null) {
+			return out;
+		}
+		for (var e : staged.entrySet()) {
+			if (e.getValue() instanceof JsonElement v && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() && v.getAsLong() > 0) {
+				out.put(e.getKey(), v.getAsLong());
+			}
+		}
+		return out;
 	}
 
 	/**

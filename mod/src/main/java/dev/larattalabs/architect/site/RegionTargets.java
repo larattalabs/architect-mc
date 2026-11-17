@@ -72,6 +72,22 @@ public final class RegionTargets {
 		boolean rings;
 		/** The entry's before over the target's box (what the builder may replace), read once. */
 		@Nullable Cells before;
+		/** (8a ST) A staged terrain target: free, built at the region's terrain rate, each cell once the world supports it. */
+		boolean terrain;
+		/** (8a ST) The part's floating anchors (a virtual support under each). */
+		List<BlockPos> floating = List.of();
+		/** (8a ST) Where the next feed turn's scan starts (a queue index), its feed turns with nothing written, and whether it was released. */
+		int scanAt;
+		int stall;
+		boolean released;
+		/** (8a ST) Whether {@link #floating} was read from the live region (else read again at the next turn). */
+		boolean floatingRead;
+		/** (round 4) Cells this run wrote this session (the halted target's recovery check: a target whose cells survived writes none). */
+		int writes;
+		/** (round 5) Which queue cells this run wrote this session: the evidence a drifted cell is ours ({@link #ours}). */
+		final BitSet wrote = new BitSet();
+		/** (8a ST) The feed turn before which a built target's durability barrier is not tried again (after a failed one). */
+		long durableRetryAt = Long.MIN_VALUE;
 
 		Plan(long placedAt, BitSet held, int[] ends, int @Nullable [][] deps) {
 			this.placedAt = placedAt;
@@ -115,8 +131,14 @@ public final class RegionTargets {
 
 	// ------------------------------------------------------------------ the split of a tile (put-down)
 
-	/** A group's cells of a tile: its target's cells, the held ones marked. */
-	record Group(int group, String part, long[] pos, Value[] vals, BitSet held) {
+	/**
+	 * A group's cells of a tile: its target's cells, the held ones marked. (8a ST) {@code staged}: the group's staged terrain cells (ARTL
+	 * class 3), a target of their own apart from the group's paid and held one, every cell held (free).
+	 */
+	record Group(int group, String part, long[] pos, Value[] vals, BitSet held, boolean staged) {
+		Group(int group, String part, long[] pos, Value[] vals, BitSet held) {
+			this(group, part, pos, vals, held, false);
+		}
 	}
 
 	/** A survival tile's cells split: the free pass (written now) and the groups' targets. {@code freeOf}: free-pass cells per group. */
@@ -143,7 +165,7 @@ public final class RegionTargets {
 		Value[] vals = c.values();
 		for (int k = 0; k < pos.length; k++) {
 			int i = at.get(pos[k]);
-			if (i < 0 || cls == null || cls[i] == Packed.FREE) {
+			if (i < 0 || cls == null || Packed.freePass(cls[i])) { // (8a ST) a staged cell is its group's terrain target (freePass: FREE only)
 				fp.add(pos[k]);
 				fv.add(vals[k]);
 				if (i >= 0 && grp != null && grp[i] < groupIds.size()) {
@@ -151,11 +173,14 @@ public final class RegionTargets {
 				}
 				continue;
 			}
-			byGroup.computeIfAbsent(grp[i], x -> new ArrayList<>()).add(k);
+			// (8a ST) per group its staged terrain target first (2g), then its paid and held one (2g + 1): the land leads the feed order
+			byGroup.computeIfAbsent(2 * grp[i] + (cls[i] == Packed.STAGED ? 0 : 1), x -> new ArrayList<>()).add(k);
 		}
 		List<Group> groups = new ArrayList<>();
 		for (var e : byGroup.entrySet()) {
 			List<Integer> ks = e.getValue();
+			int g = e.getKey() >> 1;
+			boolean staged = (e.getKey() & 1) == 0;
 			long[] gp = new long[ks.size()];
 			Value[] gv = new Value[ks.size()];
 			BitSet held = new BitSet();
@@ -163,12 +188,12 @@ public final class RegionTargets {
 				int k = ks.get(j);
 				gp[j] = pos[k];
 				gv[j] = vals[k];
-				if (cls[at.get(pos[k])] == Packed.HELD) {
+				if (staged || cls[at.get(pos[k])] == Packed.HELD) {
 					held.set(j);
 				}
 			}
-			String part = e.getKey() < groupIds.size() ? groupIds.get(e.getKey()) : "group" + e.getKey();
-			groups.add(new Group(e.getKey(), part, gp, gv, held));
+			String part = g < groupIds.size() ? groupIds.get(g) : "group" + g;
+			groups.add(new Group(g, part, gp, gv, held, staged));
 		}
 		long[] fpa = new long[fp.size()];
 		for (int i = 0; i < fpa.length; i++) {
@@ -694,8 +719,28 @@ public final class RegionTargets {
 		int cap = capStacks(srv, owner);
 		// (6c RS-b) a tunnel's group builds ring by ring along its bore
 		var live = dev.larattalabs.architect.region.RegionsImpl.live(regionId);
-		List<Bore> bores = live == null ? List.of() : bores(live.ir().json(), g.part());
-		Order o = order(g.pos(), st, g.held(), costs, cap, Stockpiles::maxStack, bores);
+		List<Bore> bores = live == null || g.staged() ? List.of() : bores(live.ir().json(), g.part());
+		// (8a ST) a staged terrain group: TO's support order (cuts top down, fills by support, loose over support, leaves by their logs,
+		// a floating part from its anchor), read against the world at put-down; its runs are slabs of the order of at most TERRAIN_RUN cells
+		int connected = -1;
+		Order o;
+		if (g.staged()) {
+			ServerLevel level = Sites.levelOf(srv, dimension);
+			BlockState[] before = new BlockState[n];
+			for (int i = 0; i < n; i++) {
+				BlockState b = level == null ? null : Builder.stateIfLoaded(level, BlockPos.of(g.pos()[i]));
+				before[i] = b == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : b;
+			}
+			java.util.function.Function<BlockPos, BlockState> world = q -> {
+				BlockState b = level == null ? null : Builder.stateIfLoaded(level, q);
+				return b == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : b;
+			};
+			BuildOrder.Terrain t = terrainOrder(g.pos(), st, before, world, live == null ? List.of() : floatingOf(live.ir().json(), g.part()));
+			connected = t.connected();
+			o = new Order(t.order(), terrainRuns(n), new int[n][]);
+		} else {
+			o = order(g.pos(), st, g.held(), costs, cap, Stockpiles::maxStack, bores);
+		}
 		int dx = x1 - x0 + 1, dz = z1 - z0 + 1;
 		int[] queue = new int[n];
 		BitSet held = new BitSet();
@@ -726,6 +771,10 @@ public final class RegionTargets {
 		if (!bores.isEmpty()) {
 			rs.addProperty("rings", true);
 		}
+		if (g.staged()) {
+			rs.addProperty(TERRAIN, true); // (8a ST) a staged terrain target: every cell held, built at the region's terrain rate
+			rs.addProperty("connected", connected);
+		}
 		JsonObject spec = new JsonObject();
 		spec.addProperty("kind", kind);
 		spec.addProperty("policy", dev.larattalabs.architect.journal.Journal.Policy.CELL.name());
@@ -736,6 +785,64 @@ public final class RegionTargets {
 		x.addProperty(EXT_PART, g.part());
 		Construction c = new Construction(Construction.BUILDING, queue, Builder.JOURNAL_TARGET, null, new BitSet(), false, null);
 		return new Infra(id, Infra.CELLS + kind, owner, x, dimension, box, System.currentTimeMillis(), member, true, spec, c);
+	}
+
+	// ------------------------------------------------------------------ (8a ST) staged terrain targets
+
+	/** (8a ST) The spec member that marks a staged terrain target ({@code regionTarget.terrain: true}). */
+	static final String TERRAIN = "terrain";
+	/** (8a ST, §3 "Runs") A staged terrain run: a slab of the support order of at most this many cells. */
+	static final int TERRAIN_RUN = 4096;
+	/** (8a ST) How many unbuilt cells one feed turn of a staged target looks at, at most (its scan resumes there next turn). */
+	static final int TERRAIN_SCAN = 4096;
+	/** (8a ST) Feed turns with nothing written (and a loaded cell not yet supported) before a target may be released. */
+	static final int TERRAIN_STALL = 100;
+	/** (8a ST, GPT final review) Chunk loads one feed turn of a staged target may make to read its cells' supports. */
+	static final int TERRAIN_LOADS = 2;
+
+	/** (8a ST) Whether a target is a staged terrain target. */
+	public static boolean isTerrain(@Nullable Infra i) {
+		return is(i) && spec(i).has(TERRAIN) && spec(i).get(TERRAIN).getAsBoolean();
+	}
+
+	/** (8a ST) Run ends of a staged target of {@code n} cells: every TERRAIN_RUN cells of its order. */
+	static int[] terrainRuns(int n) {
+		int k = Math.max(1, (n + TERRAIN_RUN - 1) / TERRAIN_RUN);
+		int[] ends = new int[k];
+		for (int i = 0; i < k; i++) {
+			ends[i] = Math.min(n, (i + 1) * TERRAIN_RUN);
+		}
+		return ends;
+	}
+
+	/**
+	 * (8a ST, N-8a-3) A part's floating anchors in a survival IR: for each {@code floating[]} declaration (M3: {anchor, parts}) naming an
+	 * IR part of plan part {@code part} (its survival group), the anchor's position. Empty for most parts.
+	 */
+	static List<BlockPos> floatingOf(@Nullable JsonObject ir, @Nullable String part) {
+		List<BlockPos> out = new ArrayList<>();
+		if (ir == null || part == null || !(ir.get("floating") instanceof JsonArray fl) || !(ir.get("anchors") instanceof JsonObject anchors)) {
+			return out;
+		}
+		JsonObject sv = ir.get("survival") instanceof JsonObject o ? o : new JsonObject();
+		JsonArray groups = sv.get("groups") instanceof JsonArray a ? a : new JsonArray();
+		JsonObject parts = sv.get("parts") instanceof JsonObject o ? o : new JsonObject();
+		for (var e : fl) {
+			if (!(e instanceof JsonObject f) || !f.has("anchor") || !(anchors.get(f.get("anchor").getAsString()) instanceof JsonArray a) || a.size() < 3
+				|| !(f.get("parts") instanceof JsonArray ps)) {
+				continue;
+			}
+			for (var pe : ps) {
+				String irPart = pe.getAsString();
+				int gi = parts.has(irPart) ? parts.get(irPart).getAsInt() : -1;
+				String g = gi >= 0 && gi < groups.size() ? groups.get(gi).getAsString() : irPart;
+				if (part.equals(g)) {
+					out.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+					break;
+				}
+			}
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ (RP) the realised record: UNFINISHED at put-down, WRITTEN once built
@@ -829,6 +936,7 @@ public final class RegionTargets {
 		r.soilSame = i.construction() != null && !i.construction().building() && !Groups.leaving(i.id());
 		JsonObject rs = spec(i);
 		r.name = "part " + (rs.has("part") ? rs.get("part").getAsString() : "?") + " of region " + (rs.has("region") ? rs.get("region").getAsString() : "?");
+		r.exactState = rs.has(TERRAIN) && rs.get(TERRAIN).getAsBoolean(); // (8a ST) before the rescan below
 		BitSet held = CellBits.fromBase64(rs.has("held") ? rs.get("held").getAsString() : "");
 		for (int q = 0; q < r.size(); q++) {
 			int k = r.queue[q];
@@ -902,6 +1010,12 @@ public final class RegionTargets {
 		}
 		Plan pl = new Plan(i.placedAt(), held, ends, deps);
 		pl.rings = rs.has("rings") && rs.get("rings").getAsBoolean();
+		if (rs.has(TERRAIN) && rs.get(TERRAIN).getAsBoolean()) {
+			pl.terrain = true;
+			var live = rs.has("region") ? dev.larattalabs.architect.region.RegionsImpl.live(rs.get("region").getAsString()) : null;
+			pl.floating = live == null ? List.of() : floatingOf(live.ir().json(), rs.has("part") ? rs.get("part").getAsString() : null);
+			pl.floatingRead = live != null;
+		}
 		return pl;
 	}
 
@@ -1062,7 +1176,7 @@ public final class RegionTargets {
 	 * paid neighbours, each cell written as the tile writes it. Only blockers stop a started run (a player or a mob in a cell, an
 	 * unloaded chunk, a support not built yet), never materials: they are reserved.
 	 */
-	static void stepFed(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Builder.Purse purse, long ticks) {
+	static void stepFed(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Builder.@Nullable Purse purse, long ticks) {
 		Plan pl = planOf(srv, t);
 		if (pl == null) {
 			return;
@@ -1072,12 +1186,19 @@ public final class RegionTargets {
 		}
 		Construction c = t.construction();
 		if (r.built.cardinality() == r.size()) {
-			r.soilSame = true;
-			RoadBuilder.complete(srv, level, t, r, null);
+			// (8a ST, GPT final review) a staged target completes only through its durability barrier, on any path
+			if (!pl.terrain || mayComplete(pl, ticks, () -> terrainDurable(srv, t.id()))) {
+				r.soilSame = true;
+				RoadBuilder.complete(srv, level, t, r, null);
+			}
 			return;
 		}
 		if (c.paused()) {
 			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.ENDED);
+			return;
+		}
+		if (pl.terrain) {
+			stepTerrain(srv, level, t, r, pl, purse, ticks); // (8a ST) a staged terrain target: free, at the region's terrain rate, in support order
 			return;
 		}
 		int run = currentRun(r, pl);
@@ -1087,6 +1208,11 @@ public final class RegionTargets {
 		// (§4.3, the half-built safety) a target with no paid cell (its part's cut or fill in a tile of its own) waits until every other
 		// target of its part that has paid cells is BUILT: the part's walls, linings and shells stand before its free cells are written
 		if (r.bom.isEmpty() && pl.started < 0 && r.built.isEmpty() && paidSiblingBuilding(t)) {
+			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
+			return;
+		}
+		// (8a ST) the land first: a paid or held target waits, before it starts, for the staged terrain targets its tile put down beside it
+		if (pl.started < 0 && r.built.isEmpty() && terrainUnder(t) != null) {
 			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
 			return;
 		}
@@ -1180,6 +1306,536 @@ public final class RegionTargets {
 				RoadBuilder.complete(srv, level, now, r, null);
 			}
 		}
+	}
+
+	// ------------------------------------------------------------------ (8a ST) the staged terrain step
+
+	/**
+	 * (8a HB, TEST: {@code dev.terrain.rate {hold}}, this JVM only) Every staged terrain target writes nothing while set, so a gate holds a
+	 * region's land at 0 or part built (Remove, undo and the halt at a fraction). Never set in production.
+	 */
+	public static volatile boolean terrainHold;
+
+	/** (8a ST) Per survival region (its group): the feed tick its terrain budget was last spent in, and how much of it. Server thread. */
+	private static final Map<String, long[]> TERRAIN_SPENT = new HashMap<>();
+	/** (8a ST) Per region group and part: the last feed tick a staged target of the part wrote a cell. Server thread. */
+	private static final Map<String, Long> PART_WROTE = new HashMap<>();
+
+	/** (8a ST) What is left of a region's terrain budget this feed tick ({@code terrainPerTick} shared by all its staged targets). */
+	static int terrainLeft(@Nullable String group, long ticks) {
+		long[] s = TERRAIN_SPENT.computeIfAbsent(String.valueOf(group), k -> new long[] {Long.MIN_VALUE, 0});
+		if (s[0] != ticks) {
+			s[0] = ticks;
+			s[1] = 0;
+		}
+		return (int) Math.max(0, SurvivalWorld.terrainPerTick() - s[1]);
+	}
+
+	static void terrainSpend(@Nullable String group, long ticks, int n) {
+		long[] s = TERRAIN_SPENT.computeIfAbsent(String.valueOf(group), k -> new long[] {ticks, 0});
+		s[1] += n;
+	}
+
+	/**
+	 * (8a ST, docs/CONTRACT.md "Phase 8a" §3) One feed turn of a staged terrain target. No bill, so a run needs nothing to start; the
+	 * region's {@code terrainPerTick} is shared by its staged targets. The scan walks the queue (TO's support order) from its first unbuilt
+	 * cell, at most {@link #TERRAIN_SCAN} unbuilt cells, and writes each cell the world now supports ({@link #supported}): so a cell that
+	 * hangs from another target of its part (TO's rounds: x03's tile 18,31 from the anchor's 18,32) waits until those cells stand, with no
+	 * re-order. A cell is written as the tile writes it (CELL_FLAGS and its NBT), so a built target equals its INSTANT twin. A target that
+	 * wrote nothing for {@link #TERRAIN_STALL} turns, every cell it waited on loaded and unsupported, while no other staged target of its
+	 * part wrote either (a fill nothing will ever reach: the plan's own floating rock), is released: from then on a fill may go in without a
+	 * solid neighbour. Only that ordering wait is released: a cut still waits for the cut over it, a loose or resting block for a solid one
+	 * under it, a leaf for its log, and a cell whose support lies in a chunk not loaded is never written (GPT review P1).
+	 */
+	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.@Nullable Purse purse, long ticks) {
+		int budget = terrainHold ? 0 : terrainLeft(t.group(), ticks);
+		if (budget <= 0) {
+			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
+			return;
+		}
+		pl.started = Math.max(pl.started, 0);
+		if (pl.floating.isEmpty() && !pl.floatingRead) {
+			// (GPT review) the anchors read once the region is live (a plan made in the startup reconcile, before the regions load, had none)
+			JsonObject rs = spec(t);
+			var live = rs.has("region") ? dev.larattalabs.architect.region.RegionsImpl.live(rs.get("region").getAsString()) : null;
+			if (live != null) {
+				pl.floating = floatingOf(live.ir().json(), partOf(t));
+				pl.floatingRead = true;
+			}
+		}
+		int n = r.size();
+		int first = r.built.nextClearBit(0);
+		if (first >= n) {
+			return;
+		}
+		int limit = Math.min(TERRAIN_SCAN, n - r.built.cardinality());
+		int q = pl.scanAt > first && pl.scanAt < n ? pl.scanAt : first;
+		Cells before = beforeOf(t, pl);
+		List<RegionOverwrites.Live> sibs = null;
+		int placed = 0;
+		boolean unready = false, unknown = false;
+		int[] loads = {TERRAIN_LOADS};
+		for (int k = 0; k < limit && budget > 0 && (placed == 0 || Placement.remainingNanos() > 0); k++, q++) {
+			q = r.built.nextClearBit(q);
+			if (q >= n) {
+				q = r.built.nextClearBit(0);
+				if (q >= n) {
+					break;
+				}
+			}
+			BlockPos p = r.pos(q);
+			BlockState now = Builder.stateIfLoaded(level, p);
+			if (now == null) {
+				continue;
+			}
+			if (r.matches(now, q)) {
+				r.markBuilt(q, true);
+				continue;
+			}
+			int sup = support(level, r, pl, q, before, now, loads);
+			if (sup == UNKNOWN) {
+				unknown = true; // its support is in a chunk not loaded: never written, never a reason to release
+				continue;
+			}
+			if (sup == MANDATORY || sup == UNREACHED && !pl.released) {
+				unready = true;
+				continue;
+			}
+			int kk = r.queue[q];
+			boolean planned = before != null && kk >= 0 && kk < before.size() && now.is(before.states[kk].getBlock());
+			final BlockState here = now, want = r.target[q];
+			if (!mayReplace(planned, here, want, pl.wrote.get(q), () -> Builder.free(level, p, here, want))) {
+				r.blockedSince.putIfAbsent(q, Builder.ticksNow());
+				continue;
+			}
+			r.blockedSince.remove(q);
+			if (!now.isAir()) {
+				if (sibs == null) {
+					sibs = RegionOverwrites.lives(srv, t.group(), t.id());
+				}
+				// (XR) a block another writer paid for goes back (to the stockpile; with none, dropped at the cell)
+				RegionOverwrites.retake(sibs, p, now, purse != null ? purse::giveBack : (items, fb) -> Builder.dropItems(level, fb, items, null), RoadBuilder.dropAt(t),
+					t.id());
+			}
+			write(level, r, q, p);
+			pl.writes++;
+			pl.wrote.set(q);
+			budget--;
+			placed++;
+		}
+		pl.scanAt = placed > 0 ? 0 : q;
+		String pk = t.group() + "|" + partOf(t);
+		if (placed > 0) {
+			terrainSpend(t.group(), ticks, placed);
+			PART_WROTE.put(pk, ticks);
+			pl.stall = 0;
+		} else if (unready && !unknown && ++pl.stall >= TERRAIN_STALL && ticks - PART_WROTE.getOrDefault(pk, Long.MIN_VALUE / 2) >= TERRAIN_STALL && !pl.released) {
+			pl.released = true;
+			Architect.LOGGER.info("Region target {} ({}): {} staged cell(s) nothing reaches, after {} turns with nothing written: fills released (cuts, loose "
+				+ "blocks and leaves still wait for their support)", t.id(), partOf(t), n - r.built.cardinality(), pl.stall);
+		}
+		SiteWaits.observe(srv, level, t.id(), placed > 0 ? WaitCalc.Outcome.PLACED : WaitCalc.Outcome.IDLE);
+		if (r.built.cardinality() == n) {
+			Infra cur = Infras.get(t.id());
+			if (cur != null && mayComplete(pl, ticks, () -> terrainDurable(srv, t.id()))) {
+				r.soilSame = true;
+				RoadBuilder.complete(srv, level, cur, r, null);
+			}
+		}
+	}
+
+	/** (8a ST, GPT review) Test: the chunk saves before a staged target is marked BUILT, and the last outcome. */
+	static final java.util.concurrent.atomic.AtomicInteger TERRAIN_SAVES = new java.util.concurrent.atomic.AtomicInteger();
+
+	/**
+	 * (8a ST, GPT review P1) Before a staged terrain target is marked BUILT its chunk writes are made durable (the loaded chunks saved and
+	 * flushed, as a stockpile's save with the world): a crash can then never leave a BUILT target whose cells the saved world lost (with no
+	 * stockpile there is no ledger reconcile to reopen it). An undurable write leaves it building: it completes at a later turn.
+	 */
+	static boolean terrainDurable(MinecraftServer srv, @Nullable String target) {
+		// (round 4) T0's world barrier (Stockpiles.barrier: players, then a flushed chunk save known durable, then the ledger through
+		// DurableFile; refused under /save-off, after a failed load or on any failed step): OK only. IN_DOUBT (the ledger renamed, its folder's
+		// force failed) is not known durable: the target stays building and the barrier runs again later
+		DurableBarrier.Result b = Stockpiles.barrier(srv);
+		TERRAIN_SAVES.incrementAndGet();
+		LAST_BARRIER = b;
+		if (b.ok()) {
+			if ("ST1".equals(dev.larattalabs.architect.journal.WorldJournal.armed()) && target != null) {
+				// (round 5, TEST) which target reached ST1, written before the halt so the gate asserts on that target
+				try {
+					java.nio.file.Path adir = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect");
+					java.nio.file.Files.createDirectories(adir); // (a world with no stockpile has no architect dir yet)
+					java.nio.file.Files.writeString(adir.resolve(ST1_MARK), target, java.nio.charset.StandardCharsets.UTF_8);
+				} catch (java.io.IOException e) {
+					Architect.LOGGER.warn("ST1: the marker could not be written: {}", e.toString());
+				}
+			}
+			// (rule 18, TEST kill point ST1) a crash at the barrier: everything saved, the target not yet marked BUILT
+			dev.larattalabs.architect.journal.WorldJournal.kill("ST1");
+		}
+		return b.ok();
+	}
+
+	/** (round 5, TEST) The file, in the world's architect dir, naming the target that reached kill point ST1. */
+	static final String ST1_MARK = "st1-target.txt";
+
+	static boolean terrainDurable(MinecraftServer srv) {
+		return terrainDurable(srv, null);
+	}
+
+	/**
+	 * (round 4, GPT final review P2) Whether a staged write may replace {@code now}: the tile's planned before, our own block in another state
+	 * (a written leaf whose distance a neighbour changed, a waterlogged leaf planned dry: set to its planned state, as the INSTANT twin holds
+	 * it, instead of waiting for ever), or what a builder may replace ({@code free}: air, a fluid, a plant).
+	 */
+	static boolean mayReplace(boolean planned, BlockState now, BlockState target, boolean wrote, java.util.function.BooleanSupplier free) {
+		return planned || ours(now, target, wrote) || free.getAsBoolean();
+	}
+
+	/**
+	 * (round 5, GPT check P2) Evidence that a cell holding {@code now} is this target's own write in a drifted state: this run wrote it this
+	 * session ({@code wrote}), or it differs from the planned state only in properties the journal reads as volatile (a leaf's distance, a
+	 * grass top's snowy: {@link dev.larattalabs.architect.journal.StillOurs#holds}). Never the block type alone: another writer's
+	 * {@code oak_log[axis=x]} on a cell planned {@code oak_log[axis=y]} is not ours.
+	 */
+	static boolean ours(BlockState now, BlockState target, boolean wrote) {
+		return now.getBlock() == target.getBlock() && (wrote || dev.larattalabs.architect.journal.StillOurs.holds(now, null, target, null));
+	}
+
+	/** (round 4, dev) The last staged terrain barrier's result. */
+	static volatile DurableBarrier.@Nullable Result LAST_BARRIER;
+
+
+
+	/** (8a ST) Feed turns between two durability barriers of one built staged target (a failed one is retried, never skipped). */
+	static final int DURABLE_RETRY = 100;
+
+	/**
+	 * (8a ST, GPT final review) Whether a staged target whose cells all stand may be marked BUILT now: only when its barrier ({@code barrier},
+	 * the chunks saved and flushed) answers true this turn. A failed barrier keeps it building; it is tried again {@link #DURABLE_RETRY} turns
+	 * later, so a failure is never followed by a completion without one.
+	 */
+	static boolean mayComplete(Plan pl, long ticks, java.util.function.BooleanSupplier barrier) {
+		if (ticks < pl.durableRetryAt) {
+			return false;
+		}
+		try {
+			if (barrier.getAsBoolean()) {
+				return true;
+			}
+		} catch (RuntimeException e) {
+			// (round 4, GPT final review) a save that throws (a failed flush through vanilla's join) is a failed barrier: the same delay
+			Architect.LOGGER.warn("Staged terrain: the world barrier threw ({}); tried again in {} turns", e.toString(), DURABLE_RETRY);
+		}
+		pl.durableRetryAt = ticks + DURABLE_RETRY;
+		return false;
+	}
+
+	private static final net.minecraft.core.Direction[] FACES = net.minecraft.core.Direction.values();
+
+	/** (8a ST) {@link #support}'s answers: the cell may go in; a mandatory rule waits (a cut, a loose block, a leaf); a fill nothing reaches yet;
+	 * a support in a chunk not loaded. */
+	static final int READY = 0, MANDATORY = 1, UNREACHED = 2, UNKNOWN = 3;
+
+	/** (8a ST) Whether staged cell {@code q} may be written now ({@link #support} is {@link #READY}). */
+	static boolean supported(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before) {
+		BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+		return now != null && support(level, r, pl, q, before, now) == READY;
+	}
+
+	/**
+	 * (8a ST, TO's rules read from the world) Whether staged cell {@code q} (holding {@code now}) may be written now:
+	 * <ul>
+	 * <li>a cut once the cut over it (of this target) is gone;</li>
+	 * <li>a loose or resting block over a standing solid block (no leaf, no unbuilt cut);</li>
+	 * <li>a leaf (mandatory: never ground support) beside a standing log, a leaf of this target already built, or a leaf a log holds
+	 * ({@code distance} under 7);</li>
+	 * <li>a fill (a log too) where it replaces a solid block that still stands, beside standing solid land or a log (an unbuilt cut of this
+	 * target counts for nothing), or under a floating anchor (its 3x3, just below it); else {@link #UNREACHED} (releasable).</li>
+	 * </ul>
+	 * A neighbour the rule needs in a chunk not loaded answers {@link #UNKNOWN} (unless another neighbour already supports it).
+	 */
+	static int support(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before, BlockState now) {
+		return support(level, r, pl, q, before, now, new int[] {0});
+	}
+
+	/**
+	 * (8a ST, GPT final review) {@link #support}, with up to {@code loads[0]} chunk loads this turn: a support in a chunk not loaded is read by
+	 * loading its chunk (a staged target holds no ticket on its neighbours' chunks), so an unknown support never stalls a target for ever.
+	 */
+	static int support(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before, BlockState now, int[] loads) {
+		int k = r.queue[q];
+		BlockState was = before != null && k >= 0 && k < before.size() ? before.states[k] : null;
+		return supportRule(r.pos(q), r.target[q], was, now, loadingWorld(o -> Builder.stateIfLoaded(level, o), level::getBlockState, loads), o -> unbuiltCut(r, o), o -> {
+			int j = r.queuePos(o);
+			return j >= 0 && r.built.get(j);
+		}, o -> {
+			int j = r.queuePos(o);
+			return j >= 0 && !r.built.get(j) && r.target[j].isAir();
+		}, pl.floating);
+	}
+
+	/** TEST and the step: chunk loads made this session to read a staged cell's support. */
+	static final java.util.concurrent.atomic.AtomicLong SUPPORT_LOADS = new java.util.concurrent.atomic.AtomicLong();
+
+	/**
+	 * (8a ST) A world lookup that reads a position in a chunk not loaded ({@code loaded} answers null) through {@code load} (a chunk load), at
+	 * most {@code budget[0]} times; past it, null (unknown).
+	 */
+	static java.util.function.Function<BlockPos, @Nullable BlockState> loadingWorld(java.util.function.Function<BlockPos, @Nullable BlockState> loaded,
+		java.util.function.Function<BlockPos, BlockState> load, int[] budget) {
+		return o -> {
+			BlockState b = loaded.apply(o);
+			if (b == null && budget[0] > 0) {
+				budget[0]--;
+				SUPPORT_LOADS.incrementAndGet();
+				b = load.apply(o);
+			}
+			return b;
+		};
+	}
+
+	/**
+	 * (8a ST) {@link #support}'s rule, pure: {@code world} the block at a position (null: its chunk is not loaded), {@code unbuiltCut} a
+	 * position of the target that is a cut not yet built, {@code builtOurs} a position of the target already built, {@code cutWaits} the
+	 * cell over a cut is itself an unbuilt cut of the target.
+	 */
+	static int supportRule(BlockPos p, BlockState after, @Nullable BlockState was, BlockState now, java.util.function.Function<BlockPos, @Nullable BlockState> world,
+		java.util.function.Predicate<BlockPos> unbuiltCut, java.util.function.Predicate<BlockPos> builtOurs, java.util.function.Predicate<BlockPos> cutWaits,
+		List<BlockPos> floating) {
+		int role = terrainRole(after);
+		if (role == BuildOrder.T_CUT) {
+			return cutWaits.test(p.above()) ? MANDATORY : READY;
+		}
+		if (role == BuildOrder.T_LOOSE || role == BuildOrder.T_REST) {
+			BlockState b = world.apply(p.below());
+			if (b == null) {
+				return UNKNOWN;
+			}
+			return Builder.anchorState(b) && !b.is(net.minecraft.tags.BlockTags.LEAVES) && !unbuiltCut.test(p.below()) ? READY : MANDATORY;
+		}
+		boolean unloaded = false;
+		if (role == BuildOrder.T_LEAF) {
+			// (GPT final review) vanilla's rule exactly: a leaf's distance is 1 + the least of its neighbours' (a log 0, a leaf its distance);
+			// at 7 a non-persistent leaf decays. It goes in only when that distance is under 7 now; a persistent leaf (it never decays) still
+			// waits for a log or a leaf of its own target already built, so it is never written before its log
+			boolean persistent = after.hasProperty(net.minecraft.world.level.block.LeavesBlock.PERSISTENT) && after.getValue(
+				net.minecraft.world.level.block.LeavesBlock.PERSISTENT);
+			int least = net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
+			boolean ownLeaf = false;
+			for (var d : FACES) {
+				BlockPos o = p.relative(d);
+				BlockState b = world.apply(o);
+				if (b == null) {
+					unloaded = true;
+					continue;
+				}
+				if (unbuiltCut.test(o)) {
+					continue;
+				}
+				if (b.is(net.minecraft.tags.BlockTags.LOGS)) {
+					least = 0;
+				} else if (b.is(net.minecraft.tags.BlockTags.LEAVES) && b.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE)) {
+					least = Math.min(least, b.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE));
+					ownLeaf |= builtOurs.test(o);
+				}
+			}
+			// (round 4) a persistent leaf (it never decays) goes in beside any leaf a log holds (distance under 7), or a built leaf of its own
+			if (least + 1 < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE || persistent && (ownLeaf || least < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE)) {
+				return READY;
+			}
+			return unloaded ? UNKNOWN : MANDATORY;
+		}
+		if (was != null && Builder.anchorState(was) && now.is(was.getBlock())) {
+			return READY; // it replaces a standing support that still stands (a grass top made dirt)
+		}
+		for (var d : FACES) {
+			BlockPos o = p.relative(d);
+			BlockState b = world.apply(o);
+			if (b == null) {
+				unloaded = true;
+				continue;
+			}
+			if ((Builder.anchorState(b) || b.is(net.minecraft.tags.BlockTags.LOGS)) && !unbuiltCut.test(o)) {
+				return READY;
+			}
+		}
+		for (BlockPos f : floating) {
+			if (Math.abs(p.getX() - f.getX()) <= 1 && Math.abs(p.getZ() - f.getZ()) <= 1 && p.getY() == f.getY() - 1) {
+				return READY;
+			}
+		}
+		return unloaded ? UNKNOWN : UNREACHED;
+	}
+
+	/** (8a ST) Whether a position is a cut of the target (its planned after air) not yet built: it still stands, but is going. */
+	private static boolean unbuiltCut(Builder.Run r, BlockPos p) {
+		int j = r.queuePos(p);
+		return j >= 0 && !r.built.get(j) && r.target[j].isAir();
+	}
+
+	/**
+	 * (8a ST) A staged terrain target still building that a paid or held target {@code t} stands on or beside: one put down by the same
+	 * tile item, whose box meets {@code t}'s grown by 1. Null when none.
+	 */
+	static @Nullable Infra terrainUnder(Infra t) {
+		if (isTerrain(t) || t.member() == null) {
+			return null;
+		}
+		var b = t.box();
+		for (Infra o : Infras.all()) {
+			if (o == t || !isTerrain(o) || !o.building() || !java.util.Objects.equals(t.group(), o.group()) || o.member() == null
+				|| !java.util.Objects.equals(t.member().itemKey(), o.member().itemKey())) {
+				continue;
+			}
+			var x = o.box();
+			if (x.minX() <= b.maxX() + 1 && b.minX() - 1 <= x.maxX() && x.minY() <= b.maxY() + 1 && b.minY() - 1 <= x.maxY() && x.minZ() <= b.maxZ() + 1
+				&& b.minZ() - 1 <= x.maxZ()) {
+				return o;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (8a ST) Dev ({@code dev.region.terrain}): a region group's staged terrain targets: per target its part, tile, cells, built, the order's
+	 * cursor (its first unbuilt queue index), connected (TO's count at put-down), runs, scan position, stall and released; the rate.
+	 */
+	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, @Nullable String batchId, boolean check) {
+		return terrainJson(srv, group, batchId == null ? List.of() : List.of(batchId), check);
+	}
+
+	/** (8a HB) As {@link #terrainJson(MinecraftServer, String, String, boolean)}, the waits read from every batch named (a growth's too). */
+	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, List<String> batchIds, boolean check) {
+		JsonObject o = new JsonObject();
+		o.addProperty("terrainPerTick", SurvivalWorld.terrainPerTick());
+		o.addProperty("stagedBuild", Packed.stagedBuild());
+		o.addProperty("gameTime", srv.overworld().getGameTime());
+		try {
+			java.nio.file.Path mark = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(ST1_MARK);
+			if (java.nio.file.Files.exists(mark)) {
+				o.addProperty("st1Target", java.nio.file.Files.readString(mark, java.nio.charset.StandardCharsets.UTF_8).trim()); // (round 5, TEST)
+			}
+		} catch (java.io.IOException e) {
+			o.addProperty("st1Target", "unreadable: " + e);
+		}
+		var lb = LAST_BARRIER;
+		if (lb != null) {
+			JsonObject b = new JsonObject();
+			b.addProperty("outcome", lb.outcome().name());
+			b.addProperty("reason", lb.reason());
+			b.addProperty("playersMs", lb.playersMs());
+			b.addProperty("chunksMs", lb.chunksMs());
+			b.addProperty("ledgerMs", lb.ledgerMs());
+			o.add("lastBarrier", b);
+		}
+		o.addProperty("barriers", TERRAIN_SAVES.get());
+		// the region's items that wait for a target (their architect_mc:waitsFor), as Steward reads ITEM_WAITING's ext
+		JsonArray waits = new JsonArray();
+		for (String bid : batchIds) {
+			var batch = bid == null ? null : Batches.get(bid);
+			if (batch == null) {
+				continue;
+			}
+			for (var it : batch.items) {
+				if (it.ext.get(EXT_WAITS_FOR) instanceof JsonObject w) {
+					JsonObject x = new JsonObject();
+					x.addProperty("key", it.key);
+					x.addProperty("status", it.status.name());
+					x.addProperty("reason", it.reason);
+					x.add("waitsFor", w.deepCopy());
+					waits.add(x);
+				}
+			}
+		}
+		o.add("waits", waits);
+		JsonArray ts = new JsonArray();
+		long cells = 0, built = 0;
+		for (Infra i : Infras.all()) {
+			if (!isTerrain(i) || !java.util.Objects.equals(group, i.group())) {
+				continue;
+			}
+			JsonObject rs = spec(i);
+			JsonObject x = new JsonObject();
+			x.addProperty("target", i.id());
+			x.addProperty("part", partOf(i));
+			x.addProperty("tile", rs.has("tile") ? rs.get("tile").getAsString() : null);
+			x.addProperty("connected", rs.has("connected") ? rs.get("connected").getAsInt() : -1);
+			x.addProperty("runs", rs.get("runs") instanceof JsonArray a ? a.size() : 0);
+			x.addProperty("building", i.building());
+			int size = i.construction() == null ? 0 : i.construction().size();
+			// (GPT review) a completed target too: its run reads the world, so a check covers BUILT targets as well
+			Builder.Run r = i.construction() != null ? RoadBuilder.run(srv, i) : null;
+			Plan pl = r == null ? null : planOf(srv, i);
+			int b = !i.building() ? size : r == null ? 0 : r.built.cardinality();
+			x.addProperty("cells", size);
+			x.addProperty("built", b);
+			if (r != null) {
+				x.addProperty("cursor", r.built.nextClearBit(0));
+			}
+			if (check && r != null && pl != null) {
+				// every standing staged cell supported by the world as it stands (TO's rules read live): the half-built land is safe
+				ServerLevel level = Sites.levelOf(srv, i.dimension());
+				Cells before = beforeOf(i, pl);
+				int unsupported = 0;
+				JsonArray firstBad = new JsonArray();
+				if (level != null) {
+					r.rescan(level, false, true);
+				}
+				int missing = 0;
+				JsonArray firstMissing = new JsonArray();
+				for (int q = 0; q < r.size() && level != null && !i.building(); q++) {
+					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+					if (now != null && !r.matches(now, q)) {
+						missing++; // a BUILT target's cell that does not hold its planned state
+						if (firstMissing.size() < 5) {
+							BlockPos p = r.pos(q);
+							firstMissing.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + now + " planned " + r.target[q]);
+						}
+					}
+				}
+				x.addProperty("missing", missing);
+				x.add("firstMissing", firstMissing);
+				for (int q = r.built.nextSetBit(0); q >= 0 && level != null; q = r.built.nextSetBit(q + 1)) {
+					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+					int sup = now == null ? READY : support(level, r, pl, q, before, now);
+					if (sup == MANDATORY || sup == UNREACHED && !pl.released) {
+						unsupported++;
+						if (firstBad.size() < 5) {
+							BlockPos p = r.pos(q);
+							firstBad.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(r.target[q].getBlock()));
+						}
+					}
+				}
+				x.addProperty("unsupported", unsupported);
+				x.add("firstUnsupported", firstBad);
+			}
+			if (pl != null) {
+				x.addProperty("writes", pl.writes);
+				x.addProperty("scanAt", pl.scanAt);
+				x.addProperty("stall", pl.stall);
+				x.addProperty("released", pl.released);
+				x.addProperty("floating", pl.floating.size());
+			}
+			cells += size;
+			built += b;
+			ts.add(x);
+		}
+		o.addProperty("cells", cells);
+		o.addProperty("built", built);
+		o.add("targets", ts);
+		return o;
+	}
+
+	/** (8a ST, Drift) The x/z boxes [x0, z0, x1, z1] of a region group's staged terrain targets still building (their land is still the before). */
+	public static List<int[]> terrainBoxes(@Nullable String group) {
+		List<int[]> out = new ArrayList<>();
+		for (Infra o : Infras.all()) {
+			if (isTerrain(o) && o.building() && java.util.Objects.equals(group, o.group())) {
+				out.add(new int[] {o.box().minX(), o.box().minZ(), o.box().maxX(), o.box().maxZ()});
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -1341,6 +1997,12 @@ public final class RegionTargets {
 			write(level, r, q, r.pos(q));
 			n++;
 		}
+		// (round 4, GPT final review) a staged target finished by hand (creative /architect site finish) is marked BUILT only through the
+		// world barrier too: under /save-off, or a failed save, its cells stand and it stays building (the feed completes it later)
+		if (isTerrain(i) && !terrainDurable(srv, i.id())) {
+			Architect.LOGGER.warn("Region target {}: finished, but the world barrier refused; it is marked built at a later turn", i.id());
+			return n;
+		}
 		RoadBuilder.complete(srv, level, i, r, null);
 		return n;
 	}
@@ -1359,6 +2021,8 @@ public final class RegionTargets {
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
 			RESCAN.clear();
 			PLANS.clear();
+			TERRAIN_SPENT.clear();
+			PART_WROTE.clear();
 			RETAKEN.clear(); // (XR) the audit's retaken is this world's session: a target id is reused by the next world
 		});
 	}
@@ -1453,8 +2117,15 @@ public final class RegionTargets {
 
 	// ------------------------------------------------------------------ the region's view of its targets
 
-	/** One target's counts for {@code RegionView.build}: cells (held + paid), built, paid cells and paid built, its state. */
-	public record Counts(String id, String part, int cells, int built, int paid, int paidBuilt, boolean done, boolean startedAny, Map<String, Integer> outstanding) {
+	/**
+	 * One target's counts for {@code RegionView.build}: cells (held + paid), built, paid cells and paid built, its state; (8a ST)
+	 * {@code terrain}: a staged terrain target (its cells are all staged, none paid).
+	 */
+	public record Counts(String id, String part, int cells, int built, int paid, int paidBuilt, boolean done, boolean startedAny, Map<String, Integer> outstanding,
+		boolean terrain) {
+		public Counts(String id, String part, int cells, int built, int paid, int paidBuilt, boolean done, boolean startedAny, Map<String, Integer> outstanding) {
+			this(id, part, cells, built, paid, paidBuilt, done, startedAny, outstanding, false);
+		}
 	}
 
 	/** The counts of every target of a group (a region's), in feed order of creation. */
@@ -1469,13 +2140,14 @@ public final class RegionTargets {
 			JsonObject rs = spec(i);
 			int held = rs.has("heldCells") ? rs.get("heldCells").getAsInt() : 0;
 			int size = c == null ? 0 : c.size();
+			boolean terrain = isTerrain(i);
 			if (c == null || !c.building()) {
-				out.add(new Counts(i.id(), part, size, size, size - held, size - held, true, true, Map.of()));
+				out.add(new Counts(i.id(), part, size, size, size - held, size - held, true, true, Map.of(), terrain));
 				continue;
 			}
 			Builder.Run r = RoadBuilder.run(srv, i);
 			if (r == null) {
-				out.add(new Counts(i.id(), part, size, 0, size - held, 0, false, false, Map.of()));
+				out.add(new Counts(i.id(), part, size, 0, size - held, 0, false, false, Map.of(), terrain));
 				continue;
 			}
 			Plan pl = planOf(srv, i);
@@ -1492,7 +2164,7 @@ public final class RegionTargets {
 				}
 			});
 			out.add(new Counts(i.id(), part, r.size(), r.built.cardinality(), r.size() - (pl == null ? held : pl.held.cardinality()), paidBuilt, false,
-				r.built.cardinality() > 0 || pl != null && pl.started >= 0, o));
+				r.built.cardinality() > 0 || pl != null && pl.started >= 0, o, terrain));
 		}
 		out.sort(java.util.Comparator.comparing(Counts::id, java.util.Comparator.comparingInt(RegionTargets::idNum)));
 		return out;
@@ -1541,6 +2213,73 @@ public final class RegionTargets {
 
 	/** The ext key a region item waiting for an earlier target carries: {@code {target, part}} (ITEM_WAITING's ext, S-RS-1). */
 	public static final String EXT_WAITS_FOR = "architect_mc:waitsFor";
+	/**
+	 * (8a, docs/CONTRACT.md "Phase 8a" §3, §6; S-8a-3) The {@code kind} of a stage wait on a staged terrain target ({@code SITE_BUSY}, ext
+	 * {@code architect_mc:waitsFor {target, part, kind: "terrain", terrainCells, terrainBuilt, say}}). Steward words its line from this exact
+	 * string: keep it stable. Slice ST sets it. Since NEXT.
+	 */
+	public static final String WAIT_KIND_TERRAIN = "terrain";
+
+	// ------------------------------------------------------------------ (8a TO) the terrain order's inputs
+
+	/** (8a TO) A terrain cell's {@link BuildOrder#forTerrain} role, from its planned after. */
+	static int terrainRole(BlockState after) {
+		if (after.isAir()) {
+			return BuildOrder.T_CUT;
+		}
+		if (Builder.gravity(after)) {
+			return BuildOrder.T_LOOSE;
+		}
+		if (after.is(net.minecraft.tags.BlockTags.LOGS)) {
+			return BuildOrder.T_LOG;
+		}
+		if (after.is(net.minecraft.tags.BlockTags.LEAVES)) {
+			return BuildOrder.T_LEAF;
+		}
+		return Builder.kind(after) == BuildOrder.ATTACHABLE ? BuildOrder.T_REST : BuildOrder.T_FILL;
+	}
+
+	/** (8a ST) Whether a standing leaf holds the leaf beside it: its distance + 1 under vanilla's decay distance (a log is always so). */
+	static boolean leafHolds(BlockState st) {
+		return st.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE) && st.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE) + 1
+			< net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
+	}
+
+	/** (8a TO) What a world block is to {@link BuildOrder#forTerrain}'s land: a log, a leaf, site-solid land, or nothing that bears. */
+	static int terrainLand(BlockState st) {
+		if (st.is(net.minecraft.tags.BlockTags.LOGS)) {
+			return BuildOrder.LAND_LOG;
+		}
+		if (st.is(net.minecraft.tags.BlockTags.LEAVES)) {
+			// (GPT final review) only a leaf a log holds close enough that a leaf beside it is held too (vanilla's distance + 1 under 7)
+			return leafHolds(st) ? BuildOrder.LAND_LEAF : BuildOrder.LAND_NONE;
+		}
+		return Builder.anchorState(st) ? BuildOrder.LAND_SOLID : BuildOrder.LAND_NONE;
+	}
+
+	/**
+	 * (8a TO, docs/CONTRACT.md "Phase 8a" §3) A terrain target's build order ({@link BuildOrder#forTerrain}) from its cells: positions
+	 * ({@link BlockPos#asLong}), planned afters and befores (only cells whose after differs from their before: a carve inside the plan's
+	 * own raised land is air before and after, so it is no cell and is never queued), the world around them as it stands ({@code world}:
+	 * the land, and the same part's cells earlier targets built), and the part's floating anchors (M3's declaration; empty for most).
+	 * Leaves are held by order alone (the INSTANT write is {@code persistent=true}; see the as-built). Slice ST feeds its targets from it.
+	 */
+	static BuildOrder.Terrain terrainOrder(long[] pos, BlockState[] after, BlockState[] before, java.util.function.Function<BlockPos, BlockState> world,
+		List<BlockPos> floating) {
+		int n = pos.length;
+		int[] x = new int[n], y = new int[n], z = new int[n], role = new int[n];
+		boolean[] wasSolid = new boolean[n];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = BlockPos.of(pos[i]);
+			x[i] = p.getX();
+			y[i] = p.getY();
+			z[i] = p.getZ();
+			role[i] = terrainRole(after[i]);
+			wasSolid[i] = Builder.anchorState(before[i]);
+		}
+		int[][] fl = floating.stream().map(b -> new int[] {b.getX(), b.getY(), b.getZ()}).toArray(int[][]::new);
+		return BuildOrder.forTerrain(x, y, z, role, wasSolid, (a, b, c) -> terrainLand(world.apply(new BlockPos(a, b, c))), fl);
+	}
 
 	/**
 	 * (§6.3) Whether a survival region's item must wait for an earlier target to be built (then it waits SITE_BUSY, naming the target and
@@ -1577,12 +2316,14 @@ public final class RegionTargets {
 			// survival "after" means built, not put down (else a road writes over a target's unbuilt cells)
 			boolean earlier = ts >= 0 && (ts < si || ts == si && ti != null && (i.after.contains(ti.key) || pathTile && "tile".equals(ti.itemKind)
 				&& ti.spec != null && "terrain".equals(ti.spec.get("set").getAsString())));
+			// (8a ST, §3 "Stage waits") a lot or a road waits for a staged terrain target of its own stage too: the land under it is built first
+			earlier |= ts == si && isTerrain(t) && (i.key.startsWith("lot:") || i.key.startsWith("road:"));
 			if (!earlier || !meets(t.box(), roi)) {
 				continue;
 			}
 			// (Steward's RC finding 3) a road by its IR road id (its item key road:<id>), never the construction road's own id
 			String rk = tm == null ? null : tm.itemKey();
-			waitOn(b, i, t.id(), is(t) ? partOf(t) : "road " + (rk != null && rk.startsWith("road:") ? rk.substring(5) : t.id()));
+			waitOn(srv, b, i, t, is(t) ? partOf(t) : "road " + (rk != null && rk.startsWith("road:") ? rk.substring(5) : t.id()));
 			return true;
 		}
 		if (fluids) {
@@ -1607,6 +2348,37 @@ public final class RegionTargets {
 			+ " to be built: a survival region builds what stands on a part only once it is built");
 	}
 
+	private static void waitOn(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, Infra t,
+		@Nullable String part) {
+		String target = t.id();
+		JsonObject extra = terrainWait(srv, t);
+		waitFor(b, i, target, part, Batches::waitFor, "waits for " + (part == null ? target : part + " (" + target + ")")
+			+ (extra != null ? "'s land" : "") + " to be built: a survival region builds what stands on a part only once it is built", extra);
+	}
+
+	/**
+	 * (8a ST, §6, S-8a-3) The typed terrain wait's payload for a wait on {@code t}: kind "terrain" (Steward words its line from it) with the
+	 * target's staged cells; null when {@code t} is not a staged terrain target.
+	 */
+	static @Nullable JsonObject terrainWait(MinecraftServer srv, @Nullable Infra t) {
+		if (!isTerrain(t)) {
+			return null;
+		}
+		JsonObject extra = new JsonObject();
+		extra.addProperty("kind", WAIT_KIND_TERRAIN);
+		Builder.Run r = RoadBuilder.run(srv, t);
+		int cells = r == null ? (t.construction() == null ? 0 : t.construction().size()) : r.size();
+		extra.addProperty("terrainCells", cells);
+		extra.addProperty("terrainBuilt", r == null ? 0 : r.built.cardinality());
+		return extra;
+	}
+
+	/** (8a HB) A stage wait on {@code target} (the fluids barrier's), typed {@code kind: "terrain"} when it is a staged terrain target. */
+	public static void waitForTarget(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target,
+		@Nullable String part, String detail) {
+		waitFor(b, i, target, part, Batches::waitFor, detail, terrainWait(srv, Infras.get(target)));
+	}
+
 	/** How a wait is put on an item (a {@link Batches#waitFor} or a stage's). */
 	interface Waiter {
 		void wait(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, dev.larattalabs.architect.api.Reason why, String msg);
@@ -1618,6 +2390,12 @@ public final class RegionTargets {
 	 */
 	static void waitFor(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part, Waiter how,
 		String detail) {
+		waitFor(b, i, target, part, how, detail, null);
+	}
+
+	/** {@link #waitFor}; (8a ST) {@code extra}: members added to the wait ({@code kind}, {@code terrainCells}, {@code terrainBuilt}). */
+	static void waitFor(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target, @Nullable String part, Waiter how,
+		String detail, @Nullable JsonObject extra) {
 		String region = RegionItems.regionOf(b);
 		var l = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
 		String waiter = RegionWaitTags.waiterOf(b, i);
@@ -1633,6 +2411,9 @@ public final class RegionTargets {
 		if (waiter != null) {
 			w.addProperty("waiter", waiter);
 		}
+		if (extra != null) {
+			extra.entrySet().forEach(e -> w.add(e.getKey(), e.getValue()));
+		}
 		// (Steward's RC finding 5) one sentence per waiting part per wait: the first of its items to wait for this target says it; the
 		// others carry the wait without `say` (the sayer passes on only when it stops waiting for the target)
 		String sk = b.id + "|" + (waiter == null ? i.key : waiter) + "|" + target;
@@ -1645,6 +2426,7 @@ public final class RegionTargets {
 			w.addProperty("say", say);
 		}
 		i.ext.add(EXT_WAITS_FOR, w);
+		TypedWaits.typed(i); // (8a HB) this wait's payload: Batches.waitFor keeps it (an untyped wait clears it)
 		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, (says ? say + ": " : "") + detail);
 	}
 
@@ -1751,18 +2533,28 @@ public final class RegionTargets {
 			final List<String> targets = new ArrayList<>();
 			long cells;
 			long built;
+			long terrainCells;
+			long terrainBuilt;
 			boolean anyBuilt;
 			boolean allDone = true;
 		}
 		Map<String, Acc> parts = new LinkedHashMap<>();
 		Map<String, Integer> outstanding = new TreeMap<>();
-		long paid = 0, paidBuilt = 0;
+		long paid = 0, paidBuilt = 0, terrain = 0, terrainBuilt = 0;
 		boolean anyBuilding = false;
 		for (Counts c : counts(srv, group)) {
 			Acc a = parts.computeIfAbsent(c.part() == null ? "?" : c.part(), k -> new Acc());
 			a.targets.add(c.id());
-			a.cells += c.cells();
-			a.built += c.built();
+			if (c.terrain()) {
+				// (8a ST, §6) a staged target's cells are the part's terrain cells (not in cells/built), counted in percent with the paid ones
+				a.terrainCells += c.cells();
+				a.terrainBuilt += c.built();
+				terrain += c.cells();
+				terrainBuilt += c.built();
+			} else {
+				a.cells += c.cells();
+				a.built += c.built();
+			}
 			a.anyBuilt |= c.built() > 0 || c.startedAny();
 			a.allDone &= c.done();
 			paid += c.paid();
@@ -1835,13 +2627,14 @@ public final class RegionTargets {
 		JsonObject freeCells = rec.survival.get("freeCells") instanceof JsonObject o ? o : new JsonObject();
 		List<dev.larattalabs.architect.api.PartBuild> out = new ArrayList<>();
 		parts.forEach((part, a) -> out.add(new dev.larattalabs.architect.api.PartBuild(part, a.allDone ? "built" : a.anyBuilt ? "building" : "waiting", a.targets,
-			a.cells, a.built, freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L)));
+			a.cells, a.built, freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L, a.terrainCells, a.terrainBuilt)));
 		// parts with only free cells (nothing to build) are not listed; their free cells are in the record
 		var b = Batches.get(rec.batchId);
 		boolean itemsDown = b == null || b.items.stream().allMatch(x -> x.status.terminal());
 		boolean built = !anyBuilding && itemsDown;
 		boolean done = built && rec.state == dev.larattalabs.architect.api.RegionState.PLACED;
-		double percent = paid == 0 ? 100.0 : Math.floor(paidBuilt * 1000.0 / paid) / 10.0;
+		// (8a ST, S-8a-3) staged terrain counts with the paid cells
+		double percent = paid + terrain == 0 ? 100.0 : Math.floor((paidBuilt + terrainBuilt) * 1000.0 / (paid + terrain)) / 10.0;
 		Map<net.minecraft.world.item.Item, Integer> items = new LinkedHashMap<>();
 		outstanding.forEach((k, v) -> {
 			var it = Cells.item(k);
@@ -1849,7 +2642,7 @@ public final class RegionTargets {
 				items.merge(it, v, Integer::sum);
 			}
 		});
-		return new dev.larattalabs.architect.api.RegionBuild(built, done, percent, items, out);
+		return new dev.larattalabs.architect.api.RegionBuild(built, done, percent, items, out, SurvivalWorld.terrainPerTick());
 	}
 
 	/** The DevBridge's and the gate's view of a survival region's build (RegionBuild, by item id). */
@@ -1862,6 +2655,7 @@ public final class RegionTargets {
 		o.addProperty("built", bld.built());
 		o.addProperty("done", bld.done());
 		o.addProperty("percent", bld.percent());
+		o.addProperty("terrainPerTick", bld.terrainPerTick());
 		JsonObject out = new JsonObject();
 		bld.outstanding().forEach((k, v) -> out.addProperty(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(k).toString(), v));
 		o.add("outstanding", out);
@@ -1876,6 +2670,8 @@ public final class RegionTargets {
 			x.addProperty("cells", p.cells());
 			x.addProperty("built", p.built());
 			x.addProperty("freeCells", p.freeCells());
+			x.addProperty("terrainCells", p.terrainCells());
+			x.addProperty("terrainBuilt", p.terrainBuilt());
 			parts.add(x);
 		}
 		o.add("parts", parts);

@@ -32880,6 +32880,206 @@ LEFTOVERS R2/CN "the region ladder becomes a port" and CL's "a ladder ending at 
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
 
+
+## Phase 8a: construction mode for forms and relief
+
+The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) lives in the coordinator's side-session notes
+(`architect-8a-contract-draft.md`); its rows are 8aF, TO, ST, HB and QX, merged as one batch. Noah started 8a before 7c closed.
+
+### Slice 8aF as built (branch `slice/8aF` off origin/main d7d000ca; versions NEXT; $0; light; recorded 2026-11-15)
+
+- **Kit.** `markSurvival` adds `staged: true` to every op a terrain kind wrote (the ops that get `free`), except fluid ops (8c's) and a
+  brush stroke's (the player's instant tool: reading taken; "natural-only strokes inside a region" are left to ST). `walkKinds` adds
+  `stagedTerrain` (appended to `KINDS_FORMAT2`, kit and `IrStale`), so an older mod or kit refuses the IR `PLAN_STALE`.
+- **"Terrain parts in their own tile entries"**: ARTL v2 cells already carry their group, but a group can mix a terrain IR part with paid ones
+  (`town` = its `pads` + streets and props), so the per-cell class says it: **class 3 `CLASS_STAGED`** = a free-pass cell of a staged op (held
+  wins: a terrace's cut and fill stay `HELD` with its walls). Counted free, so `survival.cells`, `cost.survival` and every bill are unchanged.
+  The mod decodes it (`Packed.STAGED`, `freePass`) and `RegionTargets.split` writes it in the free pass exactly as `FREE` until ST builds
+  it as targets. Groups, journal entries and put-down are unchanged.
+- **API (NEXT, binary compatible)**: `PartBuild.terrainCells/terrainBuilt`, `RegionBuild.terrainPerTick`, `Quote.terrainCells` (old constructors
+  kept: 0 or empty until ST/QX); feature `terrainConstruction` from the helper's `region.terrainConstruction`; `RegionTargets.WAIT_KIND_TERRAIN
+  = "terrain"` pinned by a test. Dev hooks `dev.region.terrain` and `dev.terrain.rate` are ST's (they need its targets and rate).
+- **Ran**: compile; `unit-scope --run` (kit 132 files, 1071 pass; Gradle 689: one failure, `RegionFluidsLFTest` pinned `bubbleColumns` last,
+  fixed and re-run green; sidecar 566 of 568, the two `eval.e2e` sim runs timed out under the parallel dumps' load and pass 4/4 alone); api-compat `--baselines` 8 of 8 clean; gitleaks clean. Byte identity, all 454 committed plan fixtures
+  against d7d000ca: **creative IRs byte-identical (454/454)**; **survival IRs identical once `staged` and `stagedTerrain` are stripped
+  (454/454; 231 carry marks)**; rs/'s survival tiles cell-identical with class 3 read as 0 (rs01 5,586 staged cells, survival_village
+  20,394). No fixture moves, so no `*_MOVED` list changes; `asks-survival.md` is unchanged (its counts are free/held/paid).
+- **§0 drift (91ce29bf -> d7d000ca)**: versions only (v0.72.0: API 1.64.0, mod 0.72.0, kit 0.67.0); `bySupport` still BOX-only (Builder),
+  `blocksPerTick` 4, `PartBuild`/`RegionBuild`/`Quote`/`RegionTargets` unchanged; QL-b/QL-c changed the quote's land, not the free rule.
+  The free pass covers pads (always), relief, forms, scatter and stamps as §0 says. x01 plans 32,035 free cells on a flat survey
+  (§0's 32,078 is cells placed in game).
+- **For ST**: build `CLASS_STAGED` cells as fed held targets per (tile x group), separate from that group's paid/held target; fill
+  `terrainCells/terrainBuilt`, `terrainPerTick`, the typed wait (`WAIT_KIND_TERRAIN`) and the dev hooks. **TO** orders them; **HB**'s RL book
+  marks them free; **QX** fills `Quote.terrainCells` from the plan's staged counts (the kit would need to count class 3 apart: today it is
+  inside `free`).
+
+### Slice TO as built (branch `slice/TO` off `slice/8aF` 483882d6; pure order, not wired; $0; light; recorded 2026-11-15)
+
+- **`BuildOrder.forTerrain`** (pure) -> `Terrain(order, connected, cuts)`: cuts first, top down; fills by SO's support BFS (ties by y), each only
+  when connected; loose and resting blocks only over a placed solid fill or solid land; a leaf only next to a placed log or an already held leaf;
+  a floating part seeds from its anchor's 3x3. Cells nothing reaches yet follow `connected`. ST's entry: `RegionTargets.terrainOrder`.
+- **Leaf decision: by order alone.** INSTANT leaves are `persistent=true` (F3's M18; every leaf state in v72), so a written leaf never decays; a
+  temporary state is not the journal's planned after, so `planUndo` would skip it on a mid-build Remove. "A log within 4" reads as "held through
+  standing leaves": v72's leaves reach 8 face steps, and a branch log reached only through leaves must not deadlock.
+- **Tests** (`TerrainOrderTest`, 10): x01-x03, v04 spire, v05 ice spikes, v72 grove, v06 terrace (cells via `kit/test/terrain-order-cells.mjs`), as
+  one target and by tile; each cell checked as it goes in, and the whole built set checked after each target prefix. Coverage caveat: no fixture
+  has a loose or resting cell, and no grove leaf touches land, so the gravity and leaf rules rest on synthetic cases (the leaf one mutation-checked).
+- **For ST**: by tile in feed order x03 needs 2 rounds (1,356 cells: tile 18,31 comes before the anchor's 18,32), v72 7, v04 2. Build `connected`,
+  re-order the rest once the part's other targets stand; feed a floating part from its anchor's tile.
+- **Leftovers**: under 8aF the crater's and terrace's cells are HELD and F3's trees PAID, so only x01/x03/v05 stage (tests take the rest by part);
+  `f3/s01_steward_glade` throws in survival (`compileSurvival`: `opMats[i] is not iterable`); `unit-mod`'s step inputs miss the kit helper.
+
+### Slice QX as built (branch `slice/QX` off `slice/TO` c9e22901; quote's time side; $0; light; recorded 2026-11-15)
+
+- **Kit.** `evalTile`'s `notes.survival` counts class 3 apart as `staged` (only when > 0), still inside `free`: `survival.cells`, `cost.survival`
+  and every bill are unchanged. `planRegion` sums it per group into plan.json's **`survivalStaged`** ({group: n}, sorted, groups with none
+  left out, absent when none), outside the IR (sha unchanged), passed through `kit/tools/region.mjs`, the sidecar (`regions.ts`, `protocol.ts`).
+- **Mod.** `Quotes` fills `Quote.terrainCells` from it (`Quotes.stagedCells`: positive counts only; a plan planned before QX gives `{}`, no
+  refusal; creative stays `{}`); the world is not read (an upper bound, as `survival.cells`). `bom`, `bomParts`, `terrain`, `exact` and `notes`
+  are untouched, and no time note is added: the javadoc gives `cells / (terrainPerTick * 20)` s, and Steward reads `RegionBuild.terrainPerTick`
+  (ST's). `dev.region.quote` returns `terrainCells`. Docs: DEVBRIDGE, SETTLEMENTS §21 (the deferred terrain cost), STEWARD-SYNC.
+- **Counts** (`kit/test/qx.test.mjs`, each against the tiles' own class 3 cells and the check's `cost.bom`): x01 `hold` 32,035 (bill empty); x03
+  `hamlet` 8,139 + `isle` 8,884 (hamlet bills 57 as before); v05 `ice` 1,419; v06 `town` 10,852 (the steps' 5,506 cut and fill stay HELD);
+  v72 `village` 8,139, its five F3 tree/mushroom groups PAID as today (570/1,751/1,406/743/4,768 items) and never staged; x02 none (HELD).
+- **Ran**: compile; scoped units over the QX files (kit, sidecar, Gradle picks; `QuotesStagedQXTest` 3); the 59 asks' survival table
+  regenerated and diffed: **asks-survival.md byte-identical** (2,646,636 staged cells, none of it in the table); api-compat; gitleaks.
+- **For ST/HB**: a terrace's and crater's terrain is HELD under 8aF, so it is not in `terrainCells`; if ST stages held terrain, count it
+  into `staged` in `realise.mjs` and the quote follows. Revisions quote the revision plan's staged cells (not net of built ones).
+### Slice ST as built (branch `slice/ST` off `slice/TO` c9e22901; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Targets.** `RegionTargets.split` gives each group's class 3 cells a target of their own per tile (`regionTarget.terrain: true`, every cell
+  held, none in `freeCells`), put down ahead of the group's paid/held one. `Packed.freePass` is FREE only; `-Darchitect.stagedTerrain=false`
+  (dev) writes class 3 in the free pass again and drops the feature. Its queue is TO's `terrainOrder` read against the world at put-down.
+- **Building (reading taken).** No re-order of the persisted queue: each turn scans the queue from its first unbuilt cell (at most 4,096) and
+  writes each cell the world now supports by TO's rules read live (a cut once the cut above is gone; loose/resting over solid; a leaf by a
+  log or leaf; a fill on a replaced solid, beside solid land or a log, or under a floating anchor's 3x3), so TO's rounds (x03's tile 18,31)
+  wait on the cells beside them with no re-order. A target that wrote nothing for 100 turns while no other staged target of its part wrote
+  is released (the rest in order, unsupported) so a region always completes. Runs: 4,096-cell slabs of the order (no bill, so no start rule).
+- **Rate.** `terrainPerTick` in architect-world.json (default 16, clamped 1-64, kept by the toggle and budget rewrites), shared by a region's
+  staged targets per tick; `RegionBuild.terrainPerTick` reads it (javadoc fixed: per region, not per target). A staged target of an owner with
+  no stockpile (an all-free plan needs none) is built by the road tick.
+- **Waits.** A lot or road waits for a staged target of an earlier or its own stage under its box + 8: `SITE_BUSY`, `waitsFor {target, part,
+  kind: "terrain", terrainCells, terrainBuilt, say}`. A paid/held target of the same tile item waits (before it starts) for a staged target it
+  meets. `Drift.checkStage` skips columns under a building staged target. A tile all targets keeps its held-leaves entry.
+- **Counts.** `PartBuild.terrainCells/terrainBuilt` (staged targets' cells, not in `cells`/`built`); `percent` = (paid + terrain built) / (paid
+  + terrain). Dev: `dev.region.terrain {region, check?}` (targets, cursor, connected, stall, released, unsupported, gameTime, the waits),
+  `dev.terrain.rate {n?}`. Feature `terrainConstruction`: the helper's `region.terrainConstruction` AND `Packed.stagedBuild()`.
+- **F3 trees stay paid** (Noah, "Keep paid"; the contract's exception): under 8aF a tree group holds paid cells, so its free cells are HELD,
+  never class 3; ST changes nothing there. `kit/test/st-8a.test.mjs` pins s01_steward_glade: no staged log or leaf, every log class 2.
+- **Kit fix.** `compileSurvival` read its per-op flags by IR op index while the evaluator reads compiled ops (a fluid op's decor bed is a
+  second compiled op), so every flag after a bed shifted and the last threw (s01). Now through each compiled op's IR op. Moves the survival
+  tiles of v73, f3/c01 and f3/u05 (coral ponds): fluid-op cells now class 0 (the fluids gate's), their shells now paid, their corals no
+  longer paid; creative IRs and every other fixture unchanged. Gradle's `test` now declares kit/lib, the kit helpers and the plan fixtures.
+- **Ran.** Units (full: build.gradle): kit 1484/1484, gradle build PASS (StagedTargetsTest 5, StagedTerrainFoundationTest 5, TerrainOrderTest
+  10, SurvivalWorldTest 3), sidecar green (4 files timed out under load 22-28 and passed alone, 29/29 + 7/7); gitleaks clean. st-ingame
+  (artifacts/gate-runs-ST/20261116-031304-change, -032158-change, -071816-change): rs01 over raised land (relief at 2/tick), x01 (32,078
+  staged cells at 16/tick), x03's island with no stockpile and x03h (the hamlet) all pass staged targets, the rate, support at every half-built
+  sample, percent, creative twins with no target, twin equality (0 differ), conservation exact and E-flat 0. The typed wait is seen on
+  x03h's props tile (`waitsFor {target c4, part isle, kind terrain, terrainCells 7200, ...}`); no fixture has a lot on a cutting staged pad
+  (their pads cut nothing; rs01's lots start after its relief by the stage chain), so the lot-specific wait is unit-proven only.
+- **x03h's bill row (resolved; pre-existing, not ST's).** The check bills part `hamlet` 49 dirt for 49 paid grass cells of its green over the
+  flat land's grass: a realise skips them (no target bills them, nothing is consumed). They are kept by position (plan.json
+  `survivalTerrain`), so `Regions.quoteApproved` leaves them out: the check's `cost.survival.bom` is an upper bound by design (SA/BC A11). The
+  same mismatch with `-Darchitect.stagedTerrain=false` (gate-runs-ST/20261117-012402-change). The gate row now compares what a build consumed
+  with the quote (exact for x01, x03, x03h; within it for rs01); `kit/test/st-8a.test.mjs` pins the 49 kept cells. Final st-ingame:
+  gate-runs-ST/20261117-013030-change, 37/37 PASS (`--shards 1 --no-turbo --no-cache`).
+- **GPT review round (rule 15, 6 P1s).**
+  - (1) A stall releases only a fill's reach. Cuts, loose and resting blocks, and leaves keep their support, and a support in an unloaded
+    chunk neither writes nor releases.
+  - (2) The road tick's no-stockpile path skips a target that is leaving (C29).
+  - (3) A staged target's chunks are saved and flushed before it is marked BUILT.
+  - (4) A staged cell matches only its own block in its planned state (volatile properties aside).
+  - (5) A leaf needs a standing log, a built leaf of its target, or a leaf a log holds, in the live rule and in TO's `forTerrain`. A mined
+    before is no support. Floating anchors are read once the region is live.
+  - (6) Survival flags follow the compiled op only in IRs that `markSurvival` marks `survival.opMap: "compiled"` (those with a fluid op's
+    decor). Unmarked, already-accepted IRs keep the legacy mapping they were quoted with.
+  - The legacy mis-bill shipped from v0.41.0 (RS-a a07e7da6 and F3-c f07c0726, 2026-10-20) through v0.74.0: in coral-pond plans, shells were
+    billed free and coral paid (v73: 182 shell cells free that should be paid, 95 coral cells paid that should be free; c01: 36 coral; u05: 23
+    coral).
+  - Tests: TerrainOrderTest (+3), st-8a (+1).
+  - The gate step is now `sta-ingame`; 7b's `st-ingame` key was shadowed by it.
+  - Added x01crash: a halt with one target BUILT; after the restart 0 cells are missing; then a half-built Remove gives E-flat 0.
+  - Strict round: rs-survival-smoke, rl-crash and bf-ingame PASS (gate-runs-ST/20261117-021150-change). sta-ingame 41/41 PASS
+    (gate-runs-ST/20261117-031444-change). The run before it caught grass on a cell planned dirt counted as built; fixed.
+  - A BUILT target's cells that a later writer took up (rs01's terrace stairs and fences, XR) read as `missing` in the evidence. They are
+    not holes: the twin row covers them.
+  - Left: the ledger book marks staged cells free (HB); the fluids barrier's wait and `RegionView.waiting` are untyped (QX/HB).
+- **Round 3 (GPT final review; Noah's "3rd round").**
+  - The durability barrier now gates both completion paths. A failed barrier keeps the target building and is retried 100 turns later.
+    It refuses while any level has saving off.
+  - The leaf rule is vanilla's: distance = 1 + the lowest neighbour's distance, and a leaf goes in only when that is under 7. A persistent
+    leaf still needs a log or a built leaf of its own target. TO's land does the same.
+  - A support in an unloaded chunk is read by loading that chunk (2 loads per turn), so it is never an endless stall.
+  - A staged cell matches only its exact planned state.
+  - Tests: TerrainOrderTest has 16; each new test asserts the old behaviour it replaces.
+  - Strict gate on 4555c9af PASS (gate-runs-ST/20261117-035805-change): sta-ingame 44/44, rs-survival-smoke 40/0, rl-crash 90/0. It
+    includes x03saveoff (no target BUILT while saving is off; all BUILT after `/save-on`) and x01crash (dev.stockpile.halt with one target
+    BUILT: 0 cells missing after the restart; a half-built Remove: E-flat 0).
+  - Rule 18 on e5cfd83c (gate-runs-ST/20261117-045658-change): 41/42. Kill point ST1 can't be armed: `dev.journal.killAt`'s accepted-points
+    check (JournalDev.java:98) refuses `ST1`. So x01crash stopped at its first row, and the ST1 and post-crash conservation rows didn't run.
+    x03saveoff and its conservation row passed. Not fixed: code changes are on hold for Noah.
+  - **Open P1 (final GPT check, for Noah).** The barrier saves chunks, not players, and AFTER_SAVE then publishes the stockpile ledger. A
+    crash after a deposit can therefore leave the ledger ahead of player.dat (a doubled deposit). The stockpile's own save with the world
+    saves the players first.
+
+### Slice HB as built (branch `slice/HB` off `slice/ST` 356aac15, ST's review round 31104f58 merged; versions NEXT; $0; strict; recorded 2026-11-17)
+
+- **RL's book marks staged cells free** (the fix; `Stockpiles`, one helper and its two call sites, beside PSV/LC3/OVF's paths). Before, a
+  staged target's book (refreshed before each save) set `s` for every built staged cell: harmless (cost 0), but not §4's "free". Now
+  `freeBook`: every cell known, `s` and `o` empty, no rescan at the save; `reconcileTerrain` at an unclean start charges, owes and gives back
+  nothing and re-derives a building target's progress from the world. **A target recorded BUILT stays BUILT** (GPT review P1-1/P1-2: the
+  first round reopened one with cells missing, which could fill a lot's or road's deliberate cut, not every one a construction queue, or
+  clear another writer's paid block for the whole resumed run). Its cells are free, so a hole mints and loses nothing; it is logged.
+  Units: `StagedTerrainBookHBTest` (2).
+- **Readings.** "Remove and undo at 0/50/100%, both orders": a survival region's stage is never undone alone (Groups refuses it), so
+  undo is RU's `undoRevision` (hb-growth, at each fraction) and the orders are Regions.remove at once vs lot first (Sites.remove of the
+  lots on the island, then Regions.remove; at 0/50% the lots wait typed and nothing stands on the land, so only at 100%).
+- **ST's two hand-overs.** The book (above). Typed waits: the fluids barrier's stage wait on a staged target now carries `kind: "terrain"`
+  (`RegionTargets.terrainWait`, shared with the stage wait); `RegionView.waiting` is read with its payload: the waiting item's
+  `architect_mc:waitsFor` is copied onto the view's `ext` (additive, no API change), read from the region's batch and its revisions'
+  (P2-4: a growth's). P2-3: a payload lives only for the wait it was set for (`TypedWaits`: its writer marks it, every `Batches.waitFor`
+  clears an unmarked one), so a fluids gate's later player or materials wait carries no stale `kind: "terrain"`. The barrier path has no
+  in-game row (no fixture's bodies wait on staged land); the clear is unit-checked.
+- **Dev (TEST):** `dev.terrain.rate {hold}` (no staged target writes while set; this JVM); `dev.region.terrain`'s waits now read the
+  revisions' batches too (a growth's items wait in their own batch: its typed wait was invisible to the hook, not to Steward's events).
+- **Gate** `tools/gate8ahb.mjs` (hb-remove, hb-halt, hb-growth). hb-remove: x03h held at 0/50/100%, Remove E-flat 0, refund = consumed,
+  conservation exact, no staged bill; lot first: every staged cell stands; XR on raised rs01: 9 staged cells taken up, none a paid
+  victim, nothing retaken, standing = paid. hb-halt: saved mid run, halted with nothing saved: books k=n/s=0/o=0 at the save and after,
+  RL nothing charged or owed, RegionView terrainCells kept, terrainBuilt = the world, rate 4, part building, typed wait again; resumed to
+  the INSTANT twin (0 differ), E-flat 0. hb-growth: a growth's pads over stepped land staged, verges wait typed `terrain`; undoRevision at
+  0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
+- **Ran** (f9903a02, ST merged): Gradle build 1359 tests 0 failures; scoped kit 74/74 (1 skipped); step-inputs check; gitleaks clean. Final
+  gate-runs-hb/20261117-034128-change: hb-remove 22/0, hb-halt 14/0, hb-growth 28/0 (`--shards 1 --no-turbo --no-cache`, 9018/9019).
+- **Fix round** (16fb55ad, gate-runs-hb/20261117-043357-change): hb-halt and hb-growth pass (RegionView.waiting typed `terrain` from the
+  growth's batch); new row xr01crash. Its first draft also turned RL's save on join off (`noPeriodic` alone): 387 paid units stood unpaid
+  after the restart, a test artefact (production always saves on join); now `{noPeriodic, joinSave}`.
+- **Combined ST/HB round** (Noah, outside the guard; slice/T0 2c2b093c merged).
+  - **P1, the save on join** (`Stockpiles.feed`): a target that joined the feed (in the pass, or through a reconcile between passes) is
+    saved through T0's `barrier()` BEFORE the pass steps any target. Only OK lets the pass run; REFUSED or IN_DOUBT holds it until a later
+    tick (rule 17). Kill point JS1 (TEST): a target that joined built paid cells in its first step. Gate hb-join (rs01, `JS1+save`).
+  - **Premise check (rule 19): the failing-first run did not fail.** At a448bcae (pre-fix, gate-runs-hb/20261117-062015-change) hb-join
+    PASSED. The step and its join save run in one server tick, and every chunk save (autosave, a kill's `+save`, ST's `terrainDurable`)
+    goes through the world-save hook, which writes the ledger with refreshed books after the chunks. Paid blocks never reach the disk
+    ahead of their target's book. The reorder is kept for rule 17; hb-join is its regression row.
+  - **P3:** `HB_ONLY=xr01crash` runs it alone. xr01crash's booked-BUILT window is unreachable with the save on join on (a later join drops
+    the books of BUILT targets): recorded, not judged (run 8's c4 is the one instance).
+  - **The 54 missing cells (xr01crash): the same class, diagnosed.** They are props target c10 (54 cells: stone bricks, a fence, stairs, a
+    trapdoor). It joined with its book saved (nothing built), built after the last ledger save, and was recorded BUILT: `Infras.put`
+    saves the sites file at once, ahead of the chunks and the ledger. The halt lost its chunk writes, and RL counts as lost only cells that
+    stood paid at the save, so it stays BUILT with 54 holes. Nothing is minted or lost (the stock keeps the items: standing = paid,
+    conservation exact). The join barrier does not fix it; a barrier before a fed target's BUILT is persisted would (ST's completion
+    item, for every fed target). Not widened into a reopen.
+- **Ran** (T0 merged, 9018/9019, `--shards 1 --no-turbo --no-cache`): gate-runs-hb/20261117-064618-change at bbbd506d: hb-join 4/0,
+  hb-growth 30/0, rl-crash 110/0; gate-runs-hb/20261117-072039-change at 297c0c64 (the two gate-only fixes): hb-halt 15/0, hb-remove
+  27/1 (the one FAIL is xr01crash's 54-cell class above). Gradle build 1414 tests 0 failures; step-inputs check; gitleaks clean.
+- **Pre-batch** (GPT check SAFE on 858e7671; the 54-cell gap is P2, to TXN T2): a refused save on join is retried after 100 ticks and
+  warned on the first refusal, then once a minute; the pass stays held (unit: `StagedTerrainBookHBTest`). Merged slice/ST 75355455 and
+  slice/T0 a4531467 (`dev.journal.killAt` accepts ST1 and JS1). gate-runs-hb/20261117-074658-change at 3ef7a289: hb-halt 15/0,
+  hb-growth 30/0, rl-crash 110/0, hb-remove 27/1 (the one FAIL is xr01crash's class above: 100 cells this time, c10 and lot s2,
+  both BUILT after the last ledger save; standing = paid 347, conservation exact). Gradle build 1432 tests, 0 failures.
+- **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the 54-cell class above
+  (TXN T2).
+
 ### Slice T0 as built (branch `slice/T0` off origin/main 5a782f9d; one fix round after the NOT SAFE GPT review of 042da098 plus TXN review 3 items 1 and 5; no API package change; $0; strict; recorded 2026-11-16)
 
 - **DurableFile** (`site/DurableFile.java`): temp, file force, atomic rename, folder force; OK / REFUSED / IN_DOUBT. `_durable` is `{store: the file's own persisted UUID, type: label, gen}` (`id()`, `satisfies(id, gen)`); a folder open that fails is IN_DOUBT off Windows; each new folder's entry is forced in its parent before the rename, and every entry from the file's folder up to the world folder is confirmed once a world session even when an earlier session made it (`confirmTo`; also `playerdata/` and every live region folder before the barrier acknowledges); an older generation never replaces a newer one; a loaded generation counts as written only after `confirm()` forces the file and folders again; `writeUnforced` un-acknowledges the generations it replaces.
@@ -33150,3 +33350,24 @@ so two module lots that share items can't each be held to their own measured bou
   region whose group is missing). Gradle full 1371 (0 failed, 1 skipped); `20261117-184144-change` at a5c5f281: lcap-survival 32/0 (row Z passes), bc-cap 10/0.
 - Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves an orphan record (it writes nothing; removed alone);
   lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).
+- **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 4 (Noah: "one more small round"; T0's barrier).**
+  - The staged barrier is T0's `Stockpiles.barrier()` (slice/T0 2c2b093c, merged): players, then chunks, then the ledger. Only OK
+    completes a target; REFUSED or IN_DOUBT keeps it building. This closes the deposit-doubling P1.
+  - Creative `/architect site finish` goes through the barrier too. A barrier that throws takes the same 100-turn retry.
+  - A staged write may set our own block's drifted state to its planned one (no stall on a written leaf whose distance changed). A
+    persistent leaf may go in beside any leaf a log holds.
+  - ST1 can now be armed. The halted target's own recovery is checked: it must complete with 0 cells written again.
+  - x03hdeposit (a deposit, a staged barrier, a crash) fails first on the old code (gate-runs-ST/20261117-060258-change: 2 lanterns
+    minted) and passes with the barrier.
+  - Final strict gate on 200bfc51 (gate-runs-ST/20261117-063123-change): sta-ingame 54/54, rs-survival-smoke 40/0, rl-crash 110/0.
+  - Barrier cost on the built x01 world (3 runs): players 11-142 ms, chunks 10-108 ms, ledger 9-12 ms.
+
+- **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose failed save left no snapshot) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart (folders and `.mcc` are re-confirmed instead); an owed chunk whose kept object can't be serialized again stays owed; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 5 (small fix after ST's final GPT check, which found no P1).** slice/T0 a4531467 is merged.
+  - A drifted-state reset now touches only a cell with evidence it is ours: this run wrote it this session, or it differs from the
+    planned state only in volatile properties. A foreign `oak_log[axis=x]` on a cell planned `oak_log[axis=y]` is left alone (unit test).
+  - x03hdeposit holds the staged targets until the deposit is in, then releases them.
+  - The target that reaches ST1 is recorded in a marker file and asserted on: c1 completed with 0 cells written again.
+  - Runs: sta-ingame 54/54 (gate-runs-ST/20261117-080333-change); rl-crash 110/0 (gate-runs-ST/20261117-073445-change). In that earlier
+    run sta-ingame failed only because the ST1 marker needed the world's architect dir, which a no-stockpile world doesn't have; fixed.

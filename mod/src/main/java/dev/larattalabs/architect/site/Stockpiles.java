@@ -149,6 +149,11 @@ public final class Stockpiles {
 		boolean dirty;
 		/** (RL) A target joined the feed this pass: the ledger is saved after it. */
 		boolean joined;
+		/** (8a HB) The tick a refused save on join is tried again (0: now), and how many were refused in a row. */
+		long joinRetryAt;
+		int joinFails;
+		/** (8a HB, kill point JS1) The ids of the targets that joined the feed since the last feed pass. */
+		final List<String> fresh = new ArrayList<>();
 		long lastEvent = Long.MIN_VALUE / 2;
 
 		Pile(String id, String owner, String dimension, StockLedger ledger) {
@@ -1926,6 +1931,7 @@ public final class Stockpiles {
 			FeedOrder.insert(p.order, idOf(t), origin(idOf(t)), Stockpiles::origin);
 			changed = true;
 			p.joined = true;
+			p.fresh.add(idOf(t));
 		}
 		if (changed) {
 			p.dirty = true;
@@ -1939,6 +1945,31 @@ public final class Stockpiles {
 
 	static void reconcile(MinecraftServer srv, Pile p) {
 		targets(srv, p);
+	}
+
+	/** (8a HB, JS1) Per target that joined the feed this pass (staged terrain aside: free), its built cell count now. */
+	private static Map<String, Integer> freshBuilt(MinecraftServer srv, Pile p) {
+		Map<String, Integer> out = new HashMap<>();
+		for (String id : p.fresh) {
+			Object t = Sites.get(id) != null ? Sites.get(id) : Infras.get(id);
+			Builder.Run r = t == null || stagedTerrain(t) ? null : run(srv, t);
+			if (r != null) {
+				out.put(id, r.built.cardinality());
+			}
+		}
+		return out;
+	}
+
+	/** (8a HB, JS1) Whether a target that joined this pass built a cell in its step (against {@link #freshBuilt}). */
+	private static boolean freshWrote(MinecraftServer srv, Pile p, Map<String, Integer> before) {
+		for (var e : before.entrySet()) {
+			Object t = Sites.get(e.getKey()) != null ? Sites.get(e.getKey()) : Infras.get(e.getKey());
+			Builder.Run r = t == null ? null : run(srv, t);
+			if (r != null && r.built.cardinality() > e.getValue()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Dev/state: per target, what it may use now ({@code stock - reserved}) and whether it reserves. */
@@ -2006,6 +2037,26 @@ public final class Stockpiles {
 		if (ts.isEmpty()) {
 			return;
 		}
+		// (RL; 8a HB, the GPT review's P1, rule 17) a target joined the feed: the ledger (its book of the target's cells) is saved with the
+		// world BEFORE any feed step, so a crash after the step finds the target in the saved ledger and RL charges what it built. Before, the
+		// save came after the pass: a halt between left the target's paid blocks on the disk with no book (no charge: a dupe). A save that
+		// does not complete holds the pass: nothing is built or charged until a later tick's save does. TEST: dev.stockpile.ps noPeriodic
+		// turns it off with the periodic save (the before-the-fix cases); joinSave: true keeps it on with the periodic save off
+		if (p.joined && !testNoJoinSave) {
+			// (8a HB, the GPT check's P3) a refused barrier is retried after JOIN_RETRY_TICKS, not every tick; the pass is held meanwhile
+			if (ticks < p.joinRetryAt) {
+				return;
+			}
+			if (!joinSave(srv, p)) {
+				p.joinRetryAt = joinRetryAt(ticks);
+				return;
+			}
+			p.joinRetryAt = 0;
+			p.joinFails = 0;
+		}
+		p.joined = false;
+		// (8a HB, kill point JS1) the paid cells the targets that joined this pass have built before it
+		Map<String, Integer> freshBuilt = freshBuilt(srv, p);
 		int cap = capacity(srv, p);
 		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		Map<String, Integer> reserved = feedPass(ts, new FeedVisit<Object>() {
@@ -2130,15 +2181,43 @@ public final class Stockpiles {
 			}
 		});
 		LAST_RESERVED.put(p.id, reserved);
-		if (p.joined) {
-			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
-			// the next autosave finds the target in the saved ledger. TEST: dev.stockpile.ps noPeriodic turns it off with the periodic save
-			// (the before-the-fix cases: nothing saved between lifecycle saves); joinSave: true keeps it on with the periodic save off
-			p.joined = false;
-			if (!testNoJoinSave) {
-				saveWithWorld(srv);
-			}
+		// (8a HB, TEST kill point JS1: dev.journal.killAt) a target that joined this pass built a paid cell in its first feed step
+		if (freshWrote(srv, p, freshBuilt)) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("JS1");
 		}
+		p.fresh.clear(); // (JS1) the targets that joined since the last pass (in it, or through a reconcile between passes) have had their step
+	}
+
+	/**
+	 * (8a HB) RL's save on join, before the pass's steps, through the world barrier (slice T0: players, then chunks, then the ledger as a
+	 * confirmed DurableFile write, its books refreshed first). True only when the barrier is OK: the ledger on the disk then holds the joined
+	 * targets' books. REFUSED (save-off, a failed load or step) or IN_DOUBT holds the pass (rule 17: no step mutates the stock before a
+	 * confirmed record); a later tick tries again.
+	 */
+	static boolean joinSave(MinecraftServer srv, Pile p) {
+		DurableBarrier.Result r = barrier(srv);
+		if (!r.ok()) {
+			p.joinFails++;
+			if (joinWarns(p.joinFails)) {
+				Architect.LOGGER.warn("Stockpiles: the save on join was {} ({}); the feed of {} waits for it (failure {}, retried every {} s)", r.outcome(), r.reason(),
+					p.owner, p.joinFails, JOIN_RETRY_TICKS / 20);
+			}
+			return false;
+		}
+		return true;
+	}
+
+	/** (8a HB) Ticks between tries of a refused save on join (the pass is held meanwhile; ST's staged retry uses the same 100). */
+	static final int JOIN_RETRY_TICKS = 100;
+
+	/** (8a HB) The tick a refused save on join is tried again. */
+	static long joinRetryAt(long now) {
+		return now + JOIN_RETRY_TICKS;
+	}
+
+	/** (8a HB) Whether the {@code n}th refused save on join in a row is logged: the first, then every 12th (once a minute at the retry rate). */
+	static boolean joinWarns(int n) {
+		return n == 1 || n % 12 == 0;
 	}
 
 	/**
@@ -2855,6 +2934,14 @@ public final class Stockpiles {
 						continue;
 					}
 					String key = keyOf(t);
+					if (stagedTerrain(t)) {
+						// (8a HB, §4) a staged terrain target is free: its book marks every cell free (known, never standing paid, never owed),
+						// with no rescan (nothing to charge or give back; a restart re-derives its progress from the world)
+						p.ledger.book(key, freeBook(r.queue));
+						keep.add(key);
+						n++;
+						continue;
+					}
 					StockLedger.Book old = p.ledger.book(key);
 					boolean fits = old != null && old.fits(r.queue);
 					java.util.BitSet owed = fits ? old.owed() : new java.util.BitSet();
@@ -2962,6 +3049,9 @@ public final class Stockpiles {
 	 */
 	static boolean reconcile(MinecraftServer srv, ServerLevel level, Pile p, Object t, String key, Builder.Run r, StockLedger.Book b) {
 		String id = idOf(t);
+		if (stagedTerrain(t)) {
+			return reconcileTerrain(srv, level, p, (Infra) t, key, r, constructionOf(t));
+		}
 		r.rescan(level, true); // every cell, its chunk loaded (as the sites check at the start)
 		r.newlyCount = 0;
 		Construction c = constructionOf(t);
@@ -3068,6 +3158,55 @@ public final class Stockpiles {
 				reopen ? "; it builds again" : "");
 		}
 		return moved;
+	}
+
+	/** (8a HB) Whether a feed target is a staged terrain target (free: no cell is charged, owed or given back). */
+	static boolean stagedTerrain(Object t) {
+		return t instanceof Infra i && RegionTargets.isTerrain(i);
+	}
+
+	/** (8a HB, §4) A staged terrain target's book over its queue: every cell known and free (never standing paid, never owed). */
+	static StockLedger.Book freeBook(int[] queue) {
+		java.util.BitSet known = new java.util.BitSet();
+		known.set(0, queue.length);
+		return new StockLedger.Book(java.util.Arrays.hashCode(queue), queue.length, known, new java.util.BitSet(), new java.util.BitSet());
+	}
+
+	/**
+	 * (8a HB, docs/CONTRACT.md "Phase 8a" §4) A staged terrain target after an unclean stop: free, so nothing is charged, owed or given back
+	 * (an older book's standing or owed bits are dropped). A target still building re-derives its progress from the world (the rescan): a
+	 * cell missing from the saved world is queued again. A target recorded BUILT stays BUILT, even with cells that are not its block now: its
+	 * cells cost nothing, so a hole mints and loses nothing, while a reopen could not tell a crash's hole from a later writer's deliberate cut
+	 * or block (a lot's cellar, a road's cut, a paid wall: not all of them are construction queues) and would fill or clear it (the GPT
+	 * review's P1s). It is logged. The book is then the free book, so a second load changes nothing.
+	 */
+	static boolean reconcileTerrain(MinecraftServer srv, ServerLevel level, Pile p, Infra t, String key, Builder.Run r, Construction c) {
+		r.attachOwed(new java.util.BitSet()); // never owed (an older book's bits dropped), so the rescan marks every standing cell built
+		r.rescan(level, true); // every cell, its chunk loaded (as the sites check at the start)
+		r.newlyCount = 0;
+		int missing = r.size() - r.built.cardinality();
+		p.ledger.book(key, freeBook(r.queue));
+		JsonObject o = new JsonObject();
+		o.addProperty("key", key);
+		o.addProperty("terrain", true);
+		o.addProperty("aheadCells", 0);
+		o.addProperty("owedCells", 0);
+		o.addProperty("lostCells", 0);
+		o.addProperty("missingCells", missing);
+		o.addProperty("built", !c.building());
+		o.add("charged", new JsonObject());
+		o.add("owes", new JsonObject());
+		o.add("creditedBack", new JsonObject());
+		o.add("overflow", new JsonObject());
+		o.add("swapBack", new JsonObject());
+		o.addProperty("reopened", false);
+		o.addProperty("playerCells", 0);
+		LAST_RECONCILE.put(t.id(), o);
+		if (!c.building() && missing > 0) {
+			Architect.LOGGER.info("Stockpile {}: staged terrain target {} is BUILT with {} cell(s) not its block after an unclean stop (a later writer's or "
+				+ "a crash's; free either way): left BUILT", p.owner, t.id(), missing);
+		}
+		return false;
 	}
 
 	/**

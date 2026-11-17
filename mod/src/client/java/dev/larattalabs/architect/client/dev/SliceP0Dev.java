@@ -319,7 +319,7 @@ public final class SliceP0Dev {
 			});
 		// (M5 QT) Regions.quote / quoteApproved: the whole survival bill of a plan with its lot entries, read-only
 		DevBridge.register("dev.region.quote", 120_000, "{planId | sha, lotEntries?: {lot: entry}} - (M5 QT) Regions.quote (planId) or Regions.quoteApproved (sha) "
-			+ "-> {planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, terrain (QL), thread, ms} or {refused, reason}", (req, mc) -> {
+			+ "-> {planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, terrain (QL), terrainCells (8a QX), thread, ms} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.optStr("planId", null);
 				String sha = f.optStr("sha", null);
@@ -351,6 +351,9 @@ public final class SliceP0Dev {
 					JsonObject tr = new JsonObject();
 					q.terrain().forEach(tr::addProperty);
 					o.add("terrain", tr);
+					JsonObject tc = new JsonObject();
+					q.terrainCells().forEach(tc::addProperty);
+					o.add("terrainCells", tc);
 					o.addProperty("thread", thread[0]);
 					o.addProperty("ms", (System.nanoTime() - t0[0]) / 1e6);
 					return o;

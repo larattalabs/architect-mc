@@ -154,11 +154,15 @@ public final class ApiRules {
 					case "plan.shapePromotion" -> "shapePromotion"; // 7c PF: plan/0's promoted forms (form.arch_span, the archSpan module; since 1.61.0)
 					case "design.fill" -> "filledContainers"; // M5 FK: a given program's bp.fill (filled containers and lock cells; since 1.59.0)
 					case "design.fillProvided" -> "fillProvided"; // FK-b: a fill's provided: true items (Limits.FILL_PROVIDED_ITEMS; since 1.64.0)
+					case "region.terrainConstruction" -> "terrainConstruction"; // 8a: survival land built over time, free (staged terrain; since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
+			}
+			if (!dev.larattalabs.architect.region.Packed.stagedBuild()) {
+				out.remove("terrainConstruction"); // (8a ST) advertised only while this mod builds staged terrain as targets
 			}
 			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
 				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved

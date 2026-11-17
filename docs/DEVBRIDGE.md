@@ -796,3 +796,6 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   stockpile's ledger, saved with the world (PAID_ORPHAN, CUSTODY). Used by `dr-survival`.
 - (DR2 fix round, TEST) `dev.stockpile.ps {capacity: n}` (since the round after OVF, OVF's own switch) sets every stockpile's room to
   `n` stacks (`-1` off; reset at a stop): a keyed refund then enters the stock past capacity (OVF). Used by `dr-survival` (DR7c).
+- **2026-11-15 (8a slice QX):** no new hook. `dev.region.quote` also returns `terrainCells` ({group: n}, `Quote.terrainCells`: the plan's staged
+  terrain cells per target group over its survey, plan.json's `survivalStaged`; `{}` for a creative quote or a plan planned before QX). The
+  bill members (`bom`, `bomParts`, `terrain`, `exact`, `notes`) are unchanged: staged cells bill nothing.

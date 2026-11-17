@@ -314,6 +314,14 @@ public interface ArchitectApi {
 	 * {@code nextNeeded}, and a removal or undo takes it back with no refund. It never reaches survival: a break of its declared container
 	 * destroys it, and a non-creative player, a hopper or the Fabric Transfer API can't take it from one (docs/CONTRACT.md "### FK-b
 	 * contract"). Refusals are checker findings of rule {@code fill}. No new method, record field or reason.
+	 * (8a, since NEXT) {@code "terrainConstruction"} is advertised when the helper's kit stages survival terrain (its
+	 * {@code region.terrainConstruction}): in a survival region every part a terrain kind writes (relief, pads' and terraces' cut and fill,
+	 * forms, scatter and stamps) is built over time as free construction targets, in support order and in runs, exactly as its INSTANT twin
+	 * writes it; it costs no items (docs/CONTRACT.md "Phase 8a"). Creative and INSTANT regions are unchanged. {@link PartBuild#terrainCells},
+	 * {@link PartBuild#terrainBuilt}, {@link RegionBuild#terrainPerTick} and {@link Quote#terrainCells} carry its progress; {@link RegionBuild}'s
+	 * {@code built}, {@code done} and {@code percent} count staged cells; an item waiting for one waits {@link Reason#SITE_BUSY} with
+	 * {@code architect_mc:waitsFor {target, part, kind: "terrain", terrainCells, terrainBuilt, say}}. A survival IR with staged ops
+	 * {@code requires} {@code stagedTerrain}, so an older mod refuses it {@link Reason#PLAN_STALE}. No new method or reason.
 	 * (7c PF, since 1.61.0) {@code "shapePromotion"} is advertised when the helper's kit plans promoted forms (its
 	 * {@code plan.shapePromotion}): generators that passed the kit's promotion pipeline (kit/lib/forms/CANDIDATES.md) are ordinary plan/0
 	 * {@code form.<name>} catalogue entries with their {@code sinceApi}; the first is {@code form.arch_span} (the archSpan module: an arcade

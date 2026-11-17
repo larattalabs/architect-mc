@@ -333,14 +333,20 @@ export function opBounds(op, blobs, bytesOf = null) {
  * (6c RS, §3, §4) A survival plan's IR marks: each op a terrain kind wrote gets `free: true` (TERRAIN_OPS; relief, scatter and stamp ops by
  * kind; every op of a brush stroke), and the member `survival` names the target groups: `groups` (sorted ids), `parts` (IR part id -> group
  * index: a plan part, so its own parts build together; the first connector of a shared route part; a bundled program's IR part itself) and
- * `pads` (the lots' pad parts, whose free cells are always the free pass). Mutates `ir`.
+ * `pads` (the lots' pad parts, whose free cells are always the free pass). (8aF) A terrain kind's op also gets `staged: true` (not a fluid op,
+ * not a brush stroke's), so walkKinds adds `stagedTerrain` and its free cells evaluate as CLASS_STAGED. Mutates `ir`.
  */
 export function markSurvival(ir, r, programId) {
   const all = programId === 'brush';
   ir.parts.forEach((p, i) => {
     const src = r.parts[i];
     p.ops.forEach((op, j) => {
-      if (all || TERRAIN_OPS.has(src.ops[j]) || op.op === 'relief' || op.op === 'scatter' || op.op === 'stamp') op.free = true;
+      if (all || TERRAIN_OPS.has(src.ops[j]) || op.op === 'relief' || op.op === 'scatter' || op.op === 'stamp') {
+        op.free = true;
+        // (8aF, docs/CONTRACT.md "Phase 8a" §1, §6) a terrain kind's op is staged in survival (built over time, slice ST): never a fluid op
+        // (8c's) nor a brush stroke's (the player's instant tool; 8aF's reading, see its as-built)
+        if (!all && op.op !== 'fluid') op.staged = true;
+      }
     });
   });
   const partOf = r.meta.planCheck?.partOf ?? null;
@@ -355,6 +361,9 @@ export function markSurvival(ir, r, programId) {
   ir.parts.forEach((p, i) => { parts[p.id] = groups.indexOf(ids[i]); });
   const pads = [...new Set((ir.lots ?? []).map((l) => l.part))].filter((x) => parts[x] !== undefined).sort();
   ir.survival = { format: 1, groups, parts, pads };
+  // (8a ST, GPT review P1) a fluid op with decor compiles a second op (its bed): the survival flags are read per compiled op's own IR op.
+  // Marked only where the two mappings differ, so an IR accepted before the fix (no mark) evaluates as it was quoted (lib/realise.mjs)
+  if (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid' && Array.isArray(o.decor) && o.decor.length))) ir.survival.opMap = 'compiled';
   // (6c RS-b, §6.4, §7.2) the tunnels' bores: per bore its group, its start walk cell, its cardinal heading and its box, so the mod builds
   // the group's target ring by ring along the heading (a ring's lining, then the carve behind it). Only a plan with a tunnel has it.
   const bores = (r.meta.tunnels ?? []).filter((t) => parts[t.part] !== undefined).map((t) => ({ group: groups[parts[t.part]], from: [...t.from], dir: [...t.dir], box: [t.box.minX, t.box.minY, t.box.minZ, t.box.maxX, t.box.maxY, t.box.maxZ] }));
@@ -610,6 +619,7 @@ export async function planRegion(o) {
         if (sv) for (const [g, x] of Object.entries(e.notes.survival ?? {})) {
           const t = (sv[g] ??= { free: 0, held: 0, paid: 0, creativeOnly: {}, bom: {} });
           t.free += x.free; t.held += x.held; t.paid += x.paid;
+          if (x.staged) t.staged = (t.staged ?? 0) + x.staged; // (8a QX) the free cells that are staged terrain (a subset of free)
           for (const [it, n] of Object.entries(x.bom ?? {})) t.bom[it] = (t.bom[it] ?? 0) + n;
           for (const [b, n] of Object.entries(x.creativeOnly ?? {})) t.creativeOnly[b] = (t.creativeOnly[b] ?? 0) + n;
           if (x.terrain) {
@@ -765,6 +775,11 @@ export async function planRegion(o) {
   // (M5 QT) a survival plan's paid cells' bill per target group, over the survey (the plan check's cost.bom of the regions' cells, kept for
   // every survival plan so Regions.quote can read it): plan.json's `survivalBom`, outside the IR (its sha is unchanged)
   const survivalBom = sv ? Object.fromEntries(Object.keys(sv).sort().map((g) => [g, Object.fromEntries(Object.entries(sv[g].bom).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
+  // (8a QX) a survival plan's staged terrain cells per target group, over the survey (ARTL class 3: counted free in survival.cells and
+  // cost.survival, and bill nothing): Regions.quote's Quote.terrainCells, the time side. plan.json's `survivalStaged`, outside the IR (its
+  // sha is unchanged); a group with none is left out, and the field with it when no group has any
+  const stagedRows = sv ? Object.keys(sv).sort().filter((g) => sv[g].staged > 0).map((g) => [g, sv[g].staged]) : [];
+  const survivalStaged = stagedRows.length ? Object.fromEntries(stagedRows) : null;
   // (BC, A11) the paid terrain cells (dirt, stone, sand ...) per group, by state: Regions.quote reads the world at each and bills only the cells
   // the land does not already hold (a realise skips those), so the quote is what the realise consumes. plan.json's `survivalTerrain`
   // a kept cell an earlier evaluation of its tile key also writes is dropped (the realise writes that one first: the land then no longer holds
@@ -811,7 +826,7 @@ export async function planRegion(o) {
   // ...]], runs: base64 int32 [x, z, y0, y1, seq]} (a lot with no write in its window: no key; past APPROACH_GROUND_RUNS_MAX runs: {capped: n})
   const approachGround = sv && Array.isArray(ir.lots) && ir.lots.length ? approachGroundOf(ir, stages, evalsOf, windows, evalBlobs) : null;
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}), ...(approachGround ? { approachGround } : {}) };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalStaged ? { survivalStaged } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}), ...(approachGround ? { approachGround } : {}) };
 }
 
 /** (QL-c) At most this many column runs per lot in plan.json's `approachGround`; past it the lot keeps {capped: n}. */

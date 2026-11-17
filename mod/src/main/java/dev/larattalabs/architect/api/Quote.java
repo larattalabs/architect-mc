@@ -43,15 +43,28 @@ import org.jspecify.annotations.Nullable;
  *     {@code survivalTerrain}. A terrain cell can change between the quote and the realise (grass over dirt, farmland drying back), so a
  *     caller's {@code maxBill} may allow a little over on these items only; Steward's rule is {@code bom[item] + max(2, ceil(2% of
  *     terrain[item]))} over the union of {@code bom}'s and {@code terrain}'s keys, every other item exact
+ * @param terrainCells (8a, feature {@code terrainConstruction}) the time side of staged terrain: per part group, the staged terrain cells
+ *     left to build (they bill nothing: {@code bom}, {@code terrain} and {@code maxBill} are unchanged; docs/CONTRACT.md "Phase 8a" §5).
+ *     The plan's count over its survey (plan.json's {@code survivalStaged}; the world is not read, so an upper bound): a group with none is
+ *     left out. F3's region-made trees stay paid (in {@code bom}, not here). At {@link RegionBuild#terrainPerTick} cells a tick (default 16)
+ *     a group takes about {@code cells / (terrainPerTick * 20)} seconds while loaded. Empty for a creative quote and for a plan planned
+ *     before NEXT. Since NEXT.
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
-	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain) {
+	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain, java.util.Map<String, Long> terrainCells) {
 	public Quote {
 		bom = bom == null ? new JsonObject() : bom;
 		bomParts = bomParts == null ? new JsonObject() : bomParts;
 		lotEntries = lotEntries == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(lotEntries));
 		notes = notes == null ? List.of() : List.copyOf(notes);
 		terrain = terrain == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(terrain));
+		terrainCells = terrainCells == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(terrainCells));
+	}
+
+	/** The 1.62.0 shape: no staged terrain ({@link #terrainCells} empty). */
+	public Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
+		java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain) {
+		this(planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, terrain, null);
 	}
 
 	/** The 1.55.0 shape: no terrain part ({@link #terrain} empty). */

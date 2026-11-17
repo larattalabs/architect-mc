@@ -221,7 +221,8 @@ export function unpack(payload) {
   const b = payload instanceof ArrayBuffer ? new Uint8Array(payload) : payload;
   if (b.length < 8 || b[0] !== 0x41 || b[1] !== 0x52 || b[2] !== 0x54 || b[3] !== 0x4c) throw new Error('ARTL: bad magic');
   if (b[4] !== 1 && b[4] !== 2) throw new Error(`ARTL: unsupported version ${b[4]}`);
-  // (6c RS) version 2 (a survival IR's tiles): after each section's palette indexes, the cells' classes (u8) then groups (u16 LE)
+  // (6c RS) version 2 (a survival IR's tiles): after each section's palette indexes, the cells' classes (u8) then groups (u16 LE);
+  // (8aF) class 3 is a staged terrain cell (lib/region/survival.mjs CLASS_STAGED)
   const v2 = b[4] === 2;
   const r = new ByteReader(b);
   r.o = 8;
@@ -260,7 +261,7 @@ export function unpack(payload) {
       all.push(c);
     }
     if (v2) {
-      for (const c of cells) { c.cls = r.u8(); if (c.cls > 2) throw new Error('ARTL: class out of range'); }
+      for (const c of cells) { c.cls = r.u8(); if (c.cls > 3) throw new Error('ARTL: class out of range'); }
       for (const c of cells) c.group = r.u16();
     }
     sections.push({ sx, sy, sz, palette, cells });

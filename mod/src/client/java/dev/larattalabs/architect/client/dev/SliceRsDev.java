@@ -72,6 +72,42 @@ public final class SliceRsDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.region.terrain", 120_000, "{region, check?: bool} - (8a ST) a survival region's staged terrain targets: per target its "
+			+ "part, tile, cells, built, cursor (first unbuilt queue index), connected (TO's count at put-down), runs, scanAt, stall, released (with "
+			+ "check: unsupported, the standing staged cells the world no longer supports); the effective terrainPerTick, gameTime, totals; waits: "
+			+ "the region's items with architect_mc:waitsFor", (req, mc) -> {
+				String region = req.get("region").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					var l = RegionsImpl.live(region);
+					if (l == null) {
+						JsonObject o = new JsonObject();
+						o.addProperty("missing", true);
+						return o;
+					}
+					// (8a HB) the waits of the region's batch and of its revisions' (a growth's items wait in its own batch)
+					java.util.List<String> bids = new java.util.ArrayList<>();
+					bids.add(l.rec().batchId);
+					for (var rv : l.rec().revisions) {
+						if (rv.batchId != null && !bids.contains(rv.batchId)) {
+							bids.add(rv.batchId);
+						}
+					}
+					return RegionTargets.terrainJson(s, l.rec().groupId, bids, req.has("check") && req.get("check").getAsBoolean());
+				});
+			});
+		DevBridge.register("dev.terrain.rate", 30_000, "{n?, hold?: bool} - (8a ST) the world's staged terrain rate (terrainPerTick, cells per tick per "
+			+ "region, 1-64, default 16): set to n (clamped, saved in architect-world.json); (8a HB, TEST, this JVM only) hold: every staged terrain "
+			+ "target writes nothing while true -> {terrainPerTick, hold}", (req, mc) -> ServerTasks.callOnServer(s -> {
+				JsonObject o = new JsonObject();
+				if (req.has("hold")) {
+					dev.larattalabs.architect.site.RegionTargets.terrainHold = req.get("hold").getAsBoolean();
+				}
+				o.addProperty("hold", dev.larattalabs.architect.site.RegionTargets.terrainHold);
+				int v = req.has("n") ? dev.larattalabs.architect.survival.SurvivalWorld.setTerrainPerTick(s, req.get("n").getAsInt())
+					: dev.larattalabs.architect.survival.SurvivalWorld.terrainPerTick();
+				o.addProperty("terrainPerTick", v);
+				return o;
+			}));
 		DevBridge.register("dev.rs.target", 30_000, "{target} - (6c RS) one target's runs (as dev.rs.state's targets[])", (req, mc) -> {
 			String id = req.get("target").getAsString();
 			return ServerTasks.callOnServer(s -> {
