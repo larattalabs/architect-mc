@@ -160,22 +160,24 @@ export async function registerTXN(steps, h) {
     const gy = await groundY();
     const y = gy + 1;
     const X0 = CX + 50, Z0 = CZ + 30;
-    const at = [X0 + 20, y + 2, Z0 + 20];
+    const at = [X0 + 1, y, Z0 - 2]; // next to the first row (menu_crafter): an open menu closes beyond reach
     await L.tp(...at);
     const s = (p) => p.join(' ');
     const add = (p, d) => p.map((v, i) => v + d[i]);
     // the rows: [id, block, slots, extra setup, action, opts]; each row gets its own column (6 apart) and line (9 apart)
     const P = 'minecraft:oak_planks';
     const rows = [
+      { id: 'menu_crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 2'], pre: async (X) => call('dev.txn.poke', { pos: X, how: 'menu' }, 30_000),
+        act: async (X) => call('dev.txn.poke', { pos: X, how: 'menuMove', slot: 0 }, 30_000) },
       // per-type writers (§6.1 item 2)
-      { id: 'furnace', block: 'furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true },
-      { id: 'blast_furnace', block: 'blast_furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true },
-      { id: 'smoker', block: 'smoker', slots: ['beef 4', 'coal 2'], ticks: true },
-      { id: 'brewing_stand', block: 'brewing_stand', slots: [null, null, null, null, 'blaze_powder 2'], ticks: true },
+      { id: 'furnace', block: 'furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true, late: true },
+      { id: 'blast_furnace', block: 'blast_furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true, late: true },
+      { id: 'smoker', block: 'smoker', slots: ['beef 4', 'coal 2'], ticks: true, late: true },
+      { id: 'brewing_stand', block: 'brewing_stand', slots: [null, null, null, null, 'blaze_powder 2'], ticks: true, late: true },
       { id: 'dropper', block: 'dropper[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'dispenser', block: 'dispenser[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 1'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
-      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], ticks: true, act: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) }, // the chest it pushes into placed only once held
+      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], ticks: true, late: true, act: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) }, // the chest it pushes into placed only once held
       { id: 'hopper_suck', block: 'hopper[facing=down]', slots: [], ignoreDrops: true, ticks: true,
         act: async (X) => cmd(`/summon minecraft:item ${X[0] + 0.5} ${X[1] + 1.2} ${X[2] + 0.5} {Item:{id:"minecraft:cobblestone",count:3}}`), injected: { 'minecraft:cobblestone': 3 } },
       { id: 'copper_golem', block: 'chest', slots: ['oak_planks 2'], slow: true, ticks: true,
@@ -185,18 +187,27 @@ export async function registerTXN(steps, h) {
       { id: 'shulker_box', block: 'shulker_box', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
       { id: 'trapped_chest', block: 'trapped_chest', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
       // (fix round, GPT P1-2..P1-5, P2-6, P2-8) what already exists when the hold begins, and data beyond the slots
-      { id: 'menu_crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 2'], pre: async (X) => call('dev.txn.poke', { pos: X, how: 'menu' }, 30_000),
-        act: async (X) => call('dev.txn.poke', { pos: X, how: 'menuMove', slot: 0 }, 30_000) },
       { id: 'golem_retained', block: 'chest', slots: ['oak_planks 2'], slow: true, ticks: true,
-        setup: async (X) => { await cmd(`/setblock ${s(add(X, [2, 0, 0]))} minecraft:copper_chest`); for (const k of [0, 1, 2]) await cmd(`/item replace block ${s(add(X, [2, 0, 0]))} container.${k} with ${P} 64`); },
-        pre: async (X) => cmd(`/summon minecraft:copper_golem ${X[0] + 1} ${X[1]} ${X[2] + 1}`), preWaitMs: 20_000 },
+        setup: async (X) => { await cmd(`/setblock ${s(add(X, [5, 0, 0]))} minecraft:copper_chest`); for (const k of [0, 1, 2]) await cmd(`/item replace block ${s(add(X, [5, 0, 0]))} container.${k} with ${P} 64`); },
+        // held first, the moment the golem has taken from the copper chest: it walks to the box with its target already chosen
+        holdFirst: true,
+        pre: async (X) => cmd(`/summon minecraft:copper_golem ${X[0] + 4} ${X[1]} ${X[2] + 1}`),
+        ready: async (X) => {
+          for (let i = 0; i < 120; i++) {
+            const c = (await call('dev.txn.cells', { cells: [add(X, [5, 0, 0])] }, 30_000))[add(X, [5, 0, 0]).join(',')];
+            const n = Object.values(c?.slots ?? {}).reduce((t, v) => t + Number(String(v).split(' x')[1] ?? 0), 0);
+            if (n < 192) return { took: 192 - n, afterMs: i * 500 };
+            await call('dev.wait', { ms: 500 }, 30_000);
+          }
+          return { took: 0 };
+        } },
       { id: 'storage_cached', block: 'chest[facing=north,type=left]', slots: ['oak_planks 5'], partner: [1, 0, 0],
         setup: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest[facing=north,type=right]`),
         pre: async (X) => call('dev.txn.poke', { pos: add(X, [1, 0, 0]), how: 'cacheStorage' }, 30_000),
         act: async (X) => call('dev.txn.poke', { pos: add(X, [1, 0, 0]), how: 'cachedExtract' }, 30_000) },
       { id: 'chest_swap', block: 'chest', slots: ['oak_planks 4'], setup: async (X) => cmd(`/setblock ${s(add(X, [0, 0, -2]))} minecraft:chest`),
         act: async (X) => call('dev.txn.poke', { pos: X, how: 'swap', with: add(X, [0, 0, -2]) }, 30_000) },
-      { id: 'brewing_active', block: 'brewing_stand', ticks: true,
+      { id: 'brewing_active', block: 'brewing_stand', ticks: true, late: true,
         slots: ['potion[potion_contents={potion:"minecraft:water"}] 1', 'potion[potion_contents={potion:"minecraft:water"}] 1', null, 'nether_wart 1', 'blaze_powder 1'] },
       // the double chest (item 1): a held half (its partner held with it), and a chest placed beside a held single one
       { id: 'double_partner', block: 'chest[facing=north,type=left]', slots: ['oak_planks 5'], base: 'green', why: 'both halves held (the partner is a txn resource): T1\'s hopper guard',
@@ -241,7 +252,7 @@ export async function registerTXN(steps, h) {
     };
     for (const r of rows) {
       await cmd(`/setblock ${s(r.X)} minecraft:${r.block}`);
-      await put(r.X, r.slots);
+      if (!r.late) await put(r.X, r.slots);
       await cmd(`/setblock ${s(r.S)} minecraft:chest`);
       await cmd(`/item replace block ${s(r.S)} container.0 with ${P} 1`);
       if (r.setup) await r.setup(r.X);
@@ -250,14 +261,16 @@ export async function registerTXN(steps, h) {
     for (const r of rows) {
       if (r.pre) r.preAnswer = await r.pre(r.X);
     }
-    const preWait = Math.max(2000, ...rows.map((r) => r.preWaitMs ?? 0));
+    // the furnaces and brewing stands are loaded last, so they are still working when their holds begin
+    for (const r of rows) if (r.late) await put(r.X, r.slots);
     await cmd('/save-all flush').catch(() => null);
-    await call('dev.wait', { ms: preWait }, 60_000);
+    await call('dev.wait', { ms: 2000 }, 60_000);
     const box = { min: [X0 - 4, gy - 2, Z0 - 4], max: [X0 + 7 * COLS + 4, y + 4, Z0 + 60] }; // the explosion row (z + 80) outside: its blast drops ground blocks
     const report = async (baseline) => call('dev.txn.conservation', { min: box.min, max: box.max, ...(baseline ? { baseline } : {}) }, 60_000);
     // ---------------------------------------------------------------- hold every row: a refused barrier keeps each aborted move held
     await cmd('/save-off');
-    for (const r of rows) {
+    for (const r of [...rows.filter((x) => x.holdFirst), ...rows.filter((x) => !x.holdFirst)]) {
+      if (r.ready) r.readyAnswer = await r.ready(r.X);
       r.run = await call('dev.txn.run', { from: r.S, to: r.X, items: { [P]: 1 } }, 120_000);
     }
     const st0 = await call('dev.txn.state', {}, 30_000);

@@ -187,7 +187,12 @@ public final class TxnDev {
 				o.addProperty("result", player.containerMenu == m ? "clicked, still open" : "clicked, closed");
 			}
 			case "cacheStorage" -> {
-				var st = net.fabricmc.fabric.api.transfer.v1.item.ItemStorage.SIDED.find(level, p, null);
+				// Fabric's own chest lookup splits a double chest into its halves; a mod that wraps the compound container itself keeps one
+				// handle over both: that is the one cached here (GPT P1-4)
+				net.minecraft.world.level.block.state.BlockState bs = level.getBlockState(p);
+				var st = bs.getBlock() instanceof net.minecraft.world.level.block.ChestBlock cb
+					? net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage.of(net.minecraft.world.level.block.ChestBlock.getContainer(cb, bs, level, p, true), null)
+					: net.fabricmc.fabric.api.transfer.v1.item.ItemStorage.SIDED.find(level, p, null);
 				CACHED.put(p.asLong(), st);
 				o.addProperty("result", st != null);
 			}
