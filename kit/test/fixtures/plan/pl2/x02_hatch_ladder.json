@@ -1,0 +1,85 @@
+{
+ "about": "(slice PL2, S5 ground access) a ladder from the ground up to a hanging lot's hatch ($0): R2's x01 (a suspend site lot hung inverted under a region-made floating island) plus a connector.ladder from the zone's lot (its hatch port, facing down) to claim_center: the rungs from the ground to the cell under the lot's box, against a themed post.",
+ "on": "flat",
+ "volume": {},
+ "covers": [
+  "form.floating_island",
+  "rule.suspended",
+  "ladder.port"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "pl2_hatch_ladder",
+  "zones": [
+   {
+    "id": "hanging",
+    "kind": "standard",
+    "required": true,
+    "label": "Hanging village",
+    "size": {
+     "preset": "M"
+    },
+    "where": {
+     "inside": {
+      "part": "isle"
+     }
+    },
+    "program": {
+     "layout": "elevated",
+     "lots": [
+      {
+       "id": "home_a",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small home hung upside down from the island's underside."
+      }
+     ]
+    }
+   }
+  ],
+  "forms": [
+   {
+    "id": "isle",
+    "kind": "floating_island",
+    "required": true,
+    "label": "The sky isle",
+    "where": {
+     "near": {
+      "anchor": "claim_center",
+      "within": 24
+     }
+    },
+    "size": {
+     "preset": "M"
+    },
+    "height": 30,
+    "pads": 0
+   }
+  ],
+  "rules": [
+   {
+    "id": "hang_inverted",
+    "kind": "suspended",
+    "scope": [
+     "hanging"
+    ]
+   }
+  ],
+  "connectors": [
+   {
+    "id": "up",
+    "kind": "ladder",
+    "from": {
+     "part": "hanging",
+     "port": "home_a"
+    },
+    "to": {
+     "anchor": "claim_center"
+    }
+   }
+  ]
+ }
+}

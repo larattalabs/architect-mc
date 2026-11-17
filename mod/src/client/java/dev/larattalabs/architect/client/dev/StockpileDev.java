@@ -51,6 +51,14 @@ public final class StockpileDev {
 			+ "saved at its credit; reset the periodic save counters");
 		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the
 		// JVM after the work queued before it; no answer comes back (poll dev.state until inWorld is false)
+		DevBridge.register("dev.stockpile.barrier", 600_000, "{run?: bool} - (slice T0) Stockpiles.barrier(): players, chunks, the ledger through "
+			+ "DurableFile (run: true runs one now) -> {runs, playerSaveFailures, last: {outcome, reason, ledgerGen, playersMs, chunksMs, ledgerMs}}",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				if (req.has("run") && req.get("run").getAsBoolean()) {
+					Stockpiles.barrier(s);
+				}
+				return dev.larattalabs.architect.site.DurableBarrier.devJson();
+			}));
 		DevBridge.register("dev.stockpile.halt", 10_000, "{mode?: now|autosave} - (HF) TEST: halts the JVM on the server thread at once (no shutdown "
 			+ "hooks, nothing saved): a crash; no answer. (RL) mode autosave: the chunks saved first as an autosave saves them (no flush: their writes "
 			+ "may still be queued at the halt), then the halt", (req, mc) -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {

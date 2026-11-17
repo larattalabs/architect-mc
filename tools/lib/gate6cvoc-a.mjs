@@ -84,7 +84,9 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
     // ((7a slices) each 7a slice flips its own kinds reserved -> supported: expected, as f7a-foundation.test reads them)
     ...KINDS_7A.map((k) => `connector.${k}`),
     // ((7a K2) wall.along supported)
-    'wall.along'] });
+    'wall.along',
+    // ((PL2, v0.76.0) the region ladder as a port: catalogue 25 -> 26)
+    'ladder.port'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);

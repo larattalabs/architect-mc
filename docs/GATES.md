@@ -87,6 +87,22 @@ and replace stricter habits where they differ (the DEV MODE section below still 
    review in the background, on its diff only (`codex exec ... -s read-only`, the second-opinion skill's framing), while other work
    goes on. Its P1 findings are fixed (one fix-verification pass) before the slice joins a batch. Rule 11's per-release GPT review
    stays: this adds a check and removes none. Light slices get none.
+16. (Overnight delegation, 2026-11-16: ended with Noah's wrap-up.)
+17. **Persist before mutate** (Noah via parent session, 2026-11-17, rules 17-24). No world, stockpile or in-memory change that
+   affects items, billing or refunds happens before a durable, *confirmed* record of it. Executor completion or a queued save is not
+   persistence. Once TXN lands, use the transaction layer (docs/TXN-DESIGN.md).
+18. **Crash points and conservation in every strict slice.** Inject a crash at each save point of the operation and assert
+   conservation (stockpile + world + ledger balance; items in == items out) after every strict scenario, failing-first. Once TXN's
+   harness exists, use it.
+19. **Verify review premises in code.** Before recommending a design built on a reviewer's framing (e.g. "legacy crates"), check
+   the claim against the code.
+20. **The review-round guard.** After a NOT SAFE GPT review: one fix round, then one final GPT pass. If that still finds a P1, the
+   slice goes to Noah via the parent: no further rounds, and no dropping it from a release without his OK.
+21. (Spending: pending Noah's direct confirmation; until then the spend rules above stand.)
+22. **Review sheets for Noah are one self-contained HTML file**, images inlined as data URIs (JPEG if large;
+   `tools/sheet-inline.mjs`).
+23. **Each slice keeps its run scripts and temp files in its own worktree**, never a shared scratchpad path.
+24. **Gate build caches are refreshed** in every gate worktree whenever lab-ui or a pinned dependency changes.
 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.

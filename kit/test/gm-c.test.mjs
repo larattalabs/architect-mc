@@ -41,10 +41,10 @@ test('catalogue 16: connector.drawbridge flips reserved -> supported (schemaVers
   const sl = (xs) => xs.filter((x) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'channel.aqueduct', 'rule.suspended'].includes(x.id ?? x)); // ((7b LP) its two flips: lp.test.mjs; (7c BF) its three: bf.test.mjs; (7c HR) its one: hr.test.mjs)
   assert.deepEqual(sl(d.reservedToSupported), ['connector.drawbridge']);
   assert.deepEqual(sl(d.schemaVersionBumps), [{ id: 'connector.drawbridge', from: 0, to: 1 }]);
-  assert.deepEqual([d.added.filter((x) => x.id !== 'program.authored' && x.id !== 'form.arch_span' && x.id !== 'feature.cave'), d.removed, d.retired, d.otherStateChanges], [[], [], [], []]); // ((7cF) program.authored: f7c-foundation.test.mjs; (7c PF) form.arch_span: pf.test.mjs)
+  assert.deepEqual([d.added.filter((x) => x.id !== 'program.authored' && x.id !== 'form.arch_span' && x.id !== 'feature.cave' && x.id !== 'ladder.port'), d.removed, d.retired, d.otherStateChanges], [[], [], [], []]); // ((7cF) program.authored: f7c-foundation.test.mjs; (7c PF) form.arch_span: pf.test.mjs)
   // ((7bF, N-7b-1) form.hidden_room and rule.suspended re-reserved until 7c are f7b-foundation.test.mjs's)
   // ((7b SL) layout.elevated's flip is sl.test.mjs's)
-  const changed = golden.entries.filter((e) => !['form.hidden_room', 'rule.suspended', 'layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct', 'form.arch_span', 'feature.cave'].includes(e.id) && JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
+  const changed = golden.entries.filter((e) => !['form.hidden_room', 'rule.suspended', 'layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct', 'form.arch_span', 'feature.cave', 'ladder.port'].includes(e.id) && JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
   assert.deepEqual(changed, ['connector.drawbridge']);
   const e = golden.entries.find((x) => x.id === 'connector.drawbridge');
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);
