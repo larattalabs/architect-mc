@@ -32746,3 +32746,24 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   same mismatch with `-Darchitect.stagedTerrain=false` (gate-runs-ST/20261117-012402-change). The gate row now compares what a build consumed
   with the quote (exact for x01, x03, x03h; within it for rs01); `kit/test/st-8a.test.mjs` pins the 49 kept cells. Final st-ingame:
   gate-runs-ST/20261117-013030-change, 37/37 PASS (`--shards 1 --no-turbo --no-cache`).
+- **GPT review round (rule 15, 6 P1s).**
+  - (1) A stall releases only a fill's reach. Cuts, loose and resting blocks, and leaves keep their support, and a support in an unloaded
+    chunk neither writes nor releases.
+  - (2) The road tick's no-stockpile path skips a target that is leaving (C29).
+  - (3) A staged target's chunks are saved and flushed before it is marked BUILT.
+  - (4) A staged cell matches only its own block in its planned state (volatile properties aside).
+  - (5) A leaf needs a standing log, a built leaf of its target, or a leaf a log holds, in the live rule and in TO's `forTerrain`. A mined
+    before is no support. Floating anchors are read once the region is live.
+  - (6) Survival flags follow the compiled op only in IRs that `markSurvival` marks `survival.opMap: "compiled"` (those with a fluid op's
+    decor). Unmarked, already-accepted IRs keep the legacy mapping they were quoted with.
+  - The legacy mis-bill shipped from v0.41.0 (RS-a a07e7da6 and F3-c f07c0726, 2026-10-20) through v0.74.0: in coral-pond plans, shells were
+    billed free and coral paid (v73: 182 shell cells free that should be paid, 95 coral cells paid that should be free; c01: 36 coral; u05: 23
+    coral).
+  - Tests: TerrainOrderTest (+3), st-8a (+1).
+  - The gate step is now `sta-ingame`; 7b's `st-ingame` key was shadowed by it.
+  - Added x01crash: a halt with one target BUILT; after the restart 0 cells are missing; then a half-built Remove gives E-flat 0.
+  - Strict round: rs-survival-smoke, rl-crash and bf-ingame PASS (gate-runs-ST/20261117-021150-change). sta-ingame 41/41 PASS
+    (gate-runs-ST/20261117-031444-change). The run before it caught grass on a cell planned dirt counted as built; fixed.
+  - A BUILT target's cells that a later writer took up (rs01's terrace stairs and fences, XR) read as `missing` in the evidence. They are
+    not holes: the twin row covers them.
+  - Left: the ledger book marks staged cells free (HB); the fluids barrier's wait and `RegionView.waiting` are untyped (QX/HB).
