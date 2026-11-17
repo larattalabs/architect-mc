@@ -1,6 +1,7 @@
 package dev.larattalabs.architect.site;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
@@ -393,6 +394,69 @@ class TerrainOrderTest {
 			}
 		}
 		return s;
+	}
+
+	// ------------------------------------------------------------------ (8a ST, GPT review P1 1, 4, 5) the live rule
+
+	/** {@link RegionTargets#supportRule} over a map of the world (absent: air; {@code unloaded}: no chunk), no target cell built. */
+	static int rule(BlockPos p, String after, String was, String now, Map<BlockPos, String> world, Set<BlockPos> unloaded, List<BlockPos> floating)
+		throws Exception {
+		Map<BlockPos, BlockState> w = new HashMap<>();
+		for (var e : world.entrySet()) {
+			w.put(e.getKey(), st(e.getValue()));
+		}
+		return RegionTargets.supportRule(p, st(after), was == null ? null : st(was), st(now), o -> unloaded.contains(o) ? null : w.getOrDefault(o,
+			Blocks.AIR.defaultBlockState()), o -> false, o -> false, o -> false, floating);
+	}
+
+	@Test
+	void aLeafNeedsALogNeverTheGround() throws Exception {
+		BlockPos p = new BlockPos(0, 65, 0);
+		Map<BlockPos, String> world = new HashMap<>();
+		world.put(p.below(), "minecraft:stone");
+		String leaf = "minecraft:oak_leaves[persistent=true,distance=1]";
+		assertEquals(RegionTargets.MANDATORY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "a leaf on stone with no log waits");
+		world.put(p.east(), "minecraft:oak_log");
+		assertEquals(RegionTargets.READY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "beside a standing log it goes in");
+		world.remove(p.east());
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=2]");
+		assertEquals(RegionTargets.READY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "beside a leaf a log holds");
+		world.put(p.east(), "minecraft:oak_leaves[persistent=true,distance=7]");
+		assertEquals(RegionTargets.MANDATORY, rule(p, leaf, null, "minecraft:air", world, Set.of(), List.of()), "not beside a leaf no log holds");
+		// TO's order too: one leaf over solid ground, no log anywhere, is never connected
+		Map<BlockPos, String> c = new java.util.LinkedHashMap<>();
+		c.put(p, leaf);
+		int[] k = {0};
+		order(c, ground(64), List.of(), k);
+		assertEquals(0, k[0], "forTerrain: a leaf with no log is not connected");
+	}
+
+	@Test
+	void mandatoryRulesAreNotReleasableAndUnloadedSupportIsUnknown() throws Exception {
+		BlockPos p = new BlockPos(0, 66, 0);
+		// a loose block over air: mandatory (release never writes it), over an unloaded chunk: unknown
+		assertEquals(RegionTargets.MANDATORY, rule(p, "minecraft:sand", null, "minecraft:air", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNKNOWN, rule(p, "minecraft:sand", null, "minecraft:air", Map.of(), Set.of(p.below()), List.of()));
+		// a fill nothing reaches: the only releasable wait; with a neighbour in an unloaded chunk: unknown (no release on a missing chunk)
+		assertEquals(RegionTargets.UNREACHED, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNKNOWN, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(p.west()), List.of()));
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:stone", null, "minecraft:air", Map.of(), Set.of(), List.of(new BlockPos(0, 67, 0))),
+			"under a floating anchor's 3x3");
+		// a fill over a support it replaces counts only while that support still stands
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:dirt", "minecraft:grass_block", "minecraft:grass_block", Map.of(), Set.of(), List.of()));
+		assertEquals(RegionTargets.UNREACHED, rule(p, "minecraft:dirt", "minecraft:grass_block", "minecraft:air", Map.of(), Set.of(), List.of()),
+			"its before mined since: no support");
+	}
+
+	@Test
+	void aStagedCellMatchesOnlyItsWholeState() throws Exception {
+		BlockState snow2 = st("minecraft:snow[layers=2]"), snow3 = st("minecraft:snow[layers=3]");
+		BlockState logY = st("minecraft:oak_log[axis=y]"), logX = st("minecraft:oak_log[axis=x]");
+		assertTrue(dev.larattalabs.architect.journal.Copper.is(snow2, snow3.getBlock()), "the block-only rule (before ST's fix) reads it built");
+		assertFalse(Builder.Run.stagedMatches(snow2, snow3), "a snow layer of the wrong thickness is not built");
+		assertFalse(Builder.Run.stagedMatches(logX, logY), "a log on the wrong axis is not built");
+		assertTrue(Builder.Run.stagedMatches(snow3, snow3));
+		assertTrue(Builder.Run.stagedMatches(st("minecraft:grass_block"), st("minecraft:dirt")), "grass spread over our dirt stays built (the journal's rule)");
 	}
 
 	@Test

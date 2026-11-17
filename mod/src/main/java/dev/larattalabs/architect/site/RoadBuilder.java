@@ -367,7 +367,11 @@ public final class RoadBuilder {
 			}
 			try {
 				if (RegionTargets.isTerrain(i)) {
-					// (8a ST) a staged terrain target of an owner with no stockpile (an all-free plan needs none, §4.2): free, built here
+					// (8a ST) a staged terrain target of an owner with no stockpile (an all-free plan needs none, §4.2): free, built here; (GPT review)
+					// never once a removal is planning it (C29, as the stockpile's feed leaves it): its unbuilt cells are in the undo plan as unchanged
+					if (Groups.leaving(i.id())) {
+						continue;
+					}
 					RegionTargets.stepFed(srv, level, i, r, null, ticks);
 					progressEvent(srv, i.id(), r);
 					continue;
