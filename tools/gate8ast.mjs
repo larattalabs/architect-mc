@@ -204,6 +204,13 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   // the final world: its INSTANT twin's, cell for cell
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twinDiff = d;
+  if (tag === 'x01') {
+    // (T0 (e)) the world barrier's cost on this fixture world, three runs (players, flushed chunks, the ledger)
+    const runs = [];
+    for (let k = 0; k < 3; k++) runs.push((await call('dev.stockpile.barrier', { run: true }, 600_000)).last);
+    out.barrierCost = runs;
+    check(runs.every((x) => x?.outcome === 'OK'), `${tag}: T0's barrier on the built fixture world: ${runs.map((x) => `${x?.outcome} players ${x?.playersMs?.toFixed(1)} ms, chunks ${x?.chunksMs?.toFixed(1)} ms, ledger ${x?.ledgerMs?.toFixed(1)} ms`).join('; ')}`, runs);
+  }
   check(d.mismatches === 0, `${tag}: the built world equals its INSTANT twin cell for cell (block entities included; the crates aside): ${d.mismatches} differ`, d.list);
   const rm = await G.remove(ctx, region);
   const e = await G.diff(ctx, box, pre);
@@ -248,9 +255,16 @@ async function crashAndRemove(tag, fx) {
   await L.settle(4000);
   await call('dev.journal.killAt', { point: null }, 10_000).catch(() => {});
   await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
-  const trK = await call('dev.region.terrain', { region, check: true }, 300_000);
-  out.afterST1 = (trK.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells, t.missing]);
-  check((trK.targets ?? []).length > 0 && (trK.targets ?? []).every((t) => (t.missing ?? 0) === 0), `${tag}: after ST1 every staged target reads its cells from the saved world (a target halted at its barrier is still building, none missing: ${json(out.afterST1)})`);
+  // (round 4) the halted target's own cells: ST1 halted at the first barrier, so no target was BUILT; the first to be BUILT after the restart
+  // is the halted one (its cells all stood), and it must complete without writing a cell (a lost cell would be written again first)
+  let trK = null, first = null;
+  for (let i = 0; i < 240 && !first; i++) {
+    trK = await call('dev.region.terrain', { region, check: true }, 300_000);
+    first = (trK.targets ?? []).find((t) => !t.building) ?? null;
+    if (!first) await sleep(500);
+  }
+  out.afterST1 = (trK?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells, t.writes, t.missing]);
+  check(!!first && first.writes === 0 && (first.missing ?? 0) === 0 && first.built === first.cells, `${tag}: after ST1 the halted target (${first?.target}) completes from the saved world: ${first?.built} of ${first?.cells} cells standing, ${first?.writes} written again, ${first?.missing} missing (${json(out.afterST1)})`);
   const pK = await C.point('after ST1');
   check(G.exact(pK), `${tag}: items in = items out after the ST1 crash (conservation ${json(pK.diff)}, identity ${pK.identity})`);
   let tr = null;
@@ -354,21 +368,27 @@ async function depositCrash(tag, fx) {
   const crateAt = await G.pile(ctx, s, 3);
   await call('dev.terrain.rate', { n: 4 }, 30_000); // slow enough that the deposit lands before the first staged target completes
   await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-  await L.cmd('/give @p minecraft:oak_planks 64');
-  await L.cmd('/give @p minecraft:cobblestone 64');
-  await L.tp(crateAt[0][0] + 0.5, crateAt[0][1] + 1, crateAt[0][2] + 2.5);
+  await L.tp(crateAt[0][0] + 0.5, crateAt[0][1] + 1, crateAt[0][2] + 2.5); // within 16 blocks of the crates (Insert from inventory's reach)
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let tr = null, need = {};
+  for (let i = 0; i < 600; i++) {
+    tr = await call('dev.region.terrain', { region }, 120_000);
+    const ts = tr.targets ?? [];
+    need = (await G.pileState(ctx)).outstanding ?? {};
+    if (ts.some((t) => t.building && t.built > 0) && !ts.some((t) => !t.building) && Object.keys(need).length) break;
+    await sleep(250);
+  }
+  // every paid target paused (HF's rule): they take nothing, so the stock moves only by the deposit; the staged ones keep building
+  const staged = new Set((tr?.targets ?? []).map((t) => t.target));
+  const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  for (const id of st0.feedOrder ?? []) if (!staged.has(id)) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+  const [item, n] = Object.entries(need).sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (item) await L.cmd(`/give @s ${item} ${Math.min(64, n)}`);
   await L.cmd('/save-all flush'); // the baseline: players, chunks and the ledger on disk
   const C = new G.Conservation(ctx, box);
   C.area = { min: [box[0] - 24, box[1], box[2] - 24], max: [box[3], box[4], box[5]] }; // the crates and the player stand west of the claim
   await C.start();
-  const region = await G.realise(ctx, ck.check.artifactSha, entries);
-  let tr = null;
-  for (let i = 0; i < 600; i++) {
-    tr = await call('dev.region.terrain', { region }, 120_000);
-    const ts = tr.targets ?? [];
-    if (ts.some((t) => t.building && t.built > 0) && !ts.some((t) => !t.building)) break;
-    await sleep(250);
-  }
+  out.need = need;
   const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
   out.deposit = { moved: ins.moved, accepted: ins.accepted ?? null, refused: ins.refused ?? null };
   check(ins.moved > 0, `${tag}: ${ins.moved} item(s) moved from the inventory into the stockpile while the island builds (no staged target BUILT yet: ${json((tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]))})`, out.deposit);
