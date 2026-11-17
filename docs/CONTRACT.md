@@ -32992,4 +32992,8 @@ LEFTOVERS "R2 7c-region-2", with HR's hidden_village, CL's ladder to a walk port
   (the removal stays pending, its whole refund held, never paid twice); T6 restores the settle there.
 - **Kept:** `takenAfter` (classification, FOREIGN "a player took"), `worldSaved`/`ledgerSaved`, kill points DRK0/3/4/6/7.
 - **Coverage note:** DRK4, DRK6 and DRK7 fire only on a settle, so no gate walks them in game now (DR4c walks DRK0 and DRK3).
+- **Units:** full Gradle build green (1399 tests, 0 failures). **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9044:9045, at
+  c2a7f970, `artifacts/gate-runs-DR2b/20261117-163016-change`): bcc-over 17/0, rl-crash 110/0, dr-crash 108/0, dr-survival 94/0 (DR4c:
+  142 pending kept whole, nothing booked, 284 = 284 after each stop), hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0,
+  x-resume 35/0: 9/9 on the first run.
 
