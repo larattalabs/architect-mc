@@ -21,7 +21,7 @@ This is design only. Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Stri
 - §9 What the harness won't catch
 - §10 Round 1 revision log
 - §11 Round 2 revision log
-- §12 Round 3 revision log
+- §12 Round 3 revision log (§12.1 round 4 edits)
 
 ---
 
@@ -246,7 +246,10 @@ final class DurableFile {                       // PSV's writer, lifted out of P
     recording the failure alone would never rewrite it, and every later barrier would refuse for ever. The mixin instead:
     1. **restores its dirty state** (when serialization failed) or **keeps the failed snapshot** and requeues it to the IO worker
        (when the write failed);
-    2. **pins the chunk** with a ticket so it isn't unloaded with its only copy in memory;
+    2. **pins the chunk** so it isn't unloaded with its only copy in memory. *(Round 4, review 4's implementation constraint.)* Native
+       chunk unload goes on after `ChunkMap.save` returns, so a ticket added afterwards is too late: the retention must intercept the
+       **unload boundary itself** (the holder's drop from the visible map, where the save's result is known), not add a ticket after
+       the save;
     3. retries at every barrier until an acknowledgement clears the debt and the ticket.
   - **An online player** whose save failed is saved again at the next barrier.
   - **An offline player** (a failed logout save; `PlayerList.saveAll` visits only online players) keeps its captured snapshot in a
@@ -307,10 +310,11 @@ the same primitive as the queue.
   "next": 1042,
   "open": [
     {
-      "id": "tx-1041", "kind": "removal.site", "kv": 1, "decision": null, "phase": "PREPARED",
+      "id": "tx-1041", "kind": "removal.site", "kv": 1, "key": "site:s12@99", "decision": null, "phase": "PREPARED",
       "at": {"tick": 123456, "wall": 1731800000000}, "who": "architect:steward | <uuid> | null",
       "resources": ["site:s12", "crate:minecraft:overworld@10,64,-3", "box:minecraft:overworld@..", "pile:steward:town"],
-      "decision": {"kind": "journal", "undoGroup": "tx-1041"},
+      "decider": {"kind": "journal", "undoGroup": "tx-1041"},
+      "payloads": {"site_removed": {"site": {"id": "s12", "..": ".."}}, "batch_done": null},
       "effects": [
         {"i": 0, "op": "crate.take",    "class": "B", "dim": "minecraft:overworld", "pos": [10,64,-3], "items": {"minecraft:oak_planks": 12},
          "from": "crate", "to": "transit"},
@@ -325,11 +329,12 @@ the same primitive as the queue.
     }
   ],
   "retiring": [{"id": "tx-1039", "await": [{"store": "q-3f2a", "gen": 88}, {"store": "s-91c0", "gen": 412}, {"epoch": 977}]}],
-  "done": ["tx-1038"]
+  "done": [{"id": "tx-1038", "key": "site:s11@97", "decision": "commit", "result": {"removed": true, "refund": {"minecraft:oak_planks": 3}},
+            "payloads": {}}]
 }
 ```
 
-- **`id`:** `tx-<n>`, where `next` is persisted. Each effect's idempotency key is `tx-1041/3`. The existing semantic keys
+- **`id`:** `tx-<n>`, where `next` is persisted. The id is the **attempt key**: every begin mints a new one (§3.7, round 4). Each effect's idempotency key is `tx-1041/3`. The existing semantic keys
   (`site:<id>@<placedAt>`, `adopt:...`, `delta:...`, `crate:...`) stay on L effects as `key`. The `credited` set dedupes them, so a
   re-begun operation can't pay twice.
 - **`kind` + `kv`:** the kind's schema version. An unknown kind, or a `kv` newer than this build's, is quarantined (§3.8).
@@ -341,8 +346,14 @@ the same primitive as the queue.
     - `{"v": "abandon", "split": {...}}` (§3.6).
   - `phase` is **progress only**: `PREPARED`, `PREPARED_DONE` (§3.4), `EFFECTS_DONE` (§3.12: futures complete here), `ABORTING`,
     `RETIRING`. No phase value ever implies or erases a decision.
-  - The recovery rule for every combination is the table in §3.6. A finished txn moves to `retiring` (§3.7), then to `done` (the last 1,024
-  ids).
+  - The recovery rule for every combination is the table in §3.6. A finished txn moves to `retiring` (§3.7), then to `done`: objects
+    `{id, key, decision, result, payloads}`, kept within the result cache's bound (the last 4,096 results, about 1 MB; §3.7).
+- **`decider`** *(round 4, P3)*: how the decision is made, not the decision. `{"kind": "txn"}` (the `decision` write in this file) or
+  `{"kind": "journal", "undoGroup": ..}` (a D effect). It was a second `decision` member in round 3's example, which lost the undecided
+  `null`.
+- **`key`** *(round 4, P2)*: the semantic **dedupe key** (`site:<id>@<placedAt>`, `adopt:..`). It is not the attempt key (§3.7).
+- **`payloads`** *(round 4, P2)*: the immutable event source data (the removed site's `SiteView` fields, the `BatchView`, the owner),
+  captured in the intent itself, so it is durable before any destructive effect (§3.7).
 - **`effects`:** the whole plan with every amount, written **before** any effect runs (R-1). The queue, sites and region records
   hold only the txn id (`"txn": "tx-1041"`), never amounts (R-7). `decCredit` and `decStock` go.
 - **`receipts`:** hints only, saved when the file is next written. Recovery decides from the stores' own markers (§3.4) and from the
@@ -392,7 +403,7 @@ the same primitive as the queue.
 
 ### 3.5 The rules a txn kind must obey
 
-- **R-1 Plan before persist.** Every amount is computed and nothing is mutated.
+- **R-1 Plan before persist.** Every amount is computed and nothing is mutated. The event payloads are captured here too (§3.7, round 4).
 - **R-2 Persist before mutate (rule 17).** The intent is in `txn.json` (`DurableFile`, confirmed) before the first in-memory change
   of any store that a later save can persist: the ledger, BEs, containers, the queue, records or a player's inventory. A failed
   write touches nothing (`JOURNAL_UNAVAILABLE`).
@@ -507,11 +518,33 @@ again.
 **What compaction keeps** *(round 3, P2-3)*. A txn leaves `open` for `done`, but `done` is not just an id list. Each entry keeps:
 - the **semantic key** (`site:s12@99`, `adopt:...`);
 - the **terminal result** (`removed`, the `refund`, the blockers; the same fields a `RemoveResult` or a charge answer carries);
-- every **pending event payload**, immutable and captured at `EFFECTS_DONE` (the removed site's `SiteView`, the `BatchView`, the
-  owner), until `events.emitted` covers it in a `txn.json` write that is acknowledged OK.
+- every **pending event payload**, immutable, until `events.emitted` covers it in a `txn.json` write that is acknowledged OK.
+
+**When payloads are captured** *(round 4, review 4 P2-3)*. Not at `EFFECTS_DONE`: `record.drop` is an earlier effect, and a crash after
+the durable drop would leave a committed removal with a tombstone and no copy of the removed `SiteView` (`ApiEvents.removed` needs the
+whole site). So:
+- the event source data (the `SiteView` fields, the `BatchView`, the owner) is read during planning (R-1) and written in the intent's
+  `payloads` by `persist()` (R-2). It is durable before the first effect, destructive or not, and never re-read from a store an effect
+  may have changed;
+- **the abort path:** an abort can owe `BATCH_DONE` (a batch the txn ended) without reaching `EFFECTS_DONE`. The `decision: abort`
+  write carries the abort's own payload (the not-placed fields), in the same `txn.json` write, so the event fires at least once from
+  the entry even after a crash mid-compensation. An abort never fires `SITE_REMOVED` or a stockpile change (§3.12.9);
+- a payload is dropped only when `events.emitted` covers it in an acknowledged write.
 
 Only then are the payloads dropped. The key and the result stay in the **result cache**: the last 4,096 results, bounded at about
 1 MB.
+
+**Attempt keys and dedupe keys** *(round 4, review 4 P2-4)*. They are separate:
+- the **attempt key** is the txn id, minted fresh by every `begin`;
+- the **dedupe key** is the semantic key (`site:s12@99`). It dedupes **effects and committed results**, never attempts.
+
+A `begin` with a dedupe key:
+1. an **open** txn holds the key: the call attaches to it (§3.12.8) and answers at its `EFFECTS_DONE`;
+2. the cache holds a **committed** result for the key: replay it (`replayed()` = true), never run again;
+3. the cache holds only **aborted** results for the key (a transient refusal, compensated): a **fresh attempt** with a new txn id. An
+   aborted result is kept for tracing under its txn id, never as the key's answer;
+4. nothing cached: a fresh attempt. After eviction, the kind's own evidence still decides (below): a committed removal's site is gone
+   or its key credited, so it cannot run twice; an aborted one left the site standing, so the retry is legitimate.
 
 **After eviction from the result cache**, a re-ask with the semantic key:
 - finds the key in the pile's `credited` set, or the site gone with its key;
@@ -619,7 +652,8 @@ stay on the server thread, as today.
      They read UNDONE, or are dropped, only at `EFFECTS_DONE` (the W restore and the credits done), so Steward never announces a
      restore that hasn't happened.
   8. **Re-asks and `RemoveResult.replayed()`** (Steward's Q5 and ask). A call with the same semantic key while its txn is open
-     attaches to it: it answers at `EFFECTS_DONE` with the original `refund`. After retirement it answers from the `done` entry.
+     attaches to it: it answers at `EFFECTS_DONE` with the original `refund`. After retirement it answers from the `done` entry, and only
+     a **committed** one (§3.7, round 4: an aborted attempt never answers a retry; the retry is a fresh attempt).
      Either answer has **`RemoveResult.replayed()` = true** (a new accessor; old constructors kept; Since NEXT; additive). Steward then
      doesn't say "Refunded" twice.
   9. **Events are at least once, with ids for tracing** *(round 2, P2-10; reworded in round 3 at Steward's ask)*.
@@ -1062,4 +1096,18 @@ It marked most of round 2 resolved.
 follow T0's fix-round brief. When I wrote this, origin/slice/T0 was still at 042da098; check §3.1 against it once its fix round lands.
 
 Not re-reviewed here: the coordinator runs the final GPT pass.
+
+### 12.1 Round 4 edits (the fourth GPT pass, TXN-gpt4.log; Noah approved them for T1)
+
+The fourth pass came back NOT SOUND with two P1s (both for T0's fix round: ancestor-directory confirmation, and the player snapshot at
+login), two P2s and one P3. Its "safe to start" table marks T1 safe in part (core scaffolding, holds, the model, hooks and the harness).
+The design edits, made on `slice/T1`:
+
+| Finding | Change |
+|---|---|
+| P2-3: event payloads captured at `EFFECTS_DONE`, after `record.drop` may have destroyed their source | the immutable event source data is written in the intent (`payloads`) by `persist()`, before any effect; the abort path writes its own payload (an owed `BATCH_DONE`) with `decision: abort` (§3.3, §3.7, R-1) |
+| P2-4: a cached aborted attempt answers a legitimate retry | the attempt key (the txn id, fresh per begin) is separate from the dedupe key (the semantic key); only committed results replay; an aborted result never answers its key (§3.3, §3.7, §3.12.8) |
+| P3-5: the §3.3 example had two `decision` members; `done` was ids only; 1,024 vs 4,096 | the journal descriptor is `decider`; `done` entries are `{id, key, decision, result, payloads}`; one bound, the result cache's 4,096 (§3.3) |
+| Implementation constraint: native chunk unload proceeds after `save` returns | retention intercepts the unload boundary itself, not a ticket added after the save (§3.1, failure debt) |
+| P1-1, P1-2 (T0) | not design edits: T0's fix round implements them. T1's `TxnCrashModel` encodes both as counterexamples |
 
