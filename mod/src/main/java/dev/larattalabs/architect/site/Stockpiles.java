@@ -146,6 +146,9 @@ public final class Stockpiles {
 		boolean dirty;
 		/** (RL) A target joined the feed this pass: the ledger is saved after it. */
 		boolean joined;
+		/** (8a HB) The tick a refused save on join is tried again (0: now), and how many were refused in a row. */
+		long joinRetryAt;
+		int joinFails;
 		/** (8a HB, kill point JS1) The ids of the targets that joined the feed since the last feed pass. */
 		final List<String> fresh = new ArrayList<>();
 		long lastEvent = Long.MIN_VALUE / 2;
@@ -1674,9 +1677,16 @@ public final class Stockpiles {
 		// does not complete holds the pass: nothing is built or charged until a later tick's save does. TEST: dev.stockpile.ps noPeriodic
 		// turns it off with the periodic save (the before-the-fix cases); joinSave: true keeps it on with the periodic save off
 		if (p.joined && !testNoJoinSave) {
-			if (!joinSave(srv)) {
+			// (8a HB, the GPT check's P3) a refused barrier is retried after JOIN_RETRY_TICKS, not every tick; the pass is held meanwhile
+			if (ticks < p.joinRetryAt) {
 				return;
 			}
+			if (!joinSave(srv, p)) {
+				p.joinRetryAt = joinRetryAt(ticks);
+				return;
+			}
+			p.joinRetryAt = 0;
+			p.joinFails = 0;
 		}
 		p.joined = false;
 		// (8a HB, kill point JS1) the paid cells the targets that joined this pass have built before it
@@ -1831,13 +1841,30 @@ public final class Stockpiles {
 	 * targets' books. REFUSED (save-off, a failed load or step) or IN_DOUBT holds the pass (rule 17: no step mutates the stock before a
 	 * confirmed record); a later tick tries again.
 	 */
-	static boolean joinSave(MinecraftServer srv) {
+	static boolean joinSave(MinecraftServer srv, Pile p) {
 		DurableBarrier.Result r = barrier(srv);
 		if (!r.ok()) {
-			Architect.LOGGER.warn("Stockpiles: the save on join was {} ({}); the feed waits for it", r.outcome(), r.reason());
+			p.joinFails++;
+			if (joinWarns(p.joinFails)) {
+				Architect.LOGGER.warn("Stockpiles: the save on join was {} ({}); the feed of {} waits for it (failure {}, retried every {} s)", r.outcome(), r.reason(),
+					p.owner, p.joinFails, JOIN_RETRY_TICKS / 20);
+			}
 			return false;
 		}
 		return true;
+	}
+
+	/** (8a HB) Ticks between tries of a refused save on join (the pass is held meanwhile; ST's staged retry uses the same 100). */
+	static final int JOIN_RETRY_TICKS = 100;
+
+	/** (8a HB) The tick a refused save on join is tried again. */
+	static long joinRetryAt(long now) {
+		return now + JOIN_RETRY_TICKS;
+	}
+
+	/** (8a HB) Whether the {@code n}th refused save on join in a row is logged: the first, then every 12th (once a minute at the retry rate). */
+	static boolean joinWarns(int n) {
+		return n == 1 || n % 12 == 0;
 	}
 
 	/**

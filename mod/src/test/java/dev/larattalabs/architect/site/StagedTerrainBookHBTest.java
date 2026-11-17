@@ -62,4 +62,12 @@ class StagedTerrainBookHBTest {
 		assertFalse(TypedWaits.settle(i), "an untyped wait keeps nothing");
 		assertFalse(i.ext.has(RegionTargets.EXT_WAITS_FOR), "no stale payload beside the new reason");
 	}
+
+	@Test
+	void aRefusedSaveOnJoinRetriesAfterABackoffAndWarnsSparingly() {
+		assertEquals(1100L, Stockpiles.joinRetryAt(1000L), "retried 100 ticks later, not the next tick");
+		assertTrue(Stockpiles.joinWarns(1), "the first refusal is logged");
+		assertFalse(Stockpiles.joinWarns(2) || Stockpiles.joinWarns(11), "the next ones are not");
+		assertTrue(Stockpiles.joinWarns(12) && Stockpiles.joinWarns(24), "then once a minute at the retry rate");
+	}
 }
