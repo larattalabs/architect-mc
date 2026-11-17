@@ -64,6 +64,16 @@ public final class DurableBarrier {
 		PLAYER_SAVE_FAILURES.incrementAndGet();
 	}
 
+	/** (T0 review 2 finding 1) Every owed player and chunk save: while any is, no ledger is published (barrier or ordinary save). */
+	public static java.util.List<String> owedDebts() {
+		if (PlayerSaves.OWED.isEmpty() && ChunkDebt.OWED.isEmpty()) {
+			return java.util.List.of();
+		}
+		java.util.List<String> out = new java.util.ArrayList<>(PlayerSaves.owed());
+		out.addAll(ChunkDebt.owed());
+		return out;
+	}
+
 	/** Whether a barrier is running (review P2-10: a save callback that calls barrier() again is refused, never recursed into). */
 	private static volatile boolean active;
 
@@ -158,6 +168,7 @@ public final class DurableBarrier {
 			// ledger to the barrier, and ChunkSaveWaitMixin skips the waits of clean or still-loading chunks
 			boolean wasExplicit = Stockpiles.explicitSave(true);
 			boolean wasTiming = SaveTiming.explicit;
+			boolean timerWasOn = SaveTiming.on();
 			SaveTiming.explicit = true;
 			try {
 				ChunkDebt.retry(); // (review P1-3, TXN item 5) every failed write's snapshot submitted again, before the flush waits for it
@@ -167,10 +178,14 @@ public final class DurableBarrier {
 			} finally {
 				Stockpiles.explicitSave(wasExplicit);
 				SaveTiming.explicit = wasTiming;
+				if (!timerWasOn && SaveTiming.on()) {
+					SaveTiming.stop(); // (T0 review 2 finding 8) the world save's timer the flushed save started: the barrier times itself
+				}
 			}
 			RegionDurability.retryOwed();
 			java.util.List<String> undurable = new java.util.ArrayList<>(RegionDurability.undurable("chunk", "entities"));
 			undurable.addAll(ChunkDebt.owed());
+			undurable.addAll(RegionDurability.confirmFolders("chunk", "entities")); // (TXN review 4 item 1) region folders' entries
 			return undurable.isEmpty() ? null : undurable.size() + " chunk write(s) or region file(s) not durable: " + (undurable.size() > 4
 				? undurable.subList(0, 4) + " ..." : undurable);
 		}

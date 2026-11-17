@@ -692,6 +692,7 @@ public final class Stockpiles {
 	 * inventory) or dropped. Returns what went out per item.
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -857,6 +858,7 @@ public final class Stockpiles {
 
 	/** {@code withdraw}: credit only, into the player's inventory (what doesn't fit drops at the player). Returns what came out. */
 	public static Map<String, Integer> withdraw(MinecraftServer srv, String owner, Map<String, Integer> items, ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -888,6 +890,18 @@ public final class Stockpiles {
 			saveLedgerFirst(srv); // (J1, HF's window, audit F5) the Take saved now, the ledger before the player
 		}
 		return out;
+	}
+
+	/**
+	 * (slice T0 review 2 finding 1) A payout (items out of the ledger into a player or the world) is refused while a player or chunk save is
+	 * owed: its ledger save would publish every credit over that debt, and holding it would leave the items both paid and still in stock.
+	 */
+	private static void requireNoDebt() throws Sites.SiteException {
+		java.util.List<String> owed = DurableBarrier.owedDebts();
+		if (!owed.isEmpty()) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, owed.size() + " player or chunk save(s) could not be written; stockpile payouts wait until"
+				+ " they are (" + owed.get(0) + ")");
+		}
 	}
 
 	/** (PS, F6) A new stockpile or crate is refused while the file failed to load: it would be lost (never saved) and reuse the file's ids. */
@@ -3062,6 +3076,13 @@ public final class Stockpiles {
 			refusedSave();
 			return; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
 		}
+		java.util.List<String> owed = DurableBarrier.owedDebts();
+		if (!owed.isEmpty()) {
+			// (slice T0 review 2 finding 1) a player or chunk save is owed: no ledger is published over it (an autosave, a save with the world,
+			// the stop's save), so its credits never reach the disk ahead of what they came from; the ledger stays pending
+			refuseUndurable("a ledger save", owed);
+			return;
+		}
 		MinecraftServer sv = SERVER;
 		if (sv != null && sv.isSameThread()) {
 			try {
@@ -3087,12 +3108,14 @@ public final class Stockpiles {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
-			// (slice T0 review P1-7) through the ledger's DurableFile, unforced as before: its store id and generation stay in the file
+			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
+			// forced like the barrier's write: an unforced replacement could leave a torn file over an acknowledged generation. Cost: one file
+			// and one folder force per ordinary save (the barrier's ledger step measured p50 8 ms on this machine)
 			DurableFile df = ledger(f);
-			boolean put = df.writeUnforced(toJson(), df.request());
+			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
-			if (!put) {
-				throw new IOException("the ledger's write was not renamed into place");
+			if (put.outcome() == DurableFile.Outcome.REFUSED) {
+				throw new IOException("the ledger's write was refused: " + put.reason());
 			}
 			saves++;
 			unsaved = false;
