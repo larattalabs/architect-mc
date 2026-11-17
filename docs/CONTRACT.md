@@ -32740,7 +32740,9 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   sample, percent, creative twins with no target, twin equality (0 differ), conservation exact and E-flat 0. The typed wait is seen on
   x03h's props tile (`waitsFor {target c4, part isle, kind terrain, terrainCells 7200, ...}`); no fixture has a lot on a cutting staged pad
   (their pads cut nothing; rs01's lots start after its relief by the stage chain), so the lot-specific wait is unit-proven only.
-- **Open (WIP): x03h's bill row.** The check bills part `hamlet` 49 dirt, 4 lanterns, 4 oak fences; its targets bill only the lanterns and
-  fences (no target holds the 49 dirt), while the world equals its twin and the conservation sum is exact (nothing minted). Not yet known
-  whether it is pre-existing (BF only ran the island alone in survival) or ST's: next, the same x03h in survival with
-  `-Darchitect.stagedTerrain=false` (TO behaviour), then fix the root cause with a unit test.
+- **x03h's bill row (resolved; pre-existing, not ST's).** The check bills part `hamlet` 49 dirt for 49 paid grass cells of its green over the
+  flat land's grass: a realise skips them (no target bills them, nothing is consumed). They are kept by position (plan.json
+  `survivalTerrain`), so `Regions.quoteApproved` leaves them out: the check's `cost.survival.bom` is an upper bound by design (SA/BC A11). The
+  same mismatch with `-Darchitect.stagedTerrain=false` (gate-runs-ST/20261117-012402-change). The gate row now compares what a build consumed
+  with the quote (exact for x01, x03, x03h; within it for rs01); `kit/test/st-8a.test.mjs` pins the 49 kept cells. Final st-ingame:
+  gate-runs-ST/20261117-013030-change, 37/37 PASS (`--shards 1 --no-turbo --no-cache`).
