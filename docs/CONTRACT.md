@@ -33015,3 +33015,10 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   - Barrier cost on the built x01 world (3 runs): players 11-142 ms, chunks 10-108 ms, ledger 9-12 ms.
 
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose failed save left no snapshot) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart (folders and `.mcc` are re-confirmed instead); an owed chunk whose kept object can't be serialized again stays owed; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 5 (small fix after ST's final GPT check, which found no P1).** slice/T0 a4531467 is merged.
+  - A drifted-state reset now touches only a cell with evidence it is ours: this run wrote it this session, or it differs from the
+    planned state only in volatile properties. A foreign `oak_log[axis=x]` on a cell planned `oak_log[axis=y]` is left alone (unit test).
+  - x03hdeposit holds the staged targets until the deposit is in, then releases them.
+  - The target that reaches ST1 is recorded in a marker file and asserted on: c1 completed with 0 cells written again.
+  - Runs: sta-ingame 54/54 (gate-runs-ST/20261117-080333-change); rl-crash 110/0 (gate-runs-ST/20261117-073445-change). In that earlier
+    run sta-ingame failed only because the ST1 marker needed the world's architect dir, which a no-stockpile world doesn't have; fixed.
