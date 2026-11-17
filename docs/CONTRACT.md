@@ -32767,3 +32767,20 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   - A BUILT target's cells that a later writer took up (rs01's terrace stairs and fences, XR) read as `missing` in the evidence. They are
     not holes: the twin row covers them.
   - Left: the ledger book marks staged cells free (HB); the fluids barrier's wait and `RegionView.waiting` are untyped (QX/HB).
+- **Round 3 (GPT final review; Noah's "3rd round").**
+  - The durability barrier now gates both completion paths. A failed barrier keeps the target building and is retried 100 turns later.
+    It refuses while any level has saving off.
+  - The leaf rule is vanilla's: distance = 1 + the lowest neighbour's distance, and a leaf goes in only when that is under 7. A persistent
+    leaf still needs a log or a built leaf of its own target. TO's land does the same.
+  - A support in an unloaded chunk is read by loading that chunk (2 loads per turn), so it is never an endless stall.
+  - A staged cell matches only its exact planned state.
+  - Tests: TerrainOrderTest has 16; each new test asserts the old behaviour it replaces.
+  - Strict gate on 4555c9af PASS (gate-runs-ST/20261117-035805-change): sta-ingame 44/44, rs-survival-smoke 40/0, rl-crash 90/0. It
+    includes x03saveoff (no target BUILT while saving is off; all BUILT after `/save-on`) and x01crash (dev.stockpile.halt with one target
+    BUILT: 0 cells missing after the restart; a half-built Remove: E-flat 0).
+  - Rule 18 on e5cfd83c (gate-runs-ST/20261117-045658-change): 41/42. Kill point ST1 can't be armed: `dev.journal.killAt`'s accepted-points
+    check (JournalDev.java:98) refuses `ST1`. So x01crash stopped at its first row, and the ST1 and post-crash conservation rows didn't run.
+    x03saveoff and its conservation row passed. Not fixed: code changes are on hold for Noah.
+  - **Open P1 (final GPT check, for Noah).** The barrier saves chunks, not players, and AFTER_SAVE then publishes the stockpile ledger. A
+    crash after a deposit can therefore leave the ledger ahead of player.dat (a doubled deposit). The stockpile's own save with the world
+    saves the players first.
