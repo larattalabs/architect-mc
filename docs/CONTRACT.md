@@ -32842,3 +32842,20 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   downloaded nothing); real check on a fresh home: lab_ui 0.5.0 fetched, same repo id, offline seed passed with no online fallback; +2 units.
 - **Checks:** kit 1539/1539, Gradle build (incl. devserver) pass, ApiCSTest 9/9; step-inputs clean; gitleaks clean. Leftover: slot-outside's
   "several slots" (same-ms ticket id `t-<ms>-<pid>`) and "load gate" tests flake under load, pre-existing.
+
+## Slice CXD, durable crate extraction (Noah 11-17, crates option C)
+
+A crate's stock that a removal takes reaches its destination exactly once (dropped at the crate's cell, as before) or stays in the
+crate, across a crash at any step. The full contract is the coordinator's notes `architect-CXD-contract.md`; in short:
+- **The record:** `stockpiles.json` gains `crateOwed` (absent when empty; older builds ignore it): `{key, site, siteKey, crateOwner,
+  dim, crate, items}`, key `crate:<crateOwner>@x,y,z/<siteKey>`. The crate's block entity gains `CxdTaken` (the key whose stock was
+  taken), saved in the same chunk as its ledger; a marked crate refuses inserts.
+- **Steps** (every `prepareDeconstruct` caller: `Sites.removeDetailed`, Groups R1, `Adopt.undoDeltas`): capture (memory; CXD1), one
+  confirmed save (`Stockpiles.saveConfirmed`, OVF's; refused: the removal refused untouched; CXD2), the take (ledger + marker; the
+  crate block stays; CXD3), the removal's commit, the settle at the member's restore (CXD4; the record closed on disk, confirmed,
+  CXDS, then the drop, the cell restored, `saveWithWorld`). Not committed: put back (CXDB). The group queue never carries crate stock.
+- **Restart** (the first tick): stands x {MARKED, PRESENT, ABSENT}: put back / close / drop the record; removed: drop record + crate
+  stock and restore the cell / drop the crate's stock / drop the record.
+- **Visible:** the emptied crate stands (refusing inserts) until its member's restore; a crate-site removal is refused while the
+  stockpiles file failed to load or its save is refused; a crash at CXDS loses the stock (was: doubled or lost in wider windows).
+  Steward: none (refund totals unchanged).

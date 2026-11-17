@@ -6,7 +6,7 @@
 //                                                    paused, stock inserted into its crate, /save-all flush (the baseline), the removal
 //                                                    halted at a kill point (dev.journal.killAt) with nothing else saved, the world
 //                                                    opened again (the first tick resolves the open records):
-//     S1..S4  a player's site (dev.build: the UI path, the placer's UUID, no site owner) deconstructed alone (Sites.removeDetailed):
+//     S1..S4  a player's site (/architect place: the placer's UUID, no site owner) deconstructed alone (Sites.removeDetailed):
 //             CXD1 captured, the record not saved; CXD2 the record saved, the crate not emptied; CXD3 the stock taken, not committed;
 //             CXD4 committed and restored, the stock not settled. The plain halts find the chunk as the record's save flushed it (the
 //             crate full: resolved "close"); S3s/S4s halt at CXD3+save / CXD4+save (the chunks saved first): the crate MARKED and not
@@ -112,17 +112,15 @@ export async function registerCXD(steps, h) {
     out[tag] = n;
   }
 
-  /** A player's construction site (dev.build: the UI path) at {@code origin}; its id. */
+  /** A player's construction site (/architect place: SiteCommands, the placer's UUID, no site owner) in front of {@code origin}; its id. */
   async function playerSite(tag, origin) {
-    await call('dev.build.start', { blueprint: 'rs_hut', origin, turns: 0 }, 60_000);
-    for (let i = 0; i < 40; i++) {
-      const st = await call('dev.build.state', {}, 30_000);
-      if (st.ready) break;
-      await L.sleep(250);
-    }
-    const r = await call('dev.build.confirm', {}, 60_000);
-    check(r.placed === true && !!r.siteId, `${tag}: a player's construction rs_hut at ${origin}: ${r.siteId ?? r.message}`);
-    return r.siteId;
+    await L.tp(origin[0], origin[1] + 1, origin[2]);
+    await cmd(`/tp @s ${origin[0]} ${origin[1] + 1} ${origin[2]} 0 0`).catch(() => null); // facing south: the site goes in front
+    const r = await cmd('/architect place rs_hut');
+    const msg = (r.messages ?? []).join(' ');
+    const id = /Construction site (\S+) /.exec(msg)?.[1] ?? null;
+    check(!!id, `${tag}: a player's construction rs_hut (/architect place) at ${origin}: ${id ?? msg.slice(0, 200)}`);
+    return id;
   }
 
   steps.cxdcrash = async () => {
@@ -146,9 +144,9 @@ export async function registerCXD(steps, h) {
     for (const tag of parts0.filter((t) => single[t])) {
       const [point, committed] = single[tag];
       const origin = slot(k++);
-      W.at = [origin[0] + 3, gy + 2, origin[2] + 24];
-      await L.tp(...W.at);
       const site = await playerSite(tag, origin);
+      W.at = [origin[0], gy + 2, origin[2] - 6]; // behind where the player placed it (the site lies to the south)
+      await L.tp(...W.at);
       if (!site) continue;
       await crashCase(out, tag, W, site, point, () => call('dev.site.deconstruct', { site }, 60_000), committed);
     }
