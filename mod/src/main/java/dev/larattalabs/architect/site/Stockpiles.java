@@ -1455,29 +1455,49 @@ public final class Stockpiles {
 		return true;
 	}
 
-	/**
-	 * (OVF) The pending delta credit's save (with the world). A save SS refuses is logged and the delta goes on: the pending credit stays in
-	 * memory and the credit's own save right after D8 (or the next one whose forces succeed) writes it with the booking.
-	 */
-	static void savePendingDelta(MinecraftServer srv) {
-		try {
-			saveWithWorld(srv);
-		} catch (IllegalStateException e) {
-			Architect.LOGGER.error("Stockpiles: a construction delta's pending credit was not saved ({}); written with its credit", e.getMessage());
+	/** (OVF) The delta was refused before it wrote anything (its pending save not confirmed): its pending credit dropped from memory. */
+	static void dropPendingDelta(@Nullable String owner, String key) {
+		Pile p = get(owner);
+		if (p != null) {
+			p.ledger.dropPending(key);
+			changed(p);
 		}
 	}
 
-	/** (OVF) What the start does with a pending delta credit: book it (its delta stands in the site's history) or drop it. */
-	enum DeltaFate { BOOK, DROP }
+	/**
+	 * (OVF) What the start does with a pending delta credit: book it (its delta stands in the site's history), keep it (the delta is
+	 * unresolved: its journal entry exists but the record doesn't name it yet, e.g. a recovery that could not finish), or drop it (the entry
+	 * never committed, or was rolled back).
+	 */
+	enum DeltaFate { BOOK, KEEP, DROP }
 
 	/**
 	 * (OVF) The fate of the pending credit {@code key} ({@code delta:<entry>:<site>}): BOOK when {@code applied} says the site's history names
-	 * the entry (the new version's record reached the disk), else DROP (the delta never committed: its refund was never owed). Pure.
+	 * the entry; else KEEP while {@code unresolved} says the journal still holds the entry live (PLACING or ACTIVE) or the site's record is
+	 * mid-update; else DROP. A malformed key is DROP. Pure.
 	 */
-	static DeltaFate deltaFate(String key, java.util.function.BiPredicate<String, String> applied) {
+	static DeltaFate deltaFate(String key, java.util.function.BiPredicate<String, String> applied, java.util.function.BiPredicate<String, String> unresolved) {
 		String site = StockLedger.deltaSiteOf(key);
 		String entry = site == null ? null : key.substring("delta:".length(), key.length() - site.length() - 1);
-		return site != null && !entry.isEmpty() && applied.test(site, entry) ? DeltaFate.BOOK : DeltaFate.DROP;
+		if (site == null || entry.isEmpty()) {
+			return DeltaFate.DROP;
+		}
+		return applied.test(site, entry) ? DeltaFate.BOOK : unresolved.test(site, entry) ? DeltaFate.KEEP : DeltaFate.DROP;
+	}
+
+	/** (OVF) Whether delta entry {@code entry} of site {@code id} is unresolved: live in the journal, or the site's record still updating. */
+	private static boolean deltaUnresolved(String id, String entry) {
+		Site s = Sites.get(id);
+		if (s != null && s.versioning().updating() > 0) {
+			return true;
+		}
+		dev.larattalabs.architect.journal.JournalStore.Meta m;
+		try {
+			m = SiteJournal.store().meta(entry);
+		} catch (Sites.SiteException e) {
+			return true; // the journal unreadable: inconclusive, kept
+		}
+		return m != null && (m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING || m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE);
 	}
 
 	/** (OVF) Whether site {@code id}'s history (standing or pending) names delta entry {@code entry}. */
@@ -1515,9 +1535,13 @@ public final class Stockpiles {
 				if (p.ledger.credited(key)) {
 					p.ledger.dropPending(key);
 					what = "already credited";
-				} else if (key.startsWith("delta:") && deltaFate(key, Stockpiles::deltaApplied) == DeltaFate.DROP) {
+				} else if (key.startsWith("delta:") && deltaFate(key, Stockpiles::deltaApplied, Stockpiles::deltaUnresolved) != DeltaFate.BOOK) {
+					if (deltaFate(key, Stockpiles::deltaApplied, Stockpiles::deltaUnresolved) == DeltaFate.KEEP) {
+						Architect.LOGGER.warn("Stockpile {}: pending credit {}: its construction delta is unresolved; kept for the next start", p.owner, key);
+						continue; // (OVF, review round 4) never dropped while the delta may still commit
+					}
 					p.ledger.dropPending(key);
-					what = "its construction delta never committed (not in the site's history): dropped";
+					what = "its construction delta never committed (no live journal entry, not in the site's history): dropped";
 				} else if (standingSite(key) != null) {
 					p.ledger.dropPending(key);
 					what = "its site stands (the removal never settled)";
@@ -1572,7 +1596,21 @@ public final class Stockpiles {
 	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
 	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
 	 */
-	static void saveConfirmed(MinecraftServer srv) {
+	/**
+	 * (OVF, review round 4) Whether the ledger is on disk now: {@link #saveConfirmed}, false (logged) where it refused. A caller that settles
+	 * a record from a booking the ledger holds ({@code charged}) does so only when this is true: never from an unsaved in-memory booking.
+	 */
+	public static boolean ledgerOnDisk(MinecraftServer srv) {
+		try {
+			saveConfirmed(srv);
+			return true;
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a booked charge waits: {}", e.getMessage());
+			return false;
+		}
+	}
+
+	public static void saveConfirmed(MinecraftServer srv) {
 		if (unsaved || loadFailed) {
 			saveWithWorld(srv);
 		}

@@ -32870,3 +32870,18 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - Leftovers: the ground dissolve and the forced `removecrate` still drop entities before their ledger save; the unkeyed give-backs,
   adoption's handoff and `creditRefund` with no stockpile as before; a crash between OVD1 and D8 drops the pending refund unless the
   start rolls the delta forward. No in-game delta crash case (fk_hall has no second version).
+
+### Slice OVF round 4 as built (the final review's NOT SAFE)
+
+- A delta's pending refund is now held under a journal id allocated up front (`applyChecked(..., presetId)`) and saved, confirmed
+  (`saveConfirmed`), before anything of the delta is written: before the OVERWRITE drop and before D1. A save that can't be confirmed
+  refuses the delta (JOURNAL_UNAVAILABLE, nothing written; findings 1 and 3: no flush ever holds a half-converted delta). Kill point
+  OVD1 sits right after that save.
+- The start resolves a pending delta three ways (`deltaFate`): BOOK when the site's history names the entry; KEEP while it is unresolved
+  (the record still updating, the entry PLACING/ACTIVE in the journal, or the journal unreadable); DROP only when the entry never
+  committed or was rolled back (finding 4).
+- RegionFluids' and MechCharges' booked-charge shortcuts, and the start's `MechCharges.settleBooked`, settle only when
+  `Stockpiles.ledgerOnDisk` confirms a save; otherwise the stage waits (finding 2).
+- Tests: StockpileOverflowOVFTest has 16 (rewritten delta order, the unresolved KEEP, the confirmed charge shortcuts). In game:
+  rl-crash adds OVD1 (a delta to rs_hut less its torch and approach, halted after its pending save: dropped, nothing booked) and OVDC
+  (halted at CS1 after the conversion: booked once, back = what left the paid record).

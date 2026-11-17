@@ -3337,6 +3337,28 @@ public final class Builder {
 		for (long p : c.plan().outcome().write().keySet()) {
 			was.put(p, level.getBlockState(BlockPos.of(p)));
 		}
+		// (slice OVF, review rounds 3-4) the removed paid cells' refund, from the before state (what the conversion loop books), held pending in
+		// the ledger under the delta's journal id (allocated now) and saved with the world BEFORE anything of the delta is written: no flush
+		// ever holds a half-converted delta, and a crash after this finds it pending; the start books it once when the site's history names
+		// the entry, keeps it while the delta is unresolved, drops it when the entry never committed (Stockpiles.settlePendingCredits). A
+		// save that can't be confirmed refuses the delta (nothing written). The start never replays the conversion, so without it the
+		// refund was lost
+		Map<String, Integer> owed = stockpiled ? removedRefund(c, was, oldBox, paidBefore) : Map.of();
+		String deltaId = null;
+		if (!owed.isEmpty()) {
+			deltaId = SiteJournal.store().newId();
+			String pendingKey = "delta:" + deltaId + ":" + r.siteId();
+			if (Stockpiles.holdPendingDelta(before.owner(), pendingKey, owed, dropPos(before))) {
+				try {
+					Stockpiles.saveConfirmed(srv);
+				} catch (IllegalStateException e) {
+					Stockpiles.dropPendingDelta(before.owner(), pendingKey);
+					throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, "The update of " + r.siteId()
+						+ " was refused: its refund could not be saved first (" + e.getMessage() + "); nothing was written");
+				}
+				WorldJournal.kill("OVD1"); // (OVF, TEST) the pending delta credit saved, nothing of the delta written
+			}
+		}
 		// the player's blocks an OVERWRITE replaces drop as items (phase 3 rule)
 		if (r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE) {
 			Map<String, Integer> drop = new TreeMap<>();
@@ -3346,21 +3368,7 @@ public final class Builder {
 			}
 			dropItems(level, dropPos(before), drop, null);
 		}
-		// (slice OVF, review finding 1) the removed paid cells' refund, from the before state (what the loop below books), held pending in the
-		// ledger and saved with the world inside applyChecked after its journal commit and before the record names the delta (D8): a crash
-		// after D8 (CS1 in the credit's save below) finds it pending, and the start books it once (Stockpiles.settlePendingCredits: the site's
-		// history names the entry); a crash before D8 drops it unless the start rolls the delta forward. The start never replays the delta's
-		// conversion, so without it the refund was lost
-		Map<String, Integer> owed = stockpiled ? removedRefund(c, was, oldBox, paidBefore) : Map.of();
-		String owner = before.owner();
-		BlockPos owedAt = dropPos(before);
-		java.util.function.Consumer<String> hold = owed.isEmpty() ? null : id -> {
-			if (Stockpiles.holdPendingDelta(owner, "delta:" + id + ":" + r.siteId(), owed, owedAt)) {
-				Stockpiles.savePendingDelta(srv);
-				WorldJournal.kill("OVD1"); // (OVF, TEST) the pending delta credit saved, the record not
-			}
-		};
-		SiteDeltas.Result res = SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta", hold);
+		SiteDeltas.Result res = SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta", deltaId);
 		Site s = Sites.get(r.siteId());
 		String entry = s.versioning().history().get(s.versioning().history().size() - 1).deltaEntry();
 		Anchors.Bounds box = s.restoreBox();

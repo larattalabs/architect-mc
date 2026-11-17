@@ -292,26 +292,26 @@ class StockpileOverflowOVFTest {
 
 	// ------------------------------------------------------------------ the GPT review's fix round (OVF NOT SAFE)
 
-	/** Finding 1: a construction delta's refund is held pending and saved before the record names the delta (D8), then booked once. */
+	/**
+	 * Findings 1 and 3 (rounds 3-4): a construction delta's refund is held pending under its preset journal id and saved, confirmed, before
+	 * anything of the delta is written (no flush holds a half-converted delta); a save that can't be confirmed refuses the delta.
+	 */
 	@Test
-	void aDeltaRefundIsPendingOnDiskBeforeItsRecordAndBooksOnce() throws Exception {
-		String d = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SiteDeltas.java"));
-		int cb = d.indexOf("beforeRecord.accept(id);");
-		int d8 = d.indexOf("// D8: the record at b");
-		assertTrue(cb > 0 && d8 > cb && d.indexOf("Sites.replace(server, nb);", d8) > d8, "the hold runs after D7 and before D8 writes the record");
+	void aDeltaRefundIsPendingOnDiskBeforeTheDeltaWritesAndBooksOnce() throws Exception {
 		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
 		int at = b.indexOf("public static SiteDeltas.Result applyConstructionDelta(");
-		int hold = b.indexOf("Stockpiles.holdPendingDelta(owner, \"delta:\" + id + \":\" + r.siteId(), owed, owedAt)", at);
-		int save = b.indexOf("Stockpiles.savePendingDelta(srv);", hold);
-		int apply = b.indexOf("SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, \"delta\", hold);", at);
-		assertTrue(hold > at && save > hold && apply > save, "the hold and its save are applyChecked's beforeRecord");
+		int id = b.indexOf("deltaId = SiteJournal.store().newId();", at);
+		int hold = b.indexOf("Stockpiles.holdPendingDelta(before.owner(), pendingKey, owed, dropPos(before))", id);
+		int save = b.indexOf("Stockpiles.saveConfirmed(srv);", hold);
+		int refuse = b.indexOf("throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE", save);
+		int drop = b.indexOf("// the player's blocks an OVERWRITE replaces drop as items", at);
+		int apply = b.indexOf("SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, \"delta\", deltaId);", at);
+		assertTrue(id > at && hold > id && save > hold && refuse > save && drop > refuse && apply > drop, "the hold's confirmed save precedes every write of the delta");
+		assertFalse(b.contains("savePendingDelta"), "no swallowed refusal");
+		String d = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SiteDeltas.java"));
+		assertTrue(d.contains("String id = presetId != null ? presetId : s.newId();") && !d.contains("beforeRecord"), "the delta uses the preset id; no flush inside it");
 		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
-		assertTrue(sp.contains("key.startsWith(\"delta:\") && deltaFate(key, Stockpiles::deltaApplied) == DeltaFate.DROP"), "the start resolves a pending delta");
-		// the start's rule: booked when the history names the entry, dropped otherwise
-		assertEquals(Stockpiles.DeltaFate.BOOK, Stockpiles.deltaFate("delta:e7:s1", (site, e) -> site.equals("s1") && e.equals("e7")));
-		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta:e7:s1", (site, e) -> false));
-		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta::s1", (site, e) -> true));
-		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta:e7:", (site, e) -> true));
+		assertTrue(sp.contains("deltaFate(key, Stockpiles::deltaApplied, Stockpiles::deltaUnresolved) != DeltaFate.BOOK"), "the start resolves a pending delta");
 		// the ledger: pending saved (with the paid record), CS1 after D8 (the record durable, the credit not), the start books it once;
 		// a second crash inside the start's save books it once again from the same pending
 		String key = "delta:e7:s1";
@@ -332,6 +332,65 @@ class StockpileOverflowOVFTest {
 				StockLedger fin = save(r, w).load();
 				assertTrue(fin.credited(key) && fin.credit(key, owed, FULL, MAX).already());
 			}
+		}
+	}
+
+	/** Finding 4 (round 4): an unresolved delta keeps its pending refund; only a delta that never committed (or rolled back) drops it. */
+	@Test
+	void anUnresolvedDeltaKeepsItsPendingRefund() throws Exception {
+		java.util.function.BiPredicate<String, String> none = (site, e) -> false, all = (site, e) -> true;
+		assertEquals(Stockpiles.DeltaFate.BOOK, Stockpiles.deltaFate("delta:e7:s1", (site, e) -> site.equals("s1") && e.equals("e7"), none));
+		assertEquals(Stockpiles.DeltaFate.KEEP, Stockpiles.deltaFate("delta:e7:s1", none, all), "a journal entry still live, the record not naming it");
+		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta:e7:s1", none, none), "never committed");
+		assertEquals(Stockpiles.DeltaFate.DROP, Stockpiles.deltaFate("delta::s1", all, all));
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		String settle = body(sp, "static void settlePendingCredits(MinecraftServer srv) {");
+		int keep = settle.indexOf("== DeltaFate.KEEP) {");
+		assertTrue(keep > 0 && settle.indexOf("continue;", keep) < settle.indexOf("p.ledger.dropPending(key);", keep), "KEEP leaves it pending");
+		String un = body(sp, "private static boolean deltaUnresolved(String id, String entry) {");
+		assertTrue(un.contains("updating() > 0") && un.contains("Status.PLACING") && un.contains("Status.ACTIVE"), "unresolved: mid-update or a live entry");
+		// the model: a pending refund across starts while unresolved (kept), then resolved applied (booked once)
+		StockLedger l = paid();
+		String key = "delta:e7:s1";
+		l.holdPending(key, Map.of(PLANKS, 30), 1L);
+		Disk disk = save(l, Map.of());
+		StockLedger r = disk.load();
+		for (int start = 0; start < 2; start++) {
+			assertEquals(Stockpiles.DeltaFate.KEEP, Stockpiles.deltaFate(key, none, all));
+			assertTrue(r.pendingKeys().contains(key), "kept (start " + start + ")");
+			r = save(r, Map.of()).load();
+		}
+		Map<String, Integer> before = held(r, Map.of());
+		assertEquals(Stockpiles.DeltaFate.BOOK, Stockpiles.deltaFate(key, all, none));
+		credit(r, key, r.pendingItems(key), new TreeMap<>());
+		assertEquals(plus(before, Map.of(PLANKS, 30)), held(r, Map.of()), "booked once when it resolves");
+	}
+
+	/** Round 4 finding 2: a caller never settles a record from an unsaved in-memory charge (RegionFluids, MechCharges). */
+	@Test
+	void aBookedChargeIsSettledOnlyFromALedgerOnDisk() throws Exception {
+		String rf = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/region/RegionFluids.java"));
+		int gate = rf.indexOf("booked.ledger().charged(chargeKey(l)) != null && !dev.larattalabs.architect.site.Stockpiles.ledgerOnDisk(s)");
+		int settle = rf.indexOf("settleBooked(l, booked.ledger(), level.getGameTime())");
+		assertTrue(gate > 0 && settle > gate, "the fluids' booked charge waits for a confirmed save before it is settled");
+		String mc = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/MechCharges.java"));
+		int g2 = mc.indexOf("if (booked != null && !Stockpiles.ledgerOnDisk(srv)) {");
+		int s2 = mc.indexOf("settle(e, booked, now);");
+		assertTrue(g2 > 0 && s2 > g2, "a mechanism's booked charge too");
+		String atStart = body(mc, "public static void settleBooked(MinecraftServer srv) {");
+		assertTrue(atStart.indexOf("Stockpiles.ledgerOnDisk(srv)") < atStart.indexOf("RegionFluids.settleBooked("), "and the start's");
+		java.lang.reflect.Field lf = Stockpiles.class.getDeclaredField("loadFailed");
+		lf.setAccessible(true);
+		boolean wasUnsaved = Stockpiles.unsaved;
+		try {
+			Stockpiles.unsaved = false;
+			assertTrue(Stockpiles.ledgerOnDisk(null));
+			lf.set(null, true);
+			Stockpiles.unsaved = true;
+			assertFalse(Stockpiles.ledgerOnDisk(null), "not on disk: the caller waits");
+		} finally {
+			lf.set(null, false);
+			Stockpiles.unsaved = wasUnsaved;
 		}
 	}
 
