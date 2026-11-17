@@ -60,6 +60,11 @@ cost, and the full set in the nightly.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`,
   `../architect-mc-<x>`). Never commit to main directly. Slices run **in parallel** on separate worktrees and ports; merge
   `origin/main` into your branch when another slice lands.
+- **Never touch the main checkout's branches (2026-11-17).** Don't merge, check out or commit slice branches in
+  `~/Developer/LarattaLabs/Minecraft/architect-mc`; its `main` only ever fast-forwards to `origin/main`. All git work happens in
+  a `_work` worktree. In shells, never mix `&&` and `;` after a `cd`: a failed step before the `cd` makes the rest run in the
+  wrong checkout (an ST agent's `git merge origin/slice/T0` once fast-forwarded the main checkout this way). Write
+  `cd <worktree> || exit 1`, or pass `git -C <worktree>` on every git call, and start multi-step shells with `set -e`.
 - **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
   as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
   "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod
