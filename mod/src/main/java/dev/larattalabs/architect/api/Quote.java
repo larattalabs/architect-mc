@@ -60,7 +60,7 @@ public record Quote(String planId, @Nullable String artifactSha, @Nullable Strin
 		this(planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, null);
 	}
 
-	/** (LCAP) The pieces of {@code bomParts} that are one lot's own bill, the ones {@link RealiseRequest#maxBillPerLot} caps. */
+	/** (LCAP, since 1.67.0) The pieces of {@code bomParts} that are one lot's own bill, the ones {@link RealiseRequest#maxBillPerLot} caps. */
 	public static final List<String> LOT_PIECES = List.of("lot:", "fill:", "mech:");
 
 	/**
@@ -72,7 +72,7 @@ public record Quote(String planId, @Nullable String artifactSha, @Nullable Strin
 		return lotBill(bomParts, lot);
 	}
 
-	/** (LCAP) {@link #lotBill(String)} over a {@code bomParts} object. */
+	/** (LCAP, since 1.67.0) {@link #lotBill(String)} over a {@code bomParts} object. */
 	public static java.util.Map<String, Integer> lotBill(@Nullable JsonObject bomParts, String lot) {
 		java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
 		if (bomParts == null || lot == null) {
