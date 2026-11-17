@@ -29,6 +29,8 @@
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery
+//     txncore   (txn-core)             slice T1: the txn core's TEST kind (dev.txn.run) halted at each kill point, bare and +save; recovery
+//                                      exactly once, the conservation report (report-only) against the baseline (tools/lib/gatetxn.mjs)
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6d-gr/<step>.json in the main checkout (GATE6DGR_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -1037,6 +1039,13 @@ steps.look = async () => {
 {
   const { registerHF } = await import('./lib/gatemhf.mjs');
   await registerHF(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
+}
+
+// ------------------------------------------------------------------ (slice T1) txncore: tools/lib/gatetxn.mjs
+
+{
+  const { registerTXN } = await import('./lib/gatetxn.mjs');
+  await registerTXN(steps, { L, call, check, cmd, log, OUT, json, ensure, spendZero, groundY, CX, CZ, haltWait, freshFlat });
 }
 
 // ------------------------------------------------------------------ (slice PS) pscrash: tools/lib/gatemps.mjs

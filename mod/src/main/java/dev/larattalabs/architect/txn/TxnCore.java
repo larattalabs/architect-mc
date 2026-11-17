@@ -558,7 +558,12 @@ public final class TxnCore {
 				return false;
 			}
 			if (p == Probe.APPLIED) {
-				Objects.requireNonNull(k.adapter(e)).compensate(t, e);
+				try {
+					Objects.requireNonNull(k.adapter(e)).compensate(t, e);
+				} catch (RuntimeException ex) {
+					hold(t, "compensation of effect " + e.i() + " refused: " + ex.getMessage(), where(k, t, e));
+					return false;
+				}
 				kill(t, "comp:" + e.i());
 			}
 		}

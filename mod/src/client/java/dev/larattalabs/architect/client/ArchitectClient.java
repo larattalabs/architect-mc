@@ -53,6 +53,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.SliceVoccDev.init(); // phase 6c slice VOC-c hooks (dev.vocc.checkPalette, histogram, regionPalette, delta)
 		dev.larattalabs.architect.client.dev.SliceCoaDev.init(); // 6c close-out A hooks (dev.coa.*: keyed pins, discardPlan, plan files, the clock, the sweeps)
 		dev.larattalabs.architect.client.dev.StockpileDev.init(); // phase 6c slice Y1 hooks (dev.stockpile.*)
+		dev.larattalabs.architect.client.dev.TxnDevHooks.init(); // slice T1 hooks (dev.txn.*)
 		dev.larattalabs.architect.client.dev.SliceRvDev.init(); // phase 6d slice RV hooks (dev.rv.*)
 		dev.larattalabs.architect.client.dev.SliceAdDev.init(); // phase 6d slice AD hooks (dev.ad.*)
 		dev.larattalabs.architect.client.dev.SliceAfDev.init(); // phase 7b slice AF hooks (dev.af.*)

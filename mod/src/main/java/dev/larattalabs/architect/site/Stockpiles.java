@@ -1662,6 +1662,9 @@ public final class Stockpiles {
 
 			@Override
 			public boolean paused(Object t) {
+				if (dev.larattalabs.architect.txn.TxnServer.held("site:" + idOf(t))) {
+					return true; // (slice T1, §3.6 "Holds") a target an open txn holds is skipped: nothing consumed (SiteWait TXN_HELD)
+				}
 				return t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused();
 			}
 
@@ -2985,6 +2988,16 @@ public final class Stockpiles {
 	/** (slice T0) The ledger's DurableFile of the world loaded now, or null (dev, units). */
 	static @Nullable DurableFile ledgerFile() {
 		return ledgerFile;
+	}
+
+	/** (slice T1) The ledger's DurableFile, for a txn's retirement await ({@code {id, gen}} from a completed barrier), or null. */
+	public static @Nullable DurableFile ledgerDurable() {
+		return ledgerFile;
+	}
+
+	/** (slice T1, dev.txn.conservation) {@link #audit}'s parts for the txn conservation report. Server thread. */
+	public static JsonObject auditParts(MinecraftServer srv, ServerPlayer player, @Nullable String owner, JsonObject req) {
+		return audit(srv, player, owner, req);
 	}
 
 	/**

@@ -34,6 +34,11 @@ public record SiteWait(String targetId, boolean waiting, long waitingSince, List
 	public static final String FILL_BLOCKED = "fill_blocked";
 	/** (BC, S-M5-9, since 1.60.0) {@link #blocked}: the next cell would draw past the realise's {@code maxBill}. */
 	public static final String BILL_CAP = "bill_cap";
+	/**
+	 * (slice T1, docs/TXN-DESIGN.md §3.12.3; Since NEXT) {@link #blocked}: the target is held by an open transaction (its txn waits for
+	 * evidence, or for ops); the feed skips it, it is not short of materials. Holds are indefinite and ops-only.
+	 */
+	public static final String TXN_HELD = "txn_held";
 
 	public SiteWait {
 		nextNeeded = nextNeeded == null ? List.of() : List.copyOf(nextNeeded);

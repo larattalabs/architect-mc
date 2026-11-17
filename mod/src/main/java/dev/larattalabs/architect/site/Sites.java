@@ -175,8 +175,17 @@ public final class Sites {
 	/** (6d AD) Why a site or group can't take a delta or a removal now (an adoption moves it: SITE_BUSY), or null. */
 	public static volatile java.util.function.@Nullable Function<String, @Nullable String> ADOPT_BUSY;
 
-	/** (6d AD) {@link #ADOPT_BUSY} of a site or group, or null. */
+	/**
+	 * (6d AD) {@link #ADOPT_BUSY} of a site or group, or null; (slice T1) also a transaction's hold on it ({@code held(other) tx-<n>: ..},
+	 * docs/TXN-DESIGN.md §3.6 "Holds": every writer honours it; O(1) when no txn is open).
+	 */
 	public static @Nullable String adoptBusy(@Nullable String id) {
+		if (id != null) {
+			String held = dev.larattalabs.architect.txn.TxnServer.heldWhy("site:" + id);
+			if (held != null) {
+				return held;
+			}
+		}
 		var f = ADOPT_BUSY;
 		return f == null || id == null ? null : f.apply(id);
 	}
