@@ -27,21 +27,32 @@ import org.jspecify.annotations.Nullable;
  *                of consuming, whatever the stockpile holds, and {@code nextNeeded} names the capped items
  * @param blockedCells (M5 FK, since 1.59.0) the world cells that hold it back ({@link #FILL_BLOCKED}: the declared containers that are not
  *                     empty); empty when {@code blocked} is null
+ * @param capScope (LCAP, Steward's LCAP-Q1, since NEXT, feature {@code "maxBillPerLot"}) for {@link #BILL_CAP}: which cap holds the target,
+ *                 {@link #CAP_REGION} (its realise's or revision's {@code maxBill}), {@code "lot:<id>"} (its lot's
+ *                 {@code maxBillPerLot}), or both comma-joined, lot first ({@code "lot:<id>,region"}); null otherwise
  */
 public record SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits, @Nullable String blocked,
-	List<BlockPos> blockedCells) {
+	List<BlockPos> blockedCells, @Nullable String capScope) {
 	/** (M5 FK, since 1.59.0) {@link #blocked}: a declared container is not empty at the fill. */
 	public static final String FILL_BLOCKED = "fill_blocked";
 	/** (BC, S-M5-9, since 1.60.0) {@link #blocked}: the next cell would draw past the realise's {@code maxBill}. */
 	public static final String BILL_CAP = "bill_cap";
+	/** (LCAP, since NEXT) {@link #capScope}: the region-wide {@code maxBill} holds it. */
+	public static final String CAP_REGION = "region";
 
 	public SiteWait {
 		nextNeeded = nextNeeded == null ? List.of() : List.copyOf(nextNeeded);
 		blockedCells = blockedCells == null ? List.of() : List.copyOf(blockedCells);
 	}
 
+	/** (M5 FK, since 1.59.0) The 1.59.0 shape: no cap scope. */
+	public SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits, @Nullable String blocked,
+		List<BlockPos> blockedCells) {
+		this(targetId, waiting, waitingSince, nextNeeded, moreUnits, blocked, blockedCells, null);
+	}
+
 	/** The 1.15.0 shape: not blocked. */
 	public SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits) {
-		this(targetId, waiting, waitingSince, nextNeeded, moreUnits, null, List.of());
+		this(targetId, waiting, waitingSince, nextNeeded, moreUnits, null, List.of(), null);
 	}
 }

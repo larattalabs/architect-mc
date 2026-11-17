@@ -1894,8 +1894,25 @@ public final class RegionsImpl implements Regions {
 			throw refusal(Reason.OTHER, "the region could not be saved: " + e.getMessage());
 		}
 		Live live = new Live(rec, ir, w);
+		// (LCAP, rule 17) the record (its caps with it) saved and confirmed before the batch is queued: a failed save refuses, nothing queued or
+		// written. The batch's and group's ids are reserved for it first, so the record names them
+		String[] ids = Batches.reserveRegionIds();
+		rec.batchId = ids[0];
+		rec.groupId = ids[1];
+		rec.state = RegionState.PLACING;
+		try {
+			saveConfirmed(live);
+		} catch (IOException e) {
+			try {
+				Files.deleteIfExists(RegionStore.region(w, id).resolve("ir.json"));
+			} catch (IOException ignored) {
+				// the directory has no region.json: a load skips it
+			}
+			throw recordUnsaved("region " + id, e);
+		}
+		WorldJournal.kill("RG2a"); // (LCAP) the record saved, the batch not yet queued
 		REGIONS.put(id, live);
-		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove(), r.maxWaitSeconds());
+		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove(), r.maxWaitSeconds(), ids[0], ids[1]);
 		rec.groupId = b.group;
 		rec.batchId = b.id;
 		rec.state = RegionState.PLACING;
@@ -2912,10 +2929,28 @@ public final class RegionsImpl implements Regions {
 
 	static void save(Live l) {
 		try {
-			RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("region.json"), l.rec().toJson());
+			saveConfirmed(l);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {} could not be saved: {}", l.rec().id, e.toString());
 		}
+	}
+
+	/**
+	 * (LCAP, rule 17) The region record's save, its failure reported: the realise's and the revision's publication (the save that records
+	 * their caps) call this and refuse when it throws, before any write the caps govern. Every other caller keeps {@link #save}'s WARN.
+	 */
+	static void saveConfirmed(Live l) throws IOException {
+		writeRec(l.world(), l.rec());
+	}
+
+	static void writeRec(Path world, RegionRec rec) throws IOException {
+		RegionStore.writeJson(RegionStore.region(world, rec.id).resolve("region.json"), rec.toJson());
+	}
+
+	/** (LCAP) The refusal of a realise or revision whose region record could not be saved: nothing was written. */
+	static RegionException recordUnsaved(String what, IOException e) {
+		return new RegionException(Reason.JOURNAL_UNAVAILABLE, what + ": the region record could not be saved (" + e.getMessage() + "), so its caps are not "
+			+ "on disk: refused before any write; free the disk and realise again", "region_record");
 	}
 
 	// ------------------------------------------------------------------ views, removal

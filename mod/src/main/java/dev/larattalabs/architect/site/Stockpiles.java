@@ -1756,10 +1756,11 @@ public final class Stockpiles {
 				// (BC, S-M5-9) nothing built and the cap held a cell back: the typed wait bill_cap (else it lifts)
 				boolean held = capHit[0] && r.built.cardinality() == before;
 				// (LCAP) either cap's units over: the larger of each item (the cap that must rise most)
-				Map<String, Integer> capOver = BillCaps.mergeOver(billCap != null && held ? BillCaps.over(r, billCap, drawn) : Map.of(), lotCap != null && held
-					? BillCaps.over(r, lotCap, lotDrawn) : Map.of());
+				Map<String, Integer> regionOver = billCap != null && held ? BillCaps.over(r, billCap, drawn) : Map.of();
+				Map<String, Integer> lotOver = lotCap != null && held ? BillCaps.over(r, lotCap, lotDrawn) : Map.of();
+				Map<String, Integer> capOver = BillCaps.mergeOver(regionOver, lotOver);
 				if (!capOver.isEmpty()) {
-					SiteWaits.billCapped(srv, idOf(t), capOver);
+					SiteWaits.billCapped(srv, idOf(t), capOver, BillCaps.scopeOf(regionOver, lotOver, lotCap == null ? null : lotCap.lot())); // (LCAP-Q1) which cap holds it
 					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
 				} else if (billCap != null || lotCap != null) {
 					SiteWaits.billUncapped(srv, idOf(t));

@@ -144,4 +144,35 @@ class LotCapLCAPTest {
 		// recovery enforces it: past the lot's cap after the reload, its room is negative and its overshoot named
 		assertEquals(Map.of(PL, 3, CO, 1), b.overshoot(Map.of(PL, 45, CO, 1)), "the mech's cobblestone: an item lot b's cap does not name");
 	}
+
+	@Test
+	void aRegionRecordThatCannotBeSavedIsReportedAndRefusedTyped(@TempDir Path dir) throws Exception {
+		// (LCAP, rule 17, the review's P1) the realise's and the revision's publication call saveConfirmed (writeRec): a failed write throws
+		RegionRec rec = new RegionRec("rg8", "p1", "sha", "steward", new JsonObject(), "minecraft:overworld", new int[] {0, 60, 0, 31, 90, 31}, 1L);
+		rec.survival = new JsonObject();
+		BillCaps.record(rec.survival, 0, Map.of(PL, 100), Map.of("b", Map.of(PL, 42)), 0);
+		RegionStore.failNext = "region.json";
+		java.io.IOException e = assertThrows(java.io.IOException.class, () -> RegionsImpl.writeRec(dir, rec));
+		assertFalse(java.nio.file.Files.exists(RegionStore.region(dir, "rg8").resolve("region.json")), "nothing on disk");
+		RegionsImpl.RegionException r = RegionsImpl.recordUnsaved("region rg8", e);
+		assertEquals(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, r.reason);
+		assertEquals("region_record", r.detail());
+		// once: the next write goes through, and carries the caps
+		RegionsImpl.writeRec(dir, rec);
+		RegionRec back = RegionRec.fromJson(RegionStore.readJson(RegionStore.region(dir, "rg8").resolve("region.json")));
+		assertEquals(Map.of("b", Map.of(PL, 42)), BillCaps.lotCaps(back.survival, 0, 0));
+		assertNull(RegionStore.failNext);
+	}
+
+	@Test
+	void aBillCapWaitNamesTheCapItHit() {
+		// (LCAP-Q1) SiteWait.capScope: region, lot:<id>, or both (lot first); the old shapes have none
+		assertEquals("lot:b", BillCaps.scopeOf(Map.of(), Map.of(PL, 3), "b"));
+		assertEquals("region", BillCaps.scopeOf(Map.of(PL, 3), Map.of(), "b"));
+		assertEquals("lot:b,region", BillCaps.scopeOf(Map.of(PL, 3), Map.of(PL, 1), "b"));
+		assertEquals("region", BillCaps.scopeOf(Map.of(PL, 3), Map.of(), null), "no lot cap");
+		assertNull(new dev.larattalabs.architect.api.SiteWait("s1", true, 0L, List.of(), 0, dev.larattalabs.architect.api.SiteWait.BILL_CAP, List.of()).capScope());
+		assertEquals("lot:b", new dev.larattalabs.architect.api.SiteWait("s1", true, 0L, List.of(), 0, dev.larattalabs.architect.api.SiteWait.BILL_CAP, List.of(), "lot:b")
+			.capScope());
+	}
 }

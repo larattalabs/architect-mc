@@ -64,8 +64,19 @@ public final class RegionStore {
 		return id;
 	}
 
+	/**
+	 * (LCAP, TEST: {@code dev.region.failNextSave}) The next write of a file with this name fails with an IOException (once), as a full or
+	 * read-only disk would: the gate's stand-in for a region record that cannot be saved. Null: off.
+	 */
+	public static volatile @org.jspecify.annotations.Nullable String failNext;
+
 	/** Write, fsync, atomic rename (and the directory exists). */
 	public static void write(Path f, byte[] data) throws IOException {
+		String fail = failNext;
+		if (fail != null && fail.equals(f.getFileName().toString())) {
+			failNext = null;
+			throw new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+		}
 		Files.createDirectories(f.getParent());
 		Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
 		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {

@@ -1064,7 +1064,7 @@ steps.look = async () => {
 
 {
   const { registerLCAP } = await import('./lib/gatelcap.mjs');
-  await registerLCAP(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, BOXOF, cellsOf, diff, haltWait });
+  await registerLCAP(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, BOXOF, cellsOf, diff, haltWait, rvState, rvWait });
 }
 
 const name = process.argv[2];

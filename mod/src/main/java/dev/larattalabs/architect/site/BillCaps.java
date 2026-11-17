@@ -378,6 +378,16 @@ public final class BillCaps {
 		return left;
 	}
 
+	/**
+	 * (LCAP-Q1, pure) Which cap a wait hit ({@link dev.larattalabs.architect.api.SiteWait#capScope}): {@code "lot:<id>"}, {@code "region"}, or
+	 * both, lot first; the region's when neither names units (a cap at its bound with nothing past it).
+	 */
+	public static String scopeOf(Map<String, Integer> regionOver, Map<String, Integer> lotOver, @Nullable String lotId) {
+		String lot = lotId != null && !lotOver.isEmpty() ? "lot:" + lotId : null;
+		String region = !regionOver.isEmpty() || lot == null ? dev.larattalabs.architect.api.SiteWait.CAP_REGION : null;
+		return lot == null ? region : region == null ? lot : lot + "," + region;
+	}
+
 	/** (LCAP, pure) Two caps' units over, merged: the larger of each item. */
 	public static Map<String, Integer> mergeOver(Map<String, Integer> a, Map<String, Integer> b) {
 		Map<String, Integer> out = new TreeMap<>(a);

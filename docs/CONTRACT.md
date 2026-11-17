@@ -32916,6 +32916,25 @@ so two module lots that share items can't each be held to their own measured bou
   (`RegionStore.writeJson` + `RegionRec.fromJson`) with the overshoot after it. Updated: `Api114Test` (component order), `ApiRulesTest`.
 - In game `lcap-survival` (`tools/lib/gatelcap.mjs`, via `tools/gate6dgr.mjs lcapsurvival`): the steps in its header.
 
+### 4. Fix round (rule 15 review P1; Steward's LCAP-Q1, LCAP-Q2)
+
+- **P1, a record that can't be saved.** `RegionsImpl.save` swallowed an IOException, so a realise or revision could build with its caps
+  only in memory. The two saves that record caps now report failure (`RegionsImpl.saveConfirmed`) and refuse
+  `Reason.JOURNAL_UNAVAILABLE`, detail `region_record`, before any governed write:
+  - a first realise saves its record (caps, the batch's and group's ids reserved first) before the batch is queued: on failure nothing is
+    queued, no region is registered and the region dir's ir.json is removed. New kill point `RG2a` (record saved, batch not queued: a crash
+    there leaves a region with no batch, which writes nothing). `RG2` is unchanged.
+  - a revision's publication (RV3) on failure puts the in-memory record back to its head (revisions, head, position, busy, manifest, state,
+    stages, survival, the effective snapshot) and refuses; on disk it is RV2's state (the manifest and snapshot written, nothing accepted).
+  - Every other `save` caller keeps the WARN (Revisions 9, RegionsImpl 9, RegionFluids 10, MechCharges 5, RegionFreeDrops 2, BillCaps 2,
+    Sites 1): they record progress after the governed write, not the cap. Test hook `dev.region.failNextSave` (`RegionStore.failNext`).
+- **LCAP-Q1, which cap.** `SiteWait.capScope` (appended component; the 1.59.0 constructor kept): for `BILL_CAP`, `"region"`
+  (`SiteWait.CAP_REGION`), `"lot:<id>"`, or both comma-joined, lot first; null otherwise. A gate mechanism's `bill_cap` wait carries the same
+  string as `waitsFor.cap`, and its `say` names the lot.
+- **LCAP-Q2.** `lcap-survival` adds a revision (rid > 0, lots lc and ld through checkPlan and realiseApproved): a town lot named on it is
+  `unknown_lot:la`; its record save failing is refused with the head unchanged; an RV3 kill, then its caps read back; ld's cap lowered holds
+  ld (capScope `lot:ld`) while lc builds; a halt with nothing saved keeps and enforces it; restored, PLACED.
+
 ### Slice LCAP as built (2026-11-17; strict; versions NEXT; $0)
 
 - API: `maxBillPerLot` on `RealiseRequest`/`ApprovedRealise` (appended, 1.60.0 constructors kept, `withMaxBillPerLot`), `Quote.lotBill`,

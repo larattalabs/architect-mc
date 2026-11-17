@@ -153,6 +153,9 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   the whole revision), and each module lot's measured bound per lot. Refusals are `BILL_CAP` with `detail` `lot:<id>` (a lot past its own
   cap) or `unknown_lot:<id>`; the region cap's detail stays `""`. Kept per rid in `survival.caps.<rid>.lots` across a restart, like BC-d.
   Unblocks `ComposedModules.MATERIALS_WAIT_FOR_LOT_CAP`. CONTRACT "Slice LCAP".
+- LCAP-Q1: `SiteWait.capScope` names the cap a `bill_cap` wait hit: `"region"`, `"lot:<id>"` or `"lot:<id>,region"` (lot first); a gate
+  mechanism's wait carries it as `waitsFor.cap`. LCAP-Q2: `lcap-survival` now covers a revision (rid > 0) with lot caps and an RV3 kill.
+- A realise or revision whose region record can't be saved is refused `JOURNAL_UNAVAILABLE` (detail `region_record`), nothing written.
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

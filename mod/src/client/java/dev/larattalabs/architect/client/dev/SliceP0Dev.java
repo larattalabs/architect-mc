@@ -265,6 +265,15 @@ public final class SliceP0Dev {
 				Map<String, Integer> set = req.get("set") instanceof JsonObject ? capOf(wrapSet(req)) : null;
 				return ServerTasks.callOnServer(srv -> dev.larattalabs.architect.site.BillCaps.devState(srv, region, req.has("rid") ? Integer.valueOf(req.get("rid").getAsInt()) : null, lot, set));
 			});
+		DevBridge.register("dev.region.failNextSave", 10_000, "{file?: \"region.json\", off?: true} - (LCAP, TEST) the next write of that file fails once with an "
+			+ "IOException (a full disk): a realise's or revision's record save then refuses JOURNAL_UNAVAILABLE (detail region_record) -> {armed}",
+			(req, mc) -> {
+				boolean off = req.has("off") && req.get("off").getAsBoolean();
+				dev.larattalabs.architect.region.RegionStore.failNext = off ? null : Fields.of(req).optStr("file", "region.json");
+				JsonObject o = new JsonObject();
+				o.addProperty("armed", dev.larattalabs.architect.region.RegionStore.failNext);
+				return java.util.concurrent.CompletableFuture.completedFuture(o);
+			});
 		DevBridge.register("dev.api.versions", 30_000, "{} - (BC) ArchitectApi.apiVersion/kitVersion/checkerVersion, Sites.loadHealthy and the BC features "
 			+ "-> {apiVersion, kitVersion, checkerVersion, loadHealthy, features}", (req, mc) -> ServerTasks.callOnServer(srv -> {
 				ArchitectApi api = ArchitectApi.get();
