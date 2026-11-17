@@ -31306,7 +31306,7 @@ without them; slabs unpickupable and untransferable from declared containers; st
   (PS: never saved) keeps such boxes sealed until it ends (fail closed). Unit `aLingeringBoxUnsealsOnlyOnceAQueueGenerationThatExcludesItIsWritten`
   (an injected failing write: still sealed though the barrier completed; the retry's write releases it); with 611ee4ee's rule (the barrier)
   swapped in, it fails.
-- **2 ops abandon:** `/architect removal abandon <group> [stage]` (permission level 2 as `/architect survival on|off`, the console too;
+- **2 ops abandon (REMOVED before merge: "LC3: ship without abandon" below):** `/architect removal abandon <group> [stage]` (permission level 2 as `/architect survival on|off`, the console too;
   `SiteCommands`). Only a persisted STALLED group or stage removal: its written members are settled as after a normal finish (their pending
   records and undone entries stay; the next start releases them on their evidence); its unwritten members (the one that broke included) stay
   standing as they are, nothing written; for each still pending (one a start's settle already took back or released is left alone) a filled member's custody goes back into its containers (as `end()` does for a removal ended before
@@ -31331,7 +31331,7 @@ without them; slabs unpickupable and untransferable from declared containers; st
   `success` flag, the same seal-state lag). Fixed (`dev.seal.state` rebuilds the set first) and re-run `20261116-141426-change` at 50a59d77:
   lc3-undo 30/0, lc3-seal 40/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
-#### LC3 round 4 (the GPT final pass, NOT SAFE at f6a982f6: abandon's custody P1, FK-b's guard P2; $0, strict)
+#### LC3 round 4 (the GPT final pass, NOT SAFE at f6a982f6: abandon's custody P1, FK-b's guard P2; $0, strict; its abandon work REMOVED, see below; the PSV merge kept)
 
 - **P1 durable custody return:** `Groups.abandonSteps` orders the abandon: every unwritten pending member's custody back (memory), then ONE
   save confirmed durable (`Stockpiles.saveWithWorldConfirmed`: players, chunks flushed with every write known durable (SS), then the ledger's
@@ -31368,6 +31368,21 @@ without them; slabs unpickupable and untransferable from declared containers; st
   finished); `stallBefore` added: `20261117-030103-change` the clean case PASS, AB1 refused by killAt's point list (fixed);
   `20261117-030545-change` at b487ba2b: lc3-undo 91/0 (clean + restart, AB1-AB4; at AB2 the containers and the saved custody both held the
   items: settled once). Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
+
+#### LC3: ship without abandon (Noah's call, 2026-11-17; abandon moves to TXN T5; $0, strict)
+
+- **Removed:** `/architect removal abandon <group> [stage]` (SiteCommands, `Groups.abandon`, its refusals and suggestions), round 4's
+  `Groups.abandonSteps`/`AbandonIo`, `Fills.writeBackAbandoned` (and its `returnBilled`/`stripProvided`/`Slots`), `Stockpiles.saveWithWorldConfirmed`,
+  the kill points AB1-AB4 (and `dev.journal.killAt`'s AB pattern), `dev.undo.failRestore {stallBefore}`, the retry's custody re-take
+  (`retakeCustody`, `retakeUnsaved`), fix 2's `Sites.dropPending` and `SiteJournal.belowAny`, `AbandonCustodyTest`, and lc3-undo's abandon
+  cases (fix 2's and round 4's); `gatem5fkb.mjs` back to f6a982f6's. No API or dev hook exposes abandon.
+- **The state as shipped:** a group or stage removal whose restore keeps failing stays STALLED in the queue file. Its whole member set (written
+  members included) stays sealed, so its holders accept and give up no items, across restarts, until a retry of the same removal finishes it.
+  That is safe (nothing enters, leaves or is refunded twice) and stuck: there is no command to give it up. Recovery is by ops later (TXN T5).
+  `dev.seal.state` still lists it under `stalled` (members written and not, `current`). Unit `aStalledRemovalKeepsItsWholeSetSealedAcrossAReload`.
+- **Kept:** the seal design (RemovalSeal, S-M5-12; FL's S-M5-17/18), fix 2's confirmed queue generations as PSV now has them, and the PSV merge.
+- **Not here:** the instant-build provided-slab P2 (LEFTOVERS, the coordinator) and the rename's directory sync (T0).
+- **Gate:** GATE7
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 

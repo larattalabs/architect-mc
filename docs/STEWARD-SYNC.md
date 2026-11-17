@@ -114,8 +114,9 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 <!-- architect-ships:end -->
 
-Ops commands (no API, no feature name; not in the table): **next release** (slice LC3) adds `/architect removal abandon <group> [stage]`
-(permission level 2, the console too): gives up a STALLED group or stage removal so its sealed boxes open (docs/CONTRACT.md "LC3 fix 2").
+Removal seal (no API, no feature name; not in the table): **next release** (slice LC3): a removal's holders refuse items until it ends. A
+removal that stays STALLED (a restore that keeps failing) keeps its holders locked until it is retried: safe, stuck, recoverable by ops later;
+there is no abandon command (it moves to TXN T5; docs/CONTRACT.md "LC3: ship without abandon").
 
 ## Steward's side (last sync 2026-11-13: steward-mc main 0c610dc, pinned to Architect 0.63.0, `pin-064` held)
 

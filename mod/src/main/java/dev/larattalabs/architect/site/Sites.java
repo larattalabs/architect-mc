@@ -2108,30 +2108,6 @@ public final class Sites {
 		}
 	}
 
-	/**
-	 * (slice LC3 fix 2, {@code /architect removal abandon}) Drops the pending records of {@code ids} (a stalled removal's unwritten members)
-	 * without touching the world, in one change of state: their blocks stay as they are and nothing can write them again (the caller has
-	 * released their journal entries first). A construction member's run is forgotten too. Server thread.
-	 */
-	static void dropPending(MinecraftServer server, java.util.Collection<String> ids) {
-		State s = state;
-		List<Site.Pending> pending = new ArrayList<>(s.pending());
-		List<String> construction = new ArrayList<>();
-		boolean any = pending.removeIf(p -> {
-			if (!ids.contains(p.site().id())) {
-				return false;
-			}
-			if (p.site().construction() != null) {
-				construction.add(p.site().id());
-			}
-			return true;
-		});
-		if (any) {
-			ids.forEach(reports::remove);
-			commit(server, new State(s.byId(), s.next(), List.copyOf(pending)));
-		}
-		construction.forEach(id -> Builder.forget(server, id));
-	}
 
 	/** Replaces a standing site's record (construction state changes: built, paused, free cells) and saves. Server thread. */
 	static void replace(MinecraftServer server, Site b) {

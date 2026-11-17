@@ -198,9 +198,9 @@ class RemovalSealTest {
 	}
 
 	@Test
-	void abandonSettlesOnlyAStalledRemovalItsWrittenAndUnwrittenMembers() {
-		// (LC3 fix 2, GPT P1 #2) /architect removal abandon: members A written, B broke mid-write, C never started; written A settles as a
-		// finished removal, B and C stay standing (their records and entries dropped); refused for anything not STALLED
+	void aStalledRemovalKeepsItsWholeSetSealedAcrossAReload() {
+		// (LC3, ship without abandon) a removal that stays STALLED keeps its holders locked: safe, stuck, recoverable by ops later (TXN T5).
+		// Members A written, B and C not; reloaded from the queue file it is still stalled and its whole set sealed
 		Groups.Removal r = new Groups.Removal("g7", null, null, false);
 		r.undo = "u:g7";
 		r.undoSites.addAll(List.of("lot_a", "lot_b", "lot_c"));
@@ -212,49 +212,21 @@ class RemovalSealTest {
 		r.current = "lot_a"; // (a member being written counts as unwritten)
 		assertEquals(List.of("lot_a", "lot_b", "lot_c"), Groups.settle(r).unwritten());
 		r.current = null;
-		assertTrue(Groups.abandonRefusal(null, false, "g7", null).startsWith("No stalled removal of g7"), "unknown, finished or already abandoned");
-		assertTrue(Groups.abandonRefusal(null, true, "g7 s1", null).contains("is running, not stalled"), "a running removal");
-		assertTrue(Groups.abandonRefusal(r, false, "g7", "closed").contains("journal is unavailable"));
-		assertEquals(null, Groups.abandonRefusal(r, false, "g7", null));
 		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
 		com.google.gson.JsonObject o = r.toJson();
 		o.addProperty("stalled", true);
 		a.add(o);
 		try {
 			Groups.load(a);
-			List<String[]> names = Groups.stalledNames();
-			assertEquals(1, names.size());
-			assertEquals("g7", names.get(0)[0]);
 			List<String> ids = new java.util.ArrayList<>();
 			Groups.sealedIds(ids);
 			assertTrue(ids.containsAll(List.of("lot_a", "lot_b", "lot_c")), "stalled: its whole set sealed " + ids);
-			int m0 = Groups.sealMods();
-			// the step that ends it (after the records are settled): out of the stalled list, out of the queue file, nothing sealed by it
-			Groups.Removal loaded = null;
-			for (com.google.gson.JsonElement e : Groups.toJson()) {
-				assertTrue(e.getAsJsonObject().has("stalled"));
-			}
-			for (Groups.Removal x : stalledList()) {
-				loaded = x;
-			}
-			assertTrue(Groups.dropStalled(loaded));
-			assertFalse(Groups.dropStalled(loaded), "a second drop finds nothing (the command refuses: no stalled removal)");
-			assertTrue(Groups.toJson().isEmpty(), "the next queue file holds no removal: nothing resumes or replays");
-			List<String> none = new java.util.ArrayList<>();
-			Groups.sealedIds(none);
-			assertTrue(none.isEmpty(), "nothing sealed by it (its boxes linger until that queue file is written)");
-			assertTrue(Groups.sealMods() != m0, "the index follows the change");
+			com.google.gson.JsonArray again = Groups.toJson();
+			assertEquals(1, again.size());
+			assertTrue(again.get(0).getAsJsonObject().has("stalled"), "it stays in the queue file, stalled: nothing drops it but a retry's end");
 		} finally {
 			Groups.reset(null);
 		}
-	}
-
-	private static List<Groups.Removal> stalledList() {
-		List<Groups.Removal> out = new java.util.ArrayList<>();
-		for (String[] n : Groups.stalledNames()) {
-			out.add(Groups.stalledFor(n[0], n[1]));
-		}
-		return out;
 	}
 
 	@Test

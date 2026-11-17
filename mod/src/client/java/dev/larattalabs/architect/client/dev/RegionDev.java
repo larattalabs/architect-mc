@@ -304,16 +304,8 @@ public final class RegionDev {
 					o.addProperty("armed", on);
 					return o;
 				}));
-		DevBridge.register("dev.undo.failRestore", 10_000, "{skip?: 0, stallBefore?: site} - 6c X (C22): let `skip` removal restores finish their writes, then break the next one "
-			+ "(\"injected restore failure\") before its site record is finished; -1 disarms. (LC3 round 4) stallBefore: the next group removal ends STALLED "
-			+ "just before it writes that member (\"\" disarms; skip then untouched)", (req, mc) -> ServerTasks.callOnServer(s -> {
-				if (Fields.of(req).has("stallBefore")) {
-					String id = req.get("stallBefore").getAsString();
-					dev.larattalabs.architect.site.Groups.stallBefore = id.isEmpty() ? null : id;
-					JsonObject o = new JsonObject();
-					o.addProperty("stallBefore", id);
-					return o;
-				}
+		DevBridge.register("dev.undo.failRestore", 10_000, "{skip?: 0} - 6c X (C22): let `skip` removal restores finish their writes, then break the next one "
+			+ "(\"injected restore failure\") before its site record is finished; -1 disarms", (req, mc) -> ServerTasks.callOnServer(s -> {
 				dev.larattalabs.architect.site.Groups.failRestore(Fields.of(req).has("skip") ? req.get("skip").getAsInt() : 0);
 				JsonObject o = new JsonObject();
 				o.addProperty("armed", Fields.of(req).has("skip") ? req.get("skip").getAsInt() : 0);

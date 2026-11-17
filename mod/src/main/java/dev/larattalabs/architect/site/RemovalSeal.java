@@ -642,7 +642,7 @@ public final class RemovalSeal {
 			lg.add(x);
 		});
 		o.add("lingering", lg);
-		// (LC3 fix 2) the stalled removals ({@code /architect removal abandon}): their members written and not
+		// (LC3 fix 2) the stalled removals (sealed until retried): their members written and not
 		com.google.gson.JsonArray stl = new com.google.gson.JsonArray();
 		Groups.stalledJson(stl);
 		o.add("stalled", stl);

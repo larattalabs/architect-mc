@@ -394,10 +394,6 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
-- **2026-11-17 (slice LC3 round 4; TEST):** `dev.undo.failRestore {stallBefore: site}`: the next group or stage removal ends STALLED just
-  before it writes that member ("" disarms; for a member a survival site deconstructs at once, which `skip` never breaks); `dev.journal.killAt`
-  takes AB1..AB4 (`/architect removal abandon`: custody back in memory; inside its save, chunks on disk, ledger not; save confirmed, no
-  record dropped; records dropped, queue not saved); `dev.seal.state`'s `stalled` entries add `current`.
 - **2026-11-17 (slice PSV fix round):** `dev.queue.writes` takes `failAtPreSave?: n` (TEST): the next undo pre-save's queue write and the n-1
   after it fail (the failure starts after R1, the preflight already written); the answer adds `failAtPreSave` (left armed).
 - **2026-11-16 (slice PSV):** new (`StockpileDev`, generated headless too) `dev.queue.writes {fail?: n}`: TEST, the next n queue file
@@ -412,7 +408,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   cells, off?}`: a removal restore pauses once it has written `after` cells; kept in `architect/dev-removal-pause.json`, so a restart keeps it.
   `dev.removal.undoStage {site}` (LC's, kept). (LC3 fix 2) `dev.seal.state` also answers `members: [{id, pending, standing, sealed}]`,
   `lingering: [{id, need}]` (boxes kept sealed until queue file generation `need` is written), `queueRequested`, `queueWritten`,
-  `queueWriteFailing`, and `stalled: [{group, stage?, written, unwritten}]` (the removals `/architect removal abandon` takes).
+  `queueWriteFailing`, and `stalled: [{group, stage?, written, unwritten, current?}]` (the STALLED removals, sealed until retried).
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

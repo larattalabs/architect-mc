@@ -57,10 +57,6 @@ import org.jspecify.annotations.Nullable;
  * /architect remove &lt;road|cell site&gt; [both]
  *                                   remove a road or cell site (both: the sites covering it first)
  * /architect journal                the world journal: entries, size on disk, the cache
- * /architect removal abandon &lt;group&gt; [stage]
- *                                   (permission 2, the console too) give up a STALLED group or stage removal: written members settle as
- *                                   after a finish, unwritten ones stay standing as they are (records and journal entries dropped), then
- *                                   its boxes unseal once the queue file is written; refused for anything not stalled
  * </pre>
  * In a survival world (docs/CONTRACT.md phase 3) place makes a construction site and remove deconstructs it.
  */
@@ -113,18 +109,6 @@ public final class SiteCommands {
 					.then(Commands.literal("force").executes(ctx -> removeAsk(ctx, true, null))
 						.then(Commands.literal("confirm").executes(ctx -> remove(ctx, false, true))
 							.then(Commands.argument("token", StringArgumentType.word()).executes(ctx -> removeToken(ctx, true)))))))
-			// (slice LC3 fix 2) ops only: give up a STALLED group or stage removal (its members' records settled, then its boxes unsealed)
-			.then(Commands.literal("removal").requires(SiteCommands::gamemaster)
-				.then(Commands.literal("abandon")
-					.then(Commands.argument("group", StringArgumentType.word()).suggests((ctx, b) -> {
-						Groups.stalledNames().forEach(n -> b.suggest(n[0]));
-						return b.buildFuture();
-					}).executes(ctx -> abandon(ctx, null))
-						.then(Commands.argument("stage", StringArgumentType.word()).suggests((ctx, b) -> {
-							String g = StringArgumentType.getString(ctx, "group");
-							Groups.stalledNames().stream().filter(n -> n[0].equals(g) && n[1] != null).forEach(n -> b.suggest(n[1]));
-							return b.buildFuture();
-						}).executes(ctx -> abandon(ctx, StringArgumentType.getString(ctx, "stage")))))))
 			.then(Commands.literal("survival")
 				.executes(SiteCommands::survivalShow)
 				.then(Commands.literal("on").executes(ctx -> survivalSet(ctx, true)))
@@ -377,20 +361,6 @@ public final class SiteCommands {
 			}
 			src.sendSuccess(() -> Component.literal("Removed the crate at " + pos.toShortString() + " of " + pile.owner() + (r.dropped().isEmpty() ? ""
 				: "; dropped the excess " + r.dropped()) + (r.ended() ? "; the stockpile ended" : "")), true);
-			return 1;
-		} catch (Sites.SiteException e) {
-			src.sendFailure(Component.literal(e.getMessage()));
-			return 0;
-		}
-	}
-
-	/** (slice LC3 fix 2) {@code /architect removal abandon <group> [stage]}: permission level 2 (the console too). */
-	private static int abandon(CommandContext<CommandSourceStack> ctx, @Nullable String stage) {
-		CommandSourceStack src = ctx.getSource();
-		String group = StringArgumentType.getString(ctx, "group");
-		try {
-			String line = Groups.abandon(src.getServer(), group, stage, src.getTextName());
-			src.sendSuccess(() -> Component.literal(line.substring("Ops: ".length())), true);
 			return 1;
 		} catch (Sites.SiteException e) {
 			src.sendFailure(Component.literal(e.getMessage()));
