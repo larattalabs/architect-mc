@@ -87,22 +87,6 @@ public final class TestMove {
 			o.addProperty("refused", "no dimension " + dim);
 			return o;
 		}
-		Container src = container(level, from);
-		Container dst = container(level, to);
-		if (src == null || dst == null) {
-			o.addProperty("refused", "both cells must be containers");
-			return o;
-		}
-		for (var e : items.entrySet()) {
-			if (count(src, item(e.getKey())) < e.getValue()) {
-				o.addProperty("refused", "the source holds fewer than " + e.getValue() + " " + e.getKey());
-				return o;
-			}
-		}
-		if (!fits(dst, items)) {
-			o.addProperty("refused", "the sink has no room");
-			return o;
-		}
 		TxnCore c = TxnServer.core();
 		TxnCore.Started s = c.begin(NAME, key, List.of(box(dim, from), box(dim, to)), null);
 		o.addProperty("begin", s.status().name());
@@ -110,6 +94,7 @@ public final class TestMove {
 			o.addProperty("detail", s.detail());
 		}
 		if (s.status() != TxnCore.Begin.NEW) {
+			// (T1 review P3) an open attempt or a committed result answers before the current contents are judged
 			if (s.entry() != null) {
 				o.addProperty("txn", s.entry().id);
 			}
@@ -118,6 +103,28 @@ public final class TestMove {
 				o.add("result", s.done().result());
 				o.addProperty("replayed", true);
 			}
+			return o;
+		}
+		BlockEntity sb = level.getBlockEntity(from);
+		BlockEntity db = level.getBlockEntity(to);
+		if (!plain(sb) || !plain(db)) {
+			o.addProperty("refused", "both cells must be plain containers (no crate, no hopper)");
+			return o;
+		}
+		if (Sites.ownsCell(dim, from) || Sites.ownsCell(dim, to)) {
+			o.addProperty("refused", "an Architect site or road covers a cell (the TEST kind stays clear of every legacy writer)");
+			return o;
+		}
+		Container src = (Container) sb;
+		Container dst = (Container) db;
+		for (var e : items.entrySet()) {
+			if (count(src, item(e.getKey())) < e.getValue()) {
+				o.addProperty("refused", "the source holds fewer than " + e.getValue() + " " + e.getKey());
+				return o;
+			}
+		}
+		if (!fits(dst, items)) {
+			o.addProperty("refused", "the sink has no room");
 			return o;
 		}
 		TxnEntry t = s.entry();
@@ -150,6 +157,12 @@ public final class TestMove {
 	static BlockPos posOf(Effect e) {
 		JsonArray a = e.data().getAsJsonArray("pos");
 		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
+	}
+
+	/** A vanilla block container a hold can guard (the TxnHold mixins): no crate (Architect's own writers), no hopper (it moves itself). */
+	static boolean plain(@Nullable BlockEntity be) {
+		return be instanceof net.minecraft.world.level.block.entity.BaseContainerBlockEntity && !(be instanceof dev.larattalabs.architect.survival.CrateBlockEntity)
+			&& !(be instanceof net.minecraft.world.level.block.entity.HopperBlockEntity);
 	}
 
 	static @Nullable Container container(ServerLevel level, BlockPos p) {
@@ -240,6 +253,15 @@ public final class TestMove {
 		return level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4);
 	}
 
+	/** A recovered txn's chunk is loaded for it (the recovery slot runs before anything else touches the box); a live one only reads. */
+	static @Nullable LevelChunk chunkFor(TxnEntry t, ServerLevel level, BlockPos p) {
+		LevelChunk ch = chunk(level, p);
+		if (ch == null && !t.live) {
+			ch = level.getChunk(p.getX() >> 4, p.getZ() >> 4);
+		}
+		return ch;
+	}
+
 	static List<String> receipts(LevelChunk ch) {
 		List<String> r = ch.getAttached(RECEIPTS);
 		return r == null ? List.of() : r;
@@ -259,9 +281,31 @@ public final class TestMove {
 		}
 
 		@Override
+		public @Nullable String invalid(Effect e) {
+			if (!e.data().has("dim") || !(e.data().get("pos") instanceof JsonArray a) || a.size() != 3) {
+				return "dim and pos [x, y, z] are required";
+			}
+			for (int i = 0; i < 3; i++) {
+				if (!a.get(i).isJsonPrimitive() || !a.get(i).getAsJsonPrimitive().isNumber()) {
+					return "pos must be three integers";
+				}
+			}
+			if (e.items().isEmpty()) {
+				return "no items";
+			}
+			for (String k : e.items().keySet()) {
+				Identifier id = Identifier.tryParse(k);
+				if (id == null || BuiltInRegistries.ITEM.getOptional(id).isEmpty()) {
+					return "unknown item " + k;
+				}
+			}
+			return null;
+		}
+
+		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			ServerLevel level = level(e);
-			LevelChunk ch = level == null ? null : chunk(level, posOf(e));
+			LevelChunk ch = level == null ? null : chunkFor(t, level, posOf(e));
 			if (ch == null) {
 				return Probe.UNKNOWN;
 			}
@@ -275,7 +319,7 @@ public final class TestMove {
 		@Override
 		public void apply(TxnEntry t, Effect e) {
 			ServerLevel level = level(e);
-			LevelChunk ch = level == null ? null : chunk(level, posOf(e));
+			LevelChunk ch = level == null ? null : chunkFor(t, level, posOf(e));
 			Container c = level == null ? null : container(level, posOf(e));
 			if (ch == null || c == null) {
 				throw new IllegalStateException("its container is not loaded or gone");
@@ -305,7 +349,7 @@ public final class TestMove {
 		@Override
 		public void compensate(TxnEntry t, Effect e) {
 			ServerLevel level = level(e);
-			LevelChunk ch = level == null ? null : chunk(level, posOf(e));
+			LevelChunk ch = level == null ? null : chunkFor(t, level, posOf(e));
 			Container c = level == null ? null : container(level, posOf(e));
 			if (ch == null || c == null) {
 				throw new IllegalStateException("its container is not loaded or gone");

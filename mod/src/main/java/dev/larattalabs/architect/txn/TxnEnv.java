@@ -31,8 +31,12 @@ public interface TxnEnv {
 	/** A named step was reached: the armed kill point halts here (the model throws its crash). */
 	void kill(String point);
 
-	/** Fires one event at least once (§3.12.9); {@code replayed} for one fired again by recovery. */
-	void emit(TxnEntry t, String event, JsonObject payload, boolean replayed);
+	/**
+	 * Fires one event at least once (§3.12.9); {@code replayed} for one fired again by recovery. True once it is delivered (called again for
+	 * the same event after a false, it answers whether that delivery happened, never firing twice in one session); false while it waits
+	 * for a later tick.
+	 */
+	boolean emit(TxnEntry t, String event, JsonObject payload, boolean replayed);
 
 	long tick();
 

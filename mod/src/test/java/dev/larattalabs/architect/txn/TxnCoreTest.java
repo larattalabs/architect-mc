@@ -241,4 +241,50 @@ class TxnCoreTest {
 		Conservation c3 = new Conservation().inTransit(w.core);
 		assertEquals(1, c3.violations().size(), c3.violations().toString());
 	}
+
+	/** T1 review P2-4: an effect missing its required fields is quarantined at load (its resources held); the others recover. */
+	@Test
+	void anEffectMissingItsFieldsIsQuarantinedNotThrown() {
+		TxnCrashModel.World w = world();
+		TxnEntry t = TxnCrashModelTest.begin(w, "move", null, "box:X", "box:Y");
+		w.core.plan(t, TxnCrashModelTest.fx("take", EffectClass.B, "chunk:X", Map.of("planks", 12), "crate", Effect.TRANSIT).prepare());
+		w.core.plan(t, TxnCrashModelTest.fx("put", EffectClass.B, "chunk:Y", Map.of("planks", 12), Effect.TRANSIT, "chest"));
+		assertEquals(Outcome.OK, w.core.persist(t));
+		JsonObject good = w.store("txn").disk.getAsJsonArray("open").get(0).getAsJsonObject();
+		JsonObject bad = good.deepCopy();
+		bad.addProperty("id", "tx-9");
+		bad.getAsJsonArray("effects").get(1).getAsJsonObject().getAsJsonObject("data").remove("store");
+		bad.add("resources", arr("box:Q"));
+		JsonObject doc = w.store("txn").disk.deepCopy();
+		doc.getAsJsonArray("open").add(bad);
+		TxnCore c = w.newCore();
+		c.load(doc, null);
+		assertEquals(1, c.quarantined().size(), c.quarantined().toString());
+		assertTrue(c.quarantined().get(0).why().contains("no store"), c.quarantined().get(0).why());
+		assertNotNull(c.holds().holder("box:Q"));
+		c.recover(); // the good one recovers; nothing throws
+		assertEquals(0, c.open().stream().filter(x -> x.id.equals("tx-9")).count());
+	}
+
+	/** T1 review P2-6: compensating, a give-back persisted before the sink let go counts at the sink only (no violation); forward it is. */
+	@Test
+	void aCompensationPrefixCountsAtTheSinkGoingForwardItIsAViolation() {
+		TxnCrashModel.World w = world();
+		TxnEntry t = TxnCrashModelTest.begin(w, "move", null, "box:X", "box:Y");
+		w.core.plan(t, TxnCrashModelTest.fx("take", EffectClass.B, "chunk:X", Map.of("planks", 12), "crate", Effect.TRANSIT).prepare());
+		w.core.plan(t, TxnCrashModelTest.fx("put", EffectClass.B, "chunk:Y", Map.of("planks", 12), Effect.TRANSIT, "chest"));
+		assertEquals(Outcome.OK, w.core.persist(t));
+		JsonObject y = w.store("chunk:Y").edit();
+		TxnCrashModel.put(y, "receipts", "tx-1/1");
+		w.store("chunk:Y").set(y);
+		JsonObject x = w.store("chunk:X").edit();
+		TxnCrashModel.put(x, "receipts", "tx-1/0!c");
+		w.store("chunk:X").set(x);
+		assertEquals(1, new Conservation().inTransit(w.core).violations().size(), "undecided (forward): a violation");
+		t.decision = Decision.abort();
+		t.phase = Phase.ABORTING;
+		Conservation c = new Conservation().inTransit(w.core);
+		assertEquals(List.of(), c.violations(), "aborting: counted at the sink only");
+		assertEquals(-12L, c.total().get("planks"), "the negative transit cancels the source's copy");
+	}
 }

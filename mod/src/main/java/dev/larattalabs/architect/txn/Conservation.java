@@ -39,11 +39,16 @@ public final class Conservation {
 		return this;
 	}
 
-	/** Adds every open txn's in-transit amounts by its probes (§5.2). */
+	/**
+	 * Adds every open txn's in-transit amounts by its probes (§5.2), per member group (an abandon's members go different ways). Going forward
+	 * (undecided, committed, an abandon's written members) a booking over a compensated source is a violation. Compensating (an abort, an
+	 * abandon's unwritten members) the source's give-back may persist before the sink lets go: the amount is counted at the sink only, so
+	 * the negative transit cancels the source's copy and is no violation (T1 review P2-6).
+	 */
 	public Conservation inTransit(TxnCore core) {
 		Map<String, Long> tr = new TreeMap<>();
 		for (TxnEntry t : core.open()) {
-			Map<String, Long> one = new TreeMap<>();
+			Map<String, Map<String, Long>> byMember = new TreeMap<>();
 			for (Effect e : t.effects()) {
 				if (e.items().isEmpty() || !e.intoTransit() && !e.outOfTransit()) {
 					continue;
@@ -57,17 +62,31 @@ public final class Conservation {
 					continue; // ABSENT: still at its source; COMPENSATED: back at its source
 				}
 				long sign = e.intoTransit() ? 1 : -1;
+				Map<String, Long> one = byMember.computeIfAbsent(e.member() == null ? "" : e.member(), k -> new TreeMap<>());
 				e.items().forEach((k, v) -> one.merge(k, sign * v, Long::sum));
 			}
-			one.forEach((k, v) -> {
-				if (v < 0) {
-					violations.add(t.id + ": " + k + " booked " + -v + " more than taken (a sink booked over a compensated source)");
+			byMember.forEach((member, one) -> one.forEach((k, v) -> {
+				if (v < 0 && !compensating(t, member)) {
+					violations.add(t.id + (member.isEmpty() ? "" : " " + member) + ": " + k + " booked " + -v
+						+ " more than taken (a sink booked over a compensated source, going forward)");
 				}
 				tr.merge(k, v, Long::sum);
-			});
+			}));
 		}
 		parts.put("inTransit", tr);
 		return this;
+	}
+
+	/** Whether {@code member}'s effects of {@code t} are being undone (an abort; an abandon's unwritten member). */
+	static boolean compensating(TxnEntry t, String member) {
+		Decision d = t.decision();
+		if (d == null || d.isCommit()) {
+			return false;
+		}
+		if (d.isAbort()) {
+			return true;
+		}
+		return !member.isEmpty() && d.written() != null && !d.written().contains(member);
 	}
 
 	/** Every part summed, per item. */

@@ -562,6 +562,100 @@ class TxnCrashModelTest {
 		failingFirst("legacy crate take (no journal)", sc, Naive.NO_JOURNAL, 2);
 	}
 
+	// ------------------------------------------------------------------ T1 review (TXN T1-gpt.log): the fix round's counterexamples
+
+	/** P1-1: a commit write IN_DOUBT, a restart whose re-force fails, then a power loss: recovery must hold, never act on it. */
+	@Test
+	void t1P1_1_recoveryNeverActsOnALoadedJournalWhoseReForceFailed() {
+		for (Naive naive : List.of(Naive.STORE_DOUBT_IGNORED, Naive.NONE)) {
+			World w = m.fresh(MOVE, naive);
+			Map<String, Long> baseline = TxnCrashModel.total(w);
+			w.add("txn", false, true, obj());
+			w.store("txn").doubtAt = 3; // intent, prepared, then the decision: renamed, its folder force failed
+			MOVE.op(w);
+			TxnCrashModel.Store tx = w.store("txn");
+			tx.confirmFails = 1; // the load's re-force fails too
+			tx.doubtWrites = 99; // and the disk keeps failing for a while
+			World r = w.restart(new int[w.stores.size()]);
+			World p = r.powerLoss();
+			p.settle();
+			List<String> v = new ArrayList<>(conserve(p, baseline));
+			if (!p.core.open().isEmpty()) {
+				v.add("liveness: " + p.core.state().get("open"));
+			}
+			scripted("T1 P1-1 recovery on an unconfirmed journal", naive, v);
+			assertEquals(naive == Naive.NONE, v.isEmpty(), v.toString());
+		}
+	}
+
+	/** P2-3: a recovery's event queued for the next tick, then a crash before that tick: it must fire again, never be lost. */
+	@Test
+	void t1P2_3_anEventCountsAsEmittedOnlyOnceDelivered() {
+		for (Naive naive : List.of(Naive.EMIT_ON_QUEUE, Naive.NONE)) {
+			World w = m.fresh(new Scenario() {
+				@Override
+				public void setup(World x) {
+					MOVE.setup(x);
+					x.deferEvents = true;
+				}
+
+				@Override
+				public void op(World x) {
+				}
+			}, naive);
+			TxnEntry t = begin(w, "move", "move:1", "box:X", "box:Y");
+			w.core.plan(t, fx("take", EffectClass.B, "chunk:X", it("planks", 12), "crate", Effect.TRANSIT).prepare());
+			w.core.plan(t, fx("put", EffectClass.B, "chunk:Y", it("planks", 12), Effect.TRANSIT, "chest"));
+			w.core.payload(t, "moved", obj("n", 12));
+			w.crashAt = 8; // intent, apply:0, barrier:prepare, prepared, decided, apply:1, barrier:effects, effects: EFFECTS_DONE durable
+			try {
+				run(w, t);
+			} catch (TxnCrashModel.Crash c) {
+				// stopped
+			}
+			World r = w.restart(new int[w.stores.size()]); // recovery: the event queued for the next tick
+			World r2 = r.restart(new int[r.stores.size()]); // a crash before that tick: the queue is gone
+			r2.settle();
+			boolean fired = r2.events.stream().anyMatch(e -> e.contains(":moved:")) || r.events.stream().anyMatch(e -> e.contains(":moved:"));
+			List<String> v = fired && r2.core.open().isEmpty() ? List.of() : List.of("the event was never delivered (" + r2.events + ")");
+			scripted("T1 P2-3 event delivery", naive, v);
+			assertEquals(naive == Naive.NONE, v.isEmpty(), v.toString());
+		}
+	}
+
+	/** P2-7: an effect applied twice with the total conserved (24 planks, a plan of 12) is caught by the exactly-once assertion. */
+	@Test
+	void t1P2_7_anEffectAppliedTwiceFailsTheExactlyOnceAssertion() {
+		Scenario sc = new Scenario() {
+			@Override
+			public void setup(World w) {
+				w.add("chunk:X", true, false, obj("items", it("planks", 24)));
+				w.add("chunk:Y", true, false, obj());
+			}
+
+			@Override
+			public void op(World w) {
+				MOVE.op(w);
+			}
+		};
+		Result red = m.explore(sc, Naive.NO_MARKER, 1);
+		report("T1 P2-7 exactly once", Naive.NO_MARKER, red);
+		assertTrue(red.violations().stream().anyMatch(x -> x.what().startsWith("exactly once")), red.violations().toString());
+		Result green = m.explore(sc, Naive.NONE, 2);
+		report("T1 P2-7 exactly once", Naive.NONE, green);
+		assertTrue(green.clean(), green.violations().toString());
+	}
+
+	/** P2-8: past the cap a crash point is sampled with a seed (reported), never truncated. */
+	@Test
+	void t1P2_8_pastTheCapTheExplorationSamplesWithItsSeed() {
+		Result r = m.explore(MOVE, Naive.NONE, 1, 1, 4242L);
+		report("T1 P2-8 sampled (cap 1)", Naive.NONE, r);
+		assertEquals(4242L, r.seed(), "the sampled exploration reports its seed");
+		assertTrue(r.clean(), r.violations().toString());
+		assertTrue(r.schedules() > TxnCrashModel.SAMPLE, "sampled schedules: " + r.schedules());
+	}
+
 	@Test
 	void theLogRecordsEveryCounterexample() {
 		// a marker for the report: the RED/GREEN lines are printed by each test (TXN-MODEL ...)

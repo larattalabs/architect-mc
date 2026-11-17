@@ -48,6 +48,11 @@ public interface TxnKind {
 		/** Undoes an applied prepare effect, leaving the {@code !c} marker in the same unit. */
 		void compensate(TxnEntry t, Effect e);
 
+		/** Why the effect's own fields are unusable (a missing position, an unknown item), or null; checked at persist and at load. */
+		default @Nullable String invalid(Effect e) {
+			return null;
+		}
+
 		/** The resource a hold on this effect names ({@code chunk x,z}, {@code player <name>}). */
 		default String where(TxnEntry t, Effect e) {
 			return e.op();

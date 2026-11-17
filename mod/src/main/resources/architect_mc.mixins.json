@@ -30,7 +30,11 @@
 		"SaveTimingServerMixin",
 		"ServerPlayerGameModeMixin",
 		"SlotMayPickupMixin",
-		"StructureTemplateAccessor"
+		"StructureTemplateAccessor",
+		"TxnHoldHopperMixin",
+		"TxnHoldContainerMixin",
+		"TxnHoldBreakMixin",
+		"TxnHoldExplosionMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

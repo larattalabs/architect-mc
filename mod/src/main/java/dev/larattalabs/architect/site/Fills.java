@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.txn.TxnServer;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.BlueprintTransform;
@@ -617,6 +618,9 @@ public final class Fills {
 			if (Builder.stateIfLoaded(level, p) == null) {
 				return false; // its chunk is not loaded: wait (the fill writes all of them in one tick)
 			}
+			if (TxnServer.boxHeld(level, p) || TxnServer.held("site:" + s.id())) {
+				return false; // (slice T1, §3.6 "Holds") an open txn holds the container or the site: the fill waits
+			}
 		}
 		for (Lock l : spec.locks()) {
 			if (Builder.stateIfLoaded(level, world(s, l.x(), l.y(), l.z())) == null) {
@@ -812,6 +816,9 @@ public final class Fills {
 			return null;
 		}
 		List<BlockPos> cells = containerCells(s, spec);
+		if (TxnServer.held("site:" + s.id()) || cells.stream().anyMatch(p -> TxnServer.boxHeld(level, p))) {
+			return s.id() + ": an open transaction holds it (" + TxnServer.heldWhy("site:" + s.id()) + ")"; // (slice T1) nothing taken
+		}
 		List<Map<String, Integer>> take = new ArrayList<>();
 		for (int i = 0; i < cells.size(); i++) {
 			BlockPos p = cells.get(i);
@@ -865,6 +872,11 @@ public final class Fills {
 			return;
 		}
 		String key = Builder.creditKey(s);
+		if (TxnServer.held("site:" + s.id()) || containerCells(s, spec).stream().anyMatch(p -> TxnServer.boxHeld(level, p))) {
+			// (slice T1, §3.6 "Holds") an open txn holds the site or a container: the custody stays in the ledger, written back later
+			Architect.LOGGER.warn("Site {}: custody write-back deferred: an open transaction holds it", s.id());
+			return;
+		}
 		Map<String, Integer> held = new TreeMap<>(pile.ledger().releaseCustody(key));
 		pile.ledger().releaseProvided(key).forEach((k, v) -> held.merge(k, v, Integer::sum)); // (FK-b) the provided items go back too
 		if (held.isEmpty()) {
@@ -993,6 +1005,9 @@ public final class Fills {
 			List<BlockPos> cells = containerCells(s, spec);
 			for (int i = 0; i < cells.size(); i++) {
 				BlockPos p = cells.get(i);
+				if (TxnServer.boxHeld(level, p) || TxnServer.held("site:" + s.id())) {
+					continue; // (slice T1) an open txn holds it: never cleared here (the fill waits while held)
+				}
 				level.getChunk(p);
 				if (level.getBlockEntity(p) instanceof Container c && holdsExactly(c, spec.containers().get(i)) && c instanceof BlockEntity be) {
 					c.clearContent();

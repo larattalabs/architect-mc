@@ -190,6 +190,28 @@ public final class Sites {
 		return f == null || id == null ? null : f.apply(id);
 	}
 
+	/**
+	 * (slice T1) Whether an Architect site or road (standing or pending removal) covers the cell: its restore box. The TEST txn kind refuses
+	 * such cells, so no legacy writer (fills, custody, removals, crates) can reach a box a T1 txn holds.
+	 */
+	public static boolean ownsCell(String dimension, BlockPos p) {
+		List<Site> recs = new ArrayList<>(all());
+		recs.addAll(pendingSites());
+		for (Site s : recs) {
+			if (s.dimension().equals(dimension) && s.restoreBox().contains(p.getX(), p.getY(), p.getZ())) {
+				return true;
+			}
+		}
+		List<Infra> infs = new ArrayList<>(Infras.all());
+		infs.addAll(Infras.allPending());
+		for (Infra i : infs) {
+			if (i.dimension().equals(dimension) && i.box().contains(p.getX(), p.getY(), p.getZ())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public static void init() {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		dev.larattalabs.architect.journal.JournalMigration.init();

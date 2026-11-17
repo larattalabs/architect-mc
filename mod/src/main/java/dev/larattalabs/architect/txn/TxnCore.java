@@ -43,6 +43,10 @@ public final class TxnCore {
 		public boolean cacheAborted;
 		/** (review 2 P1-4's round-1 recovery) no PREPARED_DONE boundary: a committed redo probes and replays the prepare effects too. */
 		public boolean redoPrepare;
+		/** (T1 review P1-1) recovery trusts a loaded journal whose re-force did not return (only {@code unsynced} is checked). */
+		public boolean ignoreStoreDoubt;
+		/** (T1 review P2-3) an event counts as emitted when it is handed over, delivered or not. */
+		public boolean emittedOnQueue;
 
 		public static Options defaults() {
 			return new Options();
@@ -211,14 +215,27 @@ public final class TxnCore {
 				throw new TxnEntry.Invalid(id + ": decider " + t.decider + " is not the kind's " + k.decider());
 			}
 			for (Effect f : t.effects) {
-				if (k.adapter(f) == null) {
+				TxnKind.Adapter a = k.adapter(f);
+				if (a == null) {
 					throw new TxnEntry.Invalid(id + ": no adapter for " + f.op());
+				}
+				String bad = invalid(a, f);
+				if (bad != null) {
+					throw new TxnEntry.Invalid(id + ": effect " + f.i() + " (" + f.op() + "): " + bad); // T1 review P2-4: quarantined, never thrown
 				}
 			}
 			open.put(t.id, t);
 			holds.hold(t);
 		} catch (TxnEntry.Invalid ex) {
 			quarantine(id, raw, ex.getMessage(), res);
+		}
+	}
+
+	private static @Nullable String invalid(TxnKind.Adapter a, Effect f) {
+		try {
+			return a.invalid(f);
+		} catch (RuntimeException e) {
+			return "its fields can't be read: " + e;
 		}
 	}
 
@@ -298,12 +315,17 @@ public final class TxnCore {
 			throw new IllegalStateException(t.id + ": a journal-decided kind plans its D effect");
 		}
 		for (Effect f : t.effects) {
-			if (Objects.requireNonNull(k).adapter(f) == null) {
+			TxnKind.Adapter a = Objects.requireNonNull(k).adapter(f);
+			if (a == null) {
 				throw new IllegalStateException(t.id + ": no adapter for " + f.op());
 			}
+			String bad = invalid(a, f);
+			if (bad != null) {
+				throw new IllegalStateException(t.id + ": effect " + f.i() + " (" + f.op() + "): " + bad);
+			}
 		}
-		if (unsynced && !resync()) {
-			return DurableFile.Outcome.REFUSED; // an older write is unacknowledged: nothing new goes on top of it
+		if (journalDoubt() && !resync()) {
+			return DurableFile.Outcome.REFUSED; // an older write is unacknowledged (or the loaded file unconfirmed): nothing goes on top of it
 		}
 		open.put(t.id, t);
 		holds.hold(t);
@@ -356,8 +378,8 @@ public final class TxnCore {
 			if (!open.containsKey(t.id)) {
 				return Status.DONE;
 			}
-			if (unsynced && !resync()) {
-				return hold(t, "txn.json not acknowledged", null);
+			if (journalDoubt() && !resync()) {
+				return hold(t, "txn.json not acknowledged (an IN_DOUBT write, or a loaded file whose re-force did not return)", null);
 			}
 			t.held = null;
 			t.heldAt = null;
@@ -414,7 +436,9 @@ public final class TxnCore {
 					}
 				}
 				case FINISH -> {
-					fire(t, false);
+					if (!fire(t, false)) {
+						return hold(t, "events pending delivery", null);
+					}
 					t.phase = Phase.RETIRING;
 					if (!sync(t)) {
 						return Status.HELD;
@@ -430,7 +454,9 @@ public final class TxnCore {
 					if (!b.ok()) {
 						return hold(t, "barrier refused: " + b.reason(), null);
 					}
-					fire(t, true);
+					if (!fire(t, true)) {
+						return hold(t, "events pending delivery", null);
+					}
 					t.awaits.clear();
 					t.awaits.addAll(b.awaits());
 					t.phase = Phase.RETIRING;
@@ -622,17 +648,26 @@ public final class TxnCore {
 		return true;
 	}
 
-	/** Fires every payload event not yet emitted: the commit's (the planned ones) or the abort's ({@code abort:*}) only. */
-	private void fire(TxnEntry t, boolean aborted) {
+	/**
+	 * Fires every payload event not yet emitted: the commit's (the planned ones) or the abort's ({@code abort:*}) only. An event counts as
+	 * emitted only once the env reports it delivered (T1 review P2-3): one queued for a later tick holds the txn, and a crash before its
+	 * delivery fires it again (at least once). False while any is pending.
+	 */
+	private boolean fire(TxnEntry t, boolean aborted) {
+		boolean all = true;
 		for (var e : t.payloads.entrySet()) {
 			String name = e.getKey();
 			if (name.startsWith("abort:") != aborted || t.emitted.contains(name) || !e.getValue().isJsonObject()) {
 				continue;
 			}
-			env.emit(t, aborted ? name.substring("abort:".length()) : name, e.getValue().getAsJsonObject(), !t.live);
+			if (!env.emit(t, aborted ? name.substring("abort:".length()) : name, e.getValue().getAsJsonObject(), !t.live) && !opt.emittedOnQueue) {
+				all = false;
+				continue;
+			}
 			kill(t, "emit:" + name);
 			t.emitted.add(name);
 		}
+		return all;
 	}
 
 	private void retire(TxnEntry t) {
@@ -663,7 +698,16 @@ public final class TxnCore {
 
 	private static String where(TxnKind k, TxnEntry t, Effect e) {
 		TxnKind.Adapter a = k.adapter(e);
-		return a == null ? e.op() : a.where(t, e);
+		try {
+			return a == null ? e.op() : a.where(t, e);
+		} catch (RuntimeException ex) {
+			return e.op() + " (effect " + e.i() + ")";
+		}
+	}
+
+	/** Whether the journal is not known durable: an unacknowledged write, or the store in doubt (a load whose re-force did not return). */
+	private boolean journalDoubt() {
+		return unsynced || !opt.ignoreStoreDoubt && env.store().inDoubt();
 	}
 
 	private Status hold(TxnEntry t, String why, @Nullable String at) {

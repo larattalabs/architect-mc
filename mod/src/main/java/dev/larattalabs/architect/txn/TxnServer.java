@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.MinecraftServer;
@@ -28,8 +29,12 @@ import org.jspecify.annotations.Nullable;
  * <ol>
  * <li><b>load</b> at SERVER_STARTING, before any SERVER_STARTED listener (the legacy resolvers): txn.json read, its holds rebuilt, nothing
  * run;</li>
- * <li><b>recovery</b> on the first server tick, after every store has loaded: each open txn by the §3.6 table;</li>
- * <li><b>events</b> a recovery owes fire on the tick after it (never inside SERVER_STARTED, §3.12.9);</li>
+ * <li><b>recovery</b> in the recovery slot: SERVER_STARTED's own phase {@link #PHASE}, ordered before the default phase, so before every
+ * legacy SERVER_STARTED reconcile and every first-tick fill (T1 review P1-2). Each open txn's effects are probed and applied or compensated
+ * there (a test.move chunk is loaded for it); the barrier that retires them waits for the first tick, so a recovered txn stays held (its
+ * resources guarded from every writer) until then;</li>
+ * <li><b>events</b> a recovery owes fire on the tick after it (never inside SERVER_STARTED, §3.12.9), and count as emitted only once
+ * delivered;</li>
  * <li>each later tick re-drives retiring txns; a held one is retried with backoff (1 s doubling to 20 s), since a retry may run a
  * barrier.</li>
  * </ol>
@@ -60,15 +65,27 @@ public final class TxnServer {
 		c.register(TestMove.KIND);
 	}
 
+	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */
+	public static final net.minecraft.resources.Identifier PHASE = Architect.id("txn_recovery");
+	/** Whether the first server tick has run (the barrier needs every store loaded; before it, a barrier is deferred). */
+	private static boolean ticking;
+	private static final java.util.Set<String> DELIVERED = new java.util.HashSet<>();
+	private static final java.util.Set<String> QUEUED = new java.util.HashSet<>();
+
 	public static void init() {
 		TestMove.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(TxnServer::load);
+		ServerLifecycleEvents.SERVER_STARTED.addPhaseOrdering(PHASE, Event.DEFAULT_PHASE);
+		ServerLifecycleEvents.SERVER_STARTED.register(PHASE, TxnServer::recoverAtStart);
 		ServerTickEvents.END_SERVER_TICK.register(TxnServer::tick);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			server = null;
 			file = null;
 			recovered = false;
+			ticking = false;
 			NEXT_TICK.clear();
+			DELIVERED.clear();
+			QUEUED.clear();
 			core = emptyCore("no world loaded");
 		});
 	}
@@ -91,7 +108,10 @@ public final class TxnServer {
 	static void load(MinecraftServer srv) {
 		server = srv;
 		recovered = false;
+		ticking = false;
 		NEXT_TICK.clear();
+		DELIVERED.clear();
+		QUEUED.clear();
 		heldBackoff = HELD_MIN;
 		heldWait = 0;
 		Path p = path(srv);
@@ -117,9 +137,25 @@ public final class TxnServer {
 		}
 	}
 
+	/** The recovery slot (SERVER_STARTED, {@link #PHASE}): every open txn by the §3.6 table, before any legacy reconcile or fill. */
+	static void recoverAtStart(MinecraftServer srv) {
+		if (srv != server || recovered) {
+			return;
+		}
+		recovered = true;
+		if (core.anyOpen()) {
+			Architect.LOGGER.info("Txn: recovering {} open txn(s) in the recovery slot (before the legacy reconciles)", core.open().size());
+			core.recover();
+		}
+	}
+
 	static void tick(MinecraftServer srv) {
 		if (srv != server) {
 			return;
+		}
+		if (!ticking) {
+			ticking = true;
+			heldWait = 0; // the barriers deferred from the recovery slot run on this first tick
 		}
 		for (int n = NEXT_TICK.size(); n > 0; n--) {
 			Runnable r = NEXT_TICK.poll();
@@ -128,12 +164,10 @@ public final class TxnServer {
 			}
 		}
 		if (!recovered) {
-			recovered = true;
+			recovered = true; // no SERVER_STARTED (a test harness): recover now
 			if (core.anyOpen()) {
-				Architect.LOGGER.info("Txn: recovering {} open txn(s)", core.open().size());
 				core.recover();
 			}
-			return;
 		}
 		if (core.open().isEmpty() && !core.unsynced()) {
 			heldBackoff = HELD_MIN;
@@ -177,6 +211,12 @@ public final class TxnServer {
 	public static boolean held(String resource) {
 		TxnCore c = core;
 		return !c.holds().isEmpty() && c.holds().holder(resource) != null;
+	}
+
+	/** Whether the container cell {@code pos} of {@code level} is a box an open txn holds (the hold mixins, Fills). O(1) with none open. */
+	public static boolean boxHeld(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
+		TxnCore c = core;
+		return level != null && !c.holds().isEmpty() && c.holds().holder(TestMove.box(level.dimension().identifier().toString(), pos)) != null;
 	}
 
 	/** {@code held(other) tx-<n>: <where>} for a held resource, else null (§3.12.10). */
@@ -232,6 +272,9 @@ public final class TxnServer {
 			if (s == null) {
 				return Barrier.refused("no server");
 			}
+			if (!ticking) {
+				return Barrier.refused("deferred to the first tick (the stores load in SERVER_STARTED)");
+			}
 			DurableBarrier.Result r = Stockpiles.barrier(s);
 			if (!r.ok()) {
 				return Barrier.refused(r.outcome() + ": " + r.reason());
@@ -256,7 +299,11 @@ public final class TxnServer {
 		}
 
 		@Override
-		public void emit(TxnEntry t, String event, JsonObject payload, boolean replayed) {
+		public boolean emit(TxnEntry t, String event, JsonObject payload, boolean replayed) {
+			String key = t.id + "/" + event;
+			if (DELIVERED.contains(key)) {
+				return true;
+			}
 			String line = t.id + " " + event + (replayed ? " (replayed)" : "") + " " + payload;
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
@@ -264,12 +311,17 @@ public final class TxnServer {
 				while (EVENTS.size() > 32) {
 					EVENTS.pollFirst();
 				}
+				DELIVERED.add(key);
+				QUEUED.remove(key);
 			};
-			if (replayed) {
-				NEXT_TICK.add(fire); // a re-fired event: on the tick after recovery, with every store loaded
-			} else {
+			if (!replayed && ticking) {
 				fire.run();
+				return true;
 			}
+			if (QUEUED.add(key)) {
+				NEXT_TICK.add(fire); // a re-fired event: on the tick after recovery, with every store loaded; emitted once delivered
+			}
+			return false;
 		}
 
 		@Override

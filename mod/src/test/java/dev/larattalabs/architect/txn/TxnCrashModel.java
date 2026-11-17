@@ -58,7 +58,13 @@ final class TxnCrashModel {
 		/** gpt4 P2-4: an aborted attempt's result answers its dedupe key. */
 		CACHE_ABORTED,
 		/** §4.1 legacy kinds: today's path with no journal (CXD's crate take before any record). */
-		NO_JOURNAL
+		NO_JOURNAL,
+		/** T1 review P1-1: recovery acts on a loaded journal whose re-force did not return. */
+		STORE_DOUBT_IGNORED,
+		/** T1 review P2-3: an event queued for a later tick counts as emitted before it is delivered. */
+		EMIT_ON_QUEUE,
+		/** T1 review P2-7: a marker that never reads APPLIED (and no PREPARED_DONE boundary): effects applied twice. */
+		NO_MARKER
 	}
 
 	/** A crash: thrown at the armed kill point. */
@@ -88,6 +94,9 @@ final class TxnCrashModel {
 		int confirmFails;
 		/** Players: the next saves fail silently (the old .dat kept, Util.safeReplaceFile's discarded boolean). */
 		int silentFails;
+		/** Injection: the write with this 1-based number (counted per store) renames but its folder force fails (IN_DOUBT). */
+		int doubtAt;
+		int writes;
 
 		Store(String name, boolean async, boolean durableFile, JsonObject init) {
 			this.name = name;
@@ -109,6 +118,8 @@ final class TxnCrashModel {
 			s.doubtWrites = doubtWrites;
 			s.confirmFails = confirmFails;
 			s.silentFails = silentFails;
+			s.doubtAt = doubtAt;
+			s.writes = writes;
 			return s;
 		}
 
@@ -131,8 +142,9 @@ final class TxnCrashModel {
 			disk = mem.deepCopy();
 			diskGen++;
 			asyncSince.clear();
-			if (doubtWrites > 0) {
-				doubtWrites--;
+			writes++;
+			if (doubtWrites > 0 || writes == doubtAt) {
+				doubtWrites = Math.max(0, doubtWrites - 1);
 				return Outcome.IN_DOUBT;
 			}
 			durable = disk.deepCopy();
@@ -215,7 +227,9 @@ final class TxnCrashModel {
 			TxnCore.Options o = TxnCore.Options.defaults();
 			o.phaseOnlySchema = naive == Naive.PHASE_ONLY;
 			o.cacheAborted = naive == Naive.CACHE_ABORTED;
-			o.redoPrepare = naive == Naive.BE_MARKER;
+			o.redoPrepare = naive == Naive.BE_MARKER || naive == Naive.NO_MARKER;
+			o.ignoreStoreDoubt = naive == Naive.STORE_DOUBT_IGNORED;
+			o.emittedOnQueue = naive == Naive.EMIT_ON_QUEUE;
 			if (naive == Naive.SPLIT_IGNORED) {
 				o.rules = (d, p, dp, live) -> d != null && d.isAbandon() ? TxnRecovery.TABLE.next(Decision.commit(), p, dp, live) : TxnRecovery.TABLE.next(
 					d, p, dp, live);
@@ -253,6 +267,9 @@ final class TxnCrashModel {
 			w.dirOwed = dirOwed;
 			w.dirForceFails = dirForceFails;
 			w.unknown.addAll(unknown);
+			w.deferEvents = deferEvents;
+			w.queued.addAll(queued);
+			w.delivered.addAll(delivered);
 			w.chunkDebt.putAll(chunkDebt);
 			playerDebt.forEach((k, v) -> w.playerDebt.put(k, v.deepCopy()));
 			w.serializeFails.addAll(serializeFails);
@@ -282,6 +299,8 @@ final class TxnCrashModel {
 			w.chunkDebt.clear();
 			w.serializeFails.clear();
 			w.scope.clear();
+			w.queued.clear();
+			w.delivered.clear();
 			w.dirOwed = false;
 			w.kills = 0;
 			w.crashAt = Integer.MAX_VALUE;
@@ -366,15 +385,26 @@ final class TxnCrashModel {
 		/** Ticks until nothing changes (faults cleared first: a held txn becomes readable, an IN_DOUBT file confirms). */
 		void settle() {
 			for (Store s : stores.values()) {
-				s.failWrites = s.doubtWrites = s.confirmFails = s.silentFails = 0;
+				s.failWrites = s.doubtWrites = s.confirmFails = s.silentFails = s.doubtAt = 0;
 				if (s.inDoubt()) {
 					s.confirm();
 				}
 			}
 			unknown.clear();
 			for (int i = 0; i < 8 && !core.open().isEmpty(); i++) {
+				tickEvents();
 				core.tick();
 			}
+			tickEvents();
+		}
+
+		/** The game's next tick: the queued events delivered. */
+		void tickEvents() {
+			for (String e : List.copyOf(queued)) {
+				events.add(e);
+				delivered.add(e);
+			}
+			queued.clear();
 		}
 
 		// ---------------------------------------------------------------- the global barrier (T0's, modelled; §3.1)
@@ -459,6 +489,11 @@ final class TxnCrashModel {
 			}
 		}
 
+		/** Events re-fired by recovery are delivered on the next tick (the game's queue), not at once; a restart loses the queue. */
+		boolean deferEvents;
+		final List<String> queued = new ArrayList<>();
+		final java.util.Set<String> delivered = new java.util.HashSet<>();
+
 		/** Probes that read UNKNOWN until the world settles (an unloaded chunk, an offline player). */
 		final Set<String> unknown = new java.util.HashSet<>();
 	}
@@ -514,8 +549,20 @@ final class TxnCrashModel {
 		}
 
 		@Override
-		public void emit(TxnEntry t, String event, JsonObject payload, boolean replayed) {
-			w.events.add(t.id + ":" + event + ":" + payload);
+		public boolean emit(TxnEntry t, String event, JsonObject payload, boolean replayed) {
+			String line = t.id + ":" + event + ":" + payload;
+			if (w.delivered.contains(line)) {
+				return true;
+			}
+			if (replayed && w.deferEvents) {
+				if (!w.queued.contains(line)) {
+					w.queued.add(line); // delivered on the next tick (World.tickEvents); a crash before it loses the queue
+				}
+				return false;
+			}
+			w.events.add(line);
+			w.delivered.add(line);
+			return true;
 		}
 
 		@Override
@@ -626,9 +673,18 @@ final class TxnCrashModel {
 		}
 
 		@Override
+		public @Nullable String invalid(Effect e) {
+			return !e.data().has("store") ? "no store" : !w.stores.containsKey(storeOf(e)) ? "no store " + storeOf(e) : e.items().isEmpty() ? "no items"
+				: null;
+		}
+
+		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			if (w.unknown.contains(storeOf(e))) {
 				return Probe.UNKNOWN;
+			}
+			if (w.naive == Naive.NO_MARKER) {
+				return Probe.ABSENT; // the broken marker: never read
 			}
 			JsonObject s = w.store(storeOf(e)).mem;
 			if (has(s, receipts(e), e.compKey(t.id))) {
@@ -667,6 +723,11 @@ final class TxnCrashModel {
 
 	/** R: drops a record in a DurableFile record store (written at once); the record's absence is the probe. */
 	record Drop(World w) implements TxnKind.Adapter {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return !e.data().has("store") || !e.data().has("id") ? "store and id are required" : !w.stores.containsKey(storeOf(e)) ? "no store" : null;
+		}
+
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			JsonObject recs = w.store(storeOf(e)).mem.getAsJsonObject("records");
@@ -741,6 +802,11 @@ final class TxnCrashModel {
 
 	/** W: the restore of a chunk: its container's cells put back to before (whatever they hold is gone), receipted per chunk. */
 	record Restore(World w) implements TxnKind.Adapter {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return !e.data().has("store") || !w.stores.containsKey(storeOf(e)) ? "no store" : null;
+		}
+
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			if (w.unknown.contains(storeOf(e))) {
@@ -946,6 +1012,16 @@ final class TxnCrashModel {
 	 * world settles and is checked. A world with more than {@link #EXHAUSTIVE} schedules is sampled ({@code seed} printed).
 	 */
 	Result explore(Scenario sc, Naive naive, int depth) {
+		return explore(sc, naive, depth, EXHAUSTIVE, Long.getLong("txn.model.seed", 0x7171L));
+	}
+
+	/**
+	 * As {@link #explore(Scenario, Naive, int)}; a crash point whose version combinations exceed {@code cap} is sampled instead ({@link
+	 * #SAMPLE} seeded random combinations, the seed in the result: T1 review P2-8), never truncated.
+	 */
+	Result explore(Scenario sc, Naive naive, int depth, int cap, long seed) {
+		Random rnd = new Random(seed);
+		boolean[] sampled = {false};
 		World base = fresh(sc, naive);
 		Map<String, Long> baseline = total(base);
 		World clean = run(sc, naive, Integer.MAX_VALUE);
@@ -957,21 +1033,42 @@ final class TxnCrashModel {
 		for (int c = 1; c <= points; c++) {
 			World w = run(sc, naive, c);
 			String at = "crash at #" + c + " " + w.crashedAt;
-			for (int[] pick : picks(w)) {
+			List<int[]> all = picks(w, cap);
+			if (all == null) {
+				sampled[0] = true;
+				all = randomPicks(w, rnd, SAMPLE);
+			}
+			for (int[] pick : all) {
 				World r;
 				try {
 					r = w.restart(pick);
 				} catch (Crash x) {
 					continue;
 				}
-				recoverCrashing(sc, r, baseline, at + " pick " + java.util.Arrays.toString(pick), depth, out, count);
+				recoverCrashing(sc, r, baseline, at + " pick " + java.util.Arrays.toString(pick) + (sampled[0] ? " (seed " + seed + ")" : ""), depth, out, count);
 				if (out.size() > 20) {
-					return new Result(count[0], out, null);
+					return new Result(count[0], out, sampled[0] ? seed : null);
 				}
 			}
 		}
-		return new Result(count[0], out, null);
+		return new Result(count[0], out, sampled[0] ? seed : null);
 	}
+
+	/** Seeded random version combinations, {@code n} of them. */
+	static List<int[]> randomPicks(World w, Random rnd, int n) {
+		List<Store> ss = new ArrayList<>(w.stores.values());
+		List<int[]> out = new ArrayList<>();
+		for (int i = 0; i < n; i++) {
+			int[] p = new int[ss.size()];
+			for (int k = 0; k < p.length; k++) {
+				p[k] = rnd.nextInt(ss.get(k).candidates().size());
+			}
+			out.add(p);
+		}
+		return out;
+	}
+
+	static final int SAMPLE = 2_000;
 
 	/** Recovery crashed at each of its own points (to {@code depth}), every crash restarted at every version combination, then checked. */
 	void recoverCrashing(Scenario sc, World r, Map<String, Long> baseline, String at, int depth, List<Violation> out, int[] count) {
@@ -1002,7 +1099,8 @@ final class TxnCrashModel {
 			} catch (Crash c) {
 				// crashed inside recovery
 			}
-			for (int[] pick : picks(x)) {
+			List<int[]> xs = picks(x, EXHAUSTIVE);
+			for (int[] pick : xs == null ? randomPicks(x, new Random(k), SAMPLE) : xs) {
 				World y;
 				try {
 					y = x.restart(pick);
@@ -1034,6 +1132,20 @@ final class TxnCrashModel {
 	}
 
 	void check(Scenario sc, World w, Map<String, Long> baseline, String at, List<Violation> out) {
+		// exactly once (T1 review P2-7): every effect's receipt, and its compensation's, at most once in its store
+		for (Store s : w.stores.values()) {
+			for (String set : new String[] {"receipts", "be"}) {
+				Map<String, Integer> n = new TreeMap<>();
+				if (s.mem.get(set) instanceof JsonArray a) {
+					a.forEach(x -> n.merge(x.getAsString(), 1, Integer::sum));
+				}
+				n.forEach((k, c) -> {
+					if (c > 1) {
+						out.add(new Violation(at, "exactly once: " + k + " applied " + c + " times in " + s.name));
+					}
+				});
+			}
+		}
 		Map<String, Long> t = total(w);
 		if (!t.equals(baseline)) {
 			Map<String, Long> d = new TreeMap<>(t);
@@ -1049,9 +1161,16 @@ final class TxnCrashModel {
 		}
 	}
 
-	/** Every combination of each store's crash candidates. */
-	static List<int[]> picks(World w) {
+	/** Every combination of each store's crash candidates, or null when there are more than {@code cap} (then sample). */
+	static @Nullable List<int[]> picks(World w, int cap) {
 		List<Store> ss = new ArrayList<>(w.stores.values());
+		long n = 1;
+		for (Store s : ss) {
+			n *= s.candidates().size();
+			if (n > cap) {
+				return null;
+			}
+		}
 		List<int[]> out = new ArrayList<>();
 		int[] cur = new int[ss.size()];
 		fill(ss, 0, cur, out);
@@ -1059,9 +1178,6 @@ final class TxnCrashModel {
 	}
 
 	private static void fill(List<Store> ss, int i, int[] cur, List<int[]> out) {
-		if (out.size() > EXHAUSTIVE) {
-			return;
-		}
 		if (i == ss.size()) {
 			out.add(cur.clone());
 			return;

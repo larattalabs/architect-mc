@@ -68,6 +68,31 @@ export async function registerTXN(steps, h) {
     check(r1.persist === 'REFUSED' && st1.openCount === 0 && json(w1b.a) === json(w1.a), `refused: the intent's write refused: persist ${r1.persist}, open ${st1.openCount}, nothing moved`, r1);
     check(c1.verdict === 'match', `refused: conservation ${c1.verdict}`, c1);
 
+    // ---------------------------------------------------------------- a held txn: every writer honours its hold (T1 review P1-2)
+    {
+      const w = await where();
+      const hop = [w.from[0], w.from[1] - 1, w.from[2]];
+      await cmd('/save-off'); // the barrier refuses under save-off: the move aborts, its compensation done, the txn held until a barrier
+      const r = await call('dev.txn.run', { from: w.from, to: w.to, items: ITEMS }, 120_000);
+      const st = await state();
+      await cmd(`/setblock ${hop.join(' ')} minecraft:hopper[facing=down]`);
+      await call('dev.wait', { ms: 4000 }, 30_000);
+      const src = await chest(w.from);
+      const inHopper = await chest(hop);
+      await cmd(`/setblock ${hop.join(' ')} minecraft:air`);
+      await cmd('/save-on');
+      let st2 = await state();
+      for (let i = 0; i < 40 && st2.openCount > 0; i++) {
+        await call('dev.wait', { ms: 1000 }, 30_000);
+        st2 = await state();
+      }
+      const c = await report(BASE);
+      out.held = { run: r, heldWhile: st.heldCount, decision: st.open?.[0]?.decision, src, inHopper, openAfter: st2.openCount, conservation: c };
+      check(st.heldCount === 1 && st.open?.[0]?.decision === 'abort', `held: under /save-off the move aborts and stays held (decision ${st.open?.[0]?.decision}, held ${st.heldCount}: ${st.open?.[0]?.held})`, out.held);
+      check(units(src) === units(ITEMS) && units(inHopper) === 0, `held: a hopper under the held source pulls nothing (source ${json(src)}, hopper ${json(inHopper)})`, out.held);
+      check(st2.openCount === 0 && c.verdict === 'match', `held: after /save-on the abort retires (open ${st2.openCount}); conservation ${c.verdict}`, out.held);
+    }
+
     // ---------------------------------------------------------------- a kill point at each step, bare and +save
     const only = (process.env.GATE_TXN_POINTS ?? '').split(',').filter(Boolean);
     for (const p of points) {
