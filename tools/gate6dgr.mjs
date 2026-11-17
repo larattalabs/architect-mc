@@ -1077,6 +1077,13 @@ steps.look = async () => {
   await registerDRS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
 }
 
+// ------------------------------------------------------------------ (slice LCAP) lcapsurvival: tools/lib/gatelcap.mjs
+
+{
+  const { registerLCAP } = await import('./lib/gatelcap.mjs');
+  await registerLCAP(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, BOXOF, cellsOf, diff, haltWait, rvState, rvWait });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);

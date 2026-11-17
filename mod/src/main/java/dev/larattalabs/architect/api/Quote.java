@@ -59,4 +59,31 @@ public record Quote(String planId, @Nullable String artifactSha, @Nullable Strin
 		java.util.Map<String, String> lotEntries, boolean exact, List<String> notes) {
 		this(planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, null);
 	}
+
+	/** (LCAP) The pieces of {@code bomParts} that are one lot's own bill, the ones {@link RealiseRequest#maxBillPerLot} caps. */
+	public static final List<String> LOT_PIECES = List.of("lot:", "fill:", "mech:");
+
+	/**
+	 * (LCAP, S-M5-16, since NEXT, feature {@code "maxBillPerLot"}) One lot's own bill, item id to count, sorted: the sum of its
+	 * {@code lot:<lot>}, {@code fill:<lot>} and {@code mech:<lot>} pieces. This is what a lot's {@link RealiseRequest#maxBillPerLot} cap is
+	 * checked against at put-down (the same quote, read by the realise). Empty for a pad, a lot this quote does not bind, or a creative quote.
+	 */
+	public java.util.Map<String, Integer> lotBill(String lot) {
+		return lotBill(bomParts, lot);
+	}
+
+	/** (LCAP) {@link #lotBill(String)} over a {@code bomParts} object. */
+	public static java.util.Map<String, Integer> lotBill(@Nullable JsonObject bomParts, String lot) {
+		java.util.TreeMap<String, Integer> out = new java.util.TreeMap<>();
+		if (bomParts == null || lot == null) {
+			return java.util.Collections.unmodifiableMap(out);
+		}
+		for (String p : LOT_PIECES) {
+			if (bomParts.get(p + lot) instanceof JsonObject o) {
+				o.entrySet().forEach(e -> out.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+			}
+		}
+		out.values().removeIf(v -> v == 0);
+		return java.util.Collections.unmodifiableMap(out);
+	}
 }

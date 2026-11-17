@@ -259,6 +259,9 @@ public final class RegionsImpl implements Regions {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Regions unreadable: {}", e.toString());
 		}
+		// (LCAP, RG2a) the batch and group ids every record names are never handed out again: a record saved before its batch was queued (a
+		// crash at RG2a) names ids no batch or group holds, and a later build must not take them
+		seedReservedIds(REGIONS.values().stream().map(Live::rec).toList());
 		Prepare.resumeAll(s);
 		PlanChecks.started(s); // (6c P0) check keys, artifacts, pins and tombstones
 		TOMBS.values().forEach(t -> PlanChecks.regionRemoved(t, true)); // (C36) a REMOVED region whose artifact is still held, unpinned
@@ -1667,7 +1670,7 @@ public final class RegionsImpl implements Regions {
 		}
 		if (survival) {
 			survivalRefusal(s, p, r);
-			Quotes.capRefusal(s, p, r); // (BC, S-M5-9) a bill past maxBill: refused before any write
+			Quotes.capRefusal(s, p, r); // (BC, S-M5-9) a bill past maxBill (LCAP: or one lot's past its own cap): refused before any write
 		}
 		String why = WorldJournal.unavailable();
 		if (why != null) {
@@ -1721,8 +1724,9 @@ public final class RegionsImpl implements Regions {
 		if (survival) {
 			JsonObject sv = new JsonObject();
 			sv.addProperty("on", true);
-			if (r.maxBill() != null) {
-				dev.larattalabs.architect.site.BillCaps.record(sv, 0, r.maxBill(), 0); // (BC, BC-d) its own targets (rid 0) draw within it
+			if (r.maxBill() != null || r.maxBillPerLot() != null) {
+				// (BC, BC-d) its own targets (rid 0) draw within it; (LCAP) each capped lot's targets within their lot's cap too
+				dev.larattalabs.architect.site.BillCaps.record(sv, 0, r.maxBill(), r.maxBillPerLot(), 0);
 			}
 			rec.survival = sv; // (6c RS) its tiles put targets down, its lots and roads are construction items
 		}
@@ -1893,11 +1897,30 @@ public final class RegionsImpl implements Regions {
 			throw refusal(Reason.OTHER, "the region could not be saved: " + e.getMessage());
 		}
 		Live live = new Live(rec, ir, w);
+		// (LCAP, rule 17) the record (its caps with it) saved and confirmed before the batch is queued: a failed save refuses, nothing queued or
+		// written. The batch's and group's ids are reserved for it first, so the record names them
+		String[] ids = Batches.reserveRegionIds();
+		rec.batchId = ids[0];
+		rec.groupId = ids[1];
+		rec.state = RegionState.PLACING;
+		rec.unqueued = true; // (LCAP, RG2a) the evidence an orphan needs: cleared with the save after the queue
+		try {
+			saveConfirmed(live);
+		} catch (IOException e) {
+			try {
+				Files.deleteIfExists(RegionStore.region(w, id).resolve("ir.json"));
+			} catch (IOException ignored) {
+				// the directory has no region.json: a load skips it
+			}
+			throw recordUnsaved("region " + id, e);
+		}
+		WorldJournal.kill("RG2a"); // (LCAP) the record saved, the batch not yet queued
 		REGIONS.put(id, live);
-		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove(), r.maxWaitSeconds());
+		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove(), r.maxWaitSeconds(), ids[0], ids[1]);
 		rec.groupId = b.group;
 		rec.batchId = b.id;
 		rec.state = RegionState.PLACING;
+		rec.unqueued = false;
 		save(live);
 		WorldJournal.kill("RG2"); // the region record is written, no tile started
 		SiteEvents.REGION_STATE.invoker().onState(view(live));
@@ -2911,10 +2934,28 @@ public final class RegionsImpl implements Regions {
 
 	static void save(Live l) {
 		try {
-			RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("region.json"), l.rec().toJson());
+			saveConfirmed(l);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {} could not be saved: {}", l.rec().id, e.toString());
 		}
+	}
+
+	/**
+	 * (LCAP, rule 17) The region record's save, its failure reported: the realise's and the revision's publication (the save that records
+	 * their caps) call this and refuse when it throws, before any write the caps govern. Every other caller keeps {@link #save}'s WARN.
+	 */
+	static void saveConfirmed(Live l) throws IOException {
+		writeRec(l.world(), l.rec());
+	}
+
+	static void writeRec(Path world, RegionRec rec) throws IOException {
+		RegionStore.writeJson(RegionStore.region(world, rec.id).resolve("region.json"), rec.toJson());
+	}
+
+	/** (LCAP) The refusal of a realise or revision whose region record could not be saved: nothing was written. */
+	static RegionException recordUnsaved(String what, IOException e) {
+		return new RegionException(Reason.JOURNAL_UNAVAILABLE, what + ": the region record could not be saved (" + e.getMessage() + "), so its caps are not "
+			+ "on disk: refused before any write; free the disk and realise again", "region_record");
 	}
 
 	// ------------------------------------------------------------------ views, removal
@@ -3250,7 +3291,8 @@ public final class RegionsImpl implements Regions {
 				dev.larattalabs.architect.site.RegionFreeDrops.restoreMined(lv, l); // (6c RS §9) mined free cells back first
 			}
 			QBatch b = Batches.get(l.rec().batchId);
-			if (b != null && b.running()) {
+			// (LCAP, RG2a) only this region's own batch: a record whose batch was never queued (a crash at RG2a) names an id another build may hold
+			if (b != null && b.running() && ownsBatch(l, b)) {
 				return ArchitectApi.get().sites(s).cancelBatch(b.id).thenCompose(x -> removeGroup(s, l, o));
 			}
 			return removeGroup(s, l, o);
@@ -3263,7 +3305,74 @@ public final class RegionsImpl implements Regions {
 	 */
 	private static final Map<String, RegionState> BEFORE_REMOVAL = new java.util.concurrent.ConcurrentHashMap<>();
 
+	/** (LCAP, RG2a) The batch and group ids these records name, reserved (Batches, Sites). */
+	static void seedReservedIds(java.util.Collection<RegionRec> recs) {
+		List<String> batches = new ArrayList<>(), groups = new ArrayList<>();
+		for (RegionRec r : recs) {
+			if (r.batchId != null) {
+				batches.add(r.batchId);
+			}
+			if (r.groupId != null) {
+				groups.add(r.groupId);
+			}
+		}
+		dev.larattalabs.architect.site.RegionIds.reserve(batches, groups);
+	}
+
+	/** (LCAP, RG2a) Whether batch {@code b} is region {@code l}'s own (its ext names the region). */
+	static boolean ownsBatch(Live l, QBatch b) {
+		return b.ext != null && b.ext.get(RegionItems.EXT_REGION) instanceof JsonElement e && e.isJsonPrimitive() && e.getAsString().equals(l.rec().id);
+	}
+
+	/**
+	 * (LCAP, RG2a) A region whose record names a group that is not its own: none exists (its batch was never queued: a crash at RG2a), or
+	 * the group names another region. Its record alone is removed; nothing of the group is touched. A group with no region key keeps the
+	 * old path.
+	 */
+	static boolean orphanGroup(String regionId, @Nullable SiteGroupRec grp) {
+		return grp == null || grp.ext() != null && grp.ext().get(RegionItems.EXT_REGION) instanceof JsonElement e && e.isJsonPrimitive()
+			&& !e.getAsString().equals(regionId);
+	}
+
+	/** (LCAP, RG2a) What a removal does with a record's group: an orphan's record alone, a refusal, or the normal removal. */
+	enum OrphanAction { ORPHAN, REFUSE, NORMAL }
+
+	/**
+	 * (LCAP, RG2a; review P1) A region is an orphan only when its record says it was saved before its batch was queued ({@link RegionRec#unqueued})
+	 * and its group is missing or another region's; a group that is merely missing (a built region, the sites file unreadable) is never one.
+	 * With the sites file unreadable an orphan's cleanup is refused (its group can't be told apart). Pure.
+	 */
+	static OrphanAction orphanAction(RegionRec rec, @Nullable SiteGroupRec grp, boolean sitesLoadFailed) {
+		if (!rec.unqueued) {
+			return OrphanAction.NORMAL;
+		}
+		if (sitesLoadFailed) {
+			return OrphanAction.REFUSE;
+		}
+		return orphanGroup(rec.id, grp) ? OrphanAction.ORPHAN : OrphanAction.NORMAL;
+	}
+
+	/** (LCAP, review P1) The refusal of an orphan's cleanup while the sites file is unreadable. */
+	static final String SITES_UNREADABLE = "sites_unreadable: the sites file (architect-sites.json) could not be read at load, so whether this region's group "
+		+ "was ever queued can't be told: nothing removed (fix or restore the sites file, then remove it again)";
+
 	private static CompletableFuture<RemoveResult> removeGroup(MinecraftServer s, Live l, RemoveOptions o) {
+		OrphanAction act = orphanAction(l.rec(), Sites.group(l.rec().groupId), Sites.loadFailed());
+		if (act == OrphanAction.REFUSE) {
+			Architect.LOGGER.warn("Region {}: removal refused, nothing changed (state {}): {}", l.rec().id, l.rec().state, SITES_UNREADABLE);
+			return CompletableFuture.completedFuture(new RemoveResult(false, List.of(SITES_UNREADABLE), Map.of()));
+		}
+		if (act == OrphanAction.ORPHAN) {
+			// (LCAP, RG2a) an orphan record: it wrote nothing; another build's group or batch under its ids is never cancelled or removed
+			Architect.LOGGER.warn("Region {}: its group {} is not its own (never queued, or another region's): only its record is removed", l.rec().id,
+				l.rec().groupId);
+			if (l.rec().state != RegionState.REMOVING) {
+				BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
+			}
+			l.rec().state = RegionState.REMOVING;
+			finishRemoval(l, true, System.currentTimeMillis(), "orphan record", false);
+			return CompletableFuture.completedFuture(new RemoveResult(true, List.of(), Map.of(), 0, 0, Map.of(), List.of()));
+		}
 		// (6c D3, Steward's RC) the owner rule first: a refused caller changes nothing (the region's state and its sites' stay as they
 		// were) and is answered with the rule's blocker. Before, the region went REMOVING and then ended PARTIAL with nothing removed
 		// (main since C23's refusal path)

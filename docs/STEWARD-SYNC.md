@@ -148,6 +148,16 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 5. SF Style format 3 (0.63.0); CM, BF, HR, TC, RM (0.63.0, 0.64.0): plan-writer vocabulary.
 6. `Designs.follow` and `Library.followers` (1.51.0): per-building "update to the new Style".
 
+### New for Steward (NEXT, slice LCAP; S-M5-16)
+- `maxBillPerLot` (feature `"maxBillPerLot"`) on `ApprovedRealise` / `RealiseRequest` (`withMaxBillPerLot`), with `Quote.lotBill(lot)`
+  (a lot's `lot:` + `fill:` + `mech:` pieces). Both caps apply: pass `maxBill` = the rest of the bill **plus** the lot caps (it still covers
+  the whole revision), and each module lot's measured bound per lot. Refusals are `BILL_CAP` with `detail` `lot:<id>` (a lot past its own
+  cap) or `unknown_lot:<id>`; the region cap's detail stays `""`. Kept per rid in `survival.caps.<rid>.lots` across a restart, like BC-d.
+  Unblocks `ComposedModules.MATERIALS_WAIT_FOR_LOT_CAP`. CONTRACT "Slice LCAP".
+- LCAP-Q1: `SiteWait.capScope` names the cap a `bill_cap` wait hit: `"region"`, `"lot:<id>"` or `"lot:<id>,region"` (lot first); a gate
+  mechanism's wait carries it as `waitsFor.cap`. LCAP-Q2: `lcap-survival` now covers a revision (rid > 0) with lot caps and an RV3 kill.
+- A realise or revision whose region record can't be saved is refused `JOURNAL_UNAVAILABLE` (detail `region_record`), nothing written.
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.

@@ -270,8 +270,18 @@ public final class Batches {
 	 */
 	public static QBatch queueRegion(MinecraftServer server, String regionId, @Nullable String owner, JsonObject ext, List<QItem> items,
 		List<String> stages, int loadChunks, boolean generate, boolean autoApprove, int maxWaitSeconds) {
-		String id = newId();
-		String groupId = Sites.newGroupId();
+		String[] ids = reserveRegionIds();
+		return queueRegion(server, regionId, owner, ext, items, stages, loadChunks, generate, autoApprove, maxWaitSeconds, ids[0], ids[1]);
+	}
+
+	/** (LCAP) A new batch id and group id, reserved for a region the caller saves first ({@link #queueRegion} with them). Server thread. */
+	public static String[] reserveRegionIds() {
+		return new String[] {newId(), Sites.newGroupId()};
+	}
+
+	/** (LCAP) {@link #queueRegion} with ids from {@link #reserveRegionIds}. */
+	public static QBatch queueRegion(MinecraftServer server, String regionId, @Nullable String owner, JsonObject ext, List<QItem> items,
+		List<String> stages, int loadChunks, boolean generate, boolean autoApprove, int maxWaitSeconds, String id, String groupId) {
 		JsonObject bext = ext.deepCopy();
 		bext.addProperty(RegionItems.EXT_REGION, regionId);
 		// S8: a region's waits have no time limit (the wait reason is shown instead), unless the caller opts in to maxWait
@@ -802,7 +812,8 @@ public final class Batches {
 	}
 
 	private static String newId() {
-		while (BATCHES.containsKey("b" + next)) {
+		// (LCAP, RG2a) an id a saved region record names is skipped too (RegionIds)
+		while (BATCHES.containsKey("b" + next) || RegionIds.batchReserved("b" + next)) {
 			next++;
 		}
 		return "b" + next++;
@@ -1802,6 +1813,7 @@ public final class Batches {
 		CANCELLED.values().forEach(fs -> fs.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		CANCELLED.clear();
 		Composites.reset();
+		RegionIds.clear();
 		next = 1;
 		tick = 0;
 	}

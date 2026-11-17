@@ -45,6 +45,8 @@ public final class ApiRules {
 		// (DR) Sites.diagnose and Sites.repair (an op's roll-forward of cells lagging the journal); Sites.suspects (the auto-diagnose's cache);
 		// (DR-S) RegionView.removalStop: a removal stopped NOT_STARTED (nothing written) apart from PARTIAL
 		"diagnoseRepair", "repairSuspects", "removalStop",
+		// (LCAP, S-M5-16) RealiseRequest/ApprovedRealise.maxBillPerLot (a per-lot cap beside maxBill) and Quote.lotBill
+		"maxBillPerLot",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 

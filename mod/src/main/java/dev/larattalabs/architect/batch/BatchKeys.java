@@ -85,7 +85,8 @@ public final class BatchKeys {
 						continue;
 					}
 					// (BC) a null maxBill leaves no key either: a realise keyed before the cap keeps its hash
-					if (x == null && r instanceof dev.larattalabs.architect.api.RealiseRequest && c.getName().equals("maxBill")) {
+					// (LCAP) nor a null maxBillPerLot
+					if (x == null && r instanceof dev.larattalabs.architect.api.RealiseRequest && (c.getName().equals("maxBill") || c.getName().equals("maxBillPerLot"))) {
 						continue;
 					}
 					o.add(c.getName(), json(x, false));

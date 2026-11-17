@@ -213,6 +213,7 @@ public final class Sites {
 			state = State.EMPTY;
 			groups = Map.of();
 			nextGroup = 1;
+			RegionIds.clear();
 			reports.clear();
 			Drops.reset();
 			SiteDeltas.cleanStop(worldDir);
@@ -2565,7 +2566,8 @@ public final class Sites {
 	/** A new group id ({@code g<n>}); the counter is saved with the next commit. */
 	static String newGroupId() {
 		int n = nextGroup;
-		while (groups.containsKey("g" + n)) {
+		// (LCAP, RG2a) an id a saved region record names is skipped too (RegionIds)
+		while (groups.containsKey("g" + n) || RegionIds.groupReserved("g" + n)) {
 			n++;
 		}
 		nextGroup = n + 1;

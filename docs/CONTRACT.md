@@ -33033,3 +33033,103 @@ LEFTOVERS R2/CN "the region ladder becomes a port" and CL's "a ladder ending at 
   142 pending kept whole, nothing booked, 284 = 284 after each stop), hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0,
   x-resume 35/0: 9/9 on the first run.
 
+
+## Slice LCAP: a per-lot bill cap (branch `slice/LCAP` off main 5a782f9d / v0.76.0; 2026-11-17; DEV MODE, strict: survival billing; versions NEXT; $0)
+
+Steward's S-M5-16 (steward-mc `docs/ARCHITECT-ASKS.md` at a51262b): v0.75.0's `maxBill` is one per-item cap over a whole realise or revision,
+so two module lots that share items can't each be held to their own measured bound, and survival composed towns leave every module lot out
+(`ComposedModules.MATERIALS_WAIT_FOR_LOT_CAP`). LCAP adds an optional per-lot cap beside `maxBill`. Additive API, feature `"maxBillPerLot"`.
+
+### 1. API (since NEXT)
+
+- `RealiseRequest.maxBillPerLot` and `ApprovedRealise.maxBillPerLot`: `Map<String lotId, Map<String itemId, Integer count>>`, appended as the
+  last record component; null is no lot cap. The 1.60.0 canonical constructors stay (they leave it null), and `withMaxBillPerLot(..)` is new
+  on both; `withMaxBill` and `withConsent` keep it. Copies are sorted; a blank lot id, a null cap or a negative count is refused
+  (`IllegalArgumentException`), as for `maxBill`. A null `maxBillPerLot` leaves no member in an opKey's body, so a realise keyed before LCAP
+  keeps its hash. `realiseApproved` carries it to the realise it makes.
+- `Quote.lotBill(String lot)` (and `Quote.lotBill(JsonObject bomParts, String lot)`, `Quote.LOT_PIECES`): one lot's own bill, the sum of
+  its `lot:<lot>`, `fill:<lot>` and `mech:<lot>` pieces. It is what the cap is checked against, so `quoteApproved` (and `quote`) already give
+  Steward each lot's bound; `quoteApproved` takes no cap of its own (it is read-only, nothing to refuse).
+- No new `Reason`: a refusal is `Reason.BILL_CAP` with `ArchitectRefused.detail()` telling the cases apart (the region-wide cap's stays
+  `""`). One reason keeps every cap refusal on the path Steward already handles; the detail is the sub-code.
+
+### 2. Semantics
+
+- **Which lots, which bill.** A lot cap covers one lot of this realise or revision: at put-down its quote pieces (`lot:`, `fill:`, `mech:`;
+  never the region's tiles, its 4e roads or its fluids, which stay under `maxBill` only); while it builds, the draws of the targets of that
+  rid whose ext `architect_mc:lot` names the lot (the lot's construction site, its fill included, and a gatehouse's mechanism item) plus that
+  lot's gate mechanism charge (`survival.mech.<lot>`, same rid). An item a lot's cap does not name may not be drawn by that lot (as
+  `maxBill`). A lot with no entry (a pad) has an empty bill: any cap fits it.
+- **With `maxBill`: both apply.** `maxBill` still covers the whole realise, the capped lots included. A lot draws only what both leave (the
+  purse answers the smaller room). So Steward passes `maxBill` = the rest of the region's bill + the sum of its lot caps (not "the rest"
+  alone), and each module lot's measured bound in `maxBillPerLot`. Either may be null: lot caps with no `maxBill` cap only those lots.
+- **A lot cap above `maxBill`** (for an item) is accepted, not refused: the tighter cap wins. An item a lot cap names but `maxBill` does not
+  is capped at 0 by `maxBill`.
+- **An unknown lot** (not one of the plan's lots; for a revision, its own lots and its refills, so a town lot of an earlier rid is unknown)
+  refuses `BILL_CAP`, detail `unknown_lot:<id>`, message naming the plan's lots. Checked first, before the quote is read.
+- **Past a lot's cap at put-down** refuses `BILL_CAP`, detail `lot:<id>` (the first such lot by id), message
+  `lot <id>'s bill at put-down is past its maxBillPerLot (oak_planks 43 > 42, ...)`: each item past it with the lot's bill against its cap,
+  plus the inexact notes for that lot. The lot caps are checked before `maxBill`; all of it before anything is reserved, journaled or
+  written. Survival only: in creative nothing is consumed and the caps are ignored, unknown lots included.
+- **While it builds:** a lot past its cap waits `SiteWait.BILL_CAP` like a region cap (`nextNeeded` the larger of the two caps' units over);
+  its gate mechanism waits `bill_cap` (`waitsFor.kind: bill_cap`). A reconcile past a lot cap (standing cells, charged anyway) is named in
+  the reconcile record (`capLot`, `lotCapOver`) and a WARN, as BC-c does for the region cap.
+- **Per revision (BC-d) and persistence.** The lot caps are part of the rid's cap entry: `survival.caps.<rid> {maxBill?, lots?: {<lot>:
+  {item: n}}}`, recorded with `maxBill` in one write and replacing the rid's entry whole (a plain revision clears both). They ride BC-d's
+  persistence unchanged: the region record (`region.json`, fsync + atomic rename) is saved with them before the first tile (kill point RG2)
+  or as the revision's publication (RV3), and every enforcement point reads them off the live record after a restart.
+
+### 3. Tests
+
+- Units `LotCapLCAPTest` (7): the request members and old shapes, the keyed body hash, `Quote.lotBill`, the refusal's measure (the shared
+  item, an unnamed item, a pad, an unknown lot), both caps and the tighter one, the per-rid record, and the record's save and reload
+  (`RegionStore.writeJson` + `RegionRec.fromJson`) with the overshoot after it. Updated: `Api114Test` (component order), `ApiRulesTest`.
+- In game `lcap-survival` (`tools/lib/gatelcap.mjs`, via `tools/gate6dgr.mjs lcapsurvival`): the steps in its header.
+
+### 4. Fix round (rule 15 review P1; Steward's LCAP-Q1, LCAP-Q2)
+
+- **P1, a record that can't be saved.** `RegionsImpl.save` swallowed an IOException, so a realise or revision could build with its caps
+  only in memory. The two saves that record caps now report failure (`RegionsImpl.saveConfirmed`) and refuse
+  `Reason.JOURNAL_UNAVAILABLE`, detail `region_record`, before any governed write:
+  - a first realise saves its record (caps, the batch's and group's ids reserved first) before the batch is queued: on failure nothing is
+    queued, no region is registered and the region dir's ir.json is removed. New kill point `RG2a` (record saved, batch not queued: a crash
+    there leaves a region with no batch, which writes nothing). `RG2` is unchanged.
+  - a revision's publication (RV3) on failure puts the in-memory record back to its head (revisions, head, position, busy, manifest, state,
+    stages, survival, the effective snapshot) and refuses; on disk it is RV2's state (the manifest and snapshot written, nothing accepted).
+  - Every other `save` caller keeps the WARN (Revisions 9, RegionsImpl 9, RegionFluids 10, MechCharges 5, RegionFreeDrops 2, BillCaps 2,
+    Sites 1): they record progress after the governed write, not the cap. Test hook `dev.region.failNextSave` (`RegionStore.failNext`).
+- **RG2a orphans (second fix round).** A crash at RG2a leaves a record naming a batch and group id nobody holds. At load the ids every
+  region record names are reserved (`site/RegionIds`; `Batches.newId` and `Sites.newGroupId` skip them), so a later build never shares
+  them. A removal cancels only a batch whose ext names the region, and a region whose group is missing or names another region is an
+  orphan: only its record is removed (it wrote nothing). Third round (review P1): an orphan needs the record's own evidence,
+  `unqueued: true` (written by the RG2a pre-save, cleared by the save after the queue; absent = queued, so every older record is queued);
+  a group that is merely missing is never one, and with the sites file unreadable (`Sites.loadFailed`) an unqueued record's removal is
+  refused (`sites_unreadable`, nothing changed). `dev.journal.killAt` accepts `RG2a`. lcap-survival's row Z: RG2a halt, town B
+  with its own ids, the orphan removed, B built, items in = items out.
+- **LCAP-Q1, which cap.** `SiteWait.capScope` (appended component; the 1.59.0 constructor kept): for `BILL_CAP`, `"region"`
+  (`SiteWait.CAP_REGION`), `"lot:<id>"`, or both comma-joined, lot first; null otherwise. A gate mechanism's `bill_cap` wait carries the same
+  string as `waitsFor.cap`, and its `say` names the lot.
+- **LCAP-Q2.** `lcap-survival` adds a revision (rid > 0, lots lc and ld through checkPlan and realiseApproved): a town lot named on it is
+  `unknown_lot:la`; its record save failing is refused with the head unchanged; an RV3 kill, then its caps read back; ld's cap lowered holds
+  ld (capScope `lot:ld`) while lc builds; a halt with nothing saved keeps and enforces it; restored, PLACED.
+
+### Slice LCAP as built (2026-11-17; strict; versions NEXT; $0; fix round after the rule 15 review)
+
+- API: `maxBillPerLot` on `RealiseRequest`/`ApprovedRealise` (appended, 1.60.0 constructors kept, `withMaxBillPerLot`), `Quote.lotBill`,
+  `SiteWait.capScope` (LCAP-Q1), feature `maxBillPerLot`; `BILL_CAP` detail `lot:<id>` / `unknown_lot:<id>`. api-compat `--baselines` 8/8.
+- Rule 19, the 11-15 claim: half true. `survival.caps.<rid>` is an object, so `lots` sits beside `maxBill` with no migration; but `record()`
+  wrote `maxBill` only, `capOf`/`Cap` had no lot and the purse checked one cap: enforcement is new (BillCaps, Stockpiles, MechCharges).
+- Persistence: BC-d's region.json write (no new save path, no T0 barrier), now confirmed at the two cap-recording saves (§4, review P1).
+- Units: LotCapLCAPTest 9/9 (they can't compile on base: the API is new). In game `lcap-survival` 24/0. Failing-first: on origin/main + the
+  driver it FAILs at U (`gate-runs-LCAP-base/20261117-081406-change`); on 0b639840 + the test hook it FAILs at F1, the realise accepted with
+  its save failed (`gate-runs-LCAP-prefix/20261117-090854-change`).
+- Gate `artifacts/gate-runs-LCAP/20261117-085316-change` at 238299a0, 9076:9077, `--no-cache --shards 1 --no-turbo`: 4/4 PASS (bc-cap 10/0,
+  lcap-survival 24/0, bcd-grow 19/0, rl-crash 110/0); before the fix round `20261117-081620-change` 6/6 (with bcc-over 17/0, sad-survival 56/0).
+- Second round (RG2a): units LotCapLCAPTest 11/11, ApiY1Test 5/5 (SiteWait has 8 fields), Gradle full 1370 (0 failed, 1 skipped). Row Z
+  FAILs on 4b3dee91 + the driver (`gate-runs-LCAP-pre2/20261117-163845-change`: B took the orphan's b1/g1, the orphan's removal FAILED B)
+  and passes at 53c020a2 (`20261117-165207-change`: lcap-survival 32/0, bc-cap 10/0, bcd-grow 19/0; rl-crash 109/1 on RL5 F10, a gravel
+  drop near the road cell, then 110/0 alone in `20261117-171227-change`).
+- Third round (unreadable sites): `LotCapLCAPTest` 12/12; the same case on 537838fb's API FAILs (`orphanGroup("rg9", null)` true for a built
+  region whose group is missing). Gradle full 1371 (0 failed, 1 skipped); `20261117-184144-change` at a5c5f281: lcap-survival 32/0 (row Z passes), bc-cap 10/0.
+- Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves an orphan record (it writes nothing; removed alone);
+  lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).

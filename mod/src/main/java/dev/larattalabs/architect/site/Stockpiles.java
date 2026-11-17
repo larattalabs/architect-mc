@@ -1827,14 +1827,17 @@ public final class Stockpiles {
 				// (BC, S-M5-9) the region's maxBill: what its group may still draw (its draws counted from the ledger, then as this step pays)
 				BillCaps.Cap billCap = BillCaps.of(t);
 				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap); // (BC-c) the region's own charges too
+				// (LCAP, S-M5-16) the target's lot cap (its rid's maxBillPerLot for its lot): both caps apply, the target draws what both leave
+				BillCaps.Cap lotCap = BillCaps.lotOf(t);
+				Map<String, Integer> lotDrawn = lotCap == null ? null : BillCaps.drawn(p.ledger, lotCap);
 				boolean[] capHit = {false};
 				boolean[] settling = {false}; // (BC-c) an owed cell stands: it is charged whatever the cap (refusing it would mint)
 				Builder.Purse purse = new Builder.Purse() {
 					@Override
 					public int stock(String item) {
 						int n = reserve.available(item, p.ledger::stock);
-						if (billCap != null && !settling[0]) {
-							int left = billCap.left(drawn, item);
+						if ((billCap != null || lotCap != null) && !settling[0]) {
+							int left = BillCaps.leftUnder(billCap, drawn, lotCap, lotDrawn, item);
 							if (left < n || left <= 0) { // (BC-c) at or past the cap with no stock either: still the cap's wait
 								capHit[0] = true;
 								return left;
@@ -1852,6 +1855,9 @@ public final class Stockpiles {
 								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
 								if (drawn != null) {
 									drawn.merge(c.item(), c.count(), Integer::sum);
+								}
+								if (lotDrawn != null) {
+									lotDrawn.merge(c.item(), c.count(), Integer::sum); // (LCAP)
 								}
 							}
 						}
@@ -1908,11 +1914,15 @@ public final class Stockpiles {
 					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
 				}
 				// (BC, S-M5-9) nothing built and the cap held a cell back: the typed wait bill_cap (else it lifts)
-				Map<String, Integer> capOver = billCap != null && capHit[0] && r.built.cardinality() == before ? BillCaps.over(r, billCap, drawn) : Map.of();
+				boolean held = capHit[0] && r.built.cardinality() == before;
+				// (LCAP) either cap's units over: the larger of each item (the cap that must rise most)
+				Map<String, Integer> regionOver = billCap != null && held ? BillCaps.over(r, billCap, drawn) : Map.of();
+				Map<String, Integer> lotOver = lotCap != null && held ? BillCaps.over(r, lotCap, lotDrawn) : Map.of();
+				Map<String, Integer> capOver = BillCaps.mergeOver(regionOver, lotOver);
 				if (!capOver.isEmpty()) {
-					SiteWaits.billCapped(srv, idOf(t), capOver);
+					SiteWaits.billCapped(srv, idOf(t), capOver, BillCaps.scopeOf(regionOver, lotOver, lotCap == null ? null : lotCap.lot())); // (LCAP-Q1) which cap holds it
 					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
-				} else if (billCap != null) {
+				} else if (billCap != null || lotCap != null) {
 					SiteWaits.billUncapped(srv, idOf(t));
 				}
 			}
@@ -2891,15 +2901,26 @@ public final class Stockpiles {
 			for (Object t : bookTargets(p)) {
 				JsonObject o = LAST_RECONCILE.get(idOf(t));
 				BillCaps.Cap cap = o == null ? null : BillCaps.of(t);
-				if (cap == null) {
-					continue;
+				BillCaps.Cap lotCap = o == null ? null : BillCaps.lotOf(t); // (LCAP) the target's lot cap, named the same way
+				if (cap != null) {
+					Map<String, Integer> over = cap.overshoot(BillCaps.drawn(p.ledger, cap));
+					o.addProperty("capRegion", cap.region());
+					o.add("capOver", Builder.counts(over));
+					if (!over.isEmpty()) {
+						Architect.LOGGER.warn("Stockpile {}: the reconcile of {} left region {}'s draws past its maxBill by {}: its standing cells were charged "
+							+ "(the blocks exist); the region's targets draw no more of it and wait bill_cap", p.owner, o.get("key").getAsString(), cap.region(), over);
+					}
 				}
-				Map<String, Integer> over = cap.overshoot(BillCaps.drawn(p.ledger, cap));
-				o.addProperty("capRegion", cap.region());
-				o.add("capOver", Builder.counts(over));
-				if (!over.isEmpty()) {
-					Architect.LOGGER.warn("Stockpile {}: the reconcile of {} left region {}'s draws past its maxBill by {}: its standing cells were charged "
-						+ "(the blocks exist); the region's targets draw no more of it and wait bill_cap", p.owner, o.get("key").getAsString(), cap.region(), over);
+				if (lotCap != null) {
+					Map<String, Integer> over = lotCap.overshoot(BillCaps.drawn(p.ledger, lotCap));
+					o.addProperty("capRegion", lotCap.region());
+					o.addProperty("capLot", lotCap.lot());
+					o.add("lotCapOver", Builder.counts(over));
+					if (!over.isEmpty()) {
+						Architect.LOGGER.warn("Stockpile {}: the reconcile of {} left lot {} of region {} past its maxBillPerLot by {}: its standing cells were "
+							+ "charged (the blocks exist); the lot's targets draw no more of it and wait bill_cap", p.owner, o.get("key").getAsString(), lotCap.lot(),
+							lotCap.region(), over);
+					}
 				}
 			}
 		}

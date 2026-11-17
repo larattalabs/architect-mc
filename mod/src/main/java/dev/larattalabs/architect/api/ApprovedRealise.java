@@ -13,19 +13,34 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>(BC, S-M5-9, since 1.60.0) {@code maxBill}: as {@link RealiseRequest#maxBill}, the bound the caller approved (item id -> count); null:
  * no cap.
+ *
+ * <p>(LCAP, S-M5-16, since NEXT) {@code maxBillPerLot}: as {@link RealiseRequest#maxBillPerLot}, each lot's own cap (lot id -> item id ->
+ * count) beside {@code maxBill}; both apply. null: no lot cap.
  */
 public record ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
-	JsonObject ext, @Nullable Map<String, Integer> maxBill) {
+	JsonObject ext, @Nullable Map<String, Integer> maxBill, @Nullable Map<String, Map<String, Integer>> maxBillPerLot) {
 	public ApprovedRealise {
 		mode = mode == null ? Mode.INSTANT : mode;
 		lotEntries = lotEntries == null ? Map.of() : Map.copyOf(lotEntries);
 		ext = ext == null ? new JsonObject() : ext;
 		maxBill = RealiseRequest.capOf(maxBill);
+		maxBillPerLot = RealiseRequest.lotCapsOf(maxBillPerLot);
+	}
+
+	/** (BC, since 1.60.0) The 1.60.0 shape: no lot cap. */
+	public ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
+		JsonObject ext, @Nullable Map<String, Integer> maxBill) {
+		this(artifactSha, mode, actor, lotEntries, opKey, ext, maxBill, null);
+	}
+
+	/** (LCAP, since NEXT) The same realise with these lot caps ({@link #maxBillPerLot}; null: none). */
+	public ApprovedRealise withMaxBillPerLot(@Nullable Map<String, Map<String, Integer>> caps) {
+		return new ApprovedRealise(artifactSha, mode, actor, lotEntries, opKey, ext, maxBill, caps);
 	}
 
 	/** The 1.23.0 shape: no cap. */
 	public ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
 		JsonObject ext) {
-		this(artifactSha, mode, actor, lotEntries, opKey, ext, null);
+		this(artifactSha, mode, actor, lotEntries, opKey, ext, null, null);
 	}
 }

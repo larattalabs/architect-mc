@@ -214,6 +214,9 @@ public interface ArchitectApi {
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
 	 * (QL, since 1.62.0) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
+	 * (LCAP, since NEXT) {@code "maxBillPerLot"}: {@link RealiseRequest#maxBillPerLot}, {@link ApprovedRealise#maxBillPerLot} (each lot's own
+	 * cap beside {@code maxBill}; refused {@link Reason#BILL_CAP} with detail {@code lot:<id>} or {@code unknown_lot:<id>}) and
+	 * {@link Quote#lotBill}.
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.

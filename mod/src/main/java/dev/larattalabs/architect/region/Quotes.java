@@ -254,16 +254,71 @@ public final class Quotes {
 	 */
 	static void capRefusal(MinecraftServer s, RegionsImpl.PlanRec p, dev.larattalabs.architect.api.RealiseRequest r) {
 		Map<String, Integer> cap = r.maxBill();
+		Map<String, Map<String, Integer>> lotCaps = r.maxBillPerLot();
+		if (cap == null && lotCaps == null) {
+			return;
+		}
+		// (LCAP) a lot cap naming a lot this plan does not realise: refused before the quote is read (nothing to measure it against)
+		if (lotCaps != null) {
+			String unknown = unknownLot(lotCaps, realisedLots(p));
+			if (unknown != null) {
+				throw new RegionsImpl.RegionException(Reason.BILL_CAP, "maxBillPerLot names lot " + unknown + ", which plan " + p.planId() + " does not realise "
+					+ "(its lots: " + String.join(", ", realisedLots(p)) + ")", "unknown_lot:" + unknown);
+			}
+		}
+		Quote q = of(s, p, null, r.lotEntries());
+		// (LCAP, S-M5-16) each lot's own bill (its lot:, fill: and mech: pieces) against its own cap, then the whole bill against maxBill
+		String[] lotOver = lotCaps == null ? null : lotOver(q.bomParts(), lotCaps);
+		if (lotOver != null) {
+			List<String> why = q.exact() ? List.of() : q.notes().stream().filter(n -> n.contains("lot " + lotOver[0]) || n.contains("not loaded")).toList();
+			throw new RegionsImpl.RegionException(Reason.BILL_CAP, "lot " + lotOver[0] + "'s bill at put-down is past its maxBillPerLot (" + lotOver[1] + ")" + (why.isEmpty()
+				? "" : "; the bill is an upper bound: " + String.join("; ", why)), "lot:" + lotOver[0]);
+		}
 		if (cap == null) {
 			return;
 		}
-		Quote q = of(s, p, null, r.lotEntries());
 		List<String> over = overCap(q.bom(), cap);
 		if (!over.isEmpty()) {
 			throw RegionsImpl.refusal(Reason.BILL_CAP, "the realise's bill at put-down is past its maxBill (" + String.join(", ", over) + ")" + (q.exact() ? ""
 				: "; the bill is an upper bound: " + String.join("; ", q.notes().stream().filter(n -> n.contains("upper bound") || n.contains("not loaded")
 					|| n.contains("may")).toList())));
 		}
+	}
+
+	/** (LCAP) The lots a realise of plan {@code p} binds: the plan's own, and a revision's refills, sorted. */
+	static java.util.SortedSet<String> realisedLots(RegionsImpl.PlanRec p) {
+		java.util.SortedSet<String> out = new java.util.TreeSet<>();
+		p.ir().lots().forEach(l -> out.add(l.id()));
+		if (Revisions.isRevision(p)) {
+			out.addAll(Revisions.refills(p.ir().json()));
+		}
+		return out;
+	}
+
+	/** (LCAP, pure) The first lot (sorted) a lot cap names that is not in {@code known}, or null. */
+	static @Nullable String unknownLot(Map<String, Map<String, Integer>> lotCaps, java.util.Set<String> known) {
+		for (String lot : new java.util.TreeSet<>(lotCaps.keySet())) {
+			if (!known.contains(lot)) {
+				return lot;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (LCAP, pure) The first lot (sorted) whose own bill ({@link Quote#lotBill}: its lot:, fill: and mech: pieces) is past its cap: {lot, the
+	 * items past it, "item n > cap" joined}, or null when every capped lot is within its cap.
+	 */
+	static String @Nullable [] lotOver(JsonObject bomParts, Map<String, Map<String, Integer>> lotCaps) {
+		for (var e : new TreeMap<>(lotCaps).entrySet()) {
+			JsonObject bill = new JsonObject();
+			Quote.lotBill(bomParts, e.getKey()).forEach(bill::addProperty);
+			List<String> over = overCap(bill, e.getValue());
+			if (!over.isEmpty()) {
+				return new String[] {e.getKey(), String.join(", ", over)};
+			}
+		}
+		return null;
 	}
 
 	/** (BC) The items of a bill past a cap ({@code item n > cap}; an item the cap does not name: 0), sorted. */

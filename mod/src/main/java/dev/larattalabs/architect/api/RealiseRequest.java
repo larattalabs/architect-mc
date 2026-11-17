@@ -33,10 +33,19 @@ import org.jspecify.annotations.Nullable;
  *     passes it: a target whose next cell would draw past it waits with {@link SiteWait#BILL_CAP} (STARVED in {@code Sites.view}) instead
  *     of consuming, however much the stockpile holds. Kept with the region across a restart. A revision's cap counts its own draws from
  *     its realise on. Ignored in creative (nothing is consumed). Counts must be at least 0
+ * @param maxBillPerLot (LCAP, S-M5-16, since NEXT, feature {@code "maxBillPerLot"}) null: no lot cap. Else lot id -> its own cap (item id ->
+ *     count), each as {@link #maxBill} but over one lot's bill alone: its {@code lot:<id>}, {@code fill:<id>} and {@code mech:<id>} pieces at
+ *     put-down ({@link Quote#lotBill}), then, while it builds, the draws of that lot's own targets (its site, its gate mechanism) in this
+ *     realise or revision. Both caps apply: {@link #maxBill} still covers the whole realise, the capped lots included, and a lot draws only
+ *     what both leave (a lot cap above {@code maxBill} is accepted; the tighter wins). An item a lot's cap does not name may not be drawn by
+ *     that lot. Refused {@link Reason#BILL_CAP} before anything is reserved or written when one lot's bill is past its own cap
+ *     ({@link ArchitectRefused#detail()} {@code lot:<id>}; the message names the lot, the items and the bill against the cap), or when it names
+ *     a lot this plan does not realise (detail {@code unknown_lot:<id>}; a revision's lots are its own and its refills). Kept with the region
+ *     per realise or revision across a restart, as {@link #maxBill} is. Ignored in creative. Counts must be at least 0
  */
 public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 	boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey,
-	@Nullable BuildConsent consent, @Nullable Map<String, Integer> maxBill) {
+	@Nullable BuildConsent consent, @Nullable Map<String, Integer> maxBill, @Nullable Map<String, Map<String, Integer>> maxBillPerLot) {
 	public RealiseRequest {
 		mode = mode == null ? Mode.AUTO : mode;
 		lotEntries = lotEntries == null ? Map.of() : Map.copyOf(lotEntries);
@@ -44,6 +53,29 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 		ext = ext == null ? new JsonObject() : ext;
 		maxWaitSeconds = Math.max(0, maxWaitSeconds);
 		maxBill = capOf(maxBill);
+		maxBillPerLot = lotCapsOf(maxBillPerLot);
+	}
+
+	/** (BC, since 1.60.0) The 1.60.0 canonical shape: no lot cap. */
+	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
+		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey,
+		@Nullable BuildConsent consent, @Nullable Map<String, Integer> maxBill) {
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, maxBill, null);
+	}
+
+	/** (LCAP) Lot caps' copy, sorted by lot then item; a blank lot id, a null cap or a negative count is refused. */
+	static @Nullable Map<String, Map<String, Integer>> lotCapsOf(@Nullable Map<String, Map<String, Integer>> m) {
+		if (m == null) {
+			return null;
+		}
+		java.util.TreeMap<String, Map<String, Integer>> o = new java.util.TreeMap<>();
+		m.forEach((lot, cap) -> {
+			if (lot == null || lot.isBlank() || cap == null) {
+				throw new IllegalArgumentException("maxBillPerLot: " + lot + " -> " + cap + " (a lot id and its cap)");
+			}
+			o.put(lot, capOf(cap));
+		});
+		return java.util.Collections.unmodifiableMap(o);
 	}
 
 	/** (BC) A cap's copy, sorted; a negative or missing count is refused. */
@@ -65,34 +97,39 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey,
 		@Nullable BuildConsent consent) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, null, null);
 	}
 
 	/** (BC, since 1.60.0) The same request with this cap ({@link #maxBill}; null: none). */
 	public RealiseRequest withMaxBill(@Nullable Map<String, Integer> cap) {
-		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, cap);
+		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, cap, maxBillPerLot);
+	}
+
+	/** (LCAP, since NEXT) The same request with these lot caps ({@link #maxBillPerLot}; null: none). */
+	public RealiseRequest withMaxBillPerLot(@Nullable Map<String, Map<String, Integer>> caps) {
+		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, maxBill, caps);
 	}
 
 	/** (PT) Without a consent (the 1.14.0+ shape). */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, null, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, null, null, null);
 	}
 
 	/** (PT) The same request with this consent (a build it names is no keep-out, S-PT-4). */
 	public RealiseRequest withConsent(@Nullable BuildConsent c) {
-		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, c, maxBill);
+		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, c, maxBill, maxBillPerLot);
 	}
 
 	/** The 1.13.0 constructor (no opKey). */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, null, null, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, null, null, null, null);
 	}
 
 	/** Without a wait limit (S8's default) or an opKey. */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, 0, null, null, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, 0, null, null, null, null);
 	}
 }
