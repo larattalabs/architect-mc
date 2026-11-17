@@ -33000,20 +33000,30 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
 - **Ran** (f9903a02, ST merged): Gradle build 1359 tests 0 failures; scoped kit 74/74 (1 skipped); step-inputs check; gitleaks clean. Final
   gate-runs-hb/20261117-034128-change: hb-remove 22/0, hb-halt 14/0, hb-growth 28/0 (`--shards 1 --no-turbo --no-cache`, 9018/9019).
-- **Fix round run** (16fb55ad, gate-runs-hb/20261117-043357-change): hb-halt 15/0 and hb-growth 30/0 (RegionView.waiting typed `terrain`
-  from the growth's batch at 0 and 50%); hb-remove 24/3, all in the new xr01crash row. Its first draft held RL's save on join off as well
-  (`noPeriodic` alone), so the paid targets that joined after the case's save had no book and stood unpaid after the restart (387 units):
-  a test artefact (production always saves on join, RL), now `{noPeriodic, joinSave}`. Its BUILT staged target c4 was read by its book
-  and left BUILT (log line).
-- **Final run** (b97ffb75, gate-runs-hb/20261117-045454-change, 9018/9019, `--no-cache`): hb-halt 15/0, hb-growth 30/0, hb-remove 25/3,
-  all three in xr01crash. With the join save on, a later save on join dropped the BUILT staged targets' books, so the window was not
-  reached (0 books; the BUILT-and-booked case is shown only by run 8's c4). Accounting held: standing 392 = paid 392, conservation exact
-  through the rebuild and the Remove, E-flat 0. But after the restart and re-feed to PLACED, 54 cells of the pre-halt world are air (the
-  same cells in runs 8 and 9, at 9614-9623,71,9075: stone bricks, a fence, stairs, a trapdoor; not staged cells). Not diagnosed: no code
-  changes after the final GPT check (to Noah with its three findings: the join save after feedPass steps new targets, a full r.built
-  completing before the terrain durability check, `HB_ONLY=xr01crash` running nothing).
-- **Left:** while held no paid growth target starts
-- **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%.
+- **Fix round** (16fb55ad, gate-runs-hb/20261117-043357-change): hb-halt and hb-growth pass (RegionView.waiting typed `terrain` from the
+  growth's batch); new row xr01crash. Its first draft also turned RL's save on join off (`noPeriodic` alone): 387 paid units stood unpaid
+  after the restart, a test artefact (production always saves on join); now `{noPeriodic, joinSave}`.
+- **Combined ST/HB round** (Noah, outside the guard; slice/T0 2c2b093c merged).
+  - **P1, the save on join** (`Stockpiles.feed`): a target that joined the feed (in the pass, or through a reconcile between passes) is
+    saved through T0's `barrier()` BEFORE the pass steps any target. Only OK lets the pass run; REFUSED or IN_DOUBT holds it until a later
+    tick (rule 17). Kill point JS1 (TEST): a target that joined built paid cells in its first step. Gate hb-join (rs01, `JS1+save`).
+  - **Premise check (rule 19): the failing-first run did not fail.** At a448bcae (pre-fix, gate-runs-hb/20261117-062015-change) hb-join
+    PASSED. The step and its join save run in one server tick, and every chunk save (autosave, a kill's `+save`, ST's `terrainDurable`)
+    goes through the world-save hook, which writes the ledger with refreshed books after the chunks. Paid blocks never reach the disk
+    ahead of their target's book. The reorder is kept for rule 17; hb-join is its regression row.
+  - **P3:** `HB_ONLY=xr01crash` runs it alone. xr01crash's booked-BUILT window is unreachable with the save on join on (a later join drops
+    the books of BUILT targets): recorded, not judged (run 8's c4 is the one instance).
+  - **The 54 missing cells (xr01crash): the same class, diagnosed.** They are props target c10 (54 cells: stone bricks, a fence, stairs, a
+    trapdoor). It joined with its book saved (nothing built), built after the last ledger save, and was recorded BUILT: `Infras.put`
+    saves the sites file at once, ahead of the chunks and the ledger. The halt lost its chunk writes, and RL counts as lost only cells that
+    stood paid at the save, so it stays BUILT with 54 holes. Nothing is minted or lost (the stock keeps the items: standing = paid,
+    conservation exact). The join barrier does not fix it; a barrier before a fed target's BUILT is persisted would (ST's completion
+    item, for every fed target). Not widened into a reopen.
+- **Ran** (T0 merged, 9018/9019, `--shards 1 --no-turbo --no-cache`): gate-runs-hb/20261117-064618-change at bbbd506d: hb-join 4/0,
+  hb-growth 30/0, rl-crash 110/0; gate-runs-hb/20261117-072039-change at 297c0c64 (the two gate-only fixes): hb-halt 15/0, hb-remove
+  27/1 (the one FAIL is xr01crash's 54-cell class above). Gradle build 1414 tests 0 failures; step-inputs check; gitleaks clean.
+- **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the 54-cell class above.
+
 ### Slice T0 as built (branch `slice/T0` off origin/main 5a782f9d; one fix round after the NOT SAFE GPT review of 042da098 plus TXN review 3 items 1 and 5; no API package change; $0; strict; recorded 2026-11-16)
 
 - **DurableFile** (`site/DurableFile.java`): temp, file force, atomic rename, folder force; OK / REFUSED / IN_DOUBT. `_durable` is `{store: the file's own persisted UUID, type: label, gen}` (`id()`, `satisfies(id, gen)`); a folder open that fails is IN_DOUBT off Windows; each new folder's entry is forced in its parent before the rename; an older generation never replaces a newer one; a loaded generation counts as written only after `confirm()` forces the file and folders again; `writeUnforced` for ordinary saves.
