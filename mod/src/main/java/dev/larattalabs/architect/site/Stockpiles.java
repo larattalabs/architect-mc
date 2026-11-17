@@ -1441,74 +1441,6 @@ public final class Stockpiles {
 		return any;
 	}
 
-	/**
-	 * (slice OVF, review finding 1) A construction delta's refund held pending under its key ({@code delta:<entry>:<site>}) in the owner's
-	 * ledger, to be saved before the new version's record. Returns whether it was held (the owner has a stockpile and the key is new).
-	 */
-	static boolean holdPendingDelta(@Nullable String owner, String key, Map<String, Integer> items, BlockPos at) {
-		Pile p = get(owner);
-		if (p == null || p.ledger.credited(key)) {
-			return false;
-		}
-		p.ledger.holdPending(key, items, at.asLong());
-		changed(p);
-		return true;
-	}
-
-	/** (OVF) The delta was refused before it wrote anything (its pending save not confirmed): its pending credit dropped from memory. */
-	static void dropPendingDelta(@Nullable String owner, String key) {
-		Pile p = get(owner);
-		if (p != null) {
-			p.ledger.dropPending(key);
-			changed(p);
-		}
-	}
-
-	/**
-	 * (OVF) What the start does with a pending delta credit: book it (its delta stands in the site's history), keep it (the delta is
-	 * unresolved: its journal entry exists but the record doesn't name it yet, e.g. a recovery that could not finish), or drop it (the entry
-	 * never committed, or was rolled back).
-	 */
-	enum DeltaFate { BOOK, KEEP, DROP }
-
-	/**
-	 * (OVF) The fate of the pending credit {@code key} ({@code delta:<entry>:<site>}): BOOK when {@code applied} says the site's history names
-	 * the entry; else KEEP while {@code unresolved} says the journal still holds the entry live (PLACING or ACTIVE) or the site's record is
-	 * mid-update; else DROP. A malformed key is DROP. Pure.
-	 */
-	static DeltaFate deltaFate(String key, java.util.function.BiPredicate<String, String> applied, java.util.function.BiPredicate<String, String> unresolved) {
-		String site = StockLedger.deltaSiteOf(key);
-		String entry = site == null ? null : key.substring("delta:".length(), key.length() - site.length() - 1);
-		if (site == null || entry.isEmpty()) {
-			return DeltaFate.DROP;
-		}
-		return applied.test(site, entry) ? DeltaFate.BOOK : unresolved.test(site, entry) ? DeltaFate.KEEP : DeltaFate.DROP;
-	}
-
-	/** (OVF) Whether delta entry {@code entry} of site {@code id} is unresolved: live in the journal, or the site's record still updating. */
-	private static boolean deltaUnresolved(String id, String entry) {
-		Site s = Sites.get(id);
-		if (s != null && s.versioning().updating() > 0) {
-			return true;
-		}
-		dev.larattalabs.architect.journal.JournalStore.Meta m;
-		try {
-			m = SiteJournal.store().meta(entry);
-		} catch (Sites.SiteException e) {
-			return true; // the journal unreadable: inconclusive, kept
-		}
-		return m != null && (m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING || m.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE);
-	}
-
-	/** (OVF) Whether site {@code id}'s history (standing or pending) names delta entry {@code entry}. */
-	private static boolean deltaApplied(String id, String entry) {
-		Site s = Sites.get(id);
-		if (s == null) {
-			s = Sites.pendingRecord(id);
-		}
-		return s != null && s.versioning().history().stream().anyMatch(h -> entry.equals(h.deltaEntry()));
-	}
-
 	/** (J2) The removal ended unwritten (its save refused): its pending credits dropped. */
 	static void dropPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
 		for (Builder.Deconstruction d : decs) {
@@ -1535,13 +1467,6 @@ public final class Stockpiles {
 				if (p.ledger.credited(key)) {
 					p.ledger.dropPending(key);
 					what = "already credited";
-				} else if (key.startsWith("delta:") && deltaFate(key, Stockpiles::deltaApplied, Stockpiles::deltaUnresolved) != DeltaFate.BOOK) {
-					if (deltaFate(key, Stockpiles::deltaApplied, Stockpiles::deltaUnresolved) == DeltaFate.KEEP) {
-						Architect.LOGGER.warn("Stockpile {}: pending credit {}: its construction delta is unresolved; kept for the next start", p.owner, key);
-						continue; // (OVF, review round 4) never dropped while the delta may still commit
-					}
-					p.ledger.dropPending(key);
-					what = "its construction delta never committed (no live journal entry, not in the site's history): dropped";
 				} else if (standingSite(key) != null) {
 					p.ledger.dropPending(key);
 					what = "its site stands (the removal never settled)";

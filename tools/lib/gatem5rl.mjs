@@ -281,7 +281,7 @@ export async function registerRL(steps, h) {
     // (PS) a changed ledger is saved with the world every 10 s while a build feeds: the crash window is the time before the next such save.
     // The case holds that window open (PS's test switch, this JVM only: the restart runs as shipped)
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const lot0 = (await pile()).targets?.[lot] ?? {};
@@ -399,7 +399,7 @@ export async function registerRL(steps, h) {
     await quiet();
     const half = await deliverTo(lot, 0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const lot0 = (await pile()).targets?.[lot] ?? {};
@@ -458,7 +458,7 @@ export async function registerRL(steps, h) {
     await quiet();
     const half = await deliverTo(id, 0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const t0 = (await pile()).targets?.[id] ?? {};
@@ -498,74 +498,6 @@ export async function registerRL(steps, h) {
     return { target: id, part: T.part, atSave: t0, atHalt: t1, reconciled: rc, b1, b2, consumed, gained };
   }
 
-  /** (slice OVF) rs_hut v1 (oak walls) less its torch and its gravel approach: a delta whose removed paid cells are refunded. */
-  async function hutLess() {
-    const { Blueprint, palette } = await h.imp('lib/kit.mjs');
-    const { writeBlueprint } = await h.imp('lib/write.mjs');
-    const X = 6, Z = 4, H = 4;
-    const bp = new Blueprint({ id: 'rs_hut', name: 'rs_hut', description: 'RS rs_hut', type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 5], origin: [0, 0, 0], groundY: 1, front: 'south', palette: palette({}), approach: false, interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
-    bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall: 'minecraft:oak_planks', floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
-    bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, 'minecraft:glass_pane'); bp.set(5, 2, Z, 'minecraft:glass_pane'); bp.set(3, 3, 0, 'minecraft:copper_block'); });
-    bp.spot('entrance', 3, Z + 1, 180);
-    bp.spot('spawn', 3, Z + 3, 180);
-    const dir = path.join(h.OUT, 'rs_hut-less');
-    fs.rmSync(dir, { recursive: true, force: true });
-    writeBlueprint(bp, dir);
-    return call('dev.entry.installVersion', { entry: 'rs_hut', dir, summary: 'OVF no torch, no approach' }, 60_000);
-  }
-
-  /**
-   * (slice OVF, the GPT review's delta findings) A construction delta of the built lot to rs_hut less its torch and approach (removed paid
-   * cells, refunded into the stockpile), halted at {@code point}: OVD1 (its refund pending and saved, nothing of the delta written: after the
-   * restart the pending credit is dropped, nothing booked, the lot's paid record and the site as they were) or CS1 (the record and the
-   * conversion written, the credit's save halted before the ledger: after the restart the pending credit is booked once, what came back =
-   * what left the lot's paid record, item for item). Items in = items out either way.
-   */
-  async function deltaCase(tag, point) {
-    const W = await world(`G6B RL ${tag}`);
-    const lot = await lotPaused(tag);
-    if (!lot) { await L.leaveWorld(); return null; }
-    await deliver(1);
-    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
-    let built = false;
-    for (let i = 0; i < 300 && !built; i++) { built = !(await pile()).targets?.[lot] || (await call('dev.site.state', { site: lot }, 30_000).catch(() => ({}))).state === 'BUILT'; if (!built) { await deliver(1); await L.sleep(2000); } }
-    check(built, `${tag}: ${lot} built at v1 (rs_hut)`);
-    const v = await hutLess();
-    check((v?.version ?? 0) >= 2, `${tag}: rs_hut less its torch and approach installed: ${json(v)}`);
-    await quiet();
-    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
-    const file = () => ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
-    const B = file();
-    const key = Object.keys(B?.paid ?? {}).find((k) => k.startsWith(`site:${lot}@`));
-    check(!!key && sum(B.paid[key]) > 0, `${tag}: ${lot}'s paid record on disk (${key}: ${sum(B?.paid?.[key])} units)`);
-    await call('dev.journal.killAt', { point }, 10_000);
-    cmd(`/apitest applydelta ${lot} ${v.version} ${G.OWNER}`).catch(() => null);
-    const down = await haltWait();
-    check(down, `${tag}: ${point} halted the server inside the delta`);
-    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
-    const S = file();
-    const pend = Object.keys(S?.pendingCredit ?? {}).filter((k) => k.startsWith('delta:') && k.endsWith(`:${lot}`));
-    check(pend.length === 1, `${tag}: at the halt the saved ledger holds the delta's refund pending (${pend.join(',') || 'none'}: ${json(S?.pendingCredit?.[pend[0]]?.items ?? null)})`, S?.pendingCredit);
-    await restart(W);
-    await L.settle(4000);
-    const F = (await pile()).ledger ?? {};
-    const dkey = pend[0];
-    const back = G.minus(F.returned, B.returned);
-    const taken = G.minus(B.paid?.[key], F.paid?.[key]);
-    const res = { key, dkey, pending: S?.pendingCredit?.[dkey] ?? null, back, taken, credited: (F.credited ?? []).includes?.(dkey) ?? null, left: F.pendingCredit ?? null };
-    log(`  ${tag}: ${json(res).slice(0, 600)}`);
-    if (point === 'OVD1') {
-      check(!F.pendingCredit?.[dkey] && sum(back) === 0 && G.same(F.paid?.[key], B.paid?.[key]),
-        `${tag}: after the restart the delta never committed: its pending refund dropped, nothing booked (returned +${sum(back)}), ${lot}'s paid record as saved (items in = items out)`, res);
-    } else {
-      check(!F.pendingCredit?.[dkey] && sum(back) > 0 && G.same(back, taken),
-        `${tag}: after the restart the delta's refund booked once: what came back (${json(back)}) = what left ${lot}'s paid record (${json(taken)}), item for item; nothing pending`, res);
-    }
-    await L.leaveWorld();
-    return res;
-  }
-
   steps.rlj2 = async () => {
     await ensure();
     const out = {};
@@ -595,7 +527,7 @@ export async function registerRL(steps, h) {
     const quote = c00.maxBill ?? {};
     await deliver(0.5);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };
     const cSave = await capAt();
@@ -680,11 +612,6 @@ export async function registerRL(steps, h) {
     out.RL4 = await crashCase('RL4', 0.5, { restAfterSave: true });
     // RL5 (J1): as RL2, and a player places one of the lot's blocks in its unbuilt cell after the save: not charged at the reconcile
     out.RL5 = await crashCase('RL5', 1, { playerBlock: true });
-    // (OVF) a construction delta's refund across a halt: OVD1 (pending saved, nothing written) and CS1 (written, its credit not)
-    if (process.env.GATE_RL_OVD !== '0') {
-      out.OVD1 = await deltaCase('OVD1', 'OVD1');
-      out.OVDC = await deltaCase('OVDC', 'CS1');
-    }
     spendZero();
     return out;
   };

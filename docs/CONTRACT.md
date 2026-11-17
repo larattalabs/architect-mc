@@ -32885,3 +32885,16 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - Tests: StockpileOverflowOVFTest has 16 (rewritten delta order, the unresolved KEEP, the confirmed charge shortcuts). In game:
   rl-crash adds OVD1 (a delta to rs_hut less its torch and approach, halted after its pending save: dropped, nothing booked) and OVDC
   (halted at CS1 after the conversion: booked once, back = what left the paid record).
+
+### Slice OVF "ship core" as built (Noah, 11-17): the delta path reverted
+
+- Kept: owed stock for every keyed refund (no overflow entity; the CS1 double pay fixed), the keyed scoop's and charge's confirmed
+  saves, `Stockpiles.ledgerOnDisk` guarding RegionFluids' and MechCharges' booked charges, the over-capacity inserts for active
+  targets, the LedgerSim insertion invariant, and the over-capacity label and message.
+- Reverted to origin/main: the construction-delta refund path. Concretely: `SiteDeltas.applyChecked`'s `presetId` overload,
+  `Builder.removedRefund` and the pending-delta hold and its confirmed save before the delta (kill point OVD1 and its `dev.journal.killAt`
+  entry), `Stockpiles.holdPendingDelta`, `dropPendingDelta`, `DeltaFate` and `deltaFate` (BOOK/KEEP/DROP), `deltaApplied`,
+  `deltaUnresolved` and their branch in `settlePendingCredits`, `StockLedger.deltaSiteOf`, rl-crash's OVD1/OVDC cases, and their unit tests.
+- Known pre-existing risk until TXN: a construction delta credits its refund after `Sites.replace` writes the new version, and a crash
+  at CS1 inside that credit's save loses the refund (startup never replays the delta's conversion). As a keyed credit it is now owed stock
+  in full, so the overflow part is lost along with the rest instead of lying on the ground.

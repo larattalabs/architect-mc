@@ -665,11 +665,6 @@ public final class StockLedger {
 	}
 
 	/** (JR) The site id of a construction delta's credit key ({@code delta:<entry>:<siteId>}), or null. */
-	/** (OVF) {@link #deltaSite}, public: the site of a construction delta's credit key, or null. */
-	public static @Nullable String deltaSiteOf(String key) {
-		return deltaSite(key);
-	}
-
 	static @Nullable String deltaSite(String key) {
 		if (!key.startsWith("delta:")) {
 			return null;

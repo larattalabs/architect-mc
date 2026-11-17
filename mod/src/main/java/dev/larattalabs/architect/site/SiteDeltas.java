@@ -1003,14 +1003,6 @@ public final class SiteDeltas {
 	}
 
 	static Result applyChecked(ServerLevel level, Check c, boolean overwrite, String kind) throws Sites.SiteException {
-		return applyChecked(level, c, overwrite, kind, null);
-	}
-
-	/**
-	 * {@link #applyChecked}; (slice OVF) {@code presetId}: the delta's journal entry id, allocated by the caller before anything is written (a
-	 * construction delta holds its refund pending under it and saves that before the delta starts). Null: a new id here.
-	 */
-	static Result applyChecked(ServerLevel level, Check c, boolean overwrite, String kind, @Nullable String presetId) throws Sites.SiteException {
 		long tA = System.nanoTime();
 		Planned p = c.plan();
 		MinecraftServer server = level.getServer();
@@ -1044,7 +1036,7 @@ public final class SiteDeltas {
 		int[] ring = o.growth().isEmpty() ? new int[0] : growthRing(level, b.restoreBox(), p.pb().snapBox());
 		WorldJournal.kill("D1");
 		long layer = s.newLayer();
-		String id = presetId != null ? presetId : s.newId();
+		String id = s.newId();
 		long now = System.currentTimeMillis();
 		JsonObject meta = new JsonObject();
 		meta.addProperty("from", p.from());
