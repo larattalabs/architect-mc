@@ -917,6 +917,14 @@ entity type are refused, and the prepare re-judges the cell). Pistons can't push
 Each hold lands with a **failing-first in-game case**: the case is red on T1 (the write reaches a held box) and green with the hold,
 both recorded in the as-built. Until then a real kind (CXD's `crate.take` included) is not migrated.
 
+**Met for the vanilla container types (slice T2a, docs/CONTRACT.md "Slice T2a as built").** The holds are enforced at choke points (the
+cell's block state and block entity frozen, the double chest's combine split, each per-type ticker, the commands, a content backstop), and
+the in-game step `txn-holds` has one row per path: 30 red on the widened test.move without them, all green with them; 6 rows are held on the
+base too (T1's guards, or vanilla never does it). Types whose writers are not enumerated (campfires, lecterns, jukeboxes, chiseled bookshelves,
+decorated pots, shelves, brushable blocks, modded block entities) stay refused by every kind. **Crates** are not in that matrix: a crate's
+writers (the build feed, the crate screen, inserts, `openCrate`, the leftovers, `adopt`) get their own red/green rows in T2b, with
+`crate.take`.
+
 **Every entry point is mapped** *(P2-9)*. Each of rows 1-38 is either in a slice above or excluded with its reason:
 - rows 21, 34-36 move no items;
 - rows 26-27 are bulk streams: §3.9, JR plus RL;

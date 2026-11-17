@@ -33400,6 +33400,28 @@ so two module lots that share items can't each be held to their own measured bou
 - **Dimension P2:** `dev.txn.run`'s `dimension` must be a JSON string and a canonical key (`overworld` is refused: it keyed a box the
   hold mixins never look up); the box and effect data use the level's own key; `Adapter.invalid` quarantines a non-canonical `dim`.
 - **T2 entry criterion** written in TXN-DESIGN §6.1. Units: `TestMoveCellsTest` (5); `FillsFKBTest` now expects both Transfer API injectors (T1's insert guard had left it red); full mod suite 1436 green.
+### Slice T2a as built (branch `slice/T2` off origin/batch/v079 f3afeaa1; complete holds, TXN-DESIGN §6.1 entry criterion; $0; strict)
+
+- **Holds** (`mixin/TxnHold*`, `TxnServer.boxHeld`/`asHolder`): a held cell keeps its state, block entity and slots against every writer
+  but its own adapter. Cell freeze (`Level.setBlock/destroyBlock/removeBlock`, `LevelChunk.setBlockState/setBlockEntity/removeBlockEntity`);
+  `ChestBlock.combine` splits a double chest when a half is held; per-type tickers (furnace family, brewing, hopper push/suck, dispenser,
+  dropper, crafter, copper golem target); pistons; `/setblock`, `/fill`, `/clone` (source and destination), `/data`, `/item`, `/loot` refuse
+  naming the hold; `/place`/structures meet the freeze; a content backstop (`setItem`/`removeItem*`/`clearContent`/`loadWithComponents`,
+  logged once, `dev.txn.state.backstops`). Server side only; `Holds.cellHolder` is a per-dimension packed-cell index (O(1) per write).
+- **test.move widened** to the held types (`TestMoveCells.HELD_TYPES`; a double chest's half with its partner; unpacked loot refused);
+  other block entities (campfire, lectern, jukebox, bookshelf, pot, shelf, brushable, modded, crates) stay refused.
+- **Failing first** (`txn-holds`, ~37 boxes held at once under /save-off): 30 rows red on 88f37a88 (widened test.move, no holds;
+  `gate-runs-T2-red/20261117-220509-change`, with the hopper_push driver fix); green at 41fbaec6. Held on the base too, recorded not red:
+  barrel, shulker box, trapped chest, double-chest partner (T1 hopper guard), piston (vanilla), explosion (T1 guard).
+- **Fills custody residual:** each cell's write-back carries a chunk receipt (`wb:<key>#<n>@x,y,z|...`), a retry deducts it, the rest enters
+  the stock under that keyed credit (no drop), a barrier follows and the receipts go once it is OK. `FillsWriteBackT2Test` (5): the legacy
+  flow red (chunk saved, ledger not: paid twice), as built exact in every crash combination.
+- **Ran:** Gradle full 1564 (0 failed, 1 skipped); `gate-runs-T2/20261117-220929-change` at 41fbaec6, 9050:9051, `--no-cache --shards 1
+  --no-turbo`: txn-core 75/0, txn-holds 41/0; `gate-runs-T2-fk/20261117-221359-change` (9052:9053): fk-crash 66/0, fkb-crash 48/0.
+- **Leftovers:** crate holds and CXD as txn kinds (T2b); write-back receipts stay in the chunk when the barrier is refused (stale, never
+  read again under a later key); an Architect placement over a held cell is refused cell by cell (not up front); player open/break of a held
+  box is T1's mixins, not exercised in game.
+
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves

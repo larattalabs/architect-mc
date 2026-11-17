@@ -809,3 +809,8 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   §3.6's refusals) and `dev.txn.conservation {owner?, min, max, baseline?}` (report-only, docs/TXN-DESIGN.md §5: parts, `total`, `unread`,
   `violations`; with `baseline` a `diff` and a `verdict`: match, differs or inconclusive; never fails). `dev.journal.killAt` takes every
   `TX:` point (and `+save`). Driven by `tools/lib/gatetxn.mjs` (step `txn-core`).
+- **2026-11-17 (slice T2a, complete holds):** `dev.txn.run` takes the held container types (chests, either half of a double chest with its
+  partner, barrels, shulker boxes, hoppers, droppers, dispensers, crafters, furnaces, brewing stands); `dev.txn.state` gains `backstops`
+  (writes refused by the content backstop: an unlisted writer). New (TEST only) `dev.txn.cells {cells: [[x,y,z], ..]}` (per cell `state`,
+  `be`, `beId` (identity), `slots`, `drops` within 2 blocks) and `dev.txn.poke {pos, how}` (one raw write as another mod makes it:
+  `setBlock`, `destroyBlock`, `removeBlock`, `removeBlockEntity`, `setItem`, `removeItem`, `clearContent`, `load`). Step `txn-holds`.
