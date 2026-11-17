@@ -32853,3 +32853,20 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   over capacity: use or take stock first" (hoppers stay silent).
 - In game: fk-crash CS1o (`dev.stockpile.ps capacity 0`, TEST): the single-site removal halted at CS1 into a full stockpile is
   returned once, no entity, the stock over capacity.
+
+### Slice OVF fix round as built (the GPT review's NOT SAFE)
+
+- Finding 1 (a delta's refund lost at CS1): `Builder.removedRefund` computes the removed paid cells' refund before any write; inside
+  `SiteDeltas.applyChecked`, after D7 and before D8 writes the record naming the delta, it is held pending (`delta:<entry>:<site>`)
+  and saved with the world (`Stockpiles.savePendingDelta`; kill point OVD1). The start books it once when the site's history names the
+  entry, and drops it otherwise (`Stockpiles.deltaFate`).
+- Finding 2 (a refused scoop save, then a retry): `scoop` and a keyed `charge` call `saveConfirmed`, both for a new booking and for an
+  already-held key (it saves when anything is unsaved and throws unless the ledger reached the disk), so the caller writes its drained
+  or charged record only after the ledger holds the booking on disk.
+- Should-fix 3 (an over-capacity stall): over capacity, a unit an active (unpaused) target still misses goes in, up to that need
+  (`StockLedger.accept` with an active-need function, `Stockpiles.unbuiltActive`); anything else is refused as before.
+- Should-fix 4: LedgerSim asserts the insertion invariant at each insert made over capacity.
+- Tests: StockpileOverflowOVFTest +3 (14 in all); StockpileSaveJ1Test's delta check follows the key.
+- Leftovers: the ground dissolve and the forced `removecrate` still drop entities before their ledger save; the unkeyed give-backs,
+  adoption's handoff and `creditRefund` with no stockpile as before; a crash between OVD1 and D8 drops the pending refund unless the
+  start rolls the delta forward. No in-game delta crash case (fk_hall has no second version).
