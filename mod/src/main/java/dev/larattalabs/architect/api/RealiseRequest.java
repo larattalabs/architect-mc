@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  *     passes it: a target whose next cell would draw past it waits with {@link SiteWait#BILL_CAP} (STARVED in {@code Sites.view}) instead
  *     of consuming, however much the stockpile holds. Kept with the region across a restart. A revision's cap counts its own draws from
  *     its realise on. Ignored in creative (nothing is consumed). Counts must be at least 0
- * @param maxBillPerLot (LCAP, S-M5-16, since NEXT, feature {@code "maxBillPerLot"}) null: no lot cap. Else lot id -> its own cap (item id ->
+ * @param maxBillPerLot (LCAP, S-M5-16, since 1.67.0, feature {@code "maxBillPerLot"}) null: no lot cap. Else lot id -> its own cap (item id ->
  *     count), each as {@link #maxBill} but over one lot's bill alone: its {@code lot:<id>}, {@code fill:<id>} and {@code mech:<id>} pieces at
  *     put-down ({@link Quote#lotBill}), then, while it builds, the draws of that lot's own targets (its site, its gate mechanism) in this
  *     realise or revision. Both caps apply: {@link #maxBill} still covers the whole realise, the capped lots included, and a lot draws only
@@ -105,7 +105,7 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, cap, maxBillPerLot);
 	}
 
-	/** (LCAP, since NEXT) The same request with these lot caps ({@link #maxBillPerLot}; null: none). */
+	/** (LCAP, since 1.67.0) The same request with these lot caps ({@link #maxBillPerLot}; null: none). */
 	public RealiseRequest withMaxBillPerLot(@Nullable Map<String, Map<String, Integer>> caps) {
 		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, maxBill, caps);
 	}

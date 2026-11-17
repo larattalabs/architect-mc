@@ -64,7 +64,7 @@ public record Quote(String planId, @Nullable String artifactSha, @Nullable Strin
 	public static final List<String> LOT_PIECES = List.of("lot:", "fill:", "mech:");
 
 	/**
-	 * (LCAP, S-M5-16, since NEXT, feature {@code "maxBillPerLot"}) One lot's own bill, item id to count, sorted: the sum of its
+	 * (LCAP, S-M5-16, since 1.67.0, feature {@code "maxBillPerLot"}) One lot's own bill, item id to count, sorted: the sum of its
 	 * {@code lot:<lot>}, {@code fill:<lot>} and {@code mech:<lot>} pieces. This is what a lot's {@link RealiseRequest#maxBillPerLot} cap is
 	 * checked against at put-down (the same quote, read by the realise). Empty for a pad, a lot this quote does not bind, or a creative quote.
 	 */

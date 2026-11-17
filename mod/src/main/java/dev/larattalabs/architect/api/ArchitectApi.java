@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.66.0";
+	String VERSION = "1.67.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -214,7 +214,7 @@ public interface ArchitectApi {
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
 	 * (QL, since 1.62.0) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
-	 * (LCAP, since NEXT) {@code "maxBillPerLot"}: {@link RealiseRequest#maxBillPerLot}, {@link ApprovedRealise#maxBillPerLot} (each lot's own
+	 * (LCAP, since 1.67.0) {@code "maxBillPerLot"}: {@link RealiseRequest#maxBillPerLot}, {@link ApprovedRealise#maxBillPerLot} (each lot's own
 	 * cap beside {@code maxBill}; refused {@link Reason#BILL_CAP} with detail {@code lot:<id>} or {@code unknown_lot:<id>}) and
 	 * {@link Quote#lotBill}.
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}

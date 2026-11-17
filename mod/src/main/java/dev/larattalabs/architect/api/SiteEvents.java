@@ -294,7 +294,7 @@ public interface SiteEvents {
 
 	/**
 	 * (DR) An op's {@link Sites#repair} wrote a site's lagging cells (docs/CONTRACT.md "Slice DR"): the site id, its region id (null
-	 * outside a region) and the repair's result. Once per repaired site. Server thread. Since NEXT.
+	 * outside a region) and the repair's result. Once per repaired site. Server thread. Since 1.67.0.
 	 */
 	Event<SiteRepaired> SITE_REPAIRED = EventFactory.createArrayBacked(SiteRepaired.class, ls -> (siteId, regionId, result) -> {
 		for (SiteRepaired l : ls) {

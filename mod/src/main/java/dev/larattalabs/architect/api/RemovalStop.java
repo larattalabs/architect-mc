@@ -1,7 +1,7 @@
 package dev.larattalabs.architect.api;
 
 /**
- * How a region's last removal stopped ({@link RegionView#removalStop()}). Since NEXT (feature {@code "removalStop"}).
+ * How a region's last removal stopped ({@link RegionView#removalStop()}). Since 1.67.0 (feature {@code "removalStop"}).
  * <ul>
  * <li>{@link #NONE}: no removal stopped since the region's last removal began (or none ever ran).</li>
  * <li>{@link #NOT_STARTED}: it stopped before it wrote anything (refused, a blocker, the stockpile ledger not saved): every site stands as

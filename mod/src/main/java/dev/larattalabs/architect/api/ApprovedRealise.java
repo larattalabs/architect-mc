@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  * <p>(BC, S-M5-9, since 1.60.0) {@code maxBill}: as {@link RealiseRequest#maxBill}, the bound the caller approved (item id -> count); null:
  * no cap.
  *
- * <p>(LCAP, S-M5-16, since NEXT) {@code maxBillPerLot}: as {@link RealiseRequest#maxBillPerLot}, each lot's own cap (lot id -> item id ->
+ * <p>(LCAP, S-M5-16, since 1.67.0) {@code maxBillPerLot}: as {@link RealiseRequest#maxBillPerLot}, each lot's own cap (lot id -> item id ->
  * count) beside {@code maxBill}; both apply. null: no lot cap.
  */
 public record ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
@@ -33,7 +33,7 @@ public record ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPla
 		this(artifactSha, mode, actor, lotEntries, opKey, ext, maxBill, null);
 	}
 
-	/** (LCAP, since NEXT) The same realise with these lot caps ({@link #maxBillPerLot}; null: none). */
+	/** (LCAP, since 1.67.0) The same realise with these lot caps ({@link #maxBillPerLot}; null: none). */
 	public ApprovedRealise withMaxBillPerLot(@Nullable Map<String, Map<String, Integer>> caps) {
 		return new ApprovedRealise(artifactSha, mode, actor, lotEntries, opKey, ext, maxBill, caps);
 	}
