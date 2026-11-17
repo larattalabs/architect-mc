@@ -913,8 +913,10 @@ public final class Stockpiles {
 		for (Site s : Sites.all()) {
 			// (SAD) a BUILT site whose crate still stands (a shared crate another site of its group still builds from) joins too: the crate's
 			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped
-			if ((s.building() || crateStands(level, s) || joinedBefore(p, s)) && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension
-				.equals(s.dimension())) {
+			// (ADP) the crate read where it stands, its chunk loaded if need be (crateStands answers false for an unloaded chunk: a BUILT site on
+			// a crate out of range lost its paid record and kept a reference to the crate adopted through its building neighbour)
+			if (owner.equals(s.owner()) && s.construction() != null && s.construction().crate() != null && p.dimension.equals(s.dimension()) && (s.building()
+				|| crateStandsAt(level, s.construction().crate(), Builder.crateOwner(s)) || joinedBefore(p, s))) {
 				sites.add(s);
 				crates.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
 			}

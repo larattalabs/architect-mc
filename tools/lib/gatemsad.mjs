@@ -642,8 +642,11 @@ export async function registerSAD(steps, h) {
     out.B = { unloadedAtAdopt: !loaded, refused: aB.refused ?? null, moved, crateStock: s40.ledger?.stock, refs: [s3B.crate, s4B.crate], order: pB.feedOrder, stands: standsB };
     check(!aB.refused && G.same(moved, s40.ledger?.stock ?? {}) && !standsB,
       `ADP B: adoptCrates with the crate's chunk ${loaded ? 'still loaded (unloading not shown: held loaded)' : 'unloaded'} moved its stock exactly once (${json(moved)}; the crate held ${json(s40.ledger?.stock)}) and restored its cell`, out.B);
+    const rec3 = Object.entries(pB.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
+    out.B.rec3 = rec3 ?? null;
     check(s3B.crate?.x === undefined && s4B.crate?.x === undefined && (pB.feedOrder ?? []).includes(ids.house_4) && !(pB.feedOrder ?? []).includes(ids.house_3),
       `ADP B: both crate references cleared; house_4 joins the feed order, the BUILT house_3 not (${json(pB.feedOrder ?? [])})`, out.B);
+    check(!!rec3 && sum(rec3[1]) > 0, `ADP B: the BUILT house_3 on the out-of-range crate got its paid record (${rec3 ? sum(rec3[1]) : 0} units)`, out.B);
     // C: again: a no-op
     const aC = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     const pC = await pile();
