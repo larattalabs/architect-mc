@@ -140,7 +140,8 @@ public final class Stockpiles {
 		final String owner;
 		final String dimension;
 		final List<CrateRec> crates = new ArrayList<>();
-		final StockLedger ledger;
+		/** Not final: (T0 review 4 P1-2) a payout whose ledger write failed restores it in place. Server thread. */
+		StockLedger ledger;
 		/** Target ids (sites, roads, delta sites), first fed first. */
 		final List<String> order = new ArrayList<>();
 		/** C25's saved waits (slice Y2): kept as they are. */
@@ -332,18 +333,24 @@ public final class Stockpiles {
 			}
 		}));
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
+		// (T0 review 3 finding 1) no ledger save at SERVER_STOPPING: Fabric fires it at stopServer's head, before vanilla saves the players
+		// (saveAll, then removeAll's logouts) and the chunks. The stop's ledger is the AFTER_SAVE of its saveAllChunks, last: players, then
+		// chunks, then the ledger, held over any save that failed on the way
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			if (TRACE_SAVES) {
-				Architect.LOGGER.info("Stockpiles: world stopping, saving");
+				Architect.LOGGER.info("Stockpiles: world stopping; the ledger is saved after the players and the chunks (the stop's world save)");
 			}
-			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
 			testCapacity = -1;
+			ChunkDebt.worldClosed(); // (slice T0)
+			PlayerSaves.worldClosed();
 			SERVER = null;
 			PILES.clear();
 			dir = null;
+			ledgerFile = null; // (slice T0) the next world reads its own
+			ledgerDebt = null;
 			ticks = 0;
 			lastSaveTick = 0;
 		});
@@ -670,17 +677,25 @@ public final class Stockpiles {
 					+ "withdraw first, or remove with force (drops the excess at the crate)", false);
 			}
 			drop.putAll(excess(p.ledger, capAfter, Stockpiles::maxStack));
-			drop.forEach((k, v) -> p.ledger.drop(k, v));
 		}
-		takeCrate(level, c);
-		p.crates.remove(c);
-		Builder.dropItems(level, at, drop, null);
-		boolean ended = p.crates.isEmpty();
-		if (ended) {
-			PILES.remove(p.id);
+		boolean ended;
+		if (drop.isEmpty()) {
+			takeCrate(level, c);
+			p.crates.remove(c);
+			ended = p.crates.isEmpty();
+			if (ended) {
+				PILES.remove(p.id);
+			}
+			p.dirty = true;
+			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world (nothing is paid out)
+		} else {
+			// (T0 review 5 item 2) a payout: what was pending saved first, then the debit made durable before the crate goes and the excess drops
+			payoutPreSave(() -> saveWithWorld(srv));
+			ended = removeCrateCore(p, c, drop, () -> saveLedgerFirst(srv, () -> {
+				takeCrate(level, c);
+				Builder.dropItems(level, at, drop, null);
+			}));
 		}
-		p.dirty = true;
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		Architect.LOGGER.info("Stockpile {}: crate {} removed{}{}", owner, at.toShortString(), drop.isEmpty() ? "" : ", excess dropped " + drop, ended
 			? "; the stockpile ended" : "");
@@ -715,6 +730,7 @@ public final class Stockpiles {
 	 * inventory) or dropped. Returns what went out per item.
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -729,27 +745,22 @@ public final class Stockpiles {
 			}
 		}
 		BlockPos at = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		if (to != null && unsaved) {
-			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
-		}
+		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
 		Map<String, Integer> toPlayer = new TreeMap<>();
 		Map<String, Integer> toGround = new TreeMap<>();
-		Map<String, Integer> out = dissolveLedger(p.ledger, to == null ? null : (item, n) -> give(to, item, n), toPlayer, toGround);
-		if (to != null) {
-			Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), toGround, null);
-		} else {
-			Builder.dropItems(level, at, toGround, null);
-		}
-		for (CrateRec c : p.crates) {
-			takeCrate(level, c);
-		}
+		// (T0 review 4 P1-2) ledger first: the pile's removal is durable before a crate is taken or an item dropped; a failed write puts the
+		// player's inventory and the pile back exactly, then refuses
+		Map<String, Integer> out = dissolveCore(p, to == null ? null : holder(to), toPlayer, toGround, () -> saveLedgerFirst(srv, () -> {
+			if (to != null) {
+				Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), toGround, null);
+			} else {
+				Builder.dropItems(level, at, toGround, null);
+			}
+			for (CrateRec c : p.crates) {
+				takeCrate(level, c);
+			}
+		}));
 		JsonObject last = p.toJson();
-		PILES.remove(p.id);
-		if (to != null) {
-			saveLedgerFirst(srv); // (J1) items into a player: a crash inside the save loses them, never dupes them
-		} else {
-			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
-		}
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
@@ -781,6 +792,34 @@ public final class Stockpiles {
 				l.drop(e.getKey(), e.getValue());
 				toGround.put(e.getKey(), e.getValue());
 			}
+		}
+		return out;
+	}
+
+	/**
+	 * (T0 review 4 P1-2) A dissolve's ledger side: the stock split between {@code h} (null: all to the ground) and the ground, the pile out of
+	 * the registry, then {@code publish} (which takes the crates and drops the ground items once the ledger is durable). When it fails the
+	 * holder and the pile are restored exactly, in the same call, and the dissolve is refused.
+	 */
+	static Map<String, Integer> dissolveCore(Pile p, @Nullable Holder h, Map<String, Integer> toPlayer, Map<String, Integer> toGround,
+		java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		Object snap = h == null ? null : h.snapshot();
+		Map<String, Integer> out = dissolveLedger(p.ledger, h == null ? null : h::give, toPlayer, toGround);
+		Map<String, Pile> order = new LinkedHashMap<>(PILES);
+		PILES.remove(p.id);
+		if (!publish.getAsBoolean()) {
+			if (h != null) {
+				h.restore(snap);
+			}
+			p.ledger = StockLedger.fromJson(before);
+			PILES.clear();
+			PILES.putAll(order); // back in its place
+			toPlayer.clear();
+			toGround.clear();
+			changed(p);
+			compensate("the dissolve of " + p.owner + " was refused"); // (T0 review 5 item 1) the pile back on disk too
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was dissolved (try again)");
 		}
 		return out;
 	}
@@ -892,6 +931,7 @@ public final class Stockpiles {
 
 	/** {@code withdraw}: credit only, into the player's inventory (what doesn't fit drops at the player). Returns what came out. */
 	public static Map<String, Integer> withdraw(MinecraftServer srv, String owner, Map<String, Integer> items, ServerPlayer to) throws Sites.SiteException {
+		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -899,30 +939,150 @@ public final class Stockpiles {
 		if (to == null) {
 			throw new Sites.SiteException(Reason.FIELD_LIMIT, "to: a player is required");
 		}
-		if (unsaved) {
-			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
-		}
+		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
 		Map<String, Integer> credit = credit(srv, p);
-		Map<String, Integer> out = new TreeMap<>();
 		Map<String, Integer> ground = new TreeMap<>();
+		// (T0 review 4 P1-2) the ledger's debit is durable before the items can leave the tick: the drop waits for it, and a failed write takes
+		// the inventory back exactly and restores the ledger, then refuses
+		return withdrawCore(p, credit, items, holder(to), ground, () -> saveLedgerFirst(srv, // (J1, HF's window, audit F5) the ledger before the player
+			() -> Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null)));
+	}
+
+	/**
+	 * (T0 review 5 item 2) A forced crate removal's ledger side: the excess debited, the crate out of the pile (the pile out of the registry
+	 * when it was the last), then {@code publish} (which takes the crate and drops the excess once the ledger is durable). When it fails the
+	 * pile is restored exactly, the restored ledger written durably ({@link #compensate}), and the removal refused. Answers whether the
+	 * stockpile ended.
+	 */
+	static boolean removeCrateCore(Pile p, CrateRec c, Map<String, Integer> drop, java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		List<CrateRec> crates = new ArrayList<>(p.crates);
+		Map<String, Pile> order = new LinkedHashMap<>(PILES);
+		drop.forEach((k, v) -> p.ledger.drop(k, v));
+		p.crates.remove(c);
+		boolean ended = p.crates.isEmpty();
+		if (ended) {
+			PILES.remove(p.id);
+		}
+		p.dirty = true;
+		changed(p);
+		if (!publish.getAsBoolean()) {
+			p.ledger = StockLedger.fromJson(before);
+			p.crates.clear();
+			p.crates.addAll(crates);
+			PILES.clear();
+			PILES.putAll(order);
+			changed(p);
+			compensate("a forced removal of a crate of " + p.owner + " was refused");
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; the crate stays and nothing was dropped (try"
+				+ " again)");
+		}
+		return ended;
+	}
+
+	/** (T0 review 4 P1-2) Where a payout's items go (a player's inventory; the units give their own): put, snapshot, restore exactly. */
+	interface Holder {
+		/** Puts up to {@code n} of {@code item}; answers how many went in. */
+		int give(String item, int n);
+
+		Object snapshot();
+
+		void restore(Object snapshot);
+	}
+
+	static Holder holder(ServerPlayer to) {
+		return new Holder() {
+			@Override
+			public int give(String item, int n) {
+				return Stockpiles.give(to, item, n);
+			}
+
+			@Override
+			public Object snapshot() {
+				net.minecraft.world.entity.player.Inventory inv = to.getInventory();
+				List<ItemStack> l = new ArrayList<>(inv.getContainerSize());
+				for (int i = 0; i < inv.getContainerSize(); i++) {
+					l.add(inv.getItem(i).copy());
+				}
+				return l;
+			}
+
+			@Override
+			@SuppressWarnings("unchecked")
+			public void restore(Object snapshot) {
+				net.minecraft.world.entity.player.Inventory inv = to.getInventory();
+				List<ItemStack> l = (List<ItemStack>) snapshot;
+				for (int i = 0; i < l.size() && i < inv.getContainerSize(); i++) {
+					inv.setItem(i, l.get(i).copy());
+				}
+				inv.setChanged();
+			}
+		};
+	}
+
+	/**
+	 * (T0 review 4 P1-2) A withdrawal: the ledger debited and the items put into {@code h} (what does not fit goes to {@code ground}, dropped by
+	 * {@code publish} only once the ledger is durable), then {@code publish}. When it fails (REFUSED, IN_DOUBT, held) the holder is restored
+	 * to its snapshot and the ledger to its copy, in the same call (the server thread: the player can't move or use the items meanwhile), and
+	 * the withdrawal is refused.
+	 */
+	static Map<String, Integer> withdrawCore(Pile p, Map<String, Integer> credit, Map<String, Integer> items, Holder h, Map<String, Integer> ground,
+		java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		Object snap = h.snapshot();
+		Map<String, Integer> out = new TreeMap<>();
 		for (var e : new TreeMap<>(items).entrySet()) {
 			int n = Math.min(Math.max(0, e.getValue()), credit.getOrDefault(e.getKey(), 0));
 			if (n <= 0) {
 				continue;
 			}
 			p.ledger.withdraw(e.getKey(), n);
-			int in = give(to, e.getKey(), n);
+			int in = h.give(e.getKey(), n);
 			if (n - in > 0) {
 				ground.put(e.getKey(), n - in);
 			}
 			out.put(e.getKey(), n);
 		}
-		Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null);
-		if (!out.isEmpty()) {
+		if (out.isEmpty()) {
+			return out;
+		}
+		changed(p);
+		if (!publish.getAsBoolean()) {
+			h.restore(snap);
+			p.ledger = StockLedger.fromJson(before);
+			ground.clear();
 			changed(p);
-			saveLedgerFirst(srv); // (J1, HF's window, audit F5) the Take saved now, the ledger before the player
+			compensate("a withdrawal from " + p.owner + " was refused"); // (T0 review 5 item 1) the disk back to memory too
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was withdrawn (try again)");
 		}
 		return out;
+	}
+
+	/**
+	 * (slice T0 review 2 finding 1) A payout (items out of the ledger into a player or the world) is refused while a player or chunk save is
+	 * owed: its ledger save would publish every credit over that debt, and holding it would leave the items both paid and still in stock.
+	 */
+	/**
+	 * (T0 review 3 finding 2) A payout's pre-save: what was pending is saved first ({@code preSave}), and the payout goes on only when that
+	 * left nothing owed and the ledger durably saved; else it is refused before anything moves. Package-private for the units.
+	 */
+	static void payoutPreSave(Runnable preSave) throws Sites.SiteException {
+		requireNoDebt();
+		if (unsaved) {
+			preSave.run();
+		}
+		requireNoDebt();
+		if (unsaved) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger's pending changes could not be saved durably; payouts wait until they are");
+		}
+	}
+
+	private static void requireNoDebt() throws Sites.SiteException {
+		java.util.List<String> owed = DurableBarrier.owedDebts();
+		if (!owed.isEmpty()) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, owed.size() + " player or chunk save(s) could not be written; stockpile payouts wait until"
+				+ " they are (" + owed.get(0) + ")");
+		}
 	}
 
 	/** (PS, F6) A new stockpile or crate is refused while the file failed to load: it would be lost (never saved) and reuse the file's ids. */
@@ -1215,6 +1375,30 @@ public final class Stockpiles {
 		unsaved = true;
 	}
 
+	/**
+	 * (T0 review 5 item 1) A payout was refused after its ledger write failed and the restored ledger could not be written durably either: the
+	 * file may hold the refused move (an IN_DOUBT rename). Payouts refuse while it is set; the next durable ledger write clears it.
+	 */
+	private static volatile @Nullable String ledgerDebt;
+
+	static @Nullable String ledgerDebt() {
+		return ledgerDebt;
+	}
+
+	/**
+	 * (T0 review 5 item 1) A payout's ledger write failed and its move was undone in memory: the restored ledger is written durably over
+	 * whatever the failed write installed (an IN_DOUBT write already renamed the moved state into place), so the disk matches memory. When
+	 * that fails too, a ledger debt refuses payouts until a later write is durable.
+	 */
+	static void compensate(String what) {
+		unsaved = true;
+		if (save()) {
+			return;
+		}
+		ledgerDebt = what + ": the restored ledger could not be written durably";
+		Architect.LOGGER.error("Stockpiles: {}; payouts are refused until a ledger save is durable", ledgerDebt);
+	}
+
 	/** (HF) a ledger change since the last save (a logout saves the world when set). */
 	static volatile boolean unsaved;
 	/** (HF) inside saveWithWorld: BEFORE_SAVE leaves the ledger to it. Server thread. */
@@ -1314,9 +1498,8 @@ public final class Stockpiles {
 			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over); // (OVF) keyed: its empty buckets never overflow
 		} else {
 			for (var e : new TreeMap<>(items).entrySet()) {
-				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
+				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over, true); // (slice T0) its empty buckets enter the stock
 			}
-			dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		}
 		changed(p);
 		if (key != null) {
@@ -1633,31 +1816,59 @@ public final class Stockpiles {
 	/** (J1, TEST) kill point AS1: the next unflushed world save halts after its chunk writes, before the ledger's. */
 	static volatile boolean haltBeforeAutosaveLedger;
 
-	/** Credits without a key (a swap's old block, a bucket's container) as it happens. */
+	/** The feed's charge of a placed cell's cost under the target's credit key (the live Purse.pay). */
+	static void feedPay(MinecraftServer srv, Pile p, String key, List<SurvivalItems.Cost> costs, int cap, @Nullable Map<String, Integer> drawn,
+		BlockPos fallback) {
+		feedPay(srv, p, key, costs, cap, drawn, null, fallback);
+	}
+
+	/** The same, also tallying the lot's own draw (LCAP's per-lot cap). */
+	static void feedPay(MinecraftServer srv, Pile p, String key, List<SurvivalItems.Cost> costs, int cap, @Nullable Map<String, Integer> drawn,
+		@Nullable Map<String, Integer> lotDrawn, BlockPos fallback) {
+		Map<String, Integer> over = new TreeMap<>();
+		for (SurvivalItems.Cost c : costs) {
+			// (slice T0) a filled bucket's empty one enters the stock, past capacity if need be: never dropped (a drop saved with the world before a
+			// failed ledger write would exist twice once the reconcile charges the cell again)
+			if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over, true)) {
+				p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
+				if (drawn != null) {
+					drawn.merge(c.item(), c.count(), Integer::sum);
+				}
+				if (lotDrawn != null) {
+					lotDrawn.merge(c.item(), c.count(), Integer::sum); // (LCAP)
+				}
+			}
+		}
+	}
+
+	/** (RL, audit F7) A construction swap's old block, live (Purse.giveBackPaid): out of the target's paid record, capped by it, credited. */
+	static Map<String, Integer> swapGiveBack(MinecraftServer srv, Pile p, String targetId, Map<String, Integer> items, long placedAt, BlockPos fb) {
+		Map<String, Integer> back = p.ledger.fromPaid(targetId, items, placedAt); // (JR-b)
+		Stockpiles.changed(p); // (PS) the record moved
+		if (!back.equals(items)) {
+			Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back, items);
+		}
+		if (!back.isEmpty()) {
+			Stockpiles.giveBack(srv, p, back, fb);
+		}
+		return back;
+	}
+
+	/**
+	 * Credits without a key (a swap's old block, a bucket's container) as it happens: (slice T0) all of it, past capacity if need be, as OVF
+	 * credits a keyed refund; nothing drops. A drop would be saved with the world before the ledger: after a failed ledger write and a crash
+	 * the item would lie on the ground while the old book's reconcile credited it into the stock again.
+	 */
 	static StockLedger.Credit giveBack(MinecraftServer srv, Pile p, Map<String, Integer> items, BlockPos fallback) {
-		StockLedger.Credit c = p.ledger.giveBack(items, capacity(srv, p), Stockpiles::maxStack);
-		dropOverflow(srv, p, c.overflow(), fallback);
+		StockLedger.Credit c = p.ledger.giveBack(items, capacity(srv, p), Stockpiles::maxStack, true);
 		changed(p);
 		return c;
 	}
 
-	static void dropOverflow(MinecraftServer srv, Pile p, Map<String, Integer> over, BlockPos fallback) {
-		if (over.isEmpty()) {
-			return;
-		}
-		ServerLevel level = Sites.levelOf(srv, p.dimension);
-		if (level != null) {
-			Builder.dropItems(level, dropAt(srv, p, fallback), over, null);
-			OVERFLOW_DROPPED.merge(p.id, sumOf(over), Integer::sum);
-		}
-	}
-
-	private static int sumOf(Map<String, Integer> m) {
-		return m.values().stream().mapToInt(Integer::intValue).sum();
-	}
-
 	/** Dev: overflow units dropped as entities this session, per owner (the gate counts the entities against it). */
-	static final Map<String, Integer> OVERFLOW_DROPPED = new ConcurrentHashMap<>();
+	static final Map<String, Integer> OVERFLOW_DROPPED = new ConcurrentHashMap<>(); // (dev, historical) nothing drops since slice T0: stays 0
+	/** (TEST) what a give-back dropped: nothing since slice T0 finished the no-drop rule (stays empty; the no-drop test reads it). */
+	static final Map<String, Integer> LAST_DROP = new ConcurrentHashMap<>();
 
 	// ------------------------------------------------------------------ the owner feed loop
 
@@ -1848,20 +2059,7 @@ public final class Stockpiles {
 
 					@Override
 					public void pay(List<SurvivalItems.Cost> costs) {
-						Map<String, Integer> over = new TreeMap<>();
-						String key = keyOf(t);
-						for (SurvivalItems.Cost c : costs) {
-							if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over)) {
-								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
-								if (drawn != null) {
-									drawn.merge(c.item(), c.count(), Integer::sum);
-								}
-								if (lotDrawn != null) {
-									lotDrawn.merge(c.item(), c.count(), Integer::sum); // (LCAP)
-								}
-							}
-						}
-						dropOverflow(srv, p, over, fallback);
+						feedPay(srv, p, keyOf(t), costs, cap, drawn, lotDrawn, fallback);
 					}
 
 					@Override
@@ -1871,17 +2069,7 @@ public final class Stockpiles {
 
 					@Override
 					public Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fb) {
-						// (RL, audit F7) a swap's old block: out of the target's paid record, capped by it
-						Map<String, Integer> back = p.ledger.fromPaid(targetId, items, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt()); // (JR-b)
-						Stockpiles.changed(p); // (PS) the record moved
-						if (!back.equals(items)) {
-							Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back,
-								items);
-						}
-						if (!back.isEmpty()) {
-							Stockpiles.giveBack(srv, p, back, fb);
-						}
-						return back;
+						return swapGiveBack(srv, p, targetId, items, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt(), fb);
 					}
 
 					@Override
@@ -2792,25 +2980,23 @@ public final class Stockpiles {
 		java.util.BitSet ahead = plan.ahead();
 		java.util.BitSet lost = plan.lost();
 		int cap = capacity(srv, p);
-		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		// the ledger ahead: what the lost cells cost goes back (capped by the record), the builder charges them again as it places them
 		Map<String, Integer> lostCost = new TreeMap<>();
 		for (int i = lost.nextSetBit(0); i >= 0; i = lost.nextSetBit(i + 1)) {
 			r.cost.get(i).forEach(x -> lostCost.merge(x.item(), x.count(), Integer::sum));
 		}
-		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt());
-		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
-		dropOverflow(srv, p, cr.overflow(), fallback);
+		AtStart lostBack = refundAtStart(p, id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt(), cap);
+		Map<String, Integer> back = lostBack.back();
+		StockLedger.Credit cr = lostBack.credit(); // (slice T0) all of it in the stock: nothing dropped
 		// (J2, RL6) a construction delta's swap built after the save: the builder gave the old block back out of the record as it swapped
 		// (Builder.refundSwap -> giveBackPaid: fromPaid under the target's key, then giveBack), and the unsaved ledger lost that. Done again
 		// here, the same way, before the new block is charged. Once: the swap's give-back and its new block's charge are booked in the same
 		// tick, so a saved ledger that holds the give-back holds the cell as standing paid in its book too (never ahead); the book written
 		// below counts the cell standing, so a second load finds nothing ahead
 		Map<String, Integer> swapOld = swapOldCost(level, r, ahead, free);
-		Map<String, Integer> swapBack = swapOld.isEmpty() ? Map.of() : p.ledger.fromPaid(id, swapOld, t instanceof Site st2 ? st2.placedAt()
-			: ((Infra) t).placedAt());
-		StockLedger.Credit scr = swapBack.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(swapBack, cap, Stockpiles::maxStack);
-		dropOverflow(srv, p, scr.overflow(), fallback);
+		AtStart swapAt = refundAtStart(p, id, swapOld, t instanceof Site st2 ? st2.placedAt() : ((Infra) t).placedAt(), cap);
+		Map<String, Integer> swapBack = swapAt.back();
+		StockLedger.Credit scr = swapAt.credit(); // (slice T0) all of it in the stock: nothing dropped
 		if (!swapBack.equals(swapOld)) {
 			Architect.LOGGER.warn("Stockpile {}: the reconcile's swap give-back of {} capped at the record: {} of {}", p.owner, id, swapBack, swapOld);
 		}
@@ -2836,7 +3022,7 @@ public final class Stockpiles {
 			cost.forEach(x -> need.merge(x.item(), x.count(), Integer::sum));
 			if (need.entrySet().stream().allMatch(e -> p.ledger.stock(e.getKey()) >= e.getValue())) {
 				for (SurvivalItems.Cost x : cost) {
-					if (p.ledger.consume(x.item(), x.count(), cap, Stockpiles::maxStack, over)) {
+					if (consumeAtStart(p, x.item(), x.count(), cap, over)) {
 						p.ledger.pay(key, x.item(), x.count());
 					}
 				}
@@ -2848,7 +3034,7 @@ public final class Stockpiles {
 				need.forEach((k, v) -> owes.merge(k, v, Integer::sum));
 			}
 		}
-		dropOverflow(srv, p, over, fallback);
+		// (slice T0) the charges' empty buckets entered the stock (consumeAtStart): nothing dropped
 		java.util.BitSet standing = (java.util.BitSet) stands.clone();
 		standing.andNot(owed);
 		java.util.BitSet known = new java.util.BitSet();
@@ -2926,6 +3112,27 @@ public final class Stockpiles {
 		}
 	}
 
+	/** (T0m) A reconcile refund: what came back out of the target's paid record, and how it was credited. */
+	record AtStart(Map<String, Integer> back, StockLedger.Credit credit) {
+	}
+
+	/**
+	 * (slice T0, the GPT check of the merge with main v0.77.0) A reconcile's unkeyed refund at start (a lost cell's cost, a swap's old block):
+	 * taken from the target's paid record and credited as OVF credits a keyed refund, all of it, past capacity if need be, nothing dropped.
+	 * The reconcile's book reaches the disk only after the world (saveWithWorld): a dropped overflow saved with the chunks would survive a
+	 * failed ledger write and a crash, and the unchanged book would refund it again at the next start. In the stock, it is booked with the
+	 * book, once.
+	 */
+	static AtStart refundAtStart(Pile p, String id, Map<String, Integer> cost, long placedAt, int cap) {
+		Map<String, Integer> back = cost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, cost, placedAt);
+		return new AtStart(back, back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack, true));
+	}
+
+	/** (slice T0) A reconcile's charge of an ahead cell's unit at start: a filled bucket's empty one enters the stock past capacity, never dropped. */
+	static boolean consumeAtStart(Pile p, String item, int n, int cap, Map<String, Integer> over) {
+		return p.ledger.consume(item, n, cap, Stockpiles::maxStack, over, true);
+	}
+
 	/**
 	 * (J2, RL6) The old blocks' cost of the ahead cells that are a construction delta's swaps, as {@link Builder}'s refundSwap counts it (a
 	 * swap cell, its old block known, not free), less a cell a player placed (its PT record: the reconcile leaves it uncharged and gives
@@ -2978,12 +3185,13 @@ public final class Stockpiles {
 			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
 		}
 		explicitSave = true;
+		boolean wasTiming = SaveTiming.explicit;
 		SaveTiming.explicit = true;
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave = false;
-			SaveTiming.explicit = false;
+			SaveTiming.explicit = wasTiming;
 		}
 		RegionDurability.retryOwed();
 		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
@@ -3043,13 +3251,14 @@ public final class Stockpiles {
 			maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
 			// disk ahead of the world's chunks either
-			explicitSave = true;
+			boolean wasExplicit = explicitSave(true);
+			boolean wasTiming = SaveTiming.explicit;
 			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
-				explicitSave = false;
-				SaveTiming.explicit = false;
+				explicitSave(wasExplicit); // (slice T0 review P2-10) restored, never reset: a nested save keeps the outer one's scope
+				SaveTiming.explicit = wasTiming;
 			}
 			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
 			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
@@ -3127,18 +3336,36 @@ public final class Stockpiles {
 	 * still holding them). Server thread; off it, the ledger alone.
 	 */
 	static void saveLedgerFirst(MinecraftServer srv) {
+		saveLedgerFirst(srv, () -> {
+		});
+	}
+
+	/**
+	 * The ledger first, durably; then {@code between} (T0 review 4 P1-2: a payout's moves into the world, crates taken, items dropped: only
+	 * once its debit is on disk); then the players and the chunks. False when the ledger was not durably written: nothing after it ran.
+	 */
+	static boolean saveLedgerFirst(MinecraftServer srv, Runnable between) {
 		if (loadFailed) {
 			refusedSave();
-			return;
+			return false;
 		}
 		long l0 = System.nanoTime();
 		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
 		if (timed) {
 			SaveTiming.start();
 		}
-		save();
+		if (!save()) {
+			// (T0 review 3 finding 2) the ledger is not durably on disk (held over an owed save, refused, in doubt): no player or chunk save
+			// follows that could put the paid items on disk ahead of it
+			if (timed) {
+				SaveTiming.stop();
+			}
+			Architect.LOGGER.error("Stockpiles: a payout's ledger save did not complete; its players and chunks are not saved ahead of it");
+			return false;
+		}
+		between.run();
 		if (srv == null || !srv.isSameThread()) {
-			return;
+			return true;
 		}
 		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
 		long t0 = System.nanoTime();
@@ -3149,13 +3376,14 @@ public final class Stockpiles {
 		playerSaves++;
 		lastPlayerSaveMs = pms;
 		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
-		explicitSave = true;
+		boolean wasExplicit = explicitSave(true);
+		boolean wasTiming = SaveTiming.explicit;
 		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
-			explicitSave = false;
-			SaveTiming.explicit = false;
+			explicitSave(wasExplicit); // restored, never reset
+			SaveTiming.explicit = wasTiming;
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
@@ -3168,20 +3396,33 @@ public final class Stockpiles {
 		if (timed) {
 			logTiming("ledger first (" + caller() + ")", l0, SaveTiming.stop());
 		}
+		return true;
 	}
 
 	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */
 	static volatile int ledgerFirstSaves;
 	static volatile double lastLedgerFirstMs;
 
-	static void save() {
+	/**
+	 * The ledger written (forced, through its DurableFile). True only when it is durably on disk now: a hold (a refused load, an owed save),
+	 * a REFUSED write and an IN_DOUBT one all answer false and leave the ledger pending (T0 review 3 finding 2: IN_DOUBT is never "saved").
+	 * True too when there is nothing to write (no stockpile ever).
+	 */
+	static boolean save() {
 		Path d = dir;
 		if (d == null) {
-			return;
+			return false;
 		}
 		if (loadFailed) {
 			refusedSave();
-			return; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
+			return false; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
+		}
+		java.util.List<String> owed = DurableBarrier.owedSaves();
+		if (!owed.isEmpty()) {
+			// (slice T0 review 2 finding 1) a player or chunk save is owed: no ledger is published over it (an autosave, a save with the world,
+			// the stop's save), so its credits never reach the disk ahead of what they came from; the ledger stays pending
+			refuseUndurable("a ledger save", owed);
+			return false;
 		}
 		MinecraftServer sv = SERVER;
 		if (sv != null && sv.isSameThread()) {
@@ -3205,23 +3446,102 @@ public final class Stockpiles {
 		Path f = d.resolve(FILE);
 		try {
 			if (PILES.isEmpty() && !Files.exists(f)) {
-				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
+				return true; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
-			Files.createDirectories(d);
-			Path tmp = d.resolve(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
-			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
+			// forced like the barrier's write: an unforced replacement could leave a torn file over an acknowledged generation. Cost: one file
+			// and one folder force per ordinary save (the barrier's ledger step measured p50 8 ms on this machine)
+			DurableFile df = ledger(f);
+			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
+			if (!put.ok()) {
+				unsaved = true; // REFUSED or IN_DOUBT: not saved; the next save writes it again
+				throw new IOException("the ledger's write was " + put.outcome() + ": " + put.reason());
+			}
+			ledgerDebt = null; // durably on disk: memory and the file agree again
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
 			if (TRACE_SAVES) {
 				Architect.LOGGER.info("Stockpiles saved ({} stockpile(s), save #{})", PILES.size(), saves);
 			}
+			return true;
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
+			return false;
 		}
+	}
+
+	/** (slice T0) The ledger's durable file (its generations persisted in it), made for the world's dir on first use. */
+	private static @Nullable DurableFile ledgerFile;
+
+	/**
+	 * (slice T0) The ledger's one DurableFile for {@code f}: every ledger write (the barrier's and the ordinary save's) goes through it, so the
+	 * store id and generation are never dropped. Made at load ({@link #loadFrom}) and forgotten when the world stops.
+	 */
+	static DurableFile ledger(Path f) {
+		DurableFile df = ledgerFile;
+		if (df == null || !df.file().equals(f)) {
+			df = new DurableFile("stockpiles", f);
+			ledgerFile = df;
+		}
+		return df;
+	}
+
+	/** (slice T0) The ledger's DurableFile of the world loaded now, or null (dev, units). */
+	static @Nullable DurableFile ledgerFile() {
+		return ledgerFile;
+	}
+
+	/**
+	 * (slice T0) Sets the explicit-save flag the world-save callback reads (the barrier writes the ledger itself) and answers the one it
+	 * replaces, so a caller restores it (review P2-10: a nested save never clears an outer one's). Server thread.
+	 */
+	static boolean explicitSave(boolean on) {
+		boolean was = explicitSave;
+		explicitSave = on;
+		return was;
+	}
+
+	/**
+	 * (slice T0, docs/TXN-DESIGN.md §3.1) The world barrier: players, then chunks, then the ledger through {@link DurableFile}; refused under
+	 * {@code /save-off}, after a failed load or on any failed step ({@link DurableBarrier}). Server thread.
+	 */
+	public static DurableBarrier.Result barrier(MinecraftServer srv) {
+		return DurableBarrier.run(srv);
+	}
+
+	/**
+	 * (slice T0) The ledger written as a confirmed snapshot ({@link DurableFile}: temp, force, rename, folder force, its generation in the
+	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
+	 */
+	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		Path d = dir;
+		if (d == null) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
+		}
+		if (loadFailed) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
+		}
+		Path f = d.resolve(FILE);
+		if (PILES.isEmpty() && !Files.exists(f)) {
+			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
+		}
+		try {
+			refreshBooks(srv);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		DurableFile df = ledger(f);
+		DurableFile.Result r = df.write(toJson(), df.request());
+		if (r.ok()) {
+			ledgerDebt = null;
+			saves++;
+			unsaved = false;
+			lastSaveTick = ticks;
+		}
+		return r;
 	}
 
 	/** Logs every save (dev: ARCHITECT_TRACE_STOCKPILE=1; the gate's clean-stop check reads it). */
@@ -3230,6 +3550,14 @@ public final class Stockpiles {
 	private static void load(MinecraftServer server) {
 		SERVER = server;
 		RegionDurability.worldOpened(server.getWorldPath(LevelResource.ROOT)); // (SS) only this world's region files count
+		ChunkDebt.worldClosed(); // (slice T0) nothing of an earlier world is owed in this one
+		Path playerDir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+		PlayerSaves.worldOpened((id, snapshot) -> { // (slice T0, TXN item 5) an owed offline player's kept snapshot, written as vanilla writes it
+			Files.createDirectories(playerDir);
+			Path tmp = Files.createTempFile(playerDir, id + "-", ".dat");
+			net.minecraft.nbt.NbtIo.writeCompressed((net.minecraft.nbt.CompoundTag) snapshot, tmp);
+			return net.minecraft.util.Util.safeReplaceOrMoveFile(playerDir.resolve(id + ".dat"), tmp, playerDir.resolve(id + ".dat_old"), false);
+		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 	}
 
@@ -3242,7 +3570,10 @@ public final class Stockpiles {
 		loadFailedWhy = null;
 		refusedLogged = false;
 		Path f = dir.resolve(FILE);
+		ledgerFile = null; // (slice T0 review P1-7) nothing of another session's or world's acknowledgements carries over
+		ledgerDebt = null;
 		if (!Files.isRegularFile(f)) {
+			ledger(f);
 			return;
 		}
 		String why = loadFile(f);
@@ -3255,7 +3586,9 @@ public final class Stockpiles {
 			Architect.LOGGER.error("Stockpiles: could not load {} ({}). No stockpile is loaded and none is saved this session, so the file is kept as it"
 				+ " is; fix it or restore {} and reopen the world", f, why, FILE + ".bak");
 			SaveGuards.failed(FILE, why);
+			return;
 		}
+		ledger(f); // its store id and generation read back, the generation confirmed (forced again) before it counts as written
 	}
 
 	/** (PS) Loads the file into the registry; null when it loaded (then it is kept as {@code .bak}), else why not (the registry unchanged or partial). */

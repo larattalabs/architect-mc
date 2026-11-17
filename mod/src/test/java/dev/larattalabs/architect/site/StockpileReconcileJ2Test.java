@@ -14,10 +14,13 @@ class StockpileReconcileJ2Test {
 		String sp = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Stockpiles.java");
 		String rc = StockpileSaveHFTest.body(sp, "static boolean reconcile(MinecraftServer srv, ServerLevel level, Pile p, Object t, String key");
 		int sw = rc.indexOf("swapOldCost(level, r, ahead, free)");
-		int from = rc.indexOf("p.ledger.fromPaid(id, swapOld");
-		int back = rc.indexOf("p.ledger.giveBack(swapBack");
-		int charge = rc.indexOf("p.ledger.consume(");
-		assertTrue(sw >= 0 && from > sw && back > from && charge > back, "the old blocks given back out of the record, then the new ones charged");
+		// (slice T0) the refund and the charge through refundAtStart / consumeAtStart (OVF's unbounded credit: nothing dropped)
+		int back = rc.indexOf("refundAtStart(p, id, swapOld");
+		int charge = rc.indexOf("consumeAtStart(");
+		assertTrue(sw >= 0 && back > sw && charge > back, "the old blocks given back out of the record, then the new ones charged");
+		String ra = StockpileSaveHFTest.body(sp, "static AtStart refundAtStart(");
+		assertTrue(ra.indexOf("p.ledger.fromPaid(id, cost, placedAt)") < ra.indexOf("p.ledger.giveBack(back, cap, Stockpiles::maxStack, true)"),
+			"out of the record, then into the stock");
 		String b = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Builder.java");
 		String rs = StockpileSaveHFTest.body(b, "private static void refundSwap(");
 		assertTrue(rs.contains("if (swapRefunds(r, i, free))"), "refundSwap and the reconcile share one rule");

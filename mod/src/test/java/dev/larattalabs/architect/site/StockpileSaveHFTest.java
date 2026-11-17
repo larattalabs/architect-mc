@@ -62,7 +62,7 @@ class StockpileSaveHFTest {
 		}
 		String sww = body(s, "static void saveWithWorld(MinecraftServer srv)");
 		int swwAt = s.indexOf(sww);
-		String slf = body(s, "static void saveLedgerFirst(MinecraftServer srv)"); // (J1) a Take's or a dissolve's save: the ledger first
+		String slf = body(s, "static boolean saveLedgerFirst(MinecraftServer srv, Runnable between)"); // (J1) a Take's or a dissolve's save: the ledger first
 		int slfAt = s.indexOf(slf);
 		int bySaveWithWorld = 0;
 		int byLifecycle = 0;
@@ -82,9 +82,11 @@ class StockpileSaveHFTest {
 			}
 		}
 		assertEquals(1, bySaveWithWorld, "saveWithWorld's own fallback");
-		assertEquals(2, byLifecycle, "the world's save (AFTER_SAVE) and the stop (SERVER_STOPPING)");
+		assertEquals(1, byLifecycle, "the world's save (AFTER_SAVE; the stop's too: slice T0 dropped SERVER_STOPPING's early ledger save)");
 		assertEquals(1, byLedgerFirst, "(J1) saveLedgerFirst's ledger write, before its players and chunks");
-		assertEquals(4, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger) or saveLedgerFirst");
+		assertEquals(4, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger) or saveLedgerFirst"
+			+ " (slice T0: SERVER_STOPPING's save dropped; compensate's write of a refused payout's restored ledger added)");
+		assertTrue(body(src(), "static void compensate(String what)").contains("if (save()) {"), "the fourth: compensate's");
 		Matcher w = Pattern.compile("saveWithWorld\\(srv\\);").matcher(s);
 		int callers = 0;
 		while (w.find()) {

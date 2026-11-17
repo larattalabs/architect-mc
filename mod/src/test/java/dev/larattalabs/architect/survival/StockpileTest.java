@@ -1,5 +1,6 @@
 package dev.larattalabs.architect.survival;
 
+import com.google.gson.JsonObject;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -149,11 +150,22 @@ class StockpileTest {
 		assertEquals(2, l.stock(DOOR));
 		assertEquals(0, l.room(COBBLE, 1, MAX), "over capacity: nothing new enters");
 		identity(l);
-		// an unkeyed give-back still overflows, outside the identity
+		// (slice T0) an unkeyed give-back enters the stock too: refundOverflow, a historical counter, no longer grows
 		StockLedger.Credit u = l.giveBack(Map.of(DOOR, 3), 1, MAX);
-		assertEquals(Map.of(DOOR, 3), u.overflow());
-		assertEquals(Map.of(DOOR, 3), l.refundOverflow());
+		assertTrue(u.overflow().isEmpty());
+		assertEquals(5, l.stock(DOOR));
+		assertTrue(l.refundOverflow().isEmpty());
 		identity(l);
+		// a file written before slice T0 keeps its count: read and written back, never incremented
+		JsonObject o = l.toJson();
+		JsonObject ro = new JsonObject();
+		ro.addProperty(DOOR, 7);
+		o.add("refundOverflow", ro);
+		StockLedger old = StockLedger.fromJson(o);
+		assertEquals(Map.of(DOOR, 7), old.refundOverflow());
+		old.giveBack(Map.of(DOOR, 1), 1, MAX);
+		assertEquals(Map.of(DOOR, 7), old.refundOverflow(), "kept, never grows");
+		assertEquals(7, old.toJson().getAsJsonObject("refundOverflow").get(DOOR).getAsInt());
 	}
 
 	@Test
