@@ -16,12 +16,12 @@ const CLIFF = spec('cliff_face');
 const req = (over: Record<string, unknown> = {}) => ({ type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, name: 'Hanging House', ...over });
 
 describe('DesignRequest.inverted (7c CS)', () => {
-  it('the schema takes exactly true; the feature is advertised last', () => {
+  it('the schema takes exactly true; the feature is advertised after design.fillProvided', () => {
     expect(OVERHANG.fit).toBe('suspend');
     expect(DesignRequest.safeParse(req({ site: OVERHANG, inverted: true })).success).toBe(true);
     expect(DesignRequest.safeParse(req({ site: OVERHANG, inverted: false })).success).toBe(false);
     expect(DesignRequest.parse(req({ site: OVERHANG })).inverted).toBeUndefined();
-    expect(FEATURES[FEATURES.length - 1]).toBe('design.inverted');
+    expect(FEATURES.indexOf('design.inverted')).toBe(FEATURES.indexOf('design.fillProvided') + 1); // (batch 8a) later features follow it
     const item = { ...req(), itemKey: 'a', site: OVERHANG, inverted: true };
     expect(GroupRequest.parse({ name: 'g', bible: 'rustic', items: [item] }).items[0]!.inverted).toBe(true);
   });
