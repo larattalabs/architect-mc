@@ -2894,6 +2894,12 @@ public final class Builder {
 		}
 		Stockpiles.Pile p = Stockpiles.get(owner);
 		if (items.isEmpty() && (p == null || p.ledger().custody(key).isEmpty())) { // (M5 FK) a key's custody refunds with no block standing too
+			if (p != null) {
+				// (fix/double-credit) Stockpiles.credit's rule for a credit of nothing: its pending credit (J2's single site; DR-S's group
+				// removal holds one for every target) and its paid record dropped. Returning before it left the pending credit saved, and
+				// the next start booked it (nothing minted, but the ledger changed across a clean restart)
+				Stockpiles.creditOfNothing(p, key);
+			}
 			return false;
 		}
 		if (p == null) {

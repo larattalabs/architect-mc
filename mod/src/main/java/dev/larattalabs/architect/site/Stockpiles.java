@@ -1226,11 +1226,23 @@ public final class Stockpiles {
 	 * books it once at the next start and no item entity can pay it twice. {@code fallback} is unused (kept for the callers). Returns what
 	 * was credited; empty (already) for a key credited before.
 	 */
+	/**
+	 * A credit of nothing (no block standing, no custody) under {@code key}: nothing books; its paid record (JR: nothing of it stood) and its
+	 * pending credit (J2: nothing to roll forward) dropped. A key credited already is left as it is. Shared by {@link #credit} and
+	 * {@link Builder#creditRefund} (fix/double-credit).
+	 */
+	static void creditOfNothing(Pile p, String key) {
+		if (p.ledger.credited(key)) {
+			return;
+		}
+		p.ledger.dropPaid(key);
+		p.ledger.dropPending(key);
+		changed(p);
+	}
+
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
-			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
-			p.ledger.dropPending(key); // (J2) nothing to roll forward
-			changed(p);
+			creditOfNothing(p, key);
 			return StockLedger.Credit.NONE;
 		}
 		StockLedger.Credit c = p.ledger.credit(key, items, capacity(srv, p), Stockpiles::maxStack);
