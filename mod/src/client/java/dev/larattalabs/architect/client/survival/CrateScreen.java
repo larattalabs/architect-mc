@@ -446,7 +446,7 @@ public final class CrateScreen extends Screen {
 		// (OVF) "over capacity" while used > capacity (a refund went past it): inserts, hoppers' too, are refused until it fits
 		boolean over = num(s, "usedStacks") > num(s, "capacityStacks");
 		String line = dev.larattalabs.architect.site.Stockpiles.capacityLabel(num(s, "usedStacks"), num(s, "capacityStacks")) + " · " + crates + " crate(s)"
-			+ (missingCrates > 0 ? " (" + missingCrates + " missing)" : "") + " · " + targets + " building" + (over ? " (inserts refused)" : "");
+			+ (missingCrates > 0 ? " (" + missingCrates + " missing)" : "") + " · " + targets + " building" + (over ? " (only what active builds still need goes in)" : "");
 		Panels.text(g, font, line, cx, y, missingCrates > 0 || over ? UiBits.errorText() : UiBits.ink());
 		y += 11;
 		int cap = Math.max(1, num(s, "capacityStacks"));

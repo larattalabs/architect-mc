@@ -32848,7 +32848,7 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - Tests: `StockpileOverflowOVFTest` (11: K0/K1/CS1/K2, refused save + a second crash in recovery, an unsaved second debt, dissolve
   over capacity, a player's Take between crashes, charge/scoop, adopt and a forced crate removal over capacity, a source check; 8 fail on main); StockpileTest
   and LedgerLintTest (the lint allows past capacity only what a keyed refund left) updated; y-ingame item 6 now expects no entity.
-- Visible: the stockpile panel's count line reads "used of cap stacks · over capacity (inserts refused)" (`Stockpiles.capacityLabel`;
+- Visible: the stockpile panel's count line reads "used of cap stacks · over capacity (only what active builds still need goes in)" (`Stockpiles.capacityLabel`;
   the view JSON gains `overCapacity`, `capacityLabel`); a player's Insert from inventory refused over capacity says "This stockpile is
   over capacity: use or take stock first" (hoppers stay silent).
 - In game: fk-crash CS1o (`dev.stockpile.ps capacity 0`, TEST): the single-site removal halted at CS1 into a full stockpile is
