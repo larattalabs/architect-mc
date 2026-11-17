@@ -184,6 +184,25 @@ function stagesOf(st) {
 
 // ------------------------------------------------------------------ hb-remove
 
+/** The stage that puts down x03's island (its staged land). */
+const LAND_STAGE = 'forms';
+/** An /apitest command whose answer is pending: its result, waited for (gatemsad's later). */
+async function later2(args, timeoutMs = 900_000) {
+  const ask = async (a) => {
+    const r = await cmd(`/apitest ${a}`);
+    const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null');
+    if (line === undefined) throw new Error(`/apitest ${a.slice(0, 120)}: no JSON answer: ${JSON.stringify(r).slice(0, 300)}`);
+    return JSON.parse(line);
+  };
+  const pd = await ask(args);
+  if (!pd?.pending) return pd;
+  for (const end = Date.now() + timeoutMs; Date.now() < end; await L.sleep(500)) {
+    const r = await ask(`get ${pd.pending}`);
+    if (r && r.value !== undefined && r.value !== null) return r.value;
+  }
+  throw new Error(`no result for ${pd.pending}`);
+}
+
 async function removeCase(tag, fx, frac, order) {
   const S = await survival(tag, fx, { rate: frac === 50 ? 2 : 16, held: frac < 100 });
   const { region, box, pre, crateAt, C } = S;
@@ -221,37 +240,41 @@ async function removeCase(tag, fx, frac, order) {
     const ow = await call('dev.rs.overwrites', { region }, 300_000);
     const rows = ow.rows ?? ow.cells ?? [];
     const stagedVictims = rows.filter((r) => stagedIds.has(r.victim));
+    // the staged cells a later writer (a lot, a road, a props tile) took up: queued, BUILT, and no longer the staged block (XR: one owner)
+    const rc = await call('dev.rs.cells', { region }, 300_000);
+    const taken = [];
+    for (const x of rc.targets ?? []) if (stagedIds.has(x.target)) for (const c of x.cells ?? []) if (!(c[3] & 2)) taken.push(c.slice(0, 3).join(','));
     const a = await audit();
-    out.xr = { rows: rows.length, counts: ow.counts ?? null, stagedVictims: stagedVictims.slice(0, 4), retaken: a.retaken ?? {}, balance: balance(a) };
-    check(stagedVictims.length === 0 && sum(balance(a).dupe) === 0 && sum(balance(a).double) === 0,
-      `${tag}: (XR) over staged cells: ${rows.length} take-up row(s) of paid cells (${json(ow.counts ?? {})}), ${stagedVictims.length} with a staged victim; retaken ${json(a.retaken ?? {})}; the paid cells standing equal the paid records (standing ${balance(a).standing}, paid ${balance(a).paid})`, out.xr);
+    out.xr = { rows: rows.length, counts: ow.counts ?? null, stagedVictims: stagedVictims.slice(0, 4), takenUp: taken.length, takenFirst: taken.slice(0, 6), retaken: a.retaken ?? {}, balance: balance(a) };
+    check(taken.length > 0 && stagedVictims.length === 0 && sum(a.retaken) === 0 && sum(balance(a).dupe) === 0 && sum(balance(a).double) === 0,
+      `${tag}: (XR) ${taken.length} staged cell(s) taken up by later writers (one owner: the writer); ${rows.length} take-up row(s) of paid cells (${json(ow.counts ?? {})}), ${stagedVictims.length} with a staged victim; retaken ${json(a.retaken ?? {})} (nothing was paid); the paid cells standing equal the paid records (standing ${balance(a).standing}, paid ${balance(a).paid})`, out.xr);
   }
   if (order === 'dependent') {
     // the stages over the land undone first (newest first), the land as it stood: then Regions.remove
     const before = await G.snap(ctx, box, `hb-${tag}-held`);
     const stages = stagesOf(st);
-    const landStage = stages.findIndex((n) => (st.view.stages ?? []).find((x) => (x.name ?? x.stage ?? x.id) === n)?.sites?.some?.((id) => stagedIds.has(id)));
-    const later = stages.slice(Math.max(0, landStage) + 1).reverse();
+    const landStage = stages.indexOf(LAND_STAGE); // (x03's island is its forms stage: props, lots and routes stand over it)
+    const later = landStage < 0 ? [] : stages.slice(landStage + 1).reverse();
     const group = st.view.groupId;
     out.undone = [];
     for (const sg of later) {
-      const u = await cmd(`/apitest sundo ${group} ${sg} force`);
-      out.undone.push([sg, String(u?.message ?? u?.output ?? json(u)).slice(0, 160)]);
-      await L.settle(3000);
+      const u = await later2(`sundo ${group} ${sg}`);
+      out.undone.push([sg, json(u).slice(0, 240)]);
+      check(u?.removed === true, `${tag}: Sites.undoStage(${group}, ${sg}): removed ${u?.removed} (${json(u?.blockers ?? u?.refused ?? null).slice(0, 160)})`, u);
     }
     await G.waitFor(ctx, region, (x) => !x.view.busy, { timeoutMs: 600_000 });
     await L.settle(3000);
     const t2 = await terr(region);
     const d = await G.diff(ctx, box, before);
-    // the cells of the later stages go back to the land under them: only those differ from the held land, and none is a staged cell
-    const stagedCells = new Set();
-    const cells = await call('dev.rs.cells', { region }, 300_000);
-    for (const x of cells.targets ?? []) if (stagedIds.has(x.target)) for (const c of x.cells ?? []) stagedCells.add(`${c[0]},${c[1]},${c[2]}`);
-    const vsPre = await G.diff(ctx, box, pre);
-    const preDiff = new Set(vsPre.list.map((m) => m.pos));
-    const touched = d.list.filter((m) => stagedCells.has(m.pos) && preDiff.has(m.pos));
-    out.dependent = { stages, landStage, later, undone: out.undone, terrainAfter: [t2.cells, t2.built], heldDiff: d.mismatches, stagedTouched: touched.slice(0, 8) };
-    check(later.length > 0 && t2.built === t.built && touched.length === 0, `${tag}: the stages over the land undone first (${later.join(', ') || 'none'}): the half-built land as it stood (${t2.built} of ${t2.cells} staged cells, ${t.built} before; ${touched.length} staged cell(s) moved off the land; ${d.mismatches} cell(s) of the later stages restored)`, out.dependent);
+    // the cells of the later stages go back to the land under them: every staged cell then holds what it held, its staged block where the
+    // land was built (at 100% the cells the lots took up are the island's again), the before where it was not
+    const standing = async () => { let n = 0; for (const x of (await call('dev.rs.cells', { region }, 300_000)).targets ?? []) if (stagedIds.has(x.target)) for (const c of x.cells ?? []) if (c[3] & 2) n++; return n; };
+    const touched = [];
+    const builtAfter = await standing();
+    const builtWant = frac === 100 ? t.cells : t.built;
+    if (builtAfter !== builtWant) touched.push(`${builtAfter} staged cells standing, want ${builtWant}`);
+    out.dependent = { stages, landStage, later, undone: out.undone, terrainAfter: [t2.cells, t2.built], heldDiff: d.mismatches, builtAfter, builtWant, stagedTouched: touched };
+    check(later.length > 0 && t2.built === t.built && touched.length === 0 && (frac < 100 || d.mismatches > 0), `${tag}: the stages over the land undone first (${later.join(', ') || 'none'}): the half-built land as it stood (${t2.built} of ${t2.cells} staged cells, ${t.built} before; ${builtAfter} staged cells standing, want ${builtWant}; ${d.mismatches} cell(s) of the later stages restored)`, out.dependent);
   }
   const rm = await G.remove(ctx, region);
   await hold(false);
@@ -309,19 +332,20 @@ steps.halt = async () => {
   const S = await survival(tag, fx, { rate: 4 });
   const { region, box, pre, crateAt, C } = S;
   const out = { region };
-  const t0 = await untilTerrain(region, (x) => x.built > 0, 600_000);
+  await untilTerrain(region, (x) => x.built > 0, 600_000);
   await feedOnce(C, 0); // the paid targets fed in full: they build as the land allows
-  const ids = (t0.targets ?? []).map((x) => x.target);
   // the case's save: mid terrain run, PS's periodic save held off (and RL's save on join) so nothing saves between it and the halt
-  await untilTerrain(region, (x) => x.built * 10 >= x.cells * 3, 1_800_000);
+  // (every staged target of the hamlet put down first: the island's c4 joins after the street's small one)
+  await untilTerrain(region, (x) => (x.targets ?? []).length >= 2 && x.built * 10 >= x.cells * 3, 1_800_000);
   await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
   await cmd('/save-all flush');
   const s0 = await savedNow();
   const tS = await terr(region);
+  const ids = (tS.targets ?? []).map((x) => x.target);
   const books0 = stagedBooks(s0.file, ids);
   out.atSave = { saves: s0.saves, built: tS.built, cells: tS.cells, books: books0 };
   const free0 = Object.values(books0);
-  check(free0.length > 0 && free0.every(([n, k, s, o]) => k === n && s === 0 && o === 0), `${tag}: at the case's save (#${s0.saves}, ${tS.built} of ${tS.cells} staged cells built) every staged target's book marks its cells free (k every cell, s and o empty): ${json(books0)}`, books0);
+  check(free0.length === ids.length && free0.every(([n, k, s, o]) => k === n && s === 0 && o === 0), `${tag}: at the case's save (#${s0.saves}, ${tS.built} of ${tS.cells} staged cells built) every staged target's book marks its cells free (k every cell, s and o empty): ${json(books0)}`, books0);
   // built on after the save, then RegionView as Steward reads it, then the halt with nothing saved
   await untilTerrain(region, (x) => x.built * 10 >= x.cells * 6, 1_800_000);
   const s1 = await savedNow();
@@ -358,8 +382,8 @@ steps.halt = async () => {
   const tc = (v) => Object.fromEntries(v.parts.filter((p) => p.terrainCells > 0).map((p) => [p.part, p.terrainCells]));
   const tbSum = (v) => v.parts.reduce((a, p) => a + (p.terrainBuilt ?? 0), 0);
   out.restart = { built: tR.built, cells: tR.cells, view: v2 };
-  check(json(tc(v2)) === json(tc(v1)) && tbSum(v2) === tR.built && tR.built <= tH.built && tR.built >= tS.built && v2.terrainPerTick === 4 && v2.parts.some((p) => p.state === 'building' && p.terrainCells > 0) && !v2.built && v2.percent < 100,
-    `${tag}: RegionView across the restart: terrainCells per part unchanged (${json(tc(v2))}), terrainBuilt ${tbSum(v2)} = the world's ${tR.built} (at the save ${tS.built}, at the halt ${tH.built}), terrainPerTick ${v2.terrainPerTick}, percent ${v1.percent} -> ${v2.percent}, a terrain part building (${v2.parts.filter((p) => p.state === 'building').map((p) => p.part).join(' ')})`, { before: v1, after: v2 });
+  check(json(tc(v2)) === json(tc(v1)) && tbSum(v2) === tR.built && tR.built >= tS.built && v2.terrainPerTick === 4 && v2.parts.some((p) => p.state === 'building' && p.terrainCells > 0) && !v2.built && v2.percent < 100,
+    `${tag}: RegionView across the restart: terrainCells per part unchanged (${json(tc(v2))}), terrainBuilt ${tbSum(v2)} = the world's ${tR.built} read with it (at the save ${tS.built}, at the halt ${tH.built}; it builds on from the world at once), terrainPerTick ${v2.terrainPerTick}, percent ${v1.percent} -> ${v2.percent}, a terrain part building (${v2.parts.filter((p) => p.state === 'building').map((p) => p.part).join(' ')})`, { before: v1, after: v2 });
   let w2 = [];
   for (let i = 0; i < 20 && w1.length && !w2.length; i++) {
     w2 = ((await terr(region)).waits ?? []).filter((w) => w.waitsFor?.kind === 'terrain' && w.status === 'WAITING');
