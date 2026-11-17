@@ -2,11 +2,7 @@ package dev.larattalabs.architect.site;
 
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
-import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -18,13 +14,15 @@ import org.jspecify.annotations.Nullable;
  * (slice T0, docs/TXN-DESIGN.md on slice/TXN §3.1) The world barrier, {@code Stockpiles.barrier()}: everything a durable record may
  * depend on made durable, in this order:
  * <ol>
- * <li><b>players</b>: every online player's data saved (a failed save is detected: vanilla's {@code PlayerDataStorage.save} logs and
- * swallows it, {@code PlayerSaveFailMixin} counts it), then each player file and the playerdata folder forced;</li>
- * <li><b>chunks</b>: a flushed save of every level, known durable when {@link RegionDurability#undurable} is empty (every write that
- * reached a region file covered by a successful force);</li>
+ * <li><b>players</b>: every online player's data saved and each save acknowledged by its real replace result ({@link PlayerSaves}: a
+ * failed save, online or at a logout, is owed per player until a later save of it succeeds), then each acknowledged file and the playerdata
+ * folder forced;</li>
+ * <li><b>chunks</b>: owed chunk writes submitted again ({@link ChunkDebt}), a flushed save of every level, known durable when {@link
+ * RegionDurability#undurable} is empty (every write that reached a region file covered by a successful force, new region files' and
+ * {@code .mcc} payloads' entries forced) and no chunk write or serialization is owed;</li>
  * <li><b>the ledger</b>: {@code stockpiles.json} written through {@link DurableFile} (its generation in the file).</li>
  * </ol>
- * It refuses (nothing after the failed step runs) on the wrong thread, under {@code /save-off} (any level's {@code noSave}), when the ledger
+ * It refuses (nothing after the failed step runs) when called from inside a running barrier, on the wrong thread, under {@code /save-off} (any level's {@code noSave}), when the ledger
  * failed to load this session, or on any failed step; a ledger rename followed by a failed directory force is {@link
  * DurableFile.Outcome#IN_DOUBT}. Each step's time is in the result. Server thread. It replaces no caller (T0); slice ST's staged terrain
  * barrier is its first.
@@ -66,8 +64,23 @@ public final class DurableBarrier {
 		PLAYER_SAVE_FAILURES.incrementAndGet();
 	}
 
-	/** The barrier over {@code steps}, in order, stopping at the first that fails. */
+	/** Whether a barrier is running (review P2-10: a save callback that calls barrier() again is refused, never recursed into). */
+	private static volatile boolean active;
+
+	/** The barrier over {@code steps}, in order, stopping at the first that fails; a nested call (from inside a step) is refused. */
 	static Result run(Steps steps) {
+		if (active) {
+			return Result.refused("reentrant: a barrier is already running (a save callback called barrier() again)");
+		}
+		active = true;
+		try {
+			return runSteps(steps);
+		} finally {
+			active = false;
+		}
+	}
+
+	private static Result runSteps(Steps steps) {
 		String why = steps.refusal();
 		if (why != null) {
 			return Result.refused(why);
@@ -127,52 +140,85 @@ public final class DurableBarrier {
 
 		@Override
 		public @Nullable String players() {
-			int f0 = PLAYER_SAVE_FAILURES.get();
-			srv.getPlayerList().saveAll();
-			if (PLAYER_SAVE_FAILURES.get() != f0) {
-				return (PLAYER_SAVE_FAILURES.get() - f0) + " player save(s) failed";
-			}
+			// (review P1-1, P1-2) each player's save acknowledged by its real replace result, a failed one owed per player (offline too) until
+			// a later save of it succeeds; an owed offline player's kept snapshot written again first
 			Path dir = srv.getWorldPath(LevelResource.PLAYER_DATA_DIR);
-			try {
+			return PlayerSaves.step(() -> srv.getPlayerList().saveAll(), () -> {
+				java.util.List<java.util.UUID> ids = new java.util.ArrayList<>();
 				for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
-					Path f = dir.resolve(p.getStringUUID() + ".dat");
-					if (Files.exists(f)) {
-						try (FileChannel ch = FileChannel.open(f, StandardOpenOption.WRITE)) {
-							DurableFile.FORCER.file(ch);
-						}
-					}
+					ids.add(p.getUUID());
 				}
-				if (Files.isDirectory(dir)) {
-					DurableFile.FORCER.dir(dir);
-				}
-			} catch (IOException | RuntimeException e) {
-				return "a player file's force failed: " + e;
-			}
-			return null;
+				return ids;
+			}, id -> dir.resolve(id + ".dat"), dir);
 		}
 
 		@Override
 		public @Nullable String chunks() {
+			// (review P2-10, P3-11) both explicit flags scoped and restored, as saveWithWorld scopes them: the world-save callback leaves the
+			// ledger to the barrier, and ChunkSaveWaitMixin skips the waits of clean or still-loading chunks
+			boolean wasExplicit = Stockpiles.explicitSave(true);
+			boolean wasTiming = SaveTiming.explicit;
+			SaveTiming.explicit = true;
 			try {
-				Stockpiles.explicitSave(true); // the world-save callback does not write the ledger: the barrier's own step does
-				try {
-					srv.saveAllChunks(true, true, false);
-				} finally {
-					Stockpiles.explicitSave(false);
-				}
+				ChunkDebt.retry(); // (review P1-3, TXN item 5) every failed write's snapshot submitted again, before the flush waits for it
+				srv.saveAllChunks(true, true, false);
 			} catch (RuntimeException e) {
 				return "the flushed save threw: " + e;
+			} finally {
+				Stockpiles.explicitSave(wasExplicit);
+				SaveTiming.explicit = wasTiming;
 			}
 			RegionDurability.retryOwed();
-			java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
-			return undurable.isEmpty() ? null : undurable.size() + " region file(s) not durable: " + (undurable.size() > 4 ? undurable.subList(0, 4)
-				+ " ..." : undurable);
+			java.util.List<String> undurable = new java.util.ArrayList<>(RegionDurability.undurable("chunk", "entities"));
+			undurable.addAll(ChunkDebt.owed());
+			return undurable.isEmpty() ? null : undurable.size() + " chunk write(s) or region file(s) not durable: " + (undurable.size() > 4
+				? undurable.subList(0, 4) + " ..." : undurable);
 		}
 
 		@Override
 		public DurableFile.Result ledger() {
 			return Stockpiles.writeConfirmed(srv);
 		}
+	}
+
+	/**
+	 * Dev ({@code dev.stockpile.barrier}): arms the TEST failures ({@code failPlayerReplace}, {@code failChunkWrite}: that many next player
+	 * replaces or region writes fail), runs {@code reps} barriers (each step's ms, p50/p90/max), and answers {@link #devJson}.
+	 */
+	public static JsonObject dev(MinecraftServer srv, JsonObject req) {
+		if (req.has("failPlayerReplace")) {
+			PlayerSaves.FAIL_REPLACE.set(req.get("failPlayerReplace").getAsInt());
+		}
+		if (req.has("failChunkWrite")) {
+			ChunkDebt.FAIL_WRITES.set(req.get("failChunkWrite").getAsInt());
+		}
+		int reps = req.has("reps") ? Math.max(0, Math.min(200, req.get("reps").getAsInt())) : req.has("run") && req.get("run").getAsBoolean() ? 1 : 0;
+		java.util.List<double[]> ms = new java.util.ArrayList<>();
+		java.util.Map<String, Integer> outcomes = new java.util.TreeMap<>();
+		for (int i = 0; i < reps; i++) {
+			long t0 = System.nanoTime();
+			Result r = Stockpiles.barrier(srv);
+			ms.add(new double[] {(System.nanoTime() - t0) / 1e6, r.playersMs(), r.chunksMs(), r.ledgerMs()});
+			outcomes.merge(r.outcome().name(), 1, Integer::sum);
+		}
+		JsonObject o = devJson();
+		if (reps > 1) {
+			JsonObject b = new JsonObject();
+			b.addProperty("reps", reps);
+			outcomes.forEach(b::addProperty);
+			String[] names = {"total", "players", "chunks", "ledger"};
+			for (int k = 0; k < names.length; k++) {
+				final int kk = k;
+				double[] v = ms.stream().mapToDouble(a -> a[kk]).sorted().toArray();
+				JsonObject x = new JsonObject();
+				x.addProperty("p50", v[(v.length - 1) / 2]);
+				x.addProperty("p90", v[(int) Math.ceil(v.length * 0.9) - 1]);
+				x.addProperty("max", v[v.length - 1]);
+				b.add(names[k], x);
+			}
+			o.add("bench", b);
+		}
+		return o;
 	}
 
 	/** Dev: the barrier's counts and its last result. */
@@ -190,6 +236,17 @@ public final class DurableBarrier {
 			x.addProperty("chunksMs", r.chunksMs());
 			x.addProperty("ledgerMs", r.ledgerMs());
 			o.add("last", x);
+		}
+		o.add("players", PlayerSaves.devJson());
+		o.add("chunks", ChunkDebt.devJson());
+		DurableFile lf = Stockpiles.ledgerFile();
+		if (lf != null) {
+			JsonObject l = new JsonObject();
+			l.addProperty("id", lf.id());
+			l.addProperty("writtenGen", lf.writtenGen());
+			l.addProperty("installedGen", lf.installedGen());
+			l.addProperty("inDoubt", lf.inDoubt());
+			o.add("ledger", l);
 		}
 		return o;
 	}
