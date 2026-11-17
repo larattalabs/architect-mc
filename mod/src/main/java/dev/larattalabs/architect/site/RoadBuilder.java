@@ -703,8 +703,9 @@ public final class RoadBuilder {
 			}
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(x -> items.merge(x.item(), x.count(), Integer::sum));
-			Builder.dropItems(level, p, items, null);
 			dev.larattalabs.architect.placed.Placed.set(level, p, was, Sites.CELL_FLAGS);
+			// (LC2, F10) on top of the before just written, never inside it (vanilla pushed the item out toward a free neighbour: off the cell)
+			Builder.dropAtCell(level, p, items);
 			dropped++;
 		}
 		if (!out.isEmpty()) {

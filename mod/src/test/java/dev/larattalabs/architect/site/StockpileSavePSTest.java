@@ -172,7 +172,7 @@ class StockpileSavePSTest {
 		assertTrue(credit.substring(booked, saved).contains("if (!already)"), "only when it booked (once per key)");
 
 		String pl = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Placement.java")).replaceAll("//[^\n]*", "");
-		String psave = StockpileSaveHFTest.body(pl, "static void save(MinecraftServer srv, boolean clean)");
+		String psave = StockpileSaveHFTest.body(pl, "static long save(MinecraftServer srv, boolean clean)"); // (PSV) answers its generation
 		assertTrue(psave.indexOf("if (loadFailed)") >= 0 && psave.indexOf("if (loadFailed)") < psave.indexOf("PENDING_SAVE"), "the queue file: no save after a failed load");
 		String pload = StockpileSaveHFTest.body(pl, "private static void load(MinecraftServer srv)");
 		assertTrue(pload.contains("loadFailed = true;") && pload.contains("SaveGuards.failed(FILE") && pload.contains("FILE + \".bak\""),

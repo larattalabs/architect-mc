@@ -21,7 +21,17 @@ public abstract class ContainerSlotWrapperMixin {
 	@Inject(method = "extract(Lnet/fabricmc/fabric/api/transfer/v1/item/ItemVariant;JLnet/fabricmc/fabric/api/transfer/v1/transaction/TransactionContext;)J",
 		at = @At("HEAD"), cancellable = true, require = 1)
 	private void architect$noExtractProvided(ItemVariant resource, long maxAmount, TransactionContext tx, CallbackInfoReturnable<Long> cir) {
-		if (dev.larattalabs.architect.site.FillGuard.refusesExtract(this, resource.getItem())) {
+		if (dev.larattalabs.architect.site.FillGuard.refusesExtract(this, resource.getItem())
+			|| dev.larattalabs.architect.site.RemovalSeal.refusesTransferExtract(this)) { // (slice LC3 fix) out of a removal's box
+			cir.setReturnValue(0L);
+		}
+	}
+
+	/** (slice LC3) A Transfer API insert into a holder in a box being removed inserts 0 ({@code RemovalSeal}). */
+	@Inject(method = "insert(Lnet/fabricmc/fabric/api/transfer/v1/item/ItemVariant;JLnet/fabricmc/fabric/api/transfer/v1/transaction/TransactionContext;)J",
+		at = @At("HEAD"), cancellable = true, require = 1)
+	private void architect$noInsertSealed(ItemVariant resource, long maxAmount, TransactionContext tx, CallbackInfoReturnable<Long> cir) {
+		if (dev.larattalabs.architect.site.RemovalSeal.refusesTransferInsert(this)) {
 			cir.setReturnValue(0L);
 		}
 	}

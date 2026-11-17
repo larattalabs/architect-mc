@@ -577,11 +577,15 @@ public final class SiteJournal {
 	}
 
 	private static @Nullable String relation(String siteId, boolean below) {
+		return relation(siteId, below, active(siteId));
+	}
+
+	private static @Nullable String relation(String siteId, boolean below, List<JournalStore.Meta> mineAll) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return null;
 		}
-		for (JournalStore.Meta m : active(siteId)) {
+		for (JournalStore.Meta m : mineAll) {
 			for (long k : m.sections()) {
 				try {
 					List<String> others = s.inSection(m.dimension(), k);

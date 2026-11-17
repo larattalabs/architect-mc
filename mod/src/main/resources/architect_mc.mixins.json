@@ -5,12 +5,19 @@
 	"mixins": [
 		"BlockBehaviourExplosionMixin",
 		"BlockEntityStripMixin",
+		"BlockItemSealMixin",
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
 		"ChunkSaveWaitMixin",
 		"CompoundContainerAccessor",
+		"ContainerStillValidMixin",
+		"CopperGolemSealMixin",
+		"CrafterSealMixin",
+		"DispenseSealMixin",
 		"FallingBlockEntityMixin",
 		"HopperGuardMixin",
+		"HopperHoldMixin",
+		"ItemFrameSealMixin",
 		"LevelChunkMixin",
 		"LevelTicksAccessor",
 		"LevelTicksMixin",
@@ -25,7 +32,8 @@
 		"SaveTimingServerMixin",
 		"ServerPlayerGameModeMixin",
 		"SlotMayPickupMixin",
-		"StructureTemplateAccessor"
+		"StructureTemplateAccessor",
+		"VaultSealMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
