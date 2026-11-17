@@ -32910,3 +32910,19 @@ crate, across a crash at any step. The full contract is the coordinator's notes 
 - **In game** (headless, 9026:9027, `dev.stockpile.barrier` `failPlayerReplace` / `failChunkWrite` / `reps` / `forgive`): each injected failure REFUSED, then OK at the next barrier (debt paid); an ordinary save kept `{store, gen}` on disk.
 - **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+
+### Slice CXD fix round (GPT NOT SAFE on 1e8d53fe: four P1s; slice/T0 2c2b093c merged; recorded 2026-11-17)
+- **P1-1:** a member's crate stock settles before its restore and refunds (Groups, removeDetailed, Adopt); a held settle writes nothing of
+  the member (Groups keeps it at the head, tried again each second; a synchronous removal leaves the record idle to the tick).
+- **P1-2:** the orphan right-click resolves (or first makes, saved and taken) the crate's owed record, never paying apart from it; a
+  refused settle holds the group's finish.
+- **P1-3:** an IN_DOUBT capture stays open and fences its crate (no insert, no feed, no completion) until a confirmed cancel (each second).
+- **P1-4, no loss window (Noah's TXN decision 1):** the drop is tagged with its record's key, the record closed in memory, one barrier
+  saves both; not OK: the entities discarded, the record reopened (held). A crash inside leaves the tagged drop and the open record: at
+  the start every record waits (a chunk ticket, its crate fenced) until its chunk's entities load; a tagged drop marks it found (closed,
+  nothing paid again). A crate still holding stock is retaken into the record (saved) before any drop.
+- Units `CrateOwedCXDTest` (9): the sim now models the member's refunds and the queue, play after a failed barrier and an in-doubt
+  capture, with no loss allowance; the pre-fix flows red (refunds doubled, stock lost, consumed stock paid again).
+- In game `cxd-crash` 95/0 (20261117-074011): new S7/G6 (CXDS+save: found, closed), G5 (a partly built member at CXD4+save: crate +
+  refunds once), G7 (failDrops: the group holds REMOVING with the record owed, then REMOVED, once). sad-crash PASS (20261117-065657);
+  after the T0 merge cxd-crash + sad-crash PASS (20261117-063538). P1-3 has no in-game hook for a real IN_DOUBT (units only).
