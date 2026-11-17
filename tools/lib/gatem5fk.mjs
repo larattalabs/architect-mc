@@ -193,6 +193,27 @@ export async function registerFK(steps, h) {
     const next = Object.fromEntries((s.wait?.nextNeeded ?? []).map((x) => [x.item, x.count]));
     check(s.state === 'BUILDING' && !s.phase && s.containers.every((c) => sum(c.holds) === 0) && s.wait?.waiting === true && !s.wait?.blocked && G.same(only(next, FK), FILL),
       `every cell stands, the fill not fed: the site still BUILDING (${s.state}, phase ${s.phase ?? 'none'}), its hoppers empty, waiting for the fill's items (waiting ${s.wait?.waiting}, next ${json(s.wait?.nextNeeded ?? [])})`, s);
+    // (LIFT-S-1) half the fill stocked, then a restart: the run is rebuilt at load, where the Sites check ran before Builder knew the
+    // server (v0.78.0 left the fill out of it: the outstanding lost it, an insert of the rest was refused and the site waited forever).
+    // The fill stays owed, drawn from what is stocked; the rest is accepted
+    const half = Object.fromEntries(Object.entries(FILL).map(([k, v]) => [k, Math.floor(v / 2)]));
+    const rest = G.minus(FILL, half);
+    const hIn = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: half, exact: true }, 120_000)).accepted ?? {};
+    await L.leaveWorld();
+    await L.openWorld(W.name);
+    await L.tp(CX + 80, 80, CZ + 56);
+    await L.settle(4000);
+    await L.sleep(9000); // the wait latches after 100 ticks without a placement
+    const psL = await pile();
+    s = await fk(site);
+    const nextL = Object.fromEntries((s.wait?.nextNeeded ?? []).map((x) => [x.item, x.count]));
+    out.restart = { inserted: hIn, outstanding: only(psL.outstanding, FK), stock: only(psL.stock, FK), wait: s.wait, state: s.state, phase: s.phase };
+    check(G.same(hIn, half) && s.state === 'BUILDING' && !s.phase && G.same(only(psL.outstanding, FK), FILL) && G.same(only(psL.stock, FK), half)
+      && s.wait?.waiting === true && G.same(only(nextL, FK), rest),
+      `half the fill stocked (${json(hIn)}), then a restart: the fill still owed (outstanding ${json(only(psL.outstanding, FK))}; stock ${json(only(psL.stock, FK))}), the site BUILDING and waiting for the rest (next ${json(s.wait?.nextNeeded ?? [])})`, out.restart);
+    const rIn = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: rest, exact: true }, 120_000)).accepted ?? {};
+    out.restart.restAccepted = rIn;
+    check(G.same(rIn, rest), `after the restart the rest of the fill is accepted (${json(rIn)} of ${json(rest)})`, out.restart);
     // a declared container with an item in it at the fill: never filled over; the typed wait fill_blocked names it
     const h0 = s.containers[0].at;
     await hand(h0, { add: { [FLINT]: 1 } });
