@@ -68,7 +68,7 @@ export async function registerCXD(steps, h) {
     if (build) {
       // (P1-1) partly built: its builder places part of the stock (refunds standing), then paused again
       await call('dev.stockpile.pause', { site, paused: false }, 60_000);
-      await call('dev.wait', { ms: 6000 }, 30_000);
+      await call('dev.wait', { ms: 1500 }, 30_000); // ~3 cells a second: a few placed, most still in the crate
       await call('dev.stockpile.pause', { site, paused: true }, 60_000);
       await call('dev.wait', { ms: 1000 }, 30_000);
     }
