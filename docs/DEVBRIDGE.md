@@ -786,7 +786,5 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   of the box that changed since the snapshot (no neighbour updates, no drops, no player record; cells with block entity data skipped): the
   lost-writes fault, cell exact; `op: ledger {owner, key, paid?, custody?}` pays `paid` under `key` and holds `custody` under it in that
   stockpile's ledger, saved with the world (PAID_ORPHAN, CUSTODY). Used by `dr-survival`.
-- (DR2 fix round, TEST) `dev.stockpile.ps {capacity: n}` sets every stockpile's room to `n` stacks (`-1` off; reset at a stop): a refund
-  then overflows. `dev.stockpile.ps` also answers `owedDrops` (keyed refund overflow owed in the ledgers, not yet on disk as items) and
-  `resolvedFound`/`resolvedSpawned` (owed entries a start found on disk by their items' tag, or dropped). `dev.journal.killAt OV1` halts the
-  overflow's own save after its items are flushed, before the ledger write (CS1 is the credit's save before it). Used by `dr-survival`.
+- (DR2 fix round, TEST) `dev.stockpile.ps {capacity: n}` (since the round after OVF, OVF's own switch) sets every stockpile's room to
+  `n` stacks (`-1` off; reset at a stop): a keyed refund then enters the stock past capacity (OVF). Used by `dr-survival` (DR7c).

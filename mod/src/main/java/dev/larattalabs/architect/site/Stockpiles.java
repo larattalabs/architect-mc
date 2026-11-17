@@ -220,7 +220,6 @@ public final class Stockpiles {
 
 	static void init() {
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
-		OverflowDrops.init(); // (DR2 fix, P1-1)
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
 		SiteWaits.source((srv, level, target) -> {
@@ -462,14 +461,36 @@ public final class Stockpiles {
 		return p.crates.stream().filter(c -> !pr.contains(c)).map(CrateRec::pos).toList();
 	}
 
-	/** (DR2 fix, TEST dev.stockpile.ps capacity) every stockpile's capacity in stacks, or -1 (off): a refund then overflows. */
+	static int capacity(MinecraftServer srv, Pile p) {
+		return testCapacity >= 0 ? testCapacity : StockLedger.STACKS_PER_CRATE * present(srv, p).size();
+	}
+
+	/** (OVF) The player message when an insert into a stockpile over capacity is refused (hoppers stay silent: the pile's view shows it). */
+	public static final String OVER_CAPACITY = "This stockpile is over capacity: use or take stock first";
+
+	/** (OVF) Whether the stock is past capacity (a keyed refund put it there): nothing new enters until it fits. */
+	static boolean overCapacity(MinecraftServer srv, Pile p) {
+		return p.ledger.usedStacks(Stockpiles::maxStack) > capacity(srv, p);
+	}
+
+	/** (OVF) Whether the stockpile {@code id} names ({@code stockpile:<owner>} or a target drawing from it) is over capacity. */
+	public static boolean overCapacity(MinecraftServer srv, String id) {
+		Pile p = Builder.pileNamed(id);
+		return p != null && overCapacity(srv, p);
+	}
+
+	/** (OVF) The pile's count line: "used of cap stacks", with "over capacity" while used > cap. Pure. */
+	public static String capacityLabel(int used, int cap) {
+		return used + " of " + cap + " stacks" + (used > cap ? " · over capacity" : "");
+	}
+
+	/** (OVF, TEST) {@code dev.stockpile.ps capacity}: every stockpile's capacity in stacks (-1: the crates', as normal). */
 	static volatile int testCapacity = -1;
 
-	static int capacity(MinecraftServer srv, Pile p) {
-		if (testCapacity >= 0) {
-			return testCapacity;
-		}
-		return StockLedger.STACKS_PER_CRATE * present(srv, p).size();
+	/** (OVF) a log suffix when a keyed credit left the stock over capacity (nothing dropped: nothing new enters until it fits). */
+	private static String usedOver(MinecraftServer srv, Pile p) {
+		int used = p.ledger.usedStacks(Stockpiles::maxStack), cap = capacity(srv, p);
+		return used > cap ? " (the stock now over capacity: " + used + " of " + cap + " stacks; nothing dropped)" : "";
 	}
 
 	/** Where a stockpile's overflow and drops go: above its first present crate, else {@code fallback}. */
@@ -823,9 +844,21 @@ public final class Stockpiles {
 	 * needs nothing more).
 	 */
 	static Map<String, Integer> unbuiltAll(MinecraftServer srv, Pile p) {
+		return unbuilt(srv, p, false);
+	}
+
+	/** (OVF) {@link #unbuiltAll} over the active (unpaused) targets only, with the regions' and mechanisms' pending charges. */
+	static Map<String, Integer> unbuiltActive(MinecraftServer srv, Pile p) {
+		return unbuilt(srv, p, true);
+	}
+
+	private static Map<String, Integer> unbuilt(MinecraftServer srv, Pile p, boolean activeOnly) {
 		Map<String, Integer> out = new TreeMap<>();
 		for (Object t : targets(srv, p)) {
 			if (Groups.leaving(idOf(t))) {
+				continue;
+			}
+			if (activeOnly && (t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused())) {
 				continue;
 			}
 			Builder.Run r = run(srv, t);
@@ -1165,7 +1198,11 @@ public final class Stockpiles {
 		if (need.isEmpty()) {
 			return null;
 		}
-		Ledger.Accepted a = p.ledger.accept(item, it -> need.getOrDefault(it, 0), Equivalents.bundled(), capacity(srv, p), Stockpiles::maxStack, commit);
+		int cap = capacity(srv, p);
+		// (OVF) over capacity: only what the active (unpaused) targets still miss goes in (their builds never deadlock), up to that
+		Map<String, Integer> active = p.ledger.usedStacks(Stockpiles::maxStack) > cap ? unbuiltActive(srv, p) : Map.of();
+		Ledger.Accepted a = p.ledger.accept(item, it -> need.getOrDefault(it, 0), it -> active.getOrDefault(it, 0), Equivalents.bundled(), cap,
+			Stockpiles::maxStack, commit);
 		if (a != null && commit) {
 			changed(p);
 		}
@@ -1184,9 +1221,10 @@ public final class Stockpiles {
 	private static boolean explicitSave;
 
 	/**
-	 * Credits refunds into the owner's stockpile once per {@code key} (§4): up to capacity returned, the rest dropped above the first
-	 * present crate (else at {@code fallback}) and booked as refundOverflow. Returns what was credited; empty (already) for a key
-	 * credited before.
+	 * Credits refunds into the owner's stockpile once per {@code key} (§4): (slice OVF) all of it returned, past capacity if need be, never
+	 * dropped: the key and the stock land in one ledger write, so a crash at any point (CS1: the restore's chunks saved, the ledger not)
+	 * books it once at the next start and no item entity can pay it twice. {@code fallback} is unused (kept for the callers). Returns what
+	 * was credited; empty (already) for a key credited before.
 	 */
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
@@ -1204,15 +1242,8 @@ public final class Stockpiles {
 			Architect.LOGGER.info("Stockpile {}: refund {} already credited; nothing credited again", p.owner, key);
 			return c;
 		}
-		if (loadFailed) {
-			dropOverflow(srv, p, c.overflow(), fallback); // never saved this session: nothing to make durable first
-		} else if (!c.overflow().isEmpty()) {
-			// (DR2 fix, P1-1) owed in this same ledger change; spawned only after a save wrote it (OverflowDrops)
-			p.ledger.oweDrop(key, c.overflow(), dropAt(srv, p, fallback).asLong());
-		}
 		changed(p);
-		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), c.overflow().isEmpty() ? "" : ", overflow owed "
-			+ c.overflow() + " (dropped after the ledger's save)");
+		Architect.LOGGER.info("Stockpile {}: refund {} returned {}{}", p.owner, key, c.returned(), usedOver(srv, p));
 		return c;
 	}
 
@@ -1268,6 +1299,7 @@ public final class Stockpiles {
 		}
 		if (key != null && p.ledger.charged(key) != null) {
 			Architect.LOGGER.warn("Stockpile {}: region charge {} was booked before (its record not saved): not charged again", p.owner, key);
+			saveConfirmed(srv); // (OVF) booked in memory only (its save refused): never returned as standing before the ledger is on disk
 			return true;
 		}
 		Map<String, Integer> reserved = LAST_RESERVED.getOrDefault(p.id, Map.of());
@@ -1279,15 +1311,19 @@ public final class Stockpiles {
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
 		if (key != null) {
-			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over);
+			p.ledger.chargeOnce(key, items, rid, cap, Stockpiles::maxStack, over); // (OVF) keyed: its empty buckets never overflow
 		} else {
 			for (var e : new TreeMap<>(items).entrySet()) {
 				p.ledger.consume(e.getKey(), e.getValue(), cap, Stockpiles::maxStack, over);
 			}
+			dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		}
-		dropKeyed(srv, p, key, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		if (key != null) {
+			saveConfirmed(srv); // (OVF) keyed: the caller records the charge only once the ledger holds it on disk
+		} else {
+			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		}
 		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}{}", p.owner, items, key == null ? "" : " (" + key + ")");
 		return true;
 	}
@@ -1313,17 +1349,19 @@ public final class Stockpiles {
 	 */
 	public static Map<String, Integer> scoop(MinecraftServer srv, @Nullable String owner, String key, int lavaSources, int grates) {
 		Pile p = get(owner);
-		if (p == null || p.ledger.credited(key)) {
+		if (p == null) {
+			return Map.of();
+		}
+		if (p.ledger.credited(key)) {
+			saveConfirmed(srv); // (OVF) booked before; a refused save left it in memory only: the drain waits until it is on disk
 			return Map.of();
 		}
 		int cap = capacity(srv, p);
 		Map<String, Integer> over = new TreeMap<>();
+		// (OVF) keyed: the lava buckets and bars enter the stock past capacity if need be (never dropped: once across any crash)
 		StockLedger.Credit c = scoopInto(p.ledger, key, lavaSources, grates, cap, Stockpiles::maxStack, over);
-		BlockPos fb = p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above();
-		dropKeyed(srv, p, key, over, fb);
-		dropKeyed(srv, p, key, c.overflow(), fb); // (DR2 fix) a keyed credit: owed in the ledger, dropped after its save
 		changed(p);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		saveConfirmed(srv); // (OVF) the caller persists the drain only after the scoop is on disk (a refusal throws: retried, once)
 		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
 		Map<String, Integer> out = new TreeMap<>(c.returned());
 		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
@@ -1506,7 +1544,7 @@ public final class Stockpiles {
 	/**
 	 * (DR-S) A repair's booking: only {@code keys}' pending credits (the removals it settled), each once by the credit's key rule, custody
 	 * included, under the cap; a key with nothing standing drops its paid record (as a credit of nothing does). The ledger is then saved with
-	 * the world. Returns per item what left the pending credits for the stock: what was returned plus what overflowed (dropped as items).
+	 * the world. Returns per item what left the pending credits for the stock (slice OVF: all of it enters the stock, past capacity if need be).
 	 */
 	static Map<String, Integer> bookPendingFor(MinecraftServer srv, java.util.Collection<String> keys) {
 		Map<String, Integer> out = new TreeMap<>();
@@ -1558,6 +1596,35 @@ public final class Stockpiles {
 		return s != null && key.equals(Builder.creditKey(s));
 	}
 
+	/**
+	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
+	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
+	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
+	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
+	 */
+	/**
+	 * (OVF, review round 4) Whether the ledger is on disk now: {@link #saveConfirmed}, false (logged) where it refused. A caller that settles
+	 * a record from a booking the ledger holds ({@code charged}) does so only when this is true: never from an unsaved in-memory booking.
+	 */
+	public static boolean ledgerOnDisk(MinecraftServer srv) {
+		try {
+			saveConfirmed(srv);
+			return true;
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a booked charge waits: {}", e.getMessage());
+			return false;
+		}
+	}
+
+	public static void saveConfirmed(MinecraftServer srv) {
+		if (unsaved || loadFailed) {
+			saveWithWorld(srv);
+		}
+		if (unsaved || loadFailed) {
+			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
+		}
+	}
+
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
 	static volatile int creditSaves;
 	/** (J1, dev) the autosaves' wait for their chunk writes before the ledger write: count, last and max (ms). */
@@ -1572,18 +1639,6 @@ public final class Stockpiles {
 		dropOverflow(srv, p, c.overflow(), fallback);
 		changed(p);
 		return c;
-	}
-
-	/**
-	 * (DR2 fix, P1-1) A keyed booking's overflow: owed in the ledger under {@code key} (spawned after the save that writes it,
-	 * {@link OverflowDrops}); keyless, or the ledger never saved this session, dropped now.
-	 */
-	static void dropKeyed(MinecraftServer srv, Pile p, @Nullable String key, Map<String, Integer> over, BlockPos fallback) {
-		if (key == null || loadFailed) {
-			dropOverflow(srv, p, over, fallback);
-		} else if (!over.isEmpty()) {
-			p.ledger.oweDrop(key, over, dropAt(srv, p, fallback).asLong());
-		}
 	}
 
 	static void dropOverflow(MinecraftServer srv, Pile p, Map<String, Integer> over, BlockPos fallback) {
@@ -2084,6 +2139,8 @@ public final class Stockpiles {
 		o.add("missingCrates", miss);
 		o.addProperty("capacityStacks", capacity(srv, p));
 		o.addProperty("usedStacks", p.ledger.usedStacks(Stockpiles::maxStack));
+		o.addProperty("overCapacity", overCapacity(srv, p)); // (OVF) a keyed refund left it past capacity: inserts refused until it fits
+		o.addProperty("capacityLabel", capacityLabel(p.ledger.usedStacks(Stockpiles::maxStack), capacity(srv, p)));
 		o.add("stock", Builder.counts(p.ledger.stock()));
 		Map<String, Integer> need = unbuiltAll(srv, p);
 		o.add("outstanding", Builder.counts(need));
@@ -2274,14 +2331,14 @@ public final class Stockpiles {
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
 					}
-					if (req.has("capacity")) {
-						testCapacity = req.get("capacity").getAsInt(); // (DR2 fix) -1 off
-					}
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
 					if (req.has("waitAll")) {
 						SaveTiming.waitAll = req.get("waitAll").getAsBoolean(); // (SS) a flushed save waits for every loading chunk, as vanilla
+					}
+					if (req.has("capacity")) {
+						testCapacity = req.get("capacity").getAsInt(); // (OVF) every pile's capacity in stacks; -1 the crates'
 					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
@@ -2301,13 +2358,6 @@ public final class Stockpiles {
 					o.addProperty("forceAll", SaveTiming.forceAll);
 					o.addProperty("waitAll", SaveTiming.waitAll);
 					o.addProperty("capacity", testCapacity);
-					int owed = 0;
-					for (Pile q : PILES.values()) {
-						owed += q.ledger.owedDropKeys().size();
-					}
-					o.addProperty("owedDrops", owed); // (DR2 fix) overflow owed (not yet on disk as items)
-					o.addProperty("resolvedFound", OverflowDrops.resolvedFound);
-					o.addProperty("resolvedSpawned", OverflowDrops.resolvedSpawned);
 					return o;
 				}
 				case "state" -> {
@@ -2964,12 +3014,6 @@ public final class Stockpiles {
 				}
 				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
 			}
-			// (DR2 fix) the spawned overflow's chunk and entity writes are durable: its entries leave this ledger write
-			if (OverflowDrops.confirm() && "OV1".equals(WorldJournal.armed())) {
-				// (DR2 fix, TEST kill point OV1) the overflow's save: its items on disk, the ledger still owing them
-				Architect.LOGGER.error("Stockpiles: kill point OV1: the overflow's items flushed, halting before the ledger write (dev.journal.killAt)");
-				Runtime.getRuntime().halt(7);
-			}
 			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
 				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
 				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
@@ -2981,11 +3025,7 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 		}
-		int wrote = saves;
 		save();
-		if (saves > wrote) {
-			OverflowDrops.spawnOwed(srv); // (DR2 fix, P1-1) the ledger owing them is on disk: the overflow drops now (saved at once)
-		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
 		lastWorldSaveMs = ms;
@@ -3156,9 +3196,6 @@ public final class Stockpiles {
 			return;
 		}
 		String why = loadFile(f);
-		if (why == null) {
-			OverflowDrops.loaded(PILES.values()); // (DR2 fix) owed overflow on disk: resolved by the items' tag before any drop
-		}
 		if (why != null) {
 			// (PS, F6, F11) nothing loaded, nothing saved: the file stays as it is
 			PILES.clear();

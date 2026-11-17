@@ -509,7 +509,7 @@ class LedgerLintTest {
 	}
 
 	/**
-	 * Y1 overflow and gone: a refund into a full stockpile overflows to the ground (refundOverflow, outside the identity), never past capacity;
+	 * Y1 overflow and gone: (slice OVF) a refund into a full stockpile enters the stock past capacity (never dropped; was: refundOverflow);
 	 * a crate gone drops the least whole stacks that bring the stock within the new capacity.
 	 */
 	@Test
@@ -530,7 +530,9 @@ class LedgerLintTest {
 		s.removeStart(t);
 		s.removeEnd(t, false);
 		s.checkpoint("a refund into a full stockpile");
-		assertFalse(s.ledger.refundOverflow().isEmpty(), "the refund overflowed");
+		// (slice OVF) a keyed refund never overflows: all of it enters the stock, past capacity (nothing dropped)
+		assertTrue(s.ledger.refundOverflow().isEmpty(), "the refund did not overflow");
+		assertTrue(s.ledger.usedStacks(LedgerSim::maxStack) > s.cap(), "the stock over capacity");
 		s.crates = 3;
 		fill(s);
 		s.checkpoint("three crates");

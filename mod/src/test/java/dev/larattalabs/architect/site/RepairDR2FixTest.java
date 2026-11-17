@@ -11,7 +11,6 @@ import com.google.gson.JsonObject;
 import dev.larattalabs.architect.journal.JournalStore;
 import dev.larattalabs.architect.journal.Pt;
 import dev.larattalabs.architect.journal.WorldJournal;
-import dev.larattalabs.architect.survival.StockLedger;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -31,70 +30,7 @@ class RepairDR2FixTest {
 	private static final BlockState COBBLE = Blocks.COBBLESTONE.defaultBlockState();
 	private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
-	// ------------------------------------------------------------------ P1-1: overflow paid once across CS1 and OV1
-
-	/** A keyed (non-target) credit of 40 into no room: all 40 overflow. */
-	private static StockLedger.Credit credit(StockLedger l, String key) {
-		StockLedger.Credit c = l.credit(key, Map.of("minecraft:cobblestone", 40), 0, item -> 64);
-		if (!c.already()) {
-			l.oweDrop(key, c.overflow(), 77L); // Stockpiles.credit: owed in the same ledger change, never spawned there
-		}
-		return c;
-	}
-
-	/**
-	 * The protocol over the ledger file and the world's entity files, through every stop: overflow is spawned only from a ledger on disk
-	 * that owes it, and the owing entry leaves the ledger only in a save whose entity writes went first. Before the fix the items were
-	 * spawned inside credit(): a stop at CS1 (entities on disk, the ledger not) then booked the pending refund again: 40 + 40.
-	 */
-	@Test
-	void p11_overflowIsPaidOnceWhereverTheSaveStops() {
-		String key = "put:s1:1";
-		for (String stop : List.of("CS1", "OV1", "none")) {
-			StockLedger mem = new StockLedger();
-			JsonObject disk = mem.toJson(); // the ledger on disk before the credit (its refund still to book)
-			int onDisk = 0; // overflow units in the saved entity files
-			assertEquals(40, credit(mem, key).overflow().values().stream().mapToInt(Integer::intValue).sum());
-			// saveCredit: chunks (no overflow entity yet: owed only) then the ledger
-			if (!stop.equals("CS1")) {
-				disk = mem.toJson();
-				// spawnOwed: the items spawned (tagged), saved: entity files first, the entry dropped from the ledger, then the ledger
-				onDisk += 40;
-				mem.clearOwedDrop(key);
-				if (!stop.equals("OV1")) {
-					disk = mem.toJson();
-				}
-			}
-			// the restart: the saved ledger; a pending book of the same key credits nothing twice; an owed entry resolves by the tag
-			StockLedger back = StockLedger.fromJson(disk);
-			StockLedger.Credit again = credit(back, key);
-			int spawned = 0;
-			for (String k : back.owedDropKeys()) {
-				OverflowDrops.Resolution r = OverflowDrops.resolution(onDisk > 0, true);
-				if (r == OverflowDrops.Resolution.SPAWN) {
-					spawned += back.owedDrop(k).items().values().stream().mapToInt(Integer::intValue).sum();
-				}
-				back.clearOwedDrop(k);
-			}
-			assertEquals(40, onDisk + spawned, stop + ": the overflow exists exactly once (on disk " + onDisk + ", spawned at the start " + spawned
-				+ ", credited again " + again + ")");
-		}
-		assertEquals(OverflowDrops.Resolution.WAIT, OverflowDrops.resolution(false, false), "its chunk's entities not loaded yet: never spawned");
-	}
-
-	@Test
-	void p11_owedOverflowRoundTripsAndMerges() {
-		StockLedger l = new StockLedger();
-		l.oweDrop("k", Map.of("minecraft:dirt", 3), 5L);
-		l.oweDrop("k", Map.of("minecraft:dirt", 2, "minecraft:stone", 1), 9L);
-		l.oweDrop("e", Map.of(), 1L);
-		StockLedger b = StockLedger.fromJson(l.toJson());
-		assertEquals(java.util.Set.of("k"), b.owedDropKeys(), "nothing owed for an empty overflow");
-		assertEquals(Map.of("minecraft:dirt", 5, "minecraft:stone", 1), b.owedDrop("k").items());
-		assertEquals(5L, b.owedDrop("k").at(), "the first drop cell kept");
-		b.clearOwedDrop("k");
-		assertTrue(StockLedger.fromJson(b.toJson()).owedDropKeys().isEmpty());
-	}
+	// P1-1 (overflow paid once) moved to slice OVF's owed stock (the round after OVF): StockpileOverflowOVFTest covers CS1 there.
 
 	// ------------------------------------------------------------------ P1-2: /save-off refuses the barrier
 

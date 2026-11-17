@@ -12080,7 +12080,10 @@ record ItemCount(Item item, int count) {}
   `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it) is outside the identity.
   `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
 - **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
-  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. For a stockpile target:
+  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. **(Slice OVF)** A keyed refund
+  (every case below, and a region's keyed charge and scoop) never overflows: all of it is returned, past capacity if need be (nothing
+  new enters until the stock fits again), so its key and its items land in one ledger write and nothing drops. Only unkeyed
+  give-backs still overflow. For a stockpile target:
   - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
     returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
   - construction-delta refunds (removed cells at the start, `refundSwap` at the swap) and a survival revert's refunds;
@@ -32836,6 +32839,73 @@ LEFTOVERS "R2 7c-region-2", with HR's hidden_village, CL's ladder to a walk port
 - **PT:** the "took longer than 120 s" stop was the sidecar's `runKit` wall-clock timer (`sidecar/src/regions.ts`; regionPlanMs 30 s, regionPassPlanMs 120 s). `run()` (`sidecar/src/util/proc.ts`) takes `cpuLimitMs`: the child's CPU time (Linux /proc stat, else `ps -o time=`) sampled each second, stopped past the limit (`limitHit`); a failed sample keeps the last reading, and a child never read (Windows) is held to the limit by wall clock. The plan, link-pass and authored-plan runs use it, with a wall backstop `planWallBackstopMs` = 5x, 600-1800 s (config `regionPlanWallMs` overrides it; author.test's idle-timer probe sets 8 s, since an idle child never reaches a CPU limit). Messages keep 6a's prefix: "the plan took longer than 120 s of CPU time and was stopped", or "... than 600 s of wall-clock time (the backstop; N s of CPU time used, ...)". The check and previews stay wall clock. The mod's wait for a plan (RegionsImpl) rises 300/600 s to 660/900 s, past the backstop.
 - **Tests:** `kit/test/wall-wr2.test.mjs` (the gate at the claim's centre on and off the open line: fails on slice/WR, passes; the moat and the free/form rings, enclosing and not); `sidecar/test/proc-cpu.test.ts` (limitHit, the ps parser, backstop, messages, a busy child stopped by CPU, an idle one only by the backstop, an unreadable one by wall clock). Scoped units (`unit-scope --run`): kit 489/489, gradle PASS, sidecar 565/566 with author.test's idle-timer probe timing out on the 600 s backstop, fixed by `regionPlanWallMs` (author, regions, proc-cpu re-run: 46/46).
 - **Left over:** a regionPassPlanMs raised past 180 s gives a backstop beyond the mod's 900 s wait; Steward's own waits on a plan are its own.
+
+### Slice OVF as built
+
+- Bug (pre-existing): `Stockpiles.credit` dropped a keyed refund's overflow as item entities before `saveCredit` wrote the ledger;
+  a halt at CS1 (the chunks with the entities on disk, the ledger not) left the refund pending and the start booked it again: twice.
+- Fix: a keyed credit never overflows. `StockLedger.credit` (target, delta and other keys), `chargeOnce`'s empty buckets and
+  `scoopInto` return everything into the stock, past capacity if need be (a private `giveBack(..., unbounded)`); `Stockpiles.credit`,
+  the keyed `charge` and `scoop` call no `dropOverflow`. No new ledger field, no file change, no new API (javadoc note, Since NEXT).
+- Not DR2's owed-drops handoff: one ledger write, no entity/ledger two-file commit, so no crash window is left to resolve.
+- Player-visible: no refund items on the ground at the crate; the pile can read used > capacity, inserts refused until it fits;
+  the excess comes out only as credit (stock beyond what the targets need) or by dissolve, so excess that paused targets need waits
+  for them; a forced `removecrate` over capacity drops the least stock within the capacity left (the existing rule), refund excess too.
+- Unchanged (leftovers): unkeyed give-backs (a swap's old block, the feed's bucket, the RL reconcile's give-backs), adopt's
+  over-capacity drop, `creditRefund` with the stockpile gone, dissolve's own ground drop.
+- Tests: `StockpileOverflowOVFTest` (11: K0/K1/CS1/K2, refused save + a second crash in recovery, an unsaved second debt, dissolve
+  over capacity, a player's Take between crashes, charge/scoop, adopt and a forced crate removal over capacity, a source check; 8 fail on main); StockpileTest
+  and LedgerLintTest (the lint allows past capacity only what a keyed refund left) updated; y-ingame item 6 now expects no entity.
+- Visible: the stockpile panel's count line reads "used of cap stacks · over capacity (only what active builds still need goes in)" (`Stockpiles.capacityLabel`;
+  the view JSON gains `overCapacity`, `capacityLabel`); a player's Insert from inventory refused over capacity says "This stockpile is
+  over capacity: use or take stock first" (hoppers stay silent).
+- In game: fk-crash CS1o (`dev.stockpile.ps capacity 0`, TEST): the single-site removal halted at CS1 into a full stockpile is
+  returned once, no entity, the stock over capacity.
+
+### Slice OVF fix round as built (the GPT review's NOT SAFE)
+
+- Finding 1 (a delta's refund lost at CS1): `Builder.removedRefund` computes the removed paid cells' refund before any write; inside
+  `SiteDeltas.applyChecked`, after D7 and before D8 writes the record naming the delta, it is held pending (`delta:<entry>:<site>`)
+  and saved with the world (`Stockpiles.savePendingDelta`; kill point OVD1). The start books it once when the site's history names the
+  entry, and drops it otherwise (`Stockpiles.deltaFate`).
+- Finding 2 (a refused scoop save, then a retry): `scoop` and a keyed `charge` call `saveConfirmed`, both for a new booking and for an
+  already-held key (it saves when anything is unsaved and throws unless the ledger reached the disk), so the caller writes its drained
+  or charged record only after the ledger holds the booking on disk.
+- Should-fix 3 (an over-capacity stall): over capacity, a unit an active (unpaused) target still misses goes in, up to that need
+  (`StockLedger.accept` with an active-need function, `Stockpiles.unbuiltActive`); anything else is refused as before.
+- Should-fix 4: LedgerSim asserts the insertion invariant at each insert made over capacity.
+- Tests: StockpileOverflowOVFTest +3 (14 in all); StockpileSaveJ1Test's delta check follows the key.
+- Leftovers: the ground dissolve and the forced `removecrate` still drop entities before their ledger save; the unkeyed give-backs,
+  adoption's handoff and `creditRefund` with no stockpile as before; a crash between OVD1 and D8 drops the pending refund unless the
+  start rolls the delta forward. No in-game delta crash case (fk_hall has no second version).
+
+### Slice OVF round 4 as built (the final review's NOT SAFE)
+
+- A delta's pending refund is now held under a journal id allocated up front (`applyChecked(..., presetId)`) and saved, confirmed
+  (`saveConfirmed`), before anything of the delta is written: before the OVERWRITE drop and before D1. A save that can't be confirmed
+  refuses the delta (JOURNAL_UNAVAILABLE, nothing written; findings 1 and 3: no flush ever holds a half-converted delta). Kill point
+  OVD1 sits right after that save.
+- The start resolves a pending delta three ways (`deltaFate`): BOOK when the site's history names the entry; KEEP while it is unresolved
+  (the record still updating, the entry PLACING/ACTIVE in the journal, or the journal unreadable); DROP only when the entry never
+  committed or was rolled back (finding 4).
+- RegionFluids' and MechCharges' booked-charge shortcuts, and the start's `MechCharges.settleBooked`, settle only when
+  `Stockpiles.ledgerOnDisk` confirms a save; otherwise the stage waits (finding 2).
+- Tests: StockpileOverflowOVFTest has 16 (rewritten delta order, the unresolved KEEP, the confirmed charge shortcuts). In game:
+  rl-crash adds OVD1 (a delta to rs_hut less its torch and approach, halted after its pending save: dropped, nothing booked) and OVDC
+  (halted at CS1 after the conversion: booked once, back = what left the paid record).
+
+### Slice OVF "ship core" as built (Noah, 11-17): the delta path reverted
+
+- Kept: owed stock for every keyed refund (no overflow entity; the CS1 double pay fixed), the keyed scoop's and charge's confirmed
+  saves, `Stockpiles.ledgerOnDisk` guarding RegionFluids' and MechCharges' booked charges, the over-capacity inserts for active
+  targets, the LedgerSim insertion invariant, and the over-capacity label and message.
+- Reverted to origin/main: the construction-delta refund path. Concretely: `SiteDeltas.applyChecked`'s `presetId` overload,
+  `Builder.removedRefund` and the pending-delta hold and its confirmed save before the delta (kill point OVD1 and its `dev.journal.killAt`
+  entry), `Stockpiles.holdPendingDelta`, `dropPendingDelta`, `DeltaFate` and `deltaFate` (BOOK/KEEP/DROP), `deltaApplied`,
+  `deltaUnresolved` and their branch in `settlePendingCredits`, `StockLedger.deltaSiteOf`, rl-crash's OVD1/OVDC cases, and their unit tests.
+- Known pre-existing risk until TXN: a construction delta credits its refund after `Sites.replace` writes the new version, and a crash
+  at CS1 inside that credit's save loses the refund (startup never replays the delta's conversion). As a keyed credit it is now owed stock
+  in full, so the overflow part is lost along with the rest instead of lying on the ground.
 
 ### Slice DR-S as built
 

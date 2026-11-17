@@ -16,7 +16,7 @@
 //                                   once its chunks load, its reservation returns
 //     refunds                       item 5: deconstruct a built house and undo the road: returned = each one's Refunds tally; the
 //                                   player's blocks drop at the site; conservation 0
-//     overflow                      item 6: capacity full of credit; a deconstruct returns up to capacity, drops the rest: refundOverflow
+//     overflow                      item 6: capacity full of credit; (OVF) a deconstruct returns all of it, past capacity; nothing drops
 //                                   = the counted entities; conservation 0
 //     once                          item 7: dev.undo.failRestore mid-removal, retry: every refund credited once; conservation 0
 //     restart a|b|kill|c            item 8: clean stop while hoppers feed and the builder places (a: run, stop; b: reload, compare);
@@ -806,16 +806,14 @@ steps.overflow = async () => {
     const ret = d('returned'), over = d('refundOverflow');
     const crate = f.crates[0];
     const ents = (await call('dev.items.near', { pos: [crate[0], crate[1] + 1, crate[2]], radius: 3 }, 30_000)).items ?? {};
-    const both = { ...ret };
-    for (const [k, v] of Object.entries(over)) both[k] = (both[k] ?? 0) + v;
     out.removals.push({ id, usedBefore: st0.usedStacks, usedAfter: st1.usedStacks, capacity: st1.capacityStacks, paid, returned: ret, overflow: over, entities: ents });
-    check(rm.removed && same(both, paid), `item 6: ${id}: returned + refundOverflow = its tally (${sum(ret)} + ${sum(over)} = ${sum(paid)})`);
-    check(st1.usedStacks <= st1.capacityStacks, `item 6: ${id}: returned up to capacity (${st1.usedStacks} of ${st1.capacityStacks} stacks)`);
-    check(same(over, ents), `item 6: ${id}: refundOverflow equals the item entities counted at the crate (${json(over)} vs ${json(ents)})`);
+    // (slice OVF) a keyed refund never overflows: all of it returned into the stock, past capacity if need be; nothing drops at the crate
+    check(rm.removed && same(ret, paid) && sum(over) === 0, `item 6: ${id}: returned = its tally, nothing in refundOverflow (${sum(ret)} = ${sum(paid)}; overflow ${sum(over)})`);
+    check(Object.keys(ents).length === 0, `item 6: ${id}: no item entity at the crate (${json(ents)}); the stock at ${st1.usedStacks} of ${st1.capacityStacks} stacks`);
     const p = await cons.point(`${id} removed`);
     check(exact(p), `item 6: ${id}: conservation difference 0 (${json(p.diff)})`);
   }
-  check(out.removals.some((r) => sum(r.overflow) > 0), 'item 6: a deconstruct overflowed (capacity was full of credit)');
+  check(out.removals.some((r) => r.usedAfter > r.capacity), 'item 6: a deconstruct went past capacity (capacity was full of credit): in the stock, never dropped');
   await leaveWorld();
   return out;
 };

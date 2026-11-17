@@ -28,10 +28,9 @@
 //     DR4c  a third cottage removed alone, stuck as DR4a; a player mines one of its standing placed blocks before the repair: that cell is
 //           FOREIGN ("a player took"), the repair writes the rest and never settles it (nothing booked, its credit still pending); a clean
 //           start keeps it pending too (it reads restored)
-//     DR7c  a custody credit overflowing whole (dev.stockpile.ps capacity 0), CS1 armed: the halt inside the credit's save leaves no item
-//           at the crate and the custody held; finishing the open repair drops the 4 flint once
-//     DR7o  the same with OV1 (the overflow's own save, its items flushed, the ledger owing them): after the restart the 4 flint lie at the
-//           crate once, found by their tag (resolvedFound, none spawned again); finishing the repair credits nothing again
+//     DR7c  a custody credit into a full stockpile (dev.stockpile.ps capacity 0), CS1 armed: the halt inside the credit's save leaves no item
+//           at the crate and the custody held; finishing the open repair credits the 4 flint once into the stock (OVF: past capacity, no
+//           entity)
 //
 // Evidence: artifacts/gate6d-gr/drsurvival.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -449,12 +448,12 @@ export async function registerDRS(steps, h) {
       out.DR7 = { key, moved, record: r.record };
     }
 
-    // DR7c / DR7o (DR2 fix, P1-1): a keyed credit's overflow is paid once across a stop inside its save. The stockpile's room set to none
-    // (dev.stockpile.ps capacity 0), so a custody credit overflows whole: CS1 halts the credit's save after its chunks, before the ledger
-    // (was: the items already in the saved chunks, and the open repair credited the custody again: twice); OV1 halts the overflow's own save
-    // after its items are on disk, the ledger still owing them (the start finds them by their tag: never dropped again)
-    for (const [tag, point, n] of [['DR7c', 'CS1', 3], ['DR7o', 'OV1', 4]]) {
-      const key = `site:scust@${n}`;
+    // DR7c (DR2 fix, P1-1; since the round after OVF, OVF's owed stock): a keyed credit is paid once across a stop inside its save, and
+    // never overflows. The stockpile's room set to none (dev.stockpile.ps capacity 0), CS1 halts the credit's save after its chunks, before
+    // the ledger (was: 4 flint dropped before the stop and again by the finish, 8). After the restart nothing lies at the crate and the custody
+    // is held; finishing the open repair credits it once into the stock, past capacity (slice OVF), with no item entity
+    {
+      const tag = 'DR7c', key = 'site:scust@3';
       const items = { 'minecraft:flint': 4 };
       const crate = W.crates[0];
       const flint = async () => ((await call('dev.items.near', { pos: crate, radius: 6 }, 60_000)).items ?? {})['minecraft:flint'] ?? 0;
@@ -464,32 +463,25 @@ export async function registerDRS(steps, h) {
       await call('dev.stockpile.ps', { capacity: 0, noPeriodic: true }, 30_000);
       const d = await diag({ kind: 'all' });
       check(!!(d.findings ?? []).find((x) => x.code === 'CUSTODY' && x.key === key), `${tag}: CUSTODY ${key} reported`);
-      await call('dev.journal.killAt', { point }, 10_000);
+      const b0 = back(saved());
+      await call('dev.journal.killAt', { point: 'CS1' }, 10_000);
       repair(d.planId, true).catch(() => null);
-      check(await haltWait(), `${tag}: ${point} halted the server inside the credit's save`);
+      check(await haltWait(), `${tag}: CS1 halted the server inside the credit's save`);
       await restart(tag);
-      let ps = null;
-      for (let i = 0; i < 60; i++) { ps = await call('dev.stockpile.ps', {}, 30_000); if (!ps.owedDrops) break; await L.sleep(1000); }
       await L.settle(3000);
       const S = saved();
       const after = await flint();
-      if (point === 'CS1') {
-        log(`  ${tag}: after the stop ${after} flint at the crate (the overflow never dropped before its ledger's save), ${key} ${(S.credited ?? []).includes(key) ? 'credited' : 'held'}`);
-        await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
-        const r = await repair(d.planId, true);
-        await L.settle(2000);
-        const fin = await flint();
-        check(fin === 4 && saved().credited?.includes(key) && !saved().custody?.[key], `${tag}: after the open repair finished, the custody is credited once and its 4 flint lie at the crate once (${fin}; was 8: dropped before the stop and again by the finish) (${r.message})`, r);
-        out[tag] = { after, fin };
-      } else {
-        check(after === 4 && (S.credited ?? []).includes(key) && ps?.resolvedFound >= 1 && ps?.resolvedSpawned === 0 && !ps?.owedDrops,
-          `${tag}: after the stop the 4 flint lie at the crate once (${after}), found on disk by their tag (found ${ps?.resolvedFound}, spawned ${ps?.resolvedSpawned}, owed ${ps?.owedDrops}); ${key} credited`, ps);
-        const r = await repair(d.planId, true);
-        await L.settle(2000);
-        const fin = await flint();
-        check(fin === 4, `${tag}: finishing the open repair credits nothing again: still 4 flint (${fin}; ${r.message})`, r);
-        out[tag] = { after, fin, ps };
-      }
+      check(after === 0 && !(S.credited ?? []).includes(key) && G.same(S.custody?.[key] ?? {}, items) && G.same(back(S), b0),
+        `${tag}: after the stop no flint at the crate (${after}), ${key} not credited, its custody held, nothing booked`, { custody: S.custody?.[key] });
+      await call('dev.stockpile.ps', { capacity: 0 }, 30_000);
+      const r = await repair(d.planId, true);
+      await L.settle(2000);
+      const fin = await flint();
+      const S2 = saved();
+      const moved = G.minus(back(S2), b0);
+      check(fin === 0 && G.same(moved, items) && S2.credited?.includes(key) && !S2.custody?.[key],
+        `${tag}: after the open repair finished, the custody is credited once into the stock past capacity (${json(moved)}), no flint entity (${fin}; was 8 on the ground) (${r.message})`, r);
+      out[tag] = { after, fin, moved };
       await call('dev.stockpile.ps', { capacity: -1 }, 30_000);
     }
     await L.leaveWorld();

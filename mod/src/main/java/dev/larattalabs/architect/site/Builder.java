@@ -2375,6 +2375,8 @@ public final class Builder {
 			}
 			if (moved > 0) {
 				inv.setChanged();
+			} else if (Stockpiles.overCapacity(player.level().getServer(), pileCrate.siteId())) {
+				throw new Sites.SiteException(Stockpiles.OVER_CAPACITY); // (OVF) the refusal said, not a silent 0
 			}
 			return moved;
 		}

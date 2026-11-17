@@ -141,12 +141,18 @@ class StockpileTest {
 		l.giveBack(Map.of(COBBLE, 60), 1, MAX);
 		l.pay("site:s2@1", COBBLE, 10); // (JR) the delta's site paid for them (the cap)
 		l.pay("site:s2@1", DOOR, 2);
+		// (slice OVF) a keyed credit never overflows: all of it enters the stock, past capacity (nothing dropped, once across a crash)
 		StockLedger.Credit c = l.credit("delta:e1:s2", Map.of(COBBLE, 10, DOOR, 2), 1, MAX);
-		assertEquals(Map.of(COBBLE, 4), c.returned(), "the partial stack fills");
-		assertEquals(Map.of(COBBLE, 6, DOOR, 2), c.overflow());
-		assertEquals(Map.of(COBBLE, 6, DOOR, 2), l.refundOverflow());
-		assertEquals(64, l.stock(COBBLE));
-		assertEquals(0, l.stock(DOOR));
+		assertEquals(Map.of(COBBLE, 10, DOOR, 2), c.returned(), "all of it, past capacity");
+		assertTrue(c.overflow().isEmpty() && l.refundOverflow().isEmpty());
+		assertEquals(70, l.stock(COBBLE));
+		assertEquals(2, l.stock(DOOR));
+		assertEquals(0, l.room(COBBLE, 1, MAX), "over capacity: nothing new enters");
+		identity(l);
+		// an unkeyed give-back still overflows, outside the identity
+		StockLedger.Credit u = l.giveBack(Map.of(DOOR, 3), 1, MAX);
+		assertEquals(Map.of(DOOR, 3), u.overflow());
+		assertEquals(Map.of(DOOR, 3), l.refundOverflow());
 		identity(l);
 	}
 
