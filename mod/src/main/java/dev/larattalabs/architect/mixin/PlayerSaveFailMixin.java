@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * {@code PlayerDataStorage.save} catches its own exception and logs "Failed to save player data for {}", and its {@code Util.safeReplaceFile}
  * drops {@code safeReplaceOrMoveFile}'s false (26.3 bytecode: {@code pop}), so a replace that aborts and keeps the old {@code .dat} looked
  * like success. Here the replace runs as {@code safeReplaceOrMoveFile(.., false)} with its result kept, the snapshot written to the temp file
- * is kept for a retry, and a load first writes a snapshot still owed.
+ * is kept for a retry, and a login loads a snapshot still owed (written to the file first, or served in its place), never the older file.
  */
 @Mixin(PlayerDataStorage.class)
 public abstract class PlayerSaveFailMixin {
@@ -66,8 +66,18 @@ public abstract class PlayerSaveFailMixin {
 		PlayerSaves.done();
 	}
 
-	@Inject(method = "load(Lnet/minecraft/server/players/NameAndId;)Ljava/util/Optional;", at = @At("HEAD"), require = 1)
-	private void architect$loading(NameAndId who, CallbackInfoReturnable<Optional<CompoundTag>> cir) {
-		PlayerSaves.loading(who.id());
+	/**
+	 * (TXN review 4 item 2) A login's read of {@code <uuid>.dat}: an owed snapshot is written there first, or, when that fails, served in place
+	 * of the older file (vanilla's data fixer then runs on it as on a read). Never the older file while a snapshot is owed.
+	 */
+	@Inject(method = "load(Lnet/minecraft/server/players/NameAndId;Ljava/lang/String;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true,
+		require = 1)
+	private void architect$loading(NameAndId who, String suffix, CallbackInfoReturnable<Optional<CompoundTag>> cir) {
+		if (!".dat".equals(suffix)) {
+			return;
+		}
+		if (PlayerSaves.loadInstead(who.id()) instanceof CompoundTag kept) {
+			cir.setReturnValue(Optional.of(kept.copy()));
+		}
 	}
 }
