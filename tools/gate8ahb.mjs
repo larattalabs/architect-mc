@@ -506,11 +506,13 @@ steps.join = async () => {
   await ensure();
   spendZero();
   const tag = 'join';
-  const fx = G.fixture(ctx, 'bf/x03_island_hamlet');
+  // rs01 on its flat claim: its first stage's paid targets have no land to wait for, so one builds in the step it joins in (x03's
+  // hamlet waits for its island first: none does)
+  const fx = G.fixture(ctx, 'rs01_land');
   const entries = entriesOf(fx);
   const s = await G.site(ctx, tag, fx);
   await G.designs(ctx);
-  const box = boxOf(s.W, 96);
+  const box = boxOf(s.W, 40);
   const pre = await G.snap(ctx, box, `hb-${tag}-pre`);
   const ck = await G.check(ctx, tag, s);
   await call('dev.terrain.rate', { n: 16 }, 30_000);
