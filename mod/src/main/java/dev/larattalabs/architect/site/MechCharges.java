@@ -241,6 +241,7 @@ public final class MechCharges {
 			w.add("missing", json(miss));
 			w.addProperty("say", say);
 			i.ext.add(RegionTargets.EXT_WAITS_FOR, w);
+			TypedWaits.typed(i); // (8a HB) the bill wait's payload: Batches.waitFor keeps it
 			boolean moved = billWaitMoved(i);
 			Batches.waitFor(b, i, Reason.SITE_BUSY, say + " (the stockpile of " + (owner == null ? "the player" : owner)
 				+ "; its whole bill is charged at once, then it is written in one go)", moved);

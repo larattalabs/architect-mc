@@ -1310,6 +1310,12 @@ public final class RegionTargets {
 
 	// ------------------------------------------------------------------ (8a ST) the staged terrain step
 
+	/**
+	 * (8a HB, TEST: {@code dev.terrain.rate {hold}}, this JVM only) Every staged terrain target writes nothing while set, so a gate holds a
+	 * region's land at 0 or part built (Remove, undo and the halt at a fraction). Never set in production.
+	 */
+	public static volatile boolean terrainHold;
+
 	/** (8a ST) Per survival region (its group): the feed tick its terrain budget was last spent in, and how much of it. Server thread. */
 	private static final Map<String, long[]> TERRAIN_SPENT = new HashMap<>();
 	/** (8a ST) Per region group and part: the last feed tick a staged target of the part wrote a cell. Server thread. */
@@ -1342,7 +1348,7 @@ public final class RegionTargets {
 	 * under it, a leaf for its log, and a cell whose support lies in a chunk not loaded is never written (GPT review P1).
 	 */
 	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.@Nullable Purse purse, long ticks) {
-		int budget = terrainLeft(t.group(), ticks);
+		int budget = terrainHold ? 0 : terrainLeft(t.group(), ticks);
 		if (budget <= 0) {
 			SiteWaits.observe(srv, level, t.id(), WaitCalc.Outcome.IDLE);
 			return;
@@ -1696,6 +1702,11 @@ public final class RegionTargets {
 	 * cursor (its first unbuilt queue index), connected (TO's count at put-down), runs, scan position, stall and released; the rate.
 	 */
 	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, @Nullable String batchId, boolean check) {
+		return terrainJson(srv, group, batchId == null ? List.of() : List.of(batchId), check);
+	}
+
+	/** (8a HB) As {@link #terrainJson(MinecraftServer, String, String, boolean)}, the waits read from every batch named (a growth's too). */
+	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, List<String> batchIds, boolean check) {
 		JsonObject o = new JsonObject();
 		o.addProperty("terrainPerTick", SurvivalWorld.terrainPerTick());
 		o.addProperty("stagedBuild", Packed.stagedBuild());
@@ -1721,8 +1732,11 @@ public final class RegionTargets {
 		o.addProperty("barriers", TERRAIN_SAVES.get());
 		// the region's items that wait for a target (their architect_mc:waitsFor), as Steward reads ITEM_WAITING's ext
 		JsonArray waits = new JsonArray();
-		var batch = batchId == null ? null : Batches.get(batchId);
-		if (batch != null) {
+		for (String bid : batchIds) {
+			var batch = bid == null ? null : Batches.get(bid);
+			if (batch == null) {
+				continue;
+			}
 			for (var it : batch.items) {
 				if (it.ext.get(EXT_WAITS_FOR) instanceof JsonObject w) {
 					JsonObject x = new JsonObject();
@@ -2321,18 +2335,32 @@ public final class RegionTargets {
 	private static void waitOn(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, Infra t,
 		@Nullable String part) {
 		String target = t.id();
-		JsonObject extra = null;
-		if (isTerrain(t)) {
-			// (8a ST, §6, S-8a-3) the typed terrain wait: kind "terrain" (Steward words its line from it) with the target's staged cells
-			extra = new JsonObject();
-			extra.addProperty("kind", WAIT_KIND_TERRAIN);
-			Builder.Run r = RoadBuilder.run(srv, t);
-			int cells = r == null ? (t.construction() == null ? 0 : t.construction().size()) : r.size();
-			extra.addProperty("terrainCells", cells);
-			extra.addProperty("terrainBuilt", r == null ? 0 : r.built.cardinality());
-		}
+		JsonObject extra = terrainWait(srv, t);
 		waitFor(b, i, target, part, Batches::waitFor, "waits for " + (part == null ? target : part + " (" + target + ")")
 			+ (extra != null ? "'s land" : "") + " to be built: a survival region builds what stands on a part only once it is built", extra);
+	}
+
+	/**
+	 * (8a ST, §6, S-8a-3) The typed terrain wait's payload for a wait on {@code t}: kind "terrain" (Steward words its line from it) with the
+	 * target's staged cells; null when {@code t} is not a staged terrain target.
+	 */
+	static @Nullable JsonObject terrainWait(MinecraftServer srv, @Nullable Infra t) {
+		if (!isTerrain(t)) {
+			return null;
+		}
+		JsonObject extra = new JsonObject();
+		extra.addProperty("kind", WAIT_KIND_TERRAIN);
+		Builder.Run r = RoadBuilder.run(srv, t);
+		int cells = r == null ? (t.construction() == null ? 0 : t.construction().size()) : r.size();
+		extra.addProperty("terrainCells", cells);
+		extra.addProperty("terrainBuilt", r == null ? 0 : r.built.cardinality());
+		return extra;
+	}
+
+	/** (8a HB) A stage wait on {@code target} (the fluids barrier's), typed {@code kind: "terrain"} when it is a staged terrain target. */
+	public static void waitForTarget(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target,
+		@Nullable String part, String detail) {
+		waitFor(b, i, target, part, Batches::waitFor, detail, terrainWait(srv, Infras.get(target)));
 	}
 
 	/** How a wait is put on an item (a {@link Batches#waitFor} or a stage's). */
@@ -2382,6 +2410,7 @@ public final class RegionTargets {
 			w.addProperty("say", say);
 		}
 		i.ext.add(EXT_WAITS_FOR, w);
+		TypedWaits.typed(i); // (8a HB) this wait's payload: Batches.waitFor keeps it (an untyped wait clears it)
 		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, (says ? say + ": " : "") + detail);
 	}
 

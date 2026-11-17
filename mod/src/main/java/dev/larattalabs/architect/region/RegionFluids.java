@@ -695,7 +695,7 @@ public final class RegionFluids {
 				// (6c close-out A, §8) with waitsFor {target, part, waiter, say}: what the bodies wait for, sayable
 				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuilding(l.rec().groupId);
 				if (first != null) {
-					RegionItems.waitStageFor(b, stage, first[0], first[1], waiting);
+					RegionItems.waitStageFor(s, b, stage, first[0], first[1], waiting); // (8a HB) typed on a staged terrain target
 				} else {
 					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, waiting);
 				}

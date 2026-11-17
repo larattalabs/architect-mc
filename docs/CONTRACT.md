@@ -33006,6 +33006,64 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
     crash after a deposit can therefore leave the ledger ahead of player.dat (a doubled deposit). The stockpile's own save with the world
     saves the players first.
 
+### Slice HB as built (branch `slice/HB` off `slice/ST` 356aac15, ST's review round 31104f58 merged; versions NEXT; $0; strict; recorded 2026-11-17)
+
+- **RL's book marks staged cells free** (the fix; `Stockpiles`, one helper and its two call sites, beside PSV/LC3/OVF's paths). Before, a
+  staged target's book (refreshed before each save) set `s` for every built staged cell: harmless (cost 0), but not §4's "free". Now
+  `freeBook`: every cell known, `s` and `o` empty, no rescan at the save; `reconcileTerrain` at an unclean start charges, owes and gives back
+  nothing and re-derives a building target's progress from the world. **A target recorded BUILT stays BUILT** (GPT review P1-1/P1-2: the
+  first round reopened one with cells missing, which could fill a lot's or road's deliberate cut, not every one a construction queue, or
+  clear another writer's paid block for the whole resumed run). Its cells are free, so a hole mints and loses nothing; it is logged.
+  Units: `StagedTerrainBookHBTest` (2).
+- **Readings.** "Remove and undo at 0/50/100%, both orders": a survival region's stage is never undone alone (Groups refuses it), so
+  undo is RU's `undoRevision` (hb-growth, at each fraction) and the orders are Regions.remove at once vs lot first (Sites.remove of the
+  lots on the island, then Regions.remove; at 0/50% the lots wait typed and nothing stands on the land, so only at 100%).
+- **ST's two hand-overs.** The book (above). Typed waits: the fluids barrier's stage wait on a staged target now carries `kind: "terrain"`
+  (`RegionTargets.terrainWait`, shared with the stage wait); `RegionView.waiting` is read with its payload: the waiting item's
+  `architect_mc:waitsFor` is copied onto the view's `ext` (additive, no API change), read from the region's batch and its revisions'
+  (P2-4: a growth's). P2-3: a payload lives only for the wait it was set for (`TypedWaits`: its writer marks it, every `Batches.waitFor`
+  clears an unmarked one), so a fluids gate's later player or materials wait carries no stale `kind: "terrain"`. The barrier path has no
+  in-game row (no fixture's bodies wait on staged land); the clear is unit-checked.
+- **Dev (TEST):** `dev.terrain.rate {hold}` (no staged target writes while set; this JVM); `dev.region.terrain`'s waits now read the
+  revisions' batches too (a growth's items wait in their own batch: its typed wait was invisible to the hook, not to Steward's events).
+- **Gate** `tools/gate8ahb.mjs` (hb-remove, hb-halt, hb-growth). hb-remove: x03h held at 0/50/100%, Remove E-flat 0, refund = consumed,
+  conservation exact, no staged bill; lot first: every staged cell stands; XR on raised rs01: 9 staged cells taken up, none a paid
+  victim, nothing retaken, standing = paid. hb-halt: saved mid run, halted with nothing saved: books k=n/s=0/o=0 at the save and after,
+  RL nothing charged or owed, RegionView terrainCells kept, terrainBuilt = the world, rate 4, part building, typed wait again; resumed to
+  the INSTANT twin (0 differ), E-flat 0. hb-growth: a growth's pads over stepped land staged, verges wait typed `terrain`; undoRevision at
+  0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
+- **Ran** (f9903a02, ST merged): Gradle build 1359 tests 0 failures; scoped kit 74/74 (1 skipped); step-inputs check; gitleaks clean. Final
+  gate-runs-hb/20261117-034128-change: hb-remove 22/0, hb-halt 14/0, hb-growth 28/0 (`--shards 1 --no-turbo --no-cache`, 9018/9019).
+- **Fix round** (16fb55ad, gate-runs-hb/20261117-043357-change): hb-halt and hb-growth pass (RegionView.waiting typed `terrain` from the
+  growth's batch); new row xr01crash. Its first draft also turned RL's save on join off (`noPeriodic` alone): 387 paid units stood unpaid
+  after the restart, a test artefact (production always saves on join); now `{noPeriodic, joinSave}`.
+- **Combined ST/HB round** (Noah, outside the guard; slice/T0 2c2b093c merged).
+  - **P1, the save on join** (`Stockpiles.feed`): a target that joined the feed (in the pass, or through a reconcile between passes) is
+    saved through T0's `barrier()` BEFORE the pass steps any target. Only OK lets the pass run; REFUSED or IN_DOUBT holds it until a later
+    tick (rule 17). Kill point JS1 (TEST): a target that joined built paid cells in its first step. Gate hb-join (rs01, `JS1+save`).
+  - **Premise check (rule 19): the failing-first run did not fail.** At a448bcae (pre-fix, gate-runs-hb/20261117-062015-change) hb-join
+    PASSED. The step and its join save run in one server tick, and every chunk save (autosave, a kill's `+save`, ST's `terrainDurable`)
+    goes through the world-save hook, which writes the ledger with refreshed books after the chunks. Paid blocks never reach the disk
+    ahead of their target's book. The reorder is kept for rule 17; hb-join is its regression row.
+  - **P3:** `HB_ONLY=xr01crash` runs it alone. xr01crash's booked-BUILT window is unreachable with the save on join on (a later join drops
+    the books of BUILT targets): recorded, not judged (run 8's c4 is the one instance).
+  - **The 54 missing cells (xr01crash): the same class, diagnosed.** They are props target c10 (54 cells: stone bricks, a fence, stairs, a
+    trapdoor). It joined with its book saved (nothing built), built after the last ledger save, and was recorded BUILT: `Infras.put`
+    saves the sites file at once, ahead of the chunks and the ledger. The halt lost its chunk writes, and RL counts as lost only cells that
+    stood paid at the save, so it stays BUILT with 54 holes. Nothing is minted or lost (the stock keeps the items: standing = paid,
+    conservation exact). The join barrier does not fix it; a barrier before a fed target's BUILT is persisted would (ST's completion
+    item, for every fed target). Not widened into a reopen.
+- **Ran** (T0 merged, 9018/9019, `--shards 1 --no-turbo --no-cache`): gate-runs-hb/20261117-064618-change at bbbd506d: hb-join 4/0,
+  hb-growth 30/0, rl-crash 110/0; gate-runs-hb/20261117-072039-change at 297c0c64 (the two gate-only fixes): hb-halt 15/0, hb-remove
+  27/1 (the one FAIL is xr01crash's 54-cell class above). Gradle build 1414 tests 0 failures; step-inputs check; gitleaks clean.
+- **Pre-batch** (GPT check SAFE on 858e7671; the 54-cell gap is P2, to TXN T2): a refused save on join is retried after 100 ticks and
+  warned on the first refusal, then once a minute; the pass stays held (unit: `StagedTerrainBookHBTest`). Merged slice/ST 75355455 and
+  slice/T0 a4531467 (`dev.journal.killAt` accepts ST1 and JS1). gate-runs-hb/20261117-074658-change at 3ef7a289: hb-halt 15/0,
+  hb-growth 30/0, rl-crash 110/0, hb-remove 27/1 (the one FAIL is xr01crash's class above: 100 cells this time, c10 and lot s2,
+  both BUILT after the last ledger save; standing = paid 347, conservation exact). Gradle build 1432 tests, 0 failures.
+- **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the 54-cell class above
+  (TXN T2).
+
 ### Slice T0 as built (branch `slice/T0` off origin/main 5a782f9d; one fix round after the NOT SAFE GPT review of 042da098 plus TXN review 3 items 1 and 5; no API package change; $0; strict; recorded 2026-11-16)
 
 - **DurableFile** (`site/DurableFile.java`): temp, file force, atomic rename, folder force; OK / REFUSED / IN_DOUBT. `_durable` is `{store: the file's own persisted UUID, type: label, gen}` (`id()`, `satisfies(id, gen)`); a folder open that fails is IN_DOUBT off Windows; each new folder's entry is forced in its parent before the rename, and the file's folder and its parent are confirmed once a process even when an earlier session made them (`confirmChain`; also `playerdata/` and every live region folder before the barrier acknowledges); an older generation never replaces a newer one; a loaded generation counts as written only after `confirm()` forces the file and folders again; `writeUnforced` un-acknowledges the generations it replaces.
