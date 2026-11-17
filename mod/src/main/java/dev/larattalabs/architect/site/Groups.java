@@ -45,6 +45,8 @@ public final class Groups {
 		final List<String> cascaded = new ArrayList<>();
 		Map<String, Integer> handedAll = new TreeMap<>();
 		boolean started;
+		/** (LC3 round 4, not saved) a re-taken custody whose save was not confirmed yet: the next retry saves again. */
+		boolean retakeUnsaved;
 		@Nullable String current;
 		long waited;
 		long nextCheck;
@@ -440,10 +442,11 @@ public final class Groups {
 	/**
 	 * (slice LC3 round 4) Before a stalled removal resumes: an unwritten filled member with no custody (an abandon that crashed after its
 	 * custody save, before its records were dropped, wrote it back into its containers) has it taken again, so its restore refunds it once
-	 * (never destroyed with its containers); then saved with the world, as a removal's custody take.
+	 * (never destroyed with its containers). (Rule 17, persist before mutate) the take is saved with the world, confirmed durable, before the
+	 * retry may go on: answers false (the retry refused, still stalled; a later retry saves again) when that save is not confirmed.
 	 */
-	static void retakeCustody(MinecraftServer server, Removal r) {
-		boolean any = false;
+	static boolean retakeCustody(MinecraftServer server, Removal r) {
+		boolean any = r.retakeUnsaved;
 		for (String id : settle(r).unwritten()) {
 			Site s = Sites.pendingRecord(id);
 			if (s == null || s.construction() == null || !Fills.filledSite(s)) {
@@ -459,14 +462,23 @@ public final class Groups {
 			any = true;
 			Architect.LOGGER.warn("Removal of {}: unwritten member {} held no custody (an interrupted abandon returned it): taken again before the retry", r.group, id);
 		}
-		if (any) {
-			try {
-				Stockpiles.saveWithWorld(server);
-			} catch (IllegalStateException e) {
-				Architect.LOGGER.error("Removal of {}: the custody save was refused ({}); it stays pending", r.group, e.getMessage());
-			}
+		if (!any) {
+			return true;
 		}
+		r.retakeUnsaved = true;
+		if (!Stockpiles.saveWithWorldConfirmed(server)) {
+			Architect.LOGGER.error("Removal of {}: the re-taken custody's save was not confirmed durable; the retry is refused (still stalled)", r.group);
+			return false;
+		}
+		r.retakeUnsaved = false;
+		return true;
 	}
+
+	/** (LC3 round 4) The refusal a retry answers when {@link #retakeCustody} could not confirm its save. */
+	static String retakeRefusal(String name) {
+		return "The removal of " + name + " was not resumed: its members' re-taken custody could not be saved durably; it stays stalled (try again)";
+	}
+
 
 	/** (TEST, the command's suggestions) The stalled removals, by group and stage (null: the whole group). */
 	static List<String[]> stalledNames() {
@@ -794,11 +806,14 @@ public final class Groups {
 				Batches.cancel(server, b.id);
 			}
 		}
+		Removal st0 = stalled(groupId, null);
+		if (st0 != null && !retakeCustody(server, st0)) { // (LC3 round 4, rule 17) before anything changes
+			return CompletableFuture.completedFuture(new Removed(false, List.of(retakeRefusal(groupId)), Map.of()));
+		}
 		Sites.putGroup(server, g.withState(SiteGroupRec.REMOVING));
 		CompletableFuture<Removed> f = new CompletableFuture<>();
 		Removal st = stalled(groupId, null);
 		if (st != null) {
-			retakeCustody(server, st); // (LC3 round 4)
 			resume(st, f);
 			Placement.save(server, false);
 			Architect.LOGGER.info("Removing group {}: resuming the earlier removal ({} site(s) left to restore)", groupId, st.sites.size());
@@ -869,8 +884,10 @@ public final class Groups {
 		}
 		Removal st = stalled(groupId, stage);
 		if (st != null) {
+			if (!retakeCustody(server, st)) { // (LC3 round 4, rule 17)
+				return CompletableFuture.failedFuture(new IllegalStateException(retakeRefusal(nameOf(groupId, stage))));
+			}
 			CompletableFuture<Removed> f = new CompletableFuture<>();
-			retakeCustody(server, st); // (LC3 round 4)
 			resume(st, f);
 			Placement.save(server, false);
 			return f;

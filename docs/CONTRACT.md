@@ -31341,7 +31341,8 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **Idempotent return** (`Fills.writeBackAbandoned`): a declared slot already holding its item counts as written back (a crash between the
   save's chunks and its ledger); billed items with no declared slot are credited to the stockpile (a ledger change in the same save), never
   dropped. A retried stalled removal (`retakeCustody`, before `resume`) takes custody again for an unwritten filled member holding none (a
-  crash after the save, before the records), so its restore refunds it once.
+  crash after the save, before the records), so its restore refunds it once; (rule 17) saved confirmed before the retry goes on, else the
+  retry is refused (still stalled) and the next one saves again.
 - **P2:** the abandoned member keeps no record, so FillGuard would guard nothing: its provided items are settled by FK-b's rule, never
   written back (held ones released and destroyed; any provided stack in its declared containers stripped).
 - **Kill points** (`dev.journal.killAt`): AB1 custody back in memory; AB2 inside the save (chunks on disk, ledger not); AB3 save confirmed,
@@ -31353,7 +31354,7 @@ without them; slabs unpickupable and untransferable from declared containers; st
   plus stock gained = the bill), no custody or held slabs left, nothing dropped, no provided slab in the containers (f6a982f6's writeBack put the
   16 slabs back there, unguarded), loose or with the player.
 - **Leftovers:** the ledger's `filled`/`provided`/paid records of an abandoned member's key stay (keyed by placement, inert); the retry's
-  re-take is shown by units and source only.
+  re-take is shown by units and source only (no in-game crash point of its own: rule 18 not met there).
 - **PSV merged** (origin/slice/PSV f68b7716, its fix round READY): LC3's copies dropped (requestedGen, WRITTEN_GEN, failedGen, FAIL_WRITES,
   writeSave(gen) with PSV's folder sync, saveIfDue's retry half, the load resets); kept `saveWanted`/`wantSave` (saveIfDue's tail) and
   `RemovalSeal.observe`; `save` answers its generation. RemovalSealTest's barrier call became `flushSaves()` (PSV removed `saved()`). GATE4
