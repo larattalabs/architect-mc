@@ -365,11 +365,13 @@ steps.remove = async () => {
       try { out[tag] = await removeCase(tag, fx, frac, order); } catch (e) { check(false, `${tag}: ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; await hold(false).catch(() => null); }
     }
   }
-  if (want('xr01')) {
+  if (want('xr01') || want('xr01crash')) {
     // (XR) rs01 over raised land (ST's): its ground stage's path and the lots' pads written over the staged relief once it stands
     const r01 = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs01_land')));
     r01.terrain.bands = [...r01.terrain.bands, { x0: 1000, z0: 2000, x1: 1239, z1: 2159, y: 66 }, { x0: 1100, z0: 2060, x1: 1159, z1: 2120, y: 69 }];
-    try { out.xr01 = await removeCase('xr01', r01, 100, 'whole', { xr: true, over: 40 }); } catch (e) { check(false, `xr01: ${String(e.message).slice(0, 300)}`); out.xr01 = { error: String(e.stack ?? e) }; }
+    if (want('xr01')) {
+      try { out.xr01 = await removeCase('xr01', r01, 100, 'whole', { xr: true, over: 40 }); } catch (e) { check(false, `xr01: ${String(e.message).slice(0, 300)}`); out.xr01 = { error: String(e.stack ?? e) }; }
+    }
     if (want('xr01crash')) {
       try { out.xr01crash = await builtCrash('xr01crash', r01); } catch (e) { check(false, `xr01crash: ${String(e.message).slice(0, 300)}`); out.xr01crash = { error: String(e.stack ?? e) }; }
     }
@@ -488,6 +490,70 @@ steps.halt = async () => {
   const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
   check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, ef.slice(0, 8));
   out.eflat = ef.length;
+  void C;
+  return out;
+};
+
+// ------------------------------------------------------------------ hb-join
+
+/**
+ * (The GPT review's P1, Stockpiles' save on join) A target joins the feed and builds paid cells in its first feed step; the server halts
+ * right there (kill point JS1+save: the chunks saved first, as an autosave would, then the halt), before anything else is saved. The
+ * ledger on the disk must already know the target (its book): after the restart RL charges what stands, no paid cell stands unpaid; fed
+ * until built: standing = the paid records, items in = items out; Remove E-flat 0. Before the fix the save on join came after the step.
+ */
+steps.join = async () => {
+  await ensure();
+  spendZero();
+  const tag = 'join';
+  const fx = G.fixture(ctx, 'bf/x03_island_hamlet');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  await G.designs(ctx);
+  const box = boxOf(s.W, 96);
+  const pre = await G.snap(ctx, box, `hb-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  await hold(false);
+  const crateAt = await G.pile(ctx, s, 3);
+  // the whole quote in the stock first, so a target builds in its first feed step
+  const quote = await call('dev.region.quote', { sha: ck.check.artifactSha, lotEntries: entries }, 300_000);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  const acc = await C.insert(`stockpile:${G.OWNER}`, quote.bom ?? {});
+  await cmd('/save-all flush');
+  const s0 = await savedNow();
+  await call('dev.journal.killAt', { point: 'JS1+save' }, 10_000);
+  const out = { quote: quote.bom, inserted: sum(acc), saves0: s0.saves };
+  const realised = await G.realise(ctx, ck.check.artifactSha, entries).catch((e) => { out.realiseError = String(e.message); return null; });
+  const down = await haltWait();
+  check(down, `${tag}: kill point JS1+save (a target that joined built paid cells in its first step; the chunks saved, the JVM halted) reached`);
+  if (!down) return out;
+  await L.openWorld(s.world);
+  await L.tp(Math.floor((s.W.claim[0] + s.W.claim[2]) / 2), 110, Math.floor((s.W.claim[1] + s.W.claim[3]) / 2));
+  await L.settle(6000);
+  await call('dev.journal.killAt', { point: '' }, 10_000).catch(() => null);
+  const a1 = await audit();
+  const b1 = balance(a1);
+  out.after = { uncleanStart: a1.uncleanStart, reconciled: a1.reconciled, balance: b1 };
+  check(a1.uncleanStart === true && sum(b1.dupe) === 0 && sum(b1.double) === 0, `${tag}: after the unclean restart no paid cell stands unpaid and none is paid twice (standing ${b1.standing}, paid ${b1.paid}; dupe ${json(b1.dupe)}; double ${json(b1.double)}; reconciled ${json(Object.fromEntries(Object.entries(a1.reconciled ?? {}).map(([k, r]) => [k, [r.aheadCells, sum(r.charged), sum(r.owes)]])))})`, out.after);
+  // (rule 18) from the restart on: fed until built, items in = items out, then removed
+  const C2 = new G.Conservation(ctx, box);
+  await C2.start();
+  const region = realised ?? (await call('dev.region.list', {}, 60_000).catch(() => ({})))?.regions?.find?.((r) => r.owner === G.OWNER)?.id ?? null;
+  out.region = region;
+  if (region) {
+    const f = await G.feed(ctx, region, { cons: C2, fraction: 1, timeoutMs: 3_000_000, every: 1500 });
+    const a2 = await audit();
+    const b2 = balance(a2);
+    const pb = await C2.point('built');
+    check(f.last.st.view.state === 'PLACED' && sum(b2.dupe) === 0 && sum(b2.double) === 0 && G.exact(pb), `${tag}: fed until built after the restart (${f.last.st.view.state}): standing ${b2.standing} = paid ${b2.paid}; items in = items out (conservation ${json(pb.diff)})`, { b2, pb });
+    await G.remove(ctx, region);
+    const pr = await C2.point('removed');
+    const e = await G.diff(ctx, box, pre);
+    const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+    check(G.exact(pr) && ef.length === 0, `${tag}: Regions.remove: items in = items out (${json(pr.diff)}), E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
+  } else check(false, `${tag}: the region after the restart: none found`);
   void C;
   return out;
 };
@@ -639,7 +705,7 @@ async function growthCase(tag, frac, region, town0, box, crates, pile) {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['remove', 'halt', 'growth']) {
+  for (const s of ['remove', 'halt', 'growth', 'join']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

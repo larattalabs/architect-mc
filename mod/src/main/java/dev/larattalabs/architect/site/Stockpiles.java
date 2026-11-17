@@ -146,6 +146,8 @@ public final class Stockpiles {
 		boolean dirty;
 		/** (RL) A target joined the feed this pass: the ledger is saved after it. */
 		boolean joined;
+		/** (8a HB, kill point JS1) The ids of the targets that joined the feed this pass. */
+		final List<String> fresh = new ArrayList<>();
 		long lastEvent = Long.MIN_VALUE / 2;
 
 		Pile(String id, String owner, String dimension, StockLedger ledger) {
@@ -1540,6 +1542,7 @@ public final class Stockpiles {
 			FeedOrder.insert(p.order, idOf(t), origin(idOf(t)), Stockpiles::origin);
 			changed = true;
 			p.joined = true;
+			p.fresh.add(idOf(t));
 		}
 		if (changed) {
 			p.dirty = true;
@@ -1553,6 +1556,31 @@ public final class Stockpiles {
 
 	static void reconcile(MinecraftServer srv, Pile p) {
 		targets(srv, p);
+	}
+
+	/** (8a HB, JS1) Per target that joined the feed this pass (staged terrain aside: free), its built cell count now. */
+	private static Map<String, Integer> freshBuilt(MinecraftServer srv, Pile p) {
+		Map<String, Integer> out = new HashMap<>();
+		for (String id : p.fresh) {
+			Object t = Sites.get(id) != null ? Sites.get(id) : Infras.get(id);
+			Builder.Run r = t == null || stagedTerrain(t) ? null : run(srv, t);
+			if (r != null) {
+				out.put(id, r.built.cardinality());
+			}
+		}
+		return out;
+	}
+
+	/** (8a HB, JS1) Whether a target that joined this pass built a cell in its step (against {@link #freshBuilt}). */
+	private static boolean freshWrote(MinecraftServer srv, Pile p, Map<String, Integer> before) {
+		for (var e : before.entrySet()) {
+			Object t = Sites.get(e.getKey()) != null ? Sites.get(e.getKey()) : Infras.get(e.getKey());
+			Builder.Run r = t == null ? null : run(srv, t);
+			if (r != null && r.built.cardinality() > e.getValue()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Dev/state: per target, what it may use now ({@code stock - reserved}) and whether it reserves. */
@@ -1616,10 +1644,13 @@ public final class Stockpiles {
 	}
 
 	private static void feed(MinecraftServer srv, ServerLevel level, Pile p) {
+		p.fresh.clear();
 		List<Object> ts = targets(srv, p);
 		if (ts.isEmpty()) {
 			return;
 		}
+		// (8a HB, kill point JS1) the paid cells the targets that joined this pass have built before it
+		Map<String, Integer> freshBuilt = freshBuilt(srv, p);
 		int cap = capacity(srv, p);
 		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		Map<String, Integer> reserved = feedPass(ts, new FeedVisit<Object>() {
@@ -1751,6 +1782,10 @@ public final class Stockpiles {
 			}
 		});
 		LAST_RESERVED.put(p.id, reserved);
+		// (8a HB, TEST kill point JS1: dev.journal.killAt) a target that joined this pass built a paid cell in its first feed step
+		if (freshWrote(srv, p, freshBuilt)) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("JS1");
+		}
 		if (p.joined) {
 			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
 			// the next autosave finds the target in the saved ledger. TEST: dev.stockpile.ps noPeriodic turns it off with the periodic save
