@@ -33411,10 +33411,12 @@ so two module lots that share items can't each be held to their own measured bou
 - **test.move widened** to the held types (`TestMoveCells.HELD_TYPES`; a double chest's half with its partner; unpacked loot refused);
   other block entities (campfire, lectern, jukebox, bookshelf, pot, shelf, brushable, modded, crates) stay refused.
 - **Failing first** (`txn-holds`, ~37 boxes held at once under /save-off): 30 rows red on 88f37a88 (widened test.move, no holds;
-  `gate-runs-T2-red/20261117-220509-change`, with the hopper_push driver fix); green at 41fbaec6. Held on the base too, recorded not red:
+  `gate-runs-T2-red/20261117-220509-change`, with the hopper_push driver fix; its driver predates b6336a4f, which changed only the
+  explosion row's drop check, the reopen check and where conservation is read, no row's writer); green at 41fbaec6. Held on the base too, recorded not red:
   barrel, shulker box, trapped chest, double-chest partner (T1 hopper guard), piston (vanilla), explosion (T1 guard).
 - **Fills custody residual:** each cell's write-back carries a chunk receipt (`wb:<key>#<n>@x,y,z|...`), a retry deducts it, the rest enters
-  the stock under that keyed credit (no drop), a barrier follows and the receipts go once it is OK. `FillsWriteBackT2Test` (5): the legacy
+  the stock under that keyed credit (no drop; a WARN if the ledger credits less). The caller saves as before (Groups' loops: no barrier per member); at
+  the start one barrier follows every write-back and the receipts go once it is OK. `FillsWriteBackT2Test` (6, one on the real `StockLedger`): the legacy
   flow red (chunk saved, ledger not: paid twice), as built exact in every crash combination.
 - **Ran:** Gradle full 1564 (0 failed, 1 skipped); `gate-runs-T2/20261117-220929-change` at 41fbaec6, 9050:9051, `--no-cache --shards 1
   --no-turbo`: txn-core 75/0, txn-holds 41/0; `gate-runs-T2-fk/20261117-221359-change` (9052:9053): fk-crash 66/0, fkb-crash 48/0.

@@ -865,22 +865,22 @@ public final class Fills {
 	 * A removal that ends without removing {@code s} (or a custody found at load whose site still stands, no removal holding it): its
 	 * custody written back into its containers by their declarations, free, and dropped from the ledger.
 	 */
-	public static void writeBack(ServerLevel level, Site s) {
+	public static @Nullable Runnable writeBack(ServerLevel level, Site s) {
 		Stockpiles.Pile pile = Stockpiles.pileOf(s);
 		Spec spec = of(level.getServer(), s);
 		if (pile == null || spec == null) {
-			return;
+			return null;
 		}
 		String key = Builder.creditKey(s);
 		if (TxnServer.held("site:" + s.id()) || containerCells(s, spec).stream().anyMatch(p -> TxnServer.boxHeld(level, p))) {
 			// (slice T1, §3.6 "Holds") an open txn holds the site or a container: the custody stays in the ledger, written back later
 			Architect.LOGGER.warn("Site {}: custody write-back deferred: an open transaction holds it", s.id());
-			return;
+			return null;
 		}
 		Map<String, Integer> held = new TreeMap<>(pile.ledger().custody(key));
 		pile.ledger().heldProvided(key).forEach((k, v) -> held.merge(k, v, Integer::sum)); // (FK-b) the provided items go back too
 		if (held.isEmpty()) {
-			return;
+			return null;
 		}
 		// (slice T2, the custody residual) each cell's writes carry a receipt in its chunk (the same snapshot as its slots), so a retry after
 		// a crash (the chunk saved, the ledger not: the custody still held) deducts what reached a cell instead of writing or paying it again;
@@ -934,21 +934,21 @@ public final class Fills {
 			Architect.LOGGER.warn("Site {}: provided fill items with no free slot destroyed (never dropped): {}", s.id(), plan.destroyed());
 		}
 		// the rest, keyed: credited once (the key and the stock in one ledger write, with the custody's release), past capacity if need be
-		pile.ledger().credit(wb, plan.stock(), Stockpiles.capacity(level.getServer(), pile), Stockpiles::maxStack);
-		if (!plan.stock().isEmpty()) {
+		StockLedger.Credit cr = pile.ledger().credit(wb, plan.stock(), Stockpiles.capacity(level.getServer(), pile), Stockpiles::maxStack);
+		if (!cr.returned().equals(plan.stock())) {
+			Architect.LOGGER.warn("Site {}: custody write-back {} credited {} of {} (already: {})", s.id(), wb, cr.returned(), plan.stock(), cr.already());
+		} else if (!plan.stock().isEmpty()) {
 			Architect.LOGGER.info("Site {}: custody with no free slot entered the stock under {}: {}", s.id(), wb, plan.stock());
 		}
 		Stockpiles.changed(pile);
-		DurableBarrier.Result br = Stockpiles.barrier(level.getServer());
-		if (br.ok()) {
-			// the ledger holding the release is durable over the chunks with the slots: the receipts are stale
+		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
+		// the caller saves (players, chunks, then the ledger: a ledger with the release never stands over chunks without the slots); once a
+		// barrier is OK the receipts are stale and the returned prune drops them (a later write-back's key #n+1 never reads them)
+		return () -> {
 			for (BlockPos p : cells) {
 				dev.larattalabs.architect.txn.ChunkReceipts.remove(level.getChunkAt(p), r -> r.startsWith(wb + "@"));
 			}
-		} else {
-			Architect.LOGGER.warn("Site {}: custody write-back saved later ({}): its chunk receipts stay until then", s.id(), br.outcome());
-		}
-		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
+		};
 	}
 
 	// ------------------------------------------------------------------ other writers (XR)
@@ -1053,6 +1053,7 @@ public final class Fills {
 		}
 		FillGuard.invalidate(); // (FK-b) the guard index from the loaded sites
 		FillGuard.checkTransferGuard(); // (FK-b, 5d) a WARN when the optional Transfer API guard did not apply
+		List<Runnable> prunes = new ArrayList<>();
 		for (Stockpiles.Pile pile : Stockpiles.all()) {
 			Set<String> keys = new java.util.TreeSet<>(pile.ledger().custodyKeys());
 			keys.addAll(pile.ledger().heldProvidedKeys()); // (FK-b) a fill of provided items only has no billed custody
@@ -1061,9 +1062,21 @@ public final class Fills {
 				if (s != null && !Groups.leaving(s.id())) {
 					ServerLevel level = Sites.levelOf(srv, s);
 					if (level != null) {
-						writeBack(level, s);
+						Runnable prune = writeBack(level, s);
+						if (prune != null) {
+							prunes.add(prune);
+						}
 					}
 				}
+			}
+		}
+		if (!prunes.isEmpty()) {
+			// (slice T2) one barrier for every write-back at the start; their chunk receipts go only once it is OK
+			DurableBarrier.Result br = Stockpiles.barrier(srv);
+			if (br.ok()) {
+				prunes.forEach(Runnable::run);
+			} else {
+				Architect.LOGGER.warn("Custody write-backs at the start saved later ({}): their chunk receipts stay", br.outcome());
 			}
 		}
 	}

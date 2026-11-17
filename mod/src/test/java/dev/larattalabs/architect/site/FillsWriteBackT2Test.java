@@ -202,4 +202,22 @@ class FillsWriteBackT2Test {
 		assertEquals(null, FillsWriteBack.parse(List.of(r), "wb:k#1", 1, 64, -2));
 		assertEquals(null, FillsWriteBack.parse(List.of(r), "wb:k#0", 1, 64, -3));
 	}
+
+	@Test
+	void theRealLedgerCreditsAWriteBackKeyInFullAndOnce() {
+		dev.larattalabs.architect.survival.StockLedger l = new dev.larattalabs.architect.survival.StockLedger();
+		l.holdCustody(KEY, CUSTODY);
+		String wb = FillsWriteBack.key(KEY, l.creditedKeys());
+		assertEquals("wb:" + KEY + "#0", wb);
+		Map<String, Integer> rest = Map.of("minecraft:oak_planks", 4, "minecraft:cobblestone", 5);
+		l.releaseCustody(KEY);
+		var c = l.credit(wb, rest, 1, k -> 64); // capacity 1 stack: past it, never capped or dropped; no paid record (not a target key)
+		assertEquals(new TreeMap<>(rest), new TreeMap<>(c.returned()));
+		assertTrue(c.overflow().isEmpty() && c.shortfall().isEmpty() && !c.already());
+		assertEquals(new TreeMap<>(rest), new TreeMap<>(l.stock()));
+		assertTrue(l.credit(wb, rest, 1, k -> 64).already()); // once
+		assertEquals(new TreeMap<>(rest), new TreeMap<>(l.stock()));
+		assertTrue(l.custody(KEY).isEmpty());
+		assertEquals("wb:" + KEY + "#1", FillsWriteBack.key(KEY, l.creditedKeys()));
+	}
 }
