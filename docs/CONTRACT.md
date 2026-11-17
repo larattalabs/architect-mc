@@ -33043,7 +33043,8 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
 - **Pre-batch** (GPT check SAFE on 858e7671; the 54-cell gap is P2, to TXN T2): a refused save on join is retried after 100 ticks and
   warned on the first refusal, then once a minute; the pass stays held (unit: `StagedTerrainBookHBTest`). Merged slice/ST 75355455 and
   slice/T0 a4531467 (`dev.journal.killAt` accepts ST1 and JS1). gate-runs-hb/20261117-074658-change at 3ef7a289: hb-halt 15/0,
-  hb-growth 30/0, rl-crash 110/0, hb-remove 27/1 (the one FAIL is xr01crash's 54-cell class, as above). Gradle build 1432 tests, 0 failures.
+  hb-growth 30/0, rl-crash 110/0, hb-remove 27/1 (the one FAIL is xr01crash's class above: 100 cells this time, c10 and lot s2,
+  both BUILT after the last ledger save; standing = paid 347, conservation exact). Gradle build 1432 tests, 0 failures.
 - **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the 54-cell class above
   (TXN T2).
 
