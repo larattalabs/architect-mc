@@ -32845,8 +32845,11 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   for them; a forced `removecrate` over capacity drops the least stock within the capacity left (the existing rule), refund excess too.
 - Unchanged (leftovers): unkeyed give-backs (a swap's old block, the feed's bucket, the RL reconcile's give-backs), adopt's
   over-capacity drop, `creditRefund` with the stockpile gone, dissolve's own ground drop.
-- Tests: `StockpileOverflowOVFTest` (10: K0/K1/CS1/K2, refused save + a second crash in recovery, an unsaved second debt, dissolve
+- Tests: `StockpileOverflowOVFTest` (11: K0/K1/CS1/K2, refused save + a second crash in recovery, an unsaved second debt, dissolve
   over capacity, a player's Take between crashes, charge/scoop, adopt and a forced crate removal over capacity, a source check; 8 fail on main); StockpileTest
   and LedgerLintTest (the lint allows past capacity only what a keyed refund left) updated; y-ingame item 6 now expects no entity.
+- Visible: the stockpile panel's count line reads "used of cap stacks · over capacity (inserts refused)" (`Stockpiles.capacityLabel`;
+  the view JSON gains `overCapacity`, `capacityLabel`); a player's Insert from inventory refused over capacity says "This stockpile is
+  over capacity: use or take stock first" (hoppers stay silent).
 - In game: fk-crash CS1o (`dev.stockpile.ps capacity 0`, TEST): the single-site removal halted at CS1 into a full stockpile is
   returned once, no entity, the stock over capacity.

@@ -567,8 +567,8 @@ export async function registerFK(steps, h) {
       Object.assign(res, { atCrates, returned: sum(returned), overflow: sum(G.minus(F.refundOverflow, B.refundOverflow)), used: P.usedStacks, capacity: P.capacityStacks });
       await call('dev.stockpile.ps', { capacity: -1 }, 30_000);
       out_log(tag, res);
-      check(G.same(returned, paid) && sum(ents) === 0 && !F.pendingCredit?.[key] && !F.custody?.[key] && P.usedStacks > P.capacityStacks,
-        `${tag}: a refund into a full stockpile halted at CS1 is paid once: returned into the stock = ${site}'s paid record, item for item (${sum(returned)} = ${sum(paid)}); no item entity at the crates or the site (${json(ents)}; before OVF: the overflow dropped before the halt and again at the start); the stock over capacity (${P.usedStacks} of ${P.capacityStacks} stacks)`, res);
+      check(G.same(returned, paid) && sum(ents) === 0 && !F.pendingCredit?.[key] && !F.custody?.[key] && P.usedStacks > P.capacityStacks && P.overCapacity === true && /over capacity/.test(P.capacityLabel ?? ''),
+        `${tag}: a refund into a full stockpile halted at CS1 is paid once: returned into the stock = ${site}'s paid record, item for item (${sum(returned)} = ${sum(paid)}); no item entity at the crates or the site (${json(ents)}; before OVF: the overflow dropped before the halt and again at the start); the stock over capacity and shown so (${P.capacityLabel}; overCapacity ${P.overCapacity})`, res);
       await L.leaveWorld();
       return res;
     }

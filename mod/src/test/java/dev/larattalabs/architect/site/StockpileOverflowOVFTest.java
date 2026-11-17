@@ -271,6 +271,24 @@ class StockpileOverflowOVFTest {
 		assertEquals(plus(drop, l.stock()), minus(plus(paid().stock(), REFUND), Map.of()), "dropped + left = the stock before");
 	}
 
+	/** The over-capacity state is visible: the pile's count line says so, and a player's refused insert gets the message (hoppers silent). */
+	@Test
+	void theOverCapacityStateIsVisible() throws Exception {
+		assertEquals("27 of 27 stacks", Stockpiles.capacityLabel(27, 27));
+		assertEquals("31 of 27 stacks · over capacity", Stockpiles.capacityLabel(31, 27));
+		assertEquals("This stockpile is over capacity: use or take stock first", Stockpiles.OVER_CAPACITY);
+		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
+		int ins = b.indexOf("public static int insertFromInventory(ServerPlayer player, String id)");
+		int thr = b.indexOf("throw new Sites.SiteException(Stockpiles.OVER_CAPACITY);", ins);
+		assertTrue(ins > 0 && thr > ins && thr < b.indexOf("Site s = requireBuilding(id);", ins), "a player's insert into a pile over capacity is refused with the message");
+		String cb = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/survival/CrateBlockEntity.java"));
+		assertFalse(cb.contains("OVER_CAPACITY"), "a hopper's refusal stays silent (canPlaceItem false)");
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		assertTrue(sp.contains("o.addProperty(\"overCapacity\", overCapacity(srv, p));"), "the pile's view carries the state");
+		String screen = Files.readString(Path.of("src/client/java/dev/larattalabs/architect/client/survival/CrateScreen.java"));
+		assertTrue(screen.contains("Stockpiles.capacityLabel("), "the stockpile panel shows the label");
+	}
+
 	/** No keyed path drops overflow before (or after) its save. */
 	@Test
 	void noKeyedPathDropsOverflow() throws Exception {

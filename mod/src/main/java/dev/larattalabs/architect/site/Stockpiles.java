@@ -462,6 +462,25 @@ public final class Stockpiles {
 		return testCapacity >= 0 ? testCapacity : StockLedger.STACKS_PER_CRATE * present(srv, p).size();
 	}
 
+	/** (OVF) The player message when an insert into a stockpile over capacity is refused (hoppers stay silent: the pile's view shows it). */
+	public static final String OVER_CAPACITY = "This stockpile is over capacity: use or take stock first";
+
+	/** (OVF) Whether the stock is past capacity (a keyed refund put it there): nothing new enters until it fits. */
+	static boolean overCapacity(MinecraftServer srv, Pile p) {
+		return p.ledger.usedStacks(Stockpiles::maxStack) > capacity(srv, p);
+	}
+
+	/** (OVF) Whether the stockpile {@code id} names ({@code stockpile:<owner>} or a target drawing from it) is over capacity. */
+	public static boolean overCapacity(MinecraftServer srv, String id) {
+		Pile p = Builder.pileNamed(id);
+		return p != null && overCapacity(srv, p);
+	}
+
+	/** (OVF) The pile's count line: "used of cap stacks", with "over capacity" while used > cap. Pure. */
+	public static String capacityLabel(int used, int cap) {
+		return used + " of " + cap + " stacks" + (used > cap ? " · over capacity" : "");
+	}
+
 	/** (OVF, TEST) {@code dev.stockpile.ps capacity}: every stockpile's capacity in stacks (-1: the crates', as normal). */
 	static volatile int testCapacity = -1;
 
@@ -1985,6 +2004,8 @@ public final class Stockpiles {
 		o.add("missingCrates", miss);
 		o.addProperty("capacityStacks", capacity(srv, p));
 		o.addProperty("usedStacks", p.ledger.usedStacks(Stockpiles::maxStack));
+		o.addProperty("overCapacity", overCapacity(srv, p)); // (OVF) a keyed refund left it past capacity: inserts refused until it fits
+		o.addProperty("capacityLabel", capacityLabel(p.ledger.usedStacks(Stockpiles::maxStack), capacity(srv, p)));
 		o.add("stock", Builder.counts(p.ledger.stock()));
 		Map<String, Integer> need = unbuiltAll(srv, p);
 		o.add("outstanding", Builder.counts(need));
