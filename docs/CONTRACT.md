@@ -32746,3 +32746,24 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   same mismatch with `-Darchitect.stagedTerrain=false` (gate-runs-ST/20261117-012402-change). The gate row now compares what a build consumed
   with the quote (exact for x01, x03, x03h; within it for rs01); `kit/test/st-8a.test.mjs` pins the 49 kept cells. Final st-ingame:
   gate-runs-ST/20261117-013030-change, 37/37 PASS (`--shards 1 --no-turbo --no-cache`).
+
+### Slice HB as built (branch `slice/HB` off `slice/ST` 356aac15; versions NEXT; $0; strict; recorded 2026-11-17)
+
+- **RL's book marks staged cells free** (the fix; `Stockpiles`, one helper and its two call sites, beside PSV/LC3/OVF's paths). Before, a
+  staged target's book (refreshed before each save) set `s` for every built staged cell: harmless (cost 0), but not §4's "free". Now
+  `freeBook`: every cell known, `s` and `o` empty, no rescan at the save; `reconcileTerrain` at an unclean start charges, owes and gives back
+  nothing, re-derives progress from the world, and reopens a target recorded BUILT with non-shadowed cells missing (free). Units:
+  `StagedTerrainBookHBTest` (3).
+- **Readings.** "Remove and undo at 0/50/100%, both orders": a survival region's stage is never undone alone (Groups refuses it), so
+  undo is RU's `undoRevision` (hb-growth, at each fraction) and the orders are Regions.remove at once vs lot first (Sites.remove of the
+  lots on the island, then Regions.remove; at 0/50% the lots wait typed and nothing stands on the land, so only at 100%).
+- **Dev (TEST):** `dev.terrain.rate {hold}` (no staged target writes while set; this JVM); `dev.region.terrain`'s waits now read the
+  revisions' batches too (a growth's items wait in their own batch: its typed wait was invisible to the hook, not to Steward's events).
+- **Gate** `tools/gate8ahb.mjs` (hb-remove, hb-halt, hb-growth). hb-remove: x03h held at 0/50/100%, Remove E-flat 0, refund = consumed,
+  conservation exact, no staged bill; lot first: every staged cell stands; XR on raised rs01: 9 staged cells taken up, none a paid
+  victim, nothing retaken, standing = paid. hb-halt: saved mid run, halted with nothing saved: books k=n/s=0/o=0 at the save and after,
+  RL nothing charged or owed, RegionView terrainCells kept, terrainBuilt = the world, rate 4, part building, typed wait again; resumed to
+  the INSTANT twin (0 differ), E-flat 0. hb-growth: a growth's pads over stepped land staged, verges wait typed `terrain`; undoRevision at
+  0/50/100%: E-flat 0, refund = consumed (0 while held, 721 built).
+- **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%; the BUILT-with-holes
+  reopen is unit-checked only (no halt caught a target that finished after the save).
