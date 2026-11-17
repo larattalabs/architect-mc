@@ -1262,9 +1262,11 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
-		if (!result.removed() && r.undo == null) {
-			// (slice CXD) ended before its undo: a member's crate stock taken for it goes back into its crate
+		if (!result.removed() && r.undo == null && r.txn == null) {
+			// (slice CXD) ended before its undo was submitted (or after it failed: txn cleared): a member's crate stock goes back into its crate
 			CrateOwed.putBackSites(server, List.copyOf(r.decItems.keySet()));
+		}
+		if (!result.removed() && r.undo == null) {
 			// (M5 FK) ended before its undo began: a custody taken for a member that still stands goes back into its containers
 			for (String id : r.decCredit.keySet()) {
 				Site s = Sites.get(id);

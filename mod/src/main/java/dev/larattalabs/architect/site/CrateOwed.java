@@ -96,6 +96,8 @@ final class CrateOwed {
 	private static final Map<String, Rec> OPEN = new LinkedHashMap<>();
 	/** Captured this call, not saved or taken yet: {@link #commit} or {@link #dropPending}. */
 	private static final List<Rec> PENDING = new ArrayList<>();
+	/** (dev) this session's resolutions: "key STATE stands|removed putBack|close|drop:record:crate". */
+	static final List<String> LAST = new ArrayList<>();
 	/** (TEST, dev) records settled, put back and resolved at the start this session. */
 	static volatile int settled, putBack, resolvedAtStart;
 
@@ -258,6 +260,8 @@ final class CrateOwed {
 			Outcome o = resolve(stands.test(r), st);
 			Architect.LOGGER.info("Crate stock: owed record {} ({} items, crate {}, site {}): {}", r.key(), total(r.items()), st,
 				stands.test(r) ? "stands" : "removed", o);
+			LAST.add(r.key() + " " + st + " " + (stands.test(r) ? "stands" : "removed") + " " + (o.putBack() ? "putBack" : o.dropRecord() || o.dropCrateStock()
+				? "drop" + (o.dropRecord() ? ":record" : "") + (o.dropCrateStock() ? ":crate" : "") : "close"));
 			if (o.putBack()) {
 				crate.ledger().restoreStock(r.items());
 				crate.setTaken("");
@@ -388,6 +392,9 @@ final class CrateOwed {
 		o.addProperty("settled", settled);
 		o.addProperty("putBack", putBack);
 		o.addProperty("resolvedAtStart", resolvedAtStart);
+		JsonArray l = new JsonArray();
+		LAST.forEach(l::add);
+		o.add("resolutions", l);
 		return o;
 	}
 

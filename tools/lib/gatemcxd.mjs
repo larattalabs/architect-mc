@@ -8,8 +8,11 @@
 //                                                    opened again (the first tick resolves the open records):
 //     S1..S4  a player's site (dev.build: the UI path, the placer's UUID, no site owner) deconstructed alone (Sites.removeDetailed):
 //             CXD1 captured, the record not saved; CXD2 the record saved, the crate not emptied; CXD3 the stock taken, not committed;
-//             CXD4 committed and restored, the stock not settled
-//     G3, G4  a group's shared crate (an actorless batch, sharedCrate) removed with its group (Groups R1, sgremove): CXD3, CXD4
+//             CXD4 committed and restored, the stock not settled. The plain halts find the chunk as the record's save flushed it (the
+//             crate full: resolved "close"); S3s/S4s halt at CXD3+save / CXD4+save (the chunks saved first): the crate MARKED and not
+//             committed (put back), the restore on disk and the site released (ABSENT: dropped at the start)
+//     G3, G3s, G4, G4s  a group's shared crate (an actorless batch, sharedCrate) removed with its group (Groups R1, sgremove): the same
+//             points; after the restart the group's removal (resumed or planned again) is waited out and judged again
 //   each: the crate's stock + the items near the crate + the player's inventory after the restart equal the stock before, item for item
 //   (no dupe, no loss); no owed record left open; the site stands with its stock (not committed) or is gone (committed).
 //
@@ -65,7 +68,7 @@ export async function registerCXD(steps, h) {
   }
 
   /** One case: the baseline flush, the removal halted at {@code point}, the restart, the conservation judged. */
-  async function crashCase(out, tag, W, site, point, remove, committed) {
+  async function crashCase(out, tag, W, site, point, remove, committed, group = null) {
     const { cp, items } = await fill(tag, site);
     await cmd('/save-all flush').catch(() => null);
     await call('dev.wait', { ms: 2000 }, 30_000);
@@ -84,12 +87,28 @@ export async function registerCXD(steps, h) {
     await call('dev.wait', { ms: 4000 }, 30_000);
     const after = await parts(site, cp, items);
     const ow = await owed();
-    const n = { tag, point, site, crate: cp, before, after, owed: ow, removal: m };
+    const n = { tag, point, site, crate: cp, before, after, owed: ow, resolutions: ow.resolutions ?? [], removal: m };
     log(`  ${tag} (${point}): before ${json(before.total)}; after the restart ${json(after.total)} (stock ${json(after.stock)}, ground ${json(after.ground)}, inventory ${json(after.inventory)}; site ${after.stands ? after.state : 'gone'}); owed open ${(ow.open ?? []).length}, resolved at start ${ow.resolvedAtStart}`);
     check(G.same(after.total, before.total), `${tag} (${point}): the crate's stock paid exactly once: after ${json(after.total)} = before ${json(before.total)} (crate + ground + inventory)`, n);
     check((ow.open ?? []).length === 0, `${tag} (${point}): no owed record left open (${(ow.open ?? []).length}; resolved at the start ${ow.resolvedAtStart})`, ow);
-    if (committed === false) check(after.stands && after.cratePresent && G.same(after.stock, before.stock), `${tag} (${point}): not committed: the site stands, its crate holds its stock again ${json(after.stock)}`, n);
-    if (committed === true) check(!after.stands || after.state !== 'building', `${tag} (${point}): committed: the site is gone (${after.stands ? after.state : 'gone'}), its stock on the ground ${json(after.ground)}`, n);
+    if (committed === false) check(after.stands && after.cratePresent && G.same(after.stock, before.stock), `${tag} (${point}): not committed: the site stands, its crate holds its stock again ${json(after.stock)} (${json(n.resolutions)})`, n);
+    if (committed === true) check(!after.stands || after.state !== 'building', `${tag} (${point}): committed: the site is gone (${after.stands ? after.state : 'gone'}), its stock on the ground ${json(after.ground)} (${json(n.resolutions)})`, n);
+    if (group) {
+      // the group's removal from the queue (resumed, or planned again: R1 captures again) runs to its end: then judged again
+      let gs;
+      for (let i = 0; i < 300; i++) {
+        gs = (await api(`sgroup ${group}`).catch(() => null))?.state ?? null;
+        if (!gs || ['REMOVED', 'PARTIAL', 'FAILED', 'ACTIVE'].includes(gs) && i > 5) break;
+        await L.sleep(2000);
+      }
+      if (gs === 'ACTIVE') { await later(`sgremove ${group}`, 600_000).catch(() => null); gs = (await api(`sgroup ${group}`).catch(() => null))?.state ?? null; }
+      await call('dev.wait', { ms: 3000 }, 30_000);
+      const end = await parts(site, cp, items);
+      const ow2 = await owed();
+      n.groupEnd = { state: gs, parts: end, owed: ow2 };
+      log(`  ${tag}: the group's removal ended ${gs}: ${json(end.total)} (ground ${json(end.ground)}); owed open ${(ow2.open ?? []).length}`);
+      check(G.same(end.total, before.total) && (ow2.open ?? []).length === 0, `${tag} (${point}): after the group's removal ended (${gs}): ${json(end.total)} = before ${json(before.total)}, no record open`, n.groupEnd);
+    }
     out[tag] = n;
   }
 
@@ -119,22 +138,26 @@ export async function registerCXD(steps, h) {
     const at = [CX + 40, gy + 2, CZ + 60];
     await L.tp(...at);
     const W = { dir: path.join(L.SAVES, name), at };
-    const parts0 = (process.env.GATE_CXD_PARTS ?? 'S1,S2,S3,S4,G3,G4').split(',');
-    const single = { S1: ['CXD1', false], S2: ['CXD2', false], S3: ['CXD3', false], S4: ['CXD4', true] };
+    const parts0 = (process.env.GATE_CXD_PARTS ?? 'S1,S2,S3,S3s,S4,S4s,G3,G3s,G4,G4s').split(',');
+    // [point, committed]: true/false judged; null: conservation only (a plain halt: the chunks as the record's save flushed them)
+    const single = { S1: ['CXD1', false], S2: ['CXD2', false], S3: ['CXD3', null], S3s: ['CXD3+save', false], S4: ['CXD4', null], S4s: ['CXD4+save', true] };
     let k = 0;
+    const slot = (i) => [CX + 20 * (i % 5), gy + 1, CZ + 40 + 40 * Math.floor(i / 5)]; // two rows of five, apart
     for (const tag of parts0.filter((t) => single[t])) {
       const [point, committed] = single[tag];
-      const origin = [CX + 16 * k, gy + 1, CZ + 40];
-      k++;
+      const origin = slot(k++);
+      W.at = [origin[0] + 3, gy + 2, origin[2] + 24];
+      await L.tp(...W.at);
       const site = await playerSite(tag, origin);
       if (!site) continue;
       await crashCase(out, tag, W, site, point, () => call('dev.site.deconstruct', { site }, 60_000), committed);
     }
-    const group = { G3: ['CXD3', false], G4: ['CXD4', true] };
+    const group = { G3: ['CXD3', null], G3s: ['CXD3+save', null], G4: ['CXD4', null], G4s: ['CXD4+save', null] };
     for (const tag of parts0.filter((t) => group[t])) {
       const [point, committed] = group[tag];
-      const gat = [CX + 16 * k, gy + 1, CZ + 40];
-      k++;
+      const gat = slot(k++);
+      W.at = [gat[0] + 3, gy + 2, gat[2] + 24];
+      await L.tp(...W.at);
       const spec = { id: `cxd${tag.toLowerCase()}`, proximity: false, sharedCrate: true, items: [{ key: 'h1', bp: 'rs_hut', at: gat, rot: 0, mode: 'CONSTRUCTION' }] };
       const bid = await later(`bqueue ${JSON.stringify(spec)}`, 120_000);
       let bv;
@@ -142,7 +165,7 @@ export async function registerCXD(steps, h) {
       const site = bv?.items?.[0]?.site;
       check(!!site, `${tag}: an actorless construction rs_hut from its group's shared crate (${site}, group ${bv?.group})`, bv);
       if (!site) continue;
-      await crashCase(out, tag, W, site, point, () => api(`sgremove ${bv.group}`), committed);
+      await crashCase(out, tag, W, site, point, () => api(`sgremove ${bv.group}`), committed, bv.group);
     }
     await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
     await L.leaveWorld();
