@@ -32842,3 +32842,33 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   downloaded nothing); real check on a fresh home: lab_ui 0.5.0 fetched, same repo id, offline seed passed with no online fallback; +2 units.
 - **Checks:** kit 1539/1539, Gradle build (incl. devserver) pass, ApiCSTest 9/9; step-inputs clean; gitleaks clean. Leftover: slot-outside's
   "several slots" (same-ms ticket id `t-<ms>-<pid>`) and "load gate" tests flake under load, pre-existing.
+
+### Slice TXN (design)
+
+Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only. No runtime change, no API change, $0, strict. The full design
+is docs/TXN-DESIGN.md. It serves GATES rules 17 and 18.
+- **The audit (§1):** 36 paths. 31 of them move items or billing, and 29 of those have a known P/A/R crash window. Every row is
+  exposed under OS crash or power loss: the ledger and the world journal are never forced.
+- **Five meanings of "confirmed":** `saveWithWorld`, `saveConfirmed`, `saveWithWorldConfirmed`, `durableBarrier` and `Placement.saved`.
+  Only PSV's generation writer forces the file and its directory.
+- **The layer (§3):**
+  - `DurableFile`: PSV's writer, lifted out and applied to the ledger, sites and journal.
+  - One `Stockpiles.barrier()`.
+  - Txn intents in a `txn` section of `stockpiles.json`, so an intent and its ledger booking land in one atomic write.
+  - Effects in classes L / B / W / R (exactly once, each by its own marker) and P / E (at most once, declared loss).
+  - One decision per kind.
+  - Rules R-1 to R-8. R-2 is persist before mutate; R-5 is no entities.
+  - One recovery slot ahead of every feature resolver; an UNKNOWN probe holds the txn's resources.
+- **The harness (§4):**
+  - `TxnCrashModel`: units, exhaustive over the steps and over which stores an async save persisted.
+  - `txn-crash-<kind>`: every traced point × {bare, +save, +async}, with conservation exact.
+- **Conservation (§5):** stock, crates (scanned), custody and provided, containers, entities, inventories, paid standing and
+  in-transit (each open txn counted once, by its probes), less injected, plus declared loss. Report-only first.
+- **API:** no change. Steward reviews three behaviours: refund timing after a crash, over-capacity as the rule for keyed refunds,
+  and SITE_BUSY while a txn is held. Downgrade risk: an older build drops open txns.
+- **Migration (§6):**
+  1. merge PSV, OVF, ST/HB, then LC3 and DR2, with DR2 dropping its owed drops for OVF (c);
+  2. T0 durable primitives, then T1 core;
+  3. CXD (T2), ADP (T3), group removals (T4), the LC3 abandon (T5);
+  4. deltas, charges and give-backs (T6), then the leftovers (T7).
+- **Open questions for Noah:** §8 (1-6).
