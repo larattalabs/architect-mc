@@ -146,7 +146,7 @@ public final class Stockpiles {
 		boolean dirty;
 		/** (RL) A target joined the feed this pass: the ledger is saved after it. */
 		boolean joined;
-		/** (8a HB, kill point JS1) The ids of the targets that joined the feed this pass. */
+		/** (8a HB, kill point JS1) The ids of the targets that joined the feed since the last feed pass. */
 		final List<String> fresh = new ArrayList<>();
 		long lastEvent = Long.MIN_VALUE / 2;
 
@@ -1661,7 +1661,6 @@ public final class Stockpiles {
 	}
 
 	private static void feed(MinecraftServer srv, ServerLevel level, Pile p) {
-		p.fresh.clear();
 		List<Object> ts = targets(srv, p);
 		if (ts.isEmpty()) {
 			return;
@@ -1820,6 +1819,7 @@ public final class Stockpiles {
 		if (freshWrote(srv, p, freshBuilt)) {
 			dev.larattalabs.architect.journal.WorldJournal.kill("JS1");
 		}
+		p.fresh.clear(); // (JS1) the targets that joined since the last pass (in it, or through a reconcile between passes) have had their step
 	}
 
 	/**
