@@ -32845,46 +32845,43 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 
 ### Slice TXN (design)
 
-Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only. No runtime change, no API signature change, $0, strict. The
-full design is docs/TXN-DESIGN.md. It serves GATES rules 17 and 18, and it was revised once after a GPT review (NOT SAFE; §10).
-- **The audit (§1):** 38 paths. 33 of them move items or billing, and 31 of those have a known P/A/R crash window. On main,
-  neither the ledger nor the world journal is ever forced.
-- **Five meanings of "confirmed":** `saveWithWorld`, `saveConfirmed`, `saveWithWorldConfirmed`, `durableBarrier` and `Placement.saved`.
-  Only PSV's generation writer forces the file and its directory.
-- **The layer (§3):**
-  - `DurableFile`: PSV's writer, lifted out and used for the ledger, sites, regions, the journal and `txn.json`.
-  - `barrier()`: players, then chunks acknowledged and durable, then the ledger. It refuses on `.mcc` payloads and under save-off.
-  - Intents in `architect/txn.json`, written before any mutation (R-2).
-  - Effect classes, each with its marker in the effect's own atomic unit:
+Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
+GATES rules 17 and 18. It has had two rounds: GPT round 1 (§10), then the final GPT pass, Steward's review and Noah's decisions (§11,
+§8).
+- **The audit (§1):** 38 paths. 33 move items or billing, and 31 of those have a known P/A/R crash window. On main, neither the
+  ledger nor the journal is ever forced.
+- **T0 primitives (§3.1):**
+  - `DurableFile` (OK / FAILED / IN_DOUBT), with a persisted `store` id and `gen`, forcing the file and its directory;
+  - a **global** barrier over save epochs: every chunk, entity and player write acknowledged, new `.mca` and `playerdata`
+    directories forced, `.mcc` and save-off refused; then the ledger, carrying its epoch.
+- **The layer (§3.2-§3.7):**
+  - intents in `architect/txn.json`, written before any mutation;
+  - effect classes, each with its receipt:
     - L (a ledger key);
-    - B (a block-entity marker list, with compensation markers);
+    - B and W (receipts in a chunk attachment that survives BE replacement);
     - D (the journal undo group, the decision);
-    - W (the restore, receipted per chunk);
-    - R (a record ref or tombstone);
-    - P (a player attachment);
-    - E (a durable claim, at most once, with a loss receipt).
-  - One decision per kind.
-  - Retirement waits for every participant's generation.
-  - Holds are honoured by every writer.
-  - One recovery slot, after a load/reconcile split.
-  - FORMAT + 1 on the participant files while a txn is open.
-- **The harness (§4):**
-  - `TxnCrashModel`: units over the participants' version histories, failures and crashes inside recovery.
-  - `txn-crash-<kind>`: every traced point × {bare, +save, +async, fail}, plus variants, with conservation exact.
-- **Conservation (§5):** stock, crates (scanned), custody and heldProvided, containers, entities, inventories, paid standing, and
-  in-transit (each open txn counted once, by its probes, forward or compensating). Less injected, created and destroyed; plus loss
-  receipts; in base units after `Equivalents`. Report-only first.
-- **API:** no signature change. Steward must review six semantics (§3.12):
-  1. refund timing after a crash;
-  2. over capacity as the rule for keyed refunds;
-  3. `SITE_BUSY` while a txn is held;
-  4. a decided removal always completes;
-  5. player payouts exactly once at that player's next load;
-  6. futures and events across a crash.
+    - R (a record ref or tombstone, with a persisted gen);
+    - P (a player attachment and an acknowledged save);
+    - O (owed collectibles, which replace every drop);
+  - phases: `PREPARED`, `PREPARED_DONE`, `COMMITTED`, `EFFECTS_DONE`, `ABORTING`, `ABANDONED`;
+  - retirement on persisted awaits;
+  - holds honoured by every writer, indefinite and ops-only;
+  - abandon is a takeover of the same txn (T5).
+- **The harness (§4):** `TxnCrashModel` over the participants' version histories, failures and recovery prefixes. `txn-crash-<kind>`
+  takes the baseline first, traces on a copy, and runs every point × {bare, +save, +async, fail}.
+- **Conservation (§5):** exactly once per open txn, by its probes; owed counted; no loss term; base units after `Equivalents`.
+  Report-only until T1 runs clean for one batch.
+- **API (additive, Since NEXT; Steward review):**
+  - `SiteWait.TXN_HELD`;
+  - `RemoveResult.replayed()`;
+  - `txnId` and `eventId` on events, which are at least once;
+  - a `SITE_BUSY` detail;
+  - `owed` in the stockpile view;
+  - futures complete at `EFFECTS_DONE`, and views read UNDOING until then.
+- **Downgrade** across TXN is unsupported.
 - **Migration (§6):**
-  1. merge PSV, OVF, ST/HB, then LC3 and DR2 (DR2 drops its owed drops for OVF (c)); a remaining P1 goes to Noah under rule 20;
-  2. T0 primitives, then T1 core;
-  3. CXD (T2), ADP (T3), group removals (T4), LC3's abandon (T5);
-  4. T6: deltas, charges, fills, take-ups and repair; T7: leftovers and player moves;
-  5. legacy state converts by a confirmed protocol.
-- **Open questions for Noah:** §8 (1-6).
+  1. merge PSV, OVF, ST/HB, then LC3 (likely without abandon) and DR2 (which drops its owed drops for OVF);
+  2. T0, then T1;
+  3. CXD (T2), ADP (T3), group removals (T4), abandon (T5);
+  4. deltas, fills, take-ups and repair (T6); leftovers and player moves (T7).
+- **Noah's decisions** (via the parent session, 2026-11-17) are in §8. No question is open.
