@@ -56,7 +56,8 @@ class DurableT0Test {
 		assertTrue(d.written(g1) && d.written(g2));
 		JsonObject on = read(f);
 		assertEquals(7, on.get("n").getAsInt());
-		assertEquals("stockpiles", on.getAsJsonObject(DurableFile.MEMBER).get("store").getAsString());
+		assertEquals("stockpiles", on.getAsJsonObject(DurableFile.MEMBER).get("type").getAsString());
+		assertEquals(d.id(), on.getAsJsonObject(DurableFile.MEMBER).get("store").getAsString(), "store is the file's own id (review P1-8)");
 		assertEquals(2, on.getAsJsonObject(DurableFile.MEMBER).get("gen").getAsLong());
 		assertFalse(Files.exists(f.resolveSibling("stockpiles.json.tmp")), "no temp file left");
 		// a reload (a restart): the generation read from the file, the next one goes on from it
