@@ -526,7 +526,9 @@ async function growthCase(tag, frac, region, town0, box, crates, pile) {
   out.atUndo = { fed, consumed, staged: mineH.map((x) => [x.target, x.cells, x.built]), busy: rv.busy };
   const atFrac = frac === 0 ? half === 0 : frac === 50 ? half > 0 && half < all : half === all;
   check(all > 0 && atFrac, `${tag}: at the undo the growth's land is at ${frac}%: ${half} of ${all} staged cells (busy ${rv.busy})`, out.atUndo);
-  check(sum(consumed) > 0, `${tag}: a paid target of the growth consumed before the undo (${sum(consumed)}: ${json(consumed)})`, consumed);
+  // (every paid target of this growth stands on or beside its pads: while the land is held none starts, so paid == returned is 0 == 0 there;
+  // at 100% it is the whole growth's bill)
+  check(frac < 100 || sum(consumed) > 0, `${tag}: what the growth's paid targets consumed before the undo: ${sum(consumed)} (${json(consumed)})`, consumed);
   // RU: undoRevision (while it waits, at 0 and 50%)
   const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
   await hold(false);

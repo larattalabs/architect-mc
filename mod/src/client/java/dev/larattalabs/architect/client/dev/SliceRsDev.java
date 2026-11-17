@@ -84,7 +84,15 @@ public final class SliceRsDev {
 						o.addProperty("missing", true);
 						return o;
 					}
-					return RegionTargets.terrainJson(s, l.rec().groupId, l.rec().batchId, req.has("check") && req.get("check").getAsBoolean());
+					// (8a HB) the waits of the region's batch and of its revisions' (a growth's items wait in its own batch)
+					java.util.List<String> bids = new java.util.ArrayList<>();
+					bids.add(l.rec().batchId);
+					for (var rv : l.rec().revisions) {
+						if (rv.batchId != null && !bids.contains(rv.batchId)) {
+							bids.add(rv.batchId);
+						}
+					}
+					return RegionTargets.terrainJson(s, l.rec().groupId, bids, req.has("check") && req.get("check").getAsBoolean());
 				});
 			});
 		DevBridge.register("dev.terrain.rate", 30_000, "{n?, hold?: bool} - (8a ST) the world's staged terrain rate (terrainPerTick, cells per tick per "

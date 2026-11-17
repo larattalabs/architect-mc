@@ -1489,14 +1489,22 @@ public final class RegionTargets {
 	 * cursor (its first unbuilt queue index), connected (TO's count at put-down), runs, scan position, stall and released; the rate.
 	 */
 	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, @Nullable String batchId, boolean check) {
+		return terrainJson(srv, group, batchId == null ? List.of() : List.of(batchId), check);
+	}
+
+	/** (8a HB) As {@link #terrainJson(MinecraftServer, String, String, boolean)}, the waits read from every batch named (a growth's too). */
+	public static JsonObject terrainJson(MinecraftServer srv, @Nullable String group, List<String> batchIds, boolean check) {
 		JsonObject o = new JsonObject();
 		o.addProperty("terrainPerTick", SurvivalWorld.terrainPerTick());
 		o.addProperty("stagedBuild", Packed.stagedBuild());
 		o.addProperty("gameTime", srv.overworld().getGameTime());
 		// the region's items that wait for a target (their architect_mc:waitsFor), as Steward reads ITEM_WAITING's ext
 		JsonArray waits = new JsonArray();
-		var batch = batchId == null ? null : Batches.get(batchId);
-		if (batch != null) {
+		for (String bid : batchIds) {
+			var batch = bid == null ? null : Batches.get(bid);
+			if (batch == null) {
+				continue;
+			}
 			for (var it : batch.items) {
 				if (it.ext.get(EXT_WAITS_FOR) instanceof JsonObject w) {
 					JsonObject x = new JsonObject();
