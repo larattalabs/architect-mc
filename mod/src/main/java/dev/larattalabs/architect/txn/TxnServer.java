@@ -30,7 +30,8 @@ import org.jspecify.annotations.Nullable;
  * run;</li>
  * <li><b>recovery</b> on the first server tick, after every store has loaded: each open txn by the §3.6 table;</li>
  * <li><b>events</b> a recovery owes fire on the tick after it (never inside SERVER_STARTED, §3.12.9);</li>
- * <li>each later tick re-drives held and retiring txns.</li>
+ * <li>each later tick re-drives retiring txns; a held one is retried with backoff (1 s doubling to 20 s), since a retry may run a
+ * barrier.</li>
  * </ol>
  * T1 migrates no caller: its only kind is the dev hook's {@link TestMove} ({@code dev.txn.run}). Server thread.
  */
@@ -91,6 +92,8 @@ public final class TxnServer {
 		server = srv;
 		recovered = false;
 		NEXT_TICK.clear();
+		heldBackoff = HELD_MIN;
+		heldWait = 0;
 		Path p = path(srv);
 		TxnCore c = new TxnCore(new GameEnv());
 		register(c);
@@ -132,9 +135,40 @@ public final class TxnServer {
 			}
 			return;
 		}
-		if (!core.open().isEmpty() || core.unsynced()) {
-			core.tick();
+		if (core.open().isEmpty() && !core.unsynced()) {
+			heldBackoff = HELD_MIN;
+			return;
 		}
+		if (!anyHeld()) {
+			heldBackoff = HELD_MIN; // retiring txns check their awaits every tick (cheap)
+			core.tick();
+			return;
+		}
+		// a held txn retries with backoff: a retry may run a barrier (owed chunk and player writes resubmitted, every chunk flushed)
+		if (--heldWait > 0) {
+			return;
+		}
+		core.tick();
+		heldBackoff = anyHeld() ? Math.min(heldBackoff * 2, HELD_MAX) : HELD_MIN;
+		heldWait = heldBackoff;
+	}
+
+	/** Ticks between retries of a held txn: from 1 s, doubling to 20 s while it stays held. */
+	static final int HELD_MIN = 20;
+	static final int HELD_MAX = 400;
+	private static int heldBackoff = HELD_MIN;
+	private static int heldWait;
+
+	private static boolean anyHeld() {
+		if (core.unsynced()) {
+			return true;
+		}
+		for (TxnEntry t : core.open()) {
+			if (t.held() != null) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// ------------------------------------------------------------------ the holds every writer honours (O(1) with none open)
