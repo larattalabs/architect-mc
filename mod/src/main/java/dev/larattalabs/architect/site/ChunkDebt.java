@@ -251,8 +251,10 @@ public final class ChunkDebt {
 			return;
 		}
 		Debt d = OWED.get(key);
-		if (d != null) {
-			d.reserialize = null; // (T0 review 4 P1-1) the chunk was saved since: the kept object is no longer its newest state
+		if (d != null && seq > 0 && seq >= d.keptSeq) {
+			// (T0 review 4 P1-1) the chunk was saved since: the kept object is no longer its newest state. (T0 review 5 item 3) only a write at
+			// least as new as the failure that kept it: an older queued write never discards the newer kept copy
+			d.reserialize = null;
 		}
 		if (d != null && !d.stale && seq > 0 && seq >= d.failSeq) {
 			Runnable t = TEST_BEFORE_PAY;

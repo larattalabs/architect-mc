@@ -77,11 +77,11 @@ class DurableT0R4Test {
 
 	@Test
 	void p1_1_aSuccessfulSaveDropsTheKeptCopy() {
-		long old = ChunkDebt.submitted(K, 0); // a write queued before the failure
-		ChunkDebt.pendingData(K, old);
 		ChunkDebt.remark(K, () -> {
 		}, () -> "A", "unload serialization failed", true);
-		ChunkDebt.written(K, ChunkDebt.writing(K)); // a successful save of the chunk (older: it pays nothing)
+		long newer = ChunkDebt.submitted(K, 0); // a save of the chunk after the failure (T0 review 5 item 3: an older one keeps the copy)
+		ChunkDebt.pendingData(K, newer);
+		ChunkDebt.written(K, ChunkDebt.writing(K));
 		assertNull(ChunkDebt.snapshot(K), "the kept object is no longer the chunk's newest state: not served");
 	}
 

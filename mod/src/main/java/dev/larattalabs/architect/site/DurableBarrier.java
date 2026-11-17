@@ -66,6 +66,17 @@ public final class DurableBarrier {
 
 	/** (T0 review 2 finding 1) Every owed player and chunk save: while any is, no ledger is published (barrier or ordinary save). */
 	public static java.util.List<String> owedDebts() {
+		String l = Stockpiles.ledgerDebt();
+		if (l == null) {
+			return owedSaves();
+		}
+		java.util.List<String> out = new java.util.ArrayList<>(owedSaves());
+		out.add("the stockpile ledger (" + l + ")");
+		return out;
+	}
+
+	/** The owed player and chunk saves only (an ordinary ledger save holds over these; it repairs a ledger debt itself). */
+	public static java.util.List<String> owedSaves() {
 		if (PlayerSaves.OWED.isEmpty() && ChunkDebt.OWED.isEmpty()) {
 			return java.util.List.of();
 		}

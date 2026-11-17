@@ -347,6 +347,7 @@ public final class Stockpiles {
 			PILES.clear();
 			dir = null;
 			ledgerFile = null; // (slice T0) the next world reads its own
+			ledgerDebt = null;
 			ticks = 0;
 			lastSaveTick = 0;
 		});
@@ -645,17 +646,25 @@ public final class Stockpiles {
 					+ "withdraw first, or remove with force (drops the excess at the crate)", false);
 			}
 			drop.putAll(excess(p.ledger, capAfter, Stockpiles::maxStack));
-			drop.forEach((k, v) -> p.ledger.drop(k, v));
 		}
-		takeCrate(level, c);
-		p.crates.remove(c);
-		Builder.dropItems(level, at, drop, null);
-		boolean ended = p.crates.isEmpty();
-		if (ended) {
-			PILES.remove(p.id);
+		boolean ended;
+		if (drop.isEmpty()) {
+			takeCrate(level, c);
+			p.crates.remove(c);
+			ended = p.crates.isEmpty();
+			if (ended) {
+				PILES.remove(p.id);
+			}
+			p.dirty = true;
+			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world (nothing is paid out)
+		} else {
+			// (T0 review 5 item 2) a payout: what was pending saved first, then the debit made durable before the crate goes and the excess drops
+			payoutPreSave(() -> saveWithWorld(srv));
+			ended = removeCrateCore(p, c, drop, () -> saveLedgerFirst(srv, () -> {
+				takeCrate(level, c);
+				Builder.dropItems(level, at, drop, null);
+			}));
 		}
-		p.dirty = true;
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		Architect.LOGGER.info("Stockpile {}: crate {} removed{}{}", owner, at.toShortString(), drop.isEmpty() ? "" : ", excess dropped " + drop, ended
 			? "; the stockpile ended" : "");
@@ -778,6 +787,7 @@ public final class Stockpiles {
 			toPlayer.clear();
 			toGround.clear();
 			changed(p);
+			compensate("the dissolve of " + p.owner + " was refused"); // (T0 review 5 item 1) the pile back on disk too
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was dissolved (try again)");
 		}
 		return out;
@@ -895,6 +905,38 @@ public final class Stockpiles {
 			() -> Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null)));
 	}
 
+	/**
+	 * (T0 review 5 item 2) A forced crate removal's ledger side: the excess debited, the crate out of the pile (the pile out of the registry
+	 * when it was the last), then {@code publish} (which takes the crate and drops the excess once the ledger is durable). When it fails the
+	 * pile is restored exactly, the restored ledger written durably ({@link #compensate}), and the removal refused. Answers whether the
+	 * stockpile ended.
+	 */
+	static boolean removeCrateCore(Pile p, CrateRec c, Map<String, Integer> drop, java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		List<CrateRec> crates = new ArrayList<>(p.crates);
+		Map<String, Pile> order = new LinkedHashMap<>(PILES);
+		drop.forEach((k, v) -> p.ledger.drop(k, v));
+		p.crates.remove(c);
+		boolean ended = p.crates.isEmpty();
+		if (ended) {
+			PILES.remove(p.id);
+		}
+		p.dirty = true;
+		changed(p);
+		if (!publish.getAsBoolean()) {
+			p.ledger = StockLedger.fromJson(before);
+			p.crates.clear();
+			p.crates.addAll(crates);
+			PILES.clear();
+			PILES.putAll(order);
+			changed(p);
+			compensate("a forced removal of a crate of " + p.owner + " was refused");
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; the crate stays and nothing was dropped (try"
+				+ " again)");
+		}
+		return ended;
+	}
+
 	/** (T0 review 4 P1-2) Where a payout's items go (a player's inventory; the units give their own): put, snapshot, restore exactly. */
 	interface Holder {
 		/** Puts up to {@code n} of {@code item}; answers how many went in. */
@@ -967,6 +1009,7 @@ public final class Stockpiles {
 			p.ledger = StockLedger.fromJson(before);
 			ground.clear();
 			changed(p);
+			compensate("a withdrawal from " + p.owner + " was refused"); // (T0 review 5 item 1) the disk back to memory too
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was withdrawn (try again)");
 		}
 		return out;
@@ -1283,6 +1326,30 @@ public final class Stockpiles {
 	static void changed(Pile p) {
 		p.dirty = true;
 		unsaved = true;
+	}
+
+	/**
+	 * (T0 review 5 item 1) A payout was refused after its ledger write failed and the restored ledger could not be written durably either: the
+	 * file may hold the refused move (an IN_DOUBT rename). Payouts refuse while it is set; the next durable ledger write clears it.
+	 */
+	private static volatile @Nullable String ledgerDebt;
+
+	static @Nullable String ledgerDebt() {
+		return ledgerDebt;
+	}
+
+	/**
+	 * (T0 review 5 item 1) A payout's ledger write failed and its move was undone in memory: the restored ledger is written durably over
+	 * whatever the failed write installed (an IN_DOUBT write already renamed the moved state into place), so the disk matches memory. When
+	 * that fails too, a ledger debt refuses payouts until a later write is durable.
+	 */
+	static void compensate(String what) {
+		unsaved = true;
+		if (save()) {
+			return;
+		}
+		ledgerDebt = what + ": the restored ledger could not be written durably";
+		Architect.LOGGER.error("Stockpiles: {}; payouts are refused until a ledger save is durable", ledgerDebt);
 	}
 
 	/** (HF) a ledger change since the last save (a logout saves the world when set). */
@@ -3062,7 +3129,7 @@ public final class Stockpiles {
 			refusedSave();
 			return false; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
 		}
-		java.util.List<String> owed = DurableBarrier.owedDebts();
+		java.util.List<String> owed = DurableBarrier.owedSaves();
 		if (!owed.isEmpty()) {
 			// (slice T0 review 2 finding 1) a player or chunk save is owed: no ledger is published over it (an autosave, a save with the world,
 			// the stop's save), so its credits never reach the disk ahead of what they came from; the ledger stays pending
@@ -3104,6 +3171,7 @@ public final class Stockpiles {
 				unsaved = true; // REFUSED or IN_DOUBT: not saved; the next save writes it again
 				throw new IOException("the ledger's write was " + put.outcome() + ": " + put.reason());
 			}
+			ledgerDebt = null; // durably on disk: memory and the file agree again
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
@@ -3180,6 +3248,7 @@ public final class Stockpiles {
 		DurableFile df = ledger(f);
 		DurableFile.Result r = df.write(toJson(), df.request());
 		if (r.ok()) {
+			ledgerDebt = null;
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
@@ -3214,6 +3283,7 @@ public final class Stockpiles {
 		refusedLogged = false;
 		Path f = dir.resolve(FILE);
 		ledgerFile = null; // (slice T0 review P1-7) nothing of another session's or world's acknowledgements carries over
+		ledgerDebt = null;
 		if (!Files.isRegularFile(f)) {
 			ledger(f);
 			return;
