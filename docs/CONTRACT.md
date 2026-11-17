@@ -32867,3 +32867,24 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Checks:** StockpileAdoptADPTest (+2), unit-scope kit + Gradle PASS at 4b8ee4d1 (Java unchanged since); strict gate (change --only,
   --no-cache --shards 1 --no-turbo, 9080:9081) `gate-runs-adp/20261117-033537-change` at 4b8ee4d1: rl-crash 110/0, hf-crash 56/0,
   sad-survival 56/0, sad-crash 26/0 PASS; adp-defer at cf8ddc5f (crash points + conservation) `20261117-044612-change` 42/0 PASS.
+
+#### Slice ADP fix round (GPT review NOT SAFE; rule 15/20; recorded 2026-11-17; in-game rows pending the pause)
+
+- **P1 (the inherited SAD window):** adopt is now credit, save, take, save, records. The credits are booked in memory only (no crate, cell
+  or drop touched) and saved with `saveConfirmed` (OVF's method, copied verbatim at CXD's anchor: identical text, so the merge dedupes).
+  A refused save puts the ledger back and refuses the call. Then the takes (stock out, cell restored, kind released) are saved confirmed, and only
+  then are the records cleared. The intent marker is a record that still names a credited crate: `finishTakes` (start repair) or FINISH (the next
+  call) takes a crate that still stands as its owner's, never credited twice. Kill points ADP1 (inside the credit's save), ADP2 (between),
+  ADP3 (inside the take's save). Off the server thread adoptCrates refuses.
+- **Overflow:** credited uncapped and dropped last (`overCapacity`, after the records). A crash between the drop's entity write and its ledger
+  write mints the overflow (it never loses it). Leftover (TXN). Steward's "did not fit" message is unchanged.
+- **P2:** BUILT construction roads on the crate are selected (their paid record is keyed; they join no feed). `Builder.complete` never restores
+  over a crate it can't read as its own. RegionAdopt's guard and adopt's selection use `crateMayStand`/`crateBlockAt`, where any crate block, or a
+  cell that can't be read, counts as standing.
+- **Conservation** comes from the audit's standing parts (stock, paid cells standing, crate stock, item entities, containers, inventory) over the fixture box.
+- **Gate:** adp-defer (A deferred, with SAC1/SAC2; B with SAC1/ADP1 roll-back; live; C), adp-forward (ADP2, ADP3, SAC2: one town each),
+  adp-complete (own crate, finish, the Regions.adopt refusal), adp-road. Units: StockpileAdoptADPTest (fate table with FINISH, overCapacity); unit-scope PASS.
+- **Failing-first recipe (base, not pushed):** a temp branch with origin/main's `Stockpiles.java` plus only `inAdoptSave = "ADP1"` around its
+  first `saveWithWorld` and the kill hook. Run the adp-* steps there; expected FAIL on A/ADP1/complete/road. Leftover: the paid standing of a BUILT
+  road out of range (`rescan` never loads a chunk) and RegionAdopt's other callers of `crateStands` (none left).
+
