@@ -388,10 +388,104 @@ steps.halt = async () => {
 
 // ------------------------------------------------------------------ hb-growth
 
+// (GR's survival town on RS's survival base: gate6dgr's claim; its east strip raised 3 so a growth's pads cut and fill it, staged)
+const GX = 11200, GZ = 11200;
+const GCLAIM = [GX, GZ, GX + 159, GZ + 111];
+const GTOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
+const GGROW = Array.from({ length: 4 }, (_, i) => ({ id: `row_${i + 1}`, type: 'house', size: [9, 9], villager: 'dwelling' }));
+const GENTRIES = Object.fromEntries(GGROW.map((l) => [l.id, 'rs_hut']));
+
+async function groundAt(x, z) {
+  const h = await call('dev.box.hash', { min: [x, -64, z], max: [x, 255, z], cells: true }, 300_000);
+  let g = -64;
+  for (const l of h.cells ?? []) { const [k, st] = [l.slice(0, l.indexOf(' ')), l.slice(l.indexOf(' ') + 1)]; if (!/air/.test(st.split(' be=')[0])) g = Math.max(g, Number(k.split(',')[1])); }
+  return g;
+}
+
 steps.growth = async () => {
   await ensure();
   spendZero();
-  throw new Error('hb-growth: not written yet');
+  const tag = 'growth';
+  const out = {};
+  const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  await G.survivalBase(ctx);
+  await L.fresh('G6B HB Growth', G.SURV);
+  await L.setRules('exact');
+  await cmd('/weather clear');
+  await G.designs(ctx);
+  await L.tp(GX + 80, 80, GZ + 56);
+  const gy = await groundAt(GX + 150, GZ + 100);
+  // the east strip raised 3 (dirt under a grass top): uneven land where the town grows
+  for (let z = GZ - 8; z <= GZ + 119; z += 32) {
+    const z1 = Math.min(GZ + 119, z + 31);
+    await cmd(`/fill ${GX + 96} ${gy} ${z} ${GX + 167} ${gy + 2} ${z1} minecraft:dirt`);
+    await cmd(`/fill ${GX + 96} ${gy + 3} ${z} ${GX + 167} ${gy + 3} ${z1} minecraft:grass_block`);
+  }
+  const crates = [0, 1, 2, 3].map((k) => [GCLAIM[0] - 6 + 2 * k, gy + 1, GCLAIM[1] - 6]);
+  const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+  check(!cr.refused, `${tag}: a stockpile of 4 crates: ${json(cr.refused ?? 'made')}`);
+  const p0 = await L.plan('flat_village', GCLAIM, { params: { lots: GTOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+  const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+  const f0 = await G.feed(ctx, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+  const tTown = await terr(region);
+  out.town = { region, state: f0.last.st.view.state, terrain: [tTown.cells, tTown.built, (tTown.targets ?? []).length] };
+  check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `${tag}: the town built in survival (${f0.waves} waves; ${(tTown.targets ?? []).length} staged target(s) of its own, ${tTown.built}/${tTown.cells})`);
+  const town0 = new Set((tTown.targets ?? []).map((x) => x.target));
+  const box = [GCLAIM[0] - 8, gy - 12, GCLAIM[1] - 8, GCLAIM[2] + 8, gy + 28, GCLAIM[3] + 8];
+  await L.settle(3000);
+  const before = await G.snap(ctx, box, 'hb-growth-before');
+  const ps0 = await pile();
+  // the growth at 1 per tick, so it is still waiting on its land when it is undone
+  await call('dev.terrain.rate', { n: 1 }, 30_000);
+  const g = await call('dev.rv.plan', { region, program: 'flat_village', params: { grow: { lots: GGROW } } }, 900_000);
+  check(!g.refused && g.revisionOf?.rid >= 1, `${tag}: a growth of ${GGROW.length} houses planned: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
+  if (g.refused) return out;
+  const r = await call('dev.region.realise', { planId: g.planId, lots: GENTRIES }, 300_000);
+  check(!r.refused, `${tag}: the growth realised: ${r.refused ?? 'accepted'}`);
+  // its staged targets put down, and an item of it waiting typed kind "terrain"
+  let tg, waits = [];
+  for (let i = 0; i < 120; i++) {
+    tg = await terr(region);
+    waits = (tg.waits ?? []).filter((w) => w.waitsFor?.kind === 'terrain' && w.status === 'WAITING');
+    if ((tg.targets ?? []).some((x) => !town0.has(x.target)) && waits.length) break;
+    await L.sleep(2000);
+  }
+  const mine = (tg.targets ?? []).filter((x) => !town0.has(x.target));
+  out.growth = { rid: g.revisionOf.rid, staged: mine.map((x) => [x.target, x.part, x.cells, x.built]), waits: waits.slice(0, 4) };
+  check(mine.length > 0, `${tag}: the growth's land is ${mine.length} staged target(s) (${json(mine.map((x) => [x.target, x.part, x.cells]))})`, out.growth);
+  const lw = waits.find((w) => w.key?.startsWith('lot:')) ?? waits[0];
+  check(!!lw && lw.reason === 'SITE_BUSY' && typeof lw.waitsFor.part === 'string', `${tag}: an item of the growth (${lw?.key}) waits ${lw?.reason} with architect_mc:waitsFor ${json(lw?.waitsFor ?? null)}`);
+  // fed: what its paid targets lack (some consume while the land is half built), then the land held part built
+  const acc = await feedOnce({ insert: async (t, items) => (await call('dev.crate.insert', { site: t, items, exact: true }, 120_000)).accepted ?? {} }, 20_000);
+  let tH = await untilTerrain(region, (x) => (x.targets ?? []).filter((y) => !town0.has(y.target)).some((y) => y.built > 0), 600_000);
+  await hold(true);
+  await L.settle(1500);
+  tH = await terr(region);
+  const mineH = (tH.targets ?? []).filter((x) => !town0.has(x.target));
+  const ps1 = await pile();
+  const consumed = G.minus(G.minus(ps1.ledger?.consumed, ps0.ledger?.consumed), G.minus(ps1.ledger?.returned, ps0.ledger?.returned));
+  const rv = await call('dev.rv.state', { region }, 60_000);
+  out.atUndo = { fed: acc, consumed, staged: mineH.map((x) => [x.target, x.cells, x.built]), busy: rv.busy };
+  const half = mineH.reduce((a, x) => a + x.built, 0), all = mineH.reduce((a, x) => a + x.cells, 0);
+  check(half > 0 && half < all, `${tag}: at the undo the growth's land is half built (${half} of ${all} staged cells), still waiting (busy ${rv.busy})`, out.atUndo);
+  check(sum(consumed) > 0, `${tag}: a paid target of the growth consumed before the undo (${sum(consumed)}: ${json(consumed)})`, consumed);
+  // RU: undoRevision while it waits
+  const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  await hold(false);
+  await L.settle(3000);
+  const ps2 = await pile();
+  const d = await G.diff(ctx, box, before);
+  const ef = d.list.filter((m) => !crates.some((c) => c.join(',') === m.pos));
+  out.undo = { result: u, eflat: ef.length, list: ef.slice(0, 8) };
+  check(u.removed === true && ef.length === 0, `${tag}: undoRevision while the growth waits on its land: removed ${u.removed}${u.refused ? ` (refused ${u.refused})` : ''}; the half-built terrain restored, the world before the growth (${ef.length} differ)`, out.undo);
+  const put = G.minus(ps2.ledger?.delivered, ps0.ledger?.delivered);
+  const back = G.minus(G.plus(G.minus(ps2.stock, ps0.stock), {}), {});
+  check(G.same(u.refund, consumed) && G.same(put, back) && ps2.identity !== false, `${tag}: paid == returned: the refund ${json(u.refund)} is what the growth consumed ${json(consumed)}; every item put in (${sum(put)}) is back in the stock (${sum(back)}); identity ${ps2.identity}`, { refund: u.refund, consumed, put, back });
+  const tA = await terr(region);
+  const left = (tA.targets ?? []).filter((x) => !town0.has(x.target));
+  check(left.length === 0, `${tag}: none of the growth's staged targets is left (${left.length})`);
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  return out;
 };
 
 steps.report = async () => {
