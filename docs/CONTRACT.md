@@ -32800,5 +32800,13 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   from the growth's batch at 0 and 50%); hb-remove 24/3, all in the new xr01crash row. Its first draft held RL's save on join off as well
   (`noPeriodic` alone), so the paid targets that joined after the case's save had no book and stood unpaid after the restart (387 units):
   a test artefact (production always saves on join, RL), now `{noPeriodic, joinSave}`. Its BUILT staged target c4 was read by its book
-  and left BUILT (log line). PENDING: hb-remove (xr01crash) re-run, paused by the coordinator.
+  and left BUILT (log line).
+- **Final run** (b97ffb75, gate-runs-hb/20261117-045454-change, 9018/9019, `--no-cache`): hb-halt 15/0, hb-growth 30/0, hb-remove 25/3,
+  all three in xr01crash. With the join save on, a later save on join dropped the BUILT staged targets' books, so the window was not
+  reached (0 books; the BUILT-and-booked case is shown only by run 8's c4). Accounting held: standing 392 = paid 392, conservation exact
+  through the rebuild and the Remove, E-flat 0. But after the restart and re-feed to PLACED, 54 cells of the pre-halt world are air (the
+  same cells in runs 8 and 9, at 9614-9623,71,9075: stone bricks, a fence, stairs, a trapdoor; not staged cells). Not diagnosed: no code
+  changes after the final GPT check (to Noah with its three findings: the join save after feedPass steps new targets, a full r.built
+  completing before the terrain durability check, `HB_ONLY=xr01crash` running nothing).
+- **Left:** while held no paid growth target starts
 - **Left:** while held no paid growth target starts (all meet the pads), so paid == returned is 0 == 0 at 0/50%.
