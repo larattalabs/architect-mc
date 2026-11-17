@@ -650,8 +650,12 @@ export async function registerSAD(steps, h) {
     // C: again: a no-op
     const aC = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     const pC = await pile();
-    out.C = { refused: aC.refused ?? null, same: json(pC.ledger) === json(pB.ledger) };
-    check(!aC.refused && json(pC.ledger) === json(pB.ledger) && json(pC.feedOrder) === json(pB.feedOrder), 'ADP C: adoptCrates a third time changes nothing', out.C);
+    // (what an adoption writes: delivered, dropped, the paid records, the feed order; house_4, in the feed order, may draw meanwhile)
+    const differs = [...new Set([...Object.keys(pB.ledger ?? {}), ...Object.keys(pC.ledger ?? {})])].filter((k) => json(pB.ledger?.[k]) !== json(pC.ledger?.[k]));
+    out.C = { refused: aC.refused ?? null, differs };
+    check(!aC.refused && G.same(pC.ledger?.delivered, pB.ledger?.delivered) && G.same(pC.ledger?.dropped ?? {}, pB.ledger?.dropped ?? {})
+      && json(pC.ledger?.paid ?? {}) === json(pB.ledger?.paid ?? {}) && json(pC.feedOrder) === json(pB.feedOrder),
+      `ADP C: adoptCrates a third time adds nothing: delivered, dropped, paid records and feed order equal (ledger fields that moved meanwhile: ${json(differs)})`, out.C);
     await L.leaveWorld();
     spendZero();
     return out;
