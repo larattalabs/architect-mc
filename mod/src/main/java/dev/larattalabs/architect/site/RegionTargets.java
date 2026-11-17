@@ -82,6 +82,8 @@ public final class RegionTargets {
 		boolean released;
 		/** (8a ST) Whether {@link #floating} was read from the live region (else read again at the next turn). */
 		boolean floatingRead;
+		/** (round 4) Cells this run wrote this session (the halted target's recovery check: a target whose cells survived writes none). */
+		int writes;
 		/** (8a ST) The feed turn before which a built target's durability barrier is not tried again (after a failed one). */
 		long durableRetryAt = Long.MIN_VALUE;
 
@@ -1393,7 +1395,8 @@ public final class RegionTargets {
 			}
 			int kk = r.queue[q];
 			boolean planned = before != null && kk >= 0 && kk < before.size() && now.is(before.states[kk].getBlock());
-			if (!planned && !Builder.free(level, p, now, r.target[q])) {
+			final BlockState here = now, want = r.target[q];
+			if (!mayReplace(planned, here, want, () -> Builder.free(level, p, here, want))) {
 				r.blockedSince.putIfAbsent(q, Builder.ticksNow());
 				continue;
 			}
@@ -1407,6 +1410,7 @@ public final class RegionTargets {
 					t.id());
 			}
 			write(level, r, q, p);
+			pl.writes++;
 			budget--;
 			placed++;
 		}
@@ -1440,33 +1444,32 @@ public final class RegionTargets {
 	 * stockpile there is no ledger reconcile to reopen it). An undurable write leaves it building: it completes at a later turn.
 	 */
 	static boolean terrainDurable(MinecraftServer srv) {
-		if (!srv.isSameThread()) {
-			return false;
-		}
-		// (GPT final review) a level with saving off (/save-off) would skip its chunks yet leave RegionDurability clean: refused, the target
-		// stays building until saving is on again
-		for (ServerLevel l : srv.getAllLevels()) {
-			if (l.noSave) {
-				if (!SAVE_OFF_SAID) {
-					SAVE_OFF_SAID = true;
-					Architect.LOGGER.warn("Staged terrain: a target is built but saving is off (/save-off): it is marked built only once a save can be made");
-				}
-				return false;
-			}
-		}
-		SAVE_OFF_SAID = false;
-		srv.saveAllChunks(true, true, false);
+		// (round 4) T0's world barrier (Stockpiles.barrier: players, then a flushed chunk save known durable, then the ledger through
+		// DurableFile; refused under /save-off, after a failed load or on any failed step): OK only. IN_DOUBT (the ledger renamed, its folder's
+		// force failed) is not known durable: the target stays building and the barrier runs again later
+		DurableBarrier.Result b = Stockpiles.barrier(srv);
 		TERRAIN_SAVES.incrementAndGet();
-		RegionDurability.retryOwed();
-		boolean ok = RegionDurability.undurable("chunk", "entities").isEmpty();
-		if (ok) {
-			// (rule 18, TEST kill point ST1) a crash at the barrier: its chunks saved and flushed, the target not yet marked BUILT
+		LAST_BARRIER = b;
+		if (b.ok()) {
+			// (rule 18, TEST kill point ST1) a crash at the barrier: everything saved, the target not yet marked BUILT
 			dev.larattalabs.architect.journal.WorldJournal.kill("ST1");
 		}
-		return ok;
+		return b.ok();
 	}
 
-	private static boolean SAVE_OFF_SAID;
+	/**
+	 * (round 4, GPT final review P2) Whether a staged write may replace {@code now}: the tile's planned before, our own block in another state
+	 * (a written leaf whose distance a neighbour changed, a waterlogged leaf planned dry: set to its planned state, as the INSTANT twin holds
+	 * it, instead of waiting for ever), or what a builder may replace ({@code free}: air, a fluid, a plant).
+	 */
+	static boolean mayReplace(boolean planned, BlockState now, BlockState target, java.util.function.BooleanSupplier free) {
+		return planned || now.getBlock() == target.getBlock() || free.getAsBoolean();
+	}
+
+	/** (round 4, dev) The last staged terrain barrier's result. */
+	static volatile DurableBarrier.@Nullable Result LAST_BARRIER;
+
+
 
 	/** (8a ST) Feed turns between two durability barriers of one built staged target (a failed one is retried, never skipped). */
 	static final int DURABLE_RETRY = 100;
@@ -1480,8 +1483,13 @@ public final class RegionTargets {
 		if (ticks < pl.durableRetryAt) {
 			return false;
 		}
-		if (barrier.getAsBoolean()) {
-			return true;
+		try {
+			if (barrier.getAsBoolean()) {
+				return true;
+			}
+		} catch (RuntimeException e) {
+			// (round 4, GPT final review) a save that throws (a failed flush through vanilla's join) is a failed barrier: the same delay
+			Architect.LOGGER.warn("Staged terrain: the world barrier threw ({}); tried again in {} turns", e.toString(), DURABLE_RETRY);
 		}
 		pl.durableRetryAt = ticks + DURABLE_RETRY;
 		return false;
@@ -1596,7 +1604,8 @@ public final class RegionTargets {
 					ownLeaf |= builtOurs.test(o);
 				}
 			}
-			if (least + 1 < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE || persistent && ownLeaf) {
+			// (round 4) a persistent leaf (it never decays) goes in beside any leaf a log holds (distance under 7), or a built leaf of its own
+			if (least + 1 < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE || persistent && (ownLeaf || least < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE)) {
 				return READY;
 			}
 			return unloaded ? UNKNOWN : MANDATORY;
@@ -1661,6 +1670,17 @@ public final class RegionTargets {
 		o.addProperty("terrainPerTick", SurvivalWorld.terrainPerTick());
 		o.addProperty("stagedBuild", Packed.stagedBuild());
 		o.addProperty("gameTime", srv.overworld().getGameTime());
+		var lb = LAST_BARRIER;
+		if (lb != null) {
+			JsonObject b = new JsonObject();
+			b.addProperty("outcome", lb.outcome().name());
+			b.addProperty("reason", lb.reason());
+			b.addProperty("playersMs", lb.playersMs());
+			b.addProperty("chunksMs", lb.chunksMs());
+			b.addProperty("ledgerMs", lb.ledgerMs());
+			o.add("lastBarrier", b);
+		}
+		o.addProperty("barriers", TERRAIN_SAVES.get());
 		// the region's items that wait for a target (their architect_mc:waitsFor), as Steward reads ITEM_WAITING's ext
 		JsonArray waits = new JsonArray();
 		var batch = batchId == null ? null : Batches.get(batchId);
@@ -1739,6 +1759,7 @@ public final class RegionTargets {
 				x.add("firstUnsupported", firstBad);
 			}
 			if (pl != null) {
+				x.addProperty("writes", pl.writes);
 				x.addProperty("scanAt", pl.scanAt);
 				x.addProperty("stall", pl.stall);
 				x.addProperty("released", pl.released);
@@ -1912,6 +1933,12 @@ public final class RegionTargets {
 		for (int q = r.built.nextClearBit(0); q < r.size(); q = r.built.nextClearBit(q + 1)) {
 			write(level, r, q, r.pos(q));
 			n++;
+		}
+		// (round 4, GPT final review) a staged target finished by hand (creative /architect site finish) is marked BUILT only through the
+		// world barrier too: under /save-off, or a failed save, its cells stand and it stays building (the feed completes it later)
+		if (isTerrain(i) && !terrainDurable(srv)) {
+			Architect.LOGGER.warn("Region target {}: finished, but the world barrier refused; it is marked built at a later turn", i.id());
+			return n;
 		}
 		RoadBuilder.complete(srv, level, i, r, null);
 		return n;

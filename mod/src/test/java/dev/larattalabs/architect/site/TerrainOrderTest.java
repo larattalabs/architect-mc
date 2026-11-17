@@ -493,6 +493,33 @@ class TerrainOrderTest {
 	}
 
 	@Test
+	void roundFourPersistentLeafRewriteAndThrowingBarrier() throws Exception {
+		// a persistent leaf (it never decays) beside a leaf a log holds at distance 6: it goes in (round 3's rule kept it waiting for ever)
+		BlockPos p = new BlockPos(0, 65, 0);
+		Map<BlockPos, String> world = new HashMap<>();
+		world.put(p.east(), "minecraft:oak_leaves[persistent=false,distance=6]");
+		assertEquals(RegionTargets.READY, rule(p, "minecraft:oak_leaves[persistent=true,distance=7]", null, "minecraft:air", world, Set.of(), List.of()));
+		// a written leaf a neighbour changed (its distance), or a waterlogged leaf planned dry, is set to its planned state: our own block
+		BlockState planned = st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=false]");
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=4,waterlogged=false]"), planned, () -> false));
+		assertTrue(RegionTargets.mayReplace(false, st("minecraft:oak_leaves[persistent=true,distance=1,waterlogged=true]"), planned, () -> false));
+		assertFalse(RegionTargets.mayReplace(false, st("minecraft:cobblestone"), planned, () -> false), "a player's block is not ours to replace");
+		assertTrue(RegionTargets.mayReplace(true, st("minecraft:cobblestone"), planned, () -> false), "the tile's planned before is");
+		// a barrier that throws takes the same retry delay as one that fails
+		RegionTargets.Plan pl = new RegionTargets.Plan(0L, new java.util.BitSet(), new int[] {1}, null);
+		int[] calls = {0};
+		assertFalse(RegionTargets.mayComplete(pl, 500, () -> {
+			calls[0]++;
+			throw new IllegalStateException("injected flush failure");
+		}));
+		assertFalse(RegionTargets.mayComplete(pl, 501, () -> {
+			calls[0]++;
+			return true;
+		}), "no barrier on the next turn after a throw");
+		assertEquals(1, calls[0]);
+	}
+
+	@Test
 	void mandatoryRulesAreNotReleasableAndUnloadedSupportIsUnknown() throws Exception {
 		BlockPos p = new BlockPos(0, 66, 0);
 		// a loose block over air: mandatory (release never writes it), over an unloaded chunk: unknown
