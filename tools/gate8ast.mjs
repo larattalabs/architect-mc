@@ -223,7 +223,7 @@ async function haltWait() {
 }
 
 /**
- * (GPT review P1 2 and 3) x03's island with no stockpile: one staged target BUILT while the other builds, then a halt with nothing saved
+ * (GPT review P1 2 and 3) x01's hollow mountain with no stockpile: one staged target BUILT while the other builds, then a halt with nothing saved
  * (dev.stockpile.halt) and a restart: every BUILT target still holds every cell (its chunks were saved before it was marked BUILT); then,
  * half built again, Regions.remove: no staged write after the removal starts (the road tick's path leaves it as the feed does), E-flat 0.
  */
@@ -237,11 +237,11 @@ async function crashAndRemove(tag, fx) {
   await call('dev.terrain.rate', { n: 16 }, 30_000);
   const region = await G.realise(ctx, ck.check.artifactSha, {});
   let tr = null;
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 600; i++) {
     tr = await call('dev.region.terrain', { region }, 120_000);
     const ts = tr.targets ?? [];
-    if (ts.some((t) => !t.building) && ts.some((t) => t.building && t.built > 0)) break;
-    await sleep(500);
+    if (ts.some((t) => !t.building) && ts.some((t) => t.building)) break;
+    await sleep(250);
   }
   const ts0 = (tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]);
   out.beforeHalt = ts0;
@@ -298,10 +298,9 @@ steps.ingame = async () => {
     delete isle.plan.zones;
     try { out.x03 = await staged('x03', isle, { over: 96, crates: 0 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
   }
-  if (want('x03crash')) {
-    const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
-    delete isle.plan.zones;
-    try { out.x03crash = await crashAndRemove('x03crash', isle); } catch (e) { check(false, `x03crash: ${String(e.message).slice(0, 300)}`); out.x03crash = { error: String(e.stack ?? e) }; }
+  if (want('x01crash')) {
+    // (x01's mountain: four targets over 32,078 cells at 16 per tick, so one stands BUILT while others build, and half built after the restart)
+    try { out.x01crash = await crashAndRemove('x01crash', G.fixture(ctx, 'bf/x01_hollow_mountain')); } catch (e) { check(false, `x01crash: ${String(e.message).slice(0, 300)}`); out.x01crash = { error: String(e.stack ?? e) }; }
   }
   if (want('x03h')) {
     // the whole hamlet: its lots stand on the island (a stage after the island's): each waits for the island's staged targets, typed

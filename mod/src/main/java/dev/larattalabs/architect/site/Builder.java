@@ -669,9 +669,13 @@ public final class Builder {
 
 		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
 		boolean soilSame;
-		/** (8a ST) Whether a staged terrain cell holding {@code now} is built as {@code target}: its whole state, as the journal reads it. */
+		/**
+		 * (8a ST) Whether a staged terrain cell holding {@code now} is built as {@code target}: the same block in its planned state (the
+		 * journal's reading of the properties: volatile ones such as a leaf's distance or a grass top's snowy aside). Never the journal's
+		 * soil leniency: grass on a cell planned dirt (a relief's grass top made dirt) is not built, so it is written as its INSTANT twin.
+		 */
 		static boolean stagedMatches(BlockState now, BlockState target) {
-			return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target, null);
+			return now.getBlock() == target.getBlock() && dev.larattalabs.architect.journal.StillOurs.holds(now, null, target, null);
 		}
 
 		/** (8a ST) A staged terrain target's run: a cell matches only its whole planned state ({@link #matches}). */

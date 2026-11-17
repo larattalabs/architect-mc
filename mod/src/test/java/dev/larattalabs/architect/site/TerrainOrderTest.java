@@ -456,7 +456,9 @@ class TerrainOrderTest {
 		assertFalse(Builder.Run.stagedMatches(snow2, snow3), "a snow layer of the wrong thickness is not built");
 		assertFalse(Builder.Run.stagedMatches(logX, logY), "a log on the wrong axis is not built");
 		assertTrue(Builder.Run.stagedMatches(snow3, snow3));
-		assertTrue(Builder.Run.stagedMatches(st("minecraft:grass_block"), st("minecraft:dirt")), "grass spread over our dirt stays built (the journal's rule)");
+		assertFalse(Builder.Run.stagedMatches(st("minecraft:grass_block"), st("minecraft:dirt")), "grass on a cell planned dirt is not built (INSTANT wrote dirt)");
+		assertTrue(Builder.Run.stagedMatches(st("minecraft:oak_leaves[persistent=true,distance=3]"), st("minecraft:oak_leaves[persistent=true,distance=1]")),
+			"a leaf's distance is volatile");
 	}
 
 	@Test
