@@ -336,6 +336,64 @@ async function saveOff(tag, fx) {
   return out;
 }
 
+/**
+ * (round 4, GPT final review P1) A deposit doubled across a crash: x03h (the island hamlet) in survival over a stockpile, the periodic save off
+ * (dev.stockpile.ps noPeriodic), the player gives the stockpile items from their inventory (Insert from inventory) while the island builds,
+ * the first staged target completes (its barrier saves), then a halt with nothing else saved and a restart: the player's inventory plus the
+ * stock (and what the build took) equal the totals before the deposit. A barrier that saved the chunks but not the players published the
+ * ledger with the deposit while player.dat still held the items: minted.
+ */
+async function depositCrash(tag, fx) {
+  const out = { tag };
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = boxOf(s.W, 96);
+  const ck = await G.check(ctx, tag, s);
+  if (!ck.check?.artifactSha) { check(false, `${tag}: no artifact (${ck.check?.overall})`); return out; }
+  const crateAt = await G.pile(ctx, s, 3);
+  await call('dev.terrain.rate', { n: 4 }, 30_000); // slow enough that the deposit lands before the first staged target completes
+  await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+  await L.cmd('/give @p minecraft:oak_planks 64');
+  await L.cmd('/give @p minecraft:cobblestone 64');
+  await L.tp(crateAt[0][0] + 0.5, crateAt[0][1] + 1, crateAt[0][2] + 2.5);
+  await L.cmd('/save-all flush'); // the baseline: players, chunks and the ledger on disk
+  const C = new G.Conservation(ctx, box);
+  C.area = { min: [box[0] - 24, box[1], box[2] - 24], max: [box[3], box[4], box[5]] }; // the crates and the player stand west of the claim
+  await C.start();
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let tr = null;
+  for (let i = 0; i < 600; i++) {
+    tr = await call('dev.region.terrain', { region }, 120_000);
+    const ts = tr.targets ?? [];
+    if (ts.some((t) => t.building && t.built > 0) && !ts.some((t) => !t.building)) break;
+    await sleep(250);
+  }
+  const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+  out.deposit = { moved: ins.moved, accepted: ins.accepted ?? null, refused: ins.refused ?? null };
+  check(ins.moved > 0, `${tag}: ${ins.moved} item(s) moved from the inventory into the stockpile while the island builds (no staged target BUILT yet: ${json((tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]))})`, out.deposit);
+  let done = null;
+  for (let i = 0; i < 1200; i++) {
+    done = await call('dev.region.terrain', { region }, 120_000);
+    if ((done.targets ?? []).some((t) => !t.building)) break;
+    await sleep(250);
+  }
+  out.atHalt = (done?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]);
+  check((done?.targets ?? []).some((t) => !t.building), `${tag}: a staged target completed after the deposit (its barrier ran): ${json(out.atHalt)}`);
+  await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+  const down = await haltWait();
+  check(down, `${tag}: dev.stockpile.halt halted the server (nothing saved since the barrier)`);
+  await L.openWorld(s.world);
+  await L.settle(4000);
+  await call('dev.stockpile.ps', { noPeriodic: false }, 30_000).catch(() => {});
+  const p = await C.point('after the crash');
+  out.conservation = p;
+  check(G.exact(p), `${tag}: items in = items out across the crash: inventory + stock + what the build took equal the totals before the deposit (diff ${json(p.diff)}, identity ${p.identity})`, p);
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  await G.remove(ctx, region).catch(() => {});
+  return out;
+}
+
 steps.ingame = async () => {
   await ensure();
   spendZero();
@@ -365,6 +423,10 @@ steps.ingame = async () => {
     delete isle.plan.zones;
     try { out.x03saveoff = await saveOff('x03saveoff', isle); } catch (e) { check(false, `x03saveoff: ${String(e.message).slice(0, 300)}`); out.x03saveoff = { error: String(e.stack ?? e) }; }
     await L.cmd('/save-on').catch(() => {});
+  }
+  if (want('x03hdeposit')) {
+    try { out.x03hdeposit = await depositCrash('x03hdeposit', G.fixture(ctx, 'bf/x03_island_hamlet')); } catch (e) { check(false, `x03hdeposit: ${String(e.message).slice(0, 300)}`); out.x03hdeposit = { error: String(e.stack ?? e) }; }
+    await call('dev.stockpile.ps', { noPeriodic: false }, 30_000).catch(() => {});
   }
   if (want('x01crash')) {
     // (x01's mountain: four targets over 32,078 cells at 16 per tick, so one stands BUILT while others build, and half built after the restart)
