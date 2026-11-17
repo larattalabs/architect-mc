@@ -82,11 +82,17 @@ public final class TestMove {
 	 */
 	static JsonObject run(MinecraftServer srv, String dim, BlockPos from, BlockPos to, Map<String, Integer> items, @Nullable String key) {
 		JsonObject o = new JsonObject();
+		String bad = TestMoveCells.dimRefusal(dim);
+		if (bad != null) {
+			o.addProperty("refused", bad); // (T1b, P2) a non-canonical key would name a box the hold mixins never look up
+			return o;
+		}
 		ServerLevel level = Sites.levelOf(srv, dim);
 		if (level == null) {
 			o.addProperty("refused", "no dimension " + dim);
 			return o;
 		}
+		dim = level.dimension().identifier().toString(); // the hold key boxHeld builds, exactly
 		TxnCore c = TxnServer.core();
 		TxnCore.Started s = c.begin(NAME, key, List.of(box(dim, from), box(dim, to)), null);
 		o.addProperty("begin", s.status().name());
@@ -107,8 +113,13 @@ public final class TestMove {
 		}
 		BlockEntity sb = level.getBlockEntity(from);
 		BlockEntity db = level.getBlockEntity(to);
-		if (!plain(sb) || !plain(db)) {
-			o.addProperty("refused", "both cells must be plain containers (no crate, no hopper)");
+		// (T1b) single plain chests only: the T1 holds don't cover a double chest's partner, per-type writers or other BE types (§6.1, T2)
+		String cell = TestMoveCells.refusal(from, sb);
+		if (cell == null) {
+			cell = TestMoveCells.refusal(to, db);
+		}
+		if (cell != null) {
+			o.addProperty("refused", cell);
 			return o;
 		}
 		if (Sites.ownsCell(dim, from) || Sites.ownsCell(dim, to)) {
@@ -159,15 +170,10 @@ public final class TestMove {
 		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
 	}
 
-	/** A vanilla block container a hold can guard (the TxnHold mixins): no crate (Architect's own writers), no hopper (it moves itself). */
-	static boolean plain(@Nullable BlockEntity be) {
-		return be instanceof net.minecraft.world.level.block.entity.BaseContainerBlockEntity && !(be instanceof dev.larattalabs.architect.survival.CrateBlockEntity)
-			&& !(be instanceof net.minecraft.world.level.block.entity.HopperBlockEntity);
-	}
-
+	/** The chest at {@code p} (its own 27 slots), or null when the cell no longer holds a chest block entity. */
 	static @Nullable Container container(ServerLevel level, BlockPos p) {
 		BlockEntity be = level.getBlockEntity(p);
-		return be instanceof Container c ? c : null;
+		return be != null && be.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.CHEST && be instanceof Container c ? c : null;
 	}
 
 	static Item item(String id) {
@@ -282,8 +288,13 @@ public final class TestMove {
 
 		@Override
 		public @Nullable String invalid(Effect e) {
-			if (!e.data().has("dim") || !(e.data().get("pos") instanceof JsonArray a) || a.size() != 3) {
-				return "dim and pos [x, y, z] are required";
+			if (!(e.data().get("dim") instanceof com.google.gson.JsonPrimitive d) || !d.isString() || !(e.data().get("pos") instanceof JsonArray a)
+				|| a.size() != 3) {
+				return "dim (a string) and pos [x, y, z] are required";
+			}
+			String bad = TestMoveCells.dimRefusal(d.getAsString());
+			if (bad != null) {
+				return bad;
 			}
 			for (int i = 0; i < 3; i++) {
 				if (!a.get(i).isJsonPrimitive() || !a.get(i).getAsJsonPrimitive().isNumber()) {
@@ -326,6 +337,10 @@ public final class TestMove {
 			}
 			boolean take = "test.take".equals(e.op());
 			Map<String, Integer> items = new TreeMap<>(e.items());
+			String cell = take ? TestMoveCells.refusal(posOf(e), level.getBlockEntity(posOf(e))) : null;
+			if (cell != null) {
+				throw new IllegalStateException(cell); // the prepare re-judges the cell: it may have become half of a double chest since the plan
+			}
 			if (take) {
 				for (var x : items.entrySet()) {
 					if (count(c, item(x.getKey())) < x.getValue()) {

@@ -75,6 +75,11 @@ public final class TxnDev {
 	}
 
 	static JsonObject run(MinecraftServer srv, ServerPlayer player, JsonObject req) {
+		if (req.has("dimension") && !(req.get("dimension") instanceof com.google.gson.JsonPrimitive d && d.isString())) {
+			JsonObject o = new JsonObject();
+			o.addProperty("refused", "dimension must be a string resource key (e.g. minecraft:overworld)");
+			return o;
+		}
 		String dim = req.has("dimension") ? req.get("dimension").getAsString() : player.level().dimension().identifier().toString();
 		Map<String, Integer> items = new TreeMap<>();
 		for (var e : req.getAsJsonObject("items").entrySet()) {

@@ -903,6 +903,20 @@ named term with its own rule: pending credits count only while their removal is 
 | T6 | **Deltas, charges, scoops, fills, take-ups, repair, reconcile give-backs** | `delta.refund` (OVF's OVD1 → explicit decision; closes its leftover), with row 38's OVERWRITE drops owed (collectible), after the decision; `fill` (row 18, FK's FILLING becomes the intent); XR take-ups (row 11, `retakeOnce`/`retakeToPile`); repair settlement (DR2's record phases); `region.charge`, `region.scoop`, `mech.charge` (keyed, OVF (c)); RL reconcile give-backs (row 28) as L | strict | 1.5 days |
 | T7 | **Leftovers and player moves** | rows 7-9 (road crate, complete leftovers, orphan crate: crate B → L when a pile exists, else an owed collectible); row 37 (adopted-site delta removal, as `removal.site`); dissolve's ground drop, the forced `removeCrate` and `withdraw`'s full-inventory overflow (owed collectibles, Noah's decision 1); `withdraw` and dissolve to a player, and deposits from a player (rows 23-25: P with the player attachment) | strict | 1.5 days |
 
+**T2 entry criterion** *(Noah, 2026-11-17, accepting T1 as T2's base)*. T1's holds don't cover every way a container's items
+can change. T1 makes the gaps unreachable only by restricting its TEST kind: `test.move` takes **single plain chests only**
+(`TestMoveCells`; a double chest, a trapped chest, droppers, dispensers, furnaces, hoppers, barrels, crates and every other block
+entity type are refused, and the prepare re-judges the cell). Pistons can't push a chest, but commands (`/setblock`, `/clone`,
+`/data`, `/item`) remain an operator-only gap of the dev hook. **T2 cannot start** until there are complete holds for:
+1. **the double-chest partner**: the combined container reached through the other half (and a chest placed beside a held one);
+2. **per-type writers**: droppers, dispensers, furnaces (and the blast furnace and smoker), brewing stands, crafters, and every other
+   block entity that edits its own slots outside `Container.setItem`;
+3. **pistons and commands** that move or rewrite the block entity (`/setblock`, `/clone`, `/fill`, `/data`, `/item`, structure blocks);
+4. **block-entity removal**: breaking, replacement and explosion of the held cell by any path, not only the guarded ones.
+
+Each hold lands with a **failing-first in-game case**: the case is red on T1 (the write reaches a held box) and green with the hold,
+both recorded in the as-built. Until then a real kind (CXD's `crate.take` included) is not migrated.
+
 **Every entry point is mapped** *(P2-9)*. Each of rows 1-38 is either in a slice above or excluded with its reason:
 - rows 21, 34-36 move no items;
 - rows 26-27 are bulk streams: §3.9, JR plus RL;

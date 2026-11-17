@@ -32896,6 +32896,15 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
   `match` each; a refused intent touched nothing; a held txn's source untouched by a hopper, retired after `/save-on`.
 - **Deferred (T2+):** `replayed()`, `TXN_EVENT`, `Owed`, FORMAT + 1, `txn-coverage.mjs`, `/architect txn resolve`, `asyncAt`, in-game
   recovery crashes, receipt pruning; created/destroyed/converted and pending credits are unread terms (inconclusive), not counted.
+### Slice T1b as built (branch `slice/T1b` off `slice/T1` 5d23f7a1; Noah accepted T1 as T2's base with these changes; $0)
+
+- **test.move takes single plain chests only** (`TestMoveCells.refusal`): a double chest (either half), trapped and copper chests,
+  droppers, dispensers, furnaces, hoppers, barrels, crates and every other block entity are refused with the cell and its type; the
+  prepare re-judges the source cell, and put/compensate write only to a chest BE. That makes the last review's P1s (no hold for a
+  double chest's partner, per-type writers, pistons) unreachable in T1; commands stay an operator-only gap of the dev hook.
+- **Dimension P2:** `dev.txn.run`'s `dimension` must be a JSON string and a canonical key (`overworld` is refused: it keyed a box the
+  hold mixins never look up); the box and effect data use the level's own key; `Adapter.invalid` quarantines a non-canonical `dim`.
+- **T2 entry criterion** written in TXN-DESIGN §6.1. Units: `TestMoveCellsTest` (5); `FillsFKBTest` now expects both Transfer API injectors (T1's insert guard had left it red); full mod suite 1436 green.
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
