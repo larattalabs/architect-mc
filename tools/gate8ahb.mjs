@@ -203,8 +203,8 @@ async function later2(args, timeoutMs = 900_000) {
   throw new Error(`no result for ${pd.pending}`);
 }
 
-async function removeCase(tag, fx, frac, order) {
-  const S = await survival(tag, fx, { rate: frac === 50 ? 2 : 16, held: frac < 100 });
+async function removeCase(tag, fx, frac, order, { xr = false, over = 96 } = {}) {
+  const S = await survival(tag, fx, { rate: frac === 50 ? 2 : 16, held: frac < 100, over });
   const { region, box, pre, crateAt, C } = S;
   const out = { tag, frac, order, region };
   let t;
@@ -246,35 +246,26 @@ async function removeCase(tag, fx, frac, order) {
     for (const x of rc.targets ?? []) if (stagedIds.has(x.target)) for (const c of x.cells ?? []) if (!(c[3] & 2)) taken.push(c.slice(0, 3).join(','));
     const a = await audit();
     out.xr = { rows: rows.length, counts: ow.counts ?? null, stagedVictims: stagedVictims.slice(0, 4), takenUp: taken.length, takenFirst: taken.slice(0, 6), retaken: a.retaken ?? {}, balance: balance(a) };
-    check(taken.length > 0 && stagedVictims.length === 0 && sum(a.retaken) === 0 && sum(balance(a).dupe) === 0 && sum(balance(a).double) === 0,
+    check((!xr || taken.length > 0) && stagedVictims.length === 0 && sum(a.retaken) === 0 && sum(balance(a).dupe) === 0 && sum(balance(a).double) === 0,
       `${tag}: (XR) ${taken.length} staged cell(s) taken up by later writers (one owner: the writer); ${rows.length} take-up row(s) of paid cells (${json(ow.counts ?? {})}), ${stagedVictims.length} with a staged victim; retaken ${json(a.retaken ?? {})} (nothing was paid); the paid cells standing equal the paid records (standing ${balance(a).standing}, paid ${balance(a).paid})`, out.xr);
   }
   if (order === 'dependent') {
-    // the stages over the land undone first (newest first), the land as it stood: then Regions.remove
+    // the lots standing on the land removed first (Sites.remove of each placed lot site), the land then exactly as it stood; then
+    // Regions.remove. (A survival region's stage is never undone on its own: Groups refuses it; its undo is undoRevision, hb-growth.)
     const before = await G.snap(ctx, box, `hb-${tag}-held`);
-    const stages = stagesOf(st);
-    const landStage = stages.indexOf(LAND_STAGE); // (x03's island is its forms stage: props, lots and routes stand over it)
-    const later = landStage < 0 ? [] : stages.slice(landStage + 1).reverse();
-    const group = st.view.groupId;
-    out.undone = [];
-    for (const sg of later) {
-      const u = await later2(`sundo ${group} ${sg}`);
-      out.undone.push([sg, json(u).slice(0, 240)]);
-      check(u?.removed === true, `${tag}: Sites.undoStage(${group}, ${sg}): removed ${u?.removed} (${json(u?.blockers ?? u?.refused ?? null).slice(0, 160)})`, u);
+    const sites = (st.view.lots ?? []).filter((l) => l.siteId).map((l) => [l.id, l.siteId]);
+    out.lotFirst = [];
+    for (const [lot, site] of sites) {
+      const u = await later2(`remove ${site} ${G.OWNER} noforce`);
+      out.lotFirst.push([lot, site, json(u).slice(0, 200)]);
+      check(u?.removed === true, `${tag}: Sites.remove(${site}) of lot ${lot} on the staged land: removed ${u?.removed} (${json(u?.blockers ?? u?.refused ?? u?.error ?? null).slice(0, 200)})`, u);
     }
-    await G.waitFor(ctx, region, (x) => !x.view.busy, { timeoutMs: 600_000 });
-    await L.settle(3000);
-    const t2 = await terr(region);
-    const d = await G.diff(ctx, box, before);
-    // the cells of the later stages go back to the land under them: every staged cell then holds what it held, its staged block where the
-    // land was built (at 100% the cells the lots took up are the island's again), the before where it was not
+    await L.settle(4000);
     const standing = async () => { let n = 0; for (const x of (await call('dev.rs.cells', { region }, 300_000)).targets ?? []) if (stagedIds.has(x.target)) for (const c of x.cells ?? []) if (c[3] & 2) n++; return n; };
-    const touched = [];
     const builtAfter = await standing();
-    const builtWant = frac === 100 ? t.cells : t.built;
-    if (builtAfter !== builtWant) touched.push(`${builtAfter} staged cells standing, want ${builtWant}`);
-    out.dependent = { stages, landStage, later, undone: out.undone, terrainAfter: [t2.cells, t2.built], heldDiff: d.mismatches, builtAfter, builtWant, stagedTouched: touched };
-    check(later.length > 0 && t2.built === t.built && touched.length === 0 && (frac < 100 || d.mismatches > 0), `${tag}: the stages over the land undone first (${later.join(', ') || 'none'}): the half-built land as it stood (${t2.built} of ${t2.cells} staged cells, ${t.built} before; ${builtAfter} staged cells standing, want ${builtWant}; ${d.mismatches} cell(s) of the later stages restored)`, out.dependent);
+    const d = await G.diff(ctx, box, before);
+    out.dependent = { sites, builtAfter, cells: t.cells, restored: d.mismatches };
+    check(sites.length > 0 && builtAfter === t.cells && d.mismatches > 0, `${tag}: ${sites.length} lot(s) on the staged land removed first: every staged cell still stands (${builtAfter} of ${t.cells}); ${d.mismatches} cell(s) of the lots restored`, out.dependent);
   }
   const rm = await G.remove(ctx, region);
   await hold(false);
@@ -297,11 +288,18 @@ steps.remove = async () => {
   const fx = G.fixture(ctx, 'bf/x03_island_hamlet');
   const out = {};
   for (const frac of [0, 50, 100]) {
-    for (const order of ['whole', 'dependent']) {
+    // (at 0 and 50% the hamlet's lots wait typed for the land: nothing stands over it, so the lot-first order is the whole one)
+    for (const order of frac === 100 ? ['whole', 'dependent'] : ['whole']) {
       const tag = `rm${frac}${order[0]}`;
       if (!want(tag)) continue;
       try { out[tag] = await removeCase(tag, fx, frac, order); } catch (e) { check(false, `${tag}: ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; await hold(false).catch(() => null); }
     }
+  }
+  if (want('xr01')) {
+    // (XR) rs01 over raised land (ST's): its ground stage's path and the lots' pads written over the staged relief once it stands
+    const r01 = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs01_land')));
+    r01.terrain.bands = [...r01.terrain.bands, { x0: 1000, z0: 2000, x1: 1239, z1: 2159, y: 66 }, { x0: 1100, z0: 2060, x1: 1159, z1: 2120, y: 69 }];
+    try { out.xr01 = await removeCase('xr01', r01, 100, 'whole', { xr: true, over: 40 }); } catch (e) { check(false, `xr01: ${String(e.message).slice(0, 300)}`); out.xr01 = { error: String(e.stack ?? e) }; }
   }
   return out;
 };
@@ -442,8 +440,8 @@ steps.growth = async () => {
   // the east strip raised 3 (dirt under a grass top): uneven land where the town grows
   for (let z = GZ - 8; z <= GZ + 119; z += 32) {
     const z1 = Math.min(GZ + 119, z + 31);
-    await cmd(`/fill ${GX + 96} ${gy} ${z} ${GX + 167} ${gy + 2} ${z1} minecraft:dirt`);
-    await cmd(`/fill ${GX + 96} ${gy + 3} ${z} ${GX + 167} ${gy + 3} ${z1} minecraft:grass_block`);
+    await cmd(`/fill ${GX + 60} ${gy} ${z} ${GX + 167} ${gy + 2} ${z1} minecraft:dirt`);
+    await cmd(`/fill ${GX + 60} ${gy + 3} ${z} ${GX + 167} ${gy + 3} ${z1} minecraft:grass_block`);
   }
   const crates = [0, 1, 2, 3].map((k) => [GCLAIM[0] - 6 + 2 * k, gy + 1, GCLAIM[1] - 6]);
   const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
@@ -456,44 +454,75 @@ steps.growth = async () => {
   check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `${tag}: the town built in survival (${f0.waves} waves; ${(tTown.targets ?? []).length} staged target(s) of its own, ${tTown.built}/${tTown.cells})`);
   const town0 = new Set((tTown.targets ?? []).map((x) => x.target));
   const box = [GCLAIM[0] - 8, gy - 12, GCLAIM[1] - 8, GCLAIM[2] + 8, gy + 28, GCLAIM[3] + 8];
+  for (const frac of [0, 50, 100]) {
+    const t = `growth${frac}`;
+    if (!want(t)) continue;
+    try { out[t] = await growthCase(t, frac, region, town0, box, crates, pile); } catch (e) { check(false, `${t}: ${String(e.message).slice(0, 300)}`); out[t] = { error: String(e.stack ?? e) }; await hold(false).catch(() => null); }
+  }
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  return out;
+};
+
+/**
+ * One growth undone by RU at `frac` of its staged land: planned and realised with the land held (so its items wait typed on it), fed
+ * (a paid target consumes), the land let build to `frac` (100: the growth built); undoRevision; the world before it, paid == returned.
+ */
+async function growthCase(tag, frac, region, town0, box, crates, pile) {
+  const out = {};
   await L.settle(3000);
-  const before = await G.snap(ctx, box, 'hb-growth-before');
+  const before = await G.snap(ctx, box, `hb-${tag}-before`);
   const ps0 = await pile();
-  // the growth at 1 per tick, so it is still waiting on its land when it is undone
-  await call('dev.terrain.rate', { n: 1 }, 30_000);
+  await call('dev.terrain.rate', { n: frac === 50 ? 1 : 16 }, 30_000);
+  await hold(frac < 100);
   const g = await call('dev.rv.plan', { region, program: 'flat_village', params: { grow: { lots: GGROW } } }, 900_000);
   check(!g.refused && g.revisionOf?.rid >= 1, `${tag}: a growth of ${GGROW.length} houses planned: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
   if (g.refused) return out;
   const r = await call('dev.region.realise', { planId: g.planId, lots: GENTRIES }, 300_000);
   check(!r.refused, `${tag}: the growth realised: ${r.refused ?? 'accepted'}`);
-  // its staged targets put down, and an item of it waiting typed kind "terrain"
+  // its staged targets put down, and (the land held) an item of it waiting typed kind "terrain"
   let tg, waits = [];
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 90; i++) {
     tg = await terr(region);
-    waits = (tg.waits ?? []).filter((w) => w.waitsFor?.kind === 'terrain' && w.status === 'WAITING');
-    if ((tg.targets ?? []).some((x) => !town0.has(x.target)) && waits.length) break;
+    waits = (tg.waits ?? []).filter((w) => w.waitsFor?.kind === 'terrain' && w.status === 'WAITING' && !town0.has(w.waitsFor?.target));
+    if ((tg.targets ?? []).some((x) => !town0.has(x.target)) && (frac === 100 || waits.length)) break;
     await L.sleep(2000);
   }
-  const mine = (tg.targets ?? []).filter((x) => !town0.has(x.target));
-  out.growth = { rid: g.revisionOf.rid, staged: mine.map((x) => [x.target, x.part, x.cells, x.built]), waits: waits.slice(0, 4) };
-  check(mine.length > 0, `${tag}: the growth's land is ${mine.length} staged target(s) (${json(mine.map((x) => [x.target, x.part, x.cells]))})`, out.growth);
-  const lw = waits.find((w) => w.key?.startsWith('lot:')) ?? waits[0];
-  check(!!lw && lw.reason === 'SITE_BUSY' && typeof lw.waitsFor.part === 'string', `${tag}: an item of the growth (${lw?.key}) waits ${lw?.reason} with architect_mc:waitsFor ${json(lw?.waitsFor ?? null)}`);
-  // fed: what its paid targets lack (some consume while the land is half built), then the land held part built
-  const acc = await feedOnce({ insert: async (t, items) => (await call('dev.crate.insert', { site: t, items, exact: true }, 120_000)).accepted ?? {} }, 20_000);
-  let tH = await untilTerrain(region, (x) => (x.targets ?? []).filter((y) => !town0.has(y.target)).some((y) => y.built > 0), 600_000);
-  await hold(true);
+  const mine0 = (tg.targets ?? []).filter((x) => !town0.has(x.target));
+  out.staged = mine0.map((x) => [x.target, x.part, x.cells, x.built]);
+  out.waits = waits.slice(0, 3);
+  check(mine0.length > 0, `${tag}: the growth's land is ${mine0.length} staged target(s) (${json(out.staged)})`, out.staged);
+  if (frac < 100) {
+    const lw = waits.find((w) => w.key?.startsWith('lot:')) ?? waits[0];
+    check(!!lw && lw.reason === 'SITE_BUSY' && typeof lw.waitsFor.part === 'string' && lw.waitsFor.terrainCells > 0, `${tag}: an item of the growth (${lw?.key}) waits ${lw?.reason} with architect_mc:waitsFor ${json(lw?.waitsFor ?? null)}`);
+  }
+  // fed what its paid targets lack (what does not stand on the land builds), then the land to `frac`
+  const fed = await feedOnce({ insert: async (tt, items) => (await call('dev.crate.insert', { site: tt, items, exact: true }, 120_000)).accepted ?? {} }, 15_000);
+  const growthLand = (x) => (x.targets ?? []).filter((y) => !town0.has(y.target));
+  if (frac === 50) {
+    await hold(false);
+    for (let i = 0; i < 600; i++) {
+      const x = await terr(region);
+      const ml = growthLand(x);
+      if (ml.reduce((a, y) => a + y.built, 0) * 2 >= ml.reduce((a, y) => a + y.cells, 0)) break;
+      await L.sleep(100);
+    }
+    await hold(true);
+  } else if (frac === 100) {
+    const f = await G.feed(ctx, region, { fraction: 1, timeoutMs: 1_800_000, every: 2000, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done && !st.view.busy });
+    out.feedWaves = f.waves;
+  }
   await L.settle(1500);
-  tH = await terr(region);
-  const mineH = (tH.targets ?? []).filter((x) => !town0.has(x.target));
+  const tH = await terr(region);
+  const mineH = growthLand(tH);
   const ps1 = await pile();
   const consumed = G.minus(G.minus(ps1.ledger?.consumed, ps0.ledger?.consumed), G.minus(ps1.ledger?.returned, ps0.ledger?.returned));
   const rv = await call('dev.rv.state', { region }, 60_000);
-  out.atUndo = { fed: acc, consumed, staged: mineH.map((x) => [x.target, x.cells, x.built]), busy: rv.busy };
   const half = mineH.reduce((a, x) => a + x.built, 0), all = mineH.reduce((a, x) => a + x.cells, 0);
-  check(half > 0 && half < all, `${tag}: at the undo the growth's land is half built (${half} of ${all} staged cells), still waiting (busy ${rv.busy})`, out.atUndo);
+  out.atUndo = { fed, consumed, staged: mineH.map((x) => [x.target, x.cells, x.built]), busy: rv.busy };
+  const atFrac = frac === 0 ? half === 0 : frac === 50 ? half > 0 && half < all : half === all;
+  check(all > 0 && atFrac, `${tag}: at the undo the growth's land is at ${frac}%: ${half} of ${all} staged cells (busy ${rv.busy})`, out.atUndo);
   check(sum(consumed) > 0, `${tag}: a paid target of the growth consumed before the undo (${sum(consumed)}: ${json(consumed)})`, consumed);
-  // RU: undoRevision while it waits
+  // RU: undoRevision (while it waits, at 0 and 50%)
   const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
   await hold(false);
   await L.settle(3000);
@@ -501,16 +530,15 @@ steps.growth = async () => {
   const d = await G.diff(ctx, box, before);
   const ef = d.list.filter((m) => !crates.some((c) => c.join(',') === m.pos));
   out.undo = { result: u, eflat: ef.length, list: ef.slice(0, 8) };
-  check(u.removed === true && ef.length === 0, `${tag}: undoRevision while the growth waits on its land: removed ${u.removed}${u.refused ? ` (refused ${u.refused})` : ''}; the half-built terrain restored, the world before the growth (${ef.length} differ)`, out.undo);
+  check(u.removed === true && ef.length === 0, `${tag}: undoRevision ${frac < 100 ? 'while the growth waits on its land' : 'of the built growth'}: removed ${u.removed}${u.refused ? ` (refused ${u.refused})` : ''}; the ${frac === 50 ? 'half-built ' : ''}terrain restored, the world before the growth (${ef.length} differ)`, out.undo);
   const put = G.minus(ps2.ledger?.delivered, ps0.ledger?.delivered);
-  const back = G.minus(G.plus(G.minus(ps2.stock, ps0.stock), {}), {});
+  const back = G.minus(ps2.stock, ps0.stock);
   check(G.same(u.refund, consumed) && G.same(put, back) && ps2.identity !== false, `${tag}: paid == returned: the refund ${json(u.refund)} is what the growth consumed ${json(consumed)}; every item put in (${sum(put)}) is back in the stock (${sum(back)}); identity ${ps2.identity}`, { refund: u.refund, consumed, put, back });
-  const tA = await terr(region);
-  const left = (tA.targets ?? []).filter((x) => !town0.has(x.target));
-  check(left.length === 0, `${tag}: none of the growth's staged targets is left (${left.length})`);
-  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  const left = growthLand(await terr(region));
+  const sv = await call('dev.rv.state', { region }, 60_000);
+  check(left.length === 0 && sv.busy === null && sv.position === 0, `${tag}: none of the growth's staged targets is left (${left.length}); the region at position ${sv.position}, busy ${sv.busy}`);
   return out;
-};
+}
 
 steps.report = async () => {
   const rows = [];
