@@ -2962,14 +2962,24 @@ public final class RegionsImpl implements Regions {
 				break;
 			}
 		}
-		QBatch b = Batches.get(r.batchId);
 		QItem waitingItem = null;
-		if (waiting == null && b != null && b.running()) {
-			for (QItem i : b.items) {
-				if (i.status == QItem.Status.WAITING && i.reason != null) {
-					waiting = new Refusal(Reason.valueOf(i.reason), i.message);
-					waitingItem = i;
-					break;
+		// (8a HB) the region's batch, then its revisions' (a growth's items wait in its own batch; the region's is done by then)
+		List<String> bids = new ArrayList<>();
+		bids.add(r.batchId);
+		for (var rv : r.revisions) {
+			if (rv.batchId != null && !bids.contains(rv.batchId)) {
+				bids.add(rv.batchId);
+			}
+		}
+		for (String bid : bids) {
+			QBatch b = waiting == null ? Batches.get(bid) : null;
+			if (b != null && b.running()) {
+				for (QItem i : b.items) {
+					if (i.status == QItem.Status.WAITING && i.reason != null) {
+						waiting = new Refusal(Reason.valueOf(i.reason), i.message);
+						waitingItem = i;
+						break;
+					}
 				}
 			}
 		}

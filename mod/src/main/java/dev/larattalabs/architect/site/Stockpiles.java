@@ -2665,33 +2665,20 @@ public final class Stockpiles {
 		return new StockLedger.Book(java.util.Arrays.hashCode(queue), queue.length, known, new java.util.BitSet(), new java.util.BitSet());
 	}
 
-	/** (8a HB) Whether a staged terrain target builds again after an unclean stop: recorded BUILT, cells missing, no removal taking it. */
-	static boolean terrainReopens(boolean building, int missing, boolean leaving) {
-		return !building && missing > 0 && !leaving;
-	}
-
 	/**
 	 * (8a HB, docs/CONTRACT.md "Phase 8a" §4) A staged terrain target after an unclean stop: free, so nothing is charged, owed or given back
-	 * (an older book's standing or owed bits are dropped: the cells are free). Its progress is the world's (the rescan above): a cell missing
-	 * from the saved world is queued again, and a target recorded BUILT with cells missing (not another writer's) builds again, unless a
-	 * removal has it. The book is then the free book, so a second load changes nothing.
+	 * (an older book's standing or owed bits are dropped). A target still building re-derives its progress from the world (the rescan): a
+	 * cell missing from the saved world is queued again. A target recorded BUILT stays BUILT, even with cells that are not its block now: its
+	 * cells cost nothing, so a hole mints and loses nothing, while a reopen could not tell a crash's hole from a later writer's deliberate cut
+	 * or block (a lot's cellar, a road's cut, a paid wall: not all of them are construction queues) and would fill or clear it (the GPT
+	 * review's P1s). It is logged. The book is then the free book, so a second load changes nothing.
 	 */
 	static boolean reconcileTerrain(MinecraftServer srv, ServerLevel level, Pile p, Infra t, String key, Builder.Run r, Construction c) {
 		r.attachOwed(new java.util.BitSet()); // never owed (an older book's bits dropped), so the rescan marks every standing cell built
 		r.rescan(level, true); // every cell, its chunk loaded (as the sites check at the start)
 		r.newlyCount = 0;
-		var shadow = RegionOverwrites.shadowedCells(srv, level, t.group(), t.id(), t.placedAt(), r, true);
-		int missing = 0;
-		for (int i = 0; i < r.size(); i++) {
-			if (!r.built.get(i) && !shadow.contains(r.pos(i).asLong())) {
-				missing++;
-			}
-		}
+		int missing = r.size() - r.built.cardinality();
 		p.ledger.book(key, freeBook(r.queue));
-		boolean reopen = terrainReopens(c.building(), missing, Groups.leaving(t.id()));
-		if (reopen) {
-			Infras.put(srv, t.withConstruction(c.withState(Construction.BUILDING, c.crate())));
-		}
 		JsonObject o = new JsonObject();
 		o.addProperty("key", key);
 		o.addProperty("terrain", true);
@@ -2699,17 +2686,18 @@ public final class Stockpiles {
 		o.addProperty("owedCells", 0);
 		o.addProperty("lostCells", 0);
 		o.addProperty("missingCells", missing);
+		o.addProperty("built", !c.building());
 		o.add("charged", new JsonObject());
 		o.add("owes", new JsonObject());
 		o.add("creditedBack", new JsonObject());
 		o.add("overflow", new JsonObject());
 		o.add("swapBack", new JsonObject());
-		o.addProperty("reopened", reopen);
+		o.addProperty("reopened", false);
 		o.addProperty("playerCells", 0);
 		LAST_RECONCILE.put(t.id(), o);
-		if (reopen) {
-			Architect.LOGGER.warn("Stockpile {}: staged terrain target {} was BUILT with {} cell(s) missing after an unclean stop: it builds again (free)", p.owner,
-				t.id(), missing);
+		if (!c.building() && missing > 0) {
+			Architect.LOGGER.info("Stockpile {}: staged terrain target {} is BUILT with {} cell(s) not its block after an unclean stop (a later writer's or "
+				+ "a crash's; free either way): left BUILT", p.owner, t.id(), missing);
 		}
 		return false;
 	}

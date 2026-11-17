@@ -2258,6 +2258,7 @@ public final class RegionTargets {
 			w.addProperty("say", say);
 		}
 		i.ext.add(EXT_WAITS_FOR, w);
+		TypedWaits.typed(i); // (8a HB) this wait's payload: Batches.waitFor keeps it (an untyped wait clears it)
 		how.wait(b, i, dev.larattalabs.architect.api.Reason.SITE_BUSY, (says ? say + ": " : "") + detail);
 	}
 

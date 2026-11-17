@@ -283,6 +283,67 @@ async function removeCase(tag, fx, frac, order, { xr = false, over = 96 } = {}) 
   return out;
 }
 
+/**
+ * (The GPT review's P1s) A staged target recorded BUILT whose book survives in the saved ledger (it was building at the last save), its
+ * cells since taken up by later writers (XR: the path and the lots over rs01's relief), then a halt with nothing saved: after the restart
+ * RL leaves it BUILT (free: nothing charged, owed or given back; nothing refilled or cleared), the world as before the halt; Remove E-flat 0.
+ */
+async function builtCrash(tag, fx) {
+  const S = await survival(tag, fx, { rate: 16, held: true, over: 40 });
+  const { region, box, pre, crateAt } = S;
+  const out = { region };
+  const t0 = await untilTerrain(region, (x) => (x.targets ?? []).length > 0, 600_000);
+  await L.settle(3000);
+  // the books written while every staged target still builds (held), then nothing saved until the halt
+  await cmd('/save-all flush');
+  const s0 = await savedNow();
+  const ids = (t0.targets ?? []).map((x) => x.target);
+  const books0 = stagedBooks(s0.file, ids);
+  await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+  await hold(false);
+  const f = await G.feed(ctx, region, { fraction: 1, timeoutMs: 3_000_000, every: 1500 });
+  const rc = await call('dev.rs.cells', { region }, 300_000);
+  let taken = 0;
+  for (const x of rc.targets ?? []) if (ids.includes(x.target)) for (const c of x.cells ?? []) if (!(c[3] & 2)) taken++;
+  const s1 = await savedNow();
+  await L.settle(3000);
+  const snap = await G.snap(ctx, box, `hb-${tag}-built`);
+  out.before = { books: books0, saves: [s0.saves, s1.saves], state: f.last.st.view.state, taken };
+  check(f.last.st.view.state === 'PLACED' && Object.keys(books0).length === ids.length && s1.saves === s0.saves && taken > 0,
+    `${tag}: built (${f.last.st.view.state}) after the save that holds every staged book (${Object.keys(books0).length} of ${ids.length}; saves #${s0.saves} -> #${s1.saves}), ${taken} staged cell(s) since taken up by later writers`, out.before);
+  await call('dev.stockpile.halt', {}, 10_000).catch(() => null);
+  const down = await haltWait();
+  check(down, `${tag}: dev.stockpile.halt halted the server (nothing saved)`);
+  if (!down) return out;
+  await L.openWorld(S.s.world);
+  await L.tp(Math.floor((S.s.W.claim[0] + S.s.W.claim[2]) / 2), 100, Math.floor((S.s.W.claim[1] + S.s.W.claim[3]) / 2));
+  await L.settle(10_000);
+  const a1 = await audit();
+  const rec = Object.fromEntries(Object.entries(a1.reconciled ?? {}).filter(([k]) => ids.includes(k)));
+  const builtRec = Object.values(rec).filter((r) => r.built);
+  const bad = Object.values(rec).filter((r) => r.reopened || sum(r.charged) || sum(r.owes) || sum(r.creditedBack));
+  const tR = await terr(region);
+  const d = await G.diff(ctx, box, snap);
+  const dl = d.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  out.after = { uncleanStart: a1.uncleanStart, reconciled: rec, building: (tR.targets ?? []).filter((x) => x.building).map((x) => x.target), worldDiff: dl.length, list: dl.slice(0, 6) };
+  check(a1.uncleanStart === true && builtRec.length > 0 && builtRec.some((r) => r.missingCells > 0) && bad.length === 0 && out.after.building.length === 0 && dl.length === 0,
+    `${tag}: after the unclean restart RL read ${builtRec.length} BUILT staged target(s) with a book (cells not their block: ${json(builtRec.map((r) => r.missingCells))}): left BUILT, none reopened, nothing charged, owed or given back (${bad.length} not); none building; the world as before the halt (${dl.length} differ: the later writers' cells kept)`, out.after);
+  await call('dev.stockpile.ps', { noPeriodic: false }, 30_000);
+  // (rule 18) items in == items out after the restart: what stands paid comes back through the Remove, nothing more, nothing less
+  const b1 = balance(a1);
+  const C2 = new G.Conservation(ctx, box);
+  await C2.start();
+  await G.remove(ctx, region);
+  const p2 = await C2.point('removed');
+  out.conservation = { balance: b1, removed: p2 };
+  check(sum(b1.dupe) === 0 && sum(b1.double) === 0 && G.exact(p2), `${tag}: after the restart the paid cells standing equal the paid records (standing ${b1.standing}, paid ${b1.paid}); through the Remove items in = items out (conservation ${json(p2.diff)}, identity ${p2.identity})`, out.conservation);
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, ef.slice(0, 8));
+  out.eflat = ef.length;
+  return out;
+}
+
 steps.remove = async () => {
   await ensure();
   spendZero();
@@ -301,6 +362,9 @@ steps.remove = async () => {
     const r01 = JSON.parse(JSON.stringify(G.fixture(ctx, 'rs01_land')));
     r01.terrain.bands = [...r01.terrain.bands, { x0: 1000, z0: 2000, x1: 1239, z1: 2159, y: 66 }, { x0: 1100, z0: 2060, x1: 1159, z1: 2120, y: 69 }];
     try { out.xr01 = await removeCase('xr01', r01, 100, 'whole', { xr: true, over: 40 }); } catch (e) { check(false, `xr01: ${String(e.message).slice(0, 300)}`); out.xr01 = { error: String(e.stack ?? e) }; }
+    if (want('xr01crash')) {
+      try { out.xr01crash = await builtCrash('xr01crash', r01); } catch (e) { check(false, `xr01crash: ${String(e.message).slice(0, 300)}`); out.xr01crash = { error: String(e.stack ?? e) }; }
+    }
   }
   return out;
 };
@@ -395,7 +459,10 @@ steps.halt = async () => {
     `${tag}: RegionView.waiting carries the typed wait (view.ext architect_mc:waitsFor) before the halt and after the restart: ${json(vw.map((v) => [v.waiting?.reason, v.waitsFor?.kind ?? null, v.waitsFor?.part ?? null]))}`, vw.map((v) => ({ waiting: v.waiting, waitsFor: v.waitsFor })));
   await call('dev.stockpile.ps', { noPeriodic: false }, 30_000);
   // resumed: fed until built; the INSTANT twin; standing = the paid records; Remove E-flat 0
-  const f = await G.feed(ctx, region, { fraction: 1, timeoutMs: 3_000_000, every: 1500 });
+  // (rule 18) the conservation sum over the restarted world: every item fed from here on is in the build, the stock, or back after the Remove
+  const C2 = new G.Conservation(ctx, box);
+  await C2.start();
+  const f = await G.feed(ctx, region, { cons: C2, fraction: 1, timeoutMs: 3_000_000, every: 1500 });
   const tF = await terr(region, true);
   check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && tF.built === tF.cells, `${tag}: resumed and fed until built: ${f.last.st.view.state}, ${tF.built} of ${tF.cells} staged cells, percent ${f.last.rs.build?.percent}`);
   const a2 = await audit();
@@ -404,7 +471,11 @@ steps.halt = async () => {
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twinDiff = d;
   check(d.mismatches === 0, `${tag}: the world resumed after the halt equals its INSTANT twin cell for cell (block entities included; the crates aside): ${d.mismatches} differ`, d.list);
+  const pb = await C2.point('built');
   await G.remove(ctx, region);
+  const pr = await C2.point('removed');
+  out.conservation = { built: pb, removed: pr };
+  check(G.exact(pb) && G.exact(pr), `${tag}: items in = items out after the restart, built and removed (conservation ${json(pb.diff)} / ${json(pr.diff)}, identity ${pb.identity}/${pr.identity})`, out.conservation);
   const e = await G.diff(ctx, box, pre);
   const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
   check(ef.length === 0, `${tag}: Regions.remove: E-flat ${ef.length} over the box (the crates aside)`, ef.slice(0, 8));
@@ -502,6 +573,12 @@ async function growthCase(tag, frac, region, town0, box, crates, pile) {
   out.waits = waits.slice(0, 3);
   check(mine0.length > 0, `${tag}: the growth's land is ${mine0.length} staged target(s) (${json(out.staged)})`, out.staged);
   if (frac < 100) {
+    // the public view (as Steward reads it): RegionView.waiting with its typed payload, from the growth's own batch
+    let vv = null;
+    for (let i = 0; i < 20; i++) { vv = viewOf(await G.regionState(ctx, region)); if (vv.waiting && vv.waitsFor) break; await L.sleep(1000); }
+    out.view = { waiting: vv?.waiting ?? null, waitsFor: vv?.waitsFor ?? null };
+    check(vv?.waiting?.reason === 'SITE_BUSY' && vv?.waitsFor?.kind === 'terrain' && typeof vv.waitsFor.part === 'string' && vv.waitsFor.terrainCells > 0,
+      `${tag}: RegionView.waiting while the growth waits on its land: ${vv?.waiting?.reason} with view.ext architect_mc:waitsFor ${json(vv?.waitsFor ?? null)}`, out.view);
     const lw = waits.find((w) => w.key?.startsWith('lot:')) ?? waits[0];
     check(!!lw && lw.reason === 'SITE_BUSY' && typeof lw.waitsFor.part === 'string' && lw.waitsFor.terrainCells > 0, `${tag}: an item of the growth (${lw?.key}) waits ${lw?.reason} with architect_mc:waitsFor ${json(lw?.waitsFor ?? null)}`);
   }
