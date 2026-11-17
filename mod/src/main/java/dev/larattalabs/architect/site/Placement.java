@@ -515,6 +515,89 @@ public final class Placement {
 	/** (TEST, units and the dev hook {@code dev.queue.failWrites}) The next writes that fail before writing: a full disk, a read-only world folder. */
 	static final java.util.concurrent.atomic.AtomicInteger FAIL_WRITES = new java.util.concurrent.atomic.AtomicInteger();
 
+	/**
+	 * (PSV fix round, TEST: the dev hook's {@code failAtPreSave}) Armed (> 0): the next undo pre-save (Groups' preSaved, RestoreJob's
+	 * groupSaved) sets {@link #FAIL_WRITES} to this many, so the failure starts after R1 (the preflight already written): the replan path.
+	 */
+	static final java.util.concurrent.atomic.AtomicInteger FAIL_AT_PRESAVE = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** (PSV fix round, TEST) The directory sync after the rename ({@link #forceDir}); the units swap it to watch or fail it. */
+	interface DirSync {
+		void force(Path dir) throws IOException;
+	}
+
+	static volatile DirSync DIR_SYNC = Placement::forceDir;
+	private static volatile boolean dirSyncUnsupportedLogged;
+
+	/**
+	 * (PSV fix round, GPT P1 1) The rename made durable: the parent directory forced to disk (a file's fsync does not persist its directory
+	 * entry; Linux fsync(2)). A directory that can't be opened for reading (Windows: an AccessDeniedException) is best effort: logged once, the
+	 * file's own force stands. A directory that opens and fails its force is a failed write.
+	 */
+	static void forceDir(Path dir) throws IOException {
+		java.nio.channels.FileChannel ch;
+		try {
+			ch = java.nio.channels.FileChannel.open(dir, java.nio.file.StandardOpenOption.READ);
+		} catch (IOException | UnsupportedOperationException e) {
+			if (!dirSyncUnsupportedLogged) {
+				dirSyncUnsupportedLogged = true;
+				Architect.LOGGER.warn("Placement: the queue file's folder {} can't be synced on this platform ({}); the rename is best effort", dir, e.toString());
+			}
+			return;
+		}
+		try (ch) {
+			ch.force(true);
+		}
+	}
+
+	/** (PSV fix round) Whether a write at or after generation {@code gen} failed and none since covers it (the generation is not on disk). */
+	static boolean failed(long gen) {
+		return gen > 0 && failedGen >= gen && !written(gen);
+	}
+
+	/**
+	 * (PSV fix round, GPT P1 3) A removal's preflight: before it touches anything (fluids, custody, crate stock, refund tallies), a queue save
+	 * it asked for is confirmed written and no write has failed since. {@link #ready} answers false while one is pending or writes fail (then it
+	 * asks again once Placement's retry wrote the file); the caller checks {@link #loadFailed} first. Server thread; not saved.
+	 */
+	static final class Preflight {
+		long gen;
+
+		boolean ready(java.util.function.LongSupplier save) {
+			if (gen > 0) {
+				if (written(gen)) {
+					if (!writeFailing()) {
+						return true;
+					}
+					gen = 0; // a later write failed: wait for the retry, then ask again
+					return false;
+				}
+				if (!failed(gen)) {
+					return false; // pending (the saver is off the server thread)
+				}
+				gen = 0;
+			}
+			if (writeFailing()) {
+				return false;
+			}
+			gen = save.getAsLong();
+			return false;
+		}
+	}
+
+	/**
+	 * (PSV fix round) An undo's pre-save: {@link #save}, with the TEST arm {@link #FAIL_AT_PRESAVE} applied first (its failures start with this
+	 * write). Server thread.
+	 */
+	static long preSave(MinecraftServer srv) {
+		int n = FAIL_AT_PRESAVE.getAndSet(0);
+		if (n > 0) {
+			FAIL_WRITES.set(n);
+			Architect.LOGGER.info("Placement: TEST: the undo pre-save's write and the next {} fail", n - 1);
+		}
+		return save(srv, false);
+	}
+
 	/** (PSV) The last generation requested (server thread). */
 	static long requestedGen() {
 		return requestedGen;
@@ -535,8 +618,16 @@ public final class Placement {
 	 * answers the generations: requested, written, whether a write is failing, the injected failures left. Server thread.
 	 */
 	public static JsonObject devWrites(@Nullable Integer fail) {
+		return devWrites(fail, null);
+	}
+
+	/** {@link #devWrites}; {@code failAtPreSave} (PSV fix round, TEST: >= 0; 0 disarms): the next undo pre-save arms that many failures. */
+	public static JsonObject devWrites(@Nullable Integer fail, @Nullable Integer failAtPreSave) {
 		if (fail != null) {
 			FAIL_WRITES.set(Math.max(0, fail));
+		}
+		if (failAtPreSave != null) {
+			FAIL_AT_PRESAVE.set(Math.max(0, failAtPreSave));
 		}
 		JsonObject o = new JsonObject();
 		o.addProperty("requestedGen", requestedGen);
@@ -544,6 +635,7 @@ public final class Placement {
 		o.addProperty("writeFailing", writeFailing());
 		o.addProperty("failWrites", Math.max(0, FAIL_WRITES.get()));
 		o.addProperty("loadFailed", loadFailed);
+		o.addProperty("failAtPreSave", Math.max(0, FAIL_AT_PRESAVE.get()));
 		return o;
 	}
 
@@ -595,8 +687,8 @@ public final class Placement {
 	}
 
 	/**
-	 * Writes one generation of the queue file: a temporary file forced to disk, then renamed over the file (slice PSV: the generation counts
-	 * as written only once both are done). Answers whether it was written.
+	 * Writes one generation of the queue file: a temporary file forced to disk, renamed over the file, then the folder forced (slice PSV and
+	 * its fix round: the generation counts as written only once all three are done). Answers whether it was written.
 	 */
 	static synchronized boolean writeSave(JsonObject root, Path f, long gen) {
 		try {
@@ -613,6 +705,8 @@ public final class Placement {
 				ch.force(true);
 			}
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			// (PSV fix round, GPT P1 1) the rename durable before the generation counts: the directory entry forced too
+			DIR_SYNC.force(f.toAbsolutePath().getParent());
 		} catch (IOException | RuntimeException e) {
 			failedGen = Math.max(failedGen, gen);
 			Architect.LOGGER.warn("Could not save {} (generation {})", f, gen, e);

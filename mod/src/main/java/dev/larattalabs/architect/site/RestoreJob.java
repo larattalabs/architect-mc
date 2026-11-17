@@ -57,6 +57,10 @@ final class RestoreJob implements Placement.Job {
 	 * submitted ({@link #groupSaved}; slice PSV).
 	 */
 	transient long preSave;
+	/** (PSV fix round, GPT P1 3) The confirmed queue write before this job plans (and again after a dropped plan). */
+	final transient Placement.Preflight preflight = new Placement.Preflight();
+	/** (PSV fix round) A plan was dropped (its pre-save failed): a stockpile road's {@link #credit} is tallied again before the next plan. */
+	transient boolean retally;
 	transient @Nullable CompletableFuture<Object[]> txn;
 	/** A restore's writer, prepared off the server thread for a large site (the template of 600k cells). */
 	transient @Nullable CompletableFuture<Object[]> prepared;
@@ -174,6 +178,9 @@ final class RestoreJob implements Placement.Job {
 		try {
 			if (phase == PLAN) {
 				// R1 sliced per section over ticks (a size-cap site plans 600k cells), then the one commit (R2)
+				if (planner == null && !preflighted(server)) {
+					return broken != null;
+				}
 				if (planner == null) {
 					Sites.Trace tr = new Sites.Trace("restore plan start " + siteId);
 					group = SiteJournal.group(purpose + "-" + siteId);
@@ -399,16 +406,46 @@ final class RestoreJob implements Placement.Job {
 	 */
 	private boolean groupSaved(MinecraftServer server) {
 		if (preSave == 0) {
-			preSave = Placement.save(server, false);
+			preSave = Placement.preSave(server);
 			if (preSave == Placement.NOT_SAVED) {
 				// (slice PSV) nothing is saved over a queue file that failed to load: the undo can't be recorded, so none is committed
 				broken = "the queue file (" + Placement.FILE + ") failed to load this session: an undo can't be recorded, so none is committed";
 			}
 			return false;
 		}
-		// (slice PSV) the generation confirmed written (fsynced and renamed), not the saver's turn: a failed write keeps the job waiting while
-		// Placement retries the save every 5 s
+		if (Placement.failed(preSave)) {
+			// (PSV fix round, GPT P1 3) its write failed after the plan: dropped (nothing committed) and made again once a queue write is
+			// confirmed, against the world then (a block replaced meanwhile is kept, not overwritten by a frozen plan)
+			dev.larattalabs.architect.Architect.LOGGER.warn("Removal job {}: the queue file write holding its undo group failed; the plan is dropped and made "
+				+ "again once a queue write is confirmed", siteId);
+			dropPlan();
+			return false;
+		}
+		// (slice PSV) the generation confirmed written (fsynced, renamed, its folder forced), not the saver's turn
 		return Placement.written(preSave);
+	}
+
+	/** (PSV fix round) The plan dropped before its commit: planned again after the preflight. */
+	void dropPlan() {
+		planner = null;
+		planned = false;
+		txn = null;
+		preSave = 0;
+		group = null;
+		preflight.gen = 0;
+		retally = true;
+	}
+
+	/**
+	 * (PSV fix round, GPT P1 3) Before this job plans: a queue save confirmed written, no write failing since (it waits, untouched, while
+	 * writes fail). The queue file failed to load: broken, nothing planned or committed.
+	 */
+	private boolean preflighted(MinecraftServer server) {
+		if (Placement.loadFailed()) {
+			broken = Groups.UNRECORDABLE;
+			return false;
+		}
+		return preflight.ready(() -> Placement.save(server, false));
 	}
 
 	/** A road's or cell site's undo: plan and commit (when this job planned it), the record pending, the cells lowest first over ticks. */
@@ -420,7 +457,20 @@ final class RestoreJob implements Placement.Job {
 		}
 		try {
 			if (phase == PLAN) {
+				if (planner == null && !preflighted(server)) {
+					return broken != null;
+				}
 				if (planner == null) {
+					if (retally && credit != null && Stockpiles.pileOf(inf) != null) {
+						// (PSV fix round) the road's refunds tallied again against the world now (a cell mined while the writes failed is not refunded)
+						Groups.Credit again = RoadBuilder.beforeRemove(level, inf);
+						if (again != null) {
+							dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: its refunds tallied again after the dropped plan: {} (were {})", siteId,
+								again.items(), credit.items());
+							credit = again;
+						}
+					}
+					retally = false;
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}

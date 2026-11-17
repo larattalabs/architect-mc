@@ -585,6 +585,9 @@ public final class InfraPlace {
 			throw new Sites.SiteException("No road or cell site " + id);
 		}
 		SiteJournal.requireAvailable();
+		if (Placement.loadFailed()) {
+			throw new Sites.SiteException(Groups.UNRECORDABLE); // (PSV fix round, GPT P1 2) before anything is touched (no refund tally, no handover)
+		}
 		if (i.placing()) {
 			throw new Sites.SiteException(Reason.OVERLAP_BUSY, id + " is still being placed; wait until it is done");
 		}
