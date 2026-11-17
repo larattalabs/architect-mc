@@ -582,7 +582,7 @@ export async function registerSAD(steps, h) {
   // ------------------------------------------------------------------ (slice ADP) adoptCrates and its crates
   // adp-defer   A: the shared crate unreadable (owner tag changed): deferred, intact (halts SAC1, SAC2); B: its chunk unloaded, halts SAC1
   //             and ADP1 (inside the credit's save) roll back, then the live call adopts it once; C: a third call adds nothing
-  // adp-forward a fresh town per kill point ADP2 (the credit saved, the crate full), ADP3 (inside the take's save), SAC2 (the records):
+  // adp-forward a fresh town per kill point ADP1 (inside the credit's save: rolls back), ADP2 (the credit saved, the crate full), ADP3 (inside the take's save), SAC2 (the records):
   //             after the unclean restart the start's repair finishes or clears it: the crate's stock once, the references cleared
   // adp-complete a lot with its own crate, unreadable: adoptCrates defers it, the lot finished: the crate still stands with its stock;
   //             Regions.adopt refuses while it stands; its tag back, adoptCrates takes it once
@@ -726,12 +726,22 @@ export async function registerSAD(steps, h) {
   steps.adpforward = async () => {
     await ensure();
     const all = {};
-    for (const [kp, savedByOp] of [['ADP2', true], ['ADP3', true], ['SAC2', true]]) {
+    // ADP1 rolls back (the crate full, nothing credited: the live call then adopts it); ADP2, ADP3, SAC2 roll forward at the start
+    for (const [kp, savedByOp] of [['ADP1', false], ['ADP2', true], ['ADP3', true], ['SAC2', true]]) {
       const F = await adpTown(`G6B ADP Fwd ${kp}`);
       const b = await baseline(`ADP ${kp}`);
       const unloaded = await away(F.at);
       await call('dev.journal.killAt', { point: kp }, 10_000);
       const Ld = await halt(`ADP ${kp}`, F.W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp });
+      if (Ld && kp === 'ADP1') {
+        const stands = await isBlock(F.at, crateBlock);
+        const c = await siteState(F.ids.house_4);
+        F.out.back = { stands, stock: c.ledger?.stock, same: ledgerSame(Ld, b.ledger) };
+        check(stands && G.same(c.ledger?.stock, F.s40.ledger?.stock) && ledgerSame(Ld, b.ledger), `ADP ADP1 (chunk ${unloaded ? 'unloaded' : 'loaded'}): after the unclean restart the crate stands with its stock (${sum(c.ledger?.stock)}), nothing credited (base: the cell restored on disk, the credit not: the stock lost)`, F.out.back);
+        await F.conserve('ADP ADP1');
+        const live = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        check(!live.refused, 'ADP ADP1: the live call after the restart adopts it');
+      }
       if (Ld) {
         const pB = await adoptedOnce(`ADP ${kp} (chunk ${unloaded ? 'unloaded' : 'loaded'}) after the unclean restart`, F);
         F.out.rec3 = Object.entries(pB.ledger?.paid ?? {}).some(([k]) => k.startsWith(`site:${F.ids.house_3}@`));
