@@ -1649,6 +1649,17 @@ public final class Stockpiles {
 		if (ts.isEmpty()) {
 			return;
 		}
+		// (RL; 8a HB, the GPT review's P1, rule 17) a target joined the feed: the ledger (its book of the target's cells) is saved with the
+		// world BEFORE any feed step, so a crash after the step finds the target in the saved ledger and RL charges what it built. Before, the
+		// save came after the pass: a halt between left the target's paid blocks on the disk with no book (no charge: a dupe). A save that
+		// does not complete holds the pass: nothing is built or charged until a later tick's save does. TEST: dev.stockpile.ps noPeriodic
+		// turns it off with the periodic save (the before-the-fix cases); joinSave: true keeps it on with the periodic save off
+		if (p.joined && !testNoJoinSave) {
+			if (!joinSave(srv)) {
+				return;
+			}
+		}
+		p.joined = false;
 		// (8a HB, kill point JS1) the paid cells the targets that joined this pass have built before it
 		Map<String, Integer> freshBuilt = freshBuilt(srv, p);
 		int cap = capacity(srv, p);
@@ -1786,15 +1797,24 @@ public final class Stockpiles {
 		if (freshWrote(srv, p, freshBuilt)) {
 			dev.larattalabs.architect.journal.WorldJournal.kill("JS1");
 		}
-		if (p.joined) {
-			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
-			// the next autosave finds the target in the saved ledger. TEST: dev.stockpile.ps noPeriodic turns it off with the periodic save
-			// (the before-the-fix cases: nothing saved between lifecycle saves); joinSave: true keeps it on with the periodic save off
-			p.joined = false;
-			if (!testNoJoinSave) {
-				saveWithWorld(srv);
-			}
+	}
+
+	/**
+	 * (8a HB) RL's save on join, before the pass's steps: the ledger saved with the world (players, chunks, then the ledger). True when the
+	 * ledger on the disk now holds the joined targets' books; false (the save refused, failed or the ledger could not load) holds the pass.
+	 */
+	static boolean joinSave(MinecraftServer srv) {
+		if (loadFailed) {
+			return false;
 		}
+		long before = saves;
+		try {
+			saveWithWorld(srv);
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.warn("Stockpiles: the save on join was refused ({}); the feed waits for it", e.getMessage());
+			return false;
+		}
+		return saves > before;
 	}
 
 	/**
