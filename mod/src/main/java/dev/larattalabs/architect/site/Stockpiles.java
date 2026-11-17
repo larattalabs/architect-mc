@@ -1374,6 +1374,40 @@ public final class Stockpiles {
 	/** (J2, TEST kill point CS1) inside {@link #saveCredit}'s save: the players and the chunks on disk, the ledger not. */
 	private static boolean inCreditSave;
 
+	/** (LC3 round 4, TEST kill point AB2) inside {@link #saveWithWorldConfirmed}'s save. */
+	private static boolean inAbandonSave;
+	/** (LC3 round 4) {@link #save} forces its temporary file to disk before the rename. */
+	private static boolean forceWrite;
+	/** (LC3 round 4) whether the last {@link #save} wrote the file (renamed in place, no exception). */
+	private static boolean written;
+
+	/**
+	 * (slice LC3 round 4) {@link #saveWithWorld} that answers whether it is confirmed durable: the players and the chunks flushed with every
+	 * chunk and entity write known durable (SS), then the ledger's temporary file forced to disk and renamed with no exception. False (nothing
+	 * thrown) when the stockpiles failed to load this session, a chunk write is not durable, or the ledger write failed; the change then
+	 * stays in memory (pending: a later save writes it with the world). {@code /architect removal abandon} drops no record before it is true.
+	 * Server thread.
+	 */
+	static boolean saveWithWorldConfirmed(MinecraftServer srv) {
+		if (loadFailed) {
+			refusedSave();
+			return false;
+		}
+		inAbandonSave = true;
+		forceWrite = true;
+		written = false;
+		try {
+			saveWithWorld(srv);
+			return written;
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a confirmed save was not durable ({})", e.getMessage());
+			return false;
+		} finally {
+			inAbandonSave = false;
+			forceWrite = false;
+		}
+	}
+
 	/**
 	 * (J2, FK's durability leftover) A single-site removal's stockpile deconstructs: each credit held pending in its pile's ledger, saved with
 	 * the world before the removal's commit (Sites.removeDetailed). Returns whether any was held.
@@ -2771,6 +2805,11 @@ public final class Stockpiles {
 				}
 				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
 			}
+			if (inAbandonSave && "AB2".equals(WorldJournal.armed())) {
+				// (LC3 round 4, TEST kill point AB2) a crash inside an abandon's custody save: its containers on disk, the ledger not
+				Architect.LOGGER.error("Stockpiles: kill point AB2: an abandon's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
+			}
 			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
 				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
 				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
@@ -2882,6 +2921,7 @@ public final class Stockpiles {
 	static volatile double lastLedgerFirstMs;
 
 	static void save() {
+		written = false;
 		Path d = dir;
 		if (d == null) {
 			return;
@@ -2917,10 +2957,23 @@ public final class Stockpiles {
 			SaveTiming.at(SaveTiming.WRITE);
 			Files.createDirectories(d);
 			Path tmp = d.resolve(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
+			if (forceWrite) {
+				// (LC3 round 4) a confirmed save: the temporary file forced to disk before the rename (as the queue file's writes)
+				try (var ch = java.nio.channels.FileChannel.open(tmp, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+					java.nio.file.StandardOpenOption.WRITE)) {
+					java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(GSON.toJson(toJson()).getBytes(StandardCharsets.UTF_8));
+					while (b.hasRemaining()) {
+						ch.write(b);
+					}
+					ch.force(true);
+				}
+			} else {
+				Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
+			}
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			SaveTiming.at(SaveTiming.OTHER);
 			saves++;
+			written = true;
 			unsaved = false;
 			lastSaveTick = ticks;
 			if (TRACE_SAVES) {

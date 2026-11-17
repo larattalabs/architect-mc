@@ -338,6 +338,14 @@ public final class Groups {
 
 	/** (pure) Why {@code /architect removal abandon} refuses, or null: only a STALLED group or stage removal can be abandoned. */
 	static @Nullable String abandonRefusal(@Nullable Removal stalled, boolean running, String name, @Nullable String journalWhy) {
+		return abandonRefusal(stalled, running, name, journalWhy, false);
+	}
+
+	/**
+	 * (pure) {@link #abandonRefusal(Removal, boolean, String, String)}; (LC3 round 4) also refused when a member's custody would go back while
+	 * the stockpiles failed to load this session ({@code stockLoadFailed}: no ledger save can confirm it).
+	 */
+	static @Nullable String abandonRefusal(@Nullable Removal stalled, boolean running, String name, @Nullable String journalWhy, boolean stockLoadFailed) {
 		if (stalled == null) {
 			return running ? "The removal of " + name + " is running, not stalled; only a stalled removal can be abandoned (nothing was changed)"
 				: "No stalled removal of " + name + " (never stalled, finished, retried or already abandoned); nothing was changed";
@@ -345,7 +353,93 @@ public final class Groups {
 		if (journalWhy != null) {
 			return "The world journal is unavailable (" + journalWhy + "): abandoning needs it to drop the removal's records; nothing was changed";
 		}
+		if (stockLoadFailed) {
+			return "The stockpiles failed to load this session: a filled member's custody can't be returned durably; nothing was changed";
+		}
 		return null;
+	}
+
+	/** (LC3 round 4) The abandon's steps, in their crash-safe order ({@link #abandonSteps}); units drive it with a model. */
+	interface AbandonIo {
+		/** A member's custody back into its containers (Fills.writeBackAbandoned), in memory. Answers whether anything changed. */
+		boolean returnCustody(String id);
+
+		/** The players, chunks and ledger saved, confirmed durable (Stockpiles.saveWithWorldConfirmed). */
+		boolean saveConfirmed();
+
+		/** (TEST) a kill point (WorldJournal.kill). */
+		void kill(String point);
+
+		/** A member's journal entries released (awaited: durable). */
+		void release(String id) throws Sites.SiteException;
+
+		/** The members' pending records dropped (the sites file and the infras: durable at once). */
+		void dropRecords(List<String> ids);
+
+		/** Out of the stalled list, the queue saved. */
+		void leave();
+	}
+
+	/**
+	 * (slice LC3 round 4, GPT P1) The abandon's order: every member's custody back (memory), then ONE save confirmed durable (chunks, then the
+	 * ledger) before any record changes; only then the journal entries, the records and the queue. A crash before the ledger's write leaves
+	 * the saved ledger's custody with the record and the stalled removal (re-runnable: the return is idempotent); one after it leaves the
+	 * items in their containers with the record (re-runnable, or a retry takes custody again). A save that is not confirmed stops here, with
+	 * no record touched. Answers whether it went through.
+	 */
+	static boolean abandonSteps(List<String> drop, AbandonIo io) throws Sites.SiteException {
+		boolean any = false;
+		for (String id : drop) {
+			any |= io.returnCustody(id);
+		}
+		io.kill("AB1");
+		if (any && !io.saveConfirmed()) {
+			return false;
+		}
+		io.kill("AB3");
+		for (String id : drop) {
+			io.release(id);
+		}
+		io.dropRecords(drop);
+		io.kill("AB4");
+		io.leave();
+		return true;
+	}
+
+	/** (LC3 round 4, pure) Whether a retried stalled removal takes an unwritten filled member's custody again: it holds none (an abandon returned it). */
+	static boolean needsRetake(Map<String, Integer> custody, Map<String, Integer> heldProvided) {
+		return custody.isEmpty() && heldProvided.isEmpty();
+	}
+
+	/**
+	 * (slice LC3 round 4) Before a stalled removal resumes: an unwritten filled member with no custody (an abandon that crashed after its
+	 * custody save, before its records were dropped, wrote it back into its containers) has it taken again, so its restore refunds it once
+	 * (never destroyed with its containers); then saved with the world, as a removal's custody take.
+	 */
+	static void retakeCustody(MinecraftServer server, Removal r) {
+		boolean any = false;
+		for (String id : settle(r).unwritten()) {
+			Site s = Sites.pendingRecord(id);
+			if (s == null || s.construction() == null || !Fills.filledSite(s)) {
+				continue;
+			}
+			Stockpiles.Pile p = Stockpiles.pileOf(s);
+			ServerLevel lv = Sites.levelOf(server, s);
+			String key = Builder.creditKey(s);
+			if (p == null || lv == null || !needsRetake(p.ledger().custody(key), p.ledger().heldProvided(key))) {
+				continue;
+			}
+			Fills.takeCustody(lv, s, true);
+			any = true;
+			Architect.LOGGER.warn("Removal of {}: unwritten member {} held no custody (an interrupted abandon returned it): taken again before the retry", r.group, id);
+		}
+		if (any) {
+			try {
+				Stockpiles.saveWithWorld(server);
+			} catch (IllegalStateException e) {
+				Architect.LOGGER.error("Removal of {}: the custody save was refused ({}); it stays pending", r.group, e.getMessage());
+			}
+		}
 	}
 
 	/** (TEST, the command's suggestions) The stalled removals, by group and stage (null: the whole group). */
@@ -370,6 +464,9 @@ public final class Groups {
 			st.unwritten().forEach(u::add);
 			o.add("written", w);
 			o.add("unwritten", u);
+			if (r.current != null) {
+				o.addProperty("current", r.current); // (LC3 round 4) the member whose restore broke (among the unwritten)
+			}
 			out.add(o);
 		}
 	}
@@ -406,6 +503,11 @@ public final class Groups {
 		Settle st = settle(r);
 		// only a member still pending has records to drop: one standing (a start's settle took it back) or settled already is left alone
 		List<String> drop = st.unwritten().stream().filter(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null).toList();
+		boolean filled = drop.stream().anyMatch(id -> Fills.phase(Sites.pendingRecord(id)) != null);
+		no = abandonRefusal(r, false, name, null, filled && Stockpiles.loadFailed());
+		if (no != null) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, no);
+		}
 		for (String id : drop) {
 			String under = SiteJournal.belowAny(id);
 			if (under != null) {
@@ -413,25 +515,52 @@ public final class Groups {
 					+ ": forget or remove that site first; nothing was changed");
 			}
 		}
-		for (String id : drop) {
-			Site s = Sites.pendingRecord(id);
-			ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
-			if (lv != null && Fills.phase(s) != null) {
-				Fills.writeBack(lv, s); // its custody back into its containers (none taken: nothing)
+		Removal stalledR = r;
+		boolean done = abandonSteps(drop, new AbandonIo() {
+			@Override
+			public boolean returnCustody(String id) {
+				Site s = Sites.pendingRecord(id);
+				ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
+				return lv != null && Fills.phase(s) != null && Fills.writeBackAbandoned(lv, s);
 			}
-		}
-		for (String id : drop) {
-			SiteJournal.await(SiteJournal.release(id), "abandoning " + id + "'s removal");
-		}
-		Sites.dropPending(server, drop);
-		for (String id : drop) {
-			if (Infras.pending(id) != null) {
-				Infras.drop(server, id);
+
+			@Override
+			public boolean saveConfirmed() {
+				return Stockpiles.saveWithWorldConfirmed(server);
 			}
+
+			@Override
+			public void kill(String point) {
+				dev.larattalabs.architect.journal.WorldJournal.kill(point);
+			}
+
+			@Override
+			public void release(String id) throws Sites.SiteException {
+				SiteJournal.await(SiteJournal.release(id), "abandoning " + id + "'s removal");
+			}
+
+			@Override
+			public void dropRecords(List<String> ids) {
+				Sites.dropPending(server, ids);
+				for (String id : ids) {
+					if (Infras.pending(id) != null) {
+						Infras.drop(server, id);
+					}
+				}
+			}
+
+			@Override
+			public void leave() {
+				dropStalled(stalledR);
+				RemovalSeal.changed();
+				Placement.save(server, false);
+			}
+		});
+		if (!done) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "The removal of " + name + " was not abandoned: the save of its "
+				+ "members' custody, back in their containers, could not be confirmed durable; no record was dropped and it stays stalled and sealed. "
+				+ "Run it again (the return is not repeated)");
 		}
-		dropStalled(r);
-		RemovalSeal.changed();
-		Placement.save(server, false);
 		String line = "Ops: " + by + " abandoned the stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage + " of group " + group)
 			+ ": written " + st.written() + " settled as finished; unwritten " + st.unwritten() + " left standing as they are, the pending ones' records "
 			+ "and journal entries dropped " + drop + " (nothing replays); its boxes unseal once the queue file is written";
@@ -632,6 +761,7 @@ public final class Groups {
 		CompletableFuture<Removed> f = new CompletableFuture<>();
 		Removal st = stalled(groupId, null);
 		if (st != null) {
+			retakeCustody(server, st); // (LC3 round 4)
 			resume(st, f);
 			Placement.save(server, false);
 			Architect.LOGGER.info("Removing group {}: resuming the earlier removal ({} site(s) left to restore)", groupId, st.sites.size());
@@ -693,6 +823,7 @@ public final class Groups {
 		Removal st = stalled(groupId, stage);
 		if (st != null) {
 			CompletableFuture<Removed> f = new CompletableFuture<>();
+			retakeCustody(server, st); // (LC3 round 4)
 			resume(st, f);
 			Placement.save(server, false);
 			return f;
