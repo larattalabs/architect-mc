@@ -6,7 +6,6 @@ import dev.larattalabs.architect.journal.JournalStore;
 import dev.larattalabs.architect.journal.Pt;
 import dev.larattalabs.architect.journal.SectionCells;
 import dev.larattalabs.architect.journal.WorldJournal;
-import dev.larattalabs.architect.placement.Anchors;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -127,41 +126,6 @@ final class RepairCore {
 	 */
 	static boolean takenAfter(long minedAt, Want w, boolean survival) {
 		return survival && w.removal() && minedAt >= 0 && minedAt >= w.at();
-	}
-
-	/**
-	 * (DR2 round after OVF) The refund share of a stuck survival removal's taken cells, as its deconstruct tallied them: a paid queued cell
-	 * (not free-pass) standing as placed ({@code w.pre()}, the entry's after) was refunded {@code Run.refundCost(placed, qi)}, which for the
-	 * placed block is its cost ({@code Run} costs a waterlogged target dry). A cell outside the queue or free-pass refunded nothing. A cell
-	 * the tally gave less for (a player's record, an adopted cell, a covering writer's) is counted at its cost anyway: the share is never
-	 * below what the tally paid for it, so withholding it never leaves a taken block paid twice (at worst a block's refund is withheld).
-	 */
-	static Map<String, Integer> takenShare(Anchors.Bounds box, int[] queue, java.util.BitSet free, Collection<Want> taken) {
-		Map<Integer, Integer> byBox = new HashMap<>();
-		for (int i = 0; i < queue.length; i++) {
-			byBox.put(queue[i], i);
-		}
-		int dx = box.maxX() - box.minX() + 1;
-		int dz = box.maxZ() - box.minZ() + 1;
-		Map<String, Integer> out = new java.util.TreeMap<>();
-		for (Want w : taken) {
-			int x = Journal.x(w.pos()), y = Journal.y(w.pos()), z = Journal.z(w.pos());
-			if (x < box.minX() || x > box.maxX() || y < box.minY() || y > box.maxY() || z < box.minZ() || z > box.maxZ()) {
-				continue;
-			}
-			Integer qi = byBox.get(Construction.index(x - box.minX(), y - box.minY(), z - box.minZ(), dx, dz));
-			if (qi == null || free.get(qi)) {
-				continue;
-			}
-			BlockState st = WorldJournal.state(w.pre());
-			if (st.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)) {
-				st = st.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, false);
-			}
-			for (var c : Cells.cost(st)) {
-				out.merge(c.item(), c.count(), Integer::sum);
-			}
-		}
-		return out;
 	}
 
 	/**

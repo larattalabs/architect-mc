@@ -26,10 +26,10 @@
 //           credits it under the cap once (custody = credit, item for item); a second diagnose and repair find nothing
 //   (DR2 fix round, the GPT review's NOT SAFE)
 //     DR4c  a third cottage removed alone, stuck as DR4a; a player mines one of its standing placed blocks before the repair (its item drops
-//           there): that cell is FOREIGN ("a player took"). (Round after OVF) the dry run previews the pending credit less the taken share;
-//           the repair halted at DRK0, DRK3, DRK4, DRK5, DRK6 and DRK7 in turn (a restart after each, the open record resumed; items in ==
-//           items out on disk after each), then finished: settled, booked = pending - share, the share held under taken:<key> (= the
-//           player's block), nothing more on a clean start
+//           there): that cell is FOREIGN ("a player took"). The dry run previews no credit; the repair halted at DRK0 and DRK3 in turn (a
+//           restart after each, the open record resumed; items in == items out on disk after each), then finished without settling:
+//           nothing booked, its whole credit still pending, its paid record kept; a clean start and a second repair keep it pending too.
+//           (DR2 ships without the taken-share settle: it moved to TXN T6; DRK4/DRK6/DRK7 fire only on a settle, so they are not walked)
 //   (every case after DR5) items in == items out on disk: returned + pending + custody as before the case
 //     DR7c  a custody credit into a full stockpile (dev.stockpile.ps capacity 0), CS1 armed: the halt inside the credit's save leaves no item
 //           at the crate and the custody held; finishing the open repair credits the 4 flint once into the stock (OVF: past capacity, no
@@ -57,8 +57,8 @@ export async function registerDRS(steps, h) {
   const back = (l) => G.plus(l?.returned ?? {}, l?.refundOverflow ?? {});
   const pendSum = (l, keys = null) => Object.entries(l?.pendingCredit ?? {}).filter(([k]) => !keys || keys.includes(k)).reduce((a, [, e]) => G.plus(a, e.items ?? {}), {});
 
-  // (DR2 round after OVF, speed rule 18) items in == items out across a case: what came back plus what is still pending (a held taken
-  // share included) plus custody, on disk, equals the same sum before the case (a booking only moves items between them; nothing minted or lost)
+  // (DR2 round after OVF, speed rule 18) items in == items out across a case: what came back plus what is still pending
+  // plus custody, on disk, equals the same sum before the case (a booking only moves items between them; nothing minted or lost)
   const custSum = (l) => Object.values(l?.custody ?? {}).reduce((a, m) => G.plus(a, m ?? {}), {});
   const total = (l) => G.plus(G.plus(back(l), pendSum(l)), custSum(l));
   const conserve = (tag, S0) => {
@@ -66,7 +66,6 @@ export async function registerDRS(steps, h) {
     check(G.same(total(S1), total(S0)), `${tag}: items in == items out on disk: returned + pending + custody ${sum(total(S1))} = ${sum(total(S0))} before the case, item for item`,
       { before: total(S0), after: total(S1) });
   };
-  const isTaken = (k) => k.startsWith('taken:');
 
   let W;
   const saved = () => ledgerOf(JSON.parse(fs.readFileSync(path.join(L.SAVES, W.name, 'architect', 'stockpiles.json'), 'utf8')));
@@ -321,10 +320,11 @@ export async function registerDRS(steps, h) {
       const fo2 = (d2.findings ?? []).find((x) => x.code === 'FOREIGN' && x.site === C.s);
       check(st2?.lagging === lost - 1 && fo2?.foreign === 1 && /a player took/.test(fo2?.message ?? ''), `${tag}: the mined cell is FOREIGN, taken by a player (lagging ${st2?.lagging}, foreign ${fo2?.foreign}: ${fo2?.message})`, d2);
       const dry = await repair(d2.planId, false);
-      check(dry.applied === false && sum(dry.credited) > 0 && sum(dry.credited) < sum(pend0), `${tag}: the dry run previews the pending credit less the taken share (${sum(dry.credited)} of ${sum(pend0)})`, dry);
-      // (speed rule 18) a stop at each of the repair's saves, the open record resumed after each restart, items in == items out after each
+      check(dry.applied === false && sum(dry.credited) === 0, `${tag}: the dry run previews no credit (it stays pending; the taken-share settle moved to TXN T6) (${json(dry.credited)})`, dry);
+      // (speed rule 18) a stop at each of the repair's saves it reaches, the open record resumed after each restart, items in == items out
+      // after each. (DR2 ship) DRK4, DRK6 and DRK7 fire only when a repair settles or books: a removal a player took from never does now
       const walk = [];
-      for (const point of ['DRK0', 'DRK3', 'DRK4', 'DRK5', 'DRK6', 'DRK7']) {
+      for (const point of ['DRK0', 'DRK3']) {
         await call('dev.repair', { op: 'killAt', point }, 30_000);
         repair(d2.planId, true).catch(() => null);
         const down = await haltWait();
@@ -333,30 +333,33 @@ export async function registerDRS(steps, h) {
         await restart(`${tag} ${point}`);
         const Sk = saved();
         conserve(`${tag} after ${point}`, S0);
-        check(!(Sk.credited ?? []).includes(key) || !Sk.pendingCredit?.[key], `${tag} after ${point}: ${key} never both credited and pending`);
-        walk.push({ point, credited: (Sk.credited ?? []).includes(key), pending: sum(Sk.pendingCredit?.[key]?.items), held: sum(Sk.pendingCredit?.[`taken:${key}`]?.items) });
+        check(!(Sk.credited ?? []).includes(key) && G.same(Sk.pendingCredit?.[key]?.items ?? {}, pend0) && G.same(back(Sk), back(S0)),
+          `${tag} after ${point}: ${key} not credited, its whole credit still pending, nothing booked`);
+        walk.push({ point, credited: (Sk.credited ?? []).includes(key), pending: sum(Sk.pendingCredit?.[key]?.items) });
       }
       log(`  ${tag}: the walk ${json(walk)}`);
       const r = await repair(d2.planId, true);
       await L.settle(2000);
       const S2 = saved();
-      const held = S2.pendingCredit?.[`taken:${key}`]?.items ?? {};
-      const moved = G.minus(back(S2), back(S0));
-      check(r.applied === true && /final|Repaired/.test(r.message ?? '') && (S2.credited ?? []).includes(key) && !S2.pendingCredit?.[key] && !S2.paid?.[key],
-        `${tag}: the open repair finished: ${C.s} settled, ${key} credited on disk, nothing of it pending, its paid record spent (${r.message})`, r);
-      check(sum(held) > 0 && G.same(held, drop) && G.same(G.plus(moved, held), pend0),
-        `${tag}: the taken share ${json(held)} held (= the block the player took, ${json(drop)}); booked ${sum(moved)} + held ${sum(held)} = the pending credit ${sum(pend0)}, item for item (was: nothing booked, pending for good)`, { moved, held, pend0 });
+      check(!/settled/.test(r.message ?? '') && sum(r.credited) === 0 && G.same(back(S2), back(S0)) && !(S2.credited ?? []).includes(key)
+        && G.same(S2.pendingCredit?.[key]?.items ?? {}, pend0) && sum(S2.paid?.[key]) > 0 && !Object.keys(S2.pendingCredit ?? {}).some((k) => k.startsWith('taken:')),
+        `${tag}: the open repair finished without settling: nothing booked, ${key}'s whole credit still pending (${sum(pend0)}), its paid record kept, no taken: key (DR2 ships without the taken-share settle: TXN T6) (${r.message})`, r);
       conserve(tag, S0);
-      const d3 = await diag({ kind: 'all' });
-      const left = (d3.findings ?? []).filter((x) => x.site === C.s || x.key === key || x.key === `taken:${key}`);
-      check(left.length === 0, `${tag}: a second diagnose finds nothing for ${C.s} (${json(left.map((x) => [x.code, x.site, x.key]))})`);
       await L.leaveWorld();
       await L.openWorld(W.name);
       await L.tp(CX + 80, 60, CZ + 56);
-      await started(`${tag} clean restart`);
+      const s3 = await started(`${tag} clean restart`);
       const S3 = saved();
-      check(G.same(back(S3), back(S2)) && G.same(S3.pendingCredit?.[`taken:${key}`]?.items ?? {}, held), `${tag}: a clean start books nothing more: the held share stays held`);
-      out.DR4c = { site: C.s, lost, walk, moved, held, message: r.message };
+      const d3 = await diag({ kind: 'site', id: C.s });
+      const st3 = (d3.findings ?? []).find((x) => x.code === 'STUCK' && x.site === C.s);
+      check(G.same(S3.pendingCredit?.[key]?.items ?? {}, pend0) && G.same(back(S3), back(S2)) && st3?.foreign === 1 && st3?.lagging === 0,
+        `${tag}: a start keeps it pending too (it reads restored, but a player took one of its blocks): ${key} pending, nothing booked; still STUCK with the taken cell foreign (${json(st3 && { lagging: st3.lagging, foreign: st3.foreign })}; suspects ${json(s3.suspects)})`);
+      const r2 = await repair(d3.planId, true);
+      const S4 = saved();
+      check(sum(r2.credited) === 0 && G.same(back(S4), back(S3)) && G.same(S4.pendingCredit?.[key]?.items ?? {}, pend0),
+        `${tag}: a second repair changes nothing: nothing credited, ${key} still pending (${r2.message})`, r2);
+      conserve(tag, S0);
+      out.DR4c = { site: C.s, lost, walk, foreign: fo2?.foreign, message: r.message };
     }
 
     // DR12 (DR-S, the coordinator's strict fix): a removal whose saves are refused (dev.stockpile.ps refuseSave, SS's refusal) changes
@@ -398,7 +401,7 @@ export async function registerDRS(steps, h) {
       const L1 = (await pile()).ledger;
       check(await hash(BOX) === h0 && /sponge/.test(json(pc.cells ?? [])) && Object.keys(near).length === 0,
         `${tag}: nothing changed in the world: the town's box hashes as before, the player's sponge stands, no item dropped (${json(near)})`);
-      check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).filter((k) => !isTaken(k)).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
+      check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).filter((k) => k !== W.ckey).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
         `${tag}: nothing changed in the ledger: the saved file as before, nothing credited, no hold or custody left`);
       out.DR12 = { cell, stop: v?.removalStop, reason: v?.removalStopReason, state: v?.state };
     }
@@ -412,7 +415,7 @@ export async function registerDRS(steps, h) {
       await cmd('/save-all flush');
       await L.settle(2000);
       const B = saved();
-      const keys = Object.keys(B.paid ?? {}).filter((k) => sum(B.paid[k]) > 0);
+      const keys = Object.keys(B.paid ?? {}).filter((k) => sum(B.paid[k]) > 0 && k !== W.ckey); // (DR2) DR4c's stays pending
       const hkey = keys.find((k) => k.startsWith(`site:${H.s}@`));
       check(!!hkey && keys.length >= 2, `${tag}: the town's paid records on disk: ${keys.length} (${json(keys)})`);
       await rep('snap', { name: 'H', min: H.b.slice(0, 3), max: H.b.slice(3) });
@@ -440,9 +443,9 @@ export async function registerDRS(steps, h) {
       check(await hash(H.b) === restored, `${tag}: the hall's box is as its removal committed it`);
       const end = await pile();
       const all = G.minus(back(end.ledger), back(S));
-      const mine = Object.keys(S.pendingCredit ?? {}).filter((k) => !isTaken(k));
-      check(G.same(all, pendSum(S, mine)) && Object.keys(end.ledger?.pendingCredit ?? {}).filter((k) => !isTaken(k)).length === 0 && keys.every((k) => !end.ledger?.paid?.[k]),
-        `${tag}: items in = items out against the saved state: ${sum(all)} units came back = every pending credit on disk (${sum(pendSum(S, mine))}), each once; nothing pending (DR4c's taken share held); no member's paid record left`, { all, pend: pendSum(S, mine) });
+      const mine = Object.keys(S.pendingCredit ?? {}).filter((k) => k !== W.ckey);
+      check(G.same(all, pendSum(S, mine)) && Object.keys(end.ledger?.pendingCredit ?? {}).filter((k) => k !== W.ckey).length === 0 && keys.every((k) => !end.ledger?.paid?.[k]),
+        `${tag}: items in = items out against the saved state: ${sum(all)} units came back = every pending credit on disk (${sum(pendSum(S, mine))}; DR4c's left pending), each once; nothing pending; no member's paid record left`, { all, pend: pendSum(S, mine) });
       conserve(tag, S);
       out.DR4b.site = H.s;
       out.DR4b.atStart = { keys: others.length, units: sum(bookedAtStart) };

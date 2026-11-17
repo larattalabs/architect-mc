@@ -32967,21 +32967,29 @@ LEFTOVERS "R2 7c-region-2", with HR's hidden_village, CL's ladder to a walk port
   field, `Stockpiles.dropKeyed` (credit, keyed charge, scoop), kill point OV1, the ps stats `owedDrops`/`resolvedFound`/`resolvedSpawned`,
   gate DR7o, RepairDR2FixTest's two P1-1 units. DR7c now expects OVF's model (CS1 into a full pile: no entity, credited once past capacity).
 - **P1 (premise checked in code):** `settling` skipped any unit with a foreign cell, `cellOf` made a taken cell FOREIGN and the start
-  forced KEEP, so nothing ever settled such a removal. Now a cell is *taken* by its mark after the undo alone (`RepairCore.takenAfter`,
-  whatever it reads); taken cells never block a repair's settle and are never written. Their share (`RepairCore.takenShare`: the tally's
-  cost of each paid, queued, non-free cell's placed block, never below what the tally paid) moves from the pending credit to
-  `taken:<key>` (`Stockpiles.withhold`, once per key, never past the pending), held for good (a non-target key: the start LEAVEs it);
-  the rest books. The split is saved confirmed before the release. A road with taken cells stays pending (its share unproven). The
-  start still KEEPs such a removal (conservative); a repair settles it.
+  forced KEEP, so nothing ever settled such a removal. A cell is *taken* by its mark after the undo alone (`RepairCore.takenAfter`,
+  whatever it reads) and is never written. **Not shipped (see "DR2 ship" below):** the taken-share settle (settle around taken cells,
+  their share withheld under `taken:<key>`) was removed before the ship; such a removal stays pending, its whole refund held. Deferred
+  to TXN T6.
 - **Rule 17:** the repair's saves go through `Repairs.worldSaved` (the barrier) and `ledgerSaved` (`saveConfirmed`; the booking and the
   custody credit now confirmed too), the T0 switch point. **Rule 18:** kill points DRK0 (record), DRK3 (barrier), DRK4 (settling),
-  DRK5 (split), DRK6 (released), DRK7 (credits), beside DRK1/DRK1pt/DRK2; `dev.repair killAt` refuses other names.
-- **Gate** dr-survival: DR4c halts at DRK0, DRK3-DRK7 in turn, resuming after each; booked = pending - share, share = the block the
-  player took; items in == items out on disk (returned + pending + custody) after every case and every stop.
-- **Units:** `RepairDR2OvfTest` (5; the settle case fails on 16f29895: `expected [s1] but was []`), the full Gradle suite green on the merge (1397) and after the fix (1402).
-- **Gate** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at e4b1c91f, `artifacts/gate-runs-DR2r/20261117-063325-change`): bcc-over 17/0,
+  DRK6 (released), DRK7 (credits), beside DRK1/DRK1pt/DRK2; `dev.repair killAt` refuses other names (DRK5, the split, went with the settle).
+- **Gate** dr-survival (as shipped): DR4c halts at DRK0 and DRK3, resuming after each; nothing booked, the whole credit pending; items in ==
+  items out on disk (returned + pending + custody) after every case and every stop.
+- **Units:** `RepairDR2OvfTest` (as shipped: 2, the settle case flipped to "stays pending").
+- **Gate, with the settle (superseded)** (`--only --no-cache --shards 1 --no-turbo`, ports 9074:9075, at e4b1c91f, `artifacts/gate-runs-DR2r/20261117-063325-change`): bcc-over 17/0,
   rl-crash 110/0, dr-crash 108/0, dr-survival 110/0 (DR4c: booked 141 + held 1 oak log = 142 pending; 284 = 284 after each stop), hf-crash
   56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 66/0, x-resume 35/0: 9/9 on the first run.
-- **Leftovers:** the start KEEPs a taken removal until a repair (auto-diagnose names it); an evicted mark's watermark counts every unmarked
-  cell of its chunk as taken (their refund withheld, never paid twice); a road with taken cells stays pending; the held `taken:` keys stay in
-  the ledger for good; a repair resumed after its release reports "Repaired : wrote 0" with no site named (cosmetic).
+- **Leftovers:** a removal a player took from stays pending for good, its whole refund held (TXN T6); an evicted mark's watermark counts
+  every unmarked cell of its chunk as taken; a repair resumed after its release reports "Repaired : wrote 0" with no site named (cosmetic).
+
+### Slice DR2 ship: the taken-share settle deferred to TXN T6 (Noah, 2026-11-17)
+
+- The last GPT review found two P1s in the settle: a bed head (any multi-block) pays twice, and `takenShare` priced weathered/variant
+  blocks wrong. Noah: DR2 ships without it; **the taken-share settle is deferred to TXN T6.**
+- **Removed:** `RepairCore.takenShare`, `Repairs.shareOf`, `Stockpiles.withhold`/`TAKEN`, the repair's split step and kill point DRK5,
+  the dry run's "less the share" preview. **Seam:** `Repairs.unanimous` and `Repairs.settling` treat a taken cell as a blocker again
+  (the removal stays pending, its whole refund held, never paid twice); T6 restores the settle there.
+- **Kept:** `takenAfter` (classification, FOREIGN "a player took"), `worldSaved`/`ledgerSaved`, kill points DRK0/3/4/6/7.
+- **Coverage note:** DRK4, DRK6 and DRK7 fire only on a settle, so no gate walks them in game now (DR4c walks DRK0 and DRK3).
+

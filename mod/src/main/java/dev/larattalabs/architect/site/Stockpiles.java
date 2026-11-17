@@ -1582,52 +1582,6 @@ public final class Stockpiles {
 		return out;
 	}
 
-	/** (DR2 round after OVF) The held key of what players took from {@code key}'s stuck removal: never booked (a non-target key: LEAVE). */
-	static final String TAKEN = "taken:";
-
-	/**
-	 * (DR2 round after OVF) Before a repair settles a stuck survival removal some of whose standing blocks a player took after its undo: its
-	 * pending credit {@code key} keeps only what was restored or removed, and the taken cells' {@code share} moves under {@link #TAKEN}{@code
-	 * key}, held pending for good (the player holds those blocks: booking them would pay them twice). Pure of the world; once per key (a
-	 * resumed repair finds the held key and splits nothing again). Never more than {@code key} holds pending, item for item. The caller saves
-	 * the ledger, confirmed, before the removal is released (else the start would book the whole pending credit). Returns what is held.
-	 */
-	static Map<String, Integer> withhold(StockLedger l, String key, Map<String, Integer> share) {
-		String held = TAKEN + key;
-		if (l.pendingKeys().contains(held)) {
-			return new TreeMap<>(l.pendingItems(held));
-		}
-		if (!l.pendingKeys().contains(key) || share.isEmpty()) {
-			return Map.of();
-		}
-		Map<String, Integer> keep = new TreeMap<>(l.pendingItems(key));
-		Map<String, Integer> out = new TreeMap<>();
-		share.forEach((item, n) -> {
-			int take = Math.min(n, keep.getOrDefault(item, 0));
-			if (take > 0) {
-				out.put(item, take);
-				keep.merge(item, -take, Integer::sum);
-			}
-		});
-		keep.values().removeIf(v -> v <= 0);
-		long at = l.pendingAt(key);
-		l.holdPending(key, keep, at);
-		l.holdPending(held, out, at);
-		return out;
-	}
-
-	/** {@link #withhold} in the pile holding {@code key} pending (marked changed); empty when none does. */
-	static Map<String, Integer> withhold(String key, Map<String, Integer> share) {
-		for (Pile p : List.copyOf(PILES.values())) {
-			if (p.ledger.pendingKeys().contains(key) || p.ledger.pendingKeys().contains(TAKEN + key)) {
-				Map<String, Integer> out = withhold(p.ledger, key, share);
-				changed(p);
-				return out;
-			}
-		}
-		return Map.of();
-	}
-
 	/** (J2) Whether a pending record (a removal not settled yet; slice DR-S: a pending road too) has the credit key {@code key}. */
 	private static boolean pendingSite(String key) {
 		int at = key.lastIndexOf('@');
