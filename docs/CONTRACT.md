@@ -32935,17 +32935,17 @@ so two module lots that share items can't each be held to their own measured bou
   `unknown_lot:la`; its record save failing is refused with the head unchanged; an RV3 kill, then its caps read back; ld's cap lowered holds
   ld (capScope `lot:ld`) while lc builds; a halt with nothing saved keeps and enforces it; restored, PLACED.
 
-### Slice LCAP as built (2026-11-17; strict; versions NEXT; $0)
+### Slice LCAP as built (2026-11-17; strict; versions NEXT; $0; fix round after the rule 15 review)
 
 - API: `maxBillPerLot` on `RealiseRequest`/`ApprovedRealise` (appended, 1.60.0 constructors kept, `withMaxBillPerLot`), `Quote.lotBill`,
-  feature `maxBillPerLot`; `BILL_CAP` detail `lot:<id>` / `unknown_lot:<id>`, no new Reason. api-compat `--baselines` 8/8.
+  `SiteWait.capScope` (LCAP-Q1), feature `maxBillPerLot`; `BILL_CAP` detail `lot:<id>` / `unknown_lot:<id>`. api-compat `--baselines` 8/8.
 - Rule 19, the 11-15 claim: half true. `survival.caps.<rid>` is an object, so `lots` sits beside `maxBill` with no migration; but `record()`
   wrote `maxBill` only, `capOf`/`Cap` had no lot and the purse checked one cap: enforcement is new (BillCaps, Stockpiles, MechCharges).
-- Persistence: BC-d's region.json write unchanged (fsync + rename, before RG2 / at RV3); no new save path, no T0 barrier.
-- Units: LotCapLCAPTest 7/7, scoped Gradle full build and kit pass; on base they can't compile (the API is new). In game `lcap-survival`
-  passes 14/0; on base (driver only, `gate-runs-LCAP-base/20261117-081406-change`) it FAILs at U: the lot cap is ignored, the realise accepted.
-- Gate `artifacts/gate-runs-LCAP/20261117-081620-change` at a508c5aa, 9076:9077, `--no-cache --shards 1 --no-turbo`: 6/6 PASS (bc-cap 10/0,
-  lcap-survival 14/0, bcd-grow 19/0, bcc-over 17/0, rl-crash 110/0, sad-survival 56/0). Earlier runs' fixes are in the commits.
-- Leftovers: only rid 0 ran in game: a revision's lot caps (`caps.<rid>.lots`, targets with rid > 0) are covered by units and bcd-grow
-  covers region caps only; no in-game revision with lot caps and no RV-point kill. `RegionsImpl.save` still swallows an IOException (BC-d's,
-  not a confirmed record; for TXN/T0). Lot quotes here are `exact` false (upper bounds). rs_hut lots stand in for module lots.
+- Persistence: BC-d's region.json write (no new save path, no T0 barrier), now confirmed at the two cap-recording saves (§4, review P1).
+- Units: LotCapLCAPTest 9/9 (they can't compile on base: the API is new). In game `lcap-survival` 24/0. Failing-first: on origin/main + the
+  driver it FAILs at U (`gate-runs-LCAP-base/20261117-081406-change`); on 0b639840 + the test hook it FAILs at F1, the realise accepted with
+  its save failed (`gate-runs-LCAP-prefix/20261117-090854-change`).
+- Gate `artifacts/gate-runs-LCAP/20261117-085316-change` at 238299a0, 9076:9077, `--no-cache --shards 1 --no-turbo`: 4/4 PASS (bc-cap 10/0,
+  lcap-survival 24/0, bcd-grow 19/0, rl-crash 110/0); before the fix round `20261117-081620-change` 6/6 (with bcc-over 17/0, sad-survival 56/0).
+- Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves a region with no batch (it writes nothing, removable);
+  lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).
