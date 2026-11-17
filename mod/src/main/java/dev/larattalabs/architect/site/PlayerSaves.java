@@ -25,8 +25,9 @@ import org.jspecify.annotations.Nullable;
  * <ul>
  * <li>{@link #saving}, then {@link #captured} (the snapshot written to the temp file), then {@link #replaced} with the real replace result, or
  * {@link #failed} (the exception vanilla logged).</li>
- * <li>A failure is owed with its snapshot and the player object that was saved. Only a successful save of <b>that</b> object (it never left)
- * or a successful rewrite of the snapshot pays it; a new login's object (loaded from the older file) does not.</li>
+ * <li>A failure is owed with its snapshot. A later successful save pays it unless the player's data was loaded from the older file since
+ * (the debt is then <b>stale</b>): a respawn's new object (vanilla's {@code restoreFrom}) carries the same session on, so it pays; a login
+ * reads the file, so a debt that could not first write its snapshot there turns stale and only an operator clears it.</li>
  * <li>An offline player's snapshot is rewritten at the head of every barrier ({@link #step}: {@code PlayerList.saveAll} only visits online
  * players) and before that player's data is loaded again ({@link #loading}), so a rejoin never loads the older file while a snapshot waits.
  * If that rewrite fails at a load, the snapshot is stale (the new session moves on from the older file): it is never written over the new
@@ -44,13 +45,12 @@ public final class PlayerSaves {
 
 	/** One owed player. */
 	static final class Debt {
-		final Object player;
 		final @Nullable Object snapshot;
 		final String why;
+		/** The player's data was loaded from the older file while this was owed: no later save pays it (only {@link #forgive}). */
 		volatile boolean stale;
 
-		Debt(Object player, @Nullable Object snapshot, String why) {
-			this.player = player;
+		Debt(@Nullable Object snapshot, String why) {
 			this.snapshot = snapshot;
 			this.why = why;
 		}
@@ -128,7 +128,7 @@ public final class PlayerSaves {
 		ACKED.put(c.id, ROUND.get());
 		UNFORCED.add(c.id);
 		Debt d = OWED.get(c.id);
-		if (d != null && d.player == c.player) {
+		if (d != null && !d.stale) { // the session that failed carried on (the same object, or a respawn's restoreFrom copy): its state holds the loss
 			OWED.remove(c.id, d);
 			Architect.LOGGER.info("Player durability: {}'s save succeeded again; its debt is paid", c.id);
 		}
@@ -150,9 +150,8 @@ public final class PlayerSaves {
 	private static void owe(Current c, String why) {
 		ACKED.remove(c.id);
 		Debt old = OWED.get(c.id);
-		// a later failure of another object never replaces a snapshot an earlier object left (its own was loaded from the older file)
-		if (old == null || old.player == c.player) {
-			OWED.put(c.id, new Debt(c.player, c.snapshot != null ? c.snapshot : old == null ? null : old.snapshot, why));
+		if (old == null || !old.stale) { // a stale debt stays stale (the session since was loaded from the older file)
+			OWED.put(c.id, new Debt(c.snapshot != null ? c.snapshot : old == null ? null : old.snapshot, why));
 		}
 		DurableBarrier.playerSaveFailed();
 		Architect.LOGGER.error("Player durability: the save of {} failed ({}); owed (no ledger is published) until a later save of it succeeds", c.id, why);
@@ -161,10 +160,10 @@ public final class PlayerSaves {
 	/** Before the player's data is loaded (a login): a kept snapshot is written first, so the login reads it, never the older file. */
 	public static void loading(UUID id) {
 		Debt d = OWED.get(id);
-		if (d == null || d.snapshot == null || d.stale) {
+		if (d == null || d.stale) {
 			return;
 		}
-		if (!rewrite(id, d)) {
+		if (d.snapshot == null || !rewrite(id, d)) {
 			d.stale = true;
 			Architect.LOGGER.error("Player durability: {} logs in while its last save is owed and could not be written; the older file is loaded. The debt"
 				+ " stays (no ledger is published) until an operator clears it", id);
@@ -245,6 +244,13 @@ public final class PlayerSaves {
 	/** (dev, operator) forget one player's debt: its loss is accepted. */
 	public static boolean forgive(UUID id) {
 		return OWED.remove(id) != null;
+	}
+
+	/** (dev, operator: dev.stockpile.barrier forgive) forget every debt; answers how many. */
+	public static int forgiveAll() {
+		int n = OWED.size();
+		OWED.clear();
+		return n;
 	}
 
 	static com.google.gson.JsonObject devJson() {

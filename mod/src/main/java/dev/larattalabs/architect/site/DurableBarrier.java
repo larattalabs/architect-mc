@@ -183,7 +183,7 @@ public final class DurableBarrier {
 
 	/**
 	 * Dev ({@code dev.stockpile.barrier}): arms the TEST failures ({@code failPlayerReplace}, {@code failChunkWrite}: that many next player
-	 * replaces or region writes fail), runs {@code reps} barriers (each step's ms, p50/p90/max), and answers {@link #devJson}.
+	 * replaces or region writes fail), {@code forgive} (operator: every owed save's loss accepted, stale debts too), runs {@code reps} barriers (each step's ms, p50/p90/max), and answers {@link #devJson}.
 	 */
 	public static JsonObject dev(MinecraftServer srv, JsonObject req) {
 		if (req.has("failPlayerReplace")) {
@@ -191,6 +191,13 @@ public final class DurableBarrier {
 		}
 		if (req.has("failChunkWrite")) {
 			ChunkDebt.FAIL_WRITES.set(req.get("failChunkWrite").getAsInt());
+		}
+		JsonObject forgiven = null;
+		if (req.has("forgive") && req.get("forgive").getAsBoolean()) { // (operator) accept the loss of every owed save
+			forgiven = new JsonObject();
+			forgiven.addProperty("players", PlayerSaves.forgiveAll());
+			forgiven.addProperty("chunks", ChunkDebt.forgiveAll());
+			Architect.LOGGER.warn("Durable barrier: every owed save forgiven (dev.stockpile.barrier forgive): {}", forgiven);
 		}
 		int reps = req.has("reps") ? Math.max(0, Math.min(200, req.get("reps").getAsInt())) : req.has("run") && req.get("run").getAsBoolean() ? 1 : 0;
 		java.util.List<double[]> ms = new java.util.ArrayList<>();
@@ -202,6 +209,9 @@ public final class DurableBarrier {
 			outcomes.merge(r.outcome().name(), 1, Integer::sum);
 		}
 		JsonObject o = devJson();
+		if (forgiven != null) {
+			o.add("forgiven", forgiven);
+		}
 		if (reps > 1) {
 			JsonObject b = new JsonObject();
 			b.addProperty("reps", reps);

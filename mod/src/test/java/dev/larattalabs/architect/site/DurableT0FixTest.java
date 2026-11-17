@@ -356,6 +356,24 @@ class DurableT0FixTest {
 		assertTrue(PlayerSaves.OWED.isEmpty());
 	}
 
+	@Test
+	void txn5_aRespawnCarriesTheSessionOnAndPaysTheDebt() throws IOException {
+		save(id, steve, false); // the save fails; the player dies before the next barrier
+		Object respawned = new Object(); // PlayerList.respawn: a new ServerPlayer, restoreFrom the old one; nothing loaded from the file
+		dat(id);
+		assertNull(step(Set.of(id), () -> save(id, respawned, true)), "the respawned session holds the loss: its save pays the debt");
+	}
+
+	@Test
+	void txn5_aDebtWithoutASnapshotTurnsStaleAtALogin() throws IOException {
+		PlayerSaves.saving(id, steve);
+		PlayerSaves.failed("the save threw before its snapshot"); // no snapshot kept
+		PlayerSaves.done();
+		PlayerSaves.loading(id); // the player logs in again: the older file loads
+		dat(id);
+		assertNotNull(step(Set.of(id), () -> save(id, new Object(), true)), "a session loaded from the older file never pays it");
+	}
+
 	// ---------------------------------------------------------------- chunks (P1-3, TXN item 5)
 
 	@Test
@@ -385,6 +403,18 @@ class DurableT0FixTest {
 		assertEquals(1, ChunkDebt.owed().size(), "owed until that write succeeds");
 	}
 
+	@Test
+	void txn5_aChunkReloadedWithoutItsSnapshotIsNeverPaidByItsNextWrite() {
+		String k = ChunkDebt.key("w/minecraft:overworld/chunk", 5, 5);
+		ChunkDebt.remark(k, () -> {
+		}, "serialization failed");
+		ChunkDebt.saveFailed(k, "reported");
+		assertNull(ChunkDebt.snapshot(k), "the chunk unloaded and loads again: from the older file");
+		ChunkDebt.written(k); // the reloaded chunk saved
+		assertEquals(1, ChunkDebt.owed().size(), "stale: owed until an operator clears it");
+		assertEquals(1, ChunkDebt.forgiveAll());
+	}
+
 	// ---------------------------------------------------------------- native entries (P1-4)
 
 	@Test
@@ -404,6 +434,20 @@ class DurableT0FixTest {
 	}
 
 	@Test
+	void p1_4_anOwedMccTheCommitDeletedIsPaid() throws IOException {
+		Path world = tmp.resolve("world").toAbsolutePath().normalize();
+		Path region = Files.createDirectories(world.resolve("region"));
+		Path mcc = Files.writeString(region.resolve("c.3.4.mcc"), "payload");
+		RegionDurability.worldOpened(world);
+		RegionDurability.FAILING.add(mcc);
+		assertFalse(RegionDurability.forceNew(mcc, "chunk"));
+		RegionDurability.FAILING.clear();
+		Files.delete(mcc); // the chunk went back inline: the commit deleted its .mcc
+		assertTrue(RegionDurability.retryOwed().isEmpty(), "nothing left to force: paid, never owed for the rest of the session");
+		assertTrue(RegionDurability.undurable("chunk").isEmpty());
+	}
+
+	@Test
 	void theMixinsTakeTheRealResults() throws IOException {
 		String p = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/PlayerSaveFailMixin.java"));
 		assertTrue(p.contains("Util.safeReplaceOrMoveFile(current, latest, backup, false)") && p.contains("safeReplaceFile(Ljava/nio/file/Path;"),
@@ -413,6 +457,8 @@ class DurableT0FixTest {
 		assertTrue(io.contains("method = \"runStore\"") && io.contains("lambda$loadAsync$0"), "P1-3: runStore's outcome, a load served the snapshot");
 		String rf = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/RegionFileFlushMixin.java"));
 		assertTrue(rf.contains("writeToExternalFile") && rf.contains("forceNew"), "P1-4: the .mcc forced");
+		assertTrue(rf.contains("architect$writeStarts") && rf.contains("architect$external = false; // a write that threw"),
+			"the external flag is reset at each write's head (a write that threw never leaves it set)");
 		String rc = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/RegionCreateMixin.java"));
 		assertTrue(rc.contains("getRegionFile") && rc.contains("forceNew"), "P1-4: a new region file's entry forced");
 		String json = Files.readString(Path.of("src/main/resources/architect_mc.mixins.json"));

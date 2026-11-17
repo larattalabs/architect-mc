@@ -146,6 +146,10 @@ public final class RegionDurability {
 				continue;
 			}
 			long started = epoch;
+			if (p.getFileName().toString().endsWith(".mcc") && !java.nio.file.Files.exists(p)) {
+				OWED.remove(p, e.getValue()); // the chunk went back inline (the commit deleted its .mcc); the region file's write covers it
+				continue;
+			}
 			try {
 				failIfAsked(p);
 				forcePath(p);

@@ -47,6 +47,11 @@ public abstract class RegionFileFlushMixin {
 	@Unique
 	private boolean architect$external;
 
+	@Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Ljava/nio/ByteBuffer;)V", at = @At("HEAD"), require = 1)
+	private void architect$writeStarts(net.minecraft.world.level.ChunkPos pos, java.nio.ByteBuffer buf, CallbackInfo ci) {
+		architect$external = false; // a write that threw before its RETURN never leaves the flag set for the next one
+	}
+
 	@Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Ljava/nio/ByteBuffer;)V", at = @At(value = "INVOKE",
 		target = "Lnet/minecraft/world/level/chunk/storage/RegionFile;writeToExternalFile(Ljava/nio/file/Path;Ljava/nio/ByteBuffer;)Lnet/minecraft/world/level/chunk/storage/RegionFile$CommitOp;"),
 		require = 1)

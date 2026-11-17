@@ -51,10 +51,10 @@ public final class StockpileDev {
 			+ "saved at its credit; reset the periodic save counters");
 		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the
 		// JVM after the work queued before it; no answer comes back (poll dev.state until inWorld is false)
-		DevBridge.register("dev.stockpile.barrier", 600_000, "{run?: bool, reps?: n, failPlayerReplace?: n, failChunkWrite?: n} - (slice T0) "
+		DevBridge.register("dev.stockpile.barrier", 600_000, "{run?: bool, reps?: n, failPlayerReplace?: n, failChunkWrite?: n, forgive?: bool} - (slice T0) "
 			+ "Stockpiles.barrier(): players, chunks, the ledger through DurableFile (run: true runs one now; reps: n runs n and answers bench "
 			+ "{total, players, chunks, ledger: {p50, p90, max}}; failPlayerReplace / failChunkWrite: TEST, the next n player replaces or region writes "
-			+ "fail) -> {runs, playerSaveFailures, last: {outcome, reason, ledgerGen, playersMs, chunksMs, ledgerMs}, players: {owed, ..}, chunks: "
+			+ "fail; forgive: operator, every owed player and chunk save's loss accepted, stale ones too) -> {runs, playerSaveFailures, last: {outcome, reason, ledgerGen, playersMs, chunksMs, ledgerMs}, players: {owed, ..}, chunks: "
 			+ "{owed, failed, paid, resubmitted, served}, ledger: {id, writtenGen, installedGen, inDoubt}}",
 			(req, mc) -> ServerTasks.callOnServer(s -> dev.larattalabs.architect.site.DurableBarrier.dev(s, req)));
 		DevBridge.register("dev.stockpile.halt", 10_000, "{mode?: now|autosave} - (HF) TEST: halts the JVM on the server thread at once (no shutdown "

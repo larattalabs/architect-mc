@@ -21,8 +21,9 @@ import org.jspecify.annotations.Nullable;
  * is marked unsaved again, so the barrier's flushed save rewrites it;</li>
  * <li>{@link #owed} is not empty: the barrier refuses (no ledger over a chunk the disk does not hold).</li>
  * </ul>
- * Known limit: a chunk whose <i>serialization</i> failed while it unloaded has no snapshot and is not in memory; it stays owed (every barrier
- * refuses, logged) until it is loaded and saved again. Any thread; the world's state is forgotten when it closes.
+ * Known limit: a chunk whose <i>serialization</i> failed and that unloads before the next barrier has no snapshot and is not in memory: when it
+ * loads again from the older file its debt turns stale (every barrier refuses, logged) until an operator clears it. Any thread; the world's
+ * state is forgotten when it closes.
  */
 public final class ChunkDebt {
 	/** One owed chunk of one storage. */
@@ -33,6 +34,8 @@ public final class ChunkDebt {
 		/** (no snapshot) marks the loaded chunk unsaved again, so the next flushed save rewrites it; run by {@link #retry}, never inside a save. */
 		volatile @Nullable Runnable remark;
 		volatile String why;
+		/** Loaded from the older file while owed without a snapshot: the change is gone, no later write pays it (only {@link #forgiveAll}). */
+		volatile boolean stale;
 
 		Debt(String key, @Nullable Object snapshot, @Nullable Runnable resubmit, String why) {
 			this.key = key;
@@ -106,25 +109,46 @@ public final class ChunkDebt {
 		return key(info.level() + "/" + info.dimension().identifier() + "/" + info.type(), pos.x(), pos.z());
 	}
 
-	/** A write of the chunk reached its region file: the debt is paid. */
+	/** A write of the chunk reached its region file: the debt is paid, unless it is stale. */
 	public static void written(String key) {
-		if (!OWED.isEmpty() && OWED.remove(key) != null) {
+		if (OWED.isEmpty()) {
+			return;
+		}
+		Debt d = OWED.get(key);
+		if (d != null && !d.stale && OWED.remove(key, d)) {
 			PAID.incrementAndGet();
 			Architect.LOGGER.info("Chunk durability: {} written again; its debt is paid", key);
 		}
 	}
 
-	/** The snapshot a failed write left for this chunk, or null: a load is served it, never the older file. */
+	/**
+	 * A load of this chunk: the snapshot a failed write left (the load is served it, never the older file), or null. An owed chunk without a
+	 * snapshot is read from the older file: its debt turns stale (no later write of the reloaded chunk pays it; every barrier refuses).
+	 */
 	public static @Nullable Object snapshot(String key) {
 		if (OWED.isEmpty()) {
 			return null;
 		}
 		Debt d = OWED.get(key);
-		Object s = d == null ? null : d.snapshot;
+		if (d == null) {
+			return null;
+		}
+		Object s = d.snapshot;
 		if (s != null) {
 			SERVED.incrementAndGet();
+		} else if (!d.stale) {
+			d.stale = true;
+			Architect.LOGGER.error("Chunk durability: {} loads from its older file while its failed save is owed without a snapshot; the debt stays (no ledger is"
+				+ " published) until an operator clears it", key);
 		}
 		return s;
+	}
+
+	/** (dev, operator: dev.stockpile.barrier forgive) forget every debt; answers how many. */
+	public static int forgiveAll() {
+		int n = OWED.size();
+		OWED.clear();
+		return n;
 	}
 
 	/**
@@ -151,7 +175,7 @@ public final class ChunkDebt {
 	/** The owed chunks, each with why. */
 	public static List<String> owed() {
 		List<String> out = new ArrayList<>();
-		OWED.values().forEach(d -> out.add(d.key + " (" + d.why + (d.snapshot == null ? ", no snapshot" : "") + ")"));
+		OWED.values().forEach(d -> out.add(d.key + " (" + d.why + (d.stale ? ", stale" : d.snapshot == null ? ", no snapshot" : "") + ")"));
 		return out;
 	}
 
