@@ -907,42 +907,57 @@ public final class Stockpiles {
 		if (level == null) {
 			throw new Sites.SiteException(Reason.NOT_LOADED, p.dimension + " is not loaded");
 		}
+		if (!srv.isSameThread()) {
+			// (ADP) off the server thread no block entity reads: every crate would look absent
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates runs on the server thread");
+		}
+		requireLoaded();
 		// the crates, by owner id in their block entity: a site's own id, or group:<id>
 		Map<String, Construction.Crate> crates = new LinkedHashMap<>();
 		List<Site> sites = new ArrayList<>();
 		for (Site s : Sites.all()) {
 			// (SAD) a BUILT site whose crate still stands (a shared crate another site of its group still builds from) joins too: the crate's
-			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped
-			// (ADP) the crate read where it stands, its chunk loaded if need be (crateStands answers false for an unloaded chunk: a BUILT site on
-			// a crate out of range lost its paid record and kept a reference to the crate adopted through its building neighbour)
-			if (owner.equals(s.owner()) && s.construction() != null && s.construction().crate() != null && p.dimension.equals(s.dimension()) && (s.building()
-				|| crateStandsAt(level, s.construction().crate(), Builder.crateOwner(s)) || joinedBefore(p, s))) {
+			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped.
+			// (ADP) the cell read where it stands, its chunk loaded if need be, and any crate block there counts (crateStands answers false
+			// for an unloaded chunk or another tag: such a BUILT site lost its paid record, or its crate went unnoticed)
+			Construction.Crate sc = s.construction() == null ? null : s.construction().crate();
+			if (sc != null && owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && (s.building() || crateBlockAt(level, sc) || joinedBefore(p, s))) {
 				sites.add(s);
-				crates.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
+				crates.putIfAbsent(Builder.crateOwner(s), sc);
 			}
 		}
 		List<Infra> roads = new ArrayList<>();
 		for (Infra i : Infras.all()) {
-			if (i.building() && owner.equals(i.owner()) && i.construction().crate() != null && p.dimension.equals(i.dimension())) {
+			// (ADP) a BUILT construction road on the crate joins as a BUILT site does (its paid record keyed; it joins no feed). A construction
+			// road always draws from its group's crate (RoadBuilder refuses one without)
+			Construction.Crate ic = i.construction() == null ? null : i.construction().crate();
+			if (ic != null && i.group() != null && owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && (i.building() || crateBlockAt(level, ic)
+				|| namesJoined(p.ledger::credited, i.id(), i.group(), ic.x(), ic.y(), ic.z()))) {
 				roads.add(i);
-				if (i.group() != null) {
-					crates.putIfAbsent(SiteGroupRec.CRATE_PREFIX + i.group(), i.construction().crate());
-				}
+				crates.putIfAbsent(SiteGroupRec.CRATE_PREFIX + i.group(), ic);
 			}
 		}
-		Map<String, Integer> dropped = new TreeMap<>();
-		BlockPos drop = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		// (ADP, rule 17) 1. the credits, in memory only (no crate, cell or drop touched), then saved confirmed. A crash inside that save (ADP1:
+		// the chunks written, the ledger not) or before it leaves the crates full and nothing credited; after it (ADP2) the start's repair finishes
+		// each credited crate whose record still names it (FINISH). The crates' stock is credited without a cap: what is over capacity drops last
+		saveConfirmed(srv); // nothing pending: a refused save refuses the adoption before anything changes
+		JsonObject before = p.ledger.toJson();
 		Set<String> deferred = new TreeSet<>();
+		Map<String, CrateBlockEntity> take = new LinkedHashMap<>();
+		Set<String> released = new TreeSet<>();
+		Map<String, Integer> came = new TreeMap<>();
+		boolean credited = false;
 		for (var e : crates.entrySet()) {
 			Construction.Crate c = e.getValue();
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			String key = "adopt:" + e.getKey() + "@" + cp.asLong();
 			CrateBlockEntity be = level.getBlockEntity(cp) instanceof CrateBlockEntity b && e.getKey().equals(b.siteId()) ? b : null;
-			switch (crateFate(be != null, p.ledger.credited(key))) {
+			switch (crateFate(be != null, p.ledger.credited(key), crateBlockAt(level, c))) {
 				case JOIN -> {
 					Ledger l = be.ledger();
 					Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());
-					Map<String, Integer> over = p.ledger.adopt(key, l.delivered(), l.placed(), byTarget, capacity(srv, p), Stockpiles::maxStack);
+					p.ledger.adopt(key, l.delivered(), l.placed(), byTarget, Integer.MAX_VALUE, Stockpiles::maxStack); // never drops here
+					l.stock().forEach((k, v) -> came.merge(k, v, Integer::sum));
 					Map<String, Integer> keyed = new TreeMap<>();
 					byTarget.values().forEach(m -> m.forEach((k, v) -> keyed.merge(k, v, Integer::sum)));
 					Map<String, Integer> unkeyed = new TreeMap<>();
@@ -955,48 +970,79 @@ public final class Stockpiles {
 						Architect.LOGGER.info("Stockpile {}: adopted crate {}: placed {} keyed to no target (none of its targets stands on it; never refundable)", owner,
 							e.getKey(), unkeyed);
 					}
-					over.forEach((k, v) -> dropped.merge(k, v, Integer::sum));
-					l.takeStock(); // the crate's ledger now holds nothing (its block goes next)
-					be.ledgerChanged();
-					Builder.restoreCrateCell(level, c);
-					SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+					take.put(e.getKey(), be);
+					credited = true;
 				}
-				// (ADP) an earlier adoptCrates joined it and saved (SAC2): its cell was restored with that save; the release again is a no-op
-				// when it was saved too. Never the cell again: something may stand there since
-				case JOINED -> SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+				case FINISH -> {
+					Architect.LOGGER.warn("Stockpile {}: crate {} at {} was credited by an adoptCrates that stopped before taking it; taken now", owner, e.getKey(),
+						cp.toShortString());
+					take.put(e.getKey(), be);
+				}
+				// (ADP) an earlier adoptCrates took it and saved: never the cell again (something may stand there since); the release again is
+				// a no-op when it was saved too
+				case JOINED -> released.add(e.getKey());
 				case DEFER -> {
 					deferred.add(e.getKey());
 					Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted: {}; it stays as it is (its stock, its journal entry, its targets' references) "
-						+ "and a later adoptCrates retries", owner, e.getKey(), cp.toShortString(), be == null ? "its block entity could not be read as that crate's"
-							: "its key is credited but the crate still stands");
+						+ "and a later adoptCrates retries", owner, e.getKey(), cp.toShortString(), be == null ? "a crate of another owner stands there, or none of "
+							+ "its own was credited" : "unreadable");
 				}
 			}
 		}
-		// (SAD, SAC1) the ledger joined and the crate cells restored are saved together first (with the world: a crate's stock lives in its
-		// block entity), and only then do the records lose their crates (Sites' writes save architect-sites.json at once). Before, the records
-		// were saved first: a crash before the ledger's save left the crate standing in the reverted world with no record naming it, its stock
-		// and placed counts lost. A crash between the two saves (SAC2) is repaired by the next adoptCrates: its crate keys are credited, so a
-		// record that still names a gone crate is cleared without crediting the crate twice
-		Builder.dropItems(level, drop, dropped, null);
-		changed(p);
-		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		WorldJournal.kill("SAC1"); // (SAD, test) the crates credited in memory, nothing saved, nothing taken
+		if (credited) {
+			changed(p);
+			inAdoptSave = "ADP1";
+			try {
+				saveConfirmed(srv);
+			} catch (IllegalStateException ex) {
+				restoreLedger(p, before); // the credits go: the crates stay theirs (a later save never writes a credit whose crate was not taken)
+				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the credits could not be saved (" + ex.getMessage() + "); nothing adopted");
+			} finally {
+				inAdoptSave = null;
+			}
+		}
+		WorldJournal.kill("ADP2"); // (ADP, test) the credits saved, the crates still full
+		// 2. the takes: each credited crate emptied, its cell restored, its journal kind released; saved confirmed with the world. A crash inside
+		// (ADP3: the cells written, the ledger unchanged anyway) or before it: the credit is on disk and the records still name the crates
+		for (var e : take.entrySet()) {
+			CrateBlockEntity be = e.getValue();
+			be.ledger().takeStock(); // credited above (or by the stopped adoptCrates): its block goes next
+			be.ledgerChanged();
+			Builder.restoreCrateCell(level, crates.get(e.getKey()));
+			SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+		}
+		released.forEach(k -> SiteJournal.releaseKind(k, WorldJournal.CRATE));
+		if (!take.isEmpty()) {
+			changed(p);
+			inAdoptSave = "ADP3";
+			try {
+				saveConfirmed(srv);
+			} catch (IllegalStateException ex) {
+				// the credits are on disk; the records keep naming the crates, so the start's repair or the next adoptCrates finishes them
+				throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates: the taken crates could not be saved (" + ex.getMessage() + "); finished later");
+			} finally {
+				inAdoptSave = null;
+			}
+		}
+		// 3. only then do the records lose their crates (Sites' writes save architect-sites.json at once). A crash between (SAC2) is repaired at
+		// the start: the crate keys are credited and the crates gone, so a record that still names one is cleared without crediting it twice
 		for (var e : crates.entrySet()) {
 			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX) && !deferred.contains(e.getKey())) {
 				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
 				if (g != null && g.crate() != null && clearsReference(namesJoined(p.ledger::credited, g.crateOwner(), null, g.crate().x(), g.crate().y(), g.crate()
-					.z()), crateStandsAt(level, g.crate(), g.crateOwner()))) {
+					.z()), crateBlockAt(level, g.crate()))) {
 					Sites.putGroup(srv, g.withCrate(null));
 				}
 			}
 		}
-		WorldJournal.kill("SAC2"); // (SAD, test) the ledger saved, the groups' crates cleared, the sites' crate references not yet
+		WorldJournal.kill("SAC2"); // (SAD, test) the ledger and the takes saved, the groups' crates cleared, the sites' crate references not yet
 		List<Object> joined = new ArrayList<>();
 		for (Site s : sites) {
 			Site cur = Sites.get(s.id());
-			// (ADP) only a reference to a crate this ledger credited (now or before) and whose block is gone: a deferred crate keeps its targets
-			if (cur != null && cur.construction() != null && cur.construction().crate() != null && clearsReference(joinedBefore(p, cur), crateStandsAt(level, cur
-				.construction().crate(), Builder.crateOwner(cur)))) {
+			// (ADP) only a reference to a crate this ledger credited (now or before) and with no crate block left: a deferred crate keeps its targets
+			if (cur != null && cur.construction() != null && cur.construction().crate() != null && clearsReference(joinedBefore(p, cur), crateBlockAt(level, cur
+				.construction().crate()))) {
 				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				Builder.forgetRun(s.id());
 				if (cur.building()) {
@@ -1007,10 +1053,12 @@ public final class Stockpiles {
 		for (Infra i : roads) {
 			Infra cur = Infras.get(i.id());
 			Construction.Crate ic = cur == null || cur.construction() == null ? null : cur.construction().crate();
-			if (ic != null && cur.group() != null && clearsReference(namesJoined(p.ledger::credited, cur.id(), cur.group(), ic.x(), ic.y(), ic.z()), crateStandsAt(level,
-				ic, SiteGroupRec.CRATE_PREFIX + cur.group()))) {
+			if (ic != null && cur.group() != null && clearsReference(namesJoined(p.ledger::credited, cur.id(), cur.group(), ic.x(), ic.y(), ic.z()), crateBlockAt(level,
+				ic))) {
 				Infras.put(srv, cur.withConstruction(cur.construction().withCrate(null)));
-				joined.add(Infras.get(i.id()));
+				if (cur.building()) {
+					joined.add(Infras.get(i.id())); // (ADP) a BUILT road is paid: it joins no feed
+				}
 			}
 		}
 		// they join the feed order at the end, in placement order
@@ -1022,9 +1070,57 @@ public final class Stockpiles {
 		}
 		changed(p);
 		saveWithWorld(srv); // the feed order
-		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}{}", owner, crates.size() - deferred.size(), sites.size(), roads.size(),
+		// 4. (ADP) what is over capacity of what came in drops last, booked and dropped together. A crash between the entities' write and the
+		// ledger's leaves both (a mint of the overflow, never a loss); before it, the stock is over capacity (allowed: nothing enters until it fits)
+		Map<String, Integer> dropped = overCapacity(p.ledger, came, capacity(srv, p), Stockpiles::maxStack);
+		if (!dropped.isEmpty()) {
+			Builder.dropItems(level, dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above()), dropped, null);
+			changed(p);
+			saveWithWorld(srv);
+		}
+		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}{}", owner, take.size(), sites.size(), roads.size(),
 			deferred.isEmpty() ? "" : "; deferred " + deferred, dropped.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
+	}
+
+	/** (ADP, TEST) Which adoptCrates save is running: its kill point (ADP1, ADP3) halts after the chunk writes, before the ledger's. */
+	static volatile @Nullable String inAdoptSave;
+
+	/**
+	 * (ADP) Books as dropped, of what came in ({@code came}, by item id, deterministic), the least that brings the stock back within
+	 * {@code capacityStacks}: a partial stack first, as {@link StockLedger#adopt} drops. Returns what to drop as items.
+	 */
+	static Map<String, Integer> overCapacity(StockLedger l, Map<String, Integer> came, int capacityStacks, java.util.function.ToIntFunction<String> maxStack) {
+		Map<String, Integer> out = new TreeMap<>();
+		for (var e : new TreeMap<>(came).entrySet()) {
+			int left = e.getValue();
+			int max = Math.max(1, maxStack.applyAsInt(e.getKey()));
+			while (left > 0 && l.usedStacks(maxStack) > capacityStacks) {
+				int s = l.stock(e.getKey());
+				if (s <= 0) {
+					break;
+				}
+				int chunk = Math.min(left, s % max == 0 ? max : s % max);
+				int n = l.drop(e.getKey(), chunk);
+				if (n <= 0) {
+					break;
+				}
+				out.merge(e.getKey(), n, Integer::sum);
+				left -= n;
+			}
+		}
+		return out;
+	}
+
+	/** (ADP) The pile's ledger put back to {@code saved} (an adoption whose credits could not be saved): the pile record replaced in place. */
+	private static void restoreLedger(Pile p, JsonObject saved) {
+		Pile q = new Pile(p.id, p.owner, p.dimension, StockLedger.fromJson(saved));
+		q.crates.addAll(p.crates);
+		q.order.addAll(p.order);
+		q.waits = p.waits;
+		q.lastEvent = p.lastEvent;
+		PILES.put(p.id, q);
+		changed(q);
 	}
 
 	/**
@@ -1037,11 +1133,17 @@ public final class Stockpiles {
 		boolean any = false;
 		for (Pile p : List.copyOf(PILES.values())) {
 			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			// (ADP, FINISH) a credited crate a record still names and that still stands as its owner's: the adoptCrates that credited it stopped
+			// before its take was saved (ADP2, ADP3). Taken now (its credit is on disk: nothing credited twice), saved confirmed, then cleared
+			int finished = finishTakes(srv, p, level);
+			if (finished < 0) {
+				continue; // not saved: nothing cleared, tried again at the next start
+			}
 			List<Object> joined = new ArrayList<>();
 			for (Site s : Sites.all()) {
-				// (ADP) never a reference whose crate still stands (credited only when the stand check runs: an ordinary start reads no block)
-				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s) && clearsReference(true, crateStandsAt(level, s
-					.construction().crate(), Builder.crateOwner(s)))) {
+				// (ADP) never a reference with a crate block at its cell (read only for a credited one: an ordinary start reads no block)
+				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s) && clearsReference(true, crateBlockAt(level, s
+					.construction().crate()))) {
 					Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
 					Builder.forgetRun(s.id());
 					any = true;
@@ -1055,8 +1157,7 @@ public final class Stockpiles {
 			for (Infra i : Infras.all()) {
 				Construction c = i.construction();
 				if (c != null && c.crate() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && i.group() != null && namesJoined(
-					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z()) && clearsReference(true, crateStandsAt(level, c.crate(),
-						SiteGroupRec.CRATE_PREFIX + i.group()))) {
+					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z()) && clearsReference(true, crateBlockAt(level, c.crate()))) {
 					Infras.put(srv, i.withConstruction(c.withCrate(null)));
 					any = true;
 					if (i.building()) {
@@ -1067,7 +1168,7 @@ public final class Stockpiles {
 			for (SiteGroupRec g : Sites.groups()) {
 				Construction.Crate c = g.crate();
 				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z()) && clearsReference(true,
-					crateStandsAt(level, c, g.crateOwner()))) {
+					crateBlockAt(level, c))) {
 					Sites.putGroup(srv, g.withCrate(null));
 					any = true;
 				}
@@ -1089,6 +1190,62 @@ public final class Stockpiles {
 	}
 
 	/**
+	 * (ADP, FINISH) The pile's credited crates that a record (a site's, a road's or a group's) still names and that still stand as their owner's
+	 * crate: emptied, their cells restored, their journal kinds released, then saved confirmed. How many were taken (0: nothing to do), or -1
+	 * when the save was refused (logged; the references stay and the next start tries again). Server thread.
+	 */
+	private static int finishTakes(MinecraftServer srv, Pile p, @Nullable ServerLevel level) {
+		if (level == null) {
+			return 0;
+		}
+		Map<String, Construction.Crate> named = new LinkedHashMap<>();
+		for (Site s : Sites.all()) {
+			if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s)) {
+				named.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
+			}
+		}
+		for (Infra i : Infras.all()) {
+			Construction c = i.construction();
+			if (c != null && c.crate() != null && i.group() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && namesJoined(
+				p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z())) {
+				named.putIfAbsent(SiteGroupRec.CRATE_PREFIX + i.group(), c.crate());
+			}
+		}
+		for (SiteGroupRec g : Sites.groups()) {
+			Construction.Crate c = g.crate();
+			if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z())) {
+				named.putIfAbsent(g.crateOwner(), c);
+			}
+		}
+		int n = 0;
+		for (var e : named.entrySet()) {
+			Construction.Crate c = e.getValue();
+			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
+			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
+				Map<String, Integer> left = be.ledger().takeStock();
+				be.ledgerChanged();
+				Builder.restoreCrateCell(level, c);
+				SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+				n++;
+				Architect.LOGGER.warn("Stockpile {}: crate {} at {} was credited by an adoptCrates that stopped before its take was saved; taken now ({} item(s), "
+					+ "credited then)", p.owner, e.getKey(), cp.toShortString(), left.values().stream().mapToInt(Integer::intValue).sum());
+			}
+		}
+		if (n == 0) {
+			return 0;
+		}
+		changed(p);
+		try {
+			saveConfirmed(srv);
+			return n;
+		} catch (IllegalStateException ex) {
+			Architect.LOGGER.error("Stockpile {}: the finished takes could not be saved ({}); their references stay, tried again at the next start", p.owner,
+				ex.getMessage());
+			return -1;
+		}
+	}
+
+	/**
 	 * (SAD, SAC2, the pure seam) Whether a crate reference at (x, y, z) of target {@code id} (in {@code group}) names a crate whose
 	 * adoption key the ledger credited: its own crate's key, or its group's shared one (the group's crate may be cleared already, then
 	 * {@link Builder#crateOwner} names the target). With no adoption key credited (every ordinary world start) it is never true, so the
@@ -1101,41 +1258,58 @@ public final class Stockpiles {
 
 	/** (ADP) What adoptCrates does with one crate: {@link #crateFate}. */
 	enum CrateFate {
-		/** Read as its owner's crate, its key not credited: credited, its stock taken, its cell restored, its journal kind released. */
+		/** Read as its owner's crate, its key not credited: credited (saved), then taken, its cell restored, its journal kind released. */
 		JOIN,
-		/** Its key credited by an earlier adoptCrates that saved (SAC2), its block gone: only its targets' references left to clear. */
+		/** Read as its owner's crate, its key already credited (an adoptCrates that stopped between its credit's save and its take): taken now. */
+		FINISH,
+		/** Its key credited, no crate block left at its cell: taken by an earlier adoptCrates; only its targets' references left to clear. */
 		JOINED,
 		/**
-		 * Not read (its block entity missing, another owner's, or unreadable from this thread), or read but its key already credited: left
-		 * exactly as it is (block, stock, journal entry, its targets' references); the next adoptCrates retries it.
+		 * Anything else (its key not credited and no crate of its owner reads there; or credited while a crate of another owner stands there):
+		 * left exactly as it is (block, stock, journal entry, its targets' references); the next adoptCrates retries it.
 		 */
 		DEFER
 	}
 
 	/**
 	 * (ADP, the pure seam) A crate's fate in adoptCrates: {@code read}, its block entity is its owner's crate; {@code credited}, its
-	 * adoption key is in the ledger. Its cell is restored and its crate released only when its stock was read and credited now (JOIN):
-	 * before ADP an unread crate was restored and released anyway, and its targets lost their reference, the crate's stock with it.
+	 * adoption key is in the ledger; {@code crateBlock}, any crate block entity stands at its cell. Its stock is taken only when read
+	 * (JOIN after its credit's save, or FINISH); before ADP an unread crate was restored and released anyway, its stock lost.
 	 */
-	static CrateFate crateFate(boolean read, boolean credited) {
-		if (credited) {
-			return read ? CrateFate.DEFER : CrateFate.JOINED;
+	static CrateFate crateFate(boolean read, boolean credited, boolean crateBlock) {
+		if (read) {
+			return credited ? CrateFate.FINISH : CrateFate.JOIN;
 		}
-		return read ? CrateFate.JOIN : CrateFate.DEFER;
+		return credited && !crateBlock ? CrateFate.JOINED : CrateFate.DEFER;
 	}
 
 	/**
 	 * (ADP, the pure seam) Whether a target's (or group's) crate reference is cleared: only when it names a crate the ledger credited
-	 * ({@link #namesJoined}) and no crate of that owner stands there any more (one still standing holds its stock: clearing its reference
-	 * would orphan it). adoptCrates' second half and the start's {@link #repairJoinedCrates} both decide by it.
+	 * ({@link #namesJoined}) and no crate block stands at its cell any more (one still standing holds stock: clearing its reference would
+	 * orphan it). adoptCrates' third step and the start's {@link #repairJoinedCrates} both decide by it.
 	 */
 	static boolean clearsReference(boolean credited, boolean crateStands) {
 		return credited && !crateStands;
 	}
 
-	/** (ADP) Whether the crate block entity of {@code ownerKey} (a site id or {@code group:<id>}) stands at the crate's cell. Server thread. */
-	private static boolean crateStandsAt(@Nullable ServerLevel level, Construction.Crate c, String ownerKey) {
-		return level != null && level.getBlockEntity(new BlockPos(c.x(), c.y(), c.z())) instanceof CrateBlockEntity be && ownerKey.equals(be.siteId());
+	/** (ADP) Whether any crate block entity (whatever its owner tag) stands at the crate's cell. Server thread (else nothing reads). */
+	private static boolean crateBlockAt(@Nullable ServerLevel level, Construction.Crate c) {
+		return level != null && level.getBlockEntity(new BlockPos(c.x(), c.y(), c.z())) instanceof CrateBlockEntity;
+	}
+
+	/**
+	 * (ADP) For a guard: whether a site's crate reference may still name a standing crate. True unless its cell is read, on the server
+	 * thread (its chunk loaded if need be), and holds no crate block of any owner: an unknown cell counts as a standing crate, never as gone.
+	 */
+	public static boolean crateMayStand(@Nullable ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (c == null || c.crate() == null) {
+			return false;
+		}
+		if (level == null || !level.getServer().isSameThread()) {
+			return true;
+		}
+		return crateBlockAt(level, c.crate());
 	}
 
 	/** (SAD, SAC2) Whether a site's crate reference names a crate this stockpile's ledger already joined (its key credited, its block gone). */
@@ -1529,6 +1703,21 @@ public final class Stockpiles {
 		}
 		Site s = Sites.pendingRecord(key.substring(5, at));
 		return s != null && key.equals(Builder.creditKey(s));
+	}
+
+	/**
+	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
+	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
+	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
+	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
+	 */
+	static void saveConfirmed(MinecraftServer srv) {
+		if (unsaved || loadFailed) {
+			saveWithWorld(srv);
+		}
+		if (unsaved || loadFailed) {
+			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
+		}
 	}
 
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
@@ -2869,6 +3058,12 @@ public final class Stockpiles {
 			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
 				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
 				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
+			}
+			String adp = inAdoptSave;
+			if (adp != null && adp.equals(WorldJournal.armed())) {
+				// (ADP, TEST kill points ADP1, ADP3) a crash inside adoptCrates' credit or take save: the players and the chunks on disk, the ledger not
+				Architect.LOGGER.error("Stockpiles: kill point {}: adoptCrates' save flushed its chunks, halting before the ledger write (dev.journal.killAt)", adp);
 				Runtime.getRuntime().halt(7);
 			}
 			if (Fills.haltBeforeLedger()) {

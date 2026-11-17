@@ -21,9 +21,7 @@
 //   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
-//   node tools/gate6dgr.mjs adpdefer     (adp-defer)     slice ADP: adoptCrates with the shared crate unreadable (its owner tag changed):
-//                                                       it stands, the ledger, stock, references and feed order unchanged; with its
-//                                                       chunk unloaded at the adoption: its stock moved exactly once; a third call no-op
+//   node tools/gate6dgr.mjs adpdefer|adpforward|adpcomplete|adproad (adp-*)  slice ADP: adoptCrates and its crates (the ADP block at the end)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -209,7 +207,7 @@ export async function registerSAD(steps, h) {
    * house_4); house_3 fed to BUILT, house_4 a third fed and paused (still building). `pileFirst` makes the stockpile before
    * b2 (no crate: b2 draws from it).
    */
-  async function suppliedTown(tag, W, { pileFirst = false } = {}) {
+  async function suppliedTown(tag, W, { pileFirst = false, own = false } = {}) {
     const T = layout(W.gy);
     const B0 = await cellsOf(BOX(W.gy));
     const entry = await ig.installCabin('sad_cabin');
@@ -220,7 +218,8 @@ export async function registerSAD(steps, h) {
     const [l1, l2, l3, l4] = T.lots;
     // (the street pieces are instant: a construction road reports no material rows to feed it by; b2's lots share one crate)
     const b1 = await build(T, entry, [l1, l2], [[T.x0, T.xm], [T.xm + 1, T.x1]], 'b1');
-    const b2 = await build(T, entry, [l3, l4], [], 'b2', { construction: true, sharedCrate: !pileFirst, crateAt: pileFirst ? null : CRATE_AT(W.gy), waitDone: false });
+    // (ADP) own: each lot of b2 with its own crate (no shared crate)
+    const b2 = await build(T, entry, [l3, l4], [], 'b2', { construction: true, sharedCrate: !pileFirst && !own, crateAt: pileFirst || own ? null : CRATE_AT(W.gy), waitDone: false });
     const ids = { ...b1.ids, ...b2.ids };
     await pause(ids.house_4, true);
     const s4 = await siteState(ids.house_4);
@@ -580,47 +579,90 @@ export async function registerSAD(steps, h) {
     return out;
   };
 
-  // (slice ADP) adoptCrates and a crate it cannot read: never restored or released, its stock and its targets' references kept, so a later
-  // adoptCrates (once the crate reads again) moves the stock exactly once. A: the shared crate's owner tag changed (/data merge, the block
-  // entity check fails: base restored the cell and cleared the references, the crate's stock lost). B: the crate's chunk unloaded at the
-  // adoption (the player far off; a server-thread read loads it): adopted in full. C: a third adoptCrates is a no-op.
-  steps.adpdefer = async () => {
-    await ensure();
+  // ------------------------------------------------------------------ (slice ADP) adoptCrates and its crates
+  // adp-defer   A: the shared crate unreadable (owner tag changed): deferred, intact (halts SAC1, SAC2); B: its chunk unloaded, halts SAC1
+  //             and ADP1 (inside the credit's save) roll back, then the live call adopts it once; C: a third call adds nothing
+  // adp-forward a fresh town per kill point ADP2 (the credit saved, the crate full), ADP3 (inside the take's save), SAC2 (the records):
+  //             after the unclean restart the start's repair finishes or clears it: the crate's stock once, the references cleared
+  // adp-complete a lot with its own crate, unreadable: adoptCrates defers it, the lot finished: the crate still stands with its stock;
+  //             Regions.adopt refuses while it stands; its tag back, adoptCrates takes it once
+  // adp-road    a construction road built from a shared crate beside a building house: adopted, the BUILT road gets its paid record;
+  //             after a restart its removal refunds its paid cells into the stockpile
+  // Conservation (rule 18) after every case: the audit's standing parts (stock, paid cells standing, crate stock, item entities, containers,
+  // inventory) over the fixture's box equal what they were before it.
+  const ADP_BOX = (gy) => ({ min: [CX - 45, gy - 12, CZ - 45], max: [CX + 175, gy + 40, CZ + 110] });
+  const crateBlock = 'architect_mc:construction_crate';
+  const audit = (area) => call('dev.stockpile.audit', { owner: OWNER, min: area.min, max: area.max }, 120_000);
+  const standing = (a) => {
+    let t = {};
+    for (const m of [a.inventory, a.containers, a.entities, a.stock, a.paidStanding, a.legacyCrateStock]) t = G.plus(t, m ?? {});
+    for (const k of Object.keys(t)) if (!t[k]) delete t[k];
+    return t;
+  };
+  function conserver(out, area, H0) {
+    return async (tag) => {
+      const a = await audit(area);
+      const h = standing(a);
+      const d = G.minus(h, H0);
+      for (const k of Object.keys(d)) if (!d[k]) delete d[k];
+      out.conserve = { ...(out.conserve ?? {}), [tag]: { diff: d, identity: a.identity } };
+      check(Object.keys(d).length === 0 && a.identity !== false, `${tag}: conservation: what stands (stock, paid cells standing, crate stock, item entities, containers, inventory: ${sum(h)}) equals what stood before (${sum(H0)}): ${json(d)}`, out.conserve[tag]);
+    };
+  }
+  const tagOf = async (at) => json((await cmd(`/data get block ${at.join(' ')} Site`).catch((e) => ({ messages: [String(e)] }))).messages ?? []);
+  const retag = (at, t) => cmd(`/data merge block ${at.join(' ')} {Site:"${t}"}`).catch(() => null);
+  const ledgerSame = (a, b) => G.same(a?.delivered, b?.delivered) && G.same(a?.dropped ?? {}, b?.dropped ?? {}) && json(a?.paid ?? {}) === json(b?.paid ?? {}) && G.same(stockOf(a), stockOf(b));
+  async function away(at) {
+    await L.tp(CX + 4000, 120, CZ + 4000);
+    let ld = true;
+    for (let i = 0; i < 40 && ld; i++) {
+      const r = await L.cmd(`/execute if loaded ${at.join(' ')}`).catch(() => null);
+      ld = !!(r?.success || Number(r?.result) > 0);
+      if (ld) await sleep(3000);
+    }
+    return !ld;
+  }
+  /** A fresh Supplied town (the shared crate, or own crates), the stockpile, the crate's cell, tag and ledger, the conservation baseline. */
+  async function adpTown(name, opts = {}) {
     const out = {};
-    const W = await world('G6B ADP Defer');
-    const { ids, b2 } = await suppliedTown('adp', W);
+    const W = await world(name);
+    const town = await suppliedTown('adp', W, opts);
     const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
     check(!cr.refused, `ADP: a stockpile of 4 crates for ${OWNER}`);
-    const s40 = await siteState(ids.house_4);
+    const s40 = await siteState(town.ids.house_4);
     const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
-    const tag = `${'group:'}${b2.group}`;
-    const crateBlock = 'architect_mc:construction_crate';
-    const got = await cmd(`/data get block ${at.join(' ')} Site`).catch((e) => ({ messages: [String(e)] }));
-    out.tag = { at, tag, got: got.messages };
-    check(s40.crate?.present === true && json(got.messages ?? []).includes(tag) && sum(s40.ledger?.stock) > 0,
-      `ADP: the shared crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items (placed ${sum(s40.ledger?.placed)})`, out.tag);
-    const p0 = await pile();
-    const order0 = p0.feedOrder ?? [];
-    // (rule 18) conservation: items in = where they are: the stockpile's stock, what it placed (consumed) and dropped, plus the shared crate's
-    // stock and placed counts while it stands and reads. Taken at every point the crate reads (before A, after each restart, after B and C)
-    const held = async () => {
-      const p = await pile();
-      const c = await siteState(ids.house_4);
-      const cl = c.crate?.present ? c.ledger : null;
-      return G.plus(G.plus(G.plus(stockOf(p.ledger), p.ledger?.consumed ?? {}), p.ledger?.dropped ?? {}), cl ? G.plus(cl.stock ?? {}, cl.placed ?? {}) : {});
-    };
-    const H0 = await held();
-    const conserve = async (tag) => {
-      const h = await held();
-      out.conserve = { ...(out.conserve ?? {}), [tag]: G.minus(h, H0) };
-      check(G.same(h, H0), `${tag}: conservation: the stockpile (stock + placed + dropped) and the crate (stock + placed) hold the ${sum(H0)} items they held before (${sum(h)}; difference ${json(G.minus(h, H0))})`, out.conserve[tag]);
-    };
-    const same = (a, b) => G.same(a?.delivered, b?.delivered) && G.same(a?.dropped ?? {}, b?.dropped ?? {}) && json(a?.paid ?? {}) === json(b?.paid ?? {}) && G.same(stockOf(a), stockOf(b));
-    const retag = (t) => cmd(`/data merge block ${at.join(' ')} {Site:"${t}"}`).catch(() => null);
+    const tag = opts.own ? town.ids.house_4 : `group:${town.b2.group}`;
+    const got = await tagOf(at);
+    out.tag = { at, tag, got };
+    check(s40.crate?.present === true && got.includes(tag) && sum(s40.ledger?.stock) > 0,
+      `ADP: the crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items (placed ${sum(s40.ledger?.placed)})`, out.tag);
+    const area = ADP_BOX(W.gy);
+    const H0 = standing(await audit(area));
+    return { out, W, ...town, s40, at, tag, area, conserve: conserver(out, area, H0), p0: await pile() };
+  }
+  /** After the crate's adoption: its stock moved once, its cell restored, both references cleared, house_4 fed (when building), house_3 paid. */
+  async function adoptedOnce(label, F, { building = true } = {}) {
+    const pB = await pile();
+    const moved = G.plus(G.minus(stockOf(pB.ledger), stockOf(F.p0.ledger)), G.minus(pB.ledger?.dropped ?? {}, F.p0.ledger?.dropped ?? {}));
+    const s3 = await siteState(F.ids.house_3);
+    const s4 = await siteState(F.ids.house_4);
+    const stands = await isBlock(F.at, crateBlock);
+    const rec3 = Object.entries(pB.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${F.ids.house_3}@`));
+    const r = { moved, crateStock: F.s40.ledger?.stock, refs: [s3.crate, s4.crate], order: pB.feedOrder, stands, rec3: rec3 ? sum(rec3[1]) : 0 };
+    F.out[label] = r;
+    check(G.same(moved, F.s40.ledger?.stock ?? {}) && !stands, `${label}: the crate's stock moved exactly once (${json(moved)}; it held ${json(F.s40.ledger?.stock)}), its cell restored`, r);
+    check(s4.crate?.x === undefined && (!building || ((pB.feedOrder ?? []).includes(F.ids.house_4) && !(pB.feedOrder ?? []).includes(F.ids.house_3))),
+      `${label}: the crate references cleared${building ? `; house_4 in the feed order, the BUILT house_3 not (${json(pB.feedOrder ?? [])})` : ''}`, r);
+    return pB;
+  }
+
+  steps.adpdefer = async () => {
+    await ensure();
+    const F = await adpTown('G6B ADP Defer');
+    const { out, W, ids, at, tag, s40, conserve, p0 } = F;
     // A: the crate unreadable (its owner tag is not its group's)
     const mA = await cmd(`/data merge block ${at.join(' ')} {Site:"adp:other"}`);
     check(mA?.success !== false, `ADP A: the crate's owner tag changed to adp:other (${json(mA?.messages ?? [])})`);
-    // (rule 18) A halted at each save point of the deferred adoption: SAC1 (before its first save) and SAC2 (after it, before the records)
     for (const [kp, savedByOp] of [['SAC1', false], ['SAC2', true]]) {
       const b = await baseline(`ADP A ${kp}`);
       await call('dev.journal.killAt', { point: kp }, 10_000);
@@ -629,86 +671,177 @@ export async function registerSAD(steps, h) {
       const stands = await isBlock(at, crateBlock);
       const r3 = await siteState(ids.house_3);
       const r4 = await siteState(ids.house_4);
-      out[`A${kp}`] = { stands, refs: [r3.crate, r4.crate], same: same(Ld, b.ledger) };
-      check(stands && same(Ld, b.ledger) && r3.crate?.x === at[0] && r4.crate?.x === at[0], `ADP A ${kp}: after the unclean restart the unreadable crate stands, the saved ledger as before, both references kept`, out[`A${kp}`]);
-      await retag(tag);
+      out[`A${kp}`] = { stands, refs: [r3.crate, r4.crate], same: ledgerSame(Ld, b.ledger) };
+      check(stands && ledgerSame(Ld, b.ledger) && r3.crate?.x === at[0] && r4.crate?.x === at[0], `ADP A ${kp}: after the unclean restart the unreadable crate stands, the saved ledger as before, both references kept`, out[`A${kp}`]);
+      await retag(at, tag);
       await conserve(`ADP A ${kp}`);
-      await retag('adp:other');
+      await retag(at, 'adp:other');
     }
-    const sA0 = await siteState(ids.house_4);
     const aA = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     const pA = await pile();
     const standsA = await isBlock(at, crateBlock);
     const s3A = await siteState(ids.house_3);
     const s4A = await siteState(ids.house_4);
-    const gotA = await cmd(`/data get block ${at.join(' ')}`).catch((e) => ({ messages: [String(e)] }));
-    out.A = { refused: aA.refused ?? null, readBefore: sA0.crate?.present, stands: standsA, refs: [s3A.crate, s4A.crate], order: pA.feedOrder, ledgerSame: same(pA.ledger, p0.ledger),
-      be: (gotA.messages ?? []).join(' ').slice(0, 600) };
-    check(!aA.refused && sA0.crate?.present === false && standsA && same(pA.ledger, p0.ledger),
-      `ADP A: adoptCrates with the crate unreadable (owner tag changed) left it standing (${standsA}) and the stockpile's ledger and stock unchanged (${out.A.ledgerSame})`, out.A);
-    check(s3A.crate?.x === at[0] && s4A.crate?.x === at[0] && !(pA.feedOrder ?? []).includes(ids.house_4) && json(pA.feedOrder ?? []) === json(order0),
-      `ADP A: both sites keep their crate reference and nothing joined the feed order (${json(pA.feedOrder ?? [])})`, out.A);
-    // the tag back: the crate reads again with its ledger untouched
-    await cmd(`/data merge block ${at.join(' ')} {Site:"${tag}"}`).catch(() => null); // (base: the cell was restored, no crate to tag)
+    out.A = { refused: aA.refused ?? null, stands: standsA, refs: [s3A.crate, s4A.crate], order: pA.feedOrder, same: ledgerSame(pA.ledger, p0.ledger) };
+    check(!aA.refused && standsA && ledgerSame(pA.ledger, p0.ledger), `ADP A: adoptCrates with the crate unreadable left it standing (${standsA}) and the stockpile's ledger unchanged`, out.A);
+    check(s3A.crate?.x === at[0] && s4A.crate?.x === at[0] && json(pA.feedOrder ?? []) === json(p0.feedOrder ?? []), `ADP A: both sites keep their crate reference; the feed order unchanged (${json(pA.feedOrder ?? [])})`, out.A);
+    await retag(at, tag);
     const s4B0 = await siteState(ids.house_4);
-    out.back = { present: s4B0.crate?.present, stock: s4B0.ledger?.stock, placed: s4B0.ledger?.placed };
     check(s4B0.crate?.present === true && G.same(s4B0.ledger?.stock, s40.ledger?.stock) && G.same(s4B0.ledger?.placed, s40.ledger?.placed),
-      `ADP A: with its tag back the crate reads again, its stock (${sum(s4B0.ledger?.stock)}) and placed counts as before: nothing lost`, out.back);
+      `ADP A: with its tag back the crate reads again, its stock (${sum(s4B0.ledger?.stock)}) and placed counts as before`, { stock: s4B0.ledger?.stock });
     await conserve('ADP A');
-    // (rule 18) B halted at each save point with the crate's chunk unloaded: SAC1 rolls back (the crate as it was), SAC2 rolls forward (the
-    // stock in the stockpile once, the references cleared by the start's repair); the live call after it credits nothing twice
-    const away = async () => {
-      await L.tp(CX + 4000, 120, CZ + 4000);
-      let ld = true;
-      for (let i = 0; i < 40 && ld; i++) {
-        const r = await L.cmd(`/execute if loaded ${at.join(' ')}`).catch(() => null);
-        ld = !!(r?.success || Number(r?.result) > 0);
-        if (ld) await sleep(3000);
-      }
-      return !ld;
-    };
-    for (const [kp, savedByOp] of [['SAC1', false], ['SAC2', true]]) {
+    // B: the crate's chunk unloaded; halts SAC1 (before the credit's save) and ADP1 (inside it: the chunks written, the ledger not) roll back
+    for (const kp of ['SAC1', 'ADP1']) {
       const b = await baseline(`ADP B ${kp}`);
-      const unloaded = await away();
+      const unloaded = await away(at);
       await call('dev.journal.killAt', { point: kp }, 10_000);
-      const Ld = await halt(`ADP B ${kp}`, W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp });
+      const Ld = await halt(`ADP B ${kp}`, W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null));
       if (!Ld) continue;
       const stands = await isBlock(at, crateBlock);
-      const movedK = G.plus(G.minus(stockOf(Ld), stockOf(b.ledger)), G.minus(Ld.dropped ?? {}, b.ledger?.dropped ?? {}));
-      out[`B${kp}`] = { unloaded, stands, moved: movedK };
-      if (kp === 'SAC1') check(stands && same(Ld, b.ledger), `ADP B SAC1 (chunk ${unloaded ? 'unloaded' : 'loaded'}): after the unclean restart the crate stands, the saved ledger as before`, out.BSAC1);
-      else check(!stands && G.same(movedK, s40.ledger?.stock ?? {}), `ADP B SAC2 (chunk ${unloaded ? 'unloaded' : 'loaded'}): after the unclean restart the stockpile holds the crate's stock once (${json(movedK)}), the cell restored`, out.BSAC2);
+      const c = await siteState(ids.house_4);
+      out[`B${kp}`] = { unloaded, stands, crateStock: c.ledger?.stock, same: ledgerSame(Ld, b.ledger) };
+      check(stands && G.same(c.ledger?.stock, s40.ledger?.stock) && ledgerSame(Ld, b.ledger), `ADP B ${kp} (chunk ${unloaded ? 'unloaded' : 'loaded'}): after the unclean restart the crate stands with its stock (${sum(c.ledger?.stock)}), the saved ledger as before (nothing credited)`, out[`B${kp}`]);
       await conserve(`ADP B ${kp}`);
     }
-    // B: the live call (after SAC2 the crate is joined: it credits nothing twice; the checks below hold against the state before A)
-    const loaded = !(await away());
+    // B live: adopted once
+    const unloaded = await away(at);
     const aB = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     await L.tp(CX + 80, 80, CZ + 48);
     await sleep(3000);
-    const pB = await pile();
-    const moved = G.plus(G.minus(stockOf(pB.ledger), stockOf(p0.ledger)), G.minus(pB.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
-    const s3B = await siteState(ids.house_3);
-    const s4B = await siteState(ids.house_4);
-    const standsB = await isBlock(at, crateBlock);
-    out.B = { unloadedAtAdopt: !loaded, refused: aB.refused ?? null, moved, crateStock: s40.ledger?.stock, refs: [s3B.crate, s4B.crate], order: pB.feedOrder, stands: standsB };
-    check(!aB.refused && G.same(moved, s40.ledger?.stock ?? {}) && !standsB,
-      `ADP B: adoptCrates (SAC1, SAC2 halts and the live call) with the crate's chunk ${loaded ? 'still loaded (unloading not shown: held loaded)' : 'unloaded'} moved its stock exactly once (${json(moved)}; the crate held ${json(s40.ledger?.stock)}) and restored its cell`, out.B);
-    const rec3 = Object.entries(pB.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
-    out.B.rec3 = rec3 ?? null;
-    check(s3B.crate?.x === undefined && s4B.crate?.x === undefined && (pB.feedOrder ?? []).includes(ids.house_4) && !(pB.feedOrder ?? []).includes(ids.house_3),
-      `ADP B: both crate references cleared; house_4 joins the feed order, the BUILT house_3 not (${json(pB.feedOrder ?? [])})`, out.B);
-    check(!!rec3 && sum(rec3[1]) > 0, `ADP B: the BUILT house_3 on the out-of-range crate got its paid record (${rec3 ? sum(rec3[1]) : 0} units)`, out.B);
+    check(!aB.refused, `ADP B: adoptCrates with the crate's chunk ${unloaded ? 'unloaded' : 'still loaded (unloading not shown)'} (${json(aB.refused ?? 'adopted')})`);
+    const pB = await adoptedOnce('ADP B', F);
+    check(out['ADP B'].rec3 > 0, `ADP B: the BUILT house_3 on the out-of-range crate got its paid record (${out['ADP B'].rec3} units)`, out['ADP B']);
     await conserve('ADP B');
-    // C: again: a no-op
+    // C: again: nothing more
     const aC = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     const pC = await pile();
-    // (what an adoption writes: delivered, dropped, the paid records, the feed order; house_4, in the feed order, may draw meanwhile)
-    const differs = [...new Set([...Object.keys(pB.ledger ?? {}), ...Object.keys(pC.ledger ?? {})])].filter((k) => json(pB.ledger?.[k]) !== json(pC.ledger?.[k]));
-    out.C = { refused: aC.refused ?? null, differs };
-    check(!aC.refused && G.same(pC.ledger?.delivered, pB.ledger?.delivered) && G.same(pC.ledger?.dropped ?? {}, pB.ledger?.dropped ?? {})
-      && json(pC.ledger?.paid ?? {}) === json(pB.ledger?.paid ?? {}) && json(pC.feedOrder) === json(pB.feedOrder),
-      `ADP C: adoptCrates a third time adds nothing: delivered, dropped, paid records and feed order equal (ledger fields that moved meanwhile: ${json(differs)})`, out.C);
+    out.C = { refused: aC.refused ?? null };
+    check(!aC.refused && ledgerSame(pC.ledger, pB.ledger) && json(pC.feedOrder) === json(pB.feedOrder), 'ADP C: adoptCrates a third time adds nothing (delivered, dropped, paid records, stock, feed order)', out.C);
     await conserve('ADP C');
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  steps.adpforward = async () => {
+    await ensure();
+    const all = {};
+    for (const [kp, savedByOp] of [['ADP2', true], ['ADP3', true], ['SAC2', true]]) {
+      const F = await adpTown(`G6B ADP Fwd ${kp}`);
+      const b = await baseline(`ADP ${kp}`);
+      const unloaded = await away(F.at);
+      await call('dev.journal.killAt', { point: kp }, 10_000);
+      const Ld = await halt(`ADP ${kp}`, F.W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp });
+      if (Ld) {
+        const pB = await adoptedOnce(`ADP ${kp} (chunk ${unloaded ? 'unloaded' : 'loaded'}) after the unclean restart`, F);
+        F.out.rec3 = Object.entries(pB.ledger?.paid ?? {}).some(([k]) => k.startsWith(`site:${F.ids.house_3}@`));
+        check(F.out.rec3, `ADP ${kp}: the BUILT house_3 has its paid record`);
+        await F.conserve(`ADP ${kp}`);
+        const again = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        const pC = await pile();
+        check(!again.refused && ledgerSame(pC.ledger, pB.ledger), `ADP ${kp}: a later adoptCrates credits nothing twice`);
+        await F.conserve(`ADP ${kp} again`);
+      }
+      all[kp] = F.out;
+      await L.leaveWorld();
+    }
+    spendZero();
+    return all;
+  };
+
+  steps.adpcomplete = async () => {
+    await ensure();
+    const F = await adpTown('G6B ADP Complete', { own: true });
+    const { out, ids, at, tag, s40, conserve, T } = F;
+    await retag(at, 'adp:other');
+    const a1 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    check(!a1.refused && await isBlock(at, crateBlock), `ADP complete: adoptCrates defers house_4's own crate (unreadable): it stands`);
+    await pause(ids.house_4, false);
+    const fin = await call('dev.site.finish', { site: ids.house_4 }, 120_000);
+    const s4 = await builtWait(ids.house_4, 300_000);
+    const stands = await isBlock(at, crateBlock);
+    await retag(at, tag);
+    const s4b = await siteState(ids.house_4);
+    out.complete = { finish: fin.refused ?? 'ok', state: s4.state, stands, crate: s4b.crate, stock: s4b.ledger?.stock };
+    check(['BUILT', 'built'].includes(s4.state) && stands && s4b.crate?.present === true && G.same(s4b.ledger?.stock, s40.ledger?.stock),
+      `ADP complete: house_4 finished (${s4.state}) while its crate was deferred: the crate still stands with its stock (${sum(s4b.ledger?.stock)}; base restored its cell)`, out.complete);
+    await conserve('ADP complete: finished');
+    // Regions.adopt refuses while a BUILT lot's crate stands (whatever its tag)
+    await retag(at, 'adp:other');
+    const S0 = await cellsOf(BOX(F.W.gy));
+    const r0 = await call('dev.ad.adopt', adoptReq(T, ids), 900_000);
+    out.region = r0.refused ?? r0.state ?? null;
+    check(String(r0.refused ?? '').startsWith('NOT_ALLOWED') && diff(S0, await cellsOf(BOX(F.W.gy))).n === 0,
+      `ADP complete: Regions.adopt with house_4's crate standing (another tag) refused, nothing written (${out.region})`, out.region);
+    await retag(at, tag);
+    const a2 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    check(!a2.refused, `ADP complete: with its tag back adoptCrates takes it (${json(a2.refused ?? 'adopted')})`);
+    await adoptedOnce('ADP complete: adopted', F, { building: false });
+    const p = await pile();
+    const rec4 = Object.entries(p.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_4}@`));
+    check(!!rec4 && sum(rec4[1]) > 0, `ADP complete: the BUILT house_4 got its paid record (${rec4 ? sum(rec4[1]) : 0} units)`);
+    await conserve('ADP complete: adopted');
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  steps.adproad = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B ADP Road');
+    const entry = await ig.installCabin('sad_cabin');
+    await call('dev.survival.set', { on: true });
+    const X = CX + 20, Z = CZ + 20;
+    await cmd('/gamemode creative');
+    await L.tp(X + 20.5, W.gy + 30, Z + 10.5, 0, 89);
+    const y = await groundY(X, Z) + 1;
+    await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 42} ${y - 1} ${Z + 3} minecraft:stone`);
+    await cmd(`/fill ${X - 3} ${y} ${Z - 3} ${X + 42} ${y + 3} ${Z + 3} minecraft:air`);
+    await L.settle(2000);
+    const road = { points: [[X, y, Z], [X + 39, y, Z]], width: 1, owner: OWNER, mode: 'CONSTRUCTION' };
+    const rc = await api(`roadcheck ${json(road)}`);
+    check(rc.ok && rc.construction && sum(rc.bom) > 0, `ADP road: a paid construction road (BOM ${json(rc.bom)})`, rc.refusals);
+    const area = { min: [CX - 45, y - 12, Z - 60], max: [X + 60, y + 30, Z + 20] };
+    const batch = { owner: OWNER, sharedCrate: true, autoApprove: true, crateAt: [X + 20, y, Z - 10], items: [
+      { key: 'h1', bp: entry, at: [X, y, Z - 40], mode: 'AUTO' }, { key: 'r1', road: { ...road, mode: 'AUTO' } }] };
+    const bid = await later(`bqueue ${json(batch)}`);
+    let bv;
+    for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((it) => ['PLACED', 'FAILED'].includes(it.status))) break; await sleep(1000); }
+    const items = Object.fromEntries((bv.items ?? []).map((it) => [it.key, it]));
+    check(['h1', 'r1'].every((k) => items[k]?.status === 'PLACED'), `ADP road: the batch placed (${json(bv.items?.map((i) => [i.key, i.status, i.reason]))})`);
+    const roadId = items.r1?.site, h1 = items.h1?.site;
+    if (!roadId || !h1) { await L.leaveWorld(); spendZero(); return out; }
+    await pause(h1, true);
+    const ins = await call('dev.crate.insert', { site: roadId, items: rc.bom }, 60_000);
+    let rv;
+    for (let i = 0; i < 180; i++) { rv = (await api('sites')).all.find((s) => s.id === roadId); if (rv?.state === 'BUILT') break; await sleep(1000); }
+    check(rv?.state === 'BUILT' && G.same(ins.accepted, rc.bom), `ADP road: ${roadId} fed its BOM and BUILT (${rv?.state}); house ${h1} still building on the shared crate`);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `ADP road: a stockpile for ${OWNER}`);
+    const H0 = standing(await audit(area));
+    const conserve = conserver(out, area, H0);
+    const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const p1 = await pile();
+    const rec = Object.entries(p1.ledger?.paid ?? {}).find(([k]) => k.startsWith(`road:${roadId}@`));
+    out.adopt = { refused: ac.refused ?? null, record: rec ?? null, order: p1.feedOrder };
+    check(!ac.refused && !!rec && G.same(rec[1], rc.bom) && !(p1.feedOrder ?? []).includes(roadId) && (p1.feedOrder ?? []).includes(h1),
+      `ADP road: adoptCrates keyed the BUILT road's paid record (${rec ? json(rec[1]) : 'none'}; its BOM ${json(rc.bom)}); it joins no feed, the house does`, out.adopt);
+    await conserve('ADP road: adopted');
+    // a clean restart, then the road removed: its paid cells refunded into the stockpile
+    const dir = path.basename(W.dir);
+    await L.leaveWorld();
+    await L.openWorld(dir);
+    await L.tp(X + 20.5, y + 30, Z + 10.5, 0, 89);
+    await sleep(3000);
+    const before = await pile();
+    const rm = await later(`remove ${roadId} ${OWNER} noforce`);
+    await L.settle(3000);
+    const after = await pile();
+    const back = G.minus(stockOf(after.ledger), stockOf(before.ledger));
+    out.remove = { removed: rm.removed, back };
+    check(rm.removed && G.same(back, rc.bom), `ADP road: after the restart the road's removal refunded its paid cells into the stockpile (${json(back)}; base: 0)`, out.remove);
+    await conserve('ADP road: removed');
     await L.leaveWorld();
     spendZero();
     return out;

@@ -2138,7 +2138,13 @@ public final class Builder {
 		keepDelivered(srv, s, crate, keepCrate);
 		Map<String, Integer> left = crate != null && !keepCrate ? crate.ledger().takeStock() : Map.of();
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
-		if (c.crate() != null && !keepCrate && (crate != null || level.isLoaded(at))) {
+		// (ADP) never over a crate it could not read as its own (one adoptCrates deferred, another owner's tag): its stock is still in it
+		boolean foreign = crate == null && c.crate() != null && level.isLoaded(at) && level.getBlockEntity(at) instanceof CrateBlockEntity;
+		if (foreign) {
+			Architect.LOGGER.warn("Construction site {}: built, but the crate at {} does not read as its own; it stays (its stock with it) and its journal "
+				+ "entry is kept", s.id(), at.toShortString());
+		}
+		if (c.crate() != null && !keepCrate && !foreign && (crate != null || level.isLoaded(at))) {
 			restoreCrateCell(level, c.crate());
 			SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // its cell is the ground again (phase 4e)
 		}
