@@ -282,6 +282,16 @@ public final class RegionItems {
 		}
 	}
 
+	/** (8a HB) As {@link #waitStageFor(QBatch, String, String, String, String)}, typed {@code kind: "terrain"} on a staged terrain target. */
+	public static void waitStageFor(net.minecraft.server.MinecraftServer srv, QBatch b, String stage, String target,
+		@org.jspecify.annotations.Nullable String part, String detail) {
+		for (QItem i : b.inStage(stage)) {
+			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {
+				RegionTargets.waitForTarget(srv, b, i, target, part, detail);
+			}
+		}
+	}
+
 	public static void waitStage(QBatch b, String stage, Reason why, String msg) {
 		for (QItem i : b.inStage(stage)) {
 			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {

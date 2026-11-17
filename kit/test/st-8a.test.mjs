@@ -71,3 +71,20 @@ test('x03h: the check\'s terrain bill is kept by position, so the quote can leav
   assert.equal(cells, 49, 'every one is a kept paid terrain cell by position (plan.json survivalTerrain): Regions.quote reads them against the land');
   assert.equal(r.res.survivalTerrainWritten ?? null, null, 'none is always written first by an earlier evaluation (the quote may leave them out)');
 });
+
+test('an IR accepted before ST (no survival.opMap) evaluates with the legacy flag mapping it was quoted with', async () => {
+  const { ir, blobs } = await survivalPlan('valid/v73_f3_coral_pond.json');
+  assert.equal(ir.survival.opMap, 'compiled', 'a new survival IR with a decor bed carries the mark');
+  const irOps = ir.parts.flatMap((p) => p.ops ?? []);
+  const fresh = compileIR(ir, { blobs });
+  const legacyIr = JSON.parse(JSON.stringify(ir));
+  delete legacyIr.survival.opMap;
+  const legacy = compileIR(legacyIr, { blobs });
+  // the legacy mapping reads flags by IR op index: the compiled op after a bed takes the next IR op's flags
+  const byIr = Uint8Array.from(irOps.map((o) => (o.op === 'fluid' ? 1 : 0)));
+  assert.deepEqual([...legacy.survival.opFluid].slice(0, irOps.length), [...byIr], 'legacy: by IR op index, as v0.41.0-v0.74.0 billed');
+  assert.notDeepEqual([...legacy.survival.opFluid], [...fresh.survival.opFluid], 'the two mappings differ on this IR');
+  // an IR without a decor bed is never marked (its mappings agree)
+  const { ir: x01 } = await survivalPlan('bf/x01_hollow_mountain.json');
+  assert.equal(x01.survival.opMap, undefined);
+});

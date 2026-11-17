@@ -2982,7 +2982,14 @@ public final class RegionsImpl implements Regions {
 		int[] c = r.claim;
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
-		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
+		// (8a HB, §6 "the region's waiting the same") the waiting item's typed wait (architect_mc:waitsFor: kind "terrain" with its cells, GM's
+		// "bill", ...) on the view's ext beside the record's own keys, so RegionView.waiting is read with its payload; additive, no API change
+		com.google.gson.JsonObject ext = r.ext;
+		if (waitingItem != null && waitingItem.ext.get(dev.larattalabs.architect.site.RegionTargets.EXT_WAITS_FOR) instanceof com.google.gson.JsonObject wf) {
+			ext = r.ext.deepCopy();
+			ext.add(dev.larattalabs.architect.site.RegionTargets.EXT_WAITS_FOR, wf.deepCopy());
+		}
+		return new RegionView(r.id, r.planId, r.irSha, r.owner, ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
 			r.position, r.busy, Revisions.views(r));
 	}

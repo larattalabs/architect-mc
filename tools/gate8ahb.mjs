@@ -113,6 +113,7 @@ function balance(a) {
 function viewOf(st) {
   const v = st?.view ?? {}, b = v.build ?? {};
   return { state: v.state, percent: b.percent, built: b.built, done: b.done, terrainPerTick: b.terrainPerTick, waiting: v.waiting ?? null,
+    waitsFor: v.ext?.['architect_mc:waitsFor'] ?? null,
     parts: (b.parts ?? []).map((p) => ({ part: p.part, state: p.state, cells: p.cells, built: p.built, terrainCells: p.terrainCells, terrainBuilt: p.terrainBuilt })) };
 }
 
@@ -388,6 +389,10 @@ steps.halt = async () => {
     if (!w2.length) await L.sleep(1000);
   }
   check(!w1.length || w2.some((w) => w.reason === 'SITE_BUSY' && typeof w.waitsFor.part === 'string' && Number.isInteger(w.waitsFor.terrainBuilt)), `${tag}: the typed terrain wait again after the restart (${w1.length} before: ${json(w1[0]?.waitsFor ?? null)}; after: ${json(w2[0]?.waitsFor ?? null)})`);
+  // RegionView.waiting with its payload (§6 "the region's waiting the same"): the waiting item's typed wait on the view's ext
+  const vw = [v1, v2].filter((v) => v.waiting);
+  check(vw.length > 0 && vw.every((v) => v.waitsFor && (v.waitsFor.kind !== 'terrain' || (typeof v.waitsFor.part === 'string' && v.waitsFor.terrainCells > 0))) && vw.some((v) => v.waitsFor?.kind === 'terrain'),
+    `${tag}: RegionView.waiting carries the typed wait (view.ext architect_mc:waitsFor) before the halt and after the restart: ${json(vw.map((v) => [v.waiting?.reason, v.waitsFor?.kind ?? null, v.waitsFor?.part ?? null]))}`, vw.map((v) => ({ waiting: v.waiting, waitsFor: v.waitsFor })));
   await call('dev.stockpile.ps', { noPeriodic: false }, 30_000);
   // resumed: fed until built; the INSTANT twin; standing = the paid records; Remove E-flat 0
   const f = await G.feed(ctx, region, { fraction: 1, timeoutMs: 3_000_000, every: 1500 });

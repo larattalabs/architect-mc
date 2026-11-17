@@ -80,6 +80,8 @@ public final class RegionTargets {
 		int scanAt;
 		int stall;
 		boolean released;
+		/** (8a ST) Whether {@link #floating} was read from the live region (else read again at the next turn). */
+		boolean floatingRead;
 
 		Plan(long placedAt, BitSet held, int[] ends, int @Nullable [][] deps) {
 			this.placedAt = placedAt;
@@ -926,6 +928,7 @@ public final class RegionTargets {
 		r.soilSame = i.construction() != null && !i.construction().building() && !Groups.leaving(i.id());
 		JsonObject rs = spec(i);
 		r.name = "part " + (rs.has("part") ? rs.get("part").getAsString() : "?") + " of region " + (rs.has("region") ? rs.get("region").getAsString() : "?");
+		r.exactState = rs.has(TERRAIN) && rs.get(TERRAIN).getAsBoolean(); // (8a ST) before the rescan below
 		BitSet held = CellBits.fromBase64(rs.has("held") ? rs.get("held").getAsString() : "");
 		for (int q = 0; q < r.size(); q++) {
 			int k = r.queue[q];
@@ -1003,6 +1006,7 @@ public final class RegionTargets {
 			pl.terrain = true;
 			var live = rs.has("region") ? dev.larattalabs.architect.region.RegionsImpl.live(rs.get("region").getAsString()) : null;
 			pl.floating = live == null ? List.of() : floatingOf(live.ir().json(), rs.has("part") ? rs.get("part").getAsString() : null);
+			pl.floatingRead = live != null;
 		}
 		return pl;
 	}
@@ -1327,8 +1331,10 @@ public final class RegionTargets {
 	 * cell, at most {@link #TERRAIN_SCAN} unbuilt cells, and writes each cell the world now supports ({@link #supported}): so a cell that
 	 * hangs from another target of its part (TO's rounds: x03's tile 18,31 from the anchor's 18,32) waits until those cells stand, with no
 	 * re-order. A cell is written as the tile writes it (CELL_FLAGS and its NBT), so a built target equals its INSTANT twin. A target that
-	 * wrote nothing for {@link #TERRAIN_STALL} turns while no other staged target of its part wrote either (a cell nothing will ever
-	 * support: the plan's own floating block) is released: the rest is written in its order, unsupported, so the region completes.
+	 * wrote nothing for {@link #TERRAIN_STALL} turns, every cell it waited on loaded and unsupported, while no other staged target of its
+	 * part wrote either (a fill nothing will ever reach: the plan's own floating rock), is released: from then on a fill may go in without a
+	 * solid neighbour. Only that ordering wait is released: a cut still waits for the cut over it, a loose or resting block for a solid one
+	 * under it, a leaf for its log, and a cell whose support lies in a chunk not loaded is never written (GPT review P1).
 	 */
 	static void stepTerrain(MinecraftServer srv, ServerLevel level, Infra t, Builder.Run r, Plan pl, Builder.@Nullable Purse purse, long ticks) {
 		int budget = terrainHold ? 0 : terrainLeft(t.group(), ticks);
@@ -1337,6 +1343,15 @@ public final class RegionTargets {
 			return;
 		}
 		pl.started = Math.max(pl.started, 0);
+		if (pl.floating.isEmpty() && !pl.floatingRead) {
+			// (GPT review) the anchors read once the region is live (a plan made in the startup reconcile, before the regions load, had none)
+			JsonObject rs = spec(t);
+			var live = rs.has("region") ? dev.larattalabs.architect.region.RegionsImpl.live(rs.get("region").getAsString()) : null;
+			if (live != null) {
+				pl.floating = floatingOf(live.ir().json(), partOf(t));
+				pl.floatingRead = true;
+			}
+		}
 		int n = r.size();
 		int first = r.built.nextClearBit(0);
 		if (first >= n) {
@@ -1347,7 +1362,7 @@ public final class RegionTargets {
 		Cells before = beforeOf(t, pl);
 		List<RegionOverwrites.Live> sibs = null;
 		int placed = 0;
-		boolean unready = false;
+		boolean unready = false, unknown = false;
 		for (int k = 0; k < limit && budget > 0 && (placed == 0 || Placement.remainingNanos() > 0); k++, q++) {
 			q = r.built.nextClearBit(q);
 			if (q >= n) {
@@ -1365,7 +1380,12 @@ public final class RegionTargets {
 				r.markBuilt(q, true);
 				continue;
 			}
-			if (!pl.released && !supported(level, r, pl, q, before)) {
+			int sup = support(level, r, pl, q, before, now);
+			if (sup == UNKNOWN) {
+				unknown = true; // its support is in a chunk not loaded: never written, never a reason to release
+				continue;
+			}
+			if (sup == MANDATORY || sup == UNREACHED && !pl.released) {
 				unready = true;
 				continue;
 			}
@@ -1394,65 +1414,139 @@ public final class RegionTargets {
 			terrainSpend(t.group(), ticks, placed);
 			PART_WROTE.put(pk, ticks);
 			pl.stall = 0;
-		} else if (unready && ++pl.stall >= TERRAIN_STALL && ticks - PART_WROTE.getOrDefault(pk, Long.MIN_VALUE / 2) >= TERRAIN_STALL && !pl.released) {
+		} else if (unready && !unknown && ++pl.stall >= TERRAIN_STALL && ticks - PART_WROTE.getOrDefault(pk, Long.MIN_VALUE / 2) >= TERRAIN_STALL && !pl.released) {
 			pl.released = true;
-			Architect.LOGGER.info("Region target {} ({}): {} staged cell(s) nothing supports, after {} turns with nothing written: written in order", t.id(),
-				partOf(t), n - r.built.cardinality(), pl.stall);
+			Architect.LOGGER.info("Region target {} ({}): {} staged cell(s) nothing reaches, after {} turns with nothing written: fills released (cuts, loose "
+				+ "blocks and leaves still wait for their support)", t.id(), partOf(t), n - r.built.cardinality(), pl.stall);
 		}
 		SiteWaits.observe(srv, level, t.id(), placed > 0 ? WaitCalc.Outcome.PLACED : WaitCalc.Outcome.IDLE);
 		if (r.built.cardinality() == n) {
 			Infra cur = Infras.get(t.id());
-			if (cur != null) {
+			if (cur != null && terrainDurable(srv)) {
 				r.soilSame = true;
 				RoadBuilder.complete(srv, level, cur, r, null);
 			}
 		}
 	}
 
-	private static final net.minecraft.core.Direction[] FACES = net.minecraft.core.Direction.values();
+	/** (8a ST, GPT review) Test: the chunk saves before a staged target is marked BUILT, and the last outcome. */
+	static final java.util.concurrent.atomic.AtomicInteger TERRAIN_SAVES = new java.util.concurrent.atomic.AtomicInteger();
 
 	/**
-	 * (8a ST, TO's rules read from the world) Whether staged cell {@code q} may be written now: a cut once the cut over it (of this target)
-	 * is gone; a loose or resting block over a standing solid block (no leaf); a leaf beside a standing log or leaf; a fill (a log too)
-	 * where it replaces a solid block, beside standing solid land or a log (an unbuilt cut of this target counts for nothing), or under a
-	 * floating anchor (its 3x3, just below it). A leaf that no log or leaf touches is a plain fill.
+	 * (8a ST, GPT review P1) Before a staged terrain target is marked BUILT its chunk writes are made durable (the loaded chunks saved and
+	 * flushed, as a stockpile's save with the world): a crash can then never leave a BUILT target whose cells the saved world lost (with no
+	 * stockpile there is no ledger reconcile to reopen it). An undurable write leaves it building: it completes at a later turn.
 	 */
+	static boolean terrainDurable(MinecraftServer srv) {
+		if (!srv.isSameThread()) {
+			return false;
+		}
+		srv.saveAllChunks(true, true, false);
+		TERRAIN_SAVES.incrementAndGet();
+		RegionDurability.retryOwed();
+		return RegionDurability.undurable("chunk", "entities").isEmpty();
+	}
+
+	private static final net.minecraft.core.Direction[] FACES = net.minecraft.core.Direction.values();
+
+	/** (8a ST) {@link #support}'s answers: the cell may go in; a mandatory rule waits (a cut, a loose block, a leaf); a fill nothing reaches yet;
+	 * a support in a chunk not loaded. */
+	static final int READY = 0, MANDATORY = 1, UNREACHED = 2, UNKNOWN = 3;
+
+	/** (8a ST) Whether staged cell {@code q} may be written now ({@link #support} is {@link #READY}). */
 	static boolean supported(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before) {
-		BlockPos p = r.pos(q);
-		int role = terrainRole(r.target[q]);
+		BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+		return now != null && support(level, r, pl, q, before, now) == READY;
+	}
+
+	/**
+	 * (8a ST, TO's rules read from the world) Whether staged cell {@code q} (holding {@code now}) may be written now:
+	 * <ul>
+	 * <li>a cut once the cut over it (of this target) is gone;</li>
+	 * <li>a loose or resting block over a standing solid block (no leaf, no unbuilt cut);</li>
+	 * <li>a leaf (mandatory: never ground support) beside a standing log, a leaf of this target already built, or a leaf a log holds
+	 * ({@code distance} under 7);</li>
+	 * <li>a fill (a log too) where it replaces a solid block that still stands, beside standing solid land or a log (an unbuilt cut of this
+	 * target counts for nothing), or under a floating anchor (its 3x3, just below it); else {@link #UNREACHED} (releasable).</li>
+	 * </ul>
+	 * A neighbour the rule needs in a chunk not loaded answers {@link #UNKNOWN} (unless another neighbour already supports it).
+	 */
+	static int support(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before, BlockState now) {
+		int k = r.queue[q];
+		BlockState was = before != null && k >= 0 && k < before.size() ? before.states[k] : null;
+		return supportRule(r.pos(q), r.target[q], was, now, o -> Builder.stateIfLoaded(level, o), o -> unbuiltCut(r, o), o -> {
+			int j = r.queuePos(o);
+			return j >= 0 && r.built.get(j);
+		}, o -> {
+			int j = r.queuePos(o);
+			return j >= 0 && !r.built.get(j) && r.target[j].isAir();
+		}, pl.floating);
+	}
+
+	/**
+	 * (8a ST) {@link #support}'s rule, pure: {@code world} the block at a position (null: its chunk is not loaded), {@code unbuiltCut} a
+	 * position of the target that is a cut not yet built, {@code builtOurs} a position of the target already built, {@code cutWaits} the
+	 * cell over a cut is itself an unbuilt cut of the target.
+	 */
+	static int supportRule(BlockPos p, BlockState after, @Nullable BlockState was, BlockState now, java.util.function.Function<BlockPos, @Nullable BlockState> world,
+		java.util.function.Predicate<BlockPos> unbuiltCut, java.util.function.Predicate<BlockPos> builtOurs, java.util.function.Predicate<BlockPos> cutWaits,
+		List<BlockPos> floating) {
+		int role = terrainRole(after);
 		if (role == BuildOrder.T_CUT) {
-			int a = r.queuePos(p.above());
-			return a < 0 || r.built.get(a) || !r.target[a].isAir();
+			return cutWaits.test(p.above()) ? MANDATORY : READY;
 		}
 		if (role == BuildOrder.T_LOOSE || role == BuildOrder.T_REST) {
-			BlockState b = Builder.stateIfLoaded(level, p.below());
-			return b != null && Builder.anchorState(b) && !b.is(net.minecraft.tags.BlockTags.LEAVES) && !unbuiltCut(r, p.below());
+			BlockState b = world.apply(p.below());
+			if (b == null) {
+				return UNKNOWN;
+			}
+			return Builder.anchorState(b) && !b.is(net.minecraft.tags.BlockTags.LEAVES) && !unbuiltCut.test(p.below()) ? READY : MANDATORY;
 		}
+		boolean unloaded = false;
 		if (role == BuildOrder.T_LEAF) {
 			for (var d : FACES) {
-				BlockState b = Builder.stateIfLoaded(level, p.relative(d));
-				if (b != null && (b.is(net.minecraft.tags.BlockTags.LOGS) || b.is(net.minecraft.tags.BlockTags.LEAVES)) && !unbuiltCut(r, p.relative(d))) {
-					return true;
+				BlockPos o = p.relative(d);
+				BlockState b = world.apply(o);
+				if (b == null) {
+					unloaded = true;
+					continue;
+				}
+				if (unbuiltCut.test(o)) {
+					continue;
+				}
+				if (b.is(net.minecraft.tags.BlockTags.LOGS)) {
+					return READY;
+				}
+				if (b.is(net.minecraft.tags.BlockTags.LEAVES)) {
+					boolean held = b.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE) && b.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE)
+						< net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
+					if (builtOurs.test(o) || held) {
+						return READY;
+					}
 				}
 			}
+			return unloaded ? UNKNOWN : MANDATORY;
 		}
-		int k = r.queue[q];
-		if (before != null && k >= 0 && k < before.size() && Builder.anchorState(before.states[k])) {
-			return true; // it replaces a standing support (a grass top made dirt)
+		if (was != null && Builder.anchorState(was) && now.is(was.getBlock())) {
+			return READY; // it replaces a standing support that still stands (a grass top made dirt)
 		}
 		for (var d : FACES) {
 			BlockPos o = p.relative(d);
-			BlockState b = Builder.stateIfLoaded(level, o);
-			if (b != null && (Builder.anchorState(b) || b.is(net.minecraft.tags.BlockTags.LOGS)) && !unbuiltCut(r, o)) {
-				return true;
+			BlockState b = world.apply(o);
+			if (b == null) {
+				unloaded = true;
+				continue;
+			}
+			if ((Builder.anchorState(b) || b.is(net.minecraft.tags.BlockTags.LOGS)) && !unbuiltCut.test(o)) {
+				return READY;
 			}
 		}
-		for (BlockPos f : pl.floating) {
+		for (BlockPos f : floating) {
 			if (Math.abs(p.getX() - f.getX()) <= 1 && Math.abs(p.getZ() - f.getZ()) <= 1 && p.getY() == f.getY() - 1) {
-				return true;
+				return READY;
 			}
 		}
-		return false;
+		return unloaded ? UNKNOWN : UNREACHED;
 	}
 
 	/** (8a ST) Whether a position is a cut of the target (its planned after air) not yet built: it still stands, but is going. */
@@ -1532,9 +1626,10 @@ public final class RegionTargets {
 			x.addProperty("runs", rs.get("runs") instanceof JsonArray a ? a.size() : 0);
 			x.addProperty("building", i.building());
 			int size = i.construction() == null ? 0 : i.construction().size();
-			Builder.Run r = i.building() ? RoadBuilder.run(srv, i) : null;
+			// (GPT review) a completed target too: its run reads the world, so a check covers BUILT targets as well
+			Builder.Run r = i.construction() != null ? RoadBuilder.run(srv, i) : null;
 			Plan pl = r == null ? null : planOf(srv, i);
-			int b = r == null ? (i.building() ? 0 : size) : r.built.cardinality();
+			int b = !i.building() ? size : r == null ? 0 : r.built.cardinality();
 			x.addProperty("cells", size);
 			x.addProperty("built", b);
 			if (r != null) {
@@ -1546,8 +1641,27 @@ public final class RegionTargets {
 				Cells before = beforeOf(i, pl);
 				int unsupported = 0;
 				JsonArray firstBad = new JsonArray();
+				if (level != null) {
+					r.rescan(level, false, true);
+				}
+				int missing = 0;
+				JsonArray firstMissing = new JsonArray();
+				for (int q = 0; q < r.size() && level != null && !i.building(); q++) {
+					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+					if (now != null && !r.matches(now, q)) {
+						missing++; // a BUILT target's cell that does not hold its planned state
+						if (firstMissing.size() < 5) {
+							BlockPos p = r.pos(q);
+							firstMissing.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + now + " planned " + r.target[q]);
+						}
+					}
+				}
+				x.addProperty("missing", missing);
+				x.add("firstMissing", firstMissing);
 				for (int q = r.built.nextSetBit(0); q >= 0 && level != null; q = r.built.nextSetBit(q + 1)) {
-					if (!supported(level, r, pl, q, before)) {
+					BlockState now = Builder.stateIfLoaded(level, r.pos(q));
+					int sup = now == null ? READY : support(level, r, pl, q, before, now);
+					if (sup == MANDATORY || sup == UNREACHED && !pl.released) {
 						unsupported++;
 						if (firstBad.size() < 5) {
 							BlockPos p = r.pos(q);
@@ -2069,18 +2183,32 @@ public final class RegionTargets {
 	private static void waitOn(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, Infra t,
 		@Nullable String part) {
 		String target = t.id();
-		JsonObject extra = null;
-		if (isTerrain(t)) {
-			// (8a ST, §6, S-8a-3) the typed terrain wait: kind "terrain" (Steward words its line from it) with the target's staged cells
-			extra = new JsonObject();
-			extra.addProperty("kind", WAIT_KIND_TERRAIN);
-			Builder.Run r = RoadBuilder.run(srv, t);
-			int cells = r == null ? (t.construction() == null ? 0 : t.construction().size()) : r.size();
-			extra.addProperty("terrainCells", cells);
-			extra.addProperty("terrainBuilt", r == null ? 0 : r.built.cardinality());
-		}
+		JsonObject extra = terrainWait(srv, t);
 		waitFor(b, i, target, part, Batches::waitFor, "waits for " + (part == null ? target : part + " (" + target + ")")
 			+ (extra != null ? "'s land" : "") + " to be built: a survival region builds what stands on a part only once it is built", extra);
+	}
+
+	/**
+	 * (8a ST, §6, S-8a-3) The typed terrain wait's payload for a wait on {@code t}: kind "terrain" (Steward words its line from it) with the
+	 * target's staged cells; null when {@code t} is not a staged terrain target.
+	 */
+	static @Nullable JsonObject terrainWait(MinecraftServer srv, @Nullable Infra t) {
+		if (!isTerrain(t)) {
+			return null;
+		}
+		JsonObject extra = new JsonObject();
+		extra.addProperty("kind", WAIT_KIND_TERRAIN);
+		Builder.Run r = RoadBuilder.run(srv, t);
+		int cells = r == null ? (t.construction() == null ? 0 : t.construction().size()) : r.size();
+		extra.addProperty("terrainCells", cells);
+		extra.addProperty("terrainBuilt", r == null ? 0 : r.built.cardinality());
+		return extra;
+	}
+
+	/** (8a HB) A stage wait on {@code target} (the fluids barrier's), typed {@code kind: "terrain"} when it is a staged terrain target. */
+	public static void waitForTarget(MinecraftServer srv, dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i, String target,
+		@Nullable String part, String detail) {
+		waitFor(b, i, target, part, Batches::waitFor, detail, terrainWait(srv, Infras.get(target)));
 	}
 
 	/** How a wait is put on an item (a {@link Batches#waitFor} or a stage's). */

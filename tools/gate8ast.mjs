@@ -4,7 +4,7 @@
 // 9018 (sidecar) / 9019 (DevBridge) by default. $0: no Claude call anywhere. Strict tier, targeted scenarios only (speed rule 11).
 //
 //   node tools/gate8ast.mjs <step>
-//     ingame   (st-ingame)  per fixture an INSTANT twin (creative, the flat base: checked, realised, no staged target, the box snapshotted),
+//     ingame   (sta-ingame)  per fixture an INSTANT twin (creative, the flat base: checked, realised, no staged target, the box snapshotted),
 //                           then the same plan in survival (the RS base, a stockpile): realised and built over time, sampled every ~2 s
 //                           through dev.region.terrain: staged targets for its land, intermediate states seen (0 < built < cells), the
 //                           region-wide rate never above terrainPerTick (16; rs01 2) cells per game tick, every standing staged cell supported by
@@ -138,7 +138,7 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
     const tc = (b.parts ?? []).reduce((a, p) => a + (p.terrainCells ?? 0), 0), tb = (b.parts ?? []).reduce((a, p) => a + (p.terrainBuilt ?? 0), 0);
     samples.push({ t: tr.gameTime, cells: tr.cells, built: tr.built, targets: (tr.targets ?? []).length, percent: b.percent, rate: tr.terrainPerTick, partsTerrain: [tc, tb],
       building: (b.parts ?? []).filter((p) => p.state === 'building' && p.terrainCells > 0).map((p) => p.part),
-      unsupported: deep ? (tr.targets ?? []).filter((t) => !t.released).reduce((a, t) => a + (t.unsupported ?? 0), 0) : null,
+      unsupported: deep ? (tr.targets ?? []).reduce((a, t) => a + (t.unsupported ?? 0), 0) : null,
       firstUnsupported: deep ? (tr.targets ?? []).flatMap((t) => t.firstUnsupported ?? []).slice(0, 4) : null, released: (tr.targets ?? []).filter((t) => t.released).map((t) => t.target) });
     for (const w of tr.waits ?? []) if (w.waitsFor?.kind === 'terrain' && w.status === 'WAITING') lotWaits.push(w);
   };
@@ -166,7 +166,9 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   // support order: every standing staged cell supported, at every deep sample and at the end
   const deep = samples.filter((x) => x.unsupported !== null);
   const bad = deep.filter((x) => x.unsupported > 0);
-  const finalBad = (final.targets ?? []).reduce((a, t) => a + (t.released ? 0 : t.unsupported ?? 0), 0);
+  // (GPT review) BUILT targets checked too (their runs read the world); a BUILT cell vanilla changed since is the twin row's, and the crash row's
+  const finalBad = (final.targets ?? []).reduce((a, t) => a + (t.unsupported ?? 0), 0);
+  out.missingAtEnd = (final.targets ?? []).map((t) => [t.target, t.missing ?? 0, t.firstMissing ?? []]);
   const released = (final.targets ?? []).filter((t) => t.released).map((t) => t.target);
   out.support = { deep: deep.length, bad: bad.slice(0, 4), finalBad, released };
   check(deep.length >= 1 && bad.length === 0 && finalBad === 0, `${tag}: in support order: every standing staged cell supported by the world at ${deep.length} half-built sample(s) and at the end (${finalBad} unsupported; ${released.length} target(s) released: ${released.join(' ')})`, out.support);
@@ -212,6 +214,68 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   return out;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function haltWait() {
+  for (let i = 0; i < 180; i++) {
+    await sleep(2000);
+    const st = await call('dev.state', {}, 10_000).catch(() => null);
+    if (st && st.inWorld === false) return true;
+  }
+  return false;
+}
+
+/**
+ * (GPT review P1 2 and 3) x01's hollow mountain with no stockpile: one staged target BUILT while the other builds, then a halt with nothing saved
+ * (dev.stockpile.halt) and a restart: every BUILT target still holds every cell (its chunks were saved before it was marked BUILT); then,
+ * half built again, Regions.remove: no staged write after the removal starts (the road tick's path leaves it as the feed does), E-flat 0.
+ */
+async function crashAndRemove(tag, fx) {
+  const out = { tag };
+  const s = await G.site(ctx, tag, fx);
+  const box = boxOf(s.W, 96);
+  const pre = await G.snap(ctx, box, `st-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  if (!ck.check?.artifactSha) { check(false, `${tag}: no artifact (${ck.check?.overall})`); return out; }
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  const region = await G.realise(ctx, ck.check.artifactSha, {});
+  let tr = null;
+  for (let i = 0; i < 600; i++) {
+    tr = await call('dev.region.terrain', { region }, 120_000);
+    const ts = tr.targets ?? [];
+    if (ts.some((t) => !t.building) && ts.some((t) => t.building)) break;
+    await sleep(250);
+  }
+  const ts0 = (tr?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]);
+  out.beforeHalt = ts0;
+  const ready = (tr?.targets ?? []).some((t) => !t.building) && (tr?.targets ?? []).some((t) => t.building);
+  check(ready, `${tag}: one staged target BUILT while another builds before the halt (${json(ts0)})`);
+  await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+  const down = await haltWait();
+  check(down, `${tag}: dev.stockpile.halt halted the server (nothing saved since)`);
+  await L.openWorld(s.world);
+  await L.settle(4000);
+  await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
+  const tr1 = await call('dev.region.terrain', { region, check: true }, 300_000);
+  const built = (tr1.targets ?? []).filter((t) => !t.building);
+  const holes = built.reduce((a, t) => a + (t.missing ?? 0), 0);
+  out.afterRestart = (tr1.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells, t.missing, t.unsupported]);
+  check(built.length > 0 && holes === 0, `${tag}: after the unclean restart every BUILT staged target holds every planned cell (${built.length} BUILT, ${holes} missing: ${json(out.afterRestart)})`);
+  // half built again, then removed while it builds
+  let tr2 = null;
+  for (let i = 0; i < 300; i++) {
+    tr2 = await call('dev.region.terrain', { region }, 120_000);
+    if (tr2.built > tr1.built + 500 && tr2.built < tr2.cells) break;
+    await sleep(500);
+  }
+  out.atRemove = { built: tr2?.built, cells: tr2?.cells };
+  await G.remove(ctx, region);
+  await L.settle(3000);
+  const e = await G.diff(ctx, box, pre);
+  out.eflat = { mismatches: e.mismatches, list: e.list.slice(0, 8) };
+  check(tr2 && tr2.built < tr2.cells && e.mismatches === 0, `${tag}: removed half built (${tr2?.built} of ${tr2?.cells} staged cells): E-flat ${e.mismatches} over the box (no staged write after the removal started)`, out.eflat);
+  return out;
+}
+
 steps.ingame = async () => {
   await ensure();
   spendZero();
@@ -235,6 +299,10 @@ steps.ingame = async () => {
     const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
     delete isle.plan.zones;
     try { out.x03 = await staged('x03', isle, { over: 96, crates: 0 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
+  }
+  if (want('x01crash')) {
+    // (x01's mountain: four targets over 32,078 cells at 16 per tick, so one stands BUILT while others build, and half built after the restart)
+    try { out.x01crash = await crashAndRemove('x01crash', G.fixture(ctx, 'bf/x01_hollow_mountain')); } catch (e) { check(false, `x01crash: ${String(e.message).slice(0, 300)}`); out.x01crash = { error: String(e.stack ?? e) }; }
   }
   if (want('x03h')) {
     // the whole hamlet: its lots stand on the island (a stage after the island's): each waits for the island's staged targets, typed

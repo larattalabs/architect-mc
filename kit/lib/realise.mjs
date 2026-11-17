@@ -470,7 +470,7 @@ export function compileIR(ir, opts = {}) {
   }
   if (ops.length >= OP_SLOTS) throw new Error('IR: too many ops');
   track = null;
-  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats, opSrc) : null, reach: compileReach(ir.reach) };
+  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats, SV.opMap === 'compiled' ? opSrc : null) : null, reach: compileReach(ir.reach) };
   compiled.set(ir, c);
   return c;
 }
@@ -480,6 +480,12 @@ export function compileIR(ir, opts = {}) {
  * always the free pass), each op's `free` mark (a terrain kind wrote it; relief, scatter and stamp ops are terrain kinds by kind) and fluid
  * flag, each material's kind, and each group's hold: a group holds its free cells (§4.3) when one of its non-pad parts has an op that can
  * write a paid cell (from the op's candidate materials, statically).
+ */
+/**
+ * (6c RS) The survival classes' inputs. (8a ST) `opSrc`: each compiled op's IR op, used when the IR says `survival.opMap: 'compiled'`
+ * (markSurvival from slice ST, an IR with a fluid op's decor bed). Without it (an IR accepted before ST) the flags are read by IR op index
+ * as kit 0.41.0-NEXT did: from F3-c (v0.41.0) a decor bed shifted every flag after it (a coral pond's shells read free, its coral paid), and
+ * an IR whose last compiled op is a bed throws here; such IRs evaluate as they were quoted and billed.
  */
 function compileSurvival(sv, irParts, parts, ops, mats, opMats, opSrc = null) {
   const groups = Array.isArray(sv.groups) ? sv.groups.map(String) : [];
@@ -496,7 +502,7 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats, opSrc = null) {
   const opFree = new Uint8Array(ops.length), opFluid = new Uint8Array(ops.length), opStaged = new Uint8Array(ops.length);
   const irOps = [];
   for (const p of irParts) for (const o of p.ops ?? []) irOps.push(o);
-  for (let k = 0; k < ops.length; k++) {
+  for (let k = 0; k < (opSrc ? ops.length : irOps.length); k++) {
     const o = irOps[opSrc ? opSrc[k] : k];
     if (!o) continue;
     opFree[k] = o.free === true || o.op === 'relief' || o.op === 'scatter' || o.op === 'stamp' ? 1 : 0;
@@ -508,7 +514,7 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats, opSrc = null) {
   for (let i = 0; i < ops.length; i++) {
     const pi = ops[i].part;
     if (padPart[pi] || hold[groupOfPart[pi]]) continue;
-    for (const m of opMats[opSrc ? opSrc[i] : i] ?? []) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
+    for (const m of opSrc ? opMats[opSrc[i]] ?? [] : opMats[i]) if (canPay(mk[m], opFree[i], opFluid[i])) { hold[groupOfPart[pi]] = 1; break; }
   }
   const items = new Array(mats.length).fill(null);
   return {

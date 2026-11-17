@@ -223,8 +223,8 @@ public final class BuildOrder {
 	 * <li><b>Loose blocks and resting blocks</b> ({@link #T_LOOSE}, {@link #T_REST}) come only over a placed solid fill (not a leaf) or
 	 * solid land.</li>
 	 * <li><b>Leaves after their logs</b>: a leaf joined to a log of the target (through the target's leaves) comes only next to a placed
-	 * log or a placed leaf already so held (or such land): a leaf is never written where no standing log holds it. A leaf with no log
-	 * of its own in the target is a plain fill.</li>
+	 * log or a placed leaf already so held (or such land): a leaf is never written where no standing log holds it. (GPT review) A leaf no
+	 * log holds (none in the target, none standing beside it) is never connected: solid ground bears no leaf.</li>
 	 * <li><b>Floating forms</b> ({@code floating}: the declared anchors, {x, y, z} each): the target's cells in the anchor's 3x3 just under
 	 * it seed the fill (the first cells built); a target that holds none of them gets nothing from it.</li>
 	 * </ul>
@@ -321,6 +321,9 @@ public final class BuildOrder {
 				seed[i] = below[i] < 0 && bears(land.at(x[i], y[i] - 1, z[i]));
 				continue;
 			}
+			if (role[i] == T_LEAF) {
+				continue; // (GPT review P1) a leaf no log holds is never ground-supported: it waits (unconnected) for a log to stand
+			}
 			seed[i] = wasSolid[i];
 			for (int[] d : FACES) {
 				if (!at.containsKey(key(x[i] + d[0], y[i] + d[1], z[i] + d[2]))) {
@@ -331,7 +334,7 @@ public final class BuildOrder {
 		// a floating form's virtual support: the cells in its anchor's 3x3 just under it (a target that holds none gets nothing from it)
 		for (int[] a : floating) {
 			for (int i = 0; i < n; i++) {
-				if (role[i] != T_CUT && role[i] != T_LOOSE && role[i] != T_REST && Math.abs(x[i] - a[0]) <= 1 && Math.abs(z[i] - a[2]) <= 1
+				if (role[i] != T_CUT && role[i] != T_LOOSE && role[i] != T_REST && role[i] != T_LEAF && Math.abs(x[i] - a[0]) <= 1 && Math.abs(z[i] - a[2]) <= 1
 					&& y[i] == a[1] - 1) {
 					seed[i] = true;
 				}
@@ -394,7 +397,10 @@ public final class BuildOrder {
 			// over a placed solid fill (no plant or leaf bears it), or over solid land (its seed)
 			return below[i] >= 0 ? done[below[i]] && role[below[i]] != T_REST && role[below[i]] != T_LEAF : seed[i];
 		}
-		if (r == T_LEAF && held[i]) {
+		if (r == T_LEAF) {
+			if (!held[i]) {
+				return false; // (GPT review P1) only a log, or a leaf a log holds, bears a leaf
+			}
 			if (seed[i]) {
 				return true;
 			}
