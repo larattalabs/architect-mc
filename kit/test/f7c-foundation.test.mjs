@@ -21,7 +21,7 @@ test('catalogue: against catalogue-pre7c.json exactly program.authored added (re
   const mine = (xs) => xs.filter((x) => !FLIPS.includes(x.id ?? x));
   // ((7c AU) program.authored is supported since AU: au.test.mjs holds its answers)
   // ((7c PF) form.arch_span added: pf.test.mjs)
-  assert.deepEqual(d.added.map((x) => x.id).filter((id) => id !== 'form.arch_span' && id !== 'feature.cave'), ['program.authored']);
+  assert.deepEqual(d.added.map((x) => x.id).filter((id) => id !== 'form.arch_span' && id !== 'feature.cave' && id !== 'ladder.port'), ['program.authored']);
   assert.deepEqual([d.removed, d.retired, mine(d.reservedToSupported), mine(d.otherStateChanges), mine(d.untilChanged), mine(d.notesChanged)], [[], [], [], [], [], []]);
   const e = golden.entries.find((x) => x.id === 'program.authored');
   assert.ok(e.state === 'supported' || e.until === 'AU', e.state);

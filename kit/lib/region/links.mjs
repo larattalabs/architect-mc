@@ -18,6 +18,7 @@ import { rightOf } from '../connectors/ropeGeom.mjs';
 import { fixtureFor } from './fixtures.mjs';
 import { bomOf } from '../connectors/bom.mjs';
 import { variant } from '../kit.mjs';
+import { voxelClassOf } from '../blocks.mjs';
 
 /** The stage the links are written in: after the lots (K1's own `links` stage, before the lots, already holds that name). */
 export const LINK_STAGE = 'site_links';
@@ -26,7 +27,15 @@ export const PORT_LINK_KINDS = Object.freeze(['catwalk', 'branch_walk', 'tunnel'
 /** branch_walk's limits (catalogue `connector.branch_walk`): hanger span, the reach up to an anchor, the route's length, lamps. */
 export const BRANCH_WALK = Object.freeze({ span: 8, reach: 16, lengthMax: 96, lampEvery: 12, search: 24, width: 1, rise: 4 });
 /** The codes a port link refuses with (plan time: the part's reason; realise: NO_LINK's detail `code`). */
-export const LINK_CODES = Object.freeze(['NO_PORT', 'FACING', 'LEVEL', 'ALIGN', 'NO_PATH', 'ANCHOR', 'HEADROOM', 'SPAN', 'PROTECTED', 'NO_GAP', 'WATER', 'NO_COVER', 'VOLUME']);
+export const LINK_CODES = Object.freeze(['NO_PORT', 'FACING', 'LEVEL', 'ALIGN', 'NO_PATH', 'ANCHOR', 'HEADROOM', 'SPAN', 'PROTECTED', 'NO_GAP', 'WATER', 'NO_COVER', 'VOLUME', 'NO_CLIMB']);
+/**
+ * ((slice PL2) one-ended port links: a link with one end at a site lot's port and the other at the ground under it, or on a region-made
+ * form (catalogue `ladder.port`): the region ladder (CL's kind) up to a lot's walk port. Its record's `to` is `{ground: true}` or
+ * `{form: <plan part>}` (no lot: the mod's RegionLinks.lots() binds only the lot end).)
+ */
+export const ONE_ENDED_KINDS = Object.freeze(['ladder']);
+/** The port ladder's limits (catalogue `ladder.port`): the climb's rise (feet to feet) and its rungs, one flight (CL's rest at most). */
+export const PORT_LADDER = Object.freeze({ riseMin: 2, rungsMax: 24 });
 
 const TURNS = { none: 0, clockwise_90: 1, clockwise_180: 2, counterclockwise_90: 3 };
 const H_DIRS = ['north', 'east', 'south', 'west'];
@@ -320,6 +329,156 @@ function routeBranchWalk(r, land, A, B, link) {
   return { kind: 'branch_walk', fy, path, rails, hangers, lamps, width: 1, ...(steps.length ? { steps } : {}) };
 }
 
+// ------------------------------------------------------------------ (slice PL2) the port ladder: a one-ended port link
+
+/** (PL2) The draft world reader (fluids/body.mjs localWorld, bound there: links.mjs is imported before it). */
+let localWorldOf = null;
+export function _bindLinkWorld(fn) { localWorldOf = fn; }
+
+const OPP = { north: 'south', south: 'north', east: 'west', west: 'east' };
+/** A ladder's face (the block behind its rungs) is one of these, never a falling, leaf or fluid cell. */
+const FACE = new Set(['ROCK', 'SOIL', 'ICE', 'LOG', 'OWNED', 'PLAYER', 'BLOCK_ENTITY']);
+
+/**
+ * (PL2) The land a port ladder reads: the link land (the survey and the frozen volumes) with every cell the plan's draft has written so
+ * far classed by its block (the voxel table, as R2's landAfterForms), so a ladder can stand on a region-made form; `written(x, y, z)`.
+ */
+function ladderLand(r, land, box) {
+  const lw = localWorldOf ? localWorldOf(r, box) : null;
+  const memo = new Map();
+  const written = (x, y, z) => !!lw && x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ && y >= box.minY && y <= box.maxY && !!(lw.vw.flags(x, y, z) & 1);
+  const classAt = (x, y, z) => {
+    if (!written(x, y, z)) return land.classAt(x, y, z);
+    const idx = lw.vw.get(x, y, z);
+    let c = memo.get(idx);
+    if (c === undefined) { c = voxelClassOf(String(lw.vw.pal.states[idx]).replace(/\[.*$/, '')); memo.set(idx, c); }
+    return c;
+  };
+  return { ...land, classAt, written };
+}
+
+/** A lot end's port for a port ladder: the named one, else the one whose `edge` is the link's id, else a walk port facing down, else by name. */
+function chooseLadderPort(lot, end, link) {
+  const all = lotPortsWorld(lot);
+  const ok = (p) => p.kind === 'architect:walk' && (VEC[p.facing] || p.facing === 'down');
+  if (end.port) {
+    const p = all.find((q) => q.name === end.port);
+    if (!p) throw new LinkError('NO_PORT', lot.id, end.port, `lot ${lot.id} has no port ${end.port} (its site's ports: ${all.map((q) => q.name).join(', ') || 'none'})`);
+    if (!ok(p)) throw new LinkError('NO_PORT', lot.id, end.port, `port ${end.port} of lot ${lot.id} is a ${p.kind} facing ${p.facing}: a ladder needs an architect:walk port facing out or down`);
+    return p;
+  }
+  const cand = all.filter(ok);
+  const byEdge = cand.filter((p) => p.edge === link.id);
+  const pool = byEdge.length ? byEdge : cand.filter((p) => p.edge == null);
+  if (!pool.length) throw new LinkError('NO_PORT', lot.id, null, `lot ${lot.id} has no architect:walk port facing out or down for ladder ${link.id}`);
+  return [...pool].sort((p, q) => (p.facing === 'down' ? 0 : 1) - (q.facing === 'down' ? 0 : 1) || cmp(p.name, q.name))[0];
+}
+
+/**
+ * (PL2) A ladder from the ground (or a region-made form) up to a site lot's walk port. The rungs stand in the port's out cell column (the
+ * cell just outside the box: §8.4), from the cell over the foot up to the port's feet y (a port facing out: the climber steps off the top
+ * rung into the port cell) or to the cell under the box (a hatch facing down: the design's own opening over it), against a themed post:
+ * out + the port's facing (a port facing out), else the first of the four sides (E, S, W, N) whose column stands. Refusals: NO_CLIMB (a
+ * rise under PORT_LADDER.riseMin), SPAN (more than PORT_LADDER.rungsMax rungs, or no ground within them), WATER, VOLUME (unread land),
+ * ANCHOR (a foot on leaves, a face that is no sturdy block, a foot not on the named form), PROTECTED, HEADROOM.
+ */
+function routeLadder(r, land0, A, link) {
+  const horiz = !!VEC[A.facing];
+  const [lx, top, lz] = A.out; // the top rung: a port facing out its feet cell; a hatch the cell under the box
+  const N = PORT_LADDER.rungsMax;
+  const box = { minX: lx - 2, maxX: lx + 2, minZ: lz - 2, maxZ: lz + 2, minY: top - N - 4, maxY: top + 2 };
+  const land = ladderLand(r, land0, box);
+  const boxes = r.lots.filter((l) => l.box);
+  const inLot = (x, y, z) => boxes.find((l) => inBox(l.box, x, y, z)) ?? null;
+  const outside = (x, z) => { const q = land.blocked(x, z); return q && q.class !== 'lot' ? q : null; };
+  const err = (code, msg, ev = null) => new LinkError(code, A.lot, A.name, `ladder ${link.id} at ${A.lot}.${A.name}: ${msg}`, ev);
+  if (outside(lx, lz)) throw err('PROTECTED', `the cell outside the port (${A.out.join(',')}) is ${outside(lx, lz).class}`);
+  if (horiz && !OPEN.has(land.classAt(lx, top + 1, lz))) throw err('HEADROOM', `the cell over the top rung (${lx},${top + 1},${lz}) is ${land.classAt(lx, top + 1, lz)}: the climber steps into the port with 2 of head room`);
+  // the column down to the foot (the first cell not open)
+  const groundOf = (x, z, from) => {
+    for (let y = from; y >= from - N - 1; y--) {
+      const lot = inLot(x, y, z);
+      if (lot) return { y, lot: lot.id };
+      if (!OPEN.has(land.classAt(x, y, z))) return { y, class: land.classAt(x, y, z) };
+    }
+    return null;
+  };
+  const g = groundOf(lx, lz, top);
+  if (!g) throw err('SPAN', `no ground within ${N + 1} under the port (a port ladder is one flight of at most ${N} rungs)`);
+  if (g.lot) throw err('PROTECTED', `the column under the port reaches lot ${g.lot}'s box at y ${g.y}`, { lot: g.lot });
+  if (g.y === top) throw err('HEADROOM', `the cell outside the port (${A.out.join(',')}) is ${g.class}, not open`);
+  if (g.class === 'WATER' || g.class === 'LAVA') throw err('WATER', `the ladder's foot (${lx},${g.y},${lz}) is ${g.class}`);
+  if (g.class === 'MISSING') throw err('VOLUME', `the land under the port (${lx},${g.y},${lz}) was not read`);
+  if (g.class === 'LEAVES') throw err('ANCHOR', `the ladder's foot (${lx},${g.y},${lz}) is leaves: it stands on the ground`);
+  const rise = A.cell[1] - (g.y + 1), rungs = top - g.y;
+  if (rise < PORT_LADDER.riseMin) throw err('NO_CLIMB', `the port is ${rise} over the ground: a ladder climbs at least ${PORT_LADDER.riseMin} (a step, not a climb)`, { ascent: rise, need: PORT_LADDER.riseMin });
+  if (rungs > N) throw err('SPAN', `${rungs} rungs from the ground: a port ladder is one flight of at most ${N}`, { rungs, max: N });
+  if (link.to?.form) {
+    const rect = link.to.rect ?? null;
+    const on = land.written(lx, g.y, lz) && (!rect || (lx >= rect.minX && lx <= rect.maxX && lz >= rect.minZ && lz <= rect.maxZ));
+    if (!on) throw err('ANCHOR', `the ladder's foot (${lx},${g.y},${lz}) is not on form ${link.to.form} (the land under the port is ${g.class})`, { form: link.to.form });
+  }
+  // the post: its column from its own ground up to the top rung; every rung's face the post or a sturdy cell of the land
+  const sides = horiz ? [A.facing] : ['east', 'south', 'west', 'north'];
+  let last = null;
+  for (const side of sides) {
+    const [dx, dz] = VEC[side], px = lx + dx, pz = lz + dz;
+    if (outside(px, pz)) { last = err('PROTECTED', `the post's column (${px},${pz}) is ${outside(px, pz).class}`); continue; }
+    const pg = groundOf(px, pz, top);
+    if (!pg) { last = err('SPAN', `the post beside the ladder (${px},${pz}) finds no ground within ${N + 1}`); continue; }
+    if (pg.lot) { last = err('PROTECTED', `the post's column (${px},${pz}) reaches lot ${pg.lot}'s box at y ${pg.y}`, { lot: pg.lot }); continue; }
+    if (pg.y === top) { last = err('ANCHOR', `the post's top cell (${px},${top},${pz}) is ${pg.class}, not open`); continue; }
+    if (['WATER', 'LAVA', 'MISSING'].includes(pg.class)) { last = err(pg.class === 'MISSING' ? 'VOLUME' : 'WATER', `the post's foot (${px},${pg.y},${pz}) is ${pg.class}`); continue; }
+    let bad = null;
+    for (let y = g.y + 1; y <= pg.y; y++) if (!FACE.has(land.classAt(px, y, pz))) { bad = [px, y, pz, land.classAt(px, y, pz)]; break; }
+    if (bad) { last = err('ANCHOR', `rung ${lx},${bad[1]},${lz}'s face (${bad.slice(0, 3).join(',')}) is ${bad[3]}, not a sturdy block`); continue; }
+    // (a lamp on the post's top when the cell over it is open: the ladder's top lit, M5)
+    const lamp = OPEN.has(land.classAt(px, top + 1, pz)) && !inLot(px, top + 1, pz) ? [px, top + 1, pz] : null;
+    return { kind: 'ladder', at: [lx, lz], foot: g.y, top, rise, rungs, facing: OPP[side], post: { x: px, z: pz, y0: pg.y + 1, y1: top }, lamp, footClass: g.class, ...(link.to?.form ? { form: link.to.form } : {}) };
+  }
+  throw last;
+}
+
+/** The post's block: the first role (the link's `post`, frame, structure, foundation) with a full, standing block, else cobblestone. */
+function postBlock(r, what) {
+  const role = (name) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : null);
+  const cc = r.ctx?.connectors?.ladder ?? {};
+  for (const x of [cc.post, 'frame', 'structure', 'foundation'].filter((q) => typeof q === 'string')) {
+    if (!role(x) && !/^minecraft:/.test(x)) continue;
+    const b = r.material(x, `${what} post`);
+    const n = String(b ?? '').replace(/\[.*$/, '');
+    if (!n || /_(slab|stairs|fence|fence_gate|wall|pane|door|trapdoor|button|pressure_plate|carpet|sign)$/.test(n) || !['ROCK', 'SOIL', 'LOG', 'OWNED', 'PLAYER'].includes(voxelClassOf(n))) continue;
+    return b;
+  }
+  return r.material('minecraft:cobblestone', `${what} post`);
+}
+
+/** Write a routed port ladder in `part` (stage LINK_STAGE): the post and the rungs; its climb record in `r.meta.climbs` (M10:climb). */
+function writeLadder(r, routed, part, id) {
+  const R = routed.route;
+  const what = `ladder ${id}`;
+  const post = postBlock(r, what);
+  const ladder = `minecraft:ladder[facing=${R.facing},waterlogged=false]`;
+  const role = (name) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : null);
+  const light = R.lamp ? fixtureFor(r.material(role('light') ? 'light' : 'minecraft:lantern', `${what} light`), post) : null;
+  const lamp = light ? (light.kind === 'hanging_lantern' ? light.light.replace('hanging=true', 'hanging=false') : light.light) : null;
+  const mats = [post, ladder, ...(lamp ? [lamp] : [])];
+  const [lx, lz] = R.at;
+  const cols = [R.post.x, R.post.z, R.post.y0, R.post.y1, 0, lx, lz, R.foot + 1, R.top, 1, ...(lamp ? [R.lamp[0], R.lamp[2], R.lamp[1], R.lamp[1], 2] : [])];
+  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: LINK_STAGE, set: 'path' });
+  (r.meta.parts[p.id] ??= {}).kind ??= 'path';
+  p.columns({ abs: 0 }, { abs: 0 }, cols, mats);
+  const states = [...Array(R.post.y1 - R.post.y0 + 1).fill(post), ...Array(R.rungs).fill(ladder), ...(lamp ? [lamp] : [])];
+  const rec = {
+    id, kind: 'ladder', part: p.id, stage: LINK_STAGE, rise: R.rise, flights: 0, hairpins: 0, rest: PORT_LADDER.rungsMax,
+    ladders: [{ at: [lx, R.foot + 1, lz], rungs: R.rungs, landings: 0, top: [lx, R.top, lz] }],
+    detail: [{ facing: R.facing, flights: [{ x: lx, z: lz, y0: R.foot + 1, y1: R.top }], rest: [], top: null }],
+    post: { at: [R.post.x, R.post.z], y0: R.post.y0, y1: R.post.y1, block: post }, ...(lamp ? { lamp: { at: [...R.lamp], block: lamp } } : {}), link: routed.link.id, bom: bomOf(states),
+  };
+  (r.meta.climbs ??= []).push(rec);
+  return rec;
+}
+
 // ------------------------------------------------------------------ the pass
 
 /** The plan's site lots by id (`r.lots` with a site). */
@@ -330,6 +489,7 @@ const siteLots = (r) => new Map(r.lots.filter((l) => l.site).map((l) => [l.id, l
  * ports by lot ({lot: {entry, ports: [design ports]}}) or null. Throws LinkError.
  */
 export function routeLink(r, link, ports = null) {
+  if (ONE_ENDED_KINDS.includes(link.kind)) return routeOneEnded(r, link, ports);
   const lots = siteLots(r);
   const la = lots.get(link.from.lot), lb = lots.get(link.to.lot);
   for (const [l, e] of [[la, link.from], [lb, link.to]]) if (!l) throw new LinkError('NO_PORT', e.lot, e.port ?? null, `${e.lot} is not a site lot of this plan`);
@@ -356,6 +516,31 @@ export function routeLink(r, link, ports = null) {
   const boxes = r.lots.filter((l) => l.box).map((l) => l.box);
   const route = link.kind === 'catwalk' ? routeCatwalk(r, land, A, B, link, boxes) : link.kind === 'tunnel' ? routeTunnel(r, land, A, B, link) : routeBranchWalk(r, land, A, B, link);
   return { link, ends, route, land };
+}
+
+/**
+ * (PL2) Route a one-ended link (a port ladder): its lot end as routeLink's (plan time the site's port, realise the entry's port of the
+ * name chosen at plan time, same kind and facing, inside the box); the other end the ground under it or the named form. {link, ends: [A],
+ * route, land}. Throws LinkError.
+ */
+function routeOneEnded(r, link, ports) {
+  const lot = siteLots(r).get(link.from.lot);
+  if (!lot) throw new LinkError('NO_PORT', link.from.lot, link.from.port ?? null, `${link.from.lot} is not a site lot of this plan`);
+  const hint = chooseLadderPort(lot, link.from, link);
+  let P = hint;
+  if (ports) {
+    const got = ports[lot.id];
+    if (!got || !Array.isArray(got.ports)) throw new LinkError('NO_PORT', lot.id, hint.name, `lot ${lot.id} has no entry bound at realise: its port ${hint.name} has nothing to land on`);
+    const mine = lotPortsWorld(lot, got.ports).find((q) => q.name === hint.name);
+    if (!mine) throw new LinkError('NO_PORT', lot.id, hint.name, `entry ${got.entry ?? '?'} bound to lot ${lot.id} has no port ${hint.name} (its ports: ${got.ports.map((q) => q.name).join(', ') || 'none'})`);
+    if (mine.facing !== hint.facing) throw new LinkError('FACING', lot.id, hint.name, `entry ${got.entry ?? '?'}'s port ${hint.name} faces ${mine.facing}; the link was planned to the site's port facing ${hint.facing}`);
+    if (mine.kind !== 'architect:walk') throw new LinkError('NO_PORT', lot.id, hint.name, `entry ${got.entry ?? '?'}'s port ${hint.name} is a ${mine.kind}: a ladder needs architect:walk`);
+    if (!inBox(lot.box, ...mine.cell)) throw new LinkError('NO_PORT', lot.id, hint.name, `entry ${got.entry ?? '?'}'s port ${hint.name} at ${mine.cell.join(',')} is outside the lot's box`);
+    P = mine;
+  }
+  const A = { ...P, lot: lot.id };
+  const land = linkLand(r);
+  return { link, ends: [A], route: routeLadder(r, land, A, link), land };
 }
 
 const parapet = (block, sides) => {
@@ -422,7 +607,9 @@ export function writeLink(r, routed) {
   const { link, ends: [A, B], route: R, land } = routed;
   const part = `link_${link.id}`.slice(0, 48);
   let rec;
-  if (R.kind === 'catwalk') {
+  if (R.kind === 'ladder') {
+    rec = writeLadder(r, routed, part, `ladder_${link.id}`.slice(0, 48));
+  } else if (R.kind === 'catwalk') {
     rec = catwalkRun(r, [A.cell[0], R.y, A.cell[2]], [B.cell[0], R.y, B.cell[2]], { width: R.width, side: R.side, check: R.check, stage: LINK_STAGE, part, id: `catwalk_${link.id}`.slice(0, 48), edge: link.id });
   } else if (R.kind === 'tunnel') {
     const S = r.survey;
@@ -456,14 +643,18 @@ export function writeLink(r, routed) {
     }
   }
   const endRow = (E) => ({ lot: E.lot, port: E.name, at: [...E.cell], out: [...E.out], facing: E.facing });
-  return { id: link.id, kind: link.kind === 'tunnel' ? 'tunnel.under' : link.kind, part, from: endRow(A), to: endRow(B), cells, record: rec.id };
+  // ((PL2) a one-ended link's other end: the ladder's foot (the cell over the ground or form it stands on))
+  const to = B ? endRow(B) : { ...(R.form ? { form: R.form } : { ground: true }), foot: [R.at[0], R.foot + 1, R.at[1]] };
+  return { id: link.id, kind: link.kind === 'tunnel' ? 'tunnel.under' : link.kind, part, from: endRow(A), to, cells, record: rec.id };
 }
 
 /** A link's plan-time record (the IR's `portLinks[]`): its id, kind, plan part, width and the two ends with the port each takes. */
 export function linkRecord(routed, planPart = null) {
   const { link, ends: [A, B] } = routed;
   const end = (E) => ({ lot: E.lot, port: E.name, facing: E.facing });
-  return { id: link.id, kind: link.kind, ...(planPart ? { planPart } : {}), ...(link.width ? { width: link.width } : {}), from: end(A), to: end(B) };
+  // ((PL2) a one-ended link: `to` names no lot: {ground: true} or {form: <plan part>})
+  const to = B ? end(B) : link.to?.form ? { form: link.to.form } : { ground: true };
+  return { id: link.id, kind: link.kind, ...(planPart ? { planPart } : {}), ...(link.width ? { width: link.width } : {}), from: end(A), to };
 }
 
 /**
@@ -531,7 +722,8 @@ export function portLinkOf(r, id, spec = {}) {
   if (typeof id !== 'string' || !LINK_ID.test(id)) throw new Error(`port link id '${id}' must match ${LINK_ID}`);
   if ((r.meta.portLinks ?? []).some((l) => l.id === id)) throw new Error(`port link id '${id}' is used twice`);
   const kind = spec.kind;
-  if (!PORT_LINK_KINDS.includes(kind)) throw new Error(`port link ${id}: kind must be one of ${PORT_LINK_KINDS.join(', ')}`);
+  if (!PORT_LINK_KINDS.includes(kind) && !ONE_ENDED_KINDS.includes(kind)) throw new Error(`port link ${id}: kind must be one of ${[...PORT_LINK_KINDS, ...ONE_ENDED_KINDS].join(', ')}`);
+  if (ONE_ENDED_KINDS.includes(kind)) return oneEndedOf(r, id, spec);
   for (const k of ['from', 'to']) {
     const e = spec[k];
     if (!e || typeof e.lot !== 'string' || (e.port !== undefined && e.port !== null && typeof e.port !== 'string')) throw new Error(`port link ${id}: ${k} must be {lot, port?}`);
@@ -547,6 +739,26 @@ export function portLinkOf(r, id, spec = {}) {
   (r.meta.portLinks ??= []).push(rec);
   if (r.ctx?.links) { const row = writeLink(r, routed); (r.meta.links ??= []).push(row); return { ...rec, row }; }
   return rec;
+}
+
+/**
+ * (PL2) Region.portLink for a one-ended kind (a ladder): `{kind: 'ladder', from: {lot, port?}, to?: {ground: true} | {form: <plan part>,
+ * rect?: the form's x/z box}, planPart?}`. Routed now (the lot placed): plan time recorded, realise written, as a two-ended link.
+ */
+function oneEndedOf(r, id, spec) {
+  const e = spec.from;
+  if (!e || typeof e.lot !== 'string' || (e.port !== undefined && e.port !== null && typeof e.port !== 'string')) throw new Error(`port link ${id}: from must be {lot, port?}`);
+  const t = spec.to ?? { ground: true };
+  if (!t || typeof t !== 'object' || (t.ground !== true && typeof t.form !== 'string')) throw new Error(`port link ${id}: a ${spec.kind}'s to is {ground: true} or {form: part}`);
+  if (spec.width != null) throw new Error(`port link ${id}: a ${spec.kind} is 1 wide (no width)`);
+  const to = t.form ? { form: t.form, ...(t.rect ? { rect: { ...t.rect } } : {}) } : { ground: true };
+  const link = { id, kind: spec.kind, from: { lot: e.lot, ...(e.port ? { port: e.port } : {}) }, to, ...(spec.planPart ? { planPart: spec.planPart } : {}) };
+  ensureLinkStage(r);
+  const routed = routeLink(r, link, r.ctx?.links?.lots ?? null);
+  const rec = linkRecord(routed, link.planPart ?? null);
+  (r.meta.portLinks ??= []).push(rec);
+  if (r.ctx?.links) { const row = writeLink(r, routed); (r.meta.links ??= []).push(row); return { ...rec, row, rise: routed.route.rise }; }
+  return { ...rec, rise: routed.route.rise };
 }
 
 /**
