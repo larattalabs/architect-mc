@@ -20,92 +20,100 @@ node tools/nightly.mjs                                           # the nightly: 
 node tools/nightly.mjs --megab-full                              # the nightly with megaB's full walk on demand (else weekly)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
-node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
+node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 6)
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
-## Speed rules (Noah, 2026-11-13)
+## Speed rules (the current set; Noah, 2026-11-13 to 2026-11-16, consolidated 2026-11-16)
 
-Noah via parent session, 2026-11-13 20:30 MST: "yes, apply all of those". They apply to running slices and new ones, on both mods,
-and replace stricter habits where they differ (the DEV MODE section below still holds otherwise).
+The working rules for both mods (Architect and Steward). They win over every older rule in this file, AGENTS.md and docs/PLAN.md
+where they differ. The old rule numbers are in brackets ([11.2] is old rule 11, item 2), so a code comment, brief or as-built
+that cites an old number still resolves. The dated list with Noah's words is in docs/archive/PROCESS-HISTORY.md. "The coordinator"
+is whoever briefs and merges Architect's slices (Steward's manager on its side).
+The as-built and measured sections further down are dated records: a bare rule number there is the old number.
 
-1. **Risk tiers.** *Strict:* save data and persistence, billing, refunds and stock, undo and revert, crash recovery and reconcile,
-   anything that can mint or lose items: the strict gate-verifier (re-runs on its own ports) and, where the rules ask, the GPT review.
-   *Light:* everything else (UI, wording, tooling and gate infra, docs, fixtures, $0 prompts): units plus one targeted in-game flow,
-   no independent verifier, no GPT review; a design-critic look only for new screens. The coordinator picks the tier in the brief.
-2. **Failing steps only.** After a gate failure, fix and re-run only the failing steps (`--only`); the full gate runs once at the
-   end, before the report. At most 3 full runs per slice; a 4th needs the coordinator's decision.
-3. **Batched merges.** The coordinator merges 2-4 ready slices together and runs the merge suite once on the combined result; if it
-   fails, bisect by slice.
-4. **Module re-certification** (Steward's measured modules) at an Architect pin only when the module's code changes or the Architect
-   build, billing or realise paths it uses change; a plain version bump gets a smoke check (one field round plus the billing check).
-5. **Gate capacity.** 4 concurrent in-game gate runs (`slots.max` 4); unit suites (kit, sidecar, Gradle) under `nice -n 10`; no two
-   in-game runs start within 5 minutes of each other (`slots.load.settleSec` 300); docs, kit-only and unit-only work takes no slot.
-   The nightly blackout and nightly rules are unchanged.
-7. **Short as-builts.** A slice's as-built and its report are 10-15 lines: what changed, what ran and passed, the leftovers. The
-   detail stays in the commits.
-8. **Scoped unit suites per slice** (Noah via parent session, 2026-11-13: "yes, send that to both managers/add to agent/claude
-   docs"). A slice runs only the kit, sidecar and Java tests for the files it touched plus their direct dependents; the full kit,
-   sidecar and Gradle suites run once, at the batch merge. A slice that touches shared core (the checker core, the journal or
-   ledger, the build pipeline) runs the full suite. *Tooling:* `node tools/unit-scope.mjs --run` ("Scoped unit suites" below).
-9. **Timing benches are report-only** (same decision). Benches such as the forms-island evaluation cost move out of the pass/fail
-   suites into a report step that records the number and the load; past its bound a bench flags, it does not fail the slice. The
-   nightly keeps tracking them (`tools/lib/bench-report.mjs`, below).
-10. **Load-gate bounds** (Noah via parent session, 2026-11-13: "lets ensure that is 15 min max from now on, with high at least 72
-   cap"). `slots.load.maxWaitMin` stays at 15 or less and `slots.load.max1` at 72 or more (0, `--no-load-wait`, stays allowed).
-   Raising max1 or shortening the wait is fine; anything outside needs Noah. `loadConfig` (tools/lib/turbo.mjs) clamps a config or
-   env override (`GATE_LOAD_MAX`, `GATE_LOAD_WAIT_MAX_MIN`) outside the bounds, with a warning; the nightly runs through gate-run, so
-   the same bounds hold there.
-11. **Deferred verification** (Noah via parent session, 2026-11-15: "Yes, apply all"). Overrides rules 1-4 where they conflict.
-   1. **Light tier: no in-game run per slice.** Compile, the scoped unit tests (rule 8) and gitleaks; the slice joins the next batch,
-      whose in-game run covers it.
-   2. **Strict tier: targeted scenario only.** Only the in-game scenarios for the risk the slice touches (its item-loss, billing,
-      refund, undo or crash case); no full gate of its own; the batch merge runs the full gate.
-   3. **Bigger batches.** The coordinator merges 4-6 ready slices together with one full merge suite on the combined result; on a
-      failure, bisect by slice.
-   4. **Fewer releases.** A release every 2 batches, with one full release gate and the gate-verifier (`--no-cache`).
-   5. **Verifier and GPT review per release.** The strict gate-verifier and the GPT review run once per release over all the strict
-      diffs it contains, not once per slice.
-   6. **Steward pins skip versions.** The Architect pin moves every other release; at the others, a smoke check (one field round plus
-      billing), unless the module's own code or Architect's realise or billing paths changed.
-   Unchanged: the targeted strict scenario on every strict slice, scoped units, gitleaks, the 3-full-runs cap, $0 without Noah's
-   approval, slices never merge or push main. Nightlies stay skipped until Noah says otherwise.
+**Tiers and gating**
 
-12. **Gate capacity, raised** (Noah via parent session, 2026-11-15: "More gate slots + ports"). `slots.max` 6 and
-   `slots.load.settleSec` 120 (`gate-chains.json`; rule 5's 4 and 300 are replaced); rule 10's load bounds stay. A second slice port
-   range **9000-9099** in 6-port blocks (base, base+2, base+4) beside 8896-8939; **9100-9149 is Steward's**. The turbo range and
-   the infra ports are unchanged. The coordinator still assigns every block (Ports, below).
-13. **Standing approvals** (same decision, "Standing approvals"). Go ahead and send the parent session a one-line note: a paid step
-   under $1 inside an already-approved budget (with its cost); a product question with a confident recommendation. Still ask Noah
-   first: anything irreversible, anything that changes what a player loses or pays, a new public surface, new budgets or raised
-   caps, any step over $1.
-14. **More parallel slices** (same decision). Keep 6-8 slices in progress at once as files and ports allow, and pre-brief the next
-   ones so a free slot never sits empty. Rule 11's once-per-release strict verifier and GPT review are unchanged.
+1. **Risk tiers** [1]. *Strict:* persistence and saves, billing, refunds and stock, undo and revert, crash recovery and reconcile,
+   and anything that can mint or lose items. *Light:* everything else (UI, wording, tooling and gate infra, docs, fixtures, $0
+   prompts). The coordinator picks the tier in the brief.
+2. **Light slices** [11.1, 8]: compile, the scoped unit tests (rule 7) and gitleaks. No in-game run of their own (the batch's run
+   covers them), no gate-verifier, no GPT review. A design-critic look only for new screens.
+3. **Strict slices** [11.2, 15, 17, 18]:
+   - **Persist before mutate** [17]: no world, stockpile or in-memory change affecting items, billing or refunds before a durable,
+     *confirmed* record of it. A queued save or executor completion is not persistence. Once slice TXN lands, use its transaction
+     layer.
+   - **Crash points and conservation** [18]: crash at each save point of the operation, and after every strict scenario assert that
+     stockpile + world + ledger balance (items in == items out). Write the tests failing-first; use TXN's harness once it exists.
+   - **Targeted scenarios only** [11.2]: run only the in-game steps for the risk touched (its item-loss, billing, refund, undo or
+     crash case: `node tools/gate-run.mjs change --only <steps>`); no full gate per slice. The batch merge runs the full gate.
+   - **Early GPT review** [15] of the slice's own diff, in the background, once its strict scenarios pass (the second-opinion
+     skill, `codex exec ... -s read-only`). Fix its P1s (one fix-verification pass) before the slice joins a batch.
+4. **The review-round guard** [20]: after a NOT SAFE GPT review, one fix round, then one final GPT pass. If that still finds a P1,
+   the slice goes to Noah via the parent session: no more rounds, and **never drop a slice from a release without Noah's OK**.
+5. **Verify review premises in code** [19] before designing on a reviewer's framing. Example: construction crates are called
+   "legacy" in some comments, but `Builder`, `RoadBuilder` and `Batches` (`CratePlacement`) still place them: crates are a live
+   survival flow.
+6. **Failing steps only** [2]: after a failure, re-run only the failing steps (`--only`; an explicit list reuses unchanged PASSes
+   since slice GX, so add `--no-cache` where a step must run). At most **3 full runs** per slice; a 4th needs the coordinator.
+7. **Scoped unit suites** [8]: a slice runs the tests for the files it touched plus their direct dependents,
+   `node tools/unit-scope.mjs --run` ("Scoped unit suites" below). The full kit, sidecar and Gradle suites run at the batch merge.
+   A slice touching shared core (`SHARED_CORE` in the tool: the checker core, the journal and ledgers, the build pipeline) runs
+   the full suites.
+8. **Timing benchmarks are report-only** [9]: `tools/lib/bench-report.mjs` records and flags them, never fails a slice; the
+   nightly tracks them. (Timing bars in `change`/`slice` are likewise recorded, not judged: "Timing bars" below.)
 
-15. **Review per strict slice** (Noah via parent session, 2026-11-16: "Review per strict slice"; he did not pick auto-dropping a
-   failed slice). As soon as a strict slice is built and its targeted strict scenarios pass, the coordinator runs that slice's own GPT
-   review in the background, on its diff only (`codex exec ... -s read-only`, the second-opinion skill's framing), while other work
-   goes on. Its P1 findings are fixed (one fix-verification pass) before the slice joins a batch. Rule 11's per-release GPT review
-   stays: this adds a check and removes none. Light slices get none.
-16. (Overnight delegation, 2026-11-16: ended with Noah's wrap-up.)
-17. **Persist before mutate** (Noah via parent session, 2026-11-17, rules 17-24). No world, stockpile or in-memory change that
-   affects items, billing or refunds happens before a durable, *confirmed* record of it. Executor completion or a queued save is not
-   persistence. Once TXN lands, use the transaction layer (docs/TXN-DESIGN.md).
-18. **Crash points and conservation in every strict slice.** Inject a crash at each save point of the operation and assert
-   conservation (stockpile + world + ledger balance; items in == items out) after every strict scenario, failing-first. Once TXN's
-   harness exists, use it.
-19. **Verify review premises in code.** Before recommending a design built on a reviewer's framing (e.g. "legacy crates"), check
-   the claim against the code.
-20. **The review-round guard.** After a NOT SAFE GPT review: one fix round, then one final GPT pass. If that still finds a P1, the
-   slice goes to Noah via the parent: no further rounds, and no dropping it from a release without his OK.
-21. (Spending: pending Noah's direct confirmation; until then the spend rules above stand.)
-22. **Review sheets for Noah are one self-contained HTML file**, images inlined as data URIs (JPEG if large;
-   `tools/sheet-inline.mjs`).
-23. **Each slice keeps its run scripts and temp files in its own worktree**, never a shared scratchpad path.
-24. **Gate build caches are refreshed** in every gate worktree whenever lab-ui or a pinned dependency changes.
+**Batches and releases**
 
-(Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
-the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
+9. **Batches of 4-6 ready slices** [11.3, 3], merged by the coordinator, with one full merge suite on the combined result (the full
+   unit suites and the batch's in-game run); bisect by slice on a failure.
+10. **Releases** [11.4, 11.5, 15]: a shortened release gate (the changed steps plus the strict set, step cache on), then the strict
+    gate-verifier with `--no-cache` on the strict steps, then the per-release GPT review over all the release's strict diffs.
+    Publish only after all three. The verifier never accepts a cached result. Versions: one command at merge ("Release
+    versions"). A Steward RC runs on every release; its areas follow what changed.
+11. **Steward pins skip versions** [11.6]: Steward bumps its Architect pin every other release (or sooner when a slice needs it,
+    as QD did on 0.73.0). The releases in between get a smoke check only.
+11b. **Module re-certification** [4, 11.6] (Steward's measured modules): re-certify at a new Architect pin only when the module's
+    own code, or the Architect build, billing or realise paths it uses, changed. Otherwise a smoke carry: re-quote the bounds and
+    run one field round plus billing.
+
+**Capacity**
+
+12. **Gate slots** [5, 10, 12]: up to **6** concurrent in-game runs (`slots.max` 6), at least **2 min** between in-game starts
+    (`slots.load.settleSec` 120), load threshold `slots.load.max1` **>= 72** (72 now), load wait `slots.load.maxWaitMin`
+    **<= 15** (15 now): `tools/gate-chains.json` `slots`. Going past the load bounds needs Noah; `loadConfig` (tools/lib/turbo.mjs)
+    clamps an override outside them, with a warning. Unit suites run under `nice -n 10`. Docs-only and unit-only work takes no
+    slot. Details: "Slot lock", "Load-aware start".
+13. **Ports** [12]: Architect slices, verifiers and releases use the block the coordinator assigns in **8896-8939** (pairs) or
+    **9000-9099** (6-port blocks). Turbo uses 8940-8999, infra 8912-8915. Steward uses its own pairs plus **9100-9149**, and its
+    in-game clients take slots from the shared queue (`tools/slot.mjs`, slice SLOT). The one table: "Ports" below.
+14. **Parallel slices** [14]: the coordinator keeps 6-8 slices in progress where files and ports allow, and pre-briefs the next.
+15. **Build caches** [24]: refresh every gate worktree's build cache when lab-ui or a pinned dependency changes. The runner does
+    this for its own slots: `tools/lib/pinned-deps.mjs` resolves a bumped pin (`PINS`: `lab_ui_version`) online once per slot's
+    `.gradle-home` before its build ("The nightly", "Pinned dev.larattalabs dependencies"). Add a new pinned dependency to `PINS`;
+    refresh any other gate worktree by hand.
+
+**Decisions and spending**
+
+16. **Standing approvals** [13]: on a product question with a confident recommendation, the coordinator proceeds and sends the
+    parent session a one-line note (question, choice, why); Noah can overrule. A paid step under $1 inside a budget Noah already
+    approved goes ahead, noted to the parent with its cost. Still ask first: anything irreversible, anything changing what a
+    player loses or pays, a new public surface, new budgets or raised caps, any step over $1, anything not confident.
+17. **Pre-approved paid spending** [21]: pending Noah's direct confirmation; until then paid runs need Noah's approval in the
+    running session. ([16], the overnight delegation of 2026-11-16, has ended.)
+18. **Everything routes through the parent session** (`local_a69a2186`): Noah's questions, decisions and spend.
+
+**Hygiene**
+
+19. **Short as-builts** [7]: 10-15 lines (what changed, what ran and passed, the leftovers); the detail stays in the commits.
+20. **Review sheets for Noah** [22]: one self-contained HTML file, images inlined (JPEG if large; `tools/sheet-inline.mjs`).
+21. **Run scripts and temp files** [23] stay in the slice's own worktree, never a shared scratchpad path.
+22. **Stall checks** [6]: the parent session's, every ~25 min. The 01:00-03:30 quiet window applies only when a nightly runs.
+23. **Nightlies run by default** (`tools/nightly.mjs`, 02:00 MST); Noah skips one night at a time with an empty
+    `artifacts/nightly/skip-<UTC date>` ("The nightly").
+
+**Always:** slices never merge or push main; gitleaks before any push; kill only your own processes, by PID; no Discord pings
+(never `--notify`); never commit secrets.
 
 ### gitleaks config (`.gitleaks.toml`)
 
@@ -135,7 +143,7 @@ module names covers only its data). Gradle classes the `test` task excludes by t
 suite (`mod/`, `devserver/`, `apitest/`: Gradle; `sidecar/`: vitest; the rest: kit). The one exception, printed: a gate driver (a
 step's root in `tools/step-inputs.json`) no unit reaches gets `node --check`, since the slice's own gate step runs it.
 
-**Report-only benches** (rule 9): `bench({ id, value, bound, better, unit })` from `tools/lib/bench-report.mjs` appends the reading,
+**Report-only benches** (speed rule 8 [9]): `bench({ id, value, bound, better, unit })` from `tools/lib/bench-report.mjs` appends the reading,
 the 1-min load and the core count to `artifacts/benches/<UTC date>.jsonl` and prints `FLAG bench ...` past its bound;
 `ARCHITECT_TIMING_BARS=1` (a dedicated box) makes it fail, as `JournalIndexBenchTest`'s p99 already did. The nightly's SUMMARY.md
 has a "Unit benches" line (recorded, flagged). Moved: `forms-island` evaluation cells/s (>= 90k), `region-fixtures` walled_hill
@@ -212,33 +220,23 @@ fail (CONTRACT "Slice QT as built", runs 1-3). Prove such a model in a unit when
 
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
-These override the tier, verifier and RC rules below for as long as dev mode is on.
+These override the tier, verifier and RC rules below for as long as dev mode is on. Where they differ from "Speed rules" above,
+the speed rules win (the text before the consolidation is in docs/archive/PROCESS-HISTORY.md).
 
-**A slice merges when these pass:**
-- unit tests;
-- the instant lints (lint-structure, lint-look, water-lint, p3-lint; since slice SP p3-lint's two classes run inside unit-mod, which supersedes it);
-- the slice's OWN in-game steps.
-No regression suite, impact steps or before/after comparison runs per slice. Use `gate-run change --only <the slice's own steps>`.
-
-**The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
-the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
-
-**A Steward RC runs on every release** (practice since v0.60; its areas follow what changed, so a release that leaves the API Steward
-calls alone gets a smaller set). Steward's pin and smoke rules decide its depth (speed rule 4).
-
-**Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
-
-**Releases are cheap tags,** cut whenever Steward needs something or every day or two. No release-tier run before a tag.
-
-**The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
-
-**Test-tooling slices are allowed** (GX, TS, SP and the load-aware start were all such slices) when they save more wall time than
-they cost; the coordinator briefs them and picks the tier (tooling is light, speed rule 1).
-
-**Keep the machine for product:**
-- at most 4 gate runs on the machine at once (`slots.max` 4, below; the one number every doc and brief uses; Noah's speed rules, 2026-11-13);
-- no duplicate before/after runs: compare against recorded history instead;
-- commit before running (the runner tests a frozen snapshot).
+- **What a slice runs** follows its tier (speed rules 2 and 3): a light slice compiles, runs its scoped units and gitleaks, and
+  no in-game step; a strict slice adds only the in-game steps for its risk (`gate-run change --only <steps>`). The instant lints
+  (lint-structure, lint-look, water-lint; p3-lint's two classes run inside unit-mod since slice SP) run in the unit suites. No
+  regression suite, impact steps or before/after comparison per slice.
+- **The gate-verifier** runs per release only, strict and `--no-cache` on the strict steps (speed rule 10); strict slices get
+  their own early GPT review instead (speed rule 3).
+- **A Steward RC runs on every release** (practice since v0.60; its areas follow what changed, so a release that leaves the API
+  Steward calls alone gets a smaller set). Steward's pin and smoke rules decide its depth (speed rules 11 and 11b [4, 11.6]).
+- **Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
+- **The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
+- **Test-tooling slices are allowed** (GX, TS, SP and the load-aware start were all such slices) when they save more wall time
+  than they cost; the coordinator briefs them and picks the tier (tooling is light, speed rule 1).
+- **Keep the machine for product:** at most `slots.max` (6) gate runs at once (speed rule 12); no duplicate before/after runs
+  (compare against recorded history instead); commit before running (the runner tests a frozen snapshot).
 
 **To return to release mode:** Noah says so. Then the full tiers and verifier re-runs come back (Steward RCs already run every release).
 
@@ -246,7 +244,8 @@ they cost; the coordinator briefs them and picks the tier (tooling is light, spe
 
 Evidence from 0a-X: every timing-bar failure on a slice was machine load (0a's three benches, 0b's 4d-all, 0c's three,
 X's apijars, v0.16.0's 4d-all A/B against v0.15.0); no slice gate's full regression caught a real bug; the real finds came
-from each slice's own focused items, the verifier's code review and Steward's reviews. So, **these win over the tables below**:
+from each slice's own focused items, the verifier's code review and Steward's reviews. So, **these win over the tables below** (items 3-6 are
+superseded as noted; their 2026-10-12 text is in docs/archive/PROCESS-HISTORY.md):
 
 1. **Timing bars never block a slice.** In `change` and `slice` a bench step's timing bars (MSPT, own-tick max, cells/s,
    p99, wall, heap, quiet-dependent gaps such as apijars' SITE_PROGRESS gap) are **recorded, not judged**; its functional checks
@@ -257,16 +256,12 @@ from each slice's own focused items, the verifier's code review and Steward's re
    changed paths, and the slice's own gate steps (found by the impact rule of the slice's driver, e.g. `tools/gate6cw.mjs` ->
    `w-unit`, `w-ingame`, `6cv-scenario-s7`). No `quick` regression suite per slice; the full regression runs once per
    batch at `release` (overnight). *Implemented:* `--plan` prints, under each step, why it runs.
-3. **The gate-verifier reviews the diff and the evidence; it does not re-run.** Exception: undo, journal, removal and
-   survival-accounting code, where it re-runs those specific items (that is where review found C23's defect).
-4. **Release first, Steward checks after.** A slice merges and releases without a pre-release Steward RC check; Steward checks
-   the published version and anything found becomes a patch. Exception: a slice changing behaviour Steward relies on (removal,
-   world stop, accounting) gets the RC check first.
-5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
-   merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
-6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
-   *Implemented:* see "Slot lock" below. (Raised to 4 on 10-17, set back to `slots.max` 3 on 2026-11-13 so the tool, AGENTS.md and every brief agree, then raised to 4 by Noah's speed rules the same evening; a run's shard count now follows the machine's load,
-   "Adaptive shards".)
+3. **The gate-verifier**: now per release only, strict and `--no-cache` on the strict steps (speed rule 10).
+4. **Steward's RC**: now on every release (DEV MODE).
+5. **Batch releases**: now batches of 4-6 slices and the three-part release check (speed rules 9 and 10). API and mod versions
+   are still assigned at merge (next free minor), so branches never renumber ("Release versions").
+6. **Gate runs at once**: now `slots.max` 6 (speed rule 12; "Slot lock"). A run's shard count follows the machine's load
+   ("Adaptive shards").
 7. **Bench isolation only where timing is judged (Noah, 2026-10-17).** A bench step runs alone only at `release`, in the named
    chains and with `--judge-timing`. In `change` and `slice` it schedules like any other step (same client, host and
    resources) and its timing is recorded as **contended**. No check is dropped. *Implemented:* see "Gate speed" below.
@@ -307,16 +302,14 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 | Range | Who |
 |---|---|
 | 8890-8895 | the default Architect gate runner (the nightly, a coordinator run without `--ports`) |
-| 8896-8939 (pairs) | slice gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
-| 9000-9099 (6-port blocks) | more slice gate runs and verifiers (speed rule 12, 2026-11-15); the coordinator assigns them the same way |
-| 9100-9149 | Steward (speed rule 12); never use them from Architect |
+| 8896-8939 (pairs) | slice and release gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
+| 9000-9099 (6-port blocks: base, base+2, base+4) | more slice and release gate runs and verifiers (speed rule 13 [12], 2026-11-15); the coordinator assigns them the same way |
+| 9100-9149 (pairs) | Steward's extra gate and measurement runs (speed rule 13 [12]); never use them from Architect |
 | 8898/8899 | reserved: the gallery client |
 | 8912-8915 | reserved (infra and UI runners) |
-| 8940-8999 | turbo shards (`gate-chains.json` `turbo.portRange`); nothing else may bind there |
-| 8490/8491, 8590/8591, 8592/8593, 8600/8601 | Steward (dev client, e2e, slices); never use them from Architect |
+| 8940-8999 | turbo shards (`gate-chains.json` `shards.turbo.portRange`); nothing else may bind there, except that a shared `--shards auto` run draws its pairs from 8980-8999 (`shards.auto.portRange`) |
+| 8490/8491, 8590-8601 | Steward: dev client 8490/8491, e2e 8590/8591, module catalogue 8592/8593, module measurements and slices 8594-8599 and 8600/8601 (Steward's AGENTS.md); never use them from Architect |
 | 7880, 7890-7909 | AgentCraft Foreman |
-
-Steward's own agent range (its AGENTS.md "8960-8989") overlaps the turbo range above and is Steward's to move.
 
 ### Slot lock: at most N gate runs on the machine (`slots.max`, 6 since speed rule 12)
 
@@ -346,7 +339,7 @@ node "$ARCHITECT_DIR/tools/slot.mjs" status --json               # holders (who/
 - **Load alone never fails it:** as for a gate run, the load gate gives up at the cap and starts (`loadWait.gaveUp`).
 - **`--pid`:** the slot's holder. Use the e2e driver's node pid (alive for the whole run), not a relaunching client. The slot
   frees when that pid dies; a waiter that dies loses its queue ticket.
-- **`--max-wait-min`:** 15 by default, capped at 15 (rule 10). On timeout (full slots, turbo, the queue ahead) it exits 2 with
+- **`--max-wait-min`:** 15 by default, capped at 15 (speed rule 12 [10]). On timeout (full slots, turbo, the queue ahead) it exits 2 with
   `waited 15 min for a slot (load N / max1 72; turbo none|queued|reserving|running (pid ..); holders: ..)` on stderr. Exit 3: the
   holder pid is dead. Exit 4: a release freed nothing.
 - **Status:** `status --json` `turbo` has `queued`, `reserving` and `running`. A turbo run waits for Steward holders like gate runs.
@@ -363,7 +356,7 @@ rules above stay as they are. On top of them, a **shared** run whose turn it is 
 still waits while:
 - the 1-minute load average is above `slots.load.max1` (72, four times the 18 cores; 36 until 2026-11-13, raised because the speed
   rules' `nice`d unit suites hold the load average near 80; still holds a run back in spikes such as 130), or
-- another run took its slot less than `slots.load.settleSec` (300 s since the speed rules of 2026-11-13; 120 s before) ago. The load average lags by about a minute, so without this
+- another run took its slot less than `slots.load.settleSec` (120 s; 300 s from 2026-11-13 to 2026-11-15, speed rule 12 [12]) ago. The load average lags by about a minute, so without this
   every run queued behind a high load would start in the same 15 s poll once it dips.
 
 It **never waits when it would be the only gate run** (the load is then not the gate runs', so waiting would not end it), and waits
@@ -1265,9 +1258,9 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - *GR-b (2026-11-16).* **unit-kit ends without a complete report** (TIMEOUT/FAIL/ERROR, passed as `GATE_KIT_PRODUCER`): the first
   whole-suite reader (20+ files) re-runs the suite once under GX's shared-suite lock; the rest wait and reuse it under the same
   rules (complete, this tree, every file with tests and no failure: no stale PASS). Fewer files: run here, never wait. A re-run
-  that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that rule 2 re-runs.
+  that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that speed rule 6 [2] re-runs.
   **Load-scaled timeouts:** `gate-chains.json` `timeoutLoadScale.steps` (unit-kit, -sidecar, -scope) spend `min(1, ref / load1)` of
-  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (rule 10's spirit: bounded, recorded as
+  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (speed rule 12 [10]'s spirit: bounded, recorded as
   `timeoutLoadScale` in `summary.json`). Load, not CPU time: node --test children exit and Gradle's daemon is outside the group, so
   `ps` under-counts (`tools/lib/load-timeout.mjs`; tests `kit/test/gate-load-timeout.test.mjs`, `gate-kit-producer.test.mjs`).
 
@@ -2164,6 +2157,9 @@ an env every part gets (`${PART}` = p1, p2, ...: each part's own evidence dir) a
 
 ### The knee: why `shards.turbo.max` is 9
 
+(It is 6 since 2026-10-24: see the decision at the end of this section and "Frozen source and the CPU budget".)
+
+
 The same 49 steps (`change --files tools/gate-run.mjs --turbo --no-split --lanes 3 --only ...`: 15 client-less steps (the unit
 suites with unit-kit, which their readers wait for, the lints), 25 in-game steps on headless servers, 6 scenarios (5 on hidden
 clients) and 3 look steps on clients; each at most about 12 min in history) at 3, 6, 9 and 12 in-game shards, back to back on
@@ -2696,7 +2692,7 @@ Gates are tiered by risk. Run the cheapest tier that covers the change, and the 
 |---|---|---|---|
 | `change` | the three unit suites (mod `gradlew build`, kit, sidecar vitest) + the steps the impact map gives the changed paths. Timing bars recorded, not judged. A docs-only diff runs nothing. | every commit or small change, while iterating | minutes (a journal change: ~16 min; a driver change: ~7 min) |
 | `slice` | the unit suites + `apijars` (api-compat) + the change and slice steps of the impact, i.e. the slice's own gate steps. **No `quick`.** Timing bars recorded, not judged. A docs-only diff runs nothing. | before a slice merges | a journal slice: ~28 min on one shard; a driver-only slice: its own steps + ~5 min |
-| `release` | everything, with the duplicate heavy checks rotated (below); timing bars **judged**, `--quiet-wait` on by default; the judged benches reused from the nightly unless what they measure changed ("Benches out of the release path"); then the full independent gate-verifier | once per release batch (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
+| `release` | everything whose cache key misses, with the duplicate heavy checks rotated (below); timing bars **judged**, `--quiet-wait` on by default; the judged benches reused from the nightly unless what they measure changed ("Benches out of the release path"); then the strict gate-verifier and the per-release GPT review (speed rule 10) | once per release batch (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
 
 Pick the range with `--since <ref>` (the diff `<ref>...HEAD`, from the merge base), `--range A...B`, or `--files a,b`.
 `release` with no range uses the last tag reachable from HEAD; with no tag at all it counts as engine- and placement-touching.
@@ -2826,19 +2822,17 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
 
 ### Lighter verification (gate-verifier guidance)
 
-The runner never calls Claude. The independent gate-verifier is launched by the agent, after the run, on its evidence.
+The runner never calls Claude. The independent gate-verifier is launched by the agent, after the run, on its evidence. Who checks
+what follows the speed rules (the earlier per-slice verifier text is in docs/archive/PROCESS-HISTORY.md):
 
-- **Per change:** no verifier. The `change` run's SUMMARY.md is the record.
-- **Per slice:** the gate-verifier **reviews**, it does not reproduce:
-  1. the diff (`git diff <base>...HEAD`) against the slice contract;
-  2. the runner's `SUMMARY.md`, `summary.json` (tier, impact, unmapped paths, every step's status and key numbers) and the evidence
-     of the steps that matter (gate JSONs under `gate4e/`, `gate6a/`, ...), checking that the run's head is the slice head and
-     that the selection covered the diff;
-  3. then it **re-runs only the risky steps**: anything touching the journal, the undo or survival, plus the steps for whatever the
-     diff touches that the verifier judges risky (`node tools/gate-run.mjs change --only <steps> --no-cache ...` on its own ports: `--no-cache`, since an explicit list looks up
-     its steps from slice GX on, and a re-run must run).
-- **Per release:** full reproduction. The `release` run, then the full independent gate-verifier, which reproduces the gates
-  itself (every bar, every step, not only the runner's word).
+- **Per change and per light slice:** no verifier and no GPT review. The run's SUMMARY.md (or the unit output) is the record.
+- **Per strict slice:** no verifier; the slice's own early GPT review on its diff (speed rules 3 and 4).
+- **Per release:** after the shortened release gate, the strict gate-verifier. It reviews the diff (`git diff <base>...HEAD`)
+  against the contracts and the runner's `SUMMARY.md` and `summary.json` (tier, impact, unmapped paths, every step's status and
+  key numbers, the run's head), then **re-runs the strict steps itself** (journal, undo, removal, crash, survival accounting:
+  `node tools/gate-run.mjs change --only <steps> --no-cache ...` on its own ports; `--no-cache`, since an explicit list looks up
+  its steps from slice GX on and a verifier never accepts a cached result). Then the per-release GPT review over all the
+  release's strict diffs (speed rule 10).
 
 ## What a run does
 
@@ -2892,7 +2886,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--lock FILE` | `GATE_LOCK` | `<out>/gate-run.lock` |
 | `--seed-dir DIR` | `GATE_SEED_DIR` | `../architect-mc-6a-run` |
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
-| `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
+| `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (6); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
 | | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; under the runner the step's CPU share, at least 4 ("Frozen source and the CPU budget"), else the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v2` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
 | | `GATE_CPU_CORES` | the machine's cores (`hw.ncpu`, 18 here): the run's CPU budget ("Frozen source and the CPU budget") |
@@ -2959,7 +2953,7 @@ passes `--judge-timing`. mega-lite's bars judge here as before.
 2. **Launch it detached** and note the run dir:
 
    ```sh
-   nohup node tools/gate-run.mjs slice --since origin/main > /tmp/gate-run.out 2>&1 &
+   mkdir -p artifacts; nohup node tools/gate-run.mjs slice --since origin/main > artifacts/gate-run.out 2>&1 &   # artifacts/ is ignored; your own worktree (speed rule 21 [23])
    sleep 30; R=$(ls -td ../architect-mc/artifacts/gate-runs/*-slice | head -1); echo $R
    ```
 

@@ -8,24 +8,37 @@ undoably. It has three parts:
 
 Steward (`../steward-mc`) is the main consumer of the API.
 
+This file is the current rulebook. Superseded rule text and dated process history are in `docs/archive/PROCESS-HISTORY.md`.
 
-**DEV MODE is on (Noah, 2026-10-24).** Gates are lighter until Noah says otherwise. Read docs/GATES.md "DEV MODE" before you
-gate anything:
-- a slice merges on its unit tests, the instant lints and its own in-game steps;
-- the verifier only reviews, except for undo, the journal, crash recovery and survival accounting;
-- **speed rules (Noah, 2026-11-13; docs/GATES.md "Speed rules"):** strict vs light tier, re-run only failing steps, 3 full runs
-  per slice, batched merges, 4 gate runs, `nice -n 10` unit suites, 5 min between in-game starts, 10-15 line as-builts;
-  scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
-  the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
-  the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
-- **rules 17-20, 22-24 (Noah, 2026-11-17; docs/GATES.md "Speed rules"):** persist before mutate (a confirmed durable record before
-  any item, billing or refund change; executor completion is not persistence; TXN once it lands); crash points at each save plus a
-  conservation assertion after every strict scenario, failing-first; verify review premises in code; review guard (one fix round,
-  one final GPT pass, then Noah; no auto-drop); self-contained HTML review sheets; run scripts and temp files in the slice's own
-  worktree; refresh gate build caches when lab-ui or a pinned dependency changes;
-- a Steward RC runs on every release (its areas follow what changed);
-- test-tooling slices (GX, TS) are allowed when they save more wall time than they cost; the coordinator briefs them;
-- the full set runs nightly.
+## Speed rules and DEV MODE
+
+**The speed rules are the working rules: docs/GATES.md "Speed rules"** (one current set; old rule numbers in brackets). In short:
+- **Tiers** (rule 1): *strict* is persistence and saves, billing, refunds and stock, undo and revert, crash recovery and
+  reconcile, anything that can mint or lose items; *light* is everything else. The coordinator picks the tier in the brief.
+- **Light slice** (rule 2): compile, scoped units (`node tools/unit-scope.mjs --run`), gitleaks. No in-game run, no verifier, no
+  GPT review; a design-critic look only for new screens.
+- **Strict slice** (rule 3): persist before mutate (a confirmed durable record before any item, billing or refund change; a queued
+  save or executor completion is not persistence); crash points at each save plus a conservation assertion after every strict
+  scenario, failing-first; only the in-game steps for its risk; an early GPT review of its diff before it joins a batch.
+- **Review guard** (rule 4): after a NOT SAFE review, one fix round and one final GPT pass, then Noah. Never drop a slice from a
+  release without Noah's OK. **Verify a reviewer's premise in code** (rule 5) before designing on it.
+- **Re-runs** (rule 6): only the failing steps (`--only`); at most 3 full runs per slice. **Timing benches** (rule 8) flag, never
+  fail a slice.
+- **Batches and releases** (rules 9-10): 4-6 slices per batch with one full merge suite; a release is the shortened release gate,
+  then the strict gate-verifier (`--no-cache`), then the per-release GPT review, and publishes only after all three.
+  Steward moves its Architect pin every other release (rule 11), with a smoke check in between.
+- **Capacity** (rules 12-13): at most 6 gate runs at once, 2 min between in-game starts, load max1 >= 72, load wait <= 15 min
+  (`tools/gate-chains.json` `slots`); unit suites under `nice -n 10`; docs-only and unit-only work takes no slot.
+- **Spending** (rules 16-17): a paid step under $1 inside a budget Noah already approved goes ahead with a one-line note to the
+  parent. Pre-approved paid spending (rule 17 [21]) is pending Noah's direct confirmation; until then paid runs need Noah's
+  approval in the running session.
+- **Routing** (rule 18): Noah's questions, decisions and spend go through the parent session.
+- **Hygiene** (rules 19-23): 10-15 line as-builts; review sheets as one self-contained HTML file (`tools/sheet-inline.mjs`); run
+  scripts and temp files in your own worktree; nightlies run by default (Noah skips a night with a skip file).
+
+**DEV MODE is on (Noah, 2026-10-24)** until Noah says otherwise (docs/GATES.md "DEV MODE"): galleries only for look slices, a
+Steward RC on every release (its areas follow what changed), test-tooling slices allowed when they save more wall time than they
+cost, and the full set in the nightly.
 
 ## Where things are decided
 
@@ -42,25 +55,20 @@ gate anything:
 
 ## Process
 
-- **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
+- **Work in slices** of a few hours. Each has a short contract that Steward reviews, a tier and a focused check (speed rules 2-3).
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
-- **Unit tests per slice:** `node tools/unit-scope.mjs --run` (the tests for the files you changed plus their direct dependents;
-  full suites for shared core; docs/GATES.md "Scoped unit suites"). The full suites run once, at the batch merge.
-- **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`, `../architect-mc-<x>`). Never commit to main directly.
-  Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
-- **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
-  per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
-  the verifier reviews and re-runs only undo, journal, removal or accounting items (with `--no-cache`: since slice GX an `--only`
-  list reuses unchanged PASSes, docs/GATES.md "Slice GX as built"); at most 6 gate runs at once (`slots.max` 6, speed rule 12; ports 8896-8939 and 9000-9099 by the coordinator; docs/GATES.md "Slot lock", "Speed rules").
+- **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`,
+  `../architect-mc-<x>`). Never commit to main directly. Slices run **in parallel** on separate worktrees and ports; merge
+  `origin/main` into your branch when another slice lands.
 - **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
   as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
   "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod
   A.B.C --kit K.L.M [--catalogue N]`: it sets every version, stamps the placeholders, re-cuts and verifies the goldens that record
   `kitVersion`; `--check` verifies only (docs/GATES.md "Release versions").
-- **Merging:** when the `slice` tier and a gate-verifier review of the diff plus evidence pass, the builder pushes its branch
-  and reports "ready to merge". The coordinator merges into main, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and
-  CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two slices claim the
-  same API version, the second to merge takes the next minor.
+- **Merging:** when the slice's tier checks pass (and, for a strict slice, its GPT review's P1s are fixed), the builder pushes its
+  branch and reports "ready to merge". The coordinator merges batches into main, tags and publishes; tag `vX.Y.Z` must equal
+  `mod_version`, and CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two
+  slices claim the same API version, the second to merge takes the next minor.
 - **CI runners and benches:** release-tier benches may ask the coordinator to pause Noah's CI runners (the LaunchAgents
   `com.laratta.ci-container-autoscale` and `com.laratta.tart-yardpaint-runner`). Noah allowed this when needed. Never pause
   them yourself.
@@ -71,8 +79,8 @@ gate anything:
 ## Build and test
 
 - **Java:** `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home`. In a new worktree, first run
-  `cp -c -R ~/Developer/LarattaLabs/Minecraft/architect-mc/.gradle-home . && rm -f .gradle-home/daemon/*/registry.bin*` (an APFS clone, cheap;
-  the copied daemon registry would otherwise point Gradle at the original's live daemons). Then
+  `cp -c -R ~/Developer/LarattaLabs/Minecraft/architect-mc/.gradle-home . && rm -f .gradle-home/daemon/*/registry.bin*` (an APFS
+  clone, cheap; the copied daemon registry would otherwise point Gradle at the original's live daemons). Then
   `cd mod && ./gradlew build --offline`.
 - **lab-ui** (`dev.larattalabs:lab_ui`, the shared UI library, jar-in-jar): `LAB_UI_DIR`/`-Plab_ui.dir` forces a
   checkout (warns UNRELEASED; never publish that build); else `../lab-ui` only when clean and exactly at tag
@@ -80,42 +88,47 @@ gate anything:
   never commit it). With none, an online build stops; `--offline` uses the cache. A fresh `.gradle-home` lacks the
   package: resolve it online once. Guard kinds carry the `architect_mc:` prefix (lab-ui's Guard state is shared by
   every mod that bundles it).
-- **Kit:** `node --test kit/test/*.test.mjs`. **Sidecar:** `cd sidecar && npm ci && npm run check` (tests, plus the
-  `dist/main.mjs` bundle). A release build fails without the bundle.
+- **Unit tests per slice:** `node tools/unit-scope.mjs --run` (the tests for the files you changed plus their direct dependents,
+  under `nice -n 10`; full suites for shared core; docs/GATES.md "Scoped unit suites"). The full suites run at the batch merge:
+  - **Kit:** `node --test kit/test/*.test.mjs`.
+  - **Sidecar:** `cd sidecar && npm ci && npm run check` (typecheck and tests); `npm run build` writes the `dist/main.mjs`
+    bundle. A `-Prelease` or publishing mod build fails without the bundle; a development jar only warns.
 - **In-game gates:** `node tools/gate-run.mjs <change|slice|release> --since origin/main --plan`, then run it detached.
-  - Tiers: `change` while iterating; `slice` before a slice merges; `release` (all steps, overnight) plus the full
-    gate-verifier once per release.
+  - What a slice runs follows its tier (speed rules 2-3): a strict slice runs `change --only <its risk's steps>`; the batch
+    merge and the release run the full tiers.
   - Commit first, because clients run HEAD.
   - Wait with ONE long until-loop on this run's own `summary.json` until its `state` is no longer `running` (the file exists
     from the run's start, so its existence means nothing), then read `SUMMARY.md` once. Never poll every few minutes:
-    each wake costs Noah's subscription.
-- Set `enableVsync:false` in `mod/run/options.txt`, or a hidden client stalls at the loading screen.
+    each wake costs Noah's subscription. docs/GATES.md "For agents: launch, then wait once".
+- Set `enableVsync:false` in `mod/run/options.txt`, or a hidden client stalls at the loading screen (the gate client scripts do).
 - **Tick bars judge Architect's own per-tick time.** The vanilla tick and GC are recorded, not judged.
 
 ## Ports (don't collide with other sessions)
 
-- One table: docs/GATES.md "Ports". Use the pair your brief names; for anything else ask the coordinator. Extra runners pass
-  `--ports/--run-dir/--out/--lock`.
+- One table: docs/GATES.md "Ports". Slices, verifiers and releases use the block the coordinator assigns in 8896-8939 or
+  9000-9099; Steward's are 8490/8491, 8590-8601 (8594-8599 among them) and 9100-9149. For anything else ask the coordinator. Extra runners pass `--ports/--run-dir/--out/--lock`.
 
 ## Hard rules
 
 - **No Anthropic API key, ever.** Paid runs use Noah's claude login (the sidecar's opt-in claude-login mode), only within a
-  stated spend cap, tracked in `artifacts/<gate>/spend.json`. Gates are sim/stub ($0) unless a contract says otherwise.
+  stated spend cap and with the approval speed rules 16-17 require, tracked in `artifacts/<gate>/spend.json`. Gates are sim/stub
+  ($0) unless a contract says otherwise.
 - **No Discord notifications** (the runner's notify is off; never pass `--notify`).
 - **Kill only processes you started, by PID.** Never `pkill`/`killall` by pattern: other sessions run Minecraft clients.
-- Never commit secrets, logs (`mod/logs/` is ignored) or `artifacts/` (local evidence only).
+- Never commit secrets, logs (`mod/logs/` is ignored) or `artifacts/` (local evidence only). Run gitleaks before any push.
 - **Byte-compared outputs must be platform-independent.** CI runs Linux; the kit pins the gzip OS byte.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. PR descriptions carry no "Generated
   with Claude Code" footer.
 - No `rm -rf` outside build/temp dirs, no `git reset --hard`, no force-push.
 - **Never `./gradlew --stop`**, and never point GRADLE_USER_HOME at another repo's or checkout's home: it kills other sessions'
-  running clients. A new clone or worktree gets its own `cp -c -R` copy with `daemon/*/registry.bin*` deleted before any Gradle command (a
-  copied registry still lists the original's live daemons, so `--stop` or a daemon connect reaches them); stop only the daemons
-  you started, by PID.
+  running clients. A new clone or worktree gets its own `cp -c -R` copy with `daemon/*/registry.bin*` deleted before any Gradle
+  command (a copied registry still lists the original's live daemons, so `--stop` or a daemon connect reaches them); stop only
+  the daemons you started, by PID.
 - **Clean up after yourself (Noah, 2026-10-26).** When your slice is pushed and reported, remove the worktrees and run dirs you
   created (`git worktree remove <path>`, no --force; if git refuses because of leftovers, list them in your report) and stop
-  your own daemons and clients by PID. Hundreds of stale worktrees and Minecraft run dirs made macOS's fseventsd grow to 40 GB.
+  your own daemons and clients by PID. Stale worktrees and run dirs once made macOS's fseventsd grow to 40 GB.
 - **Everything generated is themed (Noah, 2026-10-24).** Every block a generator, connector or region writes comes from the
   style's roles (or their slab/stairs/wall/fence shape variants), with a fallback to the nearest role, never a hard-coded oak
-  or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. The structure lint (S-THEME, step lint-structure) checks it.
+  or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. The structure lint (S-THEME,
+  step lint-structure) checks it.
 - Don't tune prompts against the eval briefs. A failed quality gate is reported as "not shown", with the data.
