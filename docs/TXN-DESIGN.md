@@ -34,8 +34,8 @@ There are four ways an operation can be interrupted. Today's gates test only the
 | **R** | A refused or failed write: SS's undurable chunk, an IOException, disk full, a `loadFailed` session | Whatever was written before the refusal | some units, plus `dev.queue.writes`, `dev.stockpile.ss` |
 
 TXN's guarantee is **exactly once under P, A and R**, and under O wherever the stores it relies on are fsynced, which §3.1 makes
-true. The exceptions are the two declared at-most-once effects (§3.4: a player's inventory and item entities). They lose items and
-never dupe them, and they say so in the log.
+true. The one exception is class E (an item entity, §3.4): at most once, by a durable claim, with a loss receipt. A player's inventory
+is exactly once through a player attachment, completed at that player's next load.
 
 A `Runtime.halt` keeps the page cache, so **no kill-point run can show that a missing fsync is a bug** (§9). The O model is
 covered only by source checks and fault-injected units.
