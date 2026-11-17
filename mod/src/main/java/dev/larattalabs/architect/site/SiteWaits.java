@@ -245,6 +245,10 @@ public final class SiteWaits {
 				}
 			}
 		}
+		if (dev.larattalabs.architect.txn.TxnServer.held("site:" + id)) {
+			// (slice T1, §3.12.3) held by an open txn: the feed skips it (Stockpiles.feed), not short of materials
+			return new SiteWait(id, true, since, items(needs), needs.moreUnits(), SiteWait.TXN_HELD, List.of());
+		}
 		Map<String, Integer> capped = BILL_CAPPED.get(id);
 		if (capped != null) {
 			// (BC, S-M5-9) the next cell would draw past the realise's maxBill: STARVED, typed; nextNeeded the capped items' units over the cap

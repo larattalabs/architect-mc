@@ -438,6 +438,11 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return onServer(() -> Groups.undoStage(server, groupId, stage, o != null && o.force(), covered(o))).thenCompose(f -> f).thenApply(SitesImpl::result);
 	}
 
+	/** (slice T1) SITE_BUSY with the txn hold's detail ({@code held(..) tx-<n>: ..}) when a txn holds it, else today's empty detail. */
+	static Refusal busyRefusal(String busy) {
+		return new Refusal(Reason.SITE_BUSY, busy, List.of(), busy.startsWith("held(") ? busy : "");
+	}
+
 	/** (6d AD) A site (or its group) an adoption or un-adoption is moving now: why, or null. */
 	static @Nullable String adoptBusySite(String siteId) {
 		String b = Sites.adoptBusy(siteId);
@@ -768,7 +773,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
 			String busy = adoptBusySite(r.siteId());
 			if (busy != null) {
-				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(Reason.SITE_BUSY, busy))); // (6d AD)
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), busyRefusal(busy))); // (6d AD)
 			}
 			Site b = Sites.get(r.siteId());
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
@@ -805,7 +810,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
 			String busy = adoptBusySite(siteId);
 			if (busy != null) {
-				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(Reason.SITE_BUSY, busy))); // (6d AD)
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, busyRefusal(busy))); // (6d AD)
 			}
 			Site b = Sites.get(siteId);
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);

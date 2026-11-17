@@ -40,6 +40,12 @@ public record SiteWait(String targetId, boolean waiting, long waitingSince, List
 	/** (LCAP, since 1.67.0) {@link #capScope}: the region-wide {@code maxBill} holds it. */
 	public static final String CAP_REGION = "region";
 
+	/**
+	 * (slice T1, docs/TXN-DESIGN.md §3.12.3; Since NEXT) {@link #blocked}: the target is held by an open transaction (its txn waits for
+	 * evidence, or for ops); the feed skips it, it is not short of materials. Holds are indefinite and ops-only.
+	 */
+	public static final String TXN_HELD = "txn_held";
+
 	public SiteWait {
 		nextNeeded = nextNeeded == null ? List.of() : List.copyOf(nextNeeded);
 		blockedCells = blockedCells == null ? List.of() : List.copyOf(blockedCells);

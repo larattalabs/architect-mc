@@ -799,3 +799,13 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - **2026-11-15 (8a slice QX):** no new hook. `dev.region.quote` also returns `terrainCells` ({group: n}, `Quote.terrainCells`: the plan's staged
   terrain cells per target group over its survey, plan.json's `survivalStaged`; `{}` for a creative quote or a plan planned before QX). The
   bill members (`bom`, `bomParts`, `terrain`, `exact`, `notes`) are unchanged: staged cells bill nothing.
+- **2026-11-17 (slice T1, the txn core):** new (`TxnDevHooks`, generated headless too; TEST and dev only) `dev.txn.state {}` (the core:
+  `open: [{id, kind, phase, decision, held, heldAt, resources}]`, `openCount`, `heldCount`, `quarantined`, `done`, `loadFailed`,
+  `unsynced`, `next`, `file {path, exists, writtenGen, installedGen, inDoubt}`, `holds`, the last `events`, `recovered`),
+  `dev.txn.points {kind?}` (the kill points reached this session: `TX:<kind>:<step>`, recovery's `TX:recover:<kind>:<step>`),
+  `dev.txn.trace {on?}` (on: record every point reached; off: answer them in order), `dev.txn.run {from, to, items, key?, dimension?}` (the
+  TEST kind `test.move` between two containers: `{begin, txn, persist, status, phase, decision, held}` (the id is `txn`: a reply's `id` is the bridge's), or `refused` / `detail` / `replayed`),
+  `dev.txn.failPersist {n?}` (the next n txn.json writes refused before the rename), `dev.txn.resolve {txn, how: commit|abort}` (ops resolve,
+  §3.6's refusals) and `dev.txn.conservation {owner?, min, max, baseline?}` (report-only, docs/TXN-DESIGN.md §5: parts, `total`, `unread`,
+  `violations`; with `baseline` a `diff` and a `verdict`: match, differs or inconclusive; never fails). `dev.journal.killAt` takes every
+  `TX:` point (and `+save`). Driven by `tools/lib/gatetxn.mjs` (step `txn-core`).

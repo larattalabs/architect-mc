@@ -25,6 +25,7 @@ public class Architect implements ModInitializer {
 		dev.larattalabs.architect.survival.SurvivalWorld.init();
 		dev.larattalabs.architect.placed.Placed.init(); // 6c PT: player-placed tracking and builds (the attachment, hooks, classifier)
 		Sites.init();
+		dev.larattalabs.architect.txn.TxnServer.init(); // slice T1: txn.json loads at SERVER_STARTING (holds first), recovery on the first tick
 		dev.larattalabs.architect.region.RegionsMod.init(); // phase 6a: regions, prepare, the generation counters
 		dev.larattalabs.architect.apiimpl.ApiImpl.init(); // the public API (docs/CONTRACT.md phase 4a)
 		SiteCommands.init();

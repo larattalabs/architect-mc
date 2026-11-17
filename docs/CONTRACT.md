@@ -33371,3 +33371,83 @@ so two module lots that share items can't each be held to their own measured bou
   - The target that reaches ST1 is recorded in a marker file and asserted on: c1 completed with 0 cells written again.
   - Runs: sta-ingame 54/54 (gate-runs-ST/20261117-080333-change); rl-crash 110/0 (gate-runs-ST/20261117-073445-change). In that earlier
     run sta-ingame failed only because the ST1 marker needed the world's architect dir, which a no-stockpile world doesn't have; fixed.
+
+### Slice T1 as built (branch `slice/T1` off origin/slice/T0, now merged to a4531467, + origin/slice/TXN 07301724; no caller migrated; $0; strict; one fix round after the NOT SAFE T1 review; recorded 2026-11-17)
+
+- **Design edits first** (TXN-DESIGN §12.1, Noah approved): payloads in the intent before any destructive effect, the abort's payload with
+  `decision: abort`; attempt keys (the txn id) apart from dedupe keys (only a committed result replays); §3.3 fixed; unload-boundary retention.
+- **Core** (`txn/`, no Minecraft): `TxnEntry` (format 1, `kv`, each effect's fields validated, quarantine), `Decision` beside `Phase`,
+  `TxnRecovery` (the §3.6 table), `TxnCore` (holds, attach / replay / fresh attempt, persist first, one `drive` for forward and recovery,
+  nothing acts on an unacknowledged or unconfirmed journal, events emitted only once delivered), `ResultCache`, `Holds`, `KillPoints`,
+  `Conservation` (report-only, §5.2 per member and direction).
+- **Game** (`TxnServer`): `architect/txn.json` through DurableFile; load and holds at SERVER_STARTING; recovery in SERVER_STARTED's own
+  phase before every legacy listener, its barriers on the first tick; held txns retried with backoff. Holds honoured by Fills, hoppers and
+  droppers, menus, breaking, explosions, the Transfer API, SITE_BUSY `held(..)`, the feed (`SiteWait.TXN_HELD`). TEST kind `test.move` (plain
+  containers no site or road covers; receipts `architect_mc:txn_receipts`).
+- **API (additive, Since NEXT):** `SiteWait.TXN_HELD`; `Refusal.detail` (both old constructors kept). api-compat 8/8.
+- **Units:** `TxnCrashModelTest` (17: every TXN-gpt2/3/4 and T1-review counterexample RED on its naive variant, GREEN as built; exactly-once
+  receipts; seeded sampling past the cap), `TxnCoreTest` (9); full mod suite 1431 green.
+- **In game** (`txn-core`, 9028:9029, no cache/turbo): 22 halts (11 points x bare/+save) recovered exactly once in the slot, conservation
+  `match` each; a refused intent touched nothing; a held txn's source untouched by a hopper, retired after `/save-on`.
+- **Deferred (T2+):** `replayed()`, `TXN_EVENT`, `Owed`, FORMAT + 1, `txn-coverage.mjs`, `/architect txn resolve`, `asyncAt`, in-game
+  recovery crashes, receipt pruning; created/destroyed/converted and pending credits are unread terms (inconclusive), not counted.
+### Slice T1b as built (branch `slice/T1b` off `slice/T1` 5d23f7a1; Noah accepted T1 as T2's base with these changes; $0)
+
+- **test.move takes single plain chests only** (`TestMoveCells.refusal`): a double chest (either half), trapped and copper chests,
+  droppers, dispensers, furnaces, hoppers, barrels, crates and every other block entity are refused with the cell and its type; the
+  prepare re-judges the source cell, and put/compensate write only to a chest BE. That makes the last review's P1s (no hold for a
+  double chest's partner, per-type writers, pistons) unreachable in T1; commands stay an operator-only gap of the dev hook.
+- **Dimension P2:** `dev.txn.run`'s `dimension` must be a JSON string and a canonical key (`overworld` is refused: it keyed a box the
+  hold mixins never look up); the box and effect data use the level's own key; `Adapter.invalid` quarantines a non-canonical `dim`.
+- **T2 entry criterion** written in TXN-DESIGN §6.1. Units: `TestMoveCellsTest` (5); `FillsFKBTest` now expects both Transfer API injectors (T1's insert guard had left it red); full mod suite 1436 green.
+### Slice TXN (design)
+
+Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
+GATES rules 17 and 18. It has had three rounds: GPT round 1 (§10); round 2, with the GPT pass, Steward's review and Noah's decisions (§11, §8); and
+round 3, with the third GPT pass and Steward's round 2 (§12).
+- **The audit (§1):** 38 paths. 33 move items or billing, and 31 of those have a known P/A/R crash window. On main, neither the
+  ledger nor the journal is ever forced.
+- **T0 primitives (§3.1):**
+  - `DurableFile` (OK / REFUSED / IN_DOUBT), with a persisted `store` id and `gen`, forcing the file and its directory. Load
+    re-forces before any generation counts, and best effort is only the Windows limit;
+  - a **global** barrier over save epochs: every chunk, entity and player write acknowledged, new `.mca` and `playerdata`
+    directories forced, `.mcc` and save-off refused; then the ledger, carrying its epoch.
+  - Player saves are acknowledged positively (the replace's result and a read-back hash).
+  - IO debt is retried: a failed chunk is re-dirtied or its snapshot requeued, and the chunk pinned; offline players' snapshots are
+    rewritten.
+- **The layer (§3.2-§3.7):**
+  - intents in `architect/txn.json`, written before any mutation;
+  - effect classes, each with its receipt:
+    - L (a ledger key);
+    - B and W (receipts in a chunk attachment that survives BE replacement);
+    - D (the journal undo group, the decision);
+    - R (a record ref or tombstone, with a persisted gen);
+    - P (a player attachment and an acknowledged save);
+    - O (owed collectibles, which replace every drop);
+  - an immutable `decision` (commit / abort / abandon with its split), kept separate from the `phase` progress (`PREPARED`,
+    `PREPARED_DONE`, `EFFECTS_DONE`, `ABORTING`, `RETIRING`), and a phase × decision × evidence recovery table;
+  - `done` keeps the semantic key, the result and pending event payloads, in a bounded result cache;
+  - retirement on persisted awaits;
+  - holds honoured by every writer, indefinite and ops-only;
+  - abandon is a takeover of the same txn (T5).
+- **The harness (§4):** `TxnCrashModel` over the participants' version histories, failures and recovery prefixes. `txn-crash-<kind>`
+  takes the baseline first, traces on a copy, and runs every point × {bare, +save, +async, fail}.
+- **Conservation (§5):** exactly once per open txn, by its probes; owed counted; no loss term; base units after `Equivalents`.
+  Report-only until T1 runs clean for one batch.
+- **API (additive, Since NEXT; Steward review):**
+  - `SiteWait.TXN_HELD`;
+  - `RemoveResult.replayed()`;
+  - a parallel `SiteEvents.TXN_EVENT` carrying `txnId` and `eventId` (events at least once; the ids are for tracing; consumers stay
+    idempotent on their own state);
+  - `Refusal.detail`, with `held(decided)` and `held(other)` details;
+  - `Stockpile.owed()` / `Owed` and `Stockpiles.collectOwed`;
+  - a `SITE_BUSY` detail;
+  - `owed` in the stockpile view;
+  - futures complete at `EFFECTS_DONE`, and views read UNDOING until then.
+- **Downgrade** across TXN is unsupported.
+- **Migration (§6):**
+  1. merge PSV, OVF, ST/HB, then LC3 (likely without abandon) and DR2 (which drops its owed drops for OVF);
+  2. T0, then T1;
+  3. CXD (T2), ADP (T3), group removals (T4), abandon (T5);
+  4. deltas, fills, take-ups and repair (T6); leftovers and player moves (T7).
+- **Noah's decisions** (via the parent session, 2026-11-17) are in §8. No question is open.

@@ -227,6 +227,38 @@ public final class FillGuard {
 	 * (5d, from the optional mixin) Whether a Transfer API extraction of {@code item} from the wrapper's slot is refused (0 extracted). The
 	 * wrapper's container and slot are read by reflection (Fabric impl fields), only for an allow-listed item.
 	 */
+	/**
+	 * (slice T1, §3.6 "Holds") Whether a Transfer API move through the wrapper touches a container an open txn holds (0 moved): the
+	 * Fabric Transfer API's hopper fallback and other mods' pipes. O(1) with no txn open; an unreadable wrapper fails closed while any
+	 * txn is open.
+	 */
+	public static boolean txnHeld(Object wrapper) {
+		if (dev.larattalabs.architect.txn.TxnServer.core().holds().isEmpty()) {
+			return false;
+		}
+		try {
+			java.lang.reflect.Field sf = storageField;
+			if (sf == null) {
+				sf = wrapper.getClass().getDeclaredField("storage");
+				sf.setAccessible(true);
+				storageField = sf;
+			}
+			Object storage = sf.get(wrapper);
+			java.lang.reflect.Field cf = containerField;
+			if (cf == null) {
+				cf = storage.getClass().getDeclaredField("container");
+				cf.setAccessible(true);
+				containerField = cf;
+			}
+			Object c = cf.get(storage);
+			return c instanceof net.minecraft.world.level.block.entity.BlockEntity be && dev.larattalabs.architect.txn.TxnServer.boxHeld(be.getLevel(), be
+				.getBlockPos());
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			Architect.LOGGER.error("txn hold guard for the Fabric Transfer API: {} (move refused while a txn is open)", e.toString());
+			return true;
+		}
+	}
+
 	public static boolean refusesExtract(Object wrapper, Item item) {
 		if (!providedItems().contains(item)) {
 			return false;
