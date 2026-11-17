@@ -12,7 +12,7 @@ import net.minecraft.world.level.Level;
  * item of the owner draws from it. Per item, {@code stock = delivered + returned - consumed - withdrawn - dropped}; refunds that
  * did not fit are in {@code refundOverflow}, outside that identity. Since 1.17.0.
  *
- * <p>Since NEXT (slice OVF): a keyed refund (a removal's deconstruct, a construction delta's, a region's charge or scoop) never
+ * <p>Since 1.66.0 (slice OVF): a keyed refund (a removal's deconstruct, a construction delta's, a region's charge or scoop) never
  * overflows: all of it enters the stock, past capacity if need be, and nothing drops at the crate. {@code usedStacks} can then exceed
  * {@code capacityStacks}; nothing new enters until it fits again. {@code refundOverflow} counts only unkeyed give-backs (a swap's old
  * block, a consumed lava bucket's empty bucket).
