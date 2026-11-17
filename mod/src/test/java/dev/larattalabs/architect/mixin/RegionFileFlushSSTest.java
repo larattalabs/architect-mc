@@ -139,7 +139,10 @@ class RegionFileFlushSSTest {
 		assertTrue(t.contains("return explicit && !waitAll && !ready && !hasChanges(latest);"), "only inside a stockpile save with the world");
 		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
 		assertEquals(2, sp.split("SaveTiming.explicit = true;", -1).length - 1, "saveWithWorld and saveLedgerFirst set it");
-		assertEquals(2, sp.split("SaveTiming.explicit = false;", -1).length - 1, "and clear it in a finally");
+		assertEquals(1, sp.split("SaveTiming.explicit = wasTiming;", -1).length - 1, "saveWithWorld restores it in a finally (slice T0, review P2-10)");
+		assertEquals(1, sp.split("SaveTiming.explicit = false;", -1).length - 1, "saveLedgerFirst clears it in a finally");
+		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/DurableBarrier.java"));
+		assertTrue(b.contains("SaveTiming.explicit = true;") && b.contains("SaveTiming.explicit = wasTiming;"), "the barrier scopes it too (review P3-11)");
 		assertTrue(Files.readString(Path.of("src/main/resources/architect_mc.mixins.json")).contains("\"ChunkSaveWaitMixin\""));
 	}
 }
