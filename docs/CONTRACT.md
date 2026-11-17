@@ -32864,6 +32864,7 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Tests:** `sidecar/test/compose-cb.test.ts` (the core equals plan/0#compact minus the on-demand defs and resolves every $ref; the binding budget, the worst case, 10k+ headroom; selection by words, hints, rules and land, the cap, determinism, prefix order; the pinned rules in every system; the repair fallback); the CO/CP/CF/CF2/CF3/CAVE budget units now measure `composerSystem` (worst case), and compose.test asserts the sim job's system equals it byte for byte.
 - **Left over:** 120k ceiling not re-measured in tokens (recorded PAY state has only aggregated token counts; the claude-login model's context is not recorded in the repo); a raise is Noah's call. Selection misses kinds a model picks unprompted (s3's wall/relief), served fields-only then full at repair; each compose round's job spec now carries its whole 68-108k system (it held a short system plus a ref).
 
+
 ## Phase 8a: construction mode for forms and relief
 
 The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) lives in the coordinator's side-session notes
@@ -32971,6 +32972,23 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   - A BUILT target's cells that a later writer took up (rs01's terrace stairs and fences, XR) read as `missing` in the evidence. They are
     not holes: the twin row covers them.
   - Left: the ledger book marks staged cells free (HB); the fluids barrier's wait and `RegionView.waiting` are untyped (QX/HB).
+- **Round 3 (GPT final review; Noah's "3rd round").**
+  - The durability barrier now gates both completion paths. A failed barrier keeps the target building and is retried 100 turns later.
+    It refuses while any level has saving off.
+  - The leaf rule is vanilla's: distance = 1 + the lowest neighbour's distance, and a leaf goes in only when that is under 7. A persistent
+    leaf still needs a log or a built leaf of its own target. TO's land does the same.
+  - A support in an unloaded chunk is read by loading that chunk (2 loads per turn), so it is never an endless stall.
+  - A staged cell matches only its exact planned state.
+  - Tests: TerrainOrderTest has 16; each new test asserts the old behaviour it replaces.
+  - Strict gate on 4555c9af PASS (gate-runs-ST/20261117-035805-change): sta-ingame 44/44, rs-survival-smoke 40/0, rl-crash 90/0. It
+    includes x03saveoff (no target BUILT while saving is off; all BUILT after `/save-on`) and x01crash (dev.stockpile.halt with one target
+    BUILT: 0 cells missing after the restart; a half-built Remove: E-flat 0).
+  - Rule 18 on e5cfd83c (gate-runs-ST/20261117-045658-change): 41/42. Kill point ST1 can't be armed: `dev.journal.killAt`'s accepted-points
+    check (JournalDev.java:98) refuses `ST1`. So x01crash stopped at its first row, and the ST1 and post-crash conservation rows didn't run.
+    x03saveoff and its conservation row passed. Not fixed: code changes are on hold for Noah.
+  - **Open P1 (final GPT check, for Noah).** The barrier saves chunks, not players, and AFTER_SAVE then publishes the stockpile ledger. A
+    crash after a deposit can therefore leave the ledger ahead of player.dat (a doubled deposit). The stockpile's own save with the world
+    saves the players first.
 
 ### Slice HB as built (branch `slice/HB` off `slice/ST` 356aac15, ST's review round 31104f58 merged; versions NEXT; $0; strict; recorded 2026-11-17)
 
@@ -33036,3 +33054,14 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
 - **In game** (headless, 9026:9027, `dev.stockpile.barrier` `failPlayerReplace` / `failChunkWrite` / `reps` / `forgive`): each injected failure REFUSED, then OK at the next barrier (debt paid); an ordinary save kept `{store, gen}` on disk.
 - **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
+- **Round 4 (Noah: "one more small round"; T0's barrier).**
+  - The staged barrier is T0's `Stockpiles.barrier()` (slice/T0 2c2b093c, merged): players, then chunks, then the ledger. Only OK
+    completes a target; REFUSED or IN_DOUBT keeps it building. This closes the deposit-doubling P1.
+  - Creative `/architect site finish` goes through the barrier too. A barrier that throws takes the same 100-turn retry.
+  - A staged write may set our own block's drifted state to its planned one (no stall on a written leaf whose distance changed). A
+    persistent leaf may go in beside any leaf a log holds.
+  - ST1 can now be armed. The halted target's own recovery is checked: it must complete with 0 cells written again.
+  - x03hdeposit (a deposit, a staged barrier, a crash) fails first on the old code (gate-runs-ST/20261117-060258-change: 2 lanterns
+    minted) and passes with the barrier.
+  - Final strict gate on 200bfc51 (gate-runs-ST/20261117-063123-change): sta-ingame 54/54, rs-survival-smoke 40/0, rl-crash 110/0.
+  - Barrier cost on the built x01 world (3 runs): players 11-142 ms, chunks 10-108 ms, ledger 9-12 ms.
