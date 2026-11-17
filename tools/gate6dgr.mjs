@@ -1046,6 +1046,13 @@ steps.look = async () => {
   await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
 }
 
+// ------------------------------------------------------------------ (slice CXD) cxdcrash: tools/lib/gatemcxd.mjs
+
+{
+  const { registerCXD } = await import('./lib/gatemcxd.mjs');
+  await registerCXD(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, haltWait });
+}
+
 // ------------------------------------------------------------------ (slice BC-d) bcdgrow: tools/lib/gatebcd.mjs
 
 {
