@@ -103,7 +103,13 @@ export async function registerTXN(steps, h) {
         await cmd('/save-all flush').catch(() => null);
         await call('dev.txn.state', {}, 10_000);
         await call('dev.journal.killAt', { point }, 10_000);
-        call('dev.txn.run', { from: w.from, to: w.to, items: ITEMS }, 120_000).catch(() => null); // the halt drops the call
+        const ans = call('dev.txn.run', { from: w.from, to: w.to, items: ITEMS }, 120_000).catch(() => null); // the halt drops the call
+        const first = await Promise.race([ans, new Promise((res) => setTimeout(() => res('halting'), 15_000))]);
+        if (first && first !== 'halting' && first.refused) {
+          check(false, `${point}: the move was refused before its kill point (${first.refused}): the cases stop here`, first);
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+          break;
+        }
         const down = await haltWait();
         check(down, `${point}: halted at the kill point`);
         if (!down) {
