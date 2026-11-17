@@ -437,11 +437,16 @@ steps.growth = async () => {
   await G.designs(ctx);
   await L.tp(GX + 80, 80, GZ + 56);
   const gy = await groundAt(GX + 150, GZ + 100);
-  // the east strip raised 3 (dirt under a grass top): uneven land where the town grows
-  for (let z = GZ - 8; z <= GZ + 119; z += 32) {
-    const z1 = Math.min(GZ + 119, z + 31);
-    await cmd(`/fill ${GX + 60} ${gy} ${z} ${GX + 167} ${gy + 2} ${z1} minecraft:dirt`);
-    await cmd(`/fill ${GX + 60} ${gy + 3} ${z} ${GX + 167} ${gy + 3} ${z1} minecraft:grass_block`);
+  // the east of the claim stepped (8-wide strips raised 1, 2, 3, 2 over the flat land, dirt under a grass top): uneven land where the town
+  // grows, so a growth's pads cut and fill it (staged); a uniform raise is flat again and stages nothing
+  const H = [1, 2, 3, 2];
+  for (let k = 0, x = GX + 40; x <= GX + 167; k++, x += 8) {
+    const h = H[k % H.length];
+    for (let z = GZ - 8; z <= GZ + 119; z += 32) {
+      const z1 = Math.min(GZ + 119, z + 31);
+      if (h > 1) await cmd(`/fill ${x} ${gy} ${z} ${x + 7} ${gy + h - 1} ${z1} minecraft:dirt`);
+      await cmd(`/fill ${x} ${gy + h} ${z} ${x + 7} ${gy + h} ${z1} minecraft:grass_block`);
+    }
   }
   const crates = [0, 1, 2, 3].map((k) => [GCLAIM[0] - 6 + 2 * k, gy + 1, GCLAIM[1] - 6]);
   const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
