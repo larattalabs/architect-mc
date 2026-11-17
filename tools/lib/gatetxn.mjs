@@ -184,6 +184,20 @@ export async function registerTXN(steps, h) {
       { id: 'barrel', block: 'barrel', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
       { id: 'shulker_box', block: 'shulker_box', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
       { id: 'trapped_chest', block: 'trapped_chest', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
+      // (fix round, GPT P1-2..P1-5, P2-6, P2-8) what already exists when the hold begins, and data beyond the slots
+      { id: 'menu_crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 2'], pre: async (X) => call('dev.txn.poke', { pos: X, how: 'menu' }, 30_000),
+        act: async (X) => call('dev.txn.poke', { pos: X, how: 'menuMove', slot: 0 }, 30_000) },
+      { id: 'golem_retained', block: 'chest', slots: ['oak_planks 2'], slow: true, ticks: true,
+        setup: async (X) => { await cmd(`/setblock ${s(add(X, [2, 0, 0]))} minecraft:copper_chest`); for (const k of [0, 1, 2]) await cmd(`/item replace block ${s(add(X, [2, 0, 0]))} container.${k} with ${P} 64`); },
+        pre: async (X) => cmd(`/summon minecraft:copper_golem ${X[0] + 1} ${X[1]} ${X[2] + 1}`), preWaitMs: 20_000 },
+      { id: 'storage_cached', block: 'chest[facing=north,type=left]', slots: ['oak_planks 5'], partner: [1, 0, 0],
+        setup: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest[facing=north,type=right]`),
+        pre: async (X) => call('dev.txn.poke', { pos: add(X, [1, 0, 0]), how: 'cacheStorage' }, 30_000),
+        act: async (X) => call('dev.txn.poke', { pos: add(X, [1, 0, 0]), how: 'cachedExtract' }, 30_000) },
+      { id: 'chest_swap', block: 'chest', slots: ['oak_planks 4'], setup: async (X) => cmd(`/setblock ${s(add(X, [0, 0, -2]))} minecraft:chest`),
+        act: async (X) => call('dev.txn.poke', { pos: X, how: 'swap', with: add(X, [0, 0, -2]) }, 30_000) },
+      { id: 'brewing_active', block: 'brewing_stand', ticks: true,
+        slots: ['potion[potion_contents={potion:"minecraft:water"}] 1', 'potion[potion_contents={potion:"minecraft:water"}] 1', null, 'nether_wart 1', 'blaze_powder 1'] },
       // the double chest (item 1): a held half (its partner held with it), and a chest placed beside a held single one
       { id: 'double_partner', block: 'chest[facing=north,type=left]', slots: ['oak_planks 5'], base: 'green', why: 'both halves held (the partner is a txn resource): T1\'s hopper guard',
         setup: async (X) => { await cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest[facing=north,type=right]`); await cmd(`/setblock ${s(add(X, [1, -1, 0]))} minecraft:hopper`); },
@@ -232,8 +246,13 @@ export async function registerTXN(steps, h) {
       await cmd(`/item replace block ${s(r.S)} container.0 with ${P} 1`);
       if (r.setup) await r.setup(r.X);
     }
+    // things that exist before the hold: an open menu, a cached storage handle, a golem with its target
+    for (const r of rows) {
+      if (r.pre) r.preAnswer = await r.pre(r.X);
+    }
+    const preWait = Math.max(2000, ...rows.map((r) => r.preWaitMs ?? 0));
     await cmd('/save-all flush').catch(() => null);
-    await call('dev.wait', { ms: 2000 }, 30_000);
+    await call('dev.wait', { ms: preWait }, 60_000);
     const box = { min: [X0 - 4, gy - 2, Z0 - 4], max: [X0 + 7 * COLS + 4, y + 4, Z0 + 60] }; // the explosion row (z + 80) outside: its blast drops ground blocks
     const report = async (baseline) => call('dev.txn.conservation', { min: box.min, max: box.max, ...(baseline ? { baseline } : {}) }, 60_000);
     // ---------------------------------------------------------------- hold every row: a refused barrier keeps each aborted move held
@@ -270,6 +289,7 @@ export async function registerTXN(steps, h) {
       if (a?.state !== b?.state) d.push(`state ${a?.state} -> ${b?.state}`);
       if (a?.be !== b?.be || a?.beId !== b?.beId) d.push(`block entity ${a?.be}#${a?.beId} -> ${b?.be}#${b?.beId}`);
       if (json(a?.slots ?? {}) !== json(b?.slots ?? {})) d.push(`slots ${json(a?.slots)} -> ${json(b?.slots)}`);
+      else if ((a?.nbt ?? '') !== (b?.nbt ?? '')) d.push(`data ${a?.nbt} -> ${b?.nbt}`); // the persisted data: components, timers, triggers
       if (!r.ignoreDrops && (a?.drops ?? 0) !== (b?.drops ?? 0)) d.push(`drops ${a?.drops} -> ${b?.drops}`);
       return d;
     };

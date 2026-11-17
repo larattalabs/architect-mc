@@ -944,11 +944,13 @@ public final class Fills {
 		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
 		// the caller saves (players, chunks, then the ledger: a ledger with the release never stands over chunks without the slots); once a
 		// barrier is OK the receipts are stale and the returned prune drops them (a later write-back's key #n+1 never reads them)
-		return () -> {
+		Runnable prune = () -> {
 			for (BlockPos p : cells) {
 				dev.larattalabs.architect.txn.ChunkReceipts.remove(level.getChunkAt(p), r -> r.startsWith(wb + "@"));
 			}
 		};
+		DurableBarrier.afterNextOk(prune); // (fix round, GPT P2-7) every caller's write-back: pruned after the next OK barrier, not only at the start
+		return prune;
 	}
 
 	// ------------------------------------------------------------------ other writers (XR)
@@ -1071,12 +1073,10 @@ public final class Fills {
 			}
 		}
 		if (!prunes.isEmpty()) {
-			// (slice T2) one barrier for every write-back at the start; their chunk receipts go only once it is OK
+			// (slice T2) one barrier for every write-back at the start; their chunk receipts go once one is OK (queued until then)
 			DurableBarrier.Result br = Stockpiles.barrier(srv);
-			if (br.ok()) {
-				prunes.forEach(Runnable::run);
-			} else {
-				Architect.LOGGER.warn("Custody write-backs at the start saved later ({}): their chunk receipts stay", br.outcome());
+			if (!br.ok()) {
+				Architect.LOGGER.warn("Custody write-backs at the start saved later ({}): their chunk receipts stay until a barrier is OK", br.outcome());
 			}
 		}
 	}

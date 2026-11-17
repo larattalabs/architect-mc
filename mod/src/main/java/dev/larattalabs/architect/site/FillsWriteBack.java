@@ -42,24 +42,26 @@ public final class FillsWriteBack {
 		Map<String, Integer> left = new TreeMap<>(held);
 		Map<String, Integer> already = new TreeMap<>();
 		List<Map<Integer, Fills.Stack>> writes = new ArrayList<>();
+		// (fix round, GPT P1-1) every receipt first: what reached any cell before a crash comes off the custody before any new write is
+		// planned, so a cell written then (its chunk saved) is never paid again by a cell that is free only now
+		for (int i = 0; i < decls.size(); i++) {
+			Cell c = i < cells.size() ? cells.get(i) : null;
+			if (c == null || c.receipt() == null) {
+				continue;
+			}
+			for (Fills.Stack st : c.receipt().values()) {
+				int n = Math.min(st.count(), left.getOrDefault(st.item(), 0));
+				if (n > 0) {
+					left.merge(st.item(), -n, Integer::sum);
+					already.merge(st.item(), n, Integer::sum);
+				}
+			}
+		}
 		for (int i = 0; i < decls.size(); i++) {
 			Map<Integer, Fills.Stack> w = new LinkedHashMap<>();
 			writes.add(w);
 			Cell c = i < cells.size() ? cells.get(i) : null;
-			if (c == null) {
-				continue;
-			}
-			if (c.receipt() != null) {
-				for (Fills.Stack st : c.receipt().values()) { // written before a crash: in the container already, never written again
-					int n = Math.min(st.count(), left.getOrDefault(st.item(), 0));
-					if (n > 0) {
-						left.merge(st.item(), -n, Integer::sum);
-						already.merge(st.item(), n, Integer::sum);
-					}
-				}
-				continue;
-			}
-			if (!c.present()) {
+			if (c == null || c.receipt() != null || !c.present()) {
 				continue;
 			}
 			boolean fits = i < providedFits.size() && providedFits.get(i);

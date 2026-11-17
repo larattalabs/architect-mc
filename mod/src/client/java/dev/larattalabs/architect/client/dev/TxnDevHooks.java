@@ -21,9 +21,11 @@ public final class TxnDevHooks {
 
 	public static void init() {
 		op("dev.txn.cells", "cells", "{cells: [[x,y,z], ..]} - (slice T2a) per cell: state, be (type), beId (identity: a replaced block entity changes it), "
-			+ "slots {slot: 'item xN'}, drops (item entities within 2 blocks): what txn-holds compares before and after a writer");
+			+ "slots {slot: 'item xN'}, nbt (the saved data), drops (item entities within 2 blocks): what txn-holds compares before and after a writer");
 		op("dev.txn.poke", "poke", "{pos, how} - (slice T2a) TEST: one raw write at a cell as another mod would make it: setBlock (air) | destroyBlock | "
-			+ "removeBlock | removeBlockEntity | setItem (slot 0 emptied) | removeItem (slot 0) | clearContent | load (from empty data) -> result");
+			+ "removeBlock | removeBlockEntity | setItem (slot 0 emptied) | removeItem (slot 0) | clearContent | load (from empty data); and (fix round) "
+			+ "menu (open the cell's menu for the player) | menuMove {slot?} (a quick-move click packet through the server's handler) | cacheStorage "
+			+ "(the Transfer API storage looked up now) | cachedExtract {item?} (64 extracted through that cached handle) | swap {with} (ChestBlockEntity.swapContents) -> result");
 		op("dev.txn.state", "state", "{} - (slice T1) the txn core: open txns (id, kind, phase, decision, held, heldAt, resources), openCount, heldCount, "
 			+ "quarantined, done (cache size), loadFailed, unsynced, next; file {path, exists, writtenGen, installedGen, inDoubt}; holds; the last events; recovered");
 		op("dev.txn.points", "points", "{kind?} - (slice T1) the kill points reached this session (TX:<kind>:<step>, TX:recover:<kind>:<step>), per kind "

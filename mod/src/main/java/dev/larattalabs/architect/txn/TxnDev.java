@@ -106,6 +106,7 @@ public final class TxnDev {
 			if (be != null) {
 				c.addProperty("be", String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
 				c.addProperty("beId", System.identityHashCode(be));
+				c.addProperty("nbt", be.saveWithoutMetadata(level.registryAccess()).toString()); // (fix round) the persisted data, components included
 				if (be instanceof net.minecraft.world.Container k) {
 					JsonObject sl = new JsonObject();
 					for (int i = 0; i < k.getContainerSize(); i++) {
@@ -167,10 +168,58 @@ public final class TxnDev {
 				}
 				o.addProperty("result", be != null);
 			}
+			// (fix round) things that exist before a hold begins: an open menu, a cached Transfer API handle; and the legacy chest swap
+			case "menu" -> {
+				net.minecraft.world.MenuProvider mp = level.getBlockState(p).getMenuProvider(level, p);
+				o.addProperty("result", mp != null && player.openMenu(mp).isPresent());
+			}
+			case "menuMove" -> {
+				var m = player.containerMenu;
+				if (m == player.inventoryMenu) {
+					o.addProperty("result", "no menu open");
+					break;
+				}
+				int slot = req.has("slot") ? req.get("slot").getAsInt() : 0;
+				// a real quick-move click packet, through the server's own handler (its validity check, and the hold's guard)
+				player.connection.handleContainerClick(new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(m.containerId, m.getStateId(),
+					(short) slot, (byte) 0, net.minecraft.world.inventory.ContainerInput.QUICK_MOVE, new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<>(),
+					net.minecraft.network.HashedStack.EMPTY));
+				o.addProperty("result", player.containerMenu == m ? "clicked, still open" : "clicked, closed");
+			}
+			case "cacheStorage" -> {
+				var st = net.fabricmc.fabric.api.transfer.v1.item.ItemStorage.SIDED.find(level, p, null);
+				CACHED.put(p.asLong(), st);
+				o.addProperty("result", st != null);
+			}
+			case "cachedExtract" -> {
+				var st = CACHED.get(p.asLong());
+				long n = 0;
+				if (st != null) {
+					String item = req.has("item") ? req.get("item").getAsString() : "minecraft:oak_planks";
+					try (var tx = net.fabricmc.fabric.api.transfer.v1.transaction.Transaction.openOuter()) {
+						n = st.extract(net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.of(TestMove.item(item)), 64, tx);
+						tx.commit();
+					}
+				}
+				o.addProperty("result", n);
+			}
+			case "swap" -> {
+				BlockPos q = pos(req.getAsJsonArray("with"));
+				if (be instanceof net.minecraft.world.level.block.entity.ChestBlockEntity a
+					&& level.getBlockEntity(q) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity b) {
+					net.minecraft.world.level.block.entity.ChestBlockEntity.swapContents(a, b);
+					o.addProperty("result", true);
+				} else {
+					o.addProperty("result", false);
+				}
+			}
 			default -> throw new IllegalArgumentException("unknown poke " + how);
 		}
 		return o;
 	}
+
+	/** (dev.txn.poke cacheStorage) Transfer API handles looked up before a hold, used after it. */
+	static final Map<Long, net.fabricmc.fabric.api.transfer.v1.storage.Storage<net.fabricmc.fabric.api.transfer.v1.item.ItemVariant>> CACHED = new java.util.HashMap<>();
 
 	static BlockPos pos(JsonArray a) {
 		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());

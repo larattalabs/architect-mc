@@ -24,6 +24,12 @@ import org.junit.jupiter.api.Test;
  * flow as built (chunk receipts, the rest keyed into the stock) is exact in every case.
  */
 class FillsWriteBackT2Test {
+	@org.junit.jupiter.api.BeforeAll
+	static void boot() {
+		net.minecraft.SharedConstants.tryDetectVersion();
+		net.minecraft.server.Bootstrap.bootStrap(); // Fills' statics read the registries
+	}
+
 	static final String KEY = "site:s1@100";
 	/** Two declared chests: the first declares 10 planks in slot 0 and 5 cobblestone in slot 1; the second 7 planks in slot 0. */
 	static final List<List<Fills.Stack>> DECLS = List.of(List.of(new Fills.Stack(0, "minecraft:oak_planks", 10), new Fills.Stack(1, "minecraft:cobblestone", 5)),
@@ -114,12 +120,21 @@ class FillsWriteBackT2Test {
 		p.stock().forEach((k, v) -> w.drops.merge(k, v, Integer::sum));
 	}
 
-	/** The persisted world after a crash: each store at its version before or after the write-back (ledger saved implies chunk saved). */
-	static World crashed(World before, World after, boolean chunk, boolean entities, boolean ledger) {
+	/**
+	 * The persisted world after a crash: each store at its version before or after the write-back; each cell is its own chunk, saved on its
+	 * own (fix round, GPT P1-1: a partial save); the ledger saved implies every chunk saved.
+	 */
+	static World crashed(World before, World after, boolean[] chunks, boolean entities, boolean ledger) {
 		World w = before.copy();
-		if (chunk) {
-			w.slots = after.copy().slots;
-			w.receipts = new LinkedHashSet<>(after.receipts);
+		for (int i = 0; i < chunks.length; i++) {
+			if (chunks[i]) {
+				w.slots.set(i, new HashMap<>(after.slots.get(i)));
+				for (String r : after.receipts) {
+					if (r.contains("@" + i + ",64,0|")) {
+						w.receipts.add(r);
+					}
+				}
+			}
 		}
 		if (entities) {
 			w.drops = new TreeMap<>(after.drops);
@@ -135,19 +150,20 @@ class FillsWriteBackT2Test {
 	/** Every crash combination; answers the ones whose items in != items out. */
 	static List<String> run(java.util.function.Consumer<World> flow) {
 		List<String> bad = new ArrayList<>();
-		for (int m = 0; m < 8; m++) {
-			boolean chunk = (m & 1) != 0, entities = (m & 2) != 0, ledger = (m & 4) != 0;
+		for (int m = 0; m < 16; m++) {
+			boolean[] chunks = {(m & 1) != 0, (m & 8) != 0};
+			boolean chunk = chunks[0] && chunks[1], entities = (m & 2) != 0, ledger = (m & 4) != 0;
 			if (ledger && !chunk) {
 				continue; // never: the ledger is published over durable chunks
 			}
 			World before = new World();
 			World after = before.copy();
 			flow.accept(after);
-			World w = crashed(before, after, chunk, entities, ledger);
+			World w = crashed(before, after, chunks, entities, ledger);
 			flow.accept(w); // the restart's write-back (Fills.atStart): the custody still held when the ledger was not saved
 			flow.accept(w); // and once more (a second restart): nothing new
 			if (!w.total().equals(new TreeMap<>(CUSTODY))) {
-				bad.add("chunk " + chunk + ", entities " + entities + ", ledger " + ledger + ": " + w.total());
+				bad.add("chunk " + chunks[0] + "/" + chunks[1] + ", entities " + entities + ", ledger " + ledger + ": " + w.total());
 			}
 		}
 		return bad;
@@ -157,8 +173,8 @@ class FillsWriteBackT2Test {
 	void theLegacyFlowPaysTwiceWhenTheChunkWasSavedAndTheLedgerNot() {
 		List<String> bad = run(FillsWriteBackT2Test::legacy);
 		assertFalse(bad.isEmpty(), "the legacy flow is red");
-		assertTrue(bad.stream().anyMatch(b -> b.startsWith("chunk true, entities true, ledger false")), bad.toString());
-		assertTrue(bad.stream().anyMatch(b -> b.startsWith("chunk true, entities false, ledger false")), bad.toString()); // the slots again
+		assertTrue(bad.stream().anyMatch(b -> b.startsWith("chunk true/true, entities true, ledger false")), bad.toString());
+		assertTrue(bad.stream().anyMatch(b -> b.startsWith("chunk true/true, entities false, ledger false")), bad.toString()); // the slots again
 	}
 
 	@Test
@@ -219,5 +235,30 @@ class FillsWriteBackT2Test {
 		assertEquals(new TreeMap<>(rest), new TreeMap<>(l.stock()));
 		assertTrue(l.custody(KEY).isEmpty());
 		assertEquals("wb:" + KEY + "#1", FillsWriteBack.key(KEY, l.creditedKeys()));
+	}
+
+	/**
+	 * (fix round, GPT P1-1, failing first) Custody 10 planks; cells A and B each declare 10. A was occupied in memory, so the first attempt
+	 * wrote B; only B's chunk (its slots and receipt) was saved. After the crash A is empty and the custody still held: the retry must deduct
+	 * B's receipt before it plans A. Red on afe39a21 (the receipt deducted in the cell loop, after A was written: 20 planks).
+	 */
+	@Test
+	void aLaterCellsReceiptIsDeductedBeforeAnEarlierFreeCellIsWritten() {
+		List<List<Fills.Stack>> decls = List.of(List.of(new Fills.Stack(0, "minecraft:oak_planks", 10)), List.of(new Fills.Stack(0, "minecraft:oak_planks", 10)));
+		Map<String, Integer> custody = Map.of("minecraft:oak_planks", 10);
+		String wb = FillsWriteBack.key(KEY, Set.of());
+		// the first attempt: A occupied in memory
+		FillsWriteBack.Plan first = FillsWriteBack.plan(custody, decls, List.of(true, true),
+			List.of(new FillsWriteBack.Cell(true, 27, Set.of(0), null), new FillsWriteBack.Cell(true, 27, Set.of(), null)));
+		assertTrue(first.writes().get(0).isEmpty());
+		assertEquals(10, first.writes().get(1).get(0).count());
+		String rb = FillsWriteBack.receipt(wb, 1, 64, 0, first.writes().get(1));
+		// the retry: A empty (its chunk was not saved), B with its receipt (its chunk was)
+		FillsWriteBack.Plan retry = FillsWriteBack.plan(custody, decls, List.of(true, true),
+			List.of(new FillsWriteBack.Cell(true, 27, Set.of(), FillsWriteBack.parse(List.of(rb), wb, 0, 64, 0)),
+				new FillsWriteBack.Cell(true, 27, Set.of(0), FillsWriteBack.parse(List.of(rb), wb, 1, 64, 0))));
+		assertEquals(Map.of("minecraft:oak_planks", 10), retry.already());
+		assertTrue(retry.writes().get(0).isEmpty(), "A is not written: the custody is already in B " + retry.writes());
+		assertTrue(retry.stock().isEmpty());
 	}
 }

@@ -251,8 +251,7 @@ public final class FillGuard {
 				containerField = cf;
 			}
 			Object c = cf.get(storage);
-			return c instanceof net.minecraft.world.level.block.entity.BlockEntity be && dev.larattalabs.architect.txn.TxnServer.boxHeld(be.getLevel(), be
-				.getBlockPos());
+			return dev.larattalabs.architect.txn.TxnServer.containerHeld(c); // (T2a fix round) a cached double chest's compound too
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			Architect.LOGGER.error("txn hold guard for the Fabric Transfer API: {} (move refused while a txn is open)", e.toString());
 			return true;

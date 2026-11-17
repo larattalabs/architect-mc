@@ -12,8 +12,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * (slice T2a, docs/TXN-DESIGN.md §6.1 item 2) The copper golem's item transport (it takes from copper chests and puts into chests through
- * the container's stacks): a held box is no target. Each step re-creates its target here, so a golem already walking to a box that becomes
- * held drops it. O(1) with no txn open.
+ * the container's stacks): a held box is no new target. A golem that chose its target before the hold keeps it (vanilla re-checks only the
+ * block entity's identity): its take and put are refused by {@link TxnHoldGolemTransportMixin}. O(1) with no txn open.
  */
 @Mixin(TransportItemsBetweenContainers.TransportItemTarget.class)
 public abstract class TxnHoldGolemMixin {

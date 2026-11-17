@@ -162,6 +162,7 @@ public final class TestMove {
 		payload.addProperty("to", box(dim, to));
 		c.payload(t, "test_moved", payload);
 		DurableFile.Outcome p = c.persist(t);
+		TxnServer.closeHeldMenus(srv); // (T2a fix round) a menu open over a box when its hold begins closes now, before any effect
 		o.addProperty("txn", t.id);
 		o.addProperty("persist", p.name());
 		if (p == DurableFile.Outcome.OK) {

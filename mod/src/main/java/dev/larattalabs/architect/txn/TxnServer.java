@@ -87,6 +87,7 @@ public final class TxnServer {
 			DELIVERED.clear();
 			QUEUED.clear();
 			core = emptyCore("no world loaded");
+			DurableBarrier.clearAfterOk();
 		});
 	}
 
@@ -169,6 +170,7 @@ public final class TxnServer {
 				core.recover();
 			}
 		}
+		closeHeldMenus(srv); // (T2a fix round) menus open over a box when its hold began, or reopened since: closed every tick
 		if (core.open().isEmpty() && !core.unsynced()) {
 			heldBackoff = HELD_MIN;
 			return;
@@ -246,6 +248,51 @@ public final class TxnServer {
 			r.run();
 		} finally {
 			WRITER = was;
+		}
+	}
+
+	/**
+	 * (slice T2a fix round) Whether a container is, or reaches, a held box: a block entity's own cell, either half of a double chest's
+	 * {@code CompoundContainer} (one built before the hold, or cached in a Fabric storage). Everything that already exists when a hold begins
+	 * (an open menu, a golem's retained target, a cached storage handle) is checked through here at the moment it writes.
+	 */
+	public static boolean containerHeld(@Nullable Object c) {
+		if (c == null || core.holds().isEmpty()) {
+			return false;
+		}
+		if (c instanceof net.minecraft.world.level.block.entity.BlockEntity be) {
+			return boxHeld(be.getLevel(), be.getBlockPos());
+		}
+		if (c instanceof net.minecraft.world.CompoundContainer cc) {
+			var a = (dev.larattalabs.architect.mixin.CompoundContainerAccessor) cc;
+			return containerHeld(a.architect$first()) || containerHeld(a.architect$second());
+		}
+		return false;
+	}
+
+	/** Whether any slot of {@code menu} is backed by a held box (the menu is closed and its clicks refused). */
+	public static boolean menuHeld(net.minecraft.world.inventory.@Nullable AbstractContainerMenu menu) {
+		if (menu == null || core.holds().isEmpty()) {
+			return false;
+		}
+		java.util.Set<net.minecraft.world.Container> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (net.minecraft.world.inventory.Slot sl : menu.slots) {
+			if (seen.add(sl.container) && containerHeld(sl.container)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Closes every open menu over a held box now (a hold that begins with a menu already open over its box). */
+	public static void closeHeldMenus(@Nullable MinecraftServer srv) {
+		if (srv == null || core.holds().isEmpty()) {
+			return;
+		}
+		for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
+			if (p.containerMenu != p.inventoryMenu && menuHeld(p.containerMenu)) {
+				p.closeContainer();
+			}
 		}
 	}
 

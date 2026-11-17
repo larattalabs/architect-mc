@@ -131,8 +131,26 @@ public final class DurableBarrier {
 		last = r;
 		if (!r.ok()) {
 			Architect.LOGGER.warn("Durable barrier {}: {}", r.outcome(), r.reason());
+		} else if (!AFTER_OK.isEmpty()) {
+			// (slice T2 fix round) work that waits for the ledger it changed to be durable over its chunks: run once, after this OK
+			java.util.List<Runnable> now = new java.util.ArrayList<>(AFTER_OK);
+			AFTER_OK.clear();
+			now.forEach(Runnable::run);
 		}
 		return r;
+	}
+
+	/** (slice T2) Run after the next barrier that returns OK (every store it covers durable): the custody write-backs' receipt pruning. */
+	static final java.util.List<Runnable> AFTER_OK = new java.util.ArrayList<>();
+
+	/** Queues {@code r} for after the next OK barrier. Server thread. */
+	public static void afterNextOk(Runnable r) {
+		AFTER_OK.add(r);
+	}
+
+	/** Drops the queued work (the world stopped: its chunks are gone; the receipts stay stale on disk, never read under a later key). */
+	public static void clearAfterOk() {
+		AFTER_OK.clear();
 	}
 
 	/** The server's steps. */
