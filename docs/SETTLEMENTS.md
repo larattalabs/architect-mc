@@ -1136,6 +1136,10 @@ cost nothing.
 - Moving or rotating a placed settlement (replan and re-realise).
 - Redstone lifts (piston elevators) as connectors: fragile across versions; bubble columns only.
 - ~~Region-scale survival (N4 above), and construction mode for forms and relief~~ → most of region-scale survival has shipped (RS, the connector rows, XR, A2/IG billing, QT, JR, RL); construction mode for forms and relief is planned as **8a** (PLAN.md, 2026-11-13).
+  - (8a, 2026-11-15) Its contract is final (docs/CONTRACT.md "Phase 8a"): forms and relief cost no items in survival (Noah: FREE) and are
+    built over time at `terrainPerTick` 16, staged. F3's region-made trees stay paid ("Keep paid"). **A per-world terrain cost stays deferred**:
+    it would bill natural cells like lot material with QL's "up to N" allowance, and QD's allowance rule would need replacing at that scale.
+    The quote's time side is `Quote.terrainCells` (slice QX); its bill is unchanged.
 - Writing under standing lots (6d's pad delta under a BOX cover).
 - ~~A Terrain tab or settlement UI in Architect for players~~ → Steward owns the player settlement UI; Architect's **8b** is the settlement data APIs for it, plus an optional read-only Regions view (PLAN.md, Noah via parent session, 2026-11-13).
 

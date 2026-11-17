@@ -32911,3 +32911,20 @@ The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) liv
   re-order the rest once the part's other targets stand; feed a floating part from its anchor's tile.
 - **Leftovers**: under 8aF the crater's and terrace's cells are HELD and F3's trees PAID, so only x01/x03/v05 stage (tests take the rest by part);
   `f3/s01_steward_glade` throws in survival (`compileSurvival`: `opMats[i] is not iterable`); `unit-mod`'s step inputs miss the kit helper.
+
+### Slice QX as built (branch `slice/QX` off `slice/TO` c9e22901; quote's time side; $0; light; recorded 2026-11-15)
+
+- **Kit.** `evalTile`'s `notes.survival` counts class 3 apart as `staged` (only when > 0), still inside `free`: `survival.cells`, `cost.survival`
+  and every bill are unchanged. `planRegion` sums it per group into plan.json's **`survivalStaged`** ({group: n}, sorted, groups with none
+  left out, absent when none), outside the IR (sha unchanged), passed through `kit/tools/region.mjs`, the sidecar (`regions.ts`, `protocol.ts`).
+- **Mod.** `Quotes` fills `Quote.terrainCells` from it (`Quotes.stagedCells`: positive counts only; a plan planned before QX gives `{}`, no
+  refusal; creative stays `{}`); the world is not read (an upper bound, as `survival.cells`). `bom`, `bomParts`, `terrain`, `exact` and `notes`
+  are untouched, and no time note is added: the javadoc gives `cells / (terrainPerTick * 20)` s, and Steward reads `RegionBuild.terrainPerTick`
+  (ST's). `dev.region.quote` returns `terrainCells`. Docs: DEVBRIDGE, SETTLEMENTS §21 (the deferred terrain cost), STEWARD-SYNC.
+- **Counts** (`kit/test/qx.test.mjs`, each against the tiles' own class 3 cells and the check's `cost.bom`): x01 `hold` 32,035 (bill empty); x03
+  `hamlet` 8,139 + `isle` 8,884 (hamlet bills 57 as before); v05 `ice` 1,419; v06 `town` 10,852 (the steps' 5,506 cut and fill stay HELD);
+  v72 `village` 8,139, its five F3 tree/mushroom groups PAID as today (570/1,751/1,406/743/4,768 items) and never staged; x02 none (HELD).
+- **Ran**: compile; scoped units over the QX files (kit, sidecar, Gradle picks; `QuotesStagedQXTest` 3); the 59 asks' survival table
+  regenerated and diffed: **asks-survival.md byte-identical** (2,646,636 staged cells, none of it in the table); api-compat; gitleaks.
+- **For ST/HB**: a terrace's and crater's terrain is HELD under 8aF, so it is not in `terrainCells`; if ST stages held terrain, count it
+  into `staged` in `realise.mjs` and the quote follows. Revisions quote the revision plan's staged cells (not net of built ones).

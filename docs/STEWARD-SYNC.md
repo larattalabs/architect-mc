@@ -146,6 +146,9 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 4. `planCatalogue(Set kinds)` (1.55.0): the catalogue on demand under the system cap.
 5. SF Style format 3 (0.63.0); CM, BF, HR, TC, RM (0.63.0, 0.64.0): plan-writer vocabulary.
 6. `Designs.follow` and `Library.followers` (1.51.0): per-building "update to the new Style".
+7. (8a, NEXT, with the 8a batch) `Quote.terrainCells` (QX): per part group, the staged terrain cells a survival realise builds over time
+   (they bill nothing; `bom`, `terrain` and `maxBill` are unchanged, F3's trees stay in `bom`). About `cells / (terrainPerTick * 20)` s
+   while loaded, at `RegionBuild.terrainPerTick` (16 by default): Steward's "about N min" line before the build starts.
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
