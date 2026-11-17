@@ -21,6 +21,9 @@
 //   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
+//   node tools/gate6dgr.mjs adpdefer     (adp-defer)     slice ADP: adoptCrates with the shared crate unreadable (its owner tag changed):
+//                                                       it stands, the ledger, stock, references and feed order unchanged; with its
+//                                                       chunk unloaded at the adoption: its stock moved exactly once; a third call no-op
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -572,6 +575,80 @@ export async function registerSAD(steps, h) {
     const d = diff(B0, await cellsOf(BOX(W.gy)));
     out.remove = { diff: d.n, back };
     check(rmr?.removed === true && d.n === 0 && sum(back) === 0, `row 6b: Regions.remove: E-flat ${d.n}; the instant lots refunded nothing (${json(back)})`, out.remove);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  // (slice ADP) adoptCrates and a crate it cannot read: never restored or released, its stock and its targets' references kept, so a later
+  // adoptCrates (once the crate reads again) moves the stock exactly once. A: the shared crate's owner tag changed (/data merge, the block
+  // entity check fails: base restored the cell and cleared the references, the crate's stock lost). B: the crate's chunk unloaded at the
+  // adoption (the player far off; a server-thread read loads it): adopted in full. C: a third adoptCrates is a no-op.
+  steps.adpdefer = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B ADP Defer');
+    const { ids, b2 } = await suppliedTown('adp', W);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `ADP: a stockpile of 4 crates for ${OWNER}`);
+    const s40 = await siteState(ids.house_4);
+    const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
+    const tag = `${'group:'}${b2.group}`;
+    const crateBlock = 'architect_mc:construction_crate';
+    const got = await cmd(`/data get block ${at.join(' ')} Site`).catch((e) => ({ messages: [String(e)] }));
+    out.tag = { at, tag, got: got.messages };
+    check(s40.crate?.present === true && json(got.messages ?? []).includes(tag) && sum(s40.ledger?.stock) > 0,
+      `ADP: the shared crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items (placed ${sum(s40.ledger?.placed)})`, out.tag);
+    const p0 = await pile();
+    const order0 = p0.feedOrder ?? [];
+    // A: the crate unreadable (its owner tag is not its group's)
+    const mA = await cmd(`/data merge block ${at.join(' ')} {Site:"adp:other"}`);
+    check(mA?.success !== false, `ADP A: the crate's owner tag changed to adp:other (${json(mA?.messages ?? [])})`);
+    const sA0 = await siteState(ids.house_4);
+    const aA = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const pA = await pile();
+    const standsA = await isBlock(at, crateBlock);
+    const s3A = await siteState(ids.house_3);
+    const s4A = await siteState(ids.house_4);
+    const gotA = await cmd(`/data get block ${at.join(' ')}`).catch((e) => ({ messages: [String(e)] }));
+    out.A = { refused: aA.refused ?? null, readBefore: sA0.crate?.present, stands: standsA, refs: [s3A.crate, s4A.crate], order: pA.feedOrder, ledgerSame: json(pA.ledger) === json(p0.ledger),
+      be: (gotA.messages ?? []).join(' ').slice(0, 600) };
+    check(!aA.refused && sA0.crate?.present === false && standsA && json(pA.ledger) === json(p0.ledger) && json(pA.stock) === json(p0.stock),
+      `ADP A: adoptCrates with the crate unreadable (owner tag changed) left it standing (${standsA}) and the stockpile's ledger and stock unchanged (${out.A.ledgerSame})`, out.A);
+    check(s3A.crate?.x === at[0] && s4A.crate?.x === at[0] && !(pA.feedOrder ?? []).includes(ids.house_4) && json(pA.feedOrder ?? []) === json(order0),
+      `ADP A: both sites keep their crate reference and nothing joined the feed order (${json(pA.feedOrder ?? [])})`, out.A);
+    // the tag back: the crate reads again with its ledger untouched
+    await cmd(`/data merge block ${at.join(' ')} {Site:"${tag}"}`).catch(() => null); // (base: the cell was restored, no crate to tag)
+    const s4B0 = await siteState(ids.house_4);
+    out.back = { present: s4B0.crate?.present, stock: s4B0.ledger?.stock, placed: s4B0.ledger?.placed };
+    check(s4B0.crate?.present === true && G.same(s4B0.ledger?.stock, s40.ledger?.stock) && G.same(s4B0.ledger?.placed, s40.ledger?.placed),
+      `ADP A: with its tag back the crate reads again, its stock (${sum(s4B0.ledger?.stock)}) and placed counts as before: nothing lost`, out.back);
+    // B: the crate's chunk unloaded at the adoption
+    await L.tp(CX + 4000, 120, CZ + 4000);
+    let loaded = true;
+    for (let i = 0; i < 40 && loaded; i++) {
+      const r = await L.cmd(`/execute if loaded ${at.join(' ')}`).catch(() => null);
+      loaded = !!(r?.success || Number(r?.result) > 0);
+      if (loaded) await sleep(3000);
+    }
+    const aB = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    await L.tp(CX + 80, 80, CZ + 48);
+    await sleep(3000);
+    const pB = await pile();
+    const moved = G.plus(G.minus(stockOf(pB.ledger), stockOf(p0.ledger)), G.minus(pB.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
+    const s3B = await siteState(ids.house_3);
+    const s4B = await siteState(ids.house_4);
+    const standsB = await isBlock(at, crateBlock);
+    out.B = { unloadedAtAdopt: !loaded, refused: aB.refused ?? null, moved, crateStock: s40.ledger?.stock, refs: [s3B.crate, s4B.crate], order: pB.feedOrder, stands: standsB };
+    check(!aB.refused && G.same(moved, s40.ledger?.stock ?? {}) && !standsB,
+      `ADP B: adoptCrates with the crate's chunk ${loaded ? 'still loaded (unloading not shown: held loaded)' : 'unloaded'} moved its stock exactly once (${json(moved)}; the crate held ${json(s40.ledger?.stock)}) and restored its cell`, out.B);
+    check(s3B.crate?.x === undefined && s4B.crate?.x === undefined && (pB.feedOrder ?? []).includes(ids.house_4) && !(pB.feedOrder ?? []).includes(ids.house_3),
+      `ADP B: both crate references cleared; house_4 joins the feed order, the BUILT house_3 not (${json(pB.feedOrder ?? [])})`, out.B);
+    // C: again: a no-op
+    const aC = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const pC = await pile();
+    out.C = { refused: aC.refused ?? null, same: json(pC.ledger) === json(pB.ledger) };
+    check(!aC.refused && json(pC.ledger) === json(pB.ledger) && json(pC.feedOrder) === json(pB.feedOrder), 'ADP C: adoptCrates a third time changes nothing', out.C);
     await L.leaveWorld();
     spendZero();
     return out;
