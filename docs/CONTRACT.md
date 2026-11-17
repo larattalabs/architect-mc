@@ -32846,14 +32846,18 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
-GATES rules 17 and 18. It has had two rounds: GPT round 1 (§10), then the final GPT pass, Steward's review and Noah's decisions (§11,
-§8).
+GATES rules 17 and 18. It has had three rounds: GPT round 1 (§10); round 2, with the GPT pass, Steward's review and Noah's decisions (§11, §8); and
+round 3, with the third GPT pass and Steward's round 2 (§12).
 - **The audit (§1):** 38 paths. 33 move items or billing, and 31 of those have a known P/A/R crash window. On main, neither the
   ledger nor the journal is ever forced.
 - **T0 primitives (§3.1):**
-  - `DurableFile` (OK / FAILED / IN_DOUBT), with a persisted `store` id and `gen`, forcing the file and its directory;
+  - `DurableFile` (OK / REFUSED / IN_DOUBT), with a persisted `store` id and `gen`, forcing the file and its directory. Load
+    re-forces before any generation counts, and best effort is only the Windows limit;
   - a **global** barrier over save epochs: every chunk, entity and player write acknowledged, new `.mca` and `playerdata`
     directories forced, `.mcc` and save-off refused; then the ledger, carrying its epoch.
+  - Player saves are acknowledged positively (the replace's result and a read-back hash).
+  - IO debt is retried: a failed chunk is re-dirtied or its snapshot requeued, and the chunk pinned; offline players' snapshots are
+    rewritten.
 - **The layer (§3.2-§3.7):**
   - intents in `architect/txn.json`, written before any mutation;
   - effect classes, each with its receipt:
@@ -32863,7 +32867,9 @@ GATES rules 17 and 18. It has had two rounds: GPT round 1 (§10), then the final
     - R (a record ref or tombstone, with a persisted gen);
     - P (a player attachment and an acknowledged save);
     - O (owed collectibles, which replace every drop);
-  - phases: `PREPARED`, `PREPARED_DONE`, `COMMITTED`, `EFFECTS_DONE`, `ABORTING`, `ABANDONED`;
+  - an immutable `decision` (commit / abort / abandon with its split), kept separate from the `phase` progress (`PREPARED`,
+    `PREPARED_DONE`, `EFFECTS_DONE`, `ABORTING`, `RETIRING`), and a phase × decision × evidence recovery table;
+  - `done` keeps the semantic key, the result and pending event payloads, in a bounded result cache;
   - retirement on persisted awaits;
   - holds honoured by every writer, indefinite and ops-only;
   - abandon is a takeover of the same txn (T5).
@@ -32874,7 +32880,10 @@ GATES rules 17 and 18. It has had two rounds: GPT round 1 (§10), then the final
 - **API (additive, Since NEXT; Steward review):**
   - `SiteWait.TXN_HELD`;
   - `RemoveResult.replayed()`;
-  - `txnId` and `eventId` on events, which are at least once;
+  - a parallel `SiteEvents.TXN_EVENT` carrying `txnId` and `eventId` (events at least once; the ids are for tracing; consumers stay
+    idempotent on their own state);
+  - `Refusal.detail`, with `held(decided)` and `held(other)` details;
+  - `Stockpile.owed()` / `Owed` and `Stockpiles.collectOwed`;
   - a `SITE_BUSY` detail;
   - `owed` in the stockpile view;
   - futures complete at `EFFECTS_DONE`, and views read UNDOING until then.

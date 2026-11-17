@@ -21,6 +21,7 @@ This is design only. Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Stri
 - §9 What the harness won't catch
 - §10 Round 1 revision log
 - §11 Round 2 revision log
+- §12 Round 3 revision log
 
 ---
 
@@ -167,7 +168,7 @@ ledger barrier, and IN_DOUBT. Check it against T0's as-built when that lands.)*
 
 ```java
 final class DurableFile {                       // PSV's writer, lifted out of Placement
-  enum Outcome { OK, FAILED, IN_DOUBT }
+  enum Outcome { OK, REFUSED, IN_DOUBT }          // T0's names (origin/slice/T0 042da098)
   long request();                               // the next generation (no IO)
   Outcome write(JsonObject body, long gen);     // body + {"store": id, "gen": gen}; tmp, force(true), ATOMIC_MOVE, force(dir)
   boolean written(long gen);                    // writtenGen >= gen, OK only
@@ -179,12 +180,21 @@ final class DurableFile {                       // PSV's writer, lifted out of P
 - **Persisted generations** *(round 2, P1-3)*.
   - Every `DurableFile` writes its `store` id (a UUID minted when the file is first created, kept across rewrites) and its `gen`
     inside the file.
-  - At load, `writtenGen` is the file's own `gen`, and `request()` continues from it.
+  - **At load, a generation is not proof of durability** *(round 3, P1-1)*. A process restart keeps the page cache, so a file
+    installed IN_DOUBT before the restart loads looking fine, and a later power loss can still lose it. So:
+    1. load **re-forces** the installed file and its directory (and the directory's parent if this session created it);
+    2. only when both forces return does `writtenGen` become the file's `gen`;
+    3. until then the store is `IN_DOUBT` from load: its generation acknowledges nothing, no await or decision it carries is
+       satisfied, and the store retries the forces every tick.
+
+    T0's fix round is implementing this in `DurableFile` (its initial commit 042da098 set `written` from `readGen` directly). This
+    paragraph follows T0's brief, and gets checked against origin/slice/T0 when it moves.
+  - `request()` continues from the loaded `gen`.
   - So an await persisted in `txn.json` (`{"store": "<id>", "gen": 88}`) is meaningful after a restart: it is satisfied when the
     loaded file has the same `store` and a `gen` of at least 88.
   - A file with a different `store` id (replaced or restored from a backup) satisfies nothing. The txn holds.
 - **IN_DOUBT** *(round 2, P1-5)*. Each failure is classified:
-  - a failure before the rename is `FAILED`: nothing was installed;
+  - a failure before the rename is `REFUSED`: nothing was installed;
   - a failure after the rename (the directory force throws) is `IN_DOUBT`: the new content may or may not survive an OS crash. In
     memory the store **keeps the new version as installed**, never reverting to the old one;
   - the store retries the directory force (and then the whole write) every tick until it returns `OK`;
@@ -221,9 +231,28 @@ final class DurableFile {                       // PSV's writer, lifted out of P
     `savingOff`).
   - The bulk streams' periodic save (the 10 s `saveWithWorld`) becomes a barrier too, so JR's rule ("the ledger never ahead of the
     world") is enforced by acknowledgement, not assumed.
-- **Player saves are acknowledged** *(round 2, P1-2)*. Vanilla's `PlayerDataStorage.save` catches its own IOException. A mixin
-  records each player's save outcome and epoch (success only when the new `.dat` replaced the old and its directory force, below,
-  returned). A player whose save failed is owed, as a chunk is.
+- **Player saves are acknowledged positively** *(round 2, P1-2; round 3, finding 3 on T0)*.
+  - Vanilla's `PlayerDataStorage.save` catches its own IOException.
+  - `Util.safeReplaceFile` **discards** the boolean of `safeReplaceOrMoveFile`, so a failed replace restores the old `.dat` without
+    throwing.
+  - Watching the warning call is therefore not enough, and neither is forcing whichever `.dat` exists. Instead:
+    1. a mixin captures the serialized `CompoundTag` bytes the save meant to write, and the **actual result** of
+       `safeReplaceOrMoveFile`;
+    2. the acknowledgement is positive only when that result is true, the installed `.dat` (read back) hashes to the intended
+       bytes, and the file and `playerdata/` forces returned;
+    3. anything else is a failed save: that player is owed.
+- **Failure debt is retried, not only recorded** *(round 3, P2-5)*.
+  - **A chunk** whose serialization or write failed: `ChunkMap.save` marks it saved (`tryMarkSaved`) before serializing, so
+    recording the failure alone would never rewrite it, and every later barrier would refuse for ever. The mixin instead:
+    1. **restores its dirty state** (when serialization failed) or **keeps the failed snapshot** and requeues it to the IO worker
+       (when the write failed);
+    2. **pins the chunk** with a ticket so it isn't unloaded with its only copy in memory;
+    3. retries at every barrier until an acknowledgement clears the debt and the ticket.
+  - **An online player** whose save failed is saved again at the next barrier.
+  - **An offline player** (a failed logout save; `PlayerList.saveAll` visits only online players) keeps its captured snapshot in a
+    debt table. The table rewrites that exact snapshot at each barrier until it is acknowledged. If the player logs in first, the
+    snapshot is replaced by the live player, whose save is then required.
+  - IO debt is separate from the UNKNOWN-hold policy (decision 4). It is recoverable, so it is retried.
 - **Native directory entries** *(round 2, P1-6)*:
   - a mixin on `RegionFileStorage`'s region-file creation forces the region directory after a new `.mca` is created, and marks it
     owed until that force returns;
@@ -231,6 +260,9 @@ final class DurableFile {                       // PSV's writer, lifted out of P
 
   A barrier waits for both. On Windows a directory can't be opened for a force: best effort, logged once, and the O guarantee is
   narrowed there.
+- **Best effort is only the named platform limit** *(round 3, finding 4 on T0)*. Only the documented Windows case (opening a
+  directory as a channel is unsupported) is best effort. On macOS and Linux, **any** failure to open or force the directory after a
+  rename is `IN_DOUBT`, never OK: a directory that allows the rename but denies read access included.
 - **One barrier replaces four primitives:** `saveConfirmed`, `saveWithWorldConfirmed`, `durableBarrier` and the quiet path's
   silent return. It returns `Barrier{epoch, ledgerGen}` or throws `NotDurable`.
 - **What the O guarantee covers:** writes the barrier acknowledged, with their directory entries forced, on macOS and Linux.
@@ -275,7 +307,7 @@ the same primitive as the queue.
   "next": 1042,
   "open": [
     {
-      "id": "tx-1041", "kind": "removal.site", "kv": 1, "phase": "PREPARED",
+      "id": "tx-1041", "kind": "removal.site", "kv": 1, "decision": null, "phase": "PREPARED",
       "at": {"tick": 123456, "wall": 1731800000000}, "who": "architect:steward | <uuid> | null",
       "resources": ["site:s12", "crate:minecraft:overworld@10,64,-3", "box:minecraft:overworld@..", "pile:steward:town"],
       "decision": {"kind": "journal", "undoGroup": "tx-1041"},
@@ -301,8 +333,15 @@ the same primitive as the queue.
   (`site:<id>@<placedAt>`, `adopt:...`, `delta:...`, `crate:...`) stay on L effects as `key`. The `credited` set dedupes them, so a
   re-begun operation can't pay twice.
 - **`kind` + `kv`:** the kind's schema version. An unknown kind, or a `kv` newer than this build's, is quarantined (§3.8).
-- **`phase`:** `PREPARED`, `PREPARED_DONE` (§3.4), `COMMITTED`, `EFFECTS_DONE` (§3.12: futures complete here), `ABORTING` or
-  `ABANDONED` (§3.6). A finished txn moves to `retiring` (§3.7), then to `done` (the last 1,024
+- **`decision` and `phase` are separate fields** *(round 3, P1-2)*.
+  - `decision` is **immutable once written**:
+    - `null` (undecided);
+    - `{"v": "commit"}`, written once, through `DurableFile` OK, or by the D effect's applied probe;
+    - `{"v": "abort"}`;
+    - `{"v": "abandon", "split": {...}}` (§3.6).
+  - `phase` is **progress only**: `PREPARED`, `PREPARED_DONE` (§3.4), `EFFECTS_DONE` (§3.12: futures complete here), `ABORTING`,
+    `RETIRING`. No phase value ever implies or erases a decision.
+  - The recovery rule for every combination is the table in §3.6. A finished txn moves to `retiring` (§3.7), then to `done` (the last 1,024
   ids).
 - **`effects`:** the whole plan with every amount, written **before** any effect runs (R-1). The queue, sites and region records
   hold only the txn id (`"txn": "tx-1041"`), never amounts (R-7). `decCredit` and `decStock` go.
@@ -367,7 +406,7 @@ the same primitive as the queue.
   - (d) There is at most one barrier per step and per tick. A group removal's members share their tick's barrier.
 - **R-5 No entities in a txn.** Every drop or overflow is an owed collectible (§3.4 O, Noah's decision 1).
 - **R-6 One decision.** Before it, every applied effect is compensable; after it, every remaining effect is redo-able from the entry.
-  The decision is `phase: COMMITTED` in `txn.json`, or a D effect (the journal undo group). **The decision is not completion:** a
+  The decision is the immutable `decision: commit` in `txn.json`, or a D effect (the journal undo group). **The decision is not completion:** a
   committed removal still owes its W restore, chunk by chunk, before any credit that depends on it. *(P1-2.)*
 - **R-7 One copy of each amount.**
 - **R-8 One recovery slot, and holds enforced by every writer** (§3.6). *(P1-3.)*
@@ -404,12 +443,28 @@ t.retire();                                          // §3.7
 ```
 recover():
   for each open txn, oldest first:
-    decided = phase == COMMITTED || probe(D) == APPLIED          // UNKNOWN D: hold
-    if !decided:   compensate every APPLIED B/P/L/R effect, newest first (compensation markers: idempotent); phase ABORTING -> retire
-    else:          for each effect in order: if probe != APPLIED/DONE: apply (W per chunk, ticketed loads, at most 8 a tick)
-    any UNKNOWN:   keep held; retry when its chunk or player loads
+    d = decision ?? (probe(D) == APPLIED ? commit (and write it) : probe(D) == UNKNOWN or IN_DOUBT ? hold : null)
+    act by the table below; any UNKNOWN probe: keep held, retry when its chunk or player loads
   retiring: confirm the awaited generations (§3.7)
 ```
+
+**Phase × decision × evidence: the recovery rule** *(round 3, P1-2)*
+
+| decision | phase | evidence | recovery |
+|---|---|---|---|
+| null | PREPARED | receipts of prepare effects (some, none) | compensate each APPLIED prepare effect, newest first; write `decision: abort`; retire |
+| null | PREPARED_DONE | prepare effects known applied; D probe ABSENT | compensate all prepare effects; `decision: abort`; retire. (A kind with a txn-file decision may also roll forward here only if its contract says so; the default is abort) |
+| null | any | D probe APPLIED | write `decision: commit` (the external decision happened) and continue as the commit row |
+| null | any | D probe UNKNOWN or IN_DOUBT | **hold**; never compensate |
+| commit | PREPARED_DONE | W per chunk, L/R/P probes | redo every effect not APPLIED/DONE, in order; W before credits; then `EFFECTS_DONE`, events, retire |
+| commit | EFFECTS_DONE | — | **still committed**: never compensate; fire any event not in `events.emitted`; retire |
+| commit | RETIRING | awaits | confirm the awaits; drop the entry only when satisfied (§3.7) |
+| abort | ABORTING | compensation receipts | finish compensation (idempotent `!c` receipts); retire |
+| abandon | any | the recorded `split` | resume the **recorded** split: written members forward (as commit), unwritten members compensate. The split is never recomputed after it is written |
+| any | any | an effect UNKNOWN | that effect's resources stay held; the rest of the row proceeds only where its order allows (W before credits) |
+
+- **A non-journal kind** (a keyed charge, a deposit) has no D effect. Its decision is the `decision: commit` write, and
+  `EFFECTS_DONE` without a decision can't occur: the decision is written before the first irreversible effect.
 
 - **Exactly once:**
   - each effect probes its own store's marker (the chunk attachment for B and W, the player attachment for P), or is known applied by
@@ -418,7 +473,7 @@ recover():
   - a second crash at any prefix of recovery replays from the same entry and the same markers.
 - **Abandon after the decision** (T5; Noah's decision 2; round 2, P2-7). A decided removal never reverts by inference, but ops may
   **abandon** it. The abandon is a takeover of the **same** txn, not a second txn competing for its held resources:
-  - `/architect removal abandon <group>` writes `phase: ABANDONED` with the member split (`txn.json`, confirmed);
+  - `/architect removal abandon <group>` writes the immutable `decision: abandon` with the member split (`txn.json`, confirmed). It is allowed only over a `commit` decision, and it is the one decision that may follow another;
   - members whose W restore has any chunk receipt, or any cell no longer `after`, are **written**: they settle forward, credit
     included;
   - members with neither are **unwritten**: they compensate. Custody goes back (B, with receipts), their undo entries are released,
@@ -448,6 +503,22 @@ different `store` id) holds for ops. Until then:
 
 After retirement, its receipts are stale. They are dropped the next time their chunk, BE or player is written, and never read
 again.
+
+**What compaction keeps** *(round 3, P2-3)*. A txn leaves `open` for `done`, but `done` is not just an id list. Each entry keeps:
+- the **semantic key** (`site:s12@99`, `adopt:...`);
+- the **terminal result** (`removed`, the `refund`, the blockers; the same fields a `RemoveResult` or a charge answer carries);
+- every **pending event payload**, immutable and captured at `EFFECTS_DONE` (the removed site's `SiteView`, the `BatchView`, the
+  owner), until `events.emitted` covers it in a `txn.json` write that is acknowledged OK.
+
+Only then are the payloads dropped. The key and the result stay in the **result cache**: the last 4,096 results, bounded at about
+1 MB.
+
+**After eviction from the result cache**, a re-ask with the semantic key:
+- finds the key in the pile's `credited` set, or the site gone with its key;
+- answers from current state: `removed` = true, an empty `refund`, `replayed()` = true, and the detail "result evicted".
+
+It never runs the operation again, and it never reports a refund it can't prove. Steward already reads refunds from the ledger
+delta, not from a replayed answer (Steward's round-2 review §1).
 
 ### 3.8 A corrupt, partial or unknown entry
 
@@ -551,18 +622,55 @@ stay on the server thread, as today.
      attaches to it: it answers at `EFFECTS_DONE` with the original `refund`. After retirement it answers from the `done` entry.
      Either answer has **`RemoveResult.replayed()` = true** (a new accessor; old constructors kept; Since NEXT; additive). Steward then
      doesn't say "Refunded" twice.
-  9. **Events are at least once, with ids** (round 2, P2-10, chosen over best-effort).
-     - Each event a txn fires (`SITE_REMOVED`, `BATCH_DONE`, the stockpile change events) carries `txnId` and an `eventId` (`tx-n/e<k>`),
-       additive fields, Since NEXT.
-     - The txn records `events.emitted` after firing. A crash between firing and recording fires it again; a crash before firing
-       fires it at recovery.
-     - So each event is delivered at least once and never lost. Steward dedupes by `eventId`; its handlers are already idempotent on
-       state (Steward's review §6).
+  9. **Events are at least once, with ids for tracing** *(round 2, P2-10; reworded in round 3 at Steward's ask)*.
+     - Each event a txn fires is recorded in `events.emitted` after firing. A crash between firing and recording fires it again;
+       a crash before firing fires it at recovery. So delivery is at least once, never lost.
+     - **Consumers stay idempotent on their own saved state.** Steward's guards are `batchId`, the phase and the history, saved in
+       the same file as their effect. The ids are **for tracing only**: no consumer keeps a seen-id set. A seen-id store would be a
+       second file, and a crash between it and the consumer's own save would drop a needed delivery.
+     - **When re-fired events fire** (Steward's R2-Q3): on the **first server tick after recovery**, never inside SERVER_STARTED,
+       so listeners see a running server with every store loaded.
+     - **An aborted txn** fires only what describes what really happened. A batch it ended fires `BATCH_DONE` (with today's not-placed
+       fields). It never fires `SITE_REMOVED` or a stockpile change for a removal that was compensated.
+     - **Where the ids go** *(round 3, P2-4)*. The existing callbacks keep their exact descriptors. `StockpileChanged.onChanged(String
+       owner)` has no payload object to extend, and `SiteRemoved.onRemoved(SiteView, RemoveResult)` is a fixed signature too. So a
+       **parallel event** carries the metadata:
+
+       ```java
+       Event<TxnEvent> TXN_EVENT;              // SiteEvents, Since NEXT
+       interface TxnEvent { void onTxnEvent(TxnEventInfo e); }
+       record TxnEventInfo(String txnId, String eventId, String kind, String subject, boolean replayed) {}
+       // kind: "site_removed" | "batch_done" | "stockpile_changed" | "site_updated"; subject: the site id, batch id or owner
+       ```
+
+       `TXN_EVENT` fires immediately after each legacy event a txn fires, in the same tick and in the same order. A consumer that
+       wants the id reads it there. Nothing existing changes.
+  10. **The `SITE_BUSY` detail tells the two meanings apart** (Steward's R2-Q2):
+      - `held(decided) tx-<n>: chunk x,z` or `... : player <name>`: **the caller's own decided txn** is held. It will finish later.
+        Steward words it "under way". It is not a refusal, and no FAILED entry is written;
+      - `held(other) tx-<n>: chunk x,z`: a **begin** refused because another txn holds the resource. Nothing changed; try later;
+      - an empty detail: today's busy case (another build), unchanged.
+  11. **Deltas get the detail too** (Steward's R2-Q1). `Refusal` gains a trailing `String detail` component, and the old 3-argument
+      constructor is kept (additive, Since NEXT). A refused `applyDelta` on a held resource carries the same `held(...)` detail.
+  12. **`owed` and collecting it** (Steward's R2-Q4).
+      - **The shape:** `Stockpile.owed()` → `List<Owed>`, where `record Owed(String key, String recipient, String dimension,
+        BlockPos at, Map<Item, Integer> items)` (Since NEXT; the record's old constructors kept).
+      - **The recipient** is a player UUID or an owner id. For a modid owner such as `steward_mc:settlement/<id>`, only the owning mod
+        collects, through a new `Stockpiles.collectOwed(owner, key, ServerPlayer to)` API (it decides which player receives), or
+        through the stockpile panel's Take where that owner's Take is allowed today. Architect never hands a settlement's owed items
+        to an arbitrary player.
+      - **`/architect collect`** is open to every player for entries whose recipient is their own UUID. Ops (permission 2) may
+        collect any entry, and that is logged.
+      - **`adoptCrates`' over-capacity drop becomes owed** (Noah's decision 1). It is an owed entry for the adopting owner at the
+        crate's cell, so `Adopted`'s `dropped()` reports what became owed.
 - **API additions (all additive, Since NEXT, binary compatible; Steward review required):**
   - `SiteWait.TXN_HELD`;
   - `RemoveResult.replayed()`;
-  - `txnId` and `eventId` on the event payloads;
-  - the `SITE_BUSY` detail text.
+  - the parallel `SiteEvents.TXN_EVENT` with `TxnEventInfo` (existing callbacks unchanged);
+  - `Refusal.detail` (with the old constructor kept);
+  - `Stockpile.owed()` / `Owed`;
+  - `Stockpiles.collectOwed`;
+  - the `held(decided)` / `held(other)` detail text.
 
   `Reason` gains nothing.
 - **Steward's views:** `Stockpile`/`StockLedger` views are unchanged, except that the stockpile view gains `owed` (collectibles,
@@ -607,6 +715,11 @@ the model:
   printed.
 - **Failures as well as crashes:** each write can also fail before the rename, fail after the rename (the directory force throws),
   or be refused (SS). Each probe can go UNKNOWN, then become readable.
+- **Load-time durability** *(round 3, P1-1)*. The model includes the sequence IN_DOUBT → process restart (the page cache kept, so
+  the file loads) → an attempted retirement → power loss (the unforced rename lost). It asserts that no await, decision or
+  retirement is satisfied by a loaded generation before load's re-force returned.
+- **IO debt** *(round 3, P2-5)*. A chunk serialization failure, a write failure and an offline player's failed save are each
+  retried by the model's barrier. It asserts the barrier refuses until the retry succeeds, and succeeds afterwards.
 - **Recovery is crashed at every one of its own prefixes,** on both the redo and the compensation paths, and again inside the next
   recovery (bounded to depth 3).
 - **Both branches of the decision** are covered: forward, and abort before the decision (a refused save, a thrown commit, an ended
@@ -691,7 +804,7 @@ sink, and an amount moving between them counts in exactly one place, by its prob
 
 The four probe states and where each counts:
 
-| source | sink | forward (PREPARED or COMMITTED) | compensating (ABORTING) |
+| source | sink | forward (undecided or commit) | compensating (abort, or an abandon's unwritten members) |
 |---|---|---|---|
 | holds it (not taken, or given back) | not booked | the source | the source |
 | taken | not booked | **inTransit** | **inTransit** |
@@ -918,6 +1031,35 @@ The final GPT pass (the log the coordinator ran) returned NOT SOUND with 6 P1s, 
 
 **T0** is being built on `slice/T0`. When this round was written it had no commits, so §3.1 follows T0's brief. It must be checked
 against T0's as-built when that lands.
+
+Not re-reviewed here: the coordinator runs the final GPT pass.
+
+## 12. Round 3 (the third GPT pass and Steward's round 2; Noah: "One last round")
+
+The third GPT pass came back NOT SOUND, with two P1s against the design and two P1s against T0's initial commit, plus three P2s.
+It marked most of round 2 resolved.
+
+| Finding | Change |
+|---|---|
+| P1-1: a generation loaded at start is not proof it is durable (IN_DOUBT → restart → power loss) | load re-forces the installed file and its directory before `writtenGen` acknowledges anything; until then the store is IN_DOUBT; the sequence is in the crash model (§3.1, §4.1). T0's fix round implements it |
+| P1-2: the recovery predicate lost decisions (EFFECTS_DONE without COMMITTED; ABANDONED ignored) | an immutable `decision` field separate from `phase`; a phase × decision × evidence table; EFFECTS_DONE stays committed; abandon resumes its recorded split (§3.3, §3.6) |
+| P1 (T0 042da098): player saves acknowledged without the replace result | positive acknowledgement: `safeReplaceOrMoveFile`'s result plus a read-back hash plus forces (§3.1). For T0's fix round |
+| P1 (T0 042da098): `forceDir` turned every directory error into OK | best effort only for the named Windows limit; any other failure after a rename is IN_DOUBT (§3.1). For T0's fix round |
+| P2-3: compaction dropped the promised results and event payloads | `done` keeps the semantic key, the terminal result and pending event payloads until the emitted bookkeeping is acknowledged; a bounded result cache; eviction answers `replayed()` with an empty refund, never a re-run (§3.7) |
+| P2-4: `StockpileChanged(String owner)` can't gain fields | a parallel `SiteEvents.TXN_EVENT` (`TxnEventInfo`), fired right after each legacy event; the existing descriptors unchanged (§3.12.9) |
+| P2-5 (also T0): failure debt with no retry | a failed chunk's dirty state restored or its snapshot requeued, and the chunk pinned; online players re-saved; offline players' snapshots rewritten from a debt table (§3.1) |
+
+**Steward's round 2:**
+- §3.12.9 reworded: ids are for tracing, and consumers stay idempotent on their own saved state, with no seen-id set.
+- R2-Q1: `Refusal.detail` (§3.12.11).
+- R2-Q2: `held(decided)` versus `held(other)` (§3.12.10).
+- R2-Q3: re-fired events fire on the first tick after recovery; an aborted txn fires only `BATCH_DONE` for the batch it ended; the
+  ids travel on `TXN_EVENT` (§3.12.9).
+- R2-Q4: the `Owed` shape, owner-only collection through `collectOwed` for modid recipients, `/architect collect` for one's own
+  entries (ops for any), and `adoptCrates`' overflow becomes owed (§3.12.12).
+
+**T0:** §3.1 uses T0's names (`OK` / `REFUSED` / `IN_DOUBT`). The load re-force, the player acknowledgement and the directory rule
+follow T0's fix-round brief. When I wrote this, origin/slice/T0 was still at 042da098; check §3.1 against it once its fix round lands.
 
 Not re-reviewed here: the coordinator runs the final GPT pass.
 
