@@ -175,7 +175,7 @@ export async function registerTXN(steps, h) {
       { id: 'dropper', block: 'dropper[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'dispenser', block: 'dispenser[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 1'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
-      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], setup: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) },
+      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], act: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) }, // the chest it pushes into placed only once held
       { id: 'hopper_suck', block: 'hopper[facing=down]', slots: [], ignoreDrops: true,
         act: async (X) => cmd(`/summon minecraft:item ${X[0] + 0.5} ${X[1] + 1.2} ${X[2] + 0.5} {Item:{id:"minecraft:cobblestone",count:3}}`), injected: { 'minecraft:cobblestone': 3 } },
       { id: 'copper_golem', block: 'chest', slots: ['oak_planks 2'], slow: true,

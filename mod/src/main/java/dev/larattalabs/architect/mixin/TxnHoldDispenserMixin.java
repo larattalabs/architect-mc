@@ -1,0 +1,25 @@
+package dev.larattalabs.architect.mixin;
+
+import dev.larattalabs.architect.txn.TxnServer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.DispenserBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * (slice T2a, docs/TXN-DESIGN.md §6.1 item 2) A held dispenser dispenses nothing: its behaviours split the stack in place before any
+ * {@code setItem}. The dropper overrides {@code dispenseFrom} ({@link TxnHoldDropperMixin}).
+ */
+@Mixin(DispenserBlock.class)
+public abstract class TxnHoldDispenserMixin {
+	@Inject(method = "dispenseFrom", at = @At("HEAD"), cancellable = true)
+	private void architect$txnHeldDispense(ServerLevel level, BlockState state, BlockPos pos, CallbackInfo ci) {
+		if (TxnServer.boxHeld(level, pos)) {
+			ci.cancel();
+		}
+	}
+}
