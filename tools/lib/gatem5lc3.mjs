@@ -419,8 +419,8 @@ export async function registerLC3(steps, h) {
 
   /**
    * (LC3 round 4, GPT P1 + P2) The abandon of an unwritten survival-filled member (FK-b's town: cottage_1 = fk_hall provided 1, its custody
-   * of 4 x 18 filter items and 16 module-provided slabs taken at the removal's start). The group removal forced STALLED at its first restore
-   * (failRestore skip 0: no member written). `point` (null: none) is a kill point armed for the abandon: AB1 its custody back in memory,
+   * of 4 x 18 filter items and 16 module-provided slabs taken at the removal's start). The group removal forced STALLED just before it
+   * writes fk_hall's site (dev.undo.failRestore stallBefore: the members before it written, it and the rest untouched). `point` (null: none) is a kill point armed for the abandon: AB1 its custody back in memory,
    * nothing saved; AB2 inside its save, the chunks flushed, the ledger not; AB3 the save confirmed, no record dropped; AB4 the records dropped,
    * the queue not saved. After the restart the removal is still stalled and the abandon runs again. Every case: the billed items exist ONCE
    * (in its containers, plus what found no slot credited to the stock), no custody left, nothing dropped; no provided slab in its containers
@@ -442,10 +442,10 @@ export async function registerLC3(steps, h) {
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
     await cmd('/save-all flush');
-    await call('dev.undo.failRestore', { skip: 0 }, 10_000);
+    await call('dev.undo.failRestore', { stallBefore: site }, 10_000); // (a survival site deconstructs at once: no RestoreJob to break)
     call('dev.region.remove', { region: W.region, requester: G.OWNER }, 3_600_000).catch(() => null);
-    const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 600, 1000);
-    await call('dev.undo.failRestore', { skip: -1 }, 10_000);
+    const x0 = await until(async () => { const x = await seal(); return (x.stalled ?? []).length ? x : null; }, 120, 1000);
+    await call('dev.undo.failRestore', { stallBefore: '' }, 10_000);
     const sr = x0?.stalled?.[0];
     out.stalled = sr ?? null;
     const p0 = await F.pile();

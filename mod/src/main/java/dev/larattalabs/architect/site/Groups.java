@@ -663,6 +663,13 @@ public final class Groups {
 		RestoreJob.failSkip = skip;
 	}
 
+	/**
+	 * (LC3 round 4, TEST) DevBridge {@code dev.undo.failRestore {stallBefore}}: the next group or stage removal ends STALLED just before it
+	 * writes member {@code id} (its undo committed, every record pending; that member and the rest untouched). Works for a member a
+	 * construction site deconstructs at once, which no RestoreJob breaks. Null disarms.
+	 */
+	public static volatile @Nullable String stallBefore;
+
 	private Groups() {
 	}
 
@@ -1044,6 +1051,11 @@ public final class Groups {
 			return;
 		}
 		String id = r.sites.get(0);
+		if (id.equals(stallBefore)) {
+			stallBefore = null; // (LC3 round 4, TEST) stalled before this member's write
+			end(server, r, new Removed(false, List.of(id + ": injected stall before its write (dev hook, LC3 round 4)"), Map.copyOf(r.refund)));
+			return;
+		}
 		Site s = Sites.pendingRecord(id);
 		if (s == null && Infras.pending(id) != null) {
 			// a road or cell site of the group: its cells over ticks
