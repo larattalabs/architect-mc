@@ -377,7 +377,7 @@ public final class StockLedger {
 	}
 
 	/** (OVF) {@link #consume}; {@code unbounded}: the empty bucket enters the stock past capacity (a keyed charge's: never dropped). */
-	private boolean consume(String item, int n, int capacityStacks, ToIntFunction<String> maxStack, Map<String, Integer> overflowOut, boolean unbounded) {
+	public boolean consume(String item, int n, int capacityStacks, ToIntFunction<String> maxStack, Map<String, Integer> overflowOut, boolean unbounded) {
 		if (n <= 0) {
 			return true;
 		}
@@ -741,8 +741,9 @@ public final class StockLedger {
 	/**
 	 * (slice OVF) {@link #giveBack}; {@code unbounded}: everything enters the stock, past capacity if need be, and nothing overflows. A keyed
 	 * credit's (its key and its stock land in one ledger write: exactly once across any crash, with no item entity to pay twice or lose).
+	 * (slice T0) Also the start reconcile's refunds, whose book-driven trigger replays them until its ledger write lands.
 	 */
-	private Credit giveBack(Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack, boolean unbounded) {
+	public Credit giveBack(Map<String, Integer> items, int capacityStacks, ToIntFunction<String> maxStack, boolean unbounded) {
 		Map<String, Integer> in = new TreeMap<>();
 		Map<String, Integer> over = new TreeMap<>();
 		for (var e : new TreeMap<>(items).entrySet()) {

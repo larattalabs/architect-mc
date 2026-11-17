@@ -77,7 +77,7 @@ class StockpileSaveJ1Test {
 		String sp = read(SITE + "Stockpiles.java");
 		String rc = StockpileSaveHFTest.body(sp, "static boolean reconcile(MinecraftServer srv, ServerLevel level, Pile p, Object t, String key");
 		int pt = rc.indexOf("Placed.record(level, r.pos(i)) != null");
-		int charge = rc.indexOf("p.ledger.consume(");
+		int charge = rc.indexOf("consumeAtStart("); // (slice T0) the reconcile's charge
 		assertTrue(pt >= 0 && pt < charge, "an ahead cell with a PT record is checked before any charge");
 		String branch = rc.substring(pt, rc.indexOf("continue;", pt));
 		assertTrue(branch.contains("r.markBuilt(i, true);") && !branch.contains("consume"), "it stands built, charged nothing");

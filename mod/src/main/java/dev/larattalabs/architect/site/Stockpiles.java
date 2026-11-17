@@ -2869,25 +2869,23 @@ public final class Stockpiles {
 		java.util.BitSet ahead = plan.ahead();
 		java.util.BitSet lost = plan.lost();
 		int cap = capacity(srv, p);
-		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		// the ledger ahead: what the lost cells cost goes back (capped by the record), the builder charges them again as it places them
 		Map<String, Integer> lostCost = new TreeMap<>();
 		for (int i = lost.nextSetBit(0); i >= 0; i = lost.nextSetBit(i + 1)) {
 			r.cost.get(i).forEach(x -> lostCost.merge(x.item(), x.count(), Integer::sum));
 		}
-		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt());
-		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
-		dropOverflow(srv, p, cr.overflow(), fallback);
+		AtStart lostBack = refundAtStart(p, id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt(), cap);
+		Map<String, Integer> back = lostBack.back();
+		StockLedger.Credit cr = lostBack.credit(); // (slice T0) all of it in the stock: nothing dropped
 		// (J2, RL6) a construction delta's swap built after the save: the builder gave the old block back out of the record as it swapped
 		// (Builder.refundSwap -> giveBackPaid: fromPaid under the target's key, then giveBack), and the unsaved ledger lost that. Done again
 		// here, the same way, before the new block is charged. Once: the swap's give-back and its new block's charge are booked in the same
 		// tick, so a saved ledger that holds the give-back holds the cell as standing paid in its book too (never ahead); the book written
 		// below counts the cell standing, so a second load finds nothing ahead
 		Map<String, Integer> swapOld = swapOldCost(level, r, ahead, free);
-		Map<String, Integer> swapBack = swapOld.isEmpty() ? Map.of() : p.ledger.fromPaid(id, swapOld, t instanceof Site st2 ? st2.placedAt()
-			: ((Infra) t).placedAt());
-		StockLedger.Credit scr = swapBack.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(swapBack, cap, Stockpiles::maxStack);
-		dropOverflow(srv, p, scr.overflow(), fallback);
+		AtStart swapAt = refundAtStart(p, id, swapOld, t instanceof Site st2 ? st2.placedAt() : ((Infra) t).placedAt(), cap);
+		Map<String, Integer> swapBack = swapAt.back();
+		StockLedger.Credit scr = swapAt.credit(); // (slice T0) all of it in the stock: nothing dropped
 		if (!swapBack.equals(swapOld)) {
 			Architect.LOGGER.warn("Stockpile {}: the reconcile's swap give-back of {} capped at the record: {} of {}", p.owner, id, swapBack, swapOld);
 		}
@@ -2913,7 +2911,7 @@ public final class Stockpiles {
 			cost.forEach(x -> need.merge(x.item(), x.count(), Integer::sum));
 			if (need.entrySet().stream().allMatch(e -> p.ledger.stock(e.getKey()) >= e.getValue())) {
 				for (SurvivalItems.Cost x : cost) {
-					if (p.ledger.consume(x.item(), x.count(), cap, Stockpiles::maxStack, over)) {
+					if (consumeAtStart(p, x.item(), x.count(), cap, over)) {
 						p.ledger.pay(key, x.item(), x.count());
 					}
 				}
@@ -2925,7 +2923,7 @@ public final class Stockpiles {
 				need.forEach((k, v) -> owes.merge(k, v, Integer::sum));
 			}
 		}
-		dropOverflow(srv, p, over, fallback);
+		// (slice T0) the charges' empty buckets entered the stock (consumeAtStart): nothing dropped
 		java.util.BitSet standing = (java.util.BitSet) stands.clone();
 		standing.andNot(owed);
 		java.util.BitSet known = new java.util.BitSet();
@@ -2990,6 +2988,27 @@ public final class Stockpiles {
 				}
 			}
 		}
+	}
+
+	/** (T0m) A reconcile refund: what came back out of the target's paid record, and how it was credited. */
+	record AtStart(Map<String, Integer> back, StockLedger.Credit credit) {
+	}
+
+	/**
+	 * (slice T0, the GPT check of the merge with main v0.77.0) A reconcile's unkeyed refund at start (a lost cell's cost, a swap's old block):
+	 * taken from the target's paid record and credited as OVF credits a keyed refund, all of it, past capacity if need be, nothing dropped.
+	 * The reconcile's book reaches the disk only after the world (saveWithWorld): a dropped overflow saved with the chunks would survive a
+	 * failed ledger write and a crash, and the unchanged book would refund it again at the next start. In the stock, it is booked with the
+	 * book, once.
+	 */
+	static AtStart refundAtStart(Pile p, String id, Map<String, Integer> cost, long placedAt, int cap) {
+		Map<String, Integer> back = cost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, cost, placedAt);
+		return new AtStart(back, back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack, true));
+	}
+
+	/** (slice T0) A reconcile's charge of an ahead cell's unit at start: a filled bucket's empty one enters the stock past capacity, never dropped. */
+	static boolean consumeAtStart(Pile p, String item, int n, int cap, Map<String, Integer> over) {
+		return p.ledger.consume(item, n, cap, Stockpiles::maxStack, over, true);
 	}
 
 	/**
