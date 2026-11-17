@@ -276,6 +276,45 @@ async function crashAndRemove(tag, fx) {
   return out;
 }
 
+/**
+ * (GPT final review) Saving off (/save-off): x03's island, no stockpile, builds all its staged cells but no target is marked BUILT while a
+ * save can't be made; /save-on: they complete (the barrier saved their chunks). The region removed: E-flat 0.
+ */
+async function saveOff(tag, fx) {
+  const out = { tag };
+  const s = await G.site(ctx, tag, fx);
+  const box = boxOf(s.W, 96);
+  const pre = await G.snap(ctx, box, `st-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  if (!ck.check?.artifactSha) { check(false, `${tag}: no artifact (${ck.check?.overall})`); return out; }
+  await call('dev.terrain.rate', { n: 16 }, 30_000);
+  await L.cmd('/save-off');
+  const region = await G.realise(ctx, ck.check.artifactSha, {});
+  let tr = null, heldAt = null;
+  for (let i = 0; i < 400; i++) {
+    tr = await call('dev.region.terrain', { region }, 120_000);
+    const ts = tr.targets ?? [];
+    if (ts.length && ts.every((t) => t.built === t.cells)) { heldAt = heldAt ?? Date.now(); if (Date.now() - heldAt > 15_000) break; }
+    await sleep(500);
+  }
+  const ts = tr?.targets ?? [];
+  out.saveOff = ts.map((t) => [t.target, t.building, t.built, t.cells]);
+  check(ts.length > 0 && ts.every((t) => t.built === t.cells && t.building), `${tag}: with saving off every staged cell stands but no target is marked BUILT for 15 s (${json(out.saveOff)})`);
+  await L.cmd('/save-on');
+  let done = null;
+  for (let i = 0; i < 120; i++) {
+    done = await call('dev.region.terrain', { region }, 120_000);
+    if ((done.targets ?? []).every((t) => !t.building)) break;
+    await sleep(1000);
+  }
+  out.saveOn = (done?.targets ?? []).map((t) => [t.target, t.building, t.built, t.cells]);
+  check((done?.targets ?? []).length > 0 && (done.targets ?? []).every((t) => !t.building), `${tag}: saving on again, every staged target is marked BUILT (${json(out.saveOn)})`);
+  await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  check(e.mismatches === 0, `${tag}: Regions.remove: E-flat ${e.mismatches}`, e.list.slice(0, 8));
+  return out;
+}
+
 steps.ingame = async () => {
   await ensure();
   spendZero();
@@ -299,6 +338,12 @@ steps.ingame = async () => {
     const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
     delete isle.plan.zones;
     try { out.x03 = await staged('x03', isle, { over: 96, crates: 0 }); } catch (e) { check(false, `x03: ${String(e.message).slice(0, 300)}`); out.x03 = { error: String(e.stack ?? e) }; }
+  }
+  if (want('x03saveoff')) {
+    const isle = JSON.parse(JSON.stringify(G.fixture(ctx, 'bf/x03_island_hamlet')));
+    delete isle.plan.zones;
+    try { out.x03saveoff = await saveOff('x03saveoff', isle); } catch (e) { check(false, `x03saveoff: ${String(e.message).slice(0, 300)}`); out.x03saveoff = { error: String(e.stack ?? e) }; }
+    await L.cmd('/save-on').catch(() => {});
   }
   if (want('x01crash')) {
     // (x01's mountain: four targets over 32,078 cells at 16 per tick, so one stands BUILT while others build, and half built after the restart)

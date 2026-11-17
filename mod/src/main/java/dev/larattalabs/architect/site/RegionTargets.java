@@ -82,6 +82,8 @@ public final class RegionTargets {
 		boolean released;
 		/** (8a ST) Whether {@link #floating} was read from the live region (else read again at the next turn). */
 		boolean floatingRead;
+		/** (8a ST) The feed turn before which a built target's durability barrier is not tried again (after a failed one). */
+		long durableRetryAt = Long.MIN_VALUE;
 
 		Plan(long placedAt, BitSet held, int[] ends, int @Nullable [][] deps) {
 			this.placedAt = placedAt;
@@ -791,6 +793,8 @@ public final class RegionTargets {
 	static final int TERRAIN_SCAN = 4096;
 	/** (8a ST) Feed turns with nothing written (and a loaded cell not yet supported) before a target may be released. */
 	static final int TERRAIN_STALL = 100;
+	/** (8a ST, GPT final review) Chunk loads one feed turn of a staged target may make to read its cells' supports. */
+	static final int TERRAIN_LOADS = 2;
 
 	/** (8a ST) Whether a target is a staged terrain target. */
 	public static boolean isTerrain(@Nullable Infra i) {
@@ -1178,8 +1182,11 @@ public final class RegionTargets {
 		}
 		Construction c = t.construction();
 		if (r.built.cardinality() == r.size()) {
-			r.soilSame = true;
-			RoadBuilder.complete(srv, level, t, r, null);
+			// (8a ST, GPT final review) a staged target completes only through its durability barrier, on any path
+			if (!pl.terrain || mayComplete(pl, ticks, () -> terrainDurable(srv))) {
+				r.soilSame = true;
+				RoadBuilder.complete(srv, level, t, r, null);
+			}
 			return;
 		}
 		if (c.paused()) {
@@ -1357,6 +1364,7 @@ public final class RegionTargets {
 		List<RegionOverwrites.Live> sibs = null;
 		int placed = 0;
 		boolean unready = false, unknown = false;
+		int[] loads = {TERRAIN_LOADS};
 		for (int k = 0; k < limit && budget > 0 && (placed == 0 || Placement.remainingNanos() > 0); k++, q++) {
 			q = r.built.nextClearBit(q);
 			if (q >= n) {
@@ -1374,7 +1382,7 @@ public final class RegionTargets {
 				r.markBuilt(q, true);
 				continue;
 			}
-			int sup = support(level, r, pl, q, before, now);
+			int sup = support(level, r, pl, q, before, now, loads);
 			if (sup == UNKNOWN) {
 				unknown = true; // its support is in a chunk not loaded: never written, never a reason to release
 				continue;
@@ -1416,7 +1424,7 @@ public final class RegionTargets {
 		SiteWaits.observe(srv, level, t.id(), placed > 0 ? WaitCalc.Outcome.PLACED : WaitCalc.Outcome.IDLE);
 		if (r.built.cardinality() == n) {
 			Infra cur = Infras.get(t.id());
-			if (cur != null && terrainDurable(srv)) {
+			if (cur != null && mayComplete(pl, ticks, () -> terrainDurable(srv))) {
 				r.soilSame = true;
 				RoadBuilder.complete(srv, level, cur, r, null);
 			}
@@ -1435,10 +1443,43 @@ public final class RegionTargets {
 		if (!srv.isSameThread()) {
 			return false;
 		}
+		// (GPT final review) a level with saving off (/save-off) would skip its chunks yet leave RegionDurability clean: refused, the target
+		// stays building until saving is on again
+		for (ServerLevel l : srv.getAllLevels()) {
+			if (l.noSave) {
+				if (!SAVE_OFF_SAID) {
+					SAVE_OFF_SAID = true;
+					Architect.LOGGER.warn("Staged terrain: a target is built but saving is off (/save-off): it is marked built only once a save can be made");
+				}
+				return false;
+			}
+		}
+		SAVE_OFF_SAID = false;
 		srv.saveAllChunks(true, true, false);
 		TERRAIN_SAVES.incrementAndGet();
 		RegionDurability.retryOwed();
 		return RegionDurability.undurable("chunk", "entities").isEmpty();
+	}
+
+	private static boolean SAVE_OFF_SAID;
+
+	/** (8a ST) Feed turns between two durability barriers of one built staged target (a failed one is retried, never skipped). */
+	static final int DURABLE_RETRY = 100;
+
+	/**
+	 * (8a ST, GPT final review) Whether a staged target whose cells all stand may be marked BUILT now: only when its barrier ({@code barrier},
+	 * the chunks saved and flushed) answers true this turn. A failed barrier keeps it building; it is tried again {@link #DURABLE_RETRY} turns
+	 * later, so a failure is never followed by a completion without one.
+	 */
+	static boolean mayComplete(Plan pl, long ticks, java.util.function.BooleanSupplier barrier) {
+		if (ticks < pl.durableRetryAt) {
+			return false;
+		}
+		if (barrier.getAsBoolean()) {
+			return true;
+		}
+		pl.durableRetryAt = ticks + DURABLE_RETRY;
+		return false;
 	}
 
 	private static final net.minecraft.core.Direction[] FACES = net.minecraft.core.Direction.values();
@@ -1466,15 +1507,43 @@ public final class RegionTargets {
 	 * A neighbour the rule needs in a chunk not loaded answers {@link #UNKNOWN} (unless another neighbour already supports it).
 	 */
 	static int support(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before, BlockState now) {
+		return support(level, r, pl, q, before, now, new int[] {0});
+	}
+
+	/**
+	 * (8a ST, GPT final review) {@link #support}, with up to {@code loads[0]} chunk loads this turn: a support in a chunk not loaded is read by
+	 * loading its chunk (a staged target holds no ticket on its neighbours' chunks), so an unknown support never stalls a target for ever.
+	 */
+	static int support(ServerLevel level, Builder.Run r, Plan pl, int q, @Nullable Cells before, BlockState now, int[] loads) {
 		int k = r.queue[q];
 		BlockState was = before != null && k >= 0 && k < before.size() ? before.states[k] : null;
-		return supportRule(r.pos(q), r.target[q], was, now, o -> Builder.stateIfLoaded(level, o), o -> unbuiltCut(r, o), o -> {
+		return supportRule(r.pos(q), r.target[q], was, now, loadingWorld(o -> Builder.stateIfLoaded(level, o), level::getBlockState, loads), o -> unbuiltCut(r, o), o -> {
 			int j = r.queuePos(o);
 			return j >= 0 && r.built.get(j);
 		}, o -> {
 			int j = r.queuePos(o);
 			return j >= 0 && !r.built.get(j) && r.target[j].isAir();
 		}, pl.floating);
+	}
+
+	/** TEST and the step: chunk loads made this session to read a staged cell's support. */
+	static final java.util.concurrent.atomic.AtomicLong SUPPORT_LOADS = new java.util.concurrent.atomic.AtomicLong();
+
+	/**
+	 * (8a ST) A world lookup that reads a position in a chunk not loaded ({@code loaded} answers null) through {@code load} (a chunk load), at
+	 * most {@code budget[0]} times; past it, null (unknown).
+	 */
+	static java.util.function.Function<BlockPos, @Nullable BlockState> loadingWorld(java.util.function.Function<BlockPos, @Nullable BlockState> loaded,
+		java.util.function.Function<BlockPos, BlockState> load, int[] budget) {
+		return o -> {
+			BlockState b = loaded.apply(o);
+			if (b == null && budget[0] > 0) {
+				budget[0]--;
+				SUPPORT_LOADS.incrementAndGet();
+				b = load.apply(o);
+			}
+			return b;
+		};
 	}
 
 	/**
@@ -1498,6 +1567,13 @@ public final class RegionTargets {
 		}
 		boolean unloaded = false;
 		if (role == BuildOrder.T_LEAF) {
+			// (GPT final review) vanilla's rule exactly: a leaf's distance is 1 + the least of its neighbours' (a log 0, a leaf its distance);
+			// at 7 a non-persistent leaf decays. It goes in only when that distance is under 7 now; a persistent leaf (it never decays) still
+			// waits for a log or a leaf of its own target already built, so it is never written before its log
+			boolean persistent = after.hasProperty(net.minecraft.world.level.block.LeavesBlock.PERSISTENT) && after.getValue(
+				net.minecraft.world.level.block.LeavesBlock.PERSISTENT);
+			int least = net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
+			boolean ownLeaf = false;
 			for (var d : FACES) {
 				BlockPos o = p.relative(d);
 				BlockState b = world.apply(o);
@@ -1509,15 +1585,14 @@ public final class RegionTargets {
 					continue;
 				}
 				if (b.is(net.minecraft.tags.BlockTags.LOGS)) {
-					return READY;
+					least = 0;
+				} else if (b.is(net.minecraft.tags.BlockTags.LEAVES) && b.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE)) {
+					least = Math.min(least, b.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE));
+					ownLeaf |= builtOurs.test(o);
 				}
-				if (b.is(net.minecraft.tags.BlockTags.LEAVES)) {
-					boolean held = b.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE) && b.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE)
-						< net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
-					if (builtOurs.test(o) || held) {
-						return READY;
-					}
-				}
+			}
+			if (least + 1 < net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE || persistent && ownLeaf) {
+				return READY;
 			}
 			return unloaded ? UNKNOWN : MANDATORY;
 		}
@@ -2064,13 +2139,20 @@ public final class RegionTargets {
 		return Builder.kind(after) == BuildOrder.ATTACHABLE ? BuildOrder.T_REST : BuildOrder.T_FILL;
 	}
 
+	/** (8a ST) Whether a standing leaf holds the leaf beside it: its distance + 1 under vanilla's decay distance (a log is always so). */
+	static boolean leafHolds(BlockState st) {
+		return st.hasProperty(net.minecraft.world.level.block.LeavesBlock.DISTANCE) && st.getValue(net.minecraft.world.level.block.LeavesBlock.DISTANCE) + 1
+			< net.minecraft.world.level.block.LeavesBlock.DECAY_DISTANCE;
+	}
+
 	/** (8a TO) What a world block is to {@link BuildOrder#forTerrain}'s land: a log, a leaf, site-solid land, or nothing that bears. */
 	static int terrainLand(BlockState st) {
 		if (st.is(net.minecraft.tags.BlockTags.LOGS)) {
 			return BuildOrder.LAND_LOG;
 		}
 		if (st.is(net.minecraft.tags.BlockTags.LEAVES)) {
-			return BuildOrder.LAND_LEAF;
+			// (GPT final review) only a leaf a log holds close enough that a leaf beside it is held too (vanilla's distance + 1 under 7)
+			return leafHolds(st) ? BuildOrder.LAND_LEAF : BuildOrder.LAND_NONE;
 		}
 		return Builder.anchorState(st) ? BuildOrder.LAND_SOLID : BuildOrder.LAND_NONE;
 	}
