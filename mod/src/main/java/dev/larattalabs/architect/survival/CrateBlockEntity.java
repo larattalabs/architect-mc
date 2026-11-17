@@ -28,6 +28,8 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	private String siteId = "";
 	private final Ledger ledger = new Ledger();
+	/** (Slice CXD) The owed record's key whose stock a removal took from this crate ("" = none); saved with the ledger. */
+	private String taken = "";
 
 	public CrateBlockEntity(BlockPos pos, BlockState state) {
 		super(CrateBlocks.CRATE_ENTITY, pos, state);
@@ -39,6 +41,17 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	public void setSiteId(String id) {
 		siteId = id;
+		setChanged();
+	}
+
+	/** (Slice CXD) The key of the owed record whose stock was taken from this crate, or "" (a marked crate refuses inserts). */
+	public String taken() {
+		return taken;
+	}
+
+	/** (Slice CXD) Marks (or with "" clears) the crate's stock as taken by the owed record {@code key}. */
+	public void setTaken(String key) {
+		taken = key == null ? "" : key;
 		setChanged();
 	}
 
@@ -72,7 +85,7 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	/** Whether one unit of {@code stack} would go in. Server side only (false on the client). */
 	public boolean wouldAccept(ItemStack stack) {
-		return !stack.isEmpty() && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
+		return !stack.isEmpty() && taken.isEmpty() && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
 	}
 
 	/**
@@ -80,7 +93,7 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 	 * the units taken. Server thread.
 	 */
 	public int insert(ItemStack stack) {
-		if (stack.isEmpty() || !plain(stack) || level == null || level.isClientSide()) {
+		if (stack.isEmpty() || !taken.isEmpty() || !plain(stack) || level == null || level.isClientSide()) {
 			return 0; // (PS, N2) a stack with components is never booked
 		}
 		String item = itemId(stack);
@@ -167,12 +180,16 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 		output.putString("Site", siteId);
 		output.store("Delivered", COUNTS, ledger.delivered());
 		output.store("Placed", COUNTS, ledger.placed());
+		if (!taken.isEmpty()) {
+			output.putString("CxdTaken", taken); // (CXD) absent in every crate a removal never took from
+		}
 	}
 
 	@Override
 	protected void loadAdditional(ValueInput input) {
 		super.loadAdditional(input);
 		siteId = input.getStringOr("Site", "");
+		taken = input.getStringOr("CxdTaken", "");
 		ledger.load(input.read("Delivered", COUNTS).orElse(Map.of()), input.read("Placed", COUNTS).orElse(Map.of()));
 	}
 }

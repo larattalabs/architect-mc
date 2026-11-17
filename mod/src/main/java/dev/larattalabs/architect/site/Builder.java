@@ -1714,6 +1714,11 @@ public final class Builder {
 				Architect.LOGGER.error("Settling the booked region charges failed", e);
 			}
 			try {
+				CrateOwed.atStart(srv); // (slice CXD) the open crate-stock records resolved against their crates, before anything ticks
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Resolving the owed crate stock failed", e);
+			}
+			try {
 				Stockpiles.capsAfterReconcile(srv); // (BC-c) the regions are loaded now: a reconcile past a maxBill is named
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("The reconcile's maxBill check failed", e);
@@ -1723,6 +1728,10 @@ public final class Builder {
 
 	static void tick(MinecraftServer srv) {
 		fillsAtStart(srv); // a no-op after the first tick's START listener ran it
+		if (CrateOwed.pending()) {
+			Architect.LOGGER.warn("Crate stock: a capture was left uncommitted by its removal; dropped (the crate was never touched)");
+			CrateOwed.dropPending(); // (slice CXD) the safety net: a caller that threw between capture and commit
+		}
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
@@ -2607,16 +2616,23 @@ public final class Builder {
 
 	/** What a deconstruct gives back: refunds, the player's blocks and the crate's stock, and where they drop. */
 	record Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing, @Nullable String stockpile,
-		@Nullable String key) {
+		@Nullable String key, @Nullable String owed) {
 		Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing) {
-			this(tally, crateStock, at, queued, missing, null, null);
+			this(tally, crateStock, at, queued, missing, null, null, null);
+		}
+
+		Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing, @Nullable String stockpile,
+			@Nullable String key) {
+			this(tally, crateStock, at, queued, missing, stockpile, key, null);
 		}
 
 		/** What drops at {@link #at}: refunds (a legacy site), the player's blocks and the crate's stock. A stockpile's refunds are credited instead. */
 		Map<String, Integer> all() {
 			Map<String, Integer> m = new TreeMap<>(stockpile == null ? tally.refund() : Map.of());
 			tally.playerBlocks().forEach((k, v) -> m.merge(k, v, Integer::sum));
-			crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum));
+			if (owed == null) {
+				crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum));
+			}
 			return m;
 		}
 
@@ -2629,6 +2645,9 @@ public final class Builder {
 		Map<String, Integer> reported() {
 			Map<String, Integer> m = new TreeMap<>(all());
 			credit().forEach((k, v) -> m.merge(k, v, Integer::sum));
+			if (owed != null) {
+				crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum)); // (CXD) settled by its owed record, reported as before
+			}
 			return m;
 		}
 
@@ -2773,8 +2792,15 @@ public final class Builder {
 			CrateBlockEntity crate = crate(level, s, true);
 			// a shared crate other sites still build from stays; this site's refunds drop at its cell (R6)
 			if (crate != null && otherBuildingShared(s).isEmpty() && (s.group() == null || RoadBuilder.building(s.group()).isEmpty())) {
-				keepDelivered(srv, s, crate, false);
-				stock = crate.ledger().takeStock();
+				// (slice CXD) the stock is captured as an owed record, saved confirmed and only then taken (the caller's CrateOwed.commit, once
+				// for the removal); the crate's cell (and a shared crate's entry) go when the record settles, after the commit
+				CrateOwed.Rec owed = CrateOwed.capture(level, s, crateOwner(s), c.crate(), crate);
+				if (owed != null) {
+					Deconstruction d = new Deconstruction(tally, owed.items(), at, r == null ? 0 : r.size(), missing, null, null, owed.key());
+					lastDeconstruction = d;
+					return d;
+				}
+				keepDelivered(srv, s, crate, false); // an empty crate: nothing owed, it goes now (as before)
 				restoreCrateCell(level, c.crate());
 				if (sharedGroup(s) != null) {
 					SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // the group's crate went (its own entry, phase 4e)
@@ -2867,6 +2893,7 @@ public final class Builder {
 			Stockpiles.saveCreditPending(level.getServer()); // (J1, N1's shape) before the site's record goes; (J2) a refused save leaves it pending
 		}
 		dropItems(level, d.at(), d.all(), drops);
+		CrateOwed.settle(level, creditKey(s), drops); // (slice CXD) the crate's stock, once, after the commit and the restore
 		forget(level.getServer(), s.id());
 		Construction c = s.construction();
 		if (c != null) {

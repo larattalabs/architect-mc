@@ -1628,11 +1628,17 @@ public final class Sites {
 		// commit: a crash anywhere after it rolls the credit forward at the next start (Stockpiles.settlePendingCredits) or, if the removal
 		// never settled, drops it (the site stands: its custody goes back)
 		boolean pendingHeld = Stockpiles.holdPendingCredits(decs.values());
-		if (custody || pendingHeld) {
+		boolean crateHeld = CrateOwed.pending(); // (slice CXD) a crate's stock captured: its record saved confirmed with this save, then taken
+		if (custody || pendingHeld || crateHeld) {
 			try {
-				Stockpiles.saveWithWorld(server);
+				if (crateHeld) {
+					CrateOwed.commit(server); // its confirmed save (Stockpiles.saveConfirmed) writes the custody and the credits too
+				} else {
+					Stockpiles.saveWithWorld(server);
+				}
 			} catch (IllegalStateException e) {
 				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
+				CrateOwed.dropPending();
 				Stockpiles.dropPendingCredits(decs.values());
 				for (Site y : all) {
 					if (y.construction() != null && Fills.phase(y) != null) {
@@ -1657,9 +1663,16 @@ public final class Sites {
 		}
 		WorldJournal.kill("K5");
 		String group = SiteJournal.group(id);
-		SiteJournal.Undone undone = SiteJournal.undo(level, ids, group);
-		tr.mark("plan");
-		SiteJournal.await(undone.commit(), "the removal of " + id);
+		SiteJournal.Undone undone;
+		try {
+			undone = SiteJournal.undo(level, ids, group);
+			tr.mark("plan");
+			SiteJournal.await(undone.commit(), "the removal of " + id);
+		} catch (SiteException | RuntimeException e) {
+			// (slice CXD) not committed: a crate's stock taken for it goes back into its crate
+			CrateOwed.putBackSites(server, all.stream().map(Site::id).toList());
+			throw e;
+		}
 		tr.mark("commit");
 		WorldJournal.kill("K6");
 		// R3: the records pending
@@ -2472,6 +2485,12 @@ public final class Sites {
 		drops.clearNew(level);
 		BlockPos where = at != null ? at : Builder.dropPos(b);
 		Builder.dropItems(level, where, items, drops);
+		Map<String, Integer> crate = CrateOwed.settle(level, Builder.creditKey(b), drops); // (slice CXD) the crate's stock, once
+		if (!crate.isEmpty()) {
+			Map<String, Integer> all = new java.util.TreeMap<>(items);
+			crate.forEach((k, v) -> all.merge(k, v, Integer::sum));
+			items = all;
+		}
 		Builder.forget(level.getServer(), b.id());
 		reholdNear(level, b.restoreBox());
 		SiteJournal.restoreRing(level, r.ring());

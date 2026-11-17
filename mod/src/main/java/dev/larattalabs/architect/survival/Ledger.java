@@ -100,6 +100,18 @@ public final class Ledger {
 		return s;
 	}
 
+	/** (Slice CXD) The inverse of {@link #takeStock}: a removal that ended before its commit puts the stock it took back. */
+	public void restoreStock(Map<String, Integer> stock) {
+		stock.forEach((k, v) -> {
+			int n = delivered.getOrDefault(k, 0) + v;
+			if (n == 0) {
+				delivered.remove(k);
+			} else {
+				delivered.put(k, n);
+			}
+		});
+	}
+
 	/** Restores a saved ledger. */
 	public void load(Map<String, Integer> delivered, Map<String, Integer> placed) {
 		this.delivered.clear();

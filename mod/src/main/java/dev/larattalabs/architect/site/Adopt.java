@@ -1297,10 +1297,22 @@ public final class Adopt {
 		}
 		LongPredicate only = cells::contains;
 		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, only) : null;
+		try {
+			CrateOwed.commit(server); // (slice CXD) a crate's stock: its record saved confirmed, then taken
+		} catch (IllegalStateException e) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, "The removal of " + b.id() + " was not started: "
+				+ e.getMessage());
+		}
 		Sites.Drops drops = Sites.Drops.before(level, wb != null ? wb : b.restoreBox());
 		String group = SiteJournal.group(b.id());
-		SiteJournal.Undone undone = SiteJournal.undoEntries(level, ids, group);
-		SiteJournal.await(undone.commit(), "the removal of " + b.id());
+		SiteJournal.Undone undone;
+		try {
+			undone = SiteJournal.undoEntries(level, ids, group);
+			SiteJournal.await(undone.commit(), "the removal of " + b.id());
+		} catch (Sites.SiteException | RuntimeException e) {
+			CrateOwed.putBackSites(server, List.of(b.id())); // (slice CXD) not committed: the stock goes back into the crate
+			throw e;
+		}
 		Sites.markPending(server, b, "removed");
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
 		Sites.Removed done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), Sites.statsOf(undone.work(), b.id()), Map.of(), List.of(),

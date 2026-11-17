@@ -1075,6 +1075,12 @@ public final class Groups {
 				RegionTargets.leaving(level.getServer(), inf);
 			}
 		}
+		try {
+			CrateOwed.commit(server); // (slice CXD) the members' crate stock: records saved confirmed, then taken (never in the queue file)
+		} catch (IllegalStateException e) {
+			end(server, r, new Removed(false, List.of("The removal of group " + r.group + " was not started: " + e.getMessage()), Map.copyOf(r.refund)));
+			return;
+		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
 		List<String> withCrate = new ArrayList<>(ids);
 		if (r.stage == null) {
@@ -1257,6 +1263,8 @@ public final class Groups {
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
 		if (!result.removed() && r.undo == null) {
+			// (slice CXD) ended before its undo: a member's crate stock taken for it goes back into its crate
+			CrateOwed.putBackSites(server, List.copyOf(r.decItems.keySet()));
 			// (M5 FK) ended before its undo began: a custody taken for a member that still stands goes back into its containers
 			for (String id : r.decCredit.keySet()) {
 				Site s = Sites.get(id);

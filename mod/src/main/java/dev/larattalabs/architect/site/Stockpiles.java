@@ -1465,6 +1465,21 @@ public final class Stockpiles {
 		return s != null && key.equals(Builder.creditKey(s));
 	}
 
+	/**
+	 * (slice OVF, review finding 2) A keyed booking's save, confirmed: {@link #saveWithWorld}, run only when something is unsaved, and an
+	 * {@link IllegalStateException} unless the ledger is on disk after it (a refused save, or a session whose stockpiles file failed to load,
+	 * where nothing is written). Its caller persists what depends on the booking (a region's drained removal, its charged record) only after
+	 * it returns, so a retry after a refusal saves first instead of trusting the in-memory key.
+	 */
+	static void saveConfirmed(MinecraftServer srv) {
+		if (unsaved || loadFailed) {
+			saveWithWorld(srv);
+		}
+		if (unsaved || loadFailed) {
+			throw new IllegalStateException("Stockpiles: the ledger was not saved" + (loadFailed ? " (its file failed to load this session)" : ""));
+		}
+	}
+
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
 	static volatile int creditSaves;
 	/** (J1, dev) the autosaves' wait for their chunk writes before the ledger write: count, last and max (ms). */
@@ -2098,6 +2113,7 @@ public final class Stockpiles {
 					o.addProperty("simulation", ts.getTicketDebugString(key, true));
 					return o;
 				}
+				case "owed" -> o.add("owed", CrateOwed.json()); // (slice CXD) the open crate-stock records and the counters
 				case "saved" -> {
 					JsonObject f = savedJson();
 					o.add("file", f == null ? new JsonObject() : f);
@@ -2413,6 +2429,7 @@ public final class Stockpiles {
 		JsonArray a = new JsonArray();
 		PILES.values().forEach(p -> a.add(p.toJson()));
 		root.add("stockpiles", a);
+		CrateOwed.write(root); // (CXD) the open crate-stock records (none: no key)
 		return root;
 	}
 
@@ -2940,7 +2957,7 @@ public final class Stockpiles {
 		}
 		Path f = d.resolve(FILE);
 		try {
-			if (PILES.isEmpty() && !Files.exists(f)) {
+			if (PILES.isEmpty() && CrateOwed.none() && !Files.exists(f)) {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
@@ -2973,6 +2990,7 @@ public final class Stockpiles {
 	static void loadFrom(Path d) {
 		dir = d;
 		PILES.clear();
+		CrateOwed.clear();
 		nextId = 1;
 		loadFailed = false;
 		loadFailedWhy = null;
@@ -2985,6 +3003,7 @@ public final class Stockpiles {
 		if (why != null) {
 			// (PS, F6, F11) nothing loaded, nothing saved: the file stays as it is
 			PILES.clear();
+			CrateOwed.clear();
 			nextId = 1;
 			loadFailed = true;
 			loadFailedWhy = why;
@@ -3057,6 +3076,7 @@ public final class Stockpiles {
 	 */
 	static void readInto(JsonObject root) {
 		PILES.clear();
+		CrateOwed.read(root); // (CXD)
 		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 		if (root.has("stockpiles")) {
 			for (JsonElement e : root.getAsJsonArray("stockpiles")) {
