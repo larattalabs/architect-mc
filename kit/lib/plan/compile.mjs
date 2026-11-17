@@ -71,7 +71,7 @@ import { emitElevatedZone, formHostOf, isElevatedZone, landAfterForms, resolveEl
 // ((slice R2) forms as land: a form-hosted elevated zone's lots read the plan's draft land after the forms)
 import { localWorld } from '../fluids/body.mjs';
 // (7b LP) port links between site lots (the link pass)
-import { LINK_STAGE, LinkError, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
+import { LINK_STAGE, LinkError, ONE_ENDED_KINDS, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
 import { authoredRef } from './authored.mjs';
 
 /** §7's caps (each a request may only lower). */
@@ -1372,6 +1372,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const elevatedIds = new Set(), siteLotZone = new Map();
   for (const q of V.parts) if (isElevatedZone(q)) { elevatedIds.add(q.id); for (const l of zoneLots(q.part)) { elevatedIds.add(l.id); siteLotZone.set(l.id, q.id); } }
   const portLinkParts = [];
+  // ((slice PL2) a one-ended port link: a ladder with one end a site lot ({part: lot, port?} or {part: zone, port: lot}) and the other the
+  // ground ({anchor} or {feature}) or a form part of the plan (a region-made form its foot stands on): routed after the forms, below)
+  const oneEndedParts = [];
   // (a branch_walk is only ever a port link: one in a plan without an elevated zone answers unsupported here too, never the route pass's)
   if (elevatedIds.size || order.some((p) => p.family === 'connector' && p.kind === 'branch_walk' && !answers.has(p.id))) {
     const siteEnd = (e) => (typeof e?.part !== 'string' ? null : siteLotZone.has(e.part) ? { lot: e.part, ...(e.port ? { port: e.port } : {}), zone: siteLotZone.get(e.part) }
@@ -1389,6 +1392,15 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         ans(p, { class: 'fits', provisional: true, notes: [`a link between site lots ${A.lot} and ${B.lot}: routed to their sites' ports here, written at realise to the bound entries' ports (the link pass)`] });
         continue;
       }
+      // ((PL2) the other end is not on an elevated zone: an anchor or feature (the ground under the port) or a form part (its top))
+      const groundEnd = (e) => (e?.anchor !== undefined || e?.feature !== undefined ? { ground: true } : typeof e?.part === 'string' && !elevatedIds.has(e.part) && byId.get(e.part)?.family === 'form' ? { form: e.part } : null);
+      const lotEnd = A && !B ? A : B && !A ? B : null, gEnd = A && !B ? groundEnd(p.part.to) : B && !A ? groundEnd(p.part.from) : null;
+      if (ONE_ENDED_KINDS.includes(p.kind) && lotEnd && gEnd && !ctx.survival) {
+        if ((p.part.movers ?? []).includes('villager')) { ans(p, { class: 'refused', reasons: [{ code: 'MOVER', message: `${p.id}: a ladder is player-only (S-7a-8): movers name villager`, evidence: { movers: p.part.movers } }] }); continue; }
+        oneEndedParts.push({ p, from: lotEnd, to: gEnd });
+        ans(p, { class: 'fits', provisional: true, notes: [`a ladder up to site lot ${lotEnd.lot}'s walk port from ${gEnd.form ? `form ${gEnd.form}` : 'the ground under it'}: routed to its site's port once the lots stand, written at realise to the bound entry's port (the link pass)`] });
+        continue;
+      }
       const why = ctx.survival ? 'links to site lots are not built in survival (7b keeps the standalone path for survival)'
         : !PORT_LINK_KINDS.includes(p.kind) ? `a link at a site lot's port is a catwalk, branch_walk or tunnel (not ${p.kind})`
           : 'a link at a site lot\'s port joins two different site lots (each end a lot of an elevated zone)';
@@ -1404,7 +1416,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const fluidsWanted = fluidStageWanted({ env, ctx, plan: P.plan, V, byId, order, answers, okClass }) || order.some((p) => bigWantsFluids(p) && okClass(p.id));
   // ((7b LP) a plan with a port link gets LINK_STAGE right after `lots`: empty at plan time, the realise's link pass writes the links there)
   const stagesWanted = [...(k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props']), ...(fluidsWanted ? [FLUIDS_STAGE] : [])];
-  if (portLinkParts.length) stagesWanted.splice(stagesWanted.indexOf('lots') + 1, 0, LINK_STAGE);
+  if (portLinkParts.length || oneEndedParts.length) stagesWanted.splice(stagesWanted.indexOf('lots') + 1, 0, LINK_STAGE);
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
   const partOf = {}; // region part / lot / road id -> plan part id
@@ -1759,6 +1771,27 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       rollback(r, cp0);
       ans(p, { class: 'refused', reasons: [{ code: 'NO_FEATURE', message: `the zone's site lots failed: ${e.message}` }] });
       geom.delete(p.id);
+    }
+  }
+  // ---- (slice PL2) the one-ended port links (a ladder up to a site lot's walk port), after the forms and the lots on them: routed to the
+  // site's port from the land under it (the plan's writes so far included: a region-made form), or written at realise to the bound
+  // entry's port in LINK_STAGE (a LinkError then refuses the realise NO_LINK, as a two-ended link's)
+  if (oneEndedParts.length && r.stageList.includes(LINK_STAGE)) {
+    for (const { p, from, to } of oneEndedParts) {
+      const dead = [from.zone, ...(to.form ? [to.form] : [])].filter((z) => !okClass(z));
+      if (dead.length) { ans(p, depState(p) ?? { class: 'blocked', blockedBy: dead, reasons: [{ code: 'DEPENDENCY', message: `${dead.join(', ')} did not stand` }] }); continue; }
+      if (!r.lots.some((l) => l.id === from.lot)) { ans(p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `lot ${from.lot} was not placed (unplaced in its zone)`, evidence: { lot: from.lot } }] }); continue; }
+      const cp = checkpoint(r);
+      try {
+        const rect = to.form ? geomOf(to.form)?.rect ?? null : null;
+        const rec = r.portLink(p.id, { kind: p.kind, from: { lot: from.lot, ...(from.port ? { port: from.port } : {}) }, to: to.form ? { form: to.form, ...(rect ? { rect: { minX: rect.minX, minZ: rect.minZ, maxX: rect.maxX, maxZ: rect.maxZ } } : {}) } : { ground: true }, planPart: p.id });
+        ans(p, { class: 'fits', geometry: { link: { kind: p.kind, from: rec.from, to: rec.to, rise: rec.rise } }, notes: ['the ladder is written at realise against the bound entry\'s port (the link pass; NO_LINK refuses the realise when it can\'t be reached)'] });
+        mark(p.id, addedSince(r, cp));
+      } catch (e) {
+        if (!(e instanceof LinkError) || ctx.links) throw e;
+        rollback(r, cp);
+        ans(p, { class: 'refused', reasons: [{ code: PLAN_CODE_OF_LINK[e.code] ?? e.code, message: e.message, evidence: { lot: e.lot, port: e.port, link: e.code, ...(e.evidence ? { detail: e.evidence } : {}) } }] });
+      }
     }
   }
   // ---- (7a K1) the K1 context (docs/CONTRACT.md "Phase 7a slice K1" §4's compile order), then step 2: wall lines and gates placed

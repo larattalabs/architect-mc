@@ -578,6 +578,23 @@
    "note": "LP: between site lots' cellar doors; else refused."
   },
   {
+   "id": "ladder.port",
+   "sinceApi": "NEXT",
+   "schemaVersion": 0,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     2,
+     24
+    ],
+    "rungs": 24,
+    "movers": [
+     "player"
+    ]
+   },
+   "note": "PL2: a connector.ladder with one end a site lot (its walk port, facing out or down) and the other the ground under it ({anchor} or {feature}) or a form part (its foot on the form): a one-ended port link, written at realise against the bound entry's port; NO_CLIMB under 2, SPAN past 24 rungs; not in survival."
+  },
+  {
    "id": "channel.moat",
    "sinceApi": "1.34.0",
    "schemaVersion": 1,
