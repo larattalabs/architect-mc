@@ -168,17 +168,17 @@ export async function registerTXN(steps, h) {
     const P = 'minecraft:oak_planks';
     const rows = [
       // per-type writers (§6.1 item 2)
-      { id: 'furnace', block: 'furnace', slots: ['raw_iron 4', 'coal 2'] },
-      { id: 'blast_furnace', block: 'blast_furnace', slots: ['raw_iron 4', 'coal 2'] },
-      { id: 'smoker', block: 'smoker', slots: ['beef 4', 'coal 2'] },
-      { id: 'brewing_stand', block: 'brewing_stand', slots: [null, null, null, null, 'blaze_powder 2'] },
+      { id: 'furnace', block: 'furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true },
+      { id: 'blast_furnace', block: 'blast_furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true },
+      { id: 'smoker', block: 'smoker', slots: ['beef 4', 'coal 2'], ticks: true },
+      { id: 'brewing_stand', block: 'brewing_stand', slots: [null, null, null, null, 'blaze_powder 2'], ticks: true },
       { id: 'dropper', block: 'dropper[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'dispenser', block: 'dispenser[facing=north]', slots: ['cobblestone 8'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
       { id: 'crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 1'], act: async (X) => cmd(`/setblock ${s(add(X, [0, 1, 0]))} minecraft:redstone_block`) },
-      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], act: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) }, // the chest it pushes into placed only once held
-      { id: 'hopper_suck', block: 'hopper[facing=down]', slots: [], ignoreDrops: true,
+      { id: 'hopper_push', block: 'hopper[facing=east]', slots: ['oak_planks 4'], ticks: true, act: async (X) => cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest`) }, // the chest it pushes into placed only once held
+      { id: 'hopper_suck', block: 'hopper[facing=down]', slots: [], ignoreDrops: true, ticks: true,
         act: async (X) => cmd(`/summon minecraft:item ${X[0] + 0.5} ${X[1] + 1.2} ${X[2] + 0.5} {Item:{id:"minecraft:cobblestone",count:3}}`), injected: { 'minecraft:cobblestone': 3 } },
-      { id: 'copper_golem', block: 'chest', slots: ['oak_planks 2'], slow: true,
+      { id: 'copper_golem', block: 'chest', slots: ['oak_planks 2'], slow: true, ticks: true,
         setup: async (X) => { await cmd(`/setblock ${s(add(X, [2, 0, 0]))} minecraft:copper_chest`); await cmd(`/item replace block ${s(add(X, [2, 0, 0]))} container.0 with ${P} 16`); },
         act: async (X) => cmd(`/summon minecraft:copper_golem ${X[0] + 1} ${X[1]} ${X[2] + 1}`) },
       { id: 'barrel', block: 'barrel', slots: ['oak_planks 4'], base: 'green', why: "T1's hopper guard", setup: async (X) => cmd(`/setblock ${s(add(X, [0, -1, 0]))} minecraft:hopper`) },
@@ -209,7 +209,7 @@ export async function registerTXN(steps, h) {
       // removal by any path (item 4): raw writes, as another mod would make them
       ...['setBlock', 'destroyBlock', 'removeBlock', 'removeBlockEntity', 'setItem', 'removeItem', 'clearContent', 'load'].map((how) => (
         { id: `poke_${how}`, block: 'chest', slots: ['oak_planks 4'], act: async (X) => call('dev.txn.poke', { pos: X, how }, 30_000) })),
-      { id: 'explosion', block: 'chest', slots: ['oak_planks 4'], base: 'green', why: "T1's explosion guard", far: true,
+      { id: 'explosion', block: 'chest', slots: ['oak_planks 4'], base: 'green', why: "T1's explosion guard", far: true, ignoreDrops: true, // the blast drops the ground around it
         act: async (X) => cmd(`/summon minecraft:tnt ${X[0] + 0.5} ${X[1] + 1} ${X[2] + 1.5} {fuse:0}`) },
     ];
     const COLS = 7;
@@ -283,6 +283,14 @@ export async function registerTXN(steps, h) {
     }
     const st1 = await call('dev.txn.state', {}, 30_000);
     out.backstops = st1.backstops;
+    // conservation while every box is still held (once released, the furnaces smelt again: a conversion, not a loss)
+    const injected = {};
+    for (const r of rows) for (const [it, n] of Object.entries(r.injected ?? {})) injected[it] = (injected[it] ?? 0) + n;
+    const expect = { ...out.baseline };
+    for (const [it, n] of Object.entries(injected)) expect[it] = (expect[it] ?? 0) + n;
+    const c = await report(expect);
+    out.conservation = { verdict: c.verdict, diff: c.diff, unread: c.unread, injected };
+    check(c.verdict === 'match', `conservation (still held): the box against the baseline plus the injected drop: ${c.verdict} (diff ${json(c.diff)})`, out.conservation);
     // ---------------------------------------------------------------- the world closed and opened with the holds on disk
     await L.leaveWorld();
     await L.openWorld(name);
@@ -293,16 +301,11 @@ export async function registerTXN(steps, h) {
       st2 = await call('dev.txn.state', {}, 30_000);
     }
     const reopened = await cells();
-    const lost = rows.filter((r) => r.held && json(reopened[r.X.join(',')]?.slots ?? {}) !== json(after[r.X.join(',')]?.slots ?? {}));
-    check(lost.length === 0, `reopen: the held boxes load intact (${rows.length - lost.length}/${rows.length})${lost.length ? `: ${lost.map((r) => r.id).join(', ')}` : ''}`, lost.map((r) => r.id));
+    // the boxes with no writer of their own load as they were held (a furnace or hopper resumes once its txn retires on the first tick)
+    const still = rows.filter((r) => r.held && !r.ticks);
+    const lost = still.filter((r) => json(reopened[r.X.join(',')]?.slots ?? {}) !== json(after[r.X.join(',')]?.slots ?? {}));
+    check(lost.length === 0, `reopen: the held boxes load intact (${still.length - lost.length}/${still.length} with no ticking writer)${lost.length ? `: ${lost.map((r) => r.id).join(', ')}` : ''}`, lost.map((r) => r.id));
     check(st2.openCount === 0, `reopen: every held txn retired after the world opened again (open ${st2.openCount})`, st2.open);
-    const injected = {};
-    for (const r of rows) for (const [it, n] of Object.entries(r.injected ?? {})) injected[it] = (injected[it] ?? 0) + n;
-    const expect = { ...out.baseline };
-    for (const [it, n] of Object.entries(injected)) expect[it] = (expect[it] ?? 0) + n;
-    const c = await report(expect);
-    out.conservation = { verdict: c.verdict, diff: c.diff, unread: c.unread, injected };
-    check(c.verdict === 'match', `conservation: the box against the baseline plus the injected drop: ${c.verdict} (diff ${json(c.diff)})`, out.conservation);
     out.summary = { rows: rows.length, held: rows.filter((r) => r.held).length, changed: rows.filter((r) => !r.held).map((r) => r.id),
       greenOnBase: rows.filter((r) => r.base === 'green').map((r) => r.id), backstops: out.backstops };
     log(`  txn-holds: ${json(out.summary)}`);
