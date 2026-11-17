@@ -183,7 +183,7 @@ public final class CrateScreen extends Screen {
 		boolean wasArmed = confirmDeconstruct();
 		deconShown().press();
 		if (!wasArmed && confirmDeconstruct()) {
-			flash("The ground comes back; blocks are refunded", false);
+			flash("The ground comes back; it refunds what was paid for", false);
 		}
 	}
 
@@ -226,7 +226,7 @@ public final class CrateScreen extends Screen {
 		boolean wasArmed = confirmDeconstruct();
 		if (decon.mouseClicked(e.x(), e.y(), e.button()) | deconOwned.mouseClicked(e.x(), e.y(), e.button())) {
 			if (!wasArmed && confirmDeconstruct()) {
-				flash("The ground comes back; blocks are refunded", false);
+				flash("The ground comes back; it refunds what was paid for", false);
 			}
 			return true;
 		}

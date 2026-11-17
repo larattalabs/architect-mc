@@ -121,7 +121,7 @@ steps.base = async () => {
     for (const r of ['random_tick_speed 0', 'mob_griefing false', 'advance_time false', 'advance_weather false', 'spawn_mobs false', 'spawn_monsters false']) await cmd(`/gamerule ${r}`);
     await cmd('/time set 6000');
     await call('dev.survival.set', { on: true });
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   }
   const stubs = ['g6a_stub_9', 'g6a_stub_14', 'g6a_stub_19', 'g6a_stub_24'];

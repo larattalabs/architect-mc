@@ -352,7 +352,7 @@ steps.survival = async () => {
         restarted = true;
         records.push(...((await call('dev.so.snapshots', { site: s }, 60_000)).snapshots ?? []));
         const atStop = x.built;
-        await cmd('/save-all flush');
+        await cmd('/save-all flush').catch(() => null);
         await L.leaveWorld();
         await L.openWorld(world);
         await L.tp(ctx.o[0] + 8, ctx.volBox[4] + 10, ctx.o[2] - 16);

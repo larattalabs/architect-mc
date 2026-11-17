@@ -44,6 +44,7 @@ import { simulate, settleBound } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf } from './world.mjs';
 import { _bindFluidBody } from '../region/program.mjs';
+import { _bindLinkWorld } from '../region/links.mjs';
 import { draftIR } from '../region/plan.mjs';
 import { buildVirtual } from '../region/vworld.mjs';
 import { walkKinds } from '../realise.mjs';
@@ -552,3 +553,5 @@ export function lintFluidState(ir) {
 
 // r.fluidBody (program.mjs binds it late: this module reads the plan module's draft virtual world)
 _bindFluidBody(fluidBody);
+// ((slice PL2) the port ladder reads the plan's draft writes (a region-made form) through localWorld)
+_bindLinkWorld(localWorld);

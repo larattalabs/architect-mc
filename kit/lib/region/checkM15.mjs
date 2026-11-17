@@ -250,7 +250,9 @@ export function regionM15({ ir, vw, meta, limits = regionM15Limits(meta?.m15?.lo
   const ord = (a, b) => Y[a] - Y[b] || X[a] - X[b] || Z[a] - Z[b];
   const findings = [];
   for (const rule of ['M15:cantilever', 'M15:joint']) for (const [pi, is] of [...over[rule]].sort((a, b) => a[0] - b[0])) {
-    const far = Math.max(...is.map((i) => dist[i]));
+    // (a loop, not Math.max(...): a part can hold more over-limit cells than the stack takes arguments, mega_bench's check overflowed)
+    let far = -Infinity;
+    for (const i of is) if (dist[i] > far) far = dist[i];
     const what = rule === 'M15:joint' ? `cell(s) of a port link's end more than ${limit} from a support of its own, held on one side only (the lot's landing holds a span's end, not a cantilever)` : `cell(s) more than ${limit} horizontally from a support column or a bracket, held on one side only`;
     findings.push(finding(rule, partId(pi), partStage(pi), is.length, is.slice().sort(ord).map(cellOf), `${is.length} ${what} (farthest ${far})`));
   }

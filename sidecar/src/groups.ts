@@ -25,7 +25,7 @@
 //   - status precedence: cancelled > awaiting_approval (an item waits and no massing is open) > paused_budget >
 //     held_usage > running > queued
 import type { Cost, Design, DesignRequest as DesignRequestT, Group, GroupItem, GroupRequest, GroupStatus, Massing, Outbound } from './protocol.js';
-import { DesignRequest } from './protocol.js';
+import { DesignRequest, invertedProblem } from './protocol.js';
 import { isFinalDesign } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { itemModel } from './estimates.js';
@@ -134,6 +134,9 @@ export class Groups {
     // (7b DS) site-aware items: designed in one pass (no massing first), their volumes kept now; refusals before anything is created.
     // (7b SL) a massingFirst group takes them too: they wait for the group's massing step, then design in one pass (siteWait)
     for (const it of req.items) {
+      // (7c CS) an inverted item hangs from a suspend site
+      const inv = invertedProblem(it);
+      if (inv) throw new ClientError(`item ${it.itemKey ?? '?'}: ${inv}`);
       if (!it.site) continue;
       this.sc.acceptSite(it.site);
     }

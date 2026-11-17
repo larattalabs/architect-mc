@@ -848,7 +848,7 @@ steps.item11 = async () => {
     for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 3) > 0) half[it] = Math.floor(n / 3);
     await C.insert(`stockpile:${G.OWNER}`, half);
     await sleep(8000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await sleep(1000);
     const atSave = await C.parts();
     const totSave = C.total(atSave);
@@ -1146,8 +1146,16 @@ steps.item14 = async () => {
   fs.writeFileSync(path.join(OUT, `rs-${tag}-check.json`), `${JSON.stringify({ anchors, ck }, null, 1)}\n`);
   const parts = (ck.check?.parts ?? []).map((a) => [a.part, a.class, a.reasons?.[0]?.code ?? null]);
   out.check = { overall: ck.check?.overall ?? null, survival: ck.check?.survival, parts };
-  check(ck.check?.survival === true && ck.check?.overall === 'READY', `item 14 (rs02 on S3's claim): Regions.checkPlan in survival on the settled copy: ${ck.check?.overall}${out.repaired ? ` (after Steward's repair: ${json(out.repaired)})` : ''}; ${json(parts)}; anchors ${json(an)}`);
-  if (ck.check?.overall !== 'READY') { await L.leaveWorld(); return out; }
+  // (fix b5b, a moved fixture: CF2's LOTS_SHORT) on S3's steep claim the town places 1 of its 3 lots (h2, h3 unplaced, the same geometry since
+  // kit 0.66.0). CF2 made a required zone with more than a third of its lots unplaced a repair target: NEEDS_REPAIR, the zone still adjusted,
+  // an artifact made. This step builds what the check placed, so a NEEDS_REPAIR whose only cause is LOTS_SHORT on an adjusted required zone
+  // (its numbers recorded) goes on to realise its artifact; any other cause still fails.
+  const short = (ck.check?.parts ?? []).filter((a) => (a.reasons ?? []).some((r) => r?.code === 'LOTS_SHORT'));
+  const onlyShort = ck.check?.overall === 'NEEDS_REPAIR' && !!ck.check?.artifactSha && short.length > 0
+    && (ck.check?.parts ?? []).every((a) => ['fits', 'adjusted'].includes(a.class)) && short.every((a) => a.required && a.class === 'adjusted');
+  if (onlyShort) out.lotsShort = short.map((a) => ({ part: a.part, ...(a.reasons.find((r) => r.code === 'LOTS_SHORT').evidence ?? {}) }));
+  check(ck.check?.survival === true && (ck.check?.overall === 'READY' || onlyShort), `item 14 (rs02 on S3's claim): Regions.checkPlan in survival on the settled copy: ${ck.check?.overall}${onlyShort ? ` (CF2's LOTS_SHORT alone, the moved fixture: ${json(out.lotsShort)}; its artifact realised)` : ''}${out.repaired ? ` (after Steward's repair: ${json(out.repaired)})` : ''}; ${json(parts)}; anchors ${json(an)}`);
+  if (ck.check?.overall !== 'READY' && !onlyShort) { await L.leaveWorld(); return out; }
   // ---- the box (S3 item 4's: the claim + 8, the floor - 8 to the top + 24), the snapshot, the stockpile on the ground at the NW corner
   let y0 = 320, y1 = -64;
   for (let x = c[0]; x <= c[2]; x += 2) for (let z = c[1]; z <= c[3]; z += 2) { y0 = Math.min(y0, S.floorAt(x, z)); y1 = Math.max(y1, S.topAt(x, z)); }

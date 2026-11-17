@@ -316,7 +316,7 @@ steps.ingame = async () => {
   const out = {};
   await L.fresh('G6B D3 Ingame', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   await call('dev.pt.rule', { name: 'graceMs', value: '600000' }).catch(() => null);
   const X = 20000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
@@ -489,7 +489,7 @@ steps.side = async () => {
   const out = {};
   await L.fresh('G6B D3 Side', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 24000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -552,7 +552,7 @@ steps.refusals = async () => {
   const out = {};
   await L.fresh('G6B D3 Refusals', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 28000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -639,7 +639,7 @@ steps.steward = async () => {
   const out = {};
   await L.fresh('G6B D3 Steward', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 32000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -818,7 +818,7 @@ steps.along = async () => {
   const out = {};
   await L.fresh('G6B D3 Along', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 36000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -870,7 +870,7 @@ steps.kc = async () => {
   const out = {};
   await L.fresh('G6B D3 KC', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 40000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -920,7 +920,7 @@ steps.walled = async () => {
   const out = {};
   await L.fresh('G6B D3 Walled', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 44000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -967,7 +967,7 @@ steps.pond = async () => {
   const out = {};
   await L.fresh('G6B D3 Pond', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 48000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -1009,7 +1009,7 @@ steps.natural = async () => {
   await ensure();
   const out = {};
   await L.fresh('G6B D3 Natural', await L.seedBase('2026100906'));
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   // S3's pinned claim [3604, -1036, 3795, -845]: a V town in its south-west, a shore district east of it along the river, joined
   // through the town's claim
   const A = [3604, -956, 3699, -861];
@@ -1036,7 +1036,7 @@ steps.natural = async () => {
   const rd = await L.realise(p.planId, { lots: {} });
   const sd = await L.waitRegion(rd, 3_600_000);
   check(sd.view.state === 'PLACED', `item 15: the district ${rd} PLACED`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await L.openWorld('G6B D3 Natural');
   await cmd('/tick freeze');
@@ -1083,7 +1083,7 @@ steps.survival = async () => {
   const base = await G.survivalBase({ L });
   await L.fresh('G6B D3 Survival', base);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 0, Z = 0;
   await tp(X + 80, 40, Z + 80);
   await kill();

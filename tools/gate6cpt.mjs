@@ -197,7 +197,7 @@ async function flatWorld(name, x, z) {
   copyWorld(FLAT_BASE, name);
   await openWorld(name);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   await rule('graceMs', 600000); // the world rules start at their defaults in a fresh world; set again to be sure
   await tp(x + 0.5, 0, z + 0.5);
   const gy = await groundAt(x, z);
@@ -428,7 +428,7 @@ steps.pistons = async () => {
   const midRow = [];
   for (let x = X + 1; x <= X + 13; x++) midRow.push((await ptAt([x, y, Z])).state.replace('minecraft:', ''));
   out.mid = { mid, row: midRow };
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G6B PT Pistons');
   await cmd('/tick unfreeze');
@@ -455,7 +455,7 @@ steps.reload = async () => {
   const b0 = await buildsIn(box);
   const c0 = await cellsOf(box);
   const idx = (b) => json(b.builds.map((x) => [x.id, x.kind, x.state, x.cells, x.revision, x.bounds, x.placers]));
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G6B PT Reload');
   await tp(X + 0.5, gy + 25, Z + 0.5);
@@ -615,7 +615,7 @@ steps.hyst = async () => {
   const older = Number(cid.split('-')[1]) < Number(did.split('-')[1]);
   check(merged.length === 1 && merged[0].id === cid && older && viaAlias.found && viaAlias.buildId === cid, `item 6: a merge: one build ${merged[0]?.id} (the oldest of ${cid} and ${did}); ${did} resolves to ${viaAlias.buildId}`);
   const cells0 = await cellsOf([C[0], y, C[1], D[0] + 8, y + 6, D[1] + 8]);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G6B PT Hyst');
   await tp(C[0] + 0.5, gy + 25, C[1] + 0.5);
@@ -941,7 +941,7 @@ steps.nomod = async () => {
   const b0 = (await buildsIn(box)).builds;
   const bh0 = await bhash(box);
   check(c0.tracked > 200 && b0.length === 1, `item 12: with the mod the cabin is ${b0[0]?.id} (${b0[0]?.kind}, ${c0.tracked} tracked cells)`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   const { startNoMod, readChunk, attachmentKeys } = await import('./lib/nomod-server.mjs');
   const W = path.join(SAVES, 'G6B PT NoMod');

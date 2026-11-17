@@ -406,7 +406,7 @@ export async function registerFKB(steps, h) {
     const acc = await deliver({ fill: true });
     check(G.same(acc, BILL), `${tag}: the filter items delivered while it is paused (${json(acc)})`);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
     if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
@@ -440,7 +440,7 @@ export async function registerFKB(steps, h) {
     const at = P(b.s.containers[0].at);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     const consumed = G.minus(B.consumed, W.ps0.ledger?.consumed ?? {});
     await call('dev.journal.killAt', { point }, 10_000);
@@ -479,7 +479,7 @@ export async function registerFKB(steps, h) {
     const A = b.s.containers[0].at;
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/kill @e[type=item]');
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     call('dev.fk.break', { pos: P(A), halt: true }, 30_000).catch(() => null);
     if (!(await halt(tag))) { await L.leaveWorld(); return null; }
     const S = savedLedger(W.name);
@@ -516,7 +516,7 @@ export async function registerFKB(steps, h) {
     const acc = await deliver({ fill: true });
     check(G.same(acc, BILL), `${tag}: the filter items delivered while it is paused (${json(acc)})`);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await call('dev.journal.killAt', { point: 'FK3' }, 10_000);
     call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
     if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }

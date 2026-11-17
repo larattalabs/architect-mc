@@ -33,7 +33,7 @@ export async function survivalBase(ctx) {
   await L.setRules('exact');
   await L.call('dev.survival.set', { on: true });
   await L.cmd('/kill @e[type=!minecraft:player]');
-  await L.cmd('/save-all flush');
+  await L.cmd('/save-all flush').catch(() => null);
   await L.leaveWorld();
   fs.writeFileSync(mark, JSON.stringify({ made: new Date().toISOString(), host }));
   return SURV;

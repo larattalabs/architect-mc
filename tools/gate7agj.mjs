@@ -286,7 +286,7 @@ steps.ingame = async () => {
   const out = {};
   await L.fresh('G6B GJ Walled', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 60000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -388,7 +388,7 @@ steps.town = async () => {
   const out = {};
   await L.fresh('G6B GJ Town Wall', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 64000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -469,7 +469,7 @@ steps.refusals = async () => {
   const world = 'G6B GJ Refusals';
   await L.fresh(world, FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 68000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -536,7 +536,7 @@ steps.steward = async () => {
   const world = 'G6B GJ Steward';
   await L.fresh(world, FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   const X = 72000, Z = 20000;
   await tp(X + 80, 40, Z + 80);
   await kill();
@@ -617,7 +617,7 @@ steps.shortrun = async () => {
   const out = {};
   await L.fresh('G6B GJ Short', FLAT);
   await L.setRules('exact');
-  await cmd('/op @s');
+  await cmd('/op @s').catch(() => null);
   let X = 60000;
   const Z = 20000;
   for (const [name, ring, cells] of SHORT_RUNS) {

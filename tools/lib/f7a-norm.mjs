@@ -2,6 +2,7 @@
 // fixtures), by name (docs/CONTRACT.md "Phase 7a foundation" §4, §7 item 1): the catalogue's three changes (connector.rail until CR,
 // connector.branch_walk until 7b, connector.span_bridge a supported alias of connector.bridge) re-answer exactly these fixtures. The
 // other fixtures the foundation touches are new or renamed on its branch (extension/e02_tube_draft.json, valid/v7a_foundation_*).
+import { cf2AskLine } from './sp2-norm.mjs'; // (CF2) its LOTS_SHORT ask rows
 /**
  * (GC) What the gatehouse coverage hints move: a wall that rings a zone with a gatehouse lot no wall names answers adjusted with the note
  * "<lot> is not on the wall: name it in lots (at: gate)" (notes and class only: the IR and the plan are unchanged). Recorded plans: only
@@ -33,4 +34,5 @@ export const F7A_MOVED = Object.freeze({
 /** The recorded parts (ask/part) whose answer the foundation moves only by its `until` (connector.rail: 7a -> CR). */
 export const F7A_ASK_PARTS = Object.freeze(['mining_town/rail_1']);
 /** An asks-table line with the foundation's `until` move normalised (the earlier drivers' tables compare through fl-norm's flAsksFilter). */
-export const f7aAskLine = (l) => (F7A_ASK_PARTS.some((p) => l.startsWith(`${p} `)) ? l.replace(/ until \S+$/, '') : l);
+// ((CF2) and CF2's LOTS_SHORT code on its named ask parts: sp2-norm.mjs cf2AskLine)
+export const f7aAskLine = (l) => cf2AskLine(F7A_ASK_PARTS.some((p) => l.startsWith(`${p} `)) ? l.replace(/ until \S+$/, '') : l);

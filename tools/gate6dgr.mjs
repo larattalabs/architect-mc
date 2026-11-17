@@ -1046,6 +1046,13 @@ steps.look = async () => {
   await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
 }
 
+// ------------------------------------------------------------------ (slice BC-d) bcdgrow: tools/lib/gatebcd.mjs
+
+{
+  const { registerBCD } = await import('./lib/gatebcd.mjs');
+  await registerBCD(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, growPlan, rvState, rvWait, haltWait });
+}
+
 // ------------------------------------------------------------------ (slice BC+) bcrelay: tools/lib/gatebc.mjs
 
 {

@@ -375,7 +375,7 @@ async function flatBase(force = false) {
   await setRules();
   await tp(48.5, 70, 0.5);
   await cmd('/kill @e[type=!minecraft:player]');
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
 }
 
@@ -508,7 +508,7 @@ async function ordersBase() {
   const seam = await call('dev.region.hash', { box: [36, 65, -19, 39, 78, -4], cells: true }, 60_000);
   const seamKinds = [...new Set(seam.list.map((l) => /id:"([^"]+)"/.exec(l)?.[1]))].sort();
   log(`  seam blocks: ${seamKinds.join(' ')}`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await settle(2000);
   const j = await journal();
   const act = (j.entries ?? []).filter((e) => e.status === 'ACTIVE');
@@ -525,7 +525,7 @@ async function ordersBase() {
   check(lSite && (lSite.covers ?? []).includes(ids.R), `orders: L covers R (covers ${JSON.stringify(lSite?.covers)})`, lSite);
   const ubL = allL.map((x) => box6(x.restoreBox)).reduce(union);
   check(inside(grow(ubL, 8), FIX_BOX), 'orders: with L the union box + 8 lies inside the hashed box', { ubL });
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   ctx.orders = { h0: h0.sha256, ids, L: L.siteId, group: done.group, seamKinds };
   saveCtx();
@@ -634,7 +634,7 @@ steps.edits = async () => {
   const T = await call('dev.cells.place', { kind: 'gate4e:pad', pad: PAD }, 600_000);
   const R = await call('dev.road.place', { points: [[10, 67, 0], [80, 67, 0]], width: 3 }, 180_000);
   check(T.placed && R.placed, `edits: T and R placed (${T.siteId}, ${R.siteId})`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E Edits', 'G4E EditsChest');
   await openWorld('G4E Edits');
@@ -852,7 +852,7 @@ steps.roads = async () => {
   check(fitsRoad.every((f, i) => f.predicted[2] > fits[i].predicted[2]), 'roads (A): fitToLot facing a road predicts the shorter box',
     fitsRoad.map((f, i) => [f.key, fits[i].predicted[2], f.predicted[2]]));
   bar(ownOk(ownTick(a.stats), 25), `roads (A) at 4 ms: ${tickText(ownTick(a.stats), 25)}`, ownTick(a.stats));
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E VA', 'G4E VA1');
   await openWorld('G4E VA');
@@ -1015,7 +1015,7 @@ steps.survival = async () => {
   const ub = union(box6(all.find((x) => x.id === S).restoreBox), box6(all.find((x) => x.id === U).restoreBox));
   const feedCells = Object.values(feeds).flatMap((f) => [f.hop, f.chest]);
   const builtHash = (await hash(ub, feedCells.map((c) => [...c, ...c]))).sha256;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E Surv', 'G4E Surv2');
   // the instant LAYER reference
@@ -1251,7 +1251,7 @@ steps.megalite = async () => {
   check(!!r4.relog, `megalite: resumed across a relog (${r4.relog?.placedBefore} items placed before it)`);
   const pad = r4.done.items.find((i) => i.key === 'P').site;
   const lot = r4.done.items.find((i) => i.key === 'L7').site;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E Mega4', 'G4E Mega4b');
   // one lot's undo leaves the pad exact
@@ -1395,7 +1395,7 @@ steps.api = async () => {
   // COVERED: removing the pad under H with REFUSE
   const rr = await result(await api(`remove ${T.siteId} apitest:a noforce refuse`), 120_000);
   check(!rr.removed && rr.blockers.some((b) => /cover/i.test(b)), `api: CoveredPolicy.REFUSE refuses a covered site (${rr.blockers})`, rr);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E Api', 'G4E Api2');
   await openWorld('G4E Api');
@@ -1442,7 +1442,7 @@ steps.api = async () => {
   const sgd = await waitBatch(sg, 300_000);
   const u2 = await result(await api(`sundo2 ${sgd.group} s2 keep`), 300_000);
   check(u2.removed, `api: undoStage(group, stage, RemoveOptions) (${u2.restored} cells)`, u2);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   // JOURNAL_UNAVAILABLE: an unreadable index refuses every change and is not touched
   copyWorld('G4E Api', 'G4E ApiBad');
@@ -1555,7 +1555,7 @@ steps.leaves = async () => {
   if (!fs.existsSync(path.join(SAVES, NW, 'level.dat'))) {
     await openWorld(NW, { mode: 'creative', preset: 'normal', seed: '4e', cheats: true });
     await setRules();
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
   }
   await fresh('G4E Leaves', NW);
@@ -1579,7 +1579,7 @@ steps.leaves = async () => {
   const B = { bp: 'cabin', at: [t.x + 2, yB + 1, t.z - 6] };
   const R = [t.x - 24, Math.min(yA, yB) - 12, t.z - 20, t.x + 24, Math.max(yA, yB) + 30, t.z + 30];
   const pre = await cellsOf(R);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   // held leaves, both orders
   const res = {};
@@ -1739,7 +1739,7 @@ async function killRun(point, base, action, pre) {
   await tp(48.5, 80, 30.5);
   const standing = (await sites()).map((x) => x.id);
   const before = { sites: standing, journal: journalFiles('G4E Crash'), owned: standing.length ? await ownedNow(standing) : {} };
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await settle(1000);
   await call('dev.journal.killAt', { point });
   const t0 = Date.now();
@@ -2037,7 +2037,7 @@ async function mig070() {
   }
   await tp(100.5, 80, -150.5);
   const preRoad = (await bhash(ROAD_BOX)).sha256;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G4E MigPre070', 'G4E Mig070');
   await openWorld('G4E Mig070');
@@ -2271,7 +2271,7 @@ steps.downgrade = async () => {
   const r = await result(await api(`remove ${m.ids.A1} - noforce`), 120_000).catch((e) => ({ error: String(e) }));
   const hA2 = (await bhash(migRegion('A1'))).sha256;
   check(r.removed !== true && hA === hA2, `downgrade: 0.7.0 refuses to Remove migrated A1 and writes nothing (${JSON.stringify(r).slice(0, 200)})`, r);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await stopClient();
   use('new');
   // back to 0.8.0

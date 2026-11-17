@@ -1722,6 +1722,16 @@ public final class Builder {
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Fills at start failed", e);
 			}
+			try {
+				MechCharges.settleBooked(srv); // (fix b5b) a region charge the ledger booked and the record lost: settled before the caps are read
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Settling the booked region charges failed", e);
+			}
+			try {
+				Stockpiles.capsAfterReconcile(srv); // (BC-c) the regions are loaded now: a reconcile past a maxBill is named
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("The reconcile's maxBill check failed", e);
+			}
 		}
 	}
 

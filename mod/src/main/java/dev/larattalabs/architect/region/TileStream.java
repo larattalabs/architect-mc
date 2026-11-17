@@ -76,6 +76,12 @@ public final class TileStream {
 		final List<byte[]> frames = new ArrayList<>();
 		int nextSeq;
 		volatile @Nullable CompletableFuture<Packed.Tile> decoded;
+		/**
+		 * (fix b5) The decoded cells, set before {@link #phase} becomes DECODED: a reader that sees DECODED sees them. {@link #decoded}
+		 * is the future {@code whenComplete} returns, which completes only after the action that publishes DECODED (or, for a tile
+		 * decoded before the action attaches, before the field is even assigned), so a reader in that window got null cells.
+		 */
+		volatile Packed.@Nullable Tile packed;
 		public volatile @Nullable String error;
 		public volatile long requestedAt;
 		public volatile long receivedAt;
@@ -105,12 +111,13 @@ public final class TileStream {
 		}
 
 		public Packed.@Nullable Tile cells() {
-			CompletableFuture<Packed.Tile> d = decoded;
-			return d != null && d.isDone() && !d.isCompletedExceptionally() ? d.join() : null;
+			return packed;
 		}
 	}
 
 	private static final Map<String, Tile> TILES = new ConcurrentHashMap<>();
+	/** (fix b5) Test hook: runs on the decode thread right after a tile's phase turns DECODED (TileStreamDecodedTest). */
+	static volatile @Nullable Runnable ON_DECODED;
 	private static final ExecutorService DECODE = Executors.newFixedThreadPool(2, r -> {
 		Thread t = new Thread(r, "Architect tile decode");
 		t.setDaemon(true);
@@ -573,7 +580,12 @@ public final class TileStream {
 				fail(tt, "the tile could not be read: " + (ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()));
 			} else {
 				SLOW_ROUNDS.remove(id(tt.region, tt.stage, tt.set, tt.key));
+				tt.packed = p; // (fix b5) the cells first, then the phase: DECODED always has its cells
 				tt.phase = Phase.DECODED;
+				Runnable hook = ON_DECODED;
+				if (hook != null) {
+					hook.run();
+				}
 			}
 		});
 	}

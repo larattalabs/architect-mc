@@ -11,8 +11,9 @@
 // 2. Without a fit: the inputs, once (kept in the record): the claim's affordances (the kit's analysis of the volume, TC's), the top 60
 //    of them (planImages.mjs's rankAffordances: score, then id), and with `images` the planning images (a top hillshade numbering them,
 //    two sections, an iso; kit/lib/region/planImages.mjs) as blobs.
-// 3. Round 1: a structured job (the rounds harness, jobs/rounds.ts) writes a plan/0 document: system = plan/0#compact (the one-line
-//    catalogue, 7cF) + the composer's system text (kit/prompts/composer.md, then a caller's rules); the prompt holds the brief, the claim, the Style's roles, the survey summary, the affordances, the
+// 3. Round 1: a structured job (the rounds harness, jobs/rounds.ts) writes a plan/0 document: system = plan/0#compact's core (the one-line
+//    catalogue, 7cF) + the composer's system text (kit/prompts/composer.md) + (CB) the kind schemas this request needs, the rest fields
+//    only (composerSystem) + a caller's rules; the prompt holds the brief, the claim, the Style's roles, the survey summary, the affordances, the
 //    pick's closest program, and the images come before it as image blocks. The design waits `checking` with `awaiting {round, plan}`;
 //    the mod runs Regions.checkPlan over the plan (the Overworld, no caller anchors, the owner, the Style) and answers
 //    region.compose.checked.
@@ -51,6 +52,7 @@ import { truncate } from './util/text.js';
 import { isFinalDesign } from './designs.js';
 import { affordanceSummary, surveySummary } from './regiondesign.js';
 import type { PlanImages } from './regions.js';
+import { planCompactBlock, planCompactParts } from './jobs/systemrefs.js';
 
 type ComposeMsg = z.infer<typeof RegionComposeMsg>;
 type CheckedMsg = z.infer<typeof RegionComposeCheckedMsg>;
@@ -61,8 +63,6 @@ export const COMPOSE_OWNER = 'architect:region.compose';
 export const REPAIR_ROUNDS = 1;
 /** The rounds in all, by default (a caller may ask for 0 to MAX_REPAIR_ROUNDS repairs: ext architect_mc:repairRounds). */
 export const COMPOSE_ROUNDS = 1 + REPAIR_ROUNDS;
-/** The composer's system refs: plan/0's compact form (its catalogue one line per kind). */
-export const COMPOSE_REFS = ['plan/0#compact'];
 /** The affordances the composer is shown (the kit's PLAN_IMAGE_AFFORDANCES). */
 export const COMPOSE_AFFORDANCES = 60;
 /** A repair prompt's catalogue long text is at most this many characters. */
@@ -223,6 +223,214 @@ export function composeSystemText(text: ComposerText, callerSystem?: string, fam
   return callerSystem ? `${base}\n\n## The caller's rules (they add to the rules above)\n\n${callerSystem}` : base;
 }
 
+// ---- (CB) the kind schemas on demand -------------------------------------------------------------------------------------
+//
+// A round's system (composerSystem) is: plan/0#compact's block with the on-demand kind defs left out (the core: every zone, program,
+// lot, district, locator, endpoint and rule def, the street/road/path and auto connectors, the x-rules, the whole compact catalogue),
+// then the composer's text, then "## Kind schemas for this request" (the full compact defs this request needs, at most KIND_DEFS_MAX
+// characters) and "## Other kinds, fields only" (one line per other on-demand def: its fields and their types), then the families and
+// the caller's rules. The core and the composer's text are the same bytes for every request (the provider's prompt cache keys on them).
+// A def is needed when (1) the brief, the caller's hints or rules name its kind (its catalogue ids' own words, e.g. "rope", "bridge"), or
+// (2) the claim's shown affordances hold land it is built over (AFFORDANCE_KINDS below). Named kinds come first, then the land's, each in
+// catalogue order; what does not fit KIND_DEFS_MAX stays fields only. A kind the plan uses without its full def gets it in the repair
+// prompt (planCatalogueKinds' `def`).
+
+/** (CB) The full kind defs a round shows are at most this many characters (the rest are fields-only lines). */
+export const KIND_DEFS_MAX = 10_000;
+/** (CB) The kind defs that are always shown in full (every plan has a zone of lots and its streets). */
+export const CORE_KIND_DEF = /^(zone|program)\.|^connector\.(routed|auto)$|^rule\.(palette|common)$/;
+/** (CB) Words of kind ids that name no kind by themselves. */
+const ID_STOP = new Set(['around', 'through', 'under', 'along', 'line', 'edge', 'auto', 'standard', 'routed', 'common', 'kind', 'shape', 'water']);
+/** (CB) The land each on-demand def is built over: the kit's affordance kinds (kit/lib/region/affordances.mjs) that select it. */
+export const AFFORDANCE_KINDS: Readonly<Record<string, readonly string[]>> = {
+  water: ['connector.bridge', 'connector.channel', 'form.pond', 'form.quay'],
+  gap: ['connector.bridge', 'connector.rope_bridge', 'form.arch_span'],
+  cliff_face: ['connector.ladder', 'connector.rock_stair', 'connector.switchback', 'connector.lift'],
+  ledge: ['connector.catwalk', 'connector.ladder', 'connector.rock_stair'],
+  overhang: ['connector.catwalk', 'form.stalactites'],
+  trunk: ['connector.stairs_around', 'connector.branch_walk'],
+  canopy: ['connector.branch_walk', 'connector.catwalk'],
+  spike: ['connector.stairs_around'],
+};
+
+type Json = unknown;
+const isObj = (v: Json): v is Record<string, Json> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** (CB) plan/0#compact split for the composer (composerPlanParts). */
+export interface ComposerPlanParts {
+  /** the core block (plan/0#compact without the on-demand defs) */
+  core: string;
+  /** the on-demand defs, in catalogue order */
+  onDemand: string[];
+  /** each on-demand def's compact JSON */
+  defs: Record<string, string>;
+  /** each on-demand def's fields-only line */
+  fields: Record<string, string>;
+  /** each on-demand def's trigger words (its catalogue ids' own words, singular) */
+  words: Record<string, string[]>;
+  /** the on-demand defs each on-demand def's JSON names by $ref (shown with it) */
+  refs: Record<string, string[]>;
+}
+
+const refsIn = (v: Json, out = new Set<string>()): Set<string> => {
+  if (Array.isArray(v)) v.forEach((x) => refsIn(x, out));
+  else if (isObj(v)) for (const [k, x] of Object.entries(v)) {
+    if (k === '$ref' && typeof x === 'string' && x.startsWith('#/$defs/')) out.add(x.slice('#/$defs/'.length));
+    else refsIn(x, out);
+  }
+  return out;
+};
+
+/** (CB) A def's fields as one line: `name {field: type, ...}` (the part fields every kind takes left out; `$ref`s by name). */
+export function kindFieldsLine(name: string, def: Record<string, Json>): string {
+  const common = new Set(['id', 'required', 'label', 'notes', 'ext', 'style', 'tolerance']);
+  const t = (v: Json, d = 0): string => {
+    if (!isObj(v)) return 'any';
+    if (typeof v.$ref === 'string') return v.$ref.replace('#/$defs/', '');
+    if (v.const !== undefined) return JSON.stringify(v.const);
+    if (Array.isArray(v.enum)) return v.enum.map((x) => JSON.stringify(x)).join('|');
+    const alt = (v.oneOf ?? v.anyOf) as Json;
+    if (Array.isArray(alt)) return alt.map((x) => t(x, d)).join(' or ');
+    if (v.type === 'integer' || v.type === 'number') return `${v.type === 'integer' ? 'int' : 'num'}${v.minimum !== undefined || v.maximum !== undefined ? ` ${String(v.minimum ?? '')}..${String(v.maximum ?? '')}` : ''}`;
+    if (v.type === 'array') return `[${t(v.items, d)}]`;
+    if (v.type === 'object' && isObj(v.properties) && d < 2) return `{${Object.entries(v.properties).map(([k, x]) => `${k}: ${t(x, d + 1)}`).join(', ')}}`;
+    return typeof v.type === 'string' ? v.type : 'any';
+  };
+  const props = isObj(def.properties) ? def.properties : {};
+  const req = (Array.isArray(def.required) ? def.required : []).filter((r) => r !== 'id' && r !== 'kind');
+  return `${name} {${Object.entries(props).filter(([n]) => !common.has(n)).map(([n, x]) => `${n}: ${t(x)}`).join(', ')}}${req.length ? ` required ${req.join(', ')}` : ''}`;
+}
+
+/** A word's singular stem (lowercase; "bridges" -> "bridge", "walled" -> "wall", "terraced" -> "terrace"). */
+function stems(w: string): string[] {
+  const out = [w];
+  if (w.endsWith('es') && w.length > 4) out.push(w.slice(0, -2));
+  if (w.endsWith('s') && w.length > 3) out.push(w.slice(0, -1));
+  if (w.endsWith('ed') && w.length > 4) out.push(w.slice(0, -2), w.slice(0, -1));
+  return out;
+}
+
+const planPartsCache = new Map<string, Promise<ComposerPlanParts>>();
+/** (CB) The kit's plan/0#compact split into the core and the on-demand kind defs (once per kit dir). */
+export function composerPlanParts(kitDir: string): Promise<ComposerPlanParts> {
+  let hit = planPartsCache.get(kitDir);
+  if (!hit) {
+    hit = buildPlanParts(kitDir);
+    hit.catch(() => planPartsCache.delete(kitDir));
+    planPartsCache.set(kitDir, hit);
+  }
+  return hit;
+}
+
+async function buildPlanParts(kitDir: string): Promise<ComposerPlanParts> {
+  const parts = await planCompactParts(kitDir);
+  const defsAll = (isObj(parts.schema.$defs) ? parts.schema.$defs : {}) as Record<string, Record<string, Json>>;
+  // the kind defs in catalogue order, with the catalogue ids that map to each (its def or draft; a defless sub-kind by its family's kind)
+  const idsOf = new Map<string, string[]>();
+  const kindOf = (d: string): string[] => {
+    const k = defsAll[d]?.properties;
+    const kp = isObj(k) ? (k.kind as Record<string, Json> | undefined) : undefined;
+    return kp ? (kp.const !== undefined ? [String(kp.const)] : Array.isArray(kp.enum) ? kp.enum.map(String) : []) : [];
+  };
+  for (const e of parts.entries) {
+    const ref = (typeof e.def === 'string' ? e.def : typeof e.draft === 'string' ? e.draft : '') as string;
+    if (ref.startsWith('#/$defs/') && defsAll[ref.slice('#/$defs/'.length)]) {
+      const d = ref.slice('#/$defs/'.length);
+      idsOf.set(d, [...(idsOf.get(d) ?? []), String(e.id)]);
+    }
+  }
+  for (const e of parts.entries) {
+    if (typeof e.def === 'string' || typeof e.draft === 'string') continue;
+    const fam = String(e.id).split('.')[0]!;
+    for (const d of idsOf.keys()) if (/^(connector|form|channel)\./.test(d) && kindOf(d).includes(fam)) idsOf.get(d)!.push(String(e.id));
+  }
+  let onDemand = [...idsOf.keys()].filter((d) => !CORE_KIND_DEF.test(d));
+  // a def the core names by $ref stays in the core (so the core never names a def it lacks), to a fixed point
+  for (;;) {
+    const od = new Set(onDemand);
+    const core = refsIn({ ...parts.schema, $defs: Object.fromEntries(Object.entries(defsAll).filter(([k]) => !od.has(k))) });
+    const next = onDemand.filter((d) => !core.has(d));
+    if (next.length === onDemand.length) break;
+    onDemand = next;
+  }
+  const od = new Set(onDemand);
+  const out: ComposerPlanParts = { core: planCompactBlock(parts, od), onDemand, defs: {}, fields: {}, words: {}, refs: {} };
+  for (const d of onDemand) {
+    out.defs[d] = JSON.stringify(defsAll[d]);
+    out.fields[d] = kindFieldsLine(d, defsAll[d]!);
+    const ws = new Set<string>();
+    for (const id of [d, ...(idsOf.get(d) ?? [])]) for (const w of id.split('.').slice(1).join('_').split('_')) if (w && !ID_STOP.has(w)) ws.add(w);
+    for (const k of kindOf(d)) for (const w of k.split('_')) if (w && !ID_STOP.has(w)) ws.add(w);
+    out.words[d] = [...ws].sort();
+    out.refs[d] = [...refsIn(defsAll[d])].filter((r) => od.has(r) && r !== d).sort();
+  }
+  return out;
+}
+
+/** (CB) What a request needs shown: the text that names kinds (brief, hints JSON, caller's rules) and the shown affordances' kinds. */
+export interface ComposeNeeds {
+  brief: string;
+  hints?: Record<string, unknown>;
+  callerSystem?: string;
+  affordances?: ReadonlyArray<{ kind: string }>;
+  /** every on-demand def (the worst case; tests) */
+  all?: boolean;
+}
+
+/** (CB) Which on-demand defs a round shows in full: {full (catalogue order), named, land, fieldsOnly, demoted (over KIND_DEFS_MAX)}. Pure. */
+export function selectKindDefs(parts: ComposerPlanParts, needs: ComposeNeeds): { full: string[]; named: string[]; land: string[]; fieldsOnly: string[]; demoted: string[] } {
+  const text = [needs.brief, needs.hints ? JSON.stringify(needs.hints) : '', needs.callerSystem ?? ''].join(' ').toLowerCase();
+  const tokens = new Set<string>();
+  for (const w of text.split(/[^a-z]+/)) if (w) for (const s of stems(w)) tokens.add(s);
+  const named = needs.all ? [...parts.onDemand] : parts.onDemand.filter((d) => parts.words[d]!.some((w) => tokens.has(w)));
+  const landKinds = new Set((needs.affordances ?? []).map((a) => a.kind));
+  const landSet = new Set<string>();
+  for (const k of landKinds) for (const d of AFFORDANCE_KINDS[k] ?? []) landSet.add(d);
+  const land = parts.onDemand.filter((d) => landSet.has(d) && !named.includes(d));
+  const chosen = new Set<string>();
+  const demoted: string[] = [];
+  let used = 0;
+  const take = (d: string): boolean => {
+    const group = [d, ...parts.refs[d]!].filter((x) => !chosen.has(x));
+    const n = group.reduce((s, x) => s + parts.defs[x]!.length + x.length + 6, 0);
+    if (used + n > KIND_DEFS_MAX) return false;
+    used += n;
+    for (const x of group) chosen.add(x);
+    return true;
+  };
+  for (const d of [...named, ...land]) if (!chosen.has(d) && !take(d)) demoted.push(d);
+  const full = parts.onDemand.filter((d) => chosen.has(d));
+  return { full, named, land, fieldsOnly: parts.onDemand.filter((d) => !chosen.has(d)), demoted };
+}
+
+/** (CB) The kinds block: the full defs, then the fields-only lines. */
+export function kindDefsText(parts: ComposerPlanParts, full: readonly string[]): string {
+  const shown = new Set(full);
+  const rest = parts.onDemand.filter((d) => !shown.has(d));
+  const out: string[] = [];
+  if (full.length) out.push('## Kind schemas for this request (plan/0 $defs, compact)', '', `{${full.map((d) => `${JSON.stringify(d)}:${parts.defs[d]}`).join(',')}}`, '');
+  if (rest.length) out.push('## Other kinds, fields only', '', 'Each also takes the part fields (id, required, label, notes, ext, style, tolerance). The check answers a field it cannot read, and a repair round shows the full schema of every kind the plan uses.', ...rest.map((d) => parts.fields[d]!));
+  return out.join('\n').trim();
+}
+
+/**
+ * (CB) A round's whole system prompt (the job runs it with no systemRefs): the core, the composer's text, the kinds block, (7c CP) the
+ * families, then the caller's rules (composeSystemText). Returns the kinds shown with it.
+ */
+export async function composerSystem(kitDir: string, text: ComposerText, o: { callerSystem?: string; families?: string; needs: ComposeNeeds }): Promise<{ system: string; kinds: ReturnType<typeof selectKindDefs> }> {
+  const parts = await composerPlanParts(kitDir);
+  const kinds = selectKindDefs(parts, o.needs);
+  const kt = kindDefsText(parts, kinds.full);
+  const body = composeSystemText({ ...text, system: kt ? `${text.system}\n\n${kt}` : text.system }, o.callerSystem, o.families);
+  return { system: `${parts.core}\n\n${body}`, kinds };
+}
+
+/** (CB) The system's floor: the core, the composer's text and every fields-only line (what no request can shrink). */
+export async function composerSystemFloor(kitDir: string, text: ComposerText): Promise<number> {
+  const parts = await composerPlanParts(kitDir);
+  return `${parts.core}\n\n${text.system}\n\n${kindDefsText(parts, [])}`.length;
+}
+
 const familiesCache = new Map<string, string>();
 /**
  * (7c CP) vocab/1's block families as the composer's system shows them (ext architect_mc:composeVocab "families"): the names of every family with
@@ -256,13 +464,26 @@ export const COMPOSE_SCHEMA: Record<string, unknown> = {
   required: ['plan', 'reason'],
   properties: {
     plan: { type: 'object', description: 'the plan: one plan/0 document ({"schemaVersion": "plan/0", "zones": [...], "connectors": [...], "forms": [...], "rules": [...]})' },
-    reason: { type: 'string', description: 'one or two sentences: what the plan builds and what it leaves waiting' },
+    reason: { type: 'string', description: 'one or two sentences the player reads: what they get, as they will see it; never the plan\'s workings (parts, fields, the check)' },
   },
 };
 
 /** The check's classes, best first: a round's place in this order (then the later round) picks the best plan. */
 const OVERALL_RANK = ['READY', 'NEEDS_REPAIR', 'REQUIRED_BLOCKED', 'INCOMPLETE', 'MALFORMED'];
 const GOOD = new Set(['fits', 'adjusted']);
+/** (CF2) The kit's reason on a required zone short of its lots (kit/lib/plan/finish.mjs LOTS_SHORT): adjusted, yet a repair target. */
+export const LOTS_SHORT = 'LOTS_SHORT';
+
+/** (CF2) A part's LOTS_SHORT reason (a fits/adjusted required zone whose unplaced lots exceed its allowance), or undefined. */
+export function lotsShortOf(p: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!p || !GOOD.has(String(p.class)) || !Array.isArray(p.reasons)) return undefined;
+  return (p.reasons as Array<Record<string, unknown>>).find((r) => r?.code === LOTS_SHORT);
+}
+
+/** (CF2) Whether a check's part is something a repair round is told about: not fits/adjusted, or a required zone short of its lots. */
+export function needsRepair(p: Record<string, unknown>): boolean {
+  return !GOOD.has(String(p.class)) || lotsShortOf(p) !== undefined;
+}
 
 /** An affordance as the composer keeps it (id, kind, box, metrics, score). */
 export interface ComposeAffordance {
@@ -314,6 +535,8 @@ export interface ComposeState {
   anchors?: Record<string, [number, number, number]>;
   /** the players' builds meeting the claim, as the mod sent them (id, kind, bounds, entrances) */
   builds?: Array<Record<string, unknown>>;
+  /** (CB) the on-demand kind defs the rounds' system shows in full (the rest fields only) */
+  kindsShown?: string[];
   /** while the mod checks a round's plan */
   awaiting?: { round: number; plan: Record<string, unknown> };
 }
@@ -476,7 +699,7 @@ export function repairKinds(plan: unknown, check: Record<string, unknown> | unde
 export function repairPrompt(first: string, round: ComposeRound, kindsText: string, closing: string): string {
   const check = round.check;
   const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
-  const bad = parts.filter((p) => !GOOD.has(String(p.class)));
+  const bad = parts.filter(needsRepair);
   const notes = Array.isArray(check?.notes) ? (check.notes as unknown[]).map(String) : [];
   return [
     first,
@@ -485,7 +708,7 @@ export function repairPrompt(first: string, round: ComposeRound, kindsText: stri
     truncate(JSON.stringify(round.plan ?? null), 70_000),
     '',
     '## The check',
-    round.refused ? `the check did not run: ${round.refused}` : `overall: ${String(check?.overall ?? 'unknown')}; ${parts.length - bad.length} of ${parts.length} part(s) fit or adjusted`,
+    round.refused ? `the check did not run: ${round.refused}` : `overall: ${String(check?.overall ?? 'unknown')}; ${parts.filter((p) => GOOD.has(String(p.class))).length} of ${parts.length} part(s) fit or adjusted`,
     ...((budget) => bad.map((p) => partAnswerLine(p, budget)))({ left: EVIDENCE_TOTAL_MAX }),
     ...(notes.length ? ['notes:', ...notes.slice(0, 12).map((n) => `- ${truncate(n, 600)}`)] : []),
     ...(check?.malformed ? [`malformed: ${truncate(JSON.stringify(check.malformed), 2000)}`] : []),
@@ -513,7 +736,8 @@ export function repairable(r: ComposeRound | undefined): boolean {
   if (!r) return false;
   if (r.refused || !r.check) return true;
   if (String(r.check.overall) === 'MALFORMED' || r.check.malformed) return true;
-  return (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).some((p) => p.class === 'refused' || p.class === 'malformed');
+  // ((CF2) a required zone short of its lots too: more room or fewer lots is the composer's to fix)
+  return (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).some((p) => p.class === 'refused' || p.class === 'malformed' || lotsShortOf(p) !== undefined);
 }
 
 /** (7c AU) A round's typed answers as one string (overall, each part's class and reason codes; or the refusal): the oscillation stop compares them. */
@@ -545,12 +769,16 @@ export function bestRound(rounds: readonly ComposeRound[]): ComposeRound | undef
   return best;
 }
 
-/** What waits in a check: every part not fits/adjusted, with its block and the catalogue's `until` for it. */
+/** What waits in a check: every part not fits/adjusted (and (CF2) every required zone short of its lots, with `lotsShort`), with its block and the catalogue's `until` for it. */
 export function waitsOf(check: Record<string, unknown> | undefined, until: Map<string, string>): Array<Record<string, unknown>> {
   const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
   return parts
-    .filter((p) => !GOOD.has(String(p.class)))
-    .map((p) => ({ part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}) }));
+    .filter(needsRepair)
+    .map((p) => {
+      const ev = lotsShortOf(p)?.evidence as Record<string, unknown> | undefined;
+      const short = ev && typeof ev.lots === 'number' && typeof ev.unplaced === 'number' ? { lotsShort: { lots: ev.lots, unplaced: ev.unplaced } } : {};
+      return { part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}), ...short };
+    });
 }
 
 /** (7c CP) The one level regions build in (the mod's Level.OVERWORLD), its refusal as the mod words it, and the player's words for it. */
@@ -626,6 +854,9 @@ export function partName(plan: unknown, id: unknown): string {
 /** (7c CP) A wait's player line (`say`), $0, from the check: what waits and for what. */
 export function waitSay(plan: unknown, w: Record<string, unknown>, blockedBy?: unknown): string {
   const name = partName(plan, w.part);
+  // ((CF2) a required zone short of its lots: how many didn't fit)
+  const short = w.lotsShort as { lots?: unknown; unplaced?: unknown } | undefined;
+  if (short && typeof short.lots === 'number' && typeof short.unplaced === 'number') return `${short.unplaced} of the ${short.lots} buildings in ${name} didn't fit here`;
   switch (String(w.class)) {
     case 'unsupported':
       return `${name} waits for ${typeof w.until === 'string' && w.until ? w.until : 'a later Architect release'}`;
@@ -701,7 +932,7 @@ export class ComposeDesigns {
 
   /** The job every round runs (its system and schema; the model the request's). */
   roundJob(model: string, system: string): RoundJob {
-    return { kind: 'structured', system, systemRefs: [...COMPOSE_REFS], schema: COMPOSE_SCHEMA, model, maxTurns: 3, owner: COMPOSE_OWNER, what: 'compose' };
+    return { kind: 'structured', system, schema: COMPOSE_SCHEMA, model, maxTurns: 3, owner: COMPOSE_OWNER, what: 'compose' };
   }
 
   /** region.compose: refused at once (no Claude, a bad survey, Style or volume), adopted by its key, else a design that runs at once. */
@@ -980,7 +1211,19 @@ export class ComposeDesigns {
         return this.fail(id, st, (e as Error).message);
       }
     }
-    const job = this.roundJob(st.model, composeSystemText(text, opts.system, families));
+    // (CB) the round's whole system: plan/0#compact's core, the composer's text, the kind schemas this request needs (the brief, the
+    // caller's hints and rules, the shown affordances), the families, the caller's rules
+    let sys: Awaited<ReturnType<typeof composerSystem>>;
+    try {
+      sys = await composerSystem(sc.config.kitDir, text, { callerSystem: opts.system, families, needs: { brief: st.brief, hints: opts.hints, callerSystem: opts.system, affordances: rankAffordances(st.affordances ?? []) } });
+    } catch (e) {
+      return this.fail(id, st, (e as Error).message);
+    }
+    if (JSON.stringify(st.kindsShown) !== JSON.stringify(sys.kinds.full)) {
+      st.kindsShown = sys.kinds.full;
+      this.save(id, st);
+    }
+    const job = this.roundJob(st.model, sys.system);
     const rounds = 1 + (st.repairs ?? REPAIR_ROUNDS);
     const first = composePrompt({
       brief: st.brief, claim: st.claim, summary, style: st.style ? `${st.style.id} v${st.style.version}` : undefined, roles,

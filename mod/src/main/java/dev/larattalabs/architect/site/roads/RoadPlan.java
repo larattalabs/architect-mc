@@ -479,7 +479,7 @@ public final class RoadPlan {
 				}
 			}
 			if (why == null && protect != null) {
-				int[] r = right(line, i);
+				int[] r = right(xs, zs, line, i);
 				for (int k : offs) {
 					String pm = protect.at(c[0] + k * r[0], c[2] + k * r[1]);
 					if (pm != null) {
@@ -491,7 +491,7 @@ public final class RoadPlan {
 			}
 			if (why == null && builds != null && f != Integer.MIN_VALUE) {
 				// 6c PT: a build cell within the column's cut, fill and headroom range fails the segment
-				int[] r = right(line, i);
+				int[] r = right(xs, zs, line, i);
 				search:
 				for (int k : offs) {
 					for (int y = f - 1 - MAX_CUT_FILL; y <= f + HEADROOM; y++) {
@@ -605,13 +605,7 @@ public final class RoadPlan {
 				continue;
 			}
 			int[] c = line.get(i);
-			int[] nx = line.get(Math.min(n - 1, i + 1));
-			int[] pv = line.get(Math.max(0, i - 1));
-			int dx = Integer.signum(nx[0] - pv[0]);
-			int dz = Integer.signum(nx[2] - pv[2]);
-			if (dx != 0 && dz != 0) {
-				dz = 0; // a corner: beside its x step
-			}
+			int[] rr = right(xs, zs, line, i); // (7c CN) the segment's axis, as the kit models it
 			Col cc = cols.computeIfAbsent(key(c[0], c[2]), k -> new Col(c[0], c[2], true, 0));
 			if (!cc.centre) {
 				cols.put(key(c[0], c[2]), cc = new Col(c[0], c[2], true, i));
@@ -619,8 +613,8 @@ public final class RoadPlan {
 			cc.feet = t[i];
 			cc.groundFeet = g[i];
 			cc.water = wet[i];
-			int rx = -dz;
-			int rz = dx;
+			int rx = rr[0];
+			int rz = rr[1];
 			for (int k : offs) {
 				if (k == 0) {
 					continue;
@@ -760,17 +754,29 @@ public final class RoadPlan {
 		return new Plan(List.of(), List.of(), why, reason, Map.of(), Map.of(), 0, new int[0], List.copyOf(spans));
 	}
 
-	/** The right-of-travel unit step {rx, rz} at centre cell {@code i} (a corner: beside its x step), as the walkway uses it. */
-	private static int[] right(List<int[]> line, int i) {
-		int n = line.size();
-		int[] nx = line.get(Math.min(n - 1, i + 1));
-		int[] pv = line.get(Math.max(0, i - 1));
-		int dx = Integer.signum(nx[0] - pv[0]);
-		int dz = Integer.signum(nx[2] - pv[2]);
-		if (dx != 0 && dz != 0) {
-			dz = 0;
+	/**
+	 * The right-of-travel unit step {rx, rz} at centre cell {@code i}: right of its waypoint segment's dominant axis (|dx| &gt;= |dz|: x;
+	 * ties x), the same on every cell of the segment, its end vertex included. (7c CN) This is the kit's model (lib/region/geom.mjs
+	 * {@code segmentAxis}, vworld's ground roads, the lints): the walkway used each cell's neighbours, so a diagonal segment's end cell
+	 * and a z-to-x corner put their side cell elsewhere than the virtual world and the plan's bill.
+	 */
+	private static int[] right(int[] xs, int[] zs, List<int[]> line, int i) {
+		int s = line.get(i)[3];
+		int dx = xs[s + 1] - xs[s];
+		int dz = zs[s + 1] - zs[s];
+		int ax;
+		int az;
+		if (Math.abs(dx) >= Math.abs(dz) && dx != 0) {
+			ax = Integer.signum(dx);
+			az = 0;
+		} else if (dz != 0) {
+			ax = 0;
+			az = Integer.signum(dz);
+		} else {
+			ax = 1;
+			az = 0;
 		}
-		return new int[] {-dz, dx};
+		return new int[] {-az, ax};
 	}
 
 	/** A column's ops, bottom to top; null when it can be made, else why not. */

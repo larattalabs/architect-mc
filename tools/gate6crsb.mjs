@@ -288,7 +288,7 @@ steps.rs04crash = async () => {
   const cutsBefore = await R.openCuts(ctx, region);
   const out = { region, world: s.world, before: { percent: before.build?.percent, built: last, open: cutsBefore.open, bad: cutsBefore.bad.length } };
   // the autosave, then kill -9 (our own server's pid) and a cold start in the same world
-  await L.cmd('/save-all flush');
+  await L.cmd('/save-all flush').catch(() => null);
   await L.settle(3000);
   const pids = L.clientPids();
   for (const pid of pids) { log(`kill -9 my server pid ${pid}`); process.kill(pid, 'SIGKILL'); }

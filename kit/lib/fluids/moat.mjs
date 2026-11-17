@@ -47,9 +47,16 @@ export function moatSpec(part) {
   return { width: part.width ?? pr.read.width ?? MOAT.width, depth: part.depth ?? pr.read.depth ?? MOAT.depth, fluid: pr.read.fluid ?? 'water', closed: ar.closed ?? true, ring, notes: pr.notes };
 }
 
-/** The side of rect T nearest the claim's centre (an open ring leaves it out). */
-function openSide(env, T) {
+/**
+ * The side of rect T nearest the claim's centre (an open ring leaves it out). ((WR2, WR's rule for walls) a ring whose inner shell, `o0`
+ * out from T at its first offset, holds the claim's centre strictly inside has no side facing the town: null (closed), noted.)
+ */
+function openSide(env, T, o0, notes) {
   const [cx, cz] = centre(env.claim);
+  if (cheb(cx, cz, T) < o0) {
+    notes.push(`closed: false ignored: the ring encloses the claim's centre (${cx}, ${cz}), so it has no side facing the town; it stays closed`);
+    return null;
+  }
   const d = { n: Math.abs(cz - T.minZ), e: Math.abs(T.maxX - cx), s: Math.abs(T.maxZ - cz), w: Math.abs(cx - T.minX) };
   return ['n', 'e', 's', 'w'].reduce((a, b) => (d[b] < d[a] ? b : a), 'n');
 }
@@ -107,7 +114,8 @@ export function resolve(C, p) {
   let need = lo;
   for (const w of walls) need = Math.max(need, w.hi + w.thickness + MOAT.berm);
   if (walls.length) notes.push(`beside wall ${walls.map((w) => w.id).join(', ')}: the ring starts at ${need} (the wall's widest ring, its thickness and a ${MOAT.berm}-cell berm for a bridge's landing and the gate)`);
-  const omit = sp.closed ? null : openSide(env, T);
+  // (the first offset tried: every ring of the band lies at least this far out, so a centre closer than it is inside each one)
+  const omit = sp.closed ? null : openSide(env, T, Math.max(lo, need), notes);
   if (omit) notes.push(`closed: false: its ${{ n: 'north', e: 'east', s: 'south', w: 'west' }[omit]} side (nearest the claim's centre) is left out, the ends capped`);
   const claimIn = grow(env.claim, -MARGIN);
   const taken = takenRects(C, 1);

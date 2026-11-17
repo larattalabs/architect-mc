@@ -211,6 +211,8 @@ steps.checktime = async () => {
   const p = await call('dev.region.plan', { program: 'mega_bench', claim, surveyLoad: 'generated:64', check: true }, 900_000);
   const withMs = Date.now() - t1;
   if (p.refused || bare.refused) throw new Error(`plan refused: ${p.refused ?? bare.refused}`);
+  // (release v0.75.0) a failed check writes no report.json: name the sidecar's checkError, not the missing file
+  if (!fs.existsSync(planFile(p.planId, 'report.json'))) throw new Error(`mega_bench's check wrote no report: ${p.checkError ?? readPlanJson(p.planId, 'plan.json').checkError ?? 'no checkError'}`);
   const rep = readPlanJson(p.planId, 'report.json');
   const prog = await call('dev.region.progress', { planId: p.planId }).catch(() => null);
   const checkMs = rep.ms?.total ?? null;

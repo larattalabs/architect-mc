@@ -370,7 +370,7 @@ async function flatBase(force = false) {
   await setRules();
   await tp(48.5, 70, 0.5);
   await cmd('/kill @e[type=!minecraft:player]');
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
 }
 
@@ -854,7 +854,7 @@ steps.layers = async () => {
   check(free.applied, `layers: a delta that leaves X's cells alone applies (v5 -> v1, ${free.written} cells)`, free.applied ? undefined : free);
   void pre2;
   // every removal order of {T, tavern, X}, each from a copy of this world
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G5B Layers', 'G5B LayersBase');
   const ids = { T: T.siteId, H: site, X: X.siteId };
@@ -874,7 +874,7 @@ steps.layers = async () => {
 async function killRun(point, base, action) {
   await fresh('G5B Crash', base);
   await tp(-30.5, 90, -30.5);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await settle(1000);
   await call('dev.journal.killAt', { point });
   const t0 = Date.now();
@@ -916,7 +916,7 @@ steps.crash = async () => {
   const H2 = (await hash(BOX)).sha256;
   check((await revert(site, 1)).applied, 'crash: back to v1 (the base world)');
   check((await hash(BOX)).sha256 === H1, 'crash: the base world is at v1 again');
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   copyWorld('G5B CrashBase', 'G5B CrashV1');
   const out = {};
@@ -943,7 +943,7 @@ steps.crash = async () => {
   const cc = await deltaCheck(site, 2, { cells: true });
   check((await deltaApply(site, 2)).applied, 'crash clean: v2 applied');
   for (const q of (cc.ghost?.added ?? [])) await cmd(`/setblock ${q.replaceAll(',', ' ')} minecraft:air`);
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   await openWorld('G5B CrashClean');
   await tp(-30.5, 90, -30.5);
@@ -955,7 +955,7 @@ steps.crash = async () => {
   // the revert's kill points: from v2
   await fresh('G5B CrashV2', 'G5B CrashV1');
   check((await deltaApply(site, 2)).applied, 'crash: the v2 base for the revert points');
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   const rexpect = { K5: 2, K6: 2, K7: 1 };
   for (const point of Object.keys(rexpect)) {
@@ -1211,7 +1211,7 @@ steps.survival = async () => {
     out[`pops${mine}`] = popped;
     check(popped.length === 0, `survival${mine ? ' (mined)' : ''}: no item entities in or around the box after the base build (${popped.length})`, popped.length ? popped : undefined);
     // the instant reference: a creative copy of this world gets the instant apply
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await leaveWorld();
     copyWorld('G5B Surv', 'G5B SurvRef');
     // the construction delta v1 -> v2
@@ -1380,7 +1380,7 @@ async function villageBase() {
   for (const i of done.items) if (i.status === 'PLACED') ids[i.key] = i.site;
   check(Object.keys(ids).length === 12, `village: the 12 lots placed (group ${done.group})`, done);
   const hPlaced = (await hash(V_BOX)).sha256;
-  await cmd('/save-all flush');
+  await cmd('/save-all flush').catch(() => null);
   await leaveWorld();
   ctx.village5 = { ids, group: done.group, h0, hPlaced, dir };
   saveCtx();

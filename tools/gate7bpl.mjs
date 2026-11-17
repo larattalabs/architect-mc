@@ -521,7 +521,7 @@ steps.crash = async () => {
     await call('dev.pl.reload', {}, 60_000);
     const area = grow(s.box, 10, gy - 3);
     const c0 = await cellsOf(area);
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await L.settle(1000);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.pl.place', { blueprint: s.id, site: s.wire }, 120_000).catch(() => null);
@@ -584,7 +584,7 @@ steps.crash = async () => {
     await call('dev.pl.reload', {}, 60_000);
     const p = await call('dev.pl.place', { blueprint: s.id, site: s.wire, overlap: 'layer' }, 300_000);
     check(cs.placed && p.placed, `rm ${point}: the cell site ${cs.siteId} and the house ${p.site} over it`, { cs, p });
-    await cmd('/save-all flush');
+    await cmd('/save-all flush').catch(() => null);
     await L.settle(1000);
     await call('dev.journal.killAt', { point }, 10_000);
     call('dev.pl.remove', { site: cs.siteId, covered: 'keep' }, 120_000).catch(() => null);

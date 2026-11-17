@@ -53,7 +53,7 @@ public final class CoreHooks {
 		DevBridge.register("dev.help", 5_000, "{} -> {commands, screens}", (req, mc) -> CompletableFuture.completedFuture(DevBridge.help()));
 		DevBridge.register("dev.state", 10_000, "{} -> {inWorld, ready, paused, player, world, chunks, headless: true}", (req, mc) -> state());
 		DevBridge.register("dev.command", 30_000, "{cmd, asPlayer?: false} - run a command as the player with full permissions -> {messages[], "
-			+ "success, result}", (req, mc) -> {
+			+ "success, result}; one that did not run (no result) answers ok: false with the error text, plus cmd, messages, success: false", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return command(f.nonBlank("cmd"), f.optBool("asPlayer", false));
 			});
@@ -310,8 +310,11 @@ public final class CoreHooks {
 				o.addProperty("success", success.get());
 				o.addProperty("result", result.get());
 			} else {
+				// (S-M5-19, as the client's DevCommands) no result callback: the command did not run; ok: false with the error text
 				o.addProperty("success", false);
 				o.add("result", JsonNull.INSTANCE);
+				throw new DevBridge.DevException("dev.command: '" + cmd + "' did not run (no result: unknown, incomplete or not permitted)"
+					+ (messages.isEmpty() ? "" : ": " + String.join(" | ", messages)), o);
 			}
 			return o;
 		});

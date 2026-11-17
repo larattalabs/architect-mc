@@ -771,8 +771,21 @@ public final class RegionFluids {
 		// bucket comes back); until all of it is there, the stage waits, naming what it lacks
 		if (l.rec().survival() && !l.rec().survival.has("chargedAt")) {
 			Map<String, Integer> charge = chargeOf(st);
+			var booked = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
+			if (!charge.isEmpty() && booked != null && settleBooked(l, booked.ledger(), level.getGameTime())) {
+				charge = Map.of(); // (fix b5b, review finding 3) booked before a crash lost the record: settled from the ledger, not charged again
+			}
 			if (!charge.isEmpty()) {
-				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge)) {
+				// (BC-c) the charge counts against the region's maxBill while it builds: past it, the stage waits (nothing charged or written)
+				var pile = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
+				Map<String, Integer> capOver = dev.larattalabs.architect.site.BillCaps.chargeOver(dev.larattalabs.architect.site.BillCaps.ofRegion(l, l.rid()), pile == null
+					? null : pile.ledger(), charge);
+				if (!capOver.isEmpty()) {
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait bill_cap: their charge " + charge + " is past the region's maxBill by "
+						+ capOver + " (a lava bucket per lava source, a grate's iron bars)");
+					return false;
+				}
+				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge, chargeKey(l), l.rid())) {
 					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
 						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
 					return false;
@@ -780,8 +793,11 @@ public final class RegionFluids {
 				JsonObject c = new JsonObject();
 				charge.forEach(c::addProperty);
 				l.rec().survival.add("charged", c);
+				l.rec().survival.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, l.rid()); // (BC-c) counted against that rid's cap
 			}
-			l.rec().survival.addProperty("chargedAt", level.getGameTime());
+			if (!l.rec().survival.has("chargedAt")) {
+				l.rec().survival.addProperty("chargedAt", level.getGameTime());
+			}
 			RegionsImpl.saveRec(l);
 		}
 		st.phase = "writing";
@@ -791,6 +807,37 @@ public final class RegionFluids {
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/** (fix b5b) The ledger key of a survival region's fluids charge (once per region: {@code survival.chargedAt} is never cleared). */
+	public static String chargeKey(RegionsImpl.Live l) {
+		return "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids:charge";
+	}
+
+	/**
+	 * (fix b5b, review finding 3) A fluids charge the ledger booked whose record was not saved: settled from the ledger ({@code charged},
+	 * {@code chargedRid}, {@code chargedAt}). Returns whether it settled one; the caller saves the record.
+	 */
+	public static boolean settleBooked(RegionsImpl.Live l, dev.larattalabs.architect.survival.StockLedger ledger, long now) {
+		if (!l.rec().survival() || l.rec().survival.has("chargedAt")) {
+			return false;
+		}
+		var c = ledger.charged(chargeKey(l));
+		if (c == null) {
+			return false;
+		}
+		settleCharge(l.rec().survival, c, now);
+		Architect.LOGGER.warn("Region {}: its fluids' charge {} was booked before its record was saved: settled from the ledger", l.rec().id, c.items());
+		return true;
+	}
+
+	/** (fix b5b, pure) The survival record's fluids charge: its items, its rid (BC-c), the time. */
+	static void settleCharge(JsonObject survival, dev.larattalabs.architect.survival.StockLedger.Charge c, long now) {
+		JsonObject o = new JsonObject();
+		new java.util.TreeMap<>(c.items()).forEach(o::addProperty);
+		survival.add("charged", o);
+		survival.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, c.rid());
+		survival.addProperty("chargedAt", now);
 	}
 
 	/**

@@ -259,14 +259,35 @@ public final class LibraryFeature {
 			return CompletableFuture.completedFuture(false);
 		}
 		String adopted = dev.larattalabs.architect.site.Adopt.deleteRefusal(id); // (6c PT2) its site stands on it
+		if (adopted == null) {
+			adopted = dev.larattalabs.architect.site.Composites.deleteRefusal(id, e.json()); // (7c CS) a module goes with its composite
+		}
 		if (adopted != null) {
 			say(adopted, true);
 			return CompletableFuture.completedFuture(false);
 		}
 		try {
+			// (7c CS) a composite's hidden module entries go to the trash after it (a module a failure leaves stays hidden; a composite never loses one)
+			// a module another composite also lists stays (checked against every library entry before anything moves)
+			dev.larattalabs.architect.site.Composites.ModuleDeletion del = dev.larattalabs.architect.site.Composites.modulesToDelete(id, e.json(), m -> {
+				Blueprints.Entry me = Blueprints.entry(m);
+				return me == null || me.dir() == null ? null : me.json();
+			}, dev.larattalabs.architect.site.Composites.librarySidecars());
+			java.util.List<String> modules = del.modules();
 			Path to = trash(e);
+			for (String m : modules) {
+				Blueprints.Entry me = Blueprints.entry(m);
+				if (me != null && me.dir() != null) {
+					trash(me);
+					EDITS.remove(m);
+				}
+			}
 			EDITS.remove(id);
-			say("Deleted " + nameOf(id) + " (kept in architect/library-trash/" + to.getFileName() + ")", false);
+			say("Deleted " + nameOf(id) + (modules.isEmpty() ? "" : " and its " + modules.size() + " module entries") + " (a copy is kept in the Library's trash)"
+				+ (del.shared().isEmpty() ? "" : "; kept " + del.shared().size() + " module entries another composite also uses (" + String.join(", ", del.shared().keySet()) + ")"), false);
+			if (!del.shared().isEmpty()) {
+				Architect.LOGGER.info("Library: {}'s modules kept as shared: {}", id, del.shared());
+			}
 			if (id.equals(selected)) {
 				selected = null;
 			}
