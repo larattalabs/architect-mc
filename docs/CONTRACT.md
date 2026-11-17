@@ -32928,6 +32928,11 @@ so two module lots that share items can't each be held to their own measured bou
     stages, survival, the effective snapshot) and refuses; on disk it is RV2's state (the manifest and snapshot written, nothing accepted).
   - Every other `save` caller keeps the WARN (Revisions 9, RegionsImpl 9, RegionFluids 10, MechCharges 5, RegionFreeDrops 2, BillCaps 2,
     Sites 1): they record progress after the governed write, not the cap. Test hook `dev.region.failNextSave` (`RegionStore.failNext`).
+- **RG2a orphans (second fix round).** A crash at RG2a leaves a record naming a batch and group id nobody holds. At load the ids every
+  region record names are reserved (`site/RegionIds`; `Batches.newId` and `Sites.newGroupId` skip them), so a later build never shares
+  them. A removal cancels only a batch whose ext names the region, and a region whose group is missing or names another region is an
+  orphan: only its record is removed (it wrote nothing). `dev.journal.killAt` accepts `RG2a`. lcap-survival's row Z: RG2a halt, town B
+  with its own ids, the orphan removed, B built, items in = items out.
 - **LCAP-Q1, which cap.** `SiteWait.capScope` (appended component; the 1.59.0 constructor kept): for `BILL_CAP`, `"region"`
   (`SiteWait.CAP_REGION`), `"lot:<id>"`, or both comma-joined, lot first; null otherwise. A gate mechanism's `bill_cap` wait carries the same
   string as `waitsFor.cap`, and its `say` names the lot.
@@ -32947,5 +32952,9 @@ so two module lots that share items can't each be held to their own measured bou
   its save failed (`gate-runs-LCAP-prefix/20261117-090854-change`).
 - Gate `artifacts/gate-runs-LCAP/20261117-085316-change` at 238299a0, 9076:9077, `--no-cache --shards 1 --no-turbo`: 4/4 PASS (bc-cap 10/0,
   lcap-survival 24/0, bcd-grow 19/0, rl-crash 110/0); before the fix round `20261117-081620-change` 6/6 (with bcc-over 17/0, sad-survival 56/0).
-- Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves a region with no batch (it writes nothing, removable);
+- Second round (RG2a): units LotCapLCAPTest 11/11, ApiY1Test 5/5 (SiteWait has 8 fields), Gradle full 1370 (0 failed, 1 skipped). Row Z
+  FAILs on 4b3dee91 + the driver (`gate-runs-LCAP-pre2/20261117-163845-change`: B took the orphan's b1/g1, the orphan's removal FAILED B)
+  and passes at 53c020a2 (`20261117-165207-change`: lcap-survival 32/0, bc-cap 10/0, bcd-grow 19/0; rl-crash 109/1 on RL5 F10, a gravel
+  drop near the road cell, then 110/0 alone in `20261117-171227-change`).
+- Leftovers: the other `save` callers keep the WARN (§4); a crash at RG2a leaves an orphan record (it writes nothing; removed alone);
   lot quotes here are `exact` false (upper bounds); rs_hut lots stand in for module lots (fills and mechanisms: units and code review).
