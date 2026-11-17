@@ -82,9 +82,10 @@ class StockpileSaveHFTest {
 			}
 		}
 		assertEquals(1, bySaveWithWorld, "saveWithWorld's own fallback");
-		assertEquals(2, byLifecycle, "the world's save (AFTER_SAVE) and the stop (SERVER_STOPPING)");
+		assertEquals(1, byLifecycle, "the world's save (AFTER_SAVE; the stop's too: slice T0 dropped SERVER_STOPPING's early ledger save)");
 		assertEquals(1, byLedgerFirst, "(J1) saveLedgerFirst's ledger write, before its players and chunks");
-		assertEquals(4, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger) or saveLedgerFirst");
+		assertEquals(3, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger) or saveLedgerFirst"
+			+ " (slice T0: SERVER_STOPPING's save dropped)");
 		Matcher w = Pattern.compile("saveWithWorld\\(srv\\);").matcher(s);
 		int callers = 0;
 		while (w.find()) {

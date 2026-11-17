@@ -215,7 +215,7 @@ public final class RegionDurability {
 		}
 		for (Path d : dirs) {
 			try {
-				DurableFile.confirmChain(d, 2);
+				DurableFile.confirmTo(d); // (T0 review 3 finding 5) up to the world folder: world/dimensions/<ns>/<path>/region
 				confirmContents(d);
 			} catch (IOException | RuntimeException e) {
 				left.add("folder " + d + " (its entry could not be confirmed: " + e + ")");
@@ -308,6 +308,8 @@ public final class RegionDurability {
 	/** A world opens: only its files count from now on, and nothing from an earlier world is owed. */
 	public static void worldOpened(Path dir) {
 		OWED.clear();
+		CONTENTS_CONFIRMED.clear(); // (T0 review 3 finding 6) no confirmation outlives its world session: reopened, everything is forced again
+		DurableFile.worldChanged(dir);
 		LIVE.removeIf(s -> !s.path.toAbsolutePath().normalize().startsWith(dir.toAbsolutePath().normalize()));
 		world = dir.toAbsolutePath().normalize();
 	}
@@ -315,6 +317,8 @@ public final class RegionDurability {
 	/** The world closed: everything forgotten. */
 	public static void worldClosed() {
 		OWED.clear();
+		CONTENTS_CONFIRMED.clear();
+		DurableFile.worldChanged(null);
 		LIVE.clear();
 		world = null;
 		FAILING.clear();

@@ -116,7 +116,7 @@ class StockpileSaveJ1Test {
 	void aMoveIntoAPlayerSavesTheLedgerBeforeThePlayer() throws Exception {
 		String sp = read(SITE + "Stockpiles.java");
 		String lf = StockpileSaveHFTest.body(sp, "static void saveLedgerFirst(MinecraftServer srv)");
-		int ledger = lf.indexOf("save();");
+		int ledger = lf.indexOf("if (!save()) {"); // (slice T0) and nothing after a ledger that was not published
 		int players = lf.indexOf("saveAll()");
 		int chunks = lf.indexOf("saveAllChunks(true, true, false)");
 		assertTrue(ledger >= 0 && ledger < players && players < chunks, "the ledger, then the players, then the chunks flushed");

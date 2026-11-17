@@ -193,7 +193,7 @@ public final class DurableFile {
 				FORCER.file(ch);
 			}
 			FORCER.dir(dir);
-			confirmChain(dir, 2);
+			confirmTo(dir);
 		} catch (IOException | RuntimeException e) {
 			failing = true;
 			inDoubtGen = Math.max(inDoubtGen, g);
@@ -284,7 +284,7 @@ public final class DurableFile {
 		createDirs(dir);
 		if (forced) {
 			forceDirsCreated();
-			confirmChain(dir, 2); // (TXN review 4 item 1) its folder's entry and its parent's, even when an earlier session made them
+			confirmTo(dir); // (TXN review 4 item 1, T0 review 3 finding 5) every entry up to the world folder, even ones an earlier session made
 		}
 		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
 			ByteBuffer b = ByteBuffer.wrap(bytes);
@@ -345,6 +345,40 @@ public final class DurableFile {
 			}
 			FORCER.dir(d.getParent());
 			CHAIN_CONFIRMED.add(d);
+		}
+	}
+
+	/** The running world's folder: {@link #confirmTo} walks a folder's chain up to it (null: two levels). */
+	private static volatile @Nullable Path worldRoot;
+
+	/**
+	 * (T0 review 3 findings 5, 6) A world opened ({@code root}) or closed (null): the folder confirmations of the previous one are forgotten,
+	 * so a reopen in the same process confirms every entry again before its first acknowledgement.
+	 */
+	public static void worldChanged(@Nullable Path root) {
+		CHAIN_CONFIRMED.clear();
+		worldRoot = root == null ? null : root.toAbsolutePath().normalize();
+	}
+
+	/**
+	 * (T0 review 3 finding 5) {@code dir}'s entry and every ancestor's up to and including the world folder's own (native region folders sit
+	 * as deep as {@code world/dimensions/minecraft/overworld/region}); outside the world, two levels. Once a world session per folder.
+	 */
+	public static void confirmTo(Path dir) throws IOException {
+		Path root = worldRoot;
+		Path d = dir.toAbsolutePath().normalize();
+		if (root == null || !d.startsWith(root)) {
+			confirmChain(d, 2);
+			return;
+		}
+		for (; d != null && d.getParent() != null; d = d.getParent()) {
+			if (!CHAIN_CONFIRMED.contains(d)) {
+				FORCER.dir(d.getParent());
+				CHAIN_CONFIRMED.add(d);
+			}
+			if (d.equals(root)) {
+				break;
+			}
 		}
 	}
 

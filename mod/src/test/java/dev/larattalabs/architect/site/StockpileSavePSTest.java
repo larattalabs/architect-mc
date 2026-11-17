@@ -161,7 +161,7 @@ class StockpileSavePSTest {
 			"a changed ledger, a loaded file, 10 s since the last save: the full save (players, chunks, ledger)");
 		String sww = StockpileSaveHFTest.body(sp, "static void saveWithWorld(MinecraftServer srv)");
 		assertTrue(sww.indexOf("if (loadFailed)") >= 0 && sww.indexOf("if (loadFailed)") < sww.indexOf("saveAll()"), "saveWithWorld refuses first");
-		String save = StockpileSaveHFTest.body(sp, "static void save()");
+		String save = StockpileSaveHFTest.body(sp, "static boolean save()");
 		assertTrue(save.contains("if (loadFailed)"), "save() refuses");
 
 		String g = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Groups.java")).replaceAll("//[^\n]*", "");

@@ -58,7 +58,14 @@ public abstract class PlayerSaveFailMixin {
 
 	@Inject(method = "save", at = @At(value = "INVOKE", target = "Lorg/slf4j/Logger;warn(Ljava/lang/String;Ljava/lang/Object;)V"), require = 1)
 	private void architect$failed(Player player, CallbackInfo ci) {
-		PlayerSaves.failed("the save threw (vanilla logged \"Failed to save player data\")");
+		// (T0 review 3 finding 8) an attempt that failed before its capture (the temp file) is serialized again here, so its debt keeps a current
+		// snapshot; a player whose serialization itself throws has none
+		PlayerSaves.failed("the save threw (vanilla logged \"Failed to save player data\")", () -> {
+			net.minecraft.world.level.storage.TagValueOutput out = net.minecraft.world.level.storage.TagValueOutput.createWithContext(
+				net.minecraft.util.ProblemReporter.DISCARDING, player.registryAccess());
+			player.saveWithoutId(out);
+			return out.buildResult();
+		});
 	}
 
 	@Inject(method = "save", at = @At("RETURN"), require = 1)
@@ -73,11 +80,9 @@ public abstract class PlayerSaveFailMixin {
 	@Inject(method = "load(Lnet/minecraft/server/players/NameAndId;Ljava/lang/String;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true,
 		require = 1)
 	private void architect$loading(NameAndId who, String suffix, CallbackInfoReturnable<Optional<CompoundTag>> cir) {
-		if (!".dat".equals(suffix)) {
-			return;
-		}
-		if (PlayerSaves.loadInstead(who.id()) instanceof CompoundTag kept) {
-			cir.setReturnValue(Optional.of(kept.copy()));
+		Object kept = ".dat".equals(suffix) ? PlayerSaves.loadInstead(who.id()) : ".dat_old".equals(suffix) ? PlayerSaves.loadOld(who.id()) : null;
+		if (kept instanceof CompoundTag t) { // (T0 review 3 finding 7) the .dat_old fallback too: never older than a kept or acknowledged snapshot
+			cir.setReturnValue(Optional.of(t.copy()));
 		}
 	}
 }

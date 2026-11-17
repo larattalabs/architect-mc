@@ -28,7 +28,9 @@ import org.jspecify.annotations.Nullable;
  * stale (every barrier refuses until an operator clears it).</li>
  * <li>{@link #owed} is not empty: the barrier refuses, and no ordinary ledger save publishes ({@code Stockpiles.save}).</li>
  * </ul>
- * Any thread; the world's state is forgotten when it closes.
+ * <b>One lock</b> (T0 review 3 findings 3, 4): every method that reads or changes the debts, the numbers or the pending data holds the
+ * {@code ChunkDebt.class} monitor, as {@link PlayerSaves} does; a payment, a newer failure and a retry never interleave. Any thread; the
+ * world's state is forgotten when it closes and when one opens.
  */
 public final class ChunkDebt {
 	/** One owed chunk of one storage. */
@@ -40,6 +42,8 @@ public final class ChunkDebt {
 		volatile @Nullable Runnable resubmit;
 		/** (no snapshot) marks the loaded chunk unsaved again, or writes the kept chunk object; run by {@link #retry}, never inside a save. */
 		volatile @Nullable Runnable remark;
+		/** (T0 review 3 finding 8) re-serializes the chunk object kept from a synchronous failure: a reload is served it, never the older file. */
+		volatile @Nullable Supplier<Object> reserialize;
 		volatile String why;
 		/** Loaded from the older file while owed without a usable snapshot: the change is gone, no later write pays it ({@link #forgiveAll}). */
 		volatile boolean stale;
@@ -85,6 +89,8 @@ public final class ChunkDebt {
 	static final AtomicLong FAILED = new AtomicLong(), PAID = new AtomicLong(), RESUBMITTED = new AtomicLong(), SERVED = new AtomicLong();
 	/** (TEST, dev.stockpile.barrier failChunkWrite) the next region writes that fail as if the disk refused them. */
 	public static final AtomicInteger FAIL_WRITES = new AtomicInteger();
+	/** (TEST seams, T0 review 3 findings 3 and 4) run inside the lock: before a write pays a debt, before a retry resubmits one. */
+	static volatile @Nullable Runnable TEST_BEFORE_PAY, TEST_BEFORE_RESUBMIT;
 
 	private ChunkDebt() {
 	}
@@ -105,25 +111,25 @@ public final class ChunkDebt {
 	}
 
 	/** A submission to the chunk's IO worker: its number ({@code seq}, a resubmission's own; 0 takes the next). */
-	public static long submitted(String key, long seq) {
+	public static synchronized long submitted(String key, long seq) {
 		long n = seq > 0 ? seq : SEQ.incrementAndGet();
 		LATEST.merge(key, n, Math::max);
 		return n;
 	}
 
 	/** The worker's pending data for the chunk is now submission {@code seq}'s. IO thread. */
-	public static void pendingData(String key, long seq) {
+	public static synchronized void pendingData(String key, long seq) {
 		PENDING.put(key, seq);
 	}
 
 	/** A region write of the chunk starts: the number of the data it writes (0: unknown, it pays nothing). IO thread. */
-	public static long writing(String key) {
+	public static synchronized long writing(String key) {
 		Long s = PENDING.remove(key);
 		return s == null ? 0 : s;
 	}
 
 	/** A region write failed: owed with its snapshot (submission {@code seq}) and a resubmission. */
-	public static void writeFailed(String key, @Nullable Object snapshot, long seq, @Nullable Runnable resubmit, String why) {
+	public static synchronized void writeFailed(String key, @Nullable Object snapshot, long seq, @Nullable Runnable resubmit, String why) {
 		FAILED.incrementAndGet();
 		long fail = seq > 0 ? seq : SEQ.incrementAndGet();
 		LATEST.remove(key, seq);
@@ -144,12 +150,12 @@ public final class ChunkDebt {
 	}
 
 	/** {@link #writeFailed(String, Object, long, Runnable, String)} of an unnumbered write. */
-	public static void writeFailed(String key, @Nullable Object snapshot, @Nullable Runnable resubmit, String why) {
+	public static synchronized void writeFailed(String key, @Nullable Object snapshot, @Nullable Runnable resubmit, String why) {
 		writeFailed(key, snapshot, 0, resubmit, why);
 	}
 
 	/** An asynchronous serialization of submission {@code seq} failed: owed from that attempt on (an older snapshot no longer pays). */
-	public static void serializationFailed(String key, long seq, String why) {
+	public static synchronized void serializationFailed(String key, long seq, String why) {
 		FAILED.incrementAndGet();
 		LATEST.remove(key, seq);
 		OWED.compute(key, (k, d) -> {
@@ -163,7 +169,7 @@ public final class ChunkDebt {
 	}
 
 	/** A save failed (reported by vanilla): owed; a debt an earlier report recorded stays as it is. */
-	public static void saveFailed(String key, String why) {
+	public static synchronized void saveFailed(String key, String why) {
 		OWED.computeIfAbsent(key, k -> {
 			FAILED.incrementAndGet();
 			return new Debt(k, why, SEQ.incrementAndGet());
@@ -175,7 +181,15 @@ public final class ChunkDebt {
 	 * object) runs at the next barrier's {@link #retry}. Not at once: a flushed save that keeps saving the chunks it finds unsaved would loop on
 	 * it. {@code newAttempt}: a synchronous serialization (an attempt newer than everything submitted so far).
 	 */
-	public static void remark(String key, Runnable remark, String why, boolean newAttempt) {
+	public static synchronized void remark(String key, Runnable remark, @Nullable Supplier<Object> reserialize, String why, boolean newAttempt) {
+		remark(key, remark, why, newAttempt);
+		Debt d = OWED.get(key);
+		if (d != null && reserialize != null) {
+			d.reserialize = reserialize;
+		}
+	}
+
+	public static synchronized void remark(String key, Runnable remark, String why, boolean newAttempt) {
 		long now = newAttempt ? SEQ.incrementAndGet() : 0;
 		OWED.compute(key, (k, d) -> {
 			if (d == null) {
@@ -189,17 +203,17 @@ public final class ChunkDebt {
 	}
 
 	/** {@link #remark(String, Runnable, String, boolean)} of a synchronous serialization failure. */
-	public static void remark(String key, Runnable remark, String why) {
+	public static synchronized void remark(String key, Runnable remark, String why) {
 		remark(key, remark, why, true);
 	}
 
 	/** Whether the chunk is owed. */
-	public static boolean owes(String key) {
+	public static synchronized boolean owes(String key) {
 		return !OWED.isEmpty() && OWED.containsKey(key);
 	}
 
 	/** A write of submission {@code seq} reached the region file: the debt is paid when that is at least as new as the failed attempt. */
-	public static void written(String key, long seq) {
+	public static synchronized void written(String key, long seq) {
 		if (seq > 0) {
 			LATEST.remove(key, seq);
 		}
@@ -207,14 +221,22 @@ public final class ChunkDebt {
 			return;
 		}
 		Debt d = OWED.get(key);
-		if (d != null && !d.stale && seq > 0 && seq >= d.failSeq && OWED.remove(key, d)) {
+		if (d != null && !d.stale && seq > 0 && seq >= d.failSeq) {
+			Runnable t = TEST_BEFORE_PAY;
+			if (t != null) {
+				t.run();
+			}
+			if (d.failSeq > seq || OWED.get(key) != d) {
+				return; // a newer failure arrived (only possible without the lock): it stays owed
+			}
+			OWED.remove(key);
 			PAID.incrementAndGet();
 			Architect.LOGGER.info("Chunk durability: {} written again; its debt is paid", key);
 		}
 	}
 
 	/** An unnumbered write (its data's age unknown): it pays nothing. */
-	public static void written(String key) {
+	public static synchronized void written(String key) {
 		written(key, 0);
 	}
 
@@ -227,7 +249,7 @@ public final class ChunkDebt {
 	 * A load of this chunk: the snapshot a failed write left (served instead of the older file), or null. Not when something newer for it was
 	 * submitted since (the worker's pending data, newer, is read). An owed chunk with neither is read from the older file: its debt turns stale.
 	 */
-	public static @Nullable Object snapshot(String key) {
+	public static synchronized @Nullable Object snapshot(String key) {
 		if (OWED.isEmpty()) {
 			return null;
 		}
@@ -239,6 +261,20 @@ public final class ChunkDebt {
 			SERVED.incrementAndGet();
 			return d.snapshot;
 		}
+		if (!d.usable() && d.reserialize != null && !newerSubmitted(key, d.failSeq - 1)) {
+			// (T0 review 3 finding 8) the chunk unloaded owed and loads again: served its kept object's state, never the older file
+			try {
+				Object tag = d.reserialize.get();
+				if (tag != null) {
+					d.snapshot = tag;
+					d.snapSeq = d.failSeq;
+					SERVED.incrementAndGet();
+					return tag;
+				}
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Chunk durability: {}'s kept chunk could not be serialized for its reload", key, e);
+			}
+		}
 		if (!newerSubmitted(key, d.failSeq - 1) && !d.stale) {
 			d.stale = true;
 			Architect.LOGGER.error("Chunk durability: {} loads from its older file while its failed save is owed without a snapshot; the debt stays (no ledger is"
@@ -248,7 +284,7 @@ public final class ChunkDebt {
 	}
 
 	/** (dev, operator: dev.stockpile.barrier forgive) forget every debt; answers how many. */
-	public static int forgiveAll() {
+	public static synchronized int forgiveAll() {
 		int n = OWED.size();
 		OWED.clear();
 		return n;
@@ -259,10 +295,20 @@ public final class ChunkDebt {
 	 * follows waits for it); every other owed chunk re-marked or its kept object written ({@link Debt#remark}). Server thread, before the
 	 * barrier's flushed save. Answers how many.
 	 */
-	public static int retry() {
+	public static synchronized int retry() {
 		int n = 0;
 		for (Debt d : List.copyOf(OWED.values())) {
-			Runnable r = d.usable() && d.resubmit != null && !newerSubmitted(d.key, d.snapSeq) ? d.resubmit : d.remark;
+			boolean resubmit = d.usable() && d.resubmit != null;
+			if (resubmit) {
+				Runnable t = TEST_BEFORE_RESUBMIT;
+				if (t != null) {
+					t.run();
+				}
+			}
+			if (OWED.get(d.key) != d) {
+				continue; // paid meanwhile (only possible without the lock): nothing to replay
+			}
+			Runnable r = resubmit && !newerSubmitted(d.key, d.snapSeq) ? d.resubmit : resubmit ? null : d.remark;
 			if (r != null) {
 				try {
 					r.run();
@@ -277,7 +323,7 @@ public final class ChunkDebt {
 	}
 
 	/** The owed chunks, each with why. */
-	public static List<String> owed() {
+	public static synchronized List<String> owed() {
 		List<String> out = new ArrayList<>();
 		OWED.values().forEach(d -> out.add(d.key + " (" + d.why + (d.stale ? ", stale" : d.snapshot == null ? ", no snapshot" : !d.usable()
 			? ", snapshot outdated" : "") + ")"));
@@ -285,7 +331,7 @@ public final class ChunkDebt {
 	}
 
 	/** The world closed: what is still owed is lost with it (logged). */
-	public static void worldClosed() {
+	public static synchronized void worldClosed() {
 		if (!OWED.isEmpty()) {
 			Architect.LOGGER.error("Chunk durability: the world closed with {} chunk write(s) never written: {}", OWED.size(), owed());
 		}
@@ -296,7 +342,7 @@ public final class ChunkDebt {
 	}
 
 	/** (dev) the counters. */
-	static com.google.gson.JsonObject devJson() {
+	static synchronized com.google.gson.JsonObject devJson() {
 		com.google.gson.JsonObject o = new com.google.gson.JsonObject();
 		o.addProperty("owed", OWED.size());
 		o.addProperty("failed", FAILED.get());

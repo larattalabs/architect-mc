@@ -27,6 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <li>a failure (the synchronous copy, or the write future's) is owed with a re-mark ({@link ChunkDebt#remark}) that runs at the next
  * barrier, not at once (a flushed save would loop on a chunk that keeps failing): the loaded chunk is marked unsaved, or, once it unloaded,
  * the chunk object kept from the synchronous failure is serialized again and written;</li>
+ * <li>a reload of an owed chunk whose kept object exists is served that object's state (T0 review 3 finding 8: never the older file);</li>
  * <li>the unload of an owed chunk marks it unsaved first, so the unload's own save rewrites it instead of dropping it clean (in 26.3 the
  * holder has left the maps by then, so the chunk can't be kept loaded; this is the save that pinning would have waited for).</li>
  * </ul>
@@ -57,7 +58,7 @@ public abstract class ChunkMapDebtMixin {
 					Architect.LOGGER.error("Chunk durability: {} (unloaded) could not be serialized again", key, e);
 				}
 			}
-		}, why, newAttempt);
+		}, kept == null ? null : () -> SerializableChunkData.copyOf(level, kept).write(), why, newAttempt);
 	}
 
 	@Inject(method = "save(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z", at = @At(value = "INVOKE",

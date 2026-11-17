@@ -330,11 +330,13 @@ public final class Stockpiles {
 			}
 		}));
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
+		// (T0 review 3 finding 1) no ledger save at SERVER_STOPPING: Fabric fires it at stopServer's head, before vanilla saves the players
+		// (saveAll, then removeAll's logouts) and the chunks. The stop's ledger is the AFTER_SAVE of its saveAllChunks, last: players, then
+		// chunks, then the ledger, held over any save that failed on the way
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			if (TRACE_SAVES) {
-				Architect.LOGGER.info("Stockpiles: world stopping, saving");
+				Architect.LOGGER.info("Stockpiles: world stopping; the ledger is saved after the players and the chunks (the stop's world save)");
 			}
-			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
@@ -702,9 +704,7 @@ public final class Stockpiles {
 			}
 		}
 		BlockPos at = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		if (to != null && unsaved) {
-			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
-		}
+		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
 		Map<String, Integer> toPlayer = new TreeMap<>();
 		Map<String, Integer> toGround = new TreeMap<>();
 		Map<String, Integer> out = dissolveLedger(p.ledger, to == null ? null : (item, n) -> give(to, item, n), toPlayer, toGround);
@@ -718,11 +718,8 @@ public final class Stockpiles {
 		}
 		JsonObject last = p.toJson();
 		PILES.remove(p.id);
-		if (to != null) {
-			saveLedgerFirst(srv); // (J1) items into a player: a crash inside the save loses them, never dupes them
-		} else {
-			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
-		}
+		// (J1; T0 review 3 finding 2) ledger first, to a player or to the ground: a crash inside the save loses the items, never dupes them
+		saveLedgerFirst(srv);
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
@@ -861,9 +858,7 @@ public final class Stockpiles {
 		if (to == null) {
 			throw new Sites.SiteException(Reason.FIELD_LIMIT, "to: a player is required");
 		}
-		if (unsaved) {
-			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
-		}
+		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
 		Map<String, Integer> credit = credit(srv, p);
 		Map<String, Integer> out = new TreeMap<>();
 		Map<String, Integer> ground = new TreeMap<>();
@@ -891,6 +886,21 @@ public final class Stockpiles {
 	 * (slice T0 review 2 finding 1) A payout (items out of the ledger into a player or the world) is refused while a player or chunk save is
 	 * owed: its ledger save would publish every credit over that debt, and holding it would leave the items both paid and still in stock.
 	 */
+	/**
+	 * (T0 review 3 finding 2) A payout's pre-save: what was pending is saved first ({@code preSave}), and the payout goes on only when that
+	 * left nothing owed and the ledger durably saved; else it is refused before anything moves. Package-private for the units.
+	 */
+	static void payoutPreSave(Runnable preSave) throws Sites.SiteException {
+		requireNoDebt();
+		if (unsaved) {
+			preSave.run();
+		}
+		requireNoDebt();
+		if (unsaved) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger's pending changes could not be saved durably; payouts wait until they are");
+		}
+	}
+
 	private static void requireNoDebt() throws Sites.SiteException {
 		java.util.List<String> owed = DurableBarrier.owedDebts();
 		if (!owed.isEmpty()) {
@@ -2890,7 +2900,15 @@ public final class Stockpiles {
 		if (timed) {
 			SaveTiming.start();
 		}
-		save();
+		if (!save()) {
+			// (T0 review 3 finding 2) the ledger is not durably on disk (held over an owed save, refused, in doubt): no player or chunk save
+			// follows that could put the paid items on disk ahead of it
+			if (timed) {
+				SaveTiming.stop();
+			}
+			Architect.LOGGER.error("Stockpiles: a payout's ledger save did not complete; its players and chunks are not saved ahead of it");
+			return;
+		}
 		if (srv == null || !srv.isSameThread()) {
 			return;
 		}
@@ -2903,13 +2921,14 @@ public final class Stockpiles {
 		playerSaves++;
 		lastPlayerSaveMs = pms;
 		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
-		explicitSave = true;
+		boolean wasExplicit = explicitSave(true);
+		boolean wasTiming = SaveTiming.explicit;
 		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
-			explicitSave = false;
-			SaveTiming.explicit = false;
+			explicitSave(wasExplicit); // restored, never reset
+			SaveTiming.explicit = wasTiming;
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
@@ -2928,21 +2947,26 @@ public final class Stockpiles {
 	static volatile int ledgerFirstSaves;
 	static volatile double lastLedgerFirstMs;
 
-	static void save() {
+	/**
+	 * The ledger written (forced, through its DurableFile). True only when it is durably on disk now: a hold (a refused load, an owed save),
+	 * a REFUSED write and an IN_DOUBT one all answer false and leave the ledger pending (T0 review 3 finding 2: IN_DOUBT is never "saved").
+	 * True too when there is nothing to write (no stockpile ever).
+	 */
+	static boolean save() {
 		Path d = dir;
 		if (d == null) {
-			return;
+			return false;
 		}
 		if (loadFailed) {
 			refusedSave();
-			return; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
+			return false; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
 		}
 		java.util.List<String> owed = DurableBarrier.owedDebts();
 		if (!owed.isEmpty()) {
 			// (slice T0 review 2 finding 1) a player or chunk save is owed: no ledger is published over it (an autosave, a save with the world,
 			// the stop's save), so its credits never reach the disk ahead of what they came from; the ledger stays pending
 			refuseUndurable("a ledger save", owed);
-			return;
+			return false;
 		}
 		MinecraftServer sv = SERVER;
 		if (sv != null && sv.isSameThread()) {
@@ -2966,7 +2990,7 @@ public final class Stockpiles {
 		Path f = d.resolve(FILE);
 		try {
 			if (PILES.isEmpty() && !Files.exists(f)) {
-				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
+				return true; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
 			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
@@ -2975,8 +2999,9 @@ public final class Stockpiles {
 			DurableFile df = ledger(f);
 			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
-			if (put.outcome() == DurableFile.Outcome.REFUSED) {
-				throw new IOException("the ledger's write was refused: " + put.reason());
+			if (!put.ok()) {
+				unsaved = true; // REFUSED or IN_DOUBT: not saved; the next save writes it again
+				throw new IOException("the ledger's write was " + put.outcome() + ": " + put.reason());
 			}
 			saves++;
 			unsaved = false;
@@ -2984,8 +3009,10 @@ public final class Stockpiles {
 			if (TRACE_SAVES) {
 				Architect.LOGGER.info("Stockpiles saved ({} stockpile(s), save #{})", PILES.size(), saves);
 			}
+			return true;
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
+			return false;
 		}
 	}
 
