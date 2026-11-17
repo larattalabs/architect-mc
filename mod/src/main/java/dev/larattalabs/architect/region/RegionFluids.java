@@ -772,6 +772,11 @@ public final class RegionFluids {
 		if (l.rec().survival() && !l.rec().survival.has("chargedAt")) {
 			Map<String, Integer> charge = chargeOf(st);
 			var booked = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
+			if (!charge.isEmpty() && booked != null && booked.ledger().charged(chargeKey(l)) != null && !dev.larattalabs.architect.site.Stockpiles.ledgerOnDisk(s)) {
+				// (OVF, review round 4) booked in memory only (its save refused): the stage waits; never settled as charged before the ledger is on disk
+				RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for their charge's ledger save");
+				return false;
+			}
 			if (!charge.isEmpty() && booked != null && settleBooked(l, booked.ledger(), level.getGameTime())) {
 				charge = Map.of(); // (fix b5b, review finding 3) booked before a crash lost the record: settled from the ledger, not charged again
 			}

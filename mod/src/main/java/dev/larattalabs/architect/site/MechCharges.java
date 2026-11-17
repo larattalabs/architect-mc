@@ -201,6 +201,11 @@ public final class MechCharges {
 		long now = level0 == null ? 0L : level0.getGameTime();
 		// (fix b5b, review finding 3) a charge the ledger booked before a crash lost this record: settled from the ledger, not charged again
 		StockLedger.Charge booked = capPile == null || !e.has(CHARGE_KEY) ? null : capPile.ledger().charged(e.get(CHARGE_KEY).getAsString());
+		if (booked != null && !Stockpiles.ledgerOnDisk(srv)) {
+			// (OVF, review round 4) booked in memory only (its save refused): never settled as charged until the ledger is on disk
+			RegionTargets.waitFor(b, i, "stockpile", "the stockpile's ledger save", Batches::waitFor, "the gate mechanism's charge waits for its ledger save");
+			return true;
+		}
 		if (booked != null) {
 			settle(e, booked, now);
 			RegionsImpl.saveRec(l);
@@ -281,6 +286,9 @@ public final class MechCharges {
 			Stockpiles.Pile pile = Stockpiles.get(l.rec().owner);
 			if (pile == null) {
 				continue;
+			}
+			if (!Stockpiles.ledgerOnDisk(srv)) {
+				return; // (OVF) nothing settled from a booking not on disk (the tick paths settle it once it is)
 			}
 			ServerLevel level = l.level(srv);
 			long now = level == null ? 0L : level.getGameTime();

@@ -443,9 +443,11 @@ public final class CrateScreen extends Screen {
 		int crates = s.has("crates") ? s.getAsJsonArray("crates").size() : 0;
 		int missingCrates = s.has("missingCrates") ? s.getAsJsonArray("missingCrates").size() : 0;
 		int targets = s.has("feedOrder") ? s.getAsJsonArray("feedOrder").size() : 0;
-		String line = num(s, "usedStacks") + " of " + num(s, "capacityStacks") + " stacks · " + crates + " crate(s)" + (missingCrates > 0 ? " (" + missingCrates
-			+ " missing)" : "") + " · " + targets + " building";
-		Panels.text(g, font, line, cx, y, missingCrates > 0 ? UiBits.errorText() : UiBits.ink());
+		// (OVF) "over capacity" while used > capacity (a refund went past it): inserts, hoppers' too, are refused until it fits
+		boolean over = num(s, "usedStacks") > num(s, "capacityStacks");
+		String line = dev.larattalabs.architect.site.Stockpiles.capacityLabel(num(s, "usedStacks"), num(s, "capacityStacks")) + " · " + crates + " crate(s)"
+			+ (missingCrates > 0 ? " (" + missingCrates + " missing)" : "") + " · " + targets + " building" + (over ? " (only what active builds still need goes in)" : "");
+		Panels.text(g, font, line, cx, y, missingCrates > 0 || over ? UiBits.errorText() : UiBits.ink());
 		y += 11;
 		int cap = Math.max(1, num(s, "capacityStacks"));
 		Panels.progress(g, cx, y, cw, Math.min(1.0, (double) num(s, "usedStacks") / cap), num(s, "usedStacks") > cap ? "brass" : "sage");
