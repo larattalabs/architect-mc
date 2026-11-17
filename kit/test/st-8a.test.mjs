@@ -3,7 +3,11 @@
 //   bed is a second compiled op of one IR op, and the survival flags were read by IR op index), and its trees stay paid: no log or leaf
 //   is a staged cell (class 3), every log is class 2 (Noah, 2026-11-15: "Keep paid");
 // - the survival flags follow each compiled op's own IR op: in v73 (a coral pond and a fountain, both with a decor bed) every fluid op's
-//   compiled ops, the bed's included, read as fluid, and no other op does.
+//   compiled ops, the bed's included, read as fluid, and no other op does;
+// - x03h (the island hamlet): the check bills part `hamlet` 49 dirt for 49 paid grass cells of its green that the flat land already holds
+//   (a realise skips them: no target bills them, nothing is consumed). They are the plan's kept paid terrain cells by position
+//   (survivalTerrain), so Regions.quote leaves the standing ones out; the check's cost.survival.bom is their upper bound (SA/BC A11). ST's
+//   gate compares what a build consumed with the quote, not with the check's per-part bill.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,6 +17,12 @@ import { unpack } from '../lib/region/pack.mjs';
 import { CLASS_PAID, CLASS_STAGED } from '../lib/region/survival.mjs';
 import { windowOf } from '../lib/region/vworld.mjs';
 import { asksSurvey, checkPlanVolumes, FIX, flatSurvey, goldenSurvey, stewardAnchors } from './plan-helpers.mjs';
+
+async function survivalCheck(rel) {
+  const fx = JSON.parse(fs.readFileSync(path.join(FIX, rel), 'utf8'));
+  const s = fx.terrain ? flatSurvey(fx.terrain) : fx.on === 'asks' ? asksSurvey() : fx.on === 'flat' || !fx.on ? flatSurvey() : goldenSurvey(fx.on);
+  return checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), volume: fx.volume ?? {}, survival: true });
+}
 
 async function survivalPlan(rel) {
   const fx = JSON.parse(fs.readFileSync(path.join(FIX, rel), 'utf8'));
@@ -49,4 +59,15 @@ test('survival flags follow each compiled op\'s IR op (a decor bed shifts nothin
   assert.equal(fluidCompiled, fluidIr + (c.ops.length - irOps.length), 'every fluid op and its bed read as fluid, nothing else');
   // a fluid op's compiled ops come in order, each bed right after its op
   for (let i = 0; i < c.ops.length; i++) if (c.ops[i].cond === 3 && c.ops[i].kind === 2 && i > 0) assert.equal(c.survival.opFluid[i], c.survival.opFluid[i - 1]);
+});
+
+test('x03h: the check\'s terrain bill is kept by position, so the quote can leave out what the land holds', async () => {
+  const r = await survivalCheck('bf/x03_island_hamlet.json');
+  const parts = r.res.check?.parts ?? r.check?.parts ?? [];
+  const hamlet = parts.find((p) => p.part === 'hamlet');
+  assert.equal(hamlet?.cost?.survival?.bom?.['minecraft:dirt'], 49, 'the check bills the green\'s 49 grass cells as dirt (an upper bound)');
+  const kept = (r.res.survivalTerrain?.hamlet ?? []).filter((e) => e.state === 'minecraft:grass_block');
+  const cells = kept.reduce((a, e) => a + Buffer.from(e.cells, 'base64').length / 12, 0);
+  assert.equal(cells, 49, 'every one is a kept paid terrain cell by position (plan.json survivalTerrain): Regions.quote reads them against the land');
+  assert.equal(r.res.survivalTerrainWritten ?? null, null, 'none is always written first by an earlier evaluation (the quote may leave them out)');
 });

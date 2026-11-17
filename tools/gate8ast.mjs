@@ -117,8 +117,13 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   const set = await call('dev.terrain.rate', { n: rate }, 30_000); // (16, the default; rs01's small relief slower, so its half-built states are seen)
   out.rateSet = set.terrainPerTick;
   const crateAt = crates > 0 ? await G.pile(ctx, s, crates) : []; // (crates 0: no stockpile, an all-free plan needs none)
+  // the survival quote (Regions.quoteApproved): the check's bill less the paid terrain cells the land already holds (SA/BC A11: a realise
+  // skips them, so they are neither billed nor consumed; the check's cost.survival.bom is their upper bound)
+  const quote = await call('dev.region.quote', { sha: ck.check.artifactSha, lotEntries: entries }, 300_000);
+  out.quote = { bom: quote.bom, exact: quote.exact, terrain: quote.terrain, notes: quote.notes, refused: quote.refused };
   const C = new G.Conservation(ctx, box);
   await C.start();
+  const ps0 = crates > 0 ? await G.pileState(ctx) : {};
   const region = await G.realise(ctx, ck.check.artifactSha, entries);
   out.region = region;
   const samples = [];
@@ -182,9 +187,17 @@ async function staged(tag, fx, { over = 40, crates = 3, lotWait = false, rate = 
   const bills = G.billsOf(ck, rs);
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
   const p = await C.point('built');
-  out.bills = { stagedBilled: stagedBills.map((t) => [t.target, t.bom]), differ, conservation: p, want: Object.fromEntries(differ.map((k) => [k, bills.want[k]])),
-    got: Object.fromEntries(differ.map((k) => [k, bills.got[k]])), targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.bom]) };
-  check(stagedBills.length === 0 && differ.length === 0 && G.exact(p), `${tag}: nothing billed for staged cells (${stagedBills.length} staged target(s) with a bill); the check's bills per part equal the targets' (${differ.length} differ: ${differ.join(' ')}); items in = items out (conservation ${json(p.diff)}, identity ${p.identity}; ${sum(f.inserted)} items fed)`, out.bills);
+  // what the build consumed from the stockpile against the quote: equal when the quote is exact, within it otherwise
+  const ps1 = crates > 0 ? await G.pileState(ctx) : {};
+  const consumed = G.minus(ps1.consumed ?? {}, ps0.consumed ?? {});
+  const targetsBill = (rs.targets ?? []).reduce((a, t) => G.plus(a, t.bom), {});
+  const qb = quote.bom ?? {};
+  const within = Object.entries(consumed).every(([k, v]) => v <= (qb[k] ?? 0));
+  const quoteOk = !quote.refused && (quote.exact ? G.same(qb, consumed) : within);
+  out.bills = { stagedBilled: stagedBills.map((t) => [t.target, t.bom]), consumed, targetsBill, quote: qb, quoteExact: quote.exact, checkDiffer: differ,
+    checkWant: Object.fromEntries(differ.map((k) => [k, bills.want[k]])), checkGot: Object.fromEntries(differ.map((k) => [k, bills.got[k]])), conservation: p,
+    targets: (rs.targets ?? []).map((t) => [t.target, t.part, t.bom]) };
+  check(stagedBills.length === 0 && quoteOk && G.exact(p), `${tag}: nothing billed for staged cells (${stagedBills.length} staged target(s) with a bill); the build consumed what Regions.quoteApproved quoted (${quote.exact ? 'exact' : 'an upper bound'}: quote ${json(qb)}, consumed ${json(consumed)}; the check's per-part bills, an upper bound that counts paid terrain the land already holds, differ in ${differ.length ? differ.join(' ') : 'none'}); items in = items out (conservation ${json(p.diff)}, identity ${p.identity}; ${sum(f.inserted)} items fed)`, out.bills);
   // the final world: its INSTANT twin's, cell for cell
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twinDiff = d;
