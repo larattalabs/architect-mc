@@ -50,12 +50,15 @@ export async function registerLCAP(steps, h) {
     addIn(r.accepted ?? need);
     return 1;
   }
-  /** The region's targets by lot (dev.bc.cap's rows) with their done flag (dev.rs.state). */
+  /** The region's targets (dev.bc.cap's rows); a lot's site with its construction state (dev.site.state: 'built' when done). */
   async function targets(region) {
     const c = await cap(region);
-    const rs = await G.rsState(ctx, region);
-    const done = new Map((rs.targets ?? []).map((t) => [t.id, t.done === true]));
-    return (c.targets ?? []).map((t) => ({ ...t, done: done.get(t.id) }));
+    const out = [];
+    for (const t of c.targets ?? []) {
+      const st = t.lot ? await call('dev.site.state', { site: t.id }, 60_000).catch(() => null) : null;
+      out.push({ ...t, state: st?.state ?? null, done: st?.state === 'built' });
+    }
+    return out;
   }
   async function feedUntil(region, until, ms) {
     const end = Date.now() + ms;
@@ -141,7 +144,7 @@ export async function registerLCAP(steps, h) {
     await cap(region, 'lb', low);
     const f1 = await feedUntil(region, async (ts) => lotDone(ts, 'la') && lotHeld(ts, 'lb'), 1_800_000);
     const hA = await cap(region, 'la'), hB = await cap(region, 'lb');
-    out.H = { f1: { done: f1.done, waves: f1.waves }, laDrawn: hA.lotCap?.drawn, lbDrawn: hB.lotCap?.drawn, regionDrawn: hA.drawn, lbRow: f1.ts.filter((t) => t.lot === 'lb') };
+    out.H = { f1: { done: f1.done, waves: f1.waves }, laDrawn: hA.lotCap?.drawn, lbDrawn: hB.lotCap?.drawn, regionDrawn: hA.drawn, lots: f1.ts.filter((t) => t.lot) };
     check(f1.done && (hB.lotCap?.drawn?.[PL] ?? 0) <= low[PL] && (hA.drawn?.[PL] ?? 0) < room[PL] && Object.keys(hA.overshoot ?? {}).length === 0,
       `H: lb's lot cap lowered to ${low[PL]} planks: la built (drew ${hA.lotCap?.drawn?.[PL]} planks), lb waits bill_cap (drew ${hB.lotCap?.drawn?.[PL]}); the region's maxBill still has room (${hA.drawn?.[PL]} of ${room[PL]} planks)`, out.H);
     // C: a halt with nothing saved since the flush; the lowered lot cap kept and enforced
