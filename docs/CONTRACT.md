@@ -32877,6 +32877,26 @@ Slice DR (merge 693ccc6a) was reverted before v0.74.0 shipped (GPT release revie
 - **Cost** (one player, a small flat world, machine load ~11): idle barrier p50 23 ms, p90 25 ms (players 9.8, chunks 5.6, ledger force 7.9); one dirty chunk p50 25 ms. Against `saveWithWorld` p50 15.9 / p90 82.8 ms (TXN-DESIGN §3.11); report only.
 - **Leftovers:** stale debts (a chunk reloaded without its snapshot, a player whose snapshot could not be written before a login) hold every barrier until `forgive` (dev hook only, no operator command yet); debts do not survive a restart; the ordinary save and autosave still write the ledger over owed debts, as before T0; `saveLedgerFirst` still resets its flags; entity serialization failures inside `storeEntities` are not seen; the players step (~9 ms, two F_FULLFSYNCs per acknowledged player) is the place to batch forces.
 
+### Slice T1 as built (branch `slice/T1` off origin/slice/T0 2c2b093c + origin/slice/TXN 07301724 merged; no caller migrated; $0; strict; recorded 2026-11-17)
+
+- **Design edits first** (TXN-DESIGN §12.1, Noah approved): payloads written in the intent before any destructive effect, the abort's own
+  payload with `decision: abort`; attempt keys (the txn id) apart from dedupe keys (only a committed result replays); §3.3's `decider`,
+  `done` objects, one 4,096 bound; retention at the unload boundary.
+- **Core** (`txn/`, no Minecraft): `TxnEntry` (format 1, `kv`, validated, quarantine), `Decision` (immutable) beside `Phase`,
+  `TxnRecovery` (the §3.6 table as code), `TxnCore` (begin with holds, attach / replay / fresh attempt, persist before any effect, one
+  `drive` for forward and recovery, never acting on an unacknowledged write, redo of an effect a power loss took back while retiring),
+  `ResultCache`, `Holds`, `KillPoints`, `Conservation` (report-only, §5.2 transit by probes).
+- **Game** (`TxnServer`): `architect/txn.json` through DurableFile; load and holds at SERVER_STARTING, recovery on the first tick, re-fired
+  events the tick after; awaits only from completed barriers. Holds: `Sites.adoptBusy` (SITE_BUSY `held(other) tx-n: ..`), the feed skips
+  a held target, `SiteWait.TXN_HELD` in the view. TEST kind `test.move` (chunk-attachment receipts `architect_mc:txn_receipts`).
+- **API (additive, Since NEXT):** `SiteWait.TXN_HELD`; `Refusal.detail` (both old constructors kept). api-compat 8/8.
+- **Units:** `TxnCrashModelTest` (13: every counterexample of TXN-gpt2/3/4 RED on its naive variant, GREEN as built; a move exhaustive to
+  recovery depth 3; refused / in-doubt / unknown / barrier faults), `TxnCoreTest` (7); full mod suite 1411 green.
+- **In game** (`txn-core`, headless, 9028:9029, `--no-cache --no-turbo`): 11 traced points x {bare, +save} = 22 halts, each recovered
+  exactly once (open 0; 14 forward, 8 rolled back), conservation report `match` every time; a refused intent touched nothing.
+- **Deferred (T2+):** legacy reconciles behind the recovery slot, insert/menu holds (no seals on this base), `RemoveResult.replayed`,
+  `TXN_EVENT`, `Owed`, FORMAT + 1, `txn-coverage.mjs`, `/architect txn resolve`, `dev.txn.asyncAt`, in-game recovery crashes, receipt pruning.
+
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
