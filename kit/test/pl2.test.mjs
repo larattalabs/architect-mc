@@ -142,7 +142,8 @@ test('the catalogue: ladder.port, supported, its limits the kit\'s', () => {
   const e = planCatalogue().entries.find((x) => x.id === 'ladder.port');
   assert.ok(e && e.state === 'supported');
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);
-  assert.deepEqual([e.limits.rise[0], e.limits.rungs], [PORT_LADDER.riseMin, PORT_LADDER.rungsMax]);
+  assert.equal(e.limits, undefined, 'no limits member (the composer\'s compact catalogue budget): the note states them');
+  assert.ok(e.note.includes(`rise ${PORT_LADDER.riseMin}+, at most ${PORT_LADDER.rungsMax} rungs`), e.note);
   const golden = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(golden.entries.find((x) => x.id === 'ladder.port'), e);
 });
