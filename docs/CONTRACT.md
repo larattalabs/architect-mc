@@ -31354,7 +31354,12 @@ without them; slabs unpickupable and untransferable from declared containers; st
   16 slabs back there, unguarded), loose or with the player.
 - **Leftovers:** the ledger's `filled`/`provided`/paid records of an abandoned member's key stay (keyed by placement, inert); the retry's
   re-take is shown by units and source only; the queue save at the end is still LC3's (PSV rebase pending).
-- **Gate:** RESULTS
+- **Gate** (`--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3r4`): `20261117-013955-change`
+  at d5c5aefa: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0 (the shared fixture), lc3-seal
+  40/0, fl-survival 11/0; lc3-undo 40/1, stopped (`failRestore skip 0` never breaks a survival site's at-once deconstruct: the removal
+  finished); `stallBefore` added: `20261117-030103-change` the clean case PASS, AB1 refused by killAt's point list (fixed);
+  `20261117-030545-change` at b487ba2b: lc3-undo 91/0 (clean + restart, AB1-AB4; at AB2 the containers and the saved custody both held the
+  items: settled once). Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
