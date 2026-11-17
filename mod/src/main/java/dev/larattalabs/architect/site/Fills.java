@@ -877,43 +877,77 @@ public final class Fills {
 			Architect.LOGGER.warn("Site {}: custody write-back deferred: an open transaction holds it", s.id());
 			return;
 		}
-		Map<String, Integer> held = new TreeMap<>(pile.ledger().releaseCustody(key));
-		pile.ledger().releaseProvided(key).forEach((k, v) -> held.merge(k, v, Integer::sum)); // (FK-b) the provided items go back too
+		Map<String, Integer> held = new TreeMap<>(pile.ledger().custody(key));
+		pile.ledger().heldProvided(key).forEach((k, v) -> held.merge(k, v, Integer::sum)); // (FK-b) the provided items go back too
 		if (held.isEmpty()) {
 			return;
 		}
+		// (slice T2, the custody residual) each cell's writes carry a receipt in its chunk (the same snapshot as its slots), so a retry after
+		// a crash (the chunk saved, the ledger not: the custody still held) deducts what reached a cell instead of writing or paying it again;
+		// what has no slot enters the stock under a keyed credit, in the custody release's own ledger write: never an item entity
+		String wb = FillsWriteBack.key(key, pile.ledger().creditedKeys());
 		List<BlockPos> cells = containerCells(s, spec);
+		List<List<Stack>> decls = new ArrayList<>();
+		List<Boolean> fits = new ArrayList<>();
+		List<FillsWriteBack.Cell> now = new ArrayList<>();
 		for (int i = 0; i < cells.size(); i++) {
 			BlockPos p = cells.get(i);
-			level.getChunk(p);
+			net.minecraft.world.level.chunk.LevelChunk ch = level.getChunkAt(p);
+			decls.add(spec.containers().get(i).items());
+			// (FK-b fix) a swapped block takes no provided item back (they end destroyed below, never dropped); billed items still go back
+			fits.add(providedFits(level.getServer(), s, spec.containers().get(i), level.getBlockState(p)));
+			Map<Integer, Stack> rc = FillsWriteBack.parse(dev.larattalabs.architect.txn.ChunkReceipts.of(ch), wb, p.getX(), p.getY(), p.getZ());
 			if (!(level.getBlockEntity(p) instanceof Container c)) {
+				now.add(new FillsWriteBack.Cell(false, 0, java.util.Set.of(), rc));
 				continue;
 			}
-			// (FK-b fix) a swapped block takes no provided item back (they end destroyed below, never dropped); billed items still go back
-			boolean fits = providedFits(level.getServer(), s, spec.containers().get(i), level.getBlockState(p));
-			for (Stack st : spec.containers().get(i).items()) {
-				int n = Math.min(st.count(), held.getOrDefault(st.item(), 0));
-				if (n <= 0 || st.provided() && !fits || st.slot() >= c.getContainerSize() || !c.getItem(st.slot()).isEmpty()) {
-					continue;
+			java.util.Set<Integer> occ = new java.util.HashSet<>();
+			for (int k = 0; k < c.getContainerSize(); k++) {
+				if (!c.getItem(k).isEmpty()) {
+					occ.add(k);
 				}
-				c.setItem(st.slot(), new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(st.item())), n));
-				held.merge(st.item(), -n, Integer::sum);
 			}
+			now.add(new FillsWriteBack.Cell(true, c.getContainerSize(), occ, rc));
+		}
+		FillsWriteBack.Plan plan = FillsWriteBack.plan(held, decls, fits, now);
+		pile.ledger().releaseCustody(key);
+		pile.ledger().releaseProvided(key);
+		for (int i = 0; i < cells.size(); i++) {
+			Map<Integer, Stack> w = plan.writes().get(i);
+			BlockPos p = cells.get(i);
+			if (w.isEmpty() || !(level.getBlockEntity(p) instanceof Container c)) {
+				continue;
+			}
+			for (Stack st : w.values()) {
+				c.setItem(st.slot(), new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(st.item())), st.count()));
+			}
+			dev.larattalabs.architect.txn.ChunkReceipts.add(level.getChunkAt(p), FillsWriteBack.receipt(wb, p.getX(), p.getY(), p.getZ(), w));
 			if (c instanceof BlockEntity be) {
 				touched(level, p, be);
 			}
 		}
-		held.values().removeIf(v -> v <= 0);
-		Map<String, Integer> gone = part(held, true);
-		if (!gone.isEmpty()) {
-			// (FK-b) a provided item with no free slot is destroyed, never dropped: it never reaches survival
-			Architect.LOGGER.warn("Site {}: provided fill items with no free slot destroyed (never dropped): {}", s.id(), gone);
+		if (!plan.already().isEmpty()) {
+			Architect.LOGGER.info("Site {}: custody already written back before a restart (chunk receipts {}): {}", s.id(), wb, plan.already());
 		}
-		Map<String, Integer> left = part(held, false);
-		if (!left.isEmpty()) {
-			Builder.dropItems(level, Builder.dropPos(s), left, null); // no slot left for them: at the site, never lost
+		if (!plan.destroyed().isEmpty()) {
+			// (FK-b) a provided item with no free slot is destroyed, never dropped: it never reaches survival
+			Architect.LOGGER.warn("Site {}: provided fill items with no free slot destroyed (never dropped): {}", s.id(), plan.destroyed());
+		}
+		// the rest, keyed: credited once (the key and the stock in one ledger write, with the custody's release), past capacity if need be
+		pile.ledger().credit(wb, plan.stock(), Stockpiles.capacity(level.getServer(), pile), Stockpiles::maxStack);
+		if (!plan.stock().isEmpty()) {
+			Architect.LOGGER.info("Site {}: custody with no free slot entered the stock under {}: {}", s.id(), wb, plan.stock());
 		}
 		Stockpiles.changed(pile);
+		DurableBarrier.Result br = Stockpiles.barrier(level.getServer());
+		if (br.ok()) {
+			// the ledger holding the release is durable over the chunks with the slots: the receipts are stale
+			for (BlockPos p : cells) {
+				dev.larattalabs.architect.txn.ChunkReceipts.remove(level.getChunkAt(p), r -> r.startsWith(wb + "@"));
+			}
+		} else {
+			Architect.LOGGER.warn("Site {}: custody write-back saved later ({}): its chunk receipts stay until then", s.id(), br.outcome());
+		}
 		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
 	}
 
