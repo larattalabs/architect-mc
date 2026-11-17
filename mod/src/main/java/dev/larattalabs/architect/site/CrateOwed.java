@@ -554,7 +554,14 @@ final class CrateOwed {
 			OPEN.remove(r.key());
 		}
 		Stockpiles.unsaved = true;
-		WorldJournal.kill("CXDS"); // (TEST) dropped (tagged) and closed in memory, before the barrier that saves both
+		// (TEST) CXDS: dropped (tagged) and closed in memory, before the barrier that saves both; CXDS+save: the chunks (the tagged drop) on
+		// disk and the ledger not (the world save's ledger write held off), as a crash inside the barrier between its chunks and its ledger
+		boolean was = Stockpiles.explicitSave(true);
+		try {
+			WorldJournal.kill("CXDS");
+		} finally {
+			Stockpiles.explicitSave(was);
+		}
 		DurableFile.Outcome dropSaved = barrier(srv);
 		if (testFailDrops > 0) {
 			testFailDrops--;
