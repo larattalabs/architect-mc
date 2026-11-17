@@ -170,6 +170,9 @@ export async function registerPSV(steps, h) {
     const site = bv.items?.[0]?.site;
     check(!!site, `${tag}: an actorless construction rs_hut from the group's shared crate (${site}, group ${bv.group})`, bv);
     if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
+    // paused (the crate screen's Pause, Sites.pause's path): its stock stays in the crate unused (else the builder places it all in seconds)
+    const pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+    check(!pz?.refused, `${tag}: the site paused (${json(pz?.refused ?? 'paused')})`);
     const st0 = await call('dev.site.state', { site }, 60_000);
     const give = {};
     for (const [k, v] of Object.entries(st0.bom ?? {}).slice(0, 3)) give[k] = Math.max(1, Math.floor(v / 2));

@@ -394,6 +394,8 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-17 (slice PSV fix round):** `dev.queue.writes` takes `failAtPreSave?: n` (TEST): the next undo pre-save's queue write and the n-1
+  after it fail (the failure starts after R1, the preflight already written); the answer adds `failAtPreSave` (left armed).
 - **2026-11-16 (slice PSV):** new (`StockpileDev`, generated headless too) `dev.queue.writes {fail?: n}`: TEST, the next n queue file
   (`architect-queue.json`) writes fail before writing (0 clears) -> `{requestedGen, writtenGen, writeFailing, failWrites, loadFailed}`.
   A failing write keeps a group removal's (and a removal job's) undo commit waiting; Placement retries every 5 s.
