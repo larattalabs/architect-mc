@@ -2,7 +2,6 @@ package dev.larattalabs.architect.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.site.ChunkDebt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ChunkHolder;
@@ -50,13 +49,8 @@ public abstract class ChunkMapDebtMixin {
 			ChunkAccess c = h == null ? null : h.getLatestChunk();
 			if (c != null) {
 				c.markUnsaved();
-			} else if (kept != null) {
-				try {
-					CompoundTag tag = SerializableChunkData.copyOf(level, kept).write();
-					self.write(pos, () -> tag);
-				} catch (RuntimeException e) {
-					Architect.LOGGER.error("Chunk durability: {} (unloaded) could not be serialized again", key, e);
-				}
+			} else if (ChunkDebt.keptState(key) instanceof CompoundTag tag) { // (T0 review 4 P1-1) only the newest owed attempt's kept object
+				self.write(pos, () -> tag);
 			}
 		}, kept == null ? null : () -> SerializableChunkData.copyOf(level, kept).write(), why, newAttempt);
 	}

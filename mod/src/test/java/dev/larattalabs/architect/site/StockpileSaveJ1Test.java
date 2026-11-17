@@ -115,18 +115,23 @@ class StockpileSaveJ1Test {
 	@Test
 	void aMoveIntoAPlayerSavesTheLedgerBeforeThePlayer() throws Exception {
 		String sp = read(SITE + "Stockpiles.java");
-		String lf = StockpileSaveHFTest.body(sp, "static void saveLedgerFirst(MinecraftServer srv)");
+		String lf = StockpileSaveHFTest.body(sp, "static boolean saveLedgerFirst(MinecraftServer srv, Runnable between)");
 		int ledger = lf.indexOf("if (!save()) {"); // (slice T0) and nothing after a ledger that was not published
 		int players = lf.indexOf("saveAll()");
 		int chunks = lf.indexOf("saveAllChunks(true, true, false)");
 		assertTrue(ledger >= 0 && ledger < players && players < chunks, "the ledger, then the players, then the chunks flushed");
 		assertTrue(lf.indexOf("kill(\"LF1\")") > ledger && lf.indexOf("kill(\"LF1\")") < players, "kill point LF1 inside the window");
+		// (slice T0) the pending changes saved first (payoutPreSave), then the move and its ledger-first save in the core
 		String w = StockpileSaveHFTest.body(sp, "public static Map<String, Integer> withdraw(");
-		assertTrue(w.indexOf("if (unsaved)") < w.indexOf("p.ledger.withdraw(") && w.indexOf("saveLedgerFirst(srv);") > w.indexOf("p.ledger.withdraw("),
-			"a Take: what was pending saved first (HF's order), then the Take ledger-first");
+		assertTrue(w.indexOf("payoutPreSave(") >= 0 && w.indexOf("payoutPreSave(") < w.indexOf("withdrawCore(") && w.indexOf("saveLedgerFirst(srv,")
+			> w.indexOf("withdrawCore("), "a Take: what was pending saved first (HF's order), then the Take ledger-first");
+		String wc = StockpileSaveHFTest.body(sp, "static Map<String, Integer> withdrawCore(");
+		assertTrue(wc.indexOf("p.ledger.withdraw(") < wc.indexOf("publish.getAsBoolean()"), "the debit, then its publication");
 		String d = StockpileSaveHFTest.body(sp, "public static Map<String, Integer> dissolve(");
-		assertTrue(d.indexOf("unsaved") < d.indexOf("dissolveLedger(") && d.indexOf("saveLedgerFirst(srv);") > d.indexOf("dissolveLedger("),
-			"a dissolve to a player: the same");
+		assertTrue(d.indexOf("payoutPreSave(") >= 0 && d.indexOf("payoutPreSave(") < d.indexOf("dissolveCore(") && d.indexOf("saveLedgerFirst(srv,")
+			> d.indexOf("dissolveCore("), "a dissolve: the same");
+		String dc = StockpileSaveHFTest.body(sp, "static Map<String, Integer> dissolveCore(");
+		assertTrue(dc.indexOf("dissolveLedger(") < dc.indexOf("publish.getAsBoolean()"), "the dissolve's ledger side, then its publication");
 		String sww = StockpileSaveHFTest.body(sp, "static void saveWithWorld(MinecraftServer srv)");
 		assertTrue(sww.indexOf("kill(\"HF1\")") > sww.indexOf("saveAll()"), "kill point HF1 after saveWithWorld's player write");
 	}

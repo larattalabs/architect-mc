@@ -138,7 +138,8 @@ public final class Stockpiles {
 		final String owner;
 		final String dimension;
 		final List<CrateRec> crates = new ArrayList<>();
-		final StockLedger ledger;
+		/** Not final: (T0 review 4 P1-2) a payout whose ledger write failed restores it in place. Server thread. */
+		StockLedger ledger;
 		/** Target ids (sites, roads, delta sites), first fed first. */
 		final List<String> order = new ArrayList<>();
 		/** C25's saved waits (slice Y2): kept as they are. */
@@ -707,19 +708,19 @@ public final class Stockpiles {
 		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
 		Map<String, Integer> toPlayer = new TreeMap<>();
 		Map<String, Integer> toGround = new TreeMap<>();
-		Map<String, Integer> out = dissolveLedger(p.ledger, to == null ? null : (item, n) -> give(to, item, n), toPlayer, toGround);
-		if (to != null) {
-			Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), toGround, null);
-		} else {
-			Builder.dropItems(level, at, toGround, null);
-		}
-		for (CrateRec c : p.crates) {
-			takeCrate(level, c);
-		}
+		// (T0 review 4 P1-2) ledger first: the pile's removal is durable before a crate is taken or an item dropped; a failed write puts the
+		// player's inventory and the pile back exactly, then refuses
+		Map<String, Integer> out = dissolveCore(p, to == null ? null : holder(to), toPlayer, toGround, () -> saveLedgerFirst(srv, () -> {
+			if (to != null) {
+				Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), toGround, null);
+			} else {
+				Builder.dropItems(level, at, toGround, null);
+			}
+			for (CrateRec c : p.crates) {
+				takeCrate(level, c);
+			}
+		}));
 		JsonObject last = p.toJson();
-		PILES.remove(p.id);
-		// (J1; T0 review 3 finding 2) ledger first, to a player or to the ground: a crash inside the save loses the items, never dupes them
-		saveLedgerFirst(srv);
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
@@ -751,6 +752,33 @@ public final class Stockpiles {
 				l.drop(e.getKey(), e.getValue());
 				toGround.put(e.getKey(), e.getValue());
 			}
+		}
+		return out;
+	}
+
+	/**
+	 * (T0 review 4 P1-2) A dissolve's ledger side: the stock split between {@code h} (null: all to the ground) and the ground, the pile out of
+	 * the registry, then {@code publish} (which takes the crates and drops the ground items once the ledger is durable). When it fails the
+	 * holder and the pile are restored exactly, in the same call, and the dissolve is refused.
+	 */
+	static Map<String, Integer> dissolveCore(Pile p, @Nullable Holder h, Map<String, Integer> toPlayer, Map<String, Integer> toGround,
+		java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		Object snap = h == null ? null : h.snapshot();
+		Map<String, Integer> out = dissolveLedger(p.ledger, h == null ? null : h::give, toPlayer, toGround);
+		Map<String, Pile> order = new LinkedHashMap<>(PILES);
+		PILES.remove(p.id);
+		if (!publish.getAsBoolean()) {
+			if (h != null) {
+				h.restore(snap);
+			}
+			p.ledger = StockLedger.fromJson(before);
+			PILES.clear();
+			PILES.putAll(order); // back in its place
+			toPlayer.clear();
+			toGround.clear();
+			changed(p);
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was dissolved (try again)");
 		}
 		return out;
 	}
@@ -860,24 +888,86 @@ public final class Stockpiles {
 		}
 		payoutPreSave(() -> saveWithWorld(srv)); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
 		Map<String, Integer> credit = credit(srv, p);
-		Map<String, Integer> out = new TreeMap<>();
 		Map<String, Integer> ground = new TreeMap<>();
+		// (T0 review 4 P1-2) the ledger's debit is durable before the items can leave the tick: the drop waits for it, and a failed write takes
+		// the inventory back exactly and restores the ledger, then refuses
+		return withdrawCore(p, credit, items, holder(to), ground, () -> saveLedgerFirst(srv, // (J1, HF's window, audit F5) the ledger before the player
+			() -> Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null)));
+	}
+
+	/** (T0 review 4 P1-2) Where a payout's items go (a player's inventory; the units give their own): put, snapshot, restore exactly. */
+	interface Holder {
+		/** Puts up to {@code n} of {@code item}; answers how many went in. */
+		int give(String item, int n);
+
+		Object snapshot();
+
+		void restore(Object snapshot);
+	}
+
+	static Holder holder(ServerPlayer to) {
+		return new Holder() {
+			@Override
+			public int give(String item, int n) {
+				return Stockpiles.give(to, item, n);
+			}
+
+			@Override
+			public Object snapshot() {
+				net.minecraft.world.entity.player.Inventory inv = to.getInventory();
+				List<ItemStack> l = new ArrayList<>(inv.getContainerSize());
+				for (int i = 0; i < inv.getContainerSize(); i++) {
+					l.add(inv.getItem(i).copy());
+				}
+				return l;
+			}
+
+			@Override
+			@SuppressWarnings("unchecked")
+			public void restore(Object snapshot) {
+				net.minecraft.world.entity.player.Inventory inv = to.getInventory();
+				List<ItemStack> l = (List<ItemStack>) snapshot;
+				for (int i = 0; i < l.size() && i < inv.getContainerSize(); i++) {
+					inv.setItem(i, l.get(i).copy());
+				}
+				inv.setChanged();
+			}
+		};
+	}
+
+	/**
+	 * (T0 review 4 P1-2) A withdrawal: the ledger debited and the items put into {@code h} (what does not fit goes to {@code ground}, dropped by
+	 * {@code publish} only once the ledger is durable), then {@code publish}. When it fails (REFUSED, IN_DOUBT, held) the holder is restored
+	 * to its snapshot and the ledger to its copy, in the same call (the server thread: the player can't move or use the items meanwhile), and
+	 * the withdrawal is refused.
+	 */
+	static Map<String, Integer> withdrawCore(Pile p, Map<String, Integer> credit, Map<String, Integer> items, Holder h, Map<String, Integer> ground,
+		java.util.function.BooleanSupplier publish) throws Sites.SiteException {
+		JsonObject before = p.ledger.toJson();
+		Object snap = h.snapshot();
+		Map<String, Integer> out = new TreeMap<>();
 		for (var e : new TreeMap<>(items).entrySet()) {
 			int n = Math.min(Math.max(0, e.getValue()), credit.getOrDefault(e.getKey(), 0));
 			if (n <= 0) {
 				continue;
 			}
 			p.ledger.withdraw(e.getKey(), n);
-			int in = give(to, e.getKey(), n);
+			int in = h.give(e.getKey(), n);
 			if (n - in > 0) {
 				ground.put(e.getKey(), n - in);
 			}
 			out.put(e.getKey(), n);
 		}
-		Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null);
-		if (!out.isEmpty()) {
+		if (out.isEmpty()) {
+			return out;
+		}
+		changed(p);
+		if (!publish.getAsBoolean()) {
+			h.restore(snap);
+			p.ledger = StockLedger.fromJson(before);
+			ground.clear();
 			changed(p);
-			saveLedgerFirst(srv); // (J1, HF's window, audit F5) the Take saved now, the ledger before the player
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile ledger could not be saved durably; nothing was withdrawn (try again)");
 		}
 		return out;
 	}
@@ -2891,9 +2981,18 @@ public final class Stockpiles {
 	 * still holding them). Server thread; off it, the ledger alone.
 	 */
 	static void saveLedgerFirst(MinecraftServer srv) {
+		saveLedgerFirst(srv, () -> {
+		});
+	}
+
+	/**
+	 * The ledger first, durably; then {@code between} (T0 review 4 P1-2: a payout's moves into the world, crates taken, items dropped: only
+	 * once its debit is on disk); then the players and the chunks. False when the ledger was not durably written: nothing after it ran.
+	 */
+	static boolean saveLedgerFirst(MinecraftServer srv, Runnable between) {
 		if (loadFailed) {
 			refusedSave();
-			return;
+			return false;
 		}
 		long l0 = System.nanoTime();
 		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
@@ -2907,10 +3006,11 @@ public final class Stockpiles {
 				SaveTiming.stop();
 			}
 			Architect.LOGGER.error("Stockpiles: a payout's ledger save did not complete; its players and chunks are not saved ahead of it");
-			return;
+			return false;
 		}
+		between.run();
 		if (srv == null || !srv.isSameThread()) {
-			return;
+			return true;
 		}
 		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
 		long t0 = System.nanoTime();
@@ -2941,6 +3041,7 @@ public final class Stockpiles {
 		if (timed) {
 			logTiming("ledger first (" + caller() + ")", l0, SaveTiming.stop());
 		}
+		return true;
 	}
 
 	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */

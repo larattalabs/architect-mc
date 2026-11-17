@@ -44,6 +44,8 @@ public final class ChunkDebt {
 		volatile @Nullable Runnable remark;
 		/** (T0 review 3 finding 8) re-serializes the chunk object kept from a synchronous failure: a reload is served it, never the older file. */
 		volatile @Nullable Supplier<Object> reserialize;
+		/** (T0 review 4 P1-1) the failSeq of the failure that kept that object: it is served only while no newer failure is owed. */
+		volatile long keptSeq;
 		volatile String why;
 		/** Loaded from the older file while owed without a usable snapshot: the change is gone, no later write pays it ({@link #forgiveAll}). */
 		volatile boolean stale;
@@ -56,6 +58,13 @@ public final class ChunkDebt {
 
 		boolean usable() {
 			return snapshot != null && snapSeq >= failSeq;
+		}
+	}
+
+	/** (T0 review 4 P1-1) A newer failure than the one that kept the chunk object makes that object an older copy: it is dropped. */
+	private static void dropOlderKept(Debt d) {
+		if (d.reserialize != null && d.failSeq > d.keptSeq) {
+			d.reserialize = null;
 		}
 	}
 
@@ -138,6 +147,7 @@ public final class ChunkDebt {
 				d = new Debt(k, why, fail);
 			}
 			d.failSeq = Math.max(d.failSeq, fail);
+			dropOlderKept(d);
 			if (seq >= d.snapSeq) { // the newest failed data is the one kept
 				d.snapshot = snapshot;
 				d.snapSeq = seq;
@@ -163,6 +173,7 @@ public final class ChunkDebt {
 				return new Debt(k, why, seq);
 			}
 			d.failSeq = Math.max(d.failSeq, seq);
+			dropOlderKept(d);
 			d.why = why;
 			return d;
 		});
@@ -186,6 +197,24 @@ public final class ChunkDebt {
 		Debt d = OWED.get(key);
 		if (d != null && reserialize != null) {
 			d.reserialize = reserialize;
+			d.keptSeq = d.failSeq; // tagged with the failure that kept it
+		}
+	}
+
+	/**
+	 * (T0 review 4 P1-1) The kept chunk object's state, serialized now, when it is the newest owed attempt's (its tag equals the debt's
+	 * failSeq); else null. The barrier's retry writes it for a chunk that unloaded ({@code ChunkMapDebtMixin}).
+	 */
+	public static synchronized @Nullable Object keptState(String key) {
+		Debt d = OWED.get(key);
+		if (d == null || d.reserialize == null || d.keptSeq != d.failSeq) {
+			return null;
+		}
+		try {
+			return d.reserialize.get();
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Chunk durability: {}'s kept chunk could not be serialized", key, e);
+			return null;
 		}
 	}
 
@@ -197,6 +226,7 @@ public final class ChunkDebt {
 				d = new Debt(k, why, now > 0 ? now : SEQ.incrementAndGet());
 			}
 			d.failSeq = Math.max(d.failSeq, now);
+			dropOlderKept(d); // an async failure (no object kept) after a kept one drops it too
 			d.remark = remark;
 			return d;
 		});
@@ -221,6 +251,9 @@ public final class ChunkDebt {
 			return;
 		}
 		Debt d = OWED.get(key);
+		if (d != null) {
+			d.reserialize = null; // (T0 review 4 P1-1) the chunk was saved since: the kept object is no longer its newest state
+		}
 		if (d != null && !d.stale && seq > 0 && seq >= d.failSeq) {
 			Runnable t = TEST_BEFORE_PAY;
 			if (t != null) {
@@ -261,13 +294,15 @@ public final class ChunkDebt {
 			SERVED.incrementAndGet();
 			return d.snapshot;
 		}
-		if (!d.usable() && d.reserialize != null && !newerSubmitted(key, d.failSeq - 1)) {
-			// (T0 review 3 finding 8) the chunk unloaded owed and loads again: served its kept object's state, never the older file
+		if (!d.usable() && d.reserialize != null && d.keptSeq == d.failSeq && !newerSubmitted(key, d.failSeq - 1)) {
+			// (T0 review 3 finding 8) the chunk unloaded owed and loads again: served its kept object's state, never the older file. (T0 review
+			// 4 P1-1) only while that object is the newest owed attempt's; served once (the snapshot carries it from now on)
 			try {
 				Object tag = d.reserialize.get();
+				d.reserialize = null;
 				if (tag != null) {
 					d.snapshot = tag;
-					d.snapSeq = d.failSeq;
+					d.snapSeq = d.keptSeq;
 					SERVED.incrementAndGet();
 					return tag;
 				}

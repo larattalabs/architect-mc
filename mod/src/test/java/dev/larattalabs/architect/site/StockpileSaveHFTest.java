@@ -62,7 +62,7 @@ class StockpileSaveHFTest {
 		}
 		String sww = body(s, "static void saveWithWorld(MinecraftServer srv)");
 		int swwAt = s.indexOf(sww);
-		String slf = body(s, "static void saveLedgerFirst(MinecraftServer srv)"); // (J1) a Take's or a dissolve's save: the ledger first
+		String slf = body(s, "static boolean saveLedgerFirst(MinecraftServer srv, Runnable between)"); // (J1) a Take's or a dissolve's save: the ledger first
 		int slfAt = s.indexOf(slf);
 		int bySaveWithWorld = 0;
 		int byLifecycle = 0;
