@@ -31382,7 +31382,9 @@ without them; slabs unpickupable and untransferable from declared containers; st
   `dev.seal.state` still lists it under `stalled` (members written and not, `current`). Unit `aStalledRemovalKeepsItsWholeSetSealedAcrossAReload`.
 - **Kept:** the seal design (RemovalSeal, S-M5-12; FL's S-M5-17/18), fix 2's confirmed queue generations as PSV now has them, and the PSV merge.
 - **Not here:** the instant-build provided-slab P2 (LEFTOVERS, the coordinator) and the rename's directory sync (T0).
-- **Gate:** GATE7
+- **Gate** (strict, `--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3r5/20261117-053747-change`
+  at 0cbf8847): rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, psv-crash 48/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0, lc3-seal 40/0,
+  lc3-undo 15/0 (no abandon cases), fl-survival 11/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
