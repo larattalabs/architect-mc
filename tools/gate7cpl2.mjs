@@ -41,6 +41,9 @@ const FLAT = 'G6B Flat Base';
 const OWNER = 'test:pl2';
 const TX = 9700, TZ = 9700;
 
+/** The committed fixtures that move by name (byte identity against the merge base): none (no committed plan has a ladder at a site lot). */
+export const PL2_MOVED = Object.freeze({});
+
 const steps = {};
 async function run(name) {
   for (const k of Object.keys(results)) delete results[k];
@@ -76,6 +79,11 @@ steps.unit = async () => {
   const files = ['kit/test/pl2.test.mjs', 'kit/test/lp.test.mjs', 'kit/test/cn.test.mjs'];
   out.kit = kitReuse(root, files) ?? nodeTest(files);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 20, `kit: pl2.test.mjs (the port ladder: recorded at plan time, written at realise, IR v2 = IR v1 plus the link, M10:climb clean, NO_CLIMB/SPAN/ANCHOR/WATER, NO_PORT at realise, a region-made form's foot, plan/0's pl2 fixtures READY and realised clean) with lp.test and cn.test: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  // byte identity of every committed plan fixture (the asks included) against the merge base: PL2 names no mover
+  const K = await import('./lib/gate7a-kit.mjs');
+  const u = await K.unchanged(root, { check, log, base: 'PL2', except: PL2_MOVED, mergedIf: 'kit/test/pl2.test.mjs' });
+  out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
+  fs.writeFileSync(path.join(OUT, 'pl2-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   spendZero();
   return out;
 };
