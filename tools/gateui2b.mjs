@@ -535,7 +535,7 @@ steps.gallery = async () => {
   await call('dev.build.legend', { on: false }).catch(() => null);
   // (PR A4) the legend after rotate is rebound to G in Controls: the legend shows G and Shift+G
   await sec('ui', 'placement_hud', 'legend_rebound', async () => {
-    await call('dev.pr.rebind', { action: 'rotate', key: 71 }); await call('dev.build.legend', { on: true }); await sleep(200);
+    await call('dev.pr.rebind', { action: 'rotate', key: 10 }); // G (26.3 InputConstants.KEY_G) await call('dev.build.legend', { on: true }); await sleep(200);
   }, { closeScreen: false });
   await call('dev.build.legend', { on: false }).catch(() => null);
   await call('dev.pr.rebind', { action: 'rotate' }).catch(() => null);

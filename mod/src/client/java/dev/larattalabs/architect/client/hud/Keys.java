@@ -116,7 +116,11 @@ public final class Keys {
 				case PlacingKeys.DOWN -> "Down";
 				case PlacingKeys.LEFT -> "Left";
 				case PlacingKeys.RIGHT -> "Right";
-				default -> String.valueOf((char) a.defaultKey);
+				case PlacingKeys.R -> "R";
+				case PlacingKeys.L -> "L";
+				case PlacingKeys.F -> "F";
+				case PlacingKeys.H -> "H";
+				default -> "?";
 			};
 		}
 		return label(k);

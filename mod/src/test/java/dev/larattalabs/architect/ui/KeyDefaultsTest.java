@@ -3,6 +3,7 @@ package dev.larattalabs.architect.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.larattalabs.architect.client.hud.KeyDefaults;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,8 +25,18 @@ class KeyDefaultsTest {
 
 	@Test
 	void buildLinkIsNAndJobsKeepsK() {
-		assertEquals('N', (char) KeyDefaults.BUILD_LINK);
-		assertEquals('K', (char) dev.larattalabs.labui.ui.KeyDefaults.JOBS);
+		assertEquals(InputConstants.KEY_N, KeyDefaults.BUILD_LINK);
+		assertEquals(InputConstants.KEY_K, dev.larattalabs.labui.ui.KeyDefaults.JOBS);
+	}
+
+	/** 26.3 numbers keys by SDL scancode, not GLFW: the pure tables must equal InputConstants (GLFW 66 for B was F9). */
+	@Test
+	void theCodesAre26point3InputConstants() {
+		assertEquals(List.of(InputConstants.KEY_B, InputConstants.KEY_J, InputConstants.KEY_Z, InputConstants.KEY_N), KeyDefaults.globals());
+		assertEquals(List.of(InputConstants.KEY_Y, InputConstants.KEY_I, InputConstants.KEY_U), dev.larattalabs.labui.ui.KeyDefaults.STEWARD_RESERVED);
+		assertEquals(InputConstants.KEY_F1, dev.larattalabs.labui.ui.HelpKeys.F1);
+		assertEquals(InputConstants.KEY_SLASH, dev.larattalabs.labui.ui.HelpKeys.SLASH);
+		assertEquals(InputConstants.KEY_ESCAPE, dev.larattalabs.labui.ui.HelpKeys.ESCAPE);
 	}
 
 	@Test

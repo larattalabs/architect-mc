@@ -67,9 +67,9 @@ public final class SlicePrDev {
 					JsonObject o = new JsonObject();
 					var s = mc.gui.screen();
 					o.addProperty("screen", s == null ? null : s.getClass().getName());
-					o.addProperty("toggles", dev.larattalabs.labui.ui.HelpKeys.toggles(290, false, false));
+					o.addProperty("toggles", dev.larattalabs.labui.ui.HelpKeys.toggles(com.mojang.blaze3d.platform.InputConstants.KEY_F1, false, false));
 					if (press && s != null) {
-						o.addProperty("handled", s.keyPressed(new net.minecraft.client.input.KeyEvent(290, 0, 0)));
+						o.addProperty("handled", s.keyPressed(new net.minecraft.client.input.KeyEvent(com.mojang.blaze3d.platform.InputConstants.KEY_F1, 0, 0)));
 					}
 					return o;
 				});

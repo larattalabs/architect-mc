@@ -21,34 +21,38 @@ public final class PlacingKeys {
 		PLACE, PLOT, MASSING
 	}
 
-	/** GLFW key codes. */
-	public static final int ESCAPE = 256;
-	public static final int ENTER = 257;
-	public static final int BACKSPACE = 259;
-	public static final int DELETE = 261;
-	public static final int RIGHT = 262;
-	public static final int LEFT = 263;
-	public static final int DOWN = 264;
-	public static final int UP = 265;
-	public static final int PAGE_UP = 266;
-	public static final int PAGE_DOWN = 267;
-	public static final int NUMPAD_ENTER = 335;
-	public static final int SLASH = 47;
+	/** 26.3's {@code InputConstants.KEY_*} codes (SDL scancodes, not GLFW; {@code PlacingKeysTest} holds them equal). */
+	public static final int ESCAPE = 41;
+	public static final int ENTER = 40;
+	public static final int BACKSPACE = 42;
+	public static final int DELETE = 76;
+	public static final int RIGHT = 79;
+	public static final int LEFT = 80;
+	public static final int DOWN = 81;
+	public static final int UP = 82;
+	public static final int PAGE_UP = 75;
+	public static final int PAGE_DOWN = 78;
+	public static final int NUMPAD_ENTER = 88;
+	public static final int SLASH = 56;
+	public static final int R = 21;
+	public static final int L = 15;
+	public static final int F = 9;
+	public static final int H = 11;
 
 	public enum Action {
 		CONFIRM("confirm", ENTER, EnumSet.allOf(Context.class)),
 		CANCEL("cancel", BACKSPACE, EnumSet.allOf(Context.class)),
-		ROTATE("rotate", 'R', EnumSet.of(Context.PLACE)),
-		REDIRECT("redirect", 'R', EnumSet.of(Context.MASSING)),
+		ROTATE("rotate", R, EnumSet.of(Context.PLACE)),
+		REDIRECT("redirect", R, EnumSet.of(Context.MASSING)),
 		FORWARD("nudge_forward", UP, EnumSet.of(Context.PLACE)),
 		BACK("nudge_back", DOWN, EnumSet.of(Context.PLACE)),
 		LEFT_("nudge_left", LEFT, EnumSet.of(Context.PLACE)),
 		RIGHT_("nudge_right", RIGHT, EnumSet.of(Context.PLACE)),
 		RAISE("raise", PAGE_UP, EnumSet.of(Context.PLACE, Context.PLOT)),
 		LOWER("lower", PAGE_DOWN, EnumSet.of(Context.PLACE, Context.PLOT)),
-		LOCK("lock", 'L', EnumSet.of(Context.PLACE)),
-		FIT("fit", 'F', EnumSet.of(Context.PLOT)),
-		LEGEND("legend", 'H', EnumSet.of(Context.PLACE));
+		LOCK("lock", L, EnumSet.of(Context.PLACE)),
+		FIT("fit", F, EnumSet.of(Context.PLOT)),
+		LEGEND("legend", H, EnumSet.of(Context.PLACE));
 
 		/** The mapping's name: {@code key.architect_mc.placing.<id>}. */
 		public final String id;

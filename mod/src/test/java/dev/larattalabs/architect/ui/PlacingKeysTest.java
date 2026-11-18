@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.larattalabs.architect.client.hud.PlacingKeys;
 import dev.larattalabs.architect.client.hud.PlacingKeys.Action;
 import dev.larattalabs.architect.client.hud.PlacingKeys.Context;
@@ -17,10 +18,11 @@ import org.junit.jupiter.api.Test;
 
 /** (PR A4) The rebindable placing, plot and massing keys: today's defaults, the Shift rule, Esc, rebinding, no clash within a context. */
 class PlacingKeysTest {
-	static final Map<Action, Integer> TODAY = Map.ofEntries(Map.entry(Action.CONFIRM, 257), Map.entry(Action.CANCEL, 259), Map.entry(Action.ROTATE,
-		(int) 'R'), Map.entry(Action.REDIRECT, (int) 'R'), Map.entry(Action.FORWARD, 265), Map.entry(Action.BACK, 264), Map.entry(Action.LEFT_, 263),
-		Map.entry(Action.RIGHT_, 262), Map.entry(Action.RAISE, 266), Map.entry(Action.LOWER, 267), Map.entry(Action.LOCK, (int) 'L'), Map.entry(Action.FIT,
-			(int) 'F'), Map.entry(Action.LEGEND, (int) 'H'));
+	static final Map<Action, Integer> TODAY = Map.ofEntries(Map.entry(Action.CONFIRM, InputConstants.KEY_RETURN), Map.entry(Action.CANCEL,
+		InputConstants.KEY_BACKSPACE), Map.entry(Action.ROTATE, InputConstants.KEY_R), Map.entry(Action.REDIRECT, InputConstants.KEY_R), Map.entry(Action.FORWARD,
+			InputConstants.KEY_UP), Map.entry(Action.BACK, InputConstants.KEY_DOWN), Map.entry(Action.LEFT_, InputConstants.KEY_LEFT), Map.entry(Action.RIGHT_,
+				InputConstants.KEY_RIGHT), Map.entry(Action.RAISE, InputConstants.KEY_PAGEUP), Map.entry(Action.LOWER, InputConstants.KEY_PAGEDOWN), Map.entry(
+					Action.LOCK, InputConstants.KEY_L), Map.entry(Action.FIT, InputConstants.KEY_F), Map.entry(Action.LEGEND, InputConstants.KEY_H));
 
 	@Test
 	void defaultCodesAreTodaysKeys() {
@@ -42,14 +44,22 @@ class PlacingKeysTest {
 
 	@Test
 	void eachContextResolvesTodaysKeys() {
-		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, 'R', false, PlacingKeys::defaults));
-		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, 'R', true, PlacingKeys::defaults), "Shift+R is rotate (back)");
-		assertEquals(Action.REDIRECT, PlacingKeys.resolve(Context.MASSING, 'R', false, PlacingKeys::defaults));
-		assertNull(PlacingKeys.resolve(Context.PLOT, 'R', false, PlacingKeys::defaults), "R is not a plot key: it passes to vanilla");
-		assertEquals(Action.FIT, PlacingKeys.resolve(Context.PLOT, 'F', true, PlacingKeys::defaults));
-		assertNull(PlacingKeys.resolve(Context.PLACE, 'F', false, PlacingKeys::defaults));
-		assertEquals(Action.RAISE, PlacingKeys.resolve(Context.PLOT, 266, true, PlacingKeys::defaults));
-		assertEquals(Action.LEGEND, PlacingKeys.resolve(Context.PLACE, 'H', false, PlacingKeys::defaults));
+		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_R, false, PlacingKeys::defaults));
+		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_R, true, PlacingKeys::defaults), "Shift+R is rotate (back)");
+		assertEquals(Action.REDIRECT, PlacingKeys.resolve(Context.MASSING, InputConstants.KEY_R, false, PlacingKeys::defaults));
+		assertNull(PlacingKeys.resolve(Context.PLOT, InputConstants.KEY_R, false, PlacingKeys::defaults), "R is not a plot key: it passes to vanilla");
+		assertEquals(Action.FIT, PlacingKeys.resolve(Context.PLOT, InputConstants.KEY_F, true, PlacingKeys::defaults));
+		assertNull(PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_F, false, PlacingKeys::defaults));
+		assertEquals(Action.RAISE, PlacingKeys.resolve(Context.PLOT, InputConstants.KEY_PAGEUP, true, PlacingKeys::defaults));
+		assertEquals(Action.LEGEND, PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_H, false, PlacingKeys::defaults));
+	}
+
+	@Test
+	void theFixedCodesAre26point3InputConstants() {
+		assertEquals(InputConstants.KEY_ESCAPE, PlacingKeys.ESCAPE);
+		assertEquals(InputConstants.KEY_NUMPADENTER, PlacingKeys.NUMPAD_ENTER);
+		assertEquals(InputConstants.KEY_DELETE, PlacingKeys.DELETE);
+		assertEquals(InputConstants.KEY_SLASH, PlacingKeys.SLASH);
 	}
 
 	@Test
@@ -69,11 +79,11 @@ class PlacingKeysTest {
 		for (Action a : Action.values()) {
 			b.put(a, a.defaultKey);
 		}
-		b.put(Action.ROTATE, (int) 'G');
+		b.put(Action.ROTATE, InputConstants.KEY_G);
 		b.put(Action.LOCK, -1); // unbound
-		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, 'G', false, b::get));
-		assertNull(PlacingKeys.resolve(Context.PLACE, 'R', false, b::get), "R no longer rotates");
-		assertNull(PlacingKeys.resolve(Context.PLACE, 'L', false, b::get), "an unbound lock never fires");
+		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_G, false, b::get));
+		assertNull(PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_R, false, b::get), "R no longer rotates");
+		assertNull(PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_L, false, b::get), "an unbound lock never fires");
 	}
 
 	@Test

@@ -3,7 +3,7 @@ package dev.larattalabs.architect.client.hud;
 import java.util.List;
 
 /**
- * (PR K1) Architect's default key codes as plain GLFW key numbers (pure: {@link Keys} registers from these, and
+ * (PR K1) Architect's default key codes as plain numbers (26.3's {@code InputConstants.KEY_*}: SDL scancodes, not GLFW) (pure: {@link Keys} registers from these, and
  * {@code KeyDefaultsTest} checks them without a Minecraft bootstrap).
  * <ul>
  * <li>Global keys (Controls &gt; Architect, acting with no screen open): no two share a key, and none shares lab-ui's
@@ -14,10 +14,10 @@ import java.util.List;
  * {@code KeyMapping.click} clicks every mapping on the key, so K opened the jobs panel and started a link at once.
  */
 public final class KeyDefaults {
-	public static final int SCREEN = 66; // B
-	public static final int SITE_HUD = 74; // J
-	public static final int UNDO_LAST = 90; // Z
-	public static final int BUILD_LINK = 78; // N (was K)
+	public static final int SCREEN = 5; // B
+	public static final int SITE_HUD = 13; // J
+	public static final int UNDO_LAST = 29; // Z
+	public static final int BUILD_LINK = 17; // N (was K)
 
 	private KeyDefaults() {
 	}
