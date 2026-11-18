@@ -263,6 +263,20 @@ public final class FillGuard {
 		if (!providedItems().contains(item)) {
 			return false;
 		}
+		Object[] cs = wrapperSlot(wrapper);
+		if (cs == null) {
+			return true; // fail closed: an allow-listed item, the wrapper unreadable
+		}
+		Container c = (Container) cs[0];
+		int slot = (Integer) cs[1];
+		return slot < c.getContainerSize() && guardedSlot(c, slot, c.getItem(slot));
+	}
+
+	/**
+	 * (FK-b 5d; slice LC3 shares it) The Transfer API wrapper's container and slot, {@code {Container, Integer}}, read by reflection (Fabric
+	 * impl fields); null when unreadable (logged).
+	 */
+	static Object @Nullable [] wrapperSlot(Object wrapper) {
 		try {
 			java.lang.reflect.Field sf = storageField;
 			if (sf == null) {
@@ -283,12 +297,11 @@ public final class FillGuard {
 				lf.setAccessible(true);
 				slotField = lf;
 			}
-			Container c = (Container) cf.get(storage);
-			int slot = lf.getInt(wrapper);
-			return slot < c.getContainerSize() && guardedSlot(c, slot, c.getItem(slot));
+			return new Object[] {(Container) cf.get(storage), lf.getInt(wrapper)};
 		} catch (ReflectiveOperationException | RuntimeException e) {
-			Architect.LOGGER.error("fill-provided guard for the Fabric Transfer API: {} (extraction refused)", e.toString());
-			return true; // fail closed: an allow-listed item, the wrapper unreadable
+			Architect.LOGGER.error("Fabric Transfer API guard: {} (the wrapper unreadable)", e.toString());
+			return null;
 		}
 	}
+
 }

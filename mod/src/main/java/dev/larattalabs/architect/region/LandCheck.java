@@ -261,6 +261,15 @@ public final class LandCheck {
 	}
 
 	/**
+	 * (slice FL, S-M5-18) A CHANGED cell that is a declared container of a filled site: SAME when the block still holds what was written
+	 * apart from its contents ({@code stateHolds}) and the contents are its fill or less ({@code fillOurs}, {@link
+	 * dev.larattalabs.architect.site.Fills#fillOurs}); else as it was (more than the fill is cargo: CHANGED). Pure.
+	 */
+	static Cls fillCell(Cls cls, boolean stateHolds, boolean fillOurs) {
+		return cls == Cls.CHANGED && stateHolds && fillOurs ? Cls.SAME : cls;
+	}
+
+	/**
 	 * A region cell's class with the gate mechanism's rule: a moving or trigger cell of a mechanism ({@code mechMoving}, {@link
 	 * #mechVolatile}) is never judged for its state (open, closed, mid-move: GM §4 item 4), but a block a player placed there is still the
 	 * player's (§2: a PT record is {@link Cls#PLAYER}; LCi, a player's block in an open lane), judged as {@link #classify} does.
@@ -564,6 +573,11 @@ public final class LandCheck {
 			Cls cls = o.field != null && o.field.unchanged(pos, now) ? Cls.SAME // (M5 FC) air or a field crop over our farmland
 				: classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos),
 					mech && j.mechTrig.contains(pos));
+			if (cls == Cls.CHANGED && now.hasBlockEntity()) {
+				// (slice FL, S-M5-18) a fill site's container, written empty and filled after: ours while it holds its fill or less of it
+				cls = fillCell(cls, dev.larattalabs.architect.journal.StillOurs.holds(now, after.nbt(), WorldJournal.state(after), after.nbt()),
+					dev.larattalabs.architect.site.Fills.filledContainerOurs(j.level, bp));
+			}
 			if (lot != null) {
 				long[] a = j.lots.computeIfAbsent(lot, q -> new long[2]);
 				if (cls == Cls.PLAYER) {

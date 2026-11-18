@@ -49,6 +49,12 @@ public final class StockpileDev {
 		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, joinSave?: bool, noCreditSave?: bool, refuseSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases ((DR-S) refuseSave: every explicit save with the world refused as SS refuses it): the "
 			+ "periodic ledger save off (RL: with the save when a target joins the feed, unless joinSave: true); a finished undo's refund not "
 			+ "saved at its credit; reset the periodic save counters");
+		// (slice PSV) the queue file's writes: inject failures (a full disk), read the generations; a failing write keeps an undo's commit waiting
+		DevBridge.register("dev.queue.writes", 10_000, "{fail?: n, failAtPreSave?: n} - (PSV) TEST: the next n queue file writes fail (0 clears); "
+			+ "failAtPreSave: the next undo pre-save's write and n-1 after it fail (the failure starts after R1); answers requestedGen, writtenGen, "
+			+ "writeFailing, failWrites (left), loadFailed, failAtPreSave", (req, mc) -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) ->
+				dev.larattalabs.architect.site.Placement.devWrites(req.has("fail") ? req.get("fail").getAsInt() : null, req.has("failAtPreSave") ? req.get(
+					"failAtPreSave").getAsInt() : null))).thenCompose(x -> x));
 		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the
 		// JVM after the work queued before it; no answer comes back (poll dev.state until inWorld is false)
 		DevBridge.register("dev.stockpile.barrier", 600_000, "{run?: bool, reps?: n, failPlayerReplace?: n, failChunkWrite?: n, forgive?: bool} - (slice T0) "

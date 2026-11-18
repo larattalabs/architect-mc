@@ -17,12 +17,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * (FK-b, docs/CONTRACT.md "### FK-b contract" 5c) Item transfer: a hopper or hopper minecart pulling from a declared container
  * ({@code tryTakeInItemFromSlot}) skips its provided stacks, and a declared hopper pushing ({@code ejectItems}) skips its own provided
  * slots (it pushes from its first other non-empty slot, as vanilla does past an empty one).
+ * (Slice LC3 fix) Neither pulls out of, nor pushes out of, a holder in a box being removed ({@code RemovalSeal}).
  */
 @Mixin(HopperBlockEntity.class)
 public abstract class HopperGuardMixin {
 	@Inject(method = "tryTakeInItemFromSlot", at = @At("HEAD"), cancellable = true)
 	private static void architect$noPullProvided(Hopper hopper, Container container, int slot, Direction direction, CallbackInfoReturnable<Boolean> cir) {
-		if (dev.larattalabs.architect.site.FillGuard.guardedSlot(container, slot, container.getItem(slot))) {
+		if (dev.larattalabs.architect.site.FillGuard.guardedSlot(container, slot, container.getItem(slot))
+			|| dev.larattalabs.architect.site.RemovalSeal.refusesExtract(container, slot)) { // (slice LC3 fix) out of a removal's box
+			cir.setReturnValue(false);
+		}
+	}
+
+	/** (slice LC3 fix) A hopper in a box being removed pushes nothing out ({@code RemovalSeal}): its contents are the restore's. */
+	@Inject(method = "ejectItems", at = @At("HEAD"), cancellable = true)
+	private static void architect$noPushSealed(Level level, BlockPos pos, HopperBlockEntity self, CallbackInfoReturnable<Boolean> cir) {
+		if (dev.larattalabs.architect.site.RemovalSeal.refusesPush(level, pos)) {
 			cir.setReturnValue(false);
 		}
 	}
