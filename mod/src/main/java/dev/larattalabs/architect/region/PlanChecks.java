@@ -1666,6 +1666,8 @@ public final class PlanChecks {
 		// (6c H §10) a fluid guard (a body's shell, buffer and joins, or a wet column) names its body, compares the fluid layer too, and is
 		// sampled again with it (ARVX version 3)
 		boolean fluids = g.get("fluids") instanceof JsonElement fe && fe.isJsonPrimitive() && fe.getAsBoolean();
+		// (8c VS) a guard over a version-4 volume (levels: true) is sampled again with the levels, so it diffs like against like
+		boolean levels = fluids && g.get("levels") instanceof JsonElement le && le.isJsonPrimitive() && le.getAsBoolean();
 		String part = fluids ? RegionsImpl.str(g, "kind", "body") + " " + RegionsImpl.str(g, "body", "?") + " of " + RegionsImpl.str(g, "part", "?")
 			: RegionsImpl.str(g, "part", "?");
 		JsonObject v = g.getAsJsonObject("volume");
@@ -1673,7 +1675,7 @@ public final class PlanChecks {
 		JsonArray bx = v.getAsJsonArray("box");
 		BoundingBox bb = new BoundingBox(bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx.get(4).getAsInt(), bx.get(5)
 			.getAsInt());
-		String key = sha + " " + bx + " " + fluids;
+		String key = sha + " " + bx + " " + fluids + (levels ? " levels" : "");
 		CompletableFuture<GuardSample> sample = samples.get(key);
 		if (sample == null) {
 			dev.larattalabs.architect.region.volume.Arvx.Decoded before;
@@ -1685,7 +1687,7 @@ public final class PlanChecks {
 					+ " it was checked against is gone (" + e.getMessage() + "): check again");
 			}
 			int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
-			sample = dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids).thenApply(res -> {
+			sample = dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids, levels).thenApply(res -> {
 				try {
 					return new GuardSample(before, dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz())));
 				} catch (IOException e) {
