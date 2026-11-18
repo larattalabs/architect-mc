@@ -11,6 +11,7 @@ public final class SlicePrDev {
 	}
 
 	public static void init() {
+		dev.larattalabs.architect.client.screen.StylePeek.devInit(); // (PR P1) dev.pr.peek
 		DevBridge.register("dev.pr.palette", 10_000, "{palette?: standard|okabe_ito} - (PR A2) the ghost palette, as Status sets it -> {palette}",
 			(req, mc) -> {
 				String p = Fields.of(req).optStr("palette", null);

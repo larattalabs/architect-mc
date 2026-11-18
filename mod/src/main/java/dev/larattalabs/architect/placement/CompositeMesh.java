@@ -1,5 +1,6 @@
 package dev.larattalabs.architect.placement;
 
+import dev.larattalabs.labui.ui.GhostPalette.Cat;
 import java.util.Arrays;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -22,6 +23,11 @@ public final class CompositeMesh {
 	/** The cap per key and the full-detail distance (ArchitectClientApi). */
 	public static final int MAX_CELLS = 200_000;
 	public static final int FULL_DISTANCE = 160;
+
+	/** (PR A2) A change colour in the player's ghost palette, as 0xFFRRGGBB. */
+	static int pal(dev.larattalabs.labui.ui.GhostPalette.Cat c) {
+		return 0xFF000000 | dev.larattalabs.labui.ui.GhostPalette.rgb(c);
+	}
 
 	static final int SLATE = 0xFF5F86D0;
 	static final int GREEN = 0xFF3CCB5A;
@@ -91,10 +97,11 @@ public final class CompositeMesh {
 		return switch (s) {
 			case GHOST -> 0x5A000000 | (blockArgb & 0xFFFFFF);
 			case MASSING -> 0x88000000 | mix(blockArgb, SLATE, 0.35f);
-			case ADDED -> 0x96000000 | mix(blockArgb, GREEN, 0.72f);
-			case CHANGED -> 0x96000000 | mix(blockArgb, AMBER, 0.72f);
-			case REMOVED -> 0x2E000000 | (RED & 0xFFFFFF);
-			case KEPT -> 0x24000000 | (YELLOW & 0xFFFFFF);
+			// (PR A2) the change colours follow the ghost palette (lab-ui GhostPalette: standard is today's, Okabe-Ito the CVD-safe set)
+			case ADDED -> 0x96000000 | mix(blockArgb, pal(Cat.REGION_ADDED), 0.72f);
+			case CHANGED -> 0x96000000 | mix(blockArgb, pal(Cat.COMPOSITE_CHANGED), 0.72f);
+			case REMOVED -> 0x2E000000 | (pal(Cat.REGION_REFUSED) & 0xFFFFFF);
+			case KEPT -> 0x24000000 | (pal(Cat.COMPOSITE_KEPT) & 0xFFFFFF);
 		};
 	}
 
@@ -103,10 +110,10 @@ public final class CompositeMesh {
 		return switch (s) {
 			case GHOST -> 0xC8E8E0D0;
 			case MASSING -> 0xE05F86D0;
-			case ADDED -> 0xF03CCB5A;
-			case CHANGED -> 0xF0F2A21C;
-			case REMOVED -> 0xF0E0302A;
-			case KEPT -> 0xF8F5E11E;
+			case ADDED -> 0xF0000000 | pal(Cat.REGION_ADDED);
+			case CHANGED -> 0xF0000000 | pal(Cat.COMPOSITE_CHANGED);
+			case REMOVED -> 0xF0000000 | pal(Cat.REGION_REFUSED);
+			case KEPT -> 0xF8000000 | pal(Cat.COMPOSITE_KEPT);
 		};
 	}
 

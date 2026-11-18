@@ -49,6 +49,8 @@ public final class StyleBrowserScreen extends PickerScreen {
 	private final Map<String, StyleCatalog.Card> cards;
 	private final Button duplicate = new Button("Duplicate", this::duplicateSelected);
 	private final Button edit = new Button("Edit", this::editSelected);
+	/** (PR P1) Preview on ghost: the browser collapses to a strip and the world shows the design wearing the Style. */
+	private final Button preview = new Button("Preview in world", this::previewSelected);
 	/** The "+ New style" menu (null: closed) and, under it, the built-in list. */
 	private @Nullable Menu menu;
 	private boolean gridClick;
@@ -162,6 +164,28 @@ public final class StyleBrowserScreen extends PickerScreen {
 		}
 	}
 
+	/** A card by Style id (the peek strip). */
+	StyleCatalog.@Nullable Card cardById(String id) {
+		return cards.get(id);
+	}
+
+	/** (PR P1) Opens the peek strip on the selected Style, stepping through the grid's current filter. */
+	public void previewSelected() {
+		StyleCatalog.Card c = selectedCard();
+		StylePeek.Target t = StylePeek.target();
+		if (c == null || t == null || Minecraft.getInstance().level == null) {
+			return;
+		}
+		List<String> ids = new ArrayList<>();
+		for (PickerEntry e : model().visible()) {
+			ids.add(e.id());
+		}
+		if (!ids.contains(c.id())) {
+			ids.add(0, c.id());
+		}
+		Minecraft.getInstance().gui.setScreen(new StylePeekScreen(this, ids, ids.indexOf(c.id()), t));
+	}
+
 	public void duplicateSelected() {
 		StyleCatalog.Card c = selectedCard();
 		if (c != null) {
@@ -269,6 +293,11 @@ public final class StyleBrowserScreen extends PickerScreen {
 		boolean stack = dw + 4 + ew > d[1];
 		int rowTop = d[2] - Button.H - 4;
 		int top = stack ? rowTop - Button.H - 4 : rowTop;
+		// (PR P1) Preview in world, a row of its own above Duplicate / Edit (in a world only)
+		boolean canPeek = Minecraft.getInstance().level != null && StylePeek.target() != null;
+		if (canPeek) {
+			top -= Button.H + 4;
+		}
 		g.nextStratum();
 		// Duplicate / Edit above "Use this style": a band of the pane's paper first, from a line boundary of the pane's detail lines
 		// (PickerScreen's layout: the big sheet, the name, the subtitle, then lines 10 px apart), so no line is cut in half under them
@@ -287,8 +316,15 @@ public final class StyleBrowserScreen extends PickerScreen {
 		if (c != null) {
 			edit.disabled(!c.canEdit()).tooltip(c.canEdit() ? null : c.bible().builtin() ? "Built-in: duplicate it to make your own"
 				: "Owned by a mod: duplicate it to make your own");
+			if (canPeek) {
+				preview.tooltip(StylePeek.target().sample() ? "Shown on " + StylePeek.target().name() + ": the design isn't made yet" : null);
+				preview.draw(g, font, d[0], top, d[1], Button.H, mx, my);
+			} else {
+				preview.hide();
+			}
+			int dupTop = canPeek ? top + Button.H + 4 : top;
 			if (stack) {
-				duplicate.draw(g, font, d[0], top, d[1], Button.H, mx, my);
+				duplicate.draw(g, font, d[0], dupTop, d[1], Button.H, mx, my);
 				edit.draw(g, font, d[0], rowTop, d[1], Button.H, mx, my);
 			} else {
 				duplicate.draw(g, font, d[0], rowTop, dw, Button.H, mx, my);
@@ -299,6 +335,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 			}
 		} else {
 			duplicate.hide();
+			preview.hide();
 			edit.hide();
 		}
 		if (message != null) {
@@ -405,7 +442,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 				return true;
 			}
 		}
-		if (duplicate.mouseClicked(mx, my, e.button()) || edit.mouseClicked(mx, my, e.button())) {
+		if (duplicate.mouseClicked(mx, my, e.button()) || edit.mouseClicked(mx, my, e.button()) || preview.mouseClicked(mx, my, e.button())) {
 			return true;
 		}
 		int[] gg = gridGeometry();

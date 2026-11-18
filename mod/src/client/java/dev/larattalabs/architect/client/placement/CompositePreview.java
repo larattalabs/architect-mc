@@ -79,6 +79,11 @@ public final class CompositePreview {
 	private CompositePreview() {
 	}
 
+	/** (PR P1) The last frame's draw time of every composite, ns (the Style peek's frame-time fallback). */
+	public static long lastFrameNanos() {
+		return lastNanos;
+	}
+
 	public static void init() {
 		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.composite", () -> submit(ctx)));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(CompositePreview::clearAll));

@@ -833,6 +833,23 @@ steps.gallery = async () => {
     await call('dev.screen', { open: null });
   }
 
+  // ================================================================ (PR P1) Preview on ghost: the strip, the sample cabin in three Styles, the cap
+  if (onlyWants('preview', 'styles')) {
+    await call('dev.screen', { open: null });
+    await call('dev.build.cancel').catch(() => null);
+    await L.tp(160.5, 70, 120.5, 0, 22);
+    const peek = async (style, extra) => {
+      await browser(); await call('dev.pr.peek', { select: style, open: true });
+      if (extra) await call('dev.pr.peek', extra);
+      await sleep(1800);
+    };
+    await sec('ui', 'styles', 'peek', () => peek('nordic'));
+    for (const st of ['rustic', 'nordic', 'modern']) await sec('world', 'preview', `cabin_${st}`, () => peek(st), { scales: [2] });
+    await sec('world', 'preview', 'over_cap', () => peek('medieval', { thin: true }), { scales: [2] });
+    await call('dev.pr.peek', { back: true }).catch(() => null);
+    await call('dev.screen', { open: null });
+  }
+
   // ================================================================ (PR F1) the first-build tour: each card (driven through dev.pr.guide)
   if (onlyWants('guide')) {
     const G = (o) => call('dev.pr.guide', o);
