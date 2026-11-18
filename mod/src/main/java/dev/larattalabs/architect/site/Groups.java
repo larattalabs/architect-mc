@@ -366,6 +366,14 @@ public final class Groups {
 		return LAST_STOP.get(groupId);
 	}
 
+	/**
+	 * (8b review P2-5) A whole-group removal ended (removed, stopped, refused part-way or timed out): its owner's settlement changed (its
+	 * sites read removing no longer), as its start signalled.
+	 */
+	static void signalEnd(@Nullable String owner, String groupId) {
+		dev.larattalabs.architect.apiimpl.SettlementSignals.mark(owner, dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(groupId));
+	}
+
 	/** (S-DRS-1) The stop a whole-group removal's end records: null when it removed the group. Pure. */
 	static @Nullable Stop stopOf(Removed result, boolean untouched) {
 		return result.removed() ? null : new Stop(untouched ? dev.larattalabs.architect.api.RemovalStop.NOT_STARTED : dev.larattalabs.architect.api.RemovalStop.PARTIAL,
@@ -1439,6 +1447,8 @@ public final class Groups {
 			} else {
 				LAST_STOP.put(r.group, stop);
 			}
+			SiteGroupRec eg = Sites.group(r.group);
+			signalEnd(eg == null ? null : eg.owner(), r.group);
 		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
 		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {

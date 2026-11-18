@@ -73,6 +73,11 @@ public final class SettlementSignals {
 	}
 
 	static final Coalescer C = new Coalescer();
+
+	/** (TEST) The coalescer the marks go to. */
+	public static Coalescer coalescer() {
+		return C;
+	}
 	private static long tick;
 
 	/** Marks the owner's settlement changed (a null owner, a player's own, has no settlement: ignored). Any thread. */
