@@ -143,6 +143,15 @@ module names covers only its data). Gradle classes the `test` task excludes by t
 suite (`mod/`, `devserver/`, `apitest/`: Gradle; `sidecar/`: vitest; the rest: kit). The one exception, printed: a gate driver (a
 step's root in `tools/step-inputs.json`) no unit reaches gets `node --check`, since the slice's own gate step runs it.
 
+`--run` ends with one summed line, `unit-scope --run: results tests T, pass P, fail F, checks C, check fail X (kit P/F, ...)`, from
+each suite's JUnit report (kit and vitest to a temp file, Gradle's `mod/build/test-results/test/*.xml` written during the run);
+when nothing ran it says so with `tests 0`. The unit-scope step's `parse` reads it.
+
+**Zero results never pass (OK0).** gate-run turns a step that exits 0 with no ok/FAIL line and no count metric above 0 (`tests`,
+`pass`, `passed`, `fail`, `failed`, `failures`, `checks`, from `parse` or `junit`) into FAIL "no results recorded"
+(`tools/lib/step-counts.mjs`). A step that legitimately prints no counts (a scenario run judged by its exit code) declares
+`"counts": false` in `tools/gate-chains.json`.
+
 **Report-only benches** (speed rule 8 [9]): `bench({ id, value, bound, better, unit })` from `tools/lib/bench-report.mjs` appends the reading,
 the 1-min load and the core count to `artifacts/benches/<UTC date>.jsonl` and prints `FLAG bench ...` past its bound;
 `ARCHITECT_TIMING_BARS=1` (a dedicated box) makes it fail, as `JournalIndexBenchTest`'s p99 already did. The nightly's SUMMARY.md

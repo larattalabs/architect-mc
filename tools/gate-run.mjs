@@ -104,6 +104,7 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
+import { junitCounts, noResultsReason } from './lib/step-counts.mjs';
 import { captureThreadDumps, dumpReason, hostSleep } from './lib/thread-dump.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
 import { scopeChangeUnits } from './lib/change-units.mjs';
@@ -1754,16 +1755,6 @@ function readJsonSafe(f) {
   }
 }
 
-function junitCounts(dir) {
-  if (!fs.existsSync(dir)) return null;
-  const c = { tests: 0, failures: 0, errors: 0, skipped: 0 };
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.xml'))) {
-    const head = fs.readFileSync(path.join(dir, f), 'utf8').slice(0, 2000).match(/<testsuite\b[^>]*>/)?.[0] ?? '';
-    for (const k of Object.keys(c)) c[k] += Number(head.match(new RegExp(`\\b${k}="(\\d+)"`))?.[1] ?? 0);
-  }
-  return c;
-}
-
 function runProcess(sh, step, logFile) {
   return new Promise((resolve) => {
     const fd = fs.openSync(logFile, 'a');
@@ -1975,6 +1966,13 @@ async function runStep(sh, step, rec) {
     rec.timingRecorded = barLines.map((l) => l.replace(/^\[[\d:]+\] /, '').slice(0, 300));
     summary.timingRecorded.push(...rec.timingRecorded.map((line) => ({ step: step.id, line })));
   } else rec.status = 'FAIL';
+  // zero results never count as a PASS (tools/lib/step-counts.mjs): no ok/FAIL line and no count metric above 0 is FAIL, unless the
+  // step's entry declares `"counts": false`
+  const noResults = noResultsReason(step, rec);
+  if (noResults) {
+    rec.status = 'FAIL';
+    rec.error = noResults;
+  }
   // a step with timing bars passing in record mode that also missed none still lists nothing; a recorded miss on a loaded box says so
   if (rec.timingRecorded) rec.timingLoad1 = { start: rec.load1.start, end: rec.load1.end };
   // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
@@ -1992,7 +1990,7 @@ async function runStep(sh, step, rec) {
     const tail = lines.filter((l) => l.trim()).slice(-5);
     rec.tail = tail.map((l) => l.slice(0, 300));
   }
-  log(`  ${rec.status} ${step.id} in ${fmtDur(rec.seconds)} (exit ${r.code}${r.signal ? ` ${r.signal}` : ''}, ok ${rec.ok}, FAIL ${rec.fail}${rec.timingRecorded ? `, ${rec.timingRecorded.length} timing bar(s) RECORDED not judged` : ''})${rec.metrics ? ` ${JSON.stringify(rec.metrics)}` : ''}`, sh);
+  log(`  ${rec.status} ${step.id} in ${fmtDur(rec.seconds)} (exit ${r.code}${r.signal ? ` ${r.signal}` : ''}, ok ${rec.ok}, FAIL ${rec.fail}${rec.timingRecorded ? `, ${rec.timingRecorded.length} timing bar(s) RECORDED not judged` : ''})${rec.metrics ? ` ${JSON.stringify(rec.metrics)}` : ''}${noResults ? `: ${noResults} (no ok/FAIL line, no count metric; "counts": false in tools/gate-chains.json exempts a step that prints none)` : ''}`, sh);
   // a killed or failed step may leave a client in any state (or one it started itself): stop it, the next step starts fresh
   if (rec.status !== 'PASS' || step.client === 'self') {
     await stopClient(sh, `${step.id} ${rec.status}`);
