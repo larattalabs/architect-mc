@@ -2592,7 +2592,7 @@ public final class Stockpiles {
 					saveWithWorld(srv);
 					Path f = d.resolve(FILE);
 					boolean written = saves > before;
-					if (!written && !(PILES.isEmpty() && !Files.exists(f))) {
+					if (!written && !(PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f))) {
 						throw new IllegalStateException("dev.stockpile.save: " + f + " was not written (the log says why)");
 					}
 					o.addProperty("written", written);
@@ -2861,7 +2861,35 @@ public final class Stockpiles {
 		JsonArray a = new JsonArray();
 		PILES.values().forEach(p -> a.add(p.toJson()));
 		root.add("stockpiles", a);
+		if (!OwedLedger.isEmpty()) {
+			root.add("owed", OwedLedger.toJson()); // (slice T2b) owed collectibles: in this file, published only as the ledger is
+		}
 		return root;
+	}
+
+	/** (slice T2b) Whether {@code owner} has a stockpile (an owed entry can be credited into it). */
+	public static boolean hasPile(String owner) {
+		return get(owner) != null;
+	}
+
+	/**
+	 * (slice T2b, {@code Sites.creditOwedToStock}) Owed entry {@code key}'s {@code items} into {@code owner}'s stock in one ledger change: the
+	 * entry shrinks (marked {@code effectKey}) and the pile credits them keyed {@code owed:<effectKey>}, past capacity as OVF's keyed refunds.
+	 * Throws (nothing changed) when there is no pile or the entry doesn't hold them. Server thread.
+	 */
+	public static void creditOwed(MinecraftServer srv, String owner, String key, Map<String, Integer> items, String effectKey) {
+		Pile p = get(owner);
+		if (p == null) {
+			throw new IllegalStateException(owner + " has no stockpile");
+		}
+		OwedLedger.debit(key, items, effectKey); // throws first when the entry doesn't hold them
+		p.ledger.credit("owed:" + effectKey, items, capacity(srv, p), Stockpiles::maxStack);
+		changed(p);
+	}
+
+	/** (slice T2b) The owed ledger changed in memory: the next ledger save (a barrier) publishes it. Server thread. */
+	public static void owedChanged() {
+		unsaved = true;
 	}
 
 	/** Writes the file now (a temp file, then a rename). */
@@ -3585,7 +3613,7 @@ public final class Stockpiles {
 		}
 		Path f = d.resolve(FILE);
 		try {
-			if (PILES.isEmpty() && !Files.exists(f)) {
+			if (PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f)) {
 				return true; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
@@ -3675,7 +3703,7 @@ public final class Stockpiles {
 			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
 		}
 		Path f = d.resolve(FILE);
-		if (PILES.isEmpty() && !Files.exists(f)) {
+		if (PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f)) {
 			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
 		}
 		try {
@@ -3715,6 +3743,7 @@ public final class Stockpiles {
 	static void loadFrom(Path d) {
 		dir = d;
 		PILES.clear();
+		OwedLedger.clear();
 		nextId = 1;
 		loadFailed = false;
 		loadFailedWhy = null;
@@ -3761,6 +3790,10 @@ public final class Stockpiles {
 			return "a stockpile could not be read: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
 		}
 		LOADED = root.deepCopy();
+		DURABLE_WB.clear(); // (slice T2b, the receipt-leak P2) the write-back keys this durable file already credits
+		for (Pile p : PILES.values()) {
+			p.ledger.creditedKeys().stream().filter(k -> k.startsWith("wb:")).forEach(DURABLE_WB::add);
+		}
 		Architect.LOGGER.info("Stockpiles: {} loaded (format {})", PILES.size(), root.has("format") ? root.get("format").getAsString() : "none");
 		try {
 			Files.copy(f, f.resolveSibling(FILE + ".bak"), StandardCopyOption.REPLACE_EXISTING); // (PS, F6) the last file that loaded
@@ -3804,6 +3837,7 @@ public final class Stockpiles {
 	 */
 	static void readInto(JsonObject root) {
 		PILES.clear();
+		OwedLedger.readInto(root.get("owed"));
 		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 		if (root.has("stockpiles")) {
 			for (JsonElement e : root.getAsJsonArray("stockpiles")) {
@@ -3823,6 +3857,12 @@ public final class Stockpiles {
 	static String peekNextId() {
 		return "sp" + nextId;
 	}
+
+	/**
+	 * (slice T2b) The custody write-back keys credited in the ledger file this session loaded (durable: a receipt under one of them is stale
+	 * and is dropped when a write-back next visits its chunk). Never the in-memory credited set, which a crash can still lose.
+	 */
+	static final java.util.Set<String> DURABLE_WB = new java.util.HashSet<>();
 
 	/** Dev: the file as this world session loaded it (the restart check compares it with the file the stop wrote). */
 	static @Nullable JsonObject LOADED;

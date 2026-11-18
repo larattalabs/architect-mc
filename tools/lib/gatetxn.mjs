@@ -349,4 +349,99 @@ export async function registerTXN(steps, h) {
     spendZero();
     return out;
   };
+
+  // ------------------------------------------------------------------ (slice T2b) txn-owed: owed collectibles collected exactly once
+  steps.txnowed = async () => {
+    await ensure();
+    const out = { cases: [] };
+    const name = 'G6B TXN owed';
+    await freshFlat(name);
+    const gy = await groundY();
+    const at = [CX + 80, gy + 1, CZ + 56];
+    await L.tp(...at);
+    const box = { min: [CX + 60, gy - 2, CZ + 40], max: [CX + 100, gy + 4, CZ + 70] };
+    const P = 'minecraft:oak_planks';
+    await cmd('/clear @s');
+    const me = (await call('dev.stockpile.owed', {}, 30_000));
+    const report = async (baseline) => call('dev.txn.conservation', { min: box.min, max: box.max, ...(baseline ? { baseline } : {}) }, 60_000);
+    const inv = async () => ((await report()).parts?.inventories ?? {})[P] ?? 0;
+    const owedOf = async () => ((await call('dev.stockpile.owed', {}, 30_000)).total ?? {})[P] ?? 0;
+    const state = async () => call('dev.txn.state', {}, 30_000);
+    let n = 0;
+    const owe = async (count) => {
+      const key = `test:owed/${++n}`;
+      const r = await call('dev.owed.add', { key, items: { [P]: count }, at }, 30_000);
+      await call('dev.stockpile.barrier', {}, 60_000).catch(() => null); // published as the ledger is
+      return { key, recipient: r.recipient };
+    };
+    // ---------------------------------------------------------------- a collect traced, then the API's answers
+    const e0 = await owe(20);
+    const base0 = await report();
+    out.recipient = e0.recipient;
+    await call('dev.txn.trace', { on: true }, 10_000);
+    const r0 = await call('dev.owed.collect', { recipient: e0.recipient, key: e0.key }, 120_000);
+    const points = ((await call('dev.txn.trace', { on: false }, 10_000)).trace ?? []).filter((p) => p.startsWith('TX:owed.collect:'));
+    const c0 = await report(base0.total);
+    out.trace = { r0, points };
+    check(r0.status === 'DONE' && (r0.given?.[P] ?? 0) === 20 && (await inv()) === 20 && (await owedOf()) === 0,
+      `collect: ${r0.status}, given ${json(r0.given)}, the inventory holds ${await inv()}, owed ${await owedOf()}`, r0);
+    check(points.length >= 4, `collect: ${points.length} kill points: ${points.join(' ')}`, points);
+    check(c0.verdict === 'match', `collect: conservation (owed + inventories) ${c0.verdict} ${json(c0.diff)}`, c0);
+    const r1 = await call('dev.owed.collect', { recipient: e0.recipient, key: e0.key }, 30_000);
+    check(r1.status === 'REFUSED' && /owed_not_found/.test(r1.why ?? ''), `collect again: refused ${r1.why}`, r1);
+    // ---------------------------------------------------------------- a full inventory: only what fits; the rest stays owed
+    await cmd('/clear @s');
+    for (let k = 0; k < 35; k++) await cmd(`/item replace entity @s ${k < 9 ? 'hotbar.' + k : 'inventory.' + (k - 9)} with minecraft:cobblestone 64`);
+    const e1 = await owe(80);
+    const r2 = await call('dev.owed.collect', { recipient: e1.recipient, key: e1.key }, 120_000);
+    check(r2.status === 'DONE' && (r2.given?.[P] ?? 0) === 64 && (r2.stillOwed?.[P] ?? 0) === 16, `inventory full but one slot: given ${json(r2.given)}, still owed ${json(r2.stillOwed)}`, r2);
+    const r3 = await call('dev.owed.collect', { recipient: e1.recipient, key: e1.key }, 120_000);
+    check((r3.given?.[P] ?? 0) === 0 && (r3.stillOwed?.[P] ?? 0) === 16 && r3.detail === 'inventory full', `no room: nothing given, still owed 16 (${r3.detail})`, r3);
+    await cmd('/clear @s');
+    const r4 = await call('dev.owed.collect', { recipient: e1.recipient, key: e1.key }, 120_000);
+    check((r4.given?.[P] ?? 0) === 16 && (await owedOf()) === 0, `room again: the last 16 given, nothing owed`, r4);
+    await cmd('/clear @s');
+    // ---------------------------------------------------------------- the command
+    const e2 = await owe(5);
+    const cm = await cmd('/architect collect').catch((e) => ({ error: String(e) }));
+    check((await inv()) === 5 && (await owedOf()) === 0, `/architect collect: the player's own entries collected (${json(cm?.messages ?? cm)})`, cm);
+    await cmd('/clear @s');
+    // ---------------------------------------------------------------- a kill point at each step, bare and +save
+    for (const p of points) {
+      for (const v of ['', '+save']) {
+        const point = p + v;
+        await cmd('/clear @s');
+        const e = await owe(12);
+        const before = (await inv()) + (await owedOf());
+        const base = await report();
+        await call('dev.journal.killAt', { point }, 10_000);
+        call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${point}: halted`);
+        if (!down) {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+          continue;
+        }
+        await L.openWorld(name);
+        await L.tp(...at);
+        let st = await state();
+        for (let i = 0; i < 75 && (st.openCount > 0 || !st.recovered); i++) {
+          await call('dev.wait', { ms: 1000 }, 30_000);
+          st = await state();
+        }
+        const iv = await inv(), ow = await owedOf();
+        const c = await report(base.total);
+        const k = { point, open: st.openCount, inventory: iv, owed: ow, verdict: c.verdict, diff: c.diff };
+        out.cases.push(k);
+        log(`  ${point}: open ${st.openCount}, inventory ${iv}, owed ${ow}; conservation ${c.verdict}`);
+        check(st.openCount === 0 && iv + ow === before && (iv === 0 || iv === 12), `${point}: exactly once (open ${st.openCount}, inventory ${iv}, owed ${ow}: ${before} in all)`, k);
+        check(c.verdict === 'match', `${point}: conservation against the baseline: ${c.verdict} ${json(c.diff)}`, k);
+      }
+    }
+    out.summary = { points: points.length, cases: out.cases.length, match: out.cases.filter((c) => c.verdict === 'match').length };
+    log(`  txn-owed: ${json(out.summary)}`);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
 }

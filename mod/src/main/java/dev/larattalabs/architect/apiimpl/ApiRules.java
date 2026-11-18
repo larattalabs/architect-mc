@@ -47,6 +47,8 @@ public final class ApiRules {
 		"diagnoseRepair", "repairSuspects", "removalStop",
 		// (LCAP, S-M5-16) RealiseRequest/ApprovedRealise.maxBillPerLot (a per-lot cap beside maxBill) and Quote.lotBill
 		"maxBillPerLot",
+		// (slice T2b) Sites.owed, collectOwed, creditOwedToStock, SiteEvents.OWED_CHANGED (owed collectibles, never a drop)
+		"owed",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 

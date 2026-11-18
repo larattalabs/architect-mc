@@ -20,6 +20,13 @@ public final class TxnDevHooks {
 	}
 
 	public static void init() {
+		op("dev.stockpile.owed", "owedList", "{recipient?} - (slice T2b) owed collectibles: one recipient's (a player UUID or an owner id such as "
+			+ "steward_mc:settlement/<id>), oldest first, or every entry: owed [{key, recipient, dimension, at, items, reason, createdTick}], total");
+		op("dev.owed.add", "owedAdd", "{key, items: {item: n}, recipient?: the player, reason?, at?} - (slice T2b) TEST: an owed entry, as a source's "
+			+ "O effect writes it (published by the next ledger save)");
+		op("dev.owed.collect", "owedCollect", "{recipient, key} - (slice T2b) collectOwed to the client's player through the owed.collect txn -> "
+			+ "{status: DONE|HELD|REFUSED, given, stillOwed, why, detail}");
+		op("dev.owed.credit", "owedCredit", "{owner, key} - (slice T2b) creditOwedToStock through the owed.credit txn -> {status, given, stillOwed, why}");
 		op("dev.txn.cells", "cells", "{cells: [[x,y,z], ..]} - (slice T2a) per cell: state, be (type), beId (identity: a replaced block entity changes it), "
 			+ "slots {slot: 'item xN'}, nbt (the saved data), drops (item entities within 2 blocks): what txn-holds compares before and after a writer");
 		op("dev.txn.poke", "poke", "{pos, how} - (slice T2a) TEST: one raw write at a cell as another mod would make it: setBlock (air) | destroyBlock | "

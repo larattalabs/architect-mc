@@ -217,6 +217,8 @@ public interface ArchitectApi {
 	 * (LCAP, since 1.67.0) {@code "maxBillPerLot"}: {@link RealiseRequest#maxBillPerLot}, {@link ApprovedRealise#maxBillPerLot} (each lot's own
 	 * cap beside {@code maxBill}; refused {@link Reason#BILL_CAP} with detail {@code lot:<id>} or {@code unknown_lot:<id>}) and
 	 * {@link Quote#lotBill}.
+	 * (slice T2b, since NEXT) {@code "owed"}: {@link Sites#owed}, {@link Sites#collectOwed}, {@link Sites#creditOwedToStock},
+	 * {@link SiteEvents#OWED_CHANGED} ({@link Owed}, {@link Collected}).
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.

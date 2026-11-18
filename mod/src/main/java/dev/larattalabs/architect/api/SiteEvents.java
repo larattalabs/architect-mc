@@ -271,6 +271,15 @@ public interface SiteEvents {
 		}
 	});
 	/**
+	 * (slice T2b) A recipient's owed collectibles changed ({@link Sites#owed}): an entry owed, collected in part or whole, or credited to a
+	 * stock. At least once (after a crash it may fire again); listeners re-read {@link Sites#owed}. Server thread. Since NEXT.
+	 */
+	Event<OwedChanged> OWED_CHANGED = EventFactory.createArrayBacked(OwedChanged.class, ls -> recipient -> {
+		for (OwedChanged l : ls) {
+			Guard.run(() -> l.onChanged(recipient), "OWED_CHANGED");
+		}
+	});
+	/**
 	 * (PT) A player build was found, changed (a new revision), merged (the view is the build merged away; {@link Sites#build}
 	 * resolves its id to the survivor), split (the view is the new part), claimed, released or gone ({@code change} names which).
 	 * Server thread. Since PT.
@@ -326,6 +335,12 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface RegionPlanProgress {
 		void onPhase(@org.jspecify.annotations.Nullable String planId, String phase);
+	}
+
+	/** (slice T2b) {@link #OWED_CHANGED}'s listener. Since NEXT. */
+	@FunctionalInterface
+	interface OwedChanged {
+		void onChanged(String recipient);
 	}
 
 	@FunctionalInterface

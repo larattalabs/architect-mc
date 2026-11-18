@@ -45,6 +45,10 @@ public final class TxnDev {
 			}
 			case "conservation" -> conservation(srv, player, req);
 			case "cells" -> cells(player, req);
+			case "owedAdd" -> owedAdd(srv, player, req);
+			case "owedList" -> owedList(req);
+			case "owedCollect" -> answer(OwedTxn.collect(srv, req.get("recipient").getAsString(), req.get("key").getAsString(), player));
+			case "owedCredit" -> answer(OwedTxn.credit(srv, req.get("owner").getAsString(), req.get("key").getAsString()));
 			case "poke" -> poke(player, req);
 			default -> throw new IllegalArgumentException("unknown dev.txn op " + op);
 		};
@@ -227,6 +231,73 @@ public final class TxnDev {
 		return o;
 	}
 
+	/** (slice T2b, TEST) dev.owed.add {key, recipient?: the player, items, reason?, at?}: an owed entry, as a source txn's O effect writes it. */
+	static JsonObject owedAdd(MinecraftServer srv, ServerPlayer player, JsonObject req) {
+		Map<String, Integer> items = new TreeMap<>();
+		req.getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
+		BlockPos at = req.has("at") ? pos(req.getAsJsonArray("at")) : player.blockPosition();
+		String recipient = req.has("recipient") ? req.get("recipient").getAsString() : player.getUUID().toString();
+		boolean ok = dev.larattalabs.architect.site.OwedLedger.owe(new dev.larattalabs.architect.site.OwedLedger.Entry(req.get("key").getAsString(), recipient,
+			player.level().dimension().identifier().toString(), at.getX(), at.getY(), at.getZ(), items, req.has("reason") ? req.get("reason").getAsString()
+				: dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE, srv.getTickCount(), System.currentTimeMillis()), null);
+		Stockpiles.owedChanged();
+		dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(recipient);
+		JsonObject o = owedList(req.has("recipient") ? req : new JsonObject());
+		o.addProperty("added", ok);
+		o.addProperty("recipient", recipient);
+		return o;
+	}
+
+	/** dev.stockpile.owed / dev.txn.owedList {recipient?}: the entries (one recipient's, oldest first, or all), and the total. */
+	static JsonObject owedList(JsonObject req) {
+		JsonObject o = new JsonObject();
+		JsonArray a = new JsonArray();
+		var es = req.has("recipient") ? dev.larattalabs.architect.site.OwedLedger.of(req.get("recipient").getAsString())
+			: dev.larattalabs.architect.site.OwedLedger.all();
+		Map<String, Integer> tot = new TreeMap<>();
+		for (var e : es) {
+			JsonObject x = new JsonObject();
+			x.addProperty("key", e.key());
+			x.addProperty("recipient", e.recipient());
+			x.addProperty("dimension", e.dimension());
+			x.add("at", pos(new BlockPos(e.x(), e.y(), e.z())));
+			JsonObject it = new JsonObject();
+			e.items().forEach(it::addProperty);
+			e.items().forEach((k, v) -> tot.merge(k, v, Integer::sum));
+			x.add("items", it);
+			x.addProperty("reason", e.reason());
+			x.addProperty("createdTick", e.tick());
+			a.add(x);
+		}
+		o.add("owed", a);
+		JsonObject t = new JsonObject();
+		tot.forEach(t::addProperty);
+		o.add("total", t);
+		return o;
+	}
+
+	static JsonObject answer(OwedTxn.Answer a) {
+		JsonObject o = new JsonObject();
+		o.addProperty("status", a.status());
+		JsonObject g = new JsonObject();
+		a.given().forEach(g::addProperty);
+		o.add("given", g);
+		JsonObject l = new JsonObject();
+		a.stillOwed().forEach(l::addProperty);
+		o.add("stillOwed", l);
+		o.addProperty("why", a.why());
+		o.addProperty("detail", a.detail());
+		return o;
+	}
+
+	static JsonArray pos(BlockPos p) {
+		JsonArray a = new JsonArray();
+		a.add(p.getX());
+		a.add(p.getY());
+		a.add(p.getZ());
+		return a;
+	}
+
 	/** (dev.txn.poke cacheStorage) Transfer API handles looked up before a hold, used after it. */
 	static final Map<Long, net.fabricmc.fabric.api.transfer.v1.storage.Storage<net.fabricmc.fabric.api.transfer.v1.item.ItemVariant>> CACHED = new java.util.HashMap<>();
 
@@ -275,6 +346,7 @@ public final class TxnDev {
 			}
 		}
 		c.add("inventories", inv);
+		c.add("owed", dev.larattalabs.architect.site.OwedLedger.total()); // (slice T2b) every owed collectible, from the ledger (§5.1)
 		c.add("offlineInventories", offline(srv, online, c));
 		// every pile's ledger holdings (custody and held provided items are holdings, §5.2); the legacy terms named, never silently zero
 		for (Stockpiles.Pile p : Stockpiles.all()) {

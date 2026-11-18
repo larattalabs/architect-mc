@@ -63,6 +63,8 @@ public final class TxnServer {
 
 	private static void register(TxnCore c) {
 		c.register(TestMove.KIND);
+		c.register(OwedTxn.COLLECT_KIND); // (slice T2b)
+		c.register(OwedTxn.CREDIT_KIND);
 	}
 
 	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */
@@ -74,6 +76,8 @@ public final class TxnServer {
 
 	public static void init() {
 		TestMove.init();
+		OwedTxn.init();
+		OwedCommands.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(TxnServer::load);
 		ServerLifecycleEvents.SERVER_STARTED.addPhaseOrdering(PHASE, Event.DEFAULT_PHASE);
 		ServerLifecycleEvents.SERVER_STARTED.register(PHASE, TxnServer::recoverAtStart);

@@ -954,6 +954,50 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		}
 	}
 
+	// ------------------------------------------------------------------ (slice T2b) owed collectibles
+
+	@Override
+	public java.util.List<dev.larattalabs.architect.api.Owed> owed(String recipient) {
+		java.util.List<dev.larattalabs.architect.api.Owed> out = new java.util.ArrayList<>();
+		for (dev.larattalabs.architect.site.OwedLedger.Entry e : dev.larattalabs.architect.site.OwedLedger.of(recipient)) {
+			out.add(owedView(e));
+		}
+		return out;
+	}
+
+	static dev.larattalabs.architect.api.Owed owedView(dev.larattalabs.architect.site.OwedLedger.Entry e) {
+		return new dev.larattalabs.architect.api.Owed(e.key(), e.recipient(), net.minecraft.resources.ResourceKey.create(
+			net.minecraft.core.registries.Registries.DIMENSION, net.minecraft.resources.Identifier.parse(e.dimension())),
+			new net.minecraft.core.BlockPos(e.x(), e.y(), e.z()), Views.items(e.items()), e.reason(), e.tick(), e.wall());
+	}
+
+	@Override
+	public java.util.concurrent.CompletableFuture<dev.larattalabs.architect.api.Collected> collectOwed(String recipient, String key, ServerPlayer to) {
+		return owedAnswer(key, dev.larattalabs.architect.txn.OwedTxn.collect(server, recipient, key, to));
+	}
+
+	@Override
+	public java.util.concurrent.CompletableFuture<dev.larattalabs.architect.api.Collected> creditOwedToStock(String owner, String key) {
+		return owedAnswer(key, dev.larattalabs.architect.txn.OwedTxn.credit(server, owner, key));
+	}
+
+	static java.util.concurrent.CompletableFuture<dev.larattalabs.architect.api.Collected> owedAnswer(String key,
+		dev.larattalabs.architect.txn.OwedTxn.Answer a) {
+		java.util.concurrent.CompletableFuture<dev.larattalabs.architect.api.Collected> f = new java.util.concurrent.CompletableFuture<>();
+		switch (a.status()) {
+			case "DONE" -> f.complete(new dev.larattalabs.architect.api.Collected(key, Views.items(a.given()), Views.items(a.stillOwed()), a.replayed()));
+			case "HELD" -> f.completeExceptionally(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, "owed " + key + ": " + a.detail(),
+				String.valueOf(a.detail())));
+			default -> {
+				String why = String.valueOf(a.why());
+				int c = why.indexOf(':');
+				Reason r = why.startsWith("journal_unavailable") ? Reason.JOURNAL_UNAVAILABLE : Reason.NOT_ALLOWED;
+				f.completeExceptionally(new dev.larattalabs.architect.api.ArchitectRefused(r, why, c > 0 ? why.substring(0, c) : why));
+			}
+		}
+		return f;
+	}
+
 	@Override
 	public dev.larattalabs.architect.api.Stockpile adoptCrates(String owner) {
 		try {

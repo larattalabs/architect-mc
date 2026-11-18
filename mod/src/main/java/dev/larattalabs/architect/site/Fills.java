@@ -896,6 +896,12 @@ public final class Fills {
 			decls.add(spec.containers().get(i).items());
 			// (FK-b fix) a swapped block takes no provided item back (they end destroyed below, never dropped); billed items still go back
 			fits.add(providedFits(level.getServer(), s, spec.containers().get(i), level.getBlockState(p)));
+			// (slice T2b, the receipt-leak P2) receipts of write-backs the loaded (durable) ledger already credits are stale: dropped here
+			dev.larattalabs.architect.txn.ChunkReceipts.remove(ch, r -> {
+				int bar = r.indexOf('|');
+				int at = bar < 0 ? -1 : r.lastIndexOf('@', bar); // wb:<key>#<n>@x,y,z|...: the key itself may hold an '@'
+				return r.startsWith("wb:") && at > 0 && Stockpiles.DURABLE_WB.contains(r.substring(0, at));
+			});
 			Map<Integer, Stack> rc = FillsWriteBack.parse(dev.larattalabs.architect.txn.ChunkReceipts.of(ch), wb, p.getX(), p.getY(), p.getZ());
 			if (!(level.getBlockEntity(p) instanceof Container c)) {
 				now.add(new FillsWriteBack.Cell(false, 0, java.util.Set.of(), rc));

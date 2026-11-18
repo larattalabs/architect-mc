@@ -353,6 +353,36 @@ public interface Sites {
 		throw new UnsupportedOperationException("Sites.removeStockpileCrate needs Architect API 1.17.0");
 	}
 
+	/**
+	 * (slice T2b) What Architect owes {@code recipient} (a player UUID string or an owner id), oldest first ({@link Owed#createdTick}); empty
+	 * when nothing. A recipient with a stockpile is credited there instead, so its entries are rare. Server thread. Since NEXT.
+	 */
+	default java.util.List<Owed> owed(String recipient) {
+		throw new UnsupportedOperationException("Sites.owed needs Architect API NEXT");
+	}
+
+	/**
+	 * (slice T2b) Gives player {@code to} what fits of entry {@code key} owed to {@code recipient}, exactly once across any crash (a txn: the
+	 * entry's debit and the give, the player's file acknowledged before it retires); the rest stays owed, nothing drops. Completes when the
+	 * give is applied and saved; fails {@link ArchitectRefused} {@link Reason#NOT_ALLOWED} (detail {@code owed_not_found}) for an unknown key
+	 * or another recipient's, {@link Reason#SITE_BUSY} (detail {@code held(..)}) while another collect or credit of the key or the player is
+	 * under way, or this one is held (the player left: it finishes when they return), {@link Reason#JOURNAL_UNAVAILABLE} when the txn file
+	 * can't be written. A build running for the recipient never blocks it. For an owner id, the owning mod decides which player receives.
+	 * Server thread. Since NEXT.
+	 */
+	default java.util.concurrent.CompletableFuture<Collected> collectOwed(String recipient, String key, net.minecraft.server.level.ServerPlayer to) {
+		throw new UnsupportedOperationException("Sites.collectOwed needs Architect API NEXT");
+	}
+
+	/**
+	 * (slice T2b) Credits all of entry {@code key} owed to {@code owner} into {@code owner}'s stockpile, exactly once (one ledger change: the
+	 * entry ends and the stock gains it, past capacity like a keyed refund). Never automatic: the owning mod calls it once a pile exists.
+	 * Fails as {@link #collectOwed}, and {@link Reason#NOT_ALLOWED} (detail {@code no_stockpile}) without a pile. Server thread. Since NEXT.
+	 */
+	default java.util.concurrent.CompletableFuture<Collected> creditOwedToStock(String owner, String key) {
+		throw new UnsupportedOperationException("Sites.creditOwedToStock needs Architect API NEXT");
+	}
+
 	/** The owner's stockpile (C24's "stock(owner)"), or empty. Server thread. Since 1.17.0. */
 	default Optional<Stockpile> stockpile(String owner) {
 		throw new UnsupportedOperationException("Sites.stockpile needs Architect API 1.17.0");

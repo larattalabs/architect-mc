@@ -649,8 +649,8 @@ final class TxnCrashModel {
 	/** The ops, by store field: take/put (B, a container), credit/debit (L), give/ptake (P), drop (R), decide (D), restore (W). */
 	static TxnKind.Adapter adapter(World w, String op) {
 		return switch (op) {
-			case "take", "ptake", "debit" -> new Move(w, op, -1);
-			case "put", "give", "credit" -> new Move(w, op, +1);
+			case "take", "ptake", "debit", "unowe" -> new Move(w, op, -1);
+			case "put", "give", "credit", "owe" -> new Move(w, op, +1);
 			case "drop" -> new Drop(w);
 			case "decide" -> new Decide(w);
 			case "restore" -> new Restore(w);
@@ -662,6 +662,7 @@ final class TxnCrashModel {
 		return switch (op) {
 			case "take", "put" -> "items";
 			case "debit", "credit" -> "stock";
+			case "unowe", "owe" -> "owed"; // (slice T2b) the owed ledger's entries
 			default -> "inv";
 		};
 	}
@@ -946,6 +947,7 @@ final class TxnCrashModel {
 			c.add(s.name + ".items", items(s.mem, "items"));
 			c.add(s.name + ".stock", items(s.mem, "stock"));
 			c.add(s.name + ".inv", items(s.mem, "inv"));
+			c.add(s.name + ".owedItems", items(s.mem, "owed"));
 			if (s.mem.get("records") instanceof JsonObject recs) {
 				recs.entrySet().forEach(e -> c.add(s.name + ".owed", items(e.getValue().getAsJsonObject(), "items")));
 			}
