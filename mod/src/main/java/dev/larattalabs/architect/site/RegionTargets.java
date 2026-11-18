@@ -2575,10 +2575,20 @@ public final class RegionTargets {
 			c.outstanding().forEach((k, v) -> outstanding.merge(k, v, Integer::sum));
 		}
 		// the lots (construction sites) and the 4e roads (construction roads), under their pad's and road's part
-		Map<String, String> lotPart = new java.util.HashMap<>();
-		for (var lot : l.ir().lots()) {
-			lotPart.put(lot.id(), planPartOf.apply(lot.part()));
+		// (8b review P2) every lot of the head: the realised IR's, then each standing revision's (a revision lot's item carries its lot, no part)
+		List<JsonObject> irs = new ArrayList<>();
+		irs.add(l.ir().json());
+		var revs = new ArrayList<>(rec.revisions);
+		revs.sort(java.util.Comparator.comparingInt(v -> v.position));
+		for (var rv : revs) {
+			if (rv.standing() && rv.position <= rec.position) {
+				var rir = dev.larattalabs.architect.region.Revisions.irOf(l, rv.rid);
+				if (rir != null) {
+					irs.add(rir.json());
+				}
+			}
 		}
+		Map<String, String> lotPart = lotParts(irs);
 		for (Site s : Sites.all()) {
 			if (!group.equals(s.group()) || s.construction() == null) {
 				continue;
@@ -2696,6 +2706,30 @@ public final class RegionTargets {
 			}
 		});
 		return new dev.larattalabs.architect.api.RegionBuild(built, done, percent, items, out, SurvivalWorld.terrainPerTick());
+	}
+
+	/**
+	 * (8b review P2) Every lot's plan part over IRs (pure): each IR's lots under that IR's own survival groups ({@code survival.parts} ->
+	 * {@code survival.groups}), the first IR to name a lot winning (the realised plan's first, then the revisions in position order); a lot
+	 * whose IR part has no group keeps the part's id, one with no part {@code "?"}.
+	 */
+	static Map<String, String> lotParts(List<JsonObject> irs) {
+		Map<String, String> out = new java.util.HashMap<>();
+		for (JsonObject ir : irs) {
+			List<String> groups = dev.larattalabs.architect.region.RegionSurvival.groups(ir);
+			JsonObject pm = ir.get("survival") instanceof JsonObject sv && sv.get("parts") instanceof JsonObject o ? o : new JsonObject();
+			if (ir.get("lots") instanceof JsonArray la) {
+				for (var e : la) {
+					if (e instanceof JsonObject lo && lo.get("id") != null) {
+						String part = lo.get("part") instanceof com.google.gson.JsonPrimitive pp ? pp.getAsString() : null;
+						String mapped = part == null ? "?" : pm.has(part) && pm.get(part).getAsInt() >= 0 && pm.get(part).getAsInt() < groups.size() ? groups.get(pm.get(part)
+							.getAsInt()) : part;
+						out.putIfAbsent(lo.get("id").getAsString(), mapped);
+					}
+				}
+			}
+		}
+		return out;
 	}
 
 	/**

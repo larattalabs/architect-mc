@@ -163,7 +163,7 @@ public final class Revisions {
 				sites);
 		}
 
-		boolean standing() {
+		public boolean standing() {
 			return !state.equals("UNDONE") && !state.equals("STALE");
 		}
 	}
