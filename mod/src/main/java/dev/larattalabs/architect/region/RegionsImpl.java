@@ -3562,6 +3562,7 @@ public final class RegionsImpl implements Regions {
 			note.addProperty("dangling", true);
 			note.addProperty("since", at);
 			o.rec().ext.add(EXT_BESIDE, note);
+			dev.larattalabs.architect.apiimpl.SettlementSignals.mark(o.rec().owner, o.rec().id); // (8b EV) a beside/land ext change
 			// (6c D3, §6, S-D3-3) its land: standingRemoved set, inside and outside kept (the cells are still the district's)
 			if (o.rec().ext.get(DistrictLand.EXT_LAND) instanceof JsonObject land) {
 				land.addProperty("standingRemoved", at);

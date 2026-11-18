@@ -54,6 +54,8 @@ public final class ApiRules {
 		"buildStatus",
 		// (8b LY) Regions.layout: lots (pads too) and parts with kind, box and ends, cached per IR sha and head revision
 		"regionLayout",
+		// (8b EV) SiteEvents.SETTLEMENT_CHANGED: one coalesced "re-read" signal per (owner, region)
+		"settlementChanged",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 

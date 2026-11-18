@@ -1613,8 +1613,9 @@ public final class Revisions {
 				town = new int[] {sc.get(0).getAsInt(), sc.get(1).getAsInt(), sc.get(2).getAsInt(), sc.get(3).getAsInt()};
 			}
 			JsonObject land = DistrictLand.of(effective(l), town, removedAt, !rec.revisions.isEmpty());
-			if (land != null) {
+			if (land != null && !land.equals(rec.ext.get(DistrictLand.EXT_LAND))) {
 				rec.ext.add(DistrictLand.EXT_LAND, land);
+				dev.larattalabs.architect.apiimpl.SettlementSignals.mark(rec.owner, rec.id); // (8b EV) a land ext change
 			}
 		}
 		for (Rev r : rec.revisions) {

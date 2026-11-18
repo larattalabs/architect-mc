@@ -2133,8 +2133,9 @@ public final class Sites {
 			return;
 		}
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		map.put(b.id(), b);
+		Site was = map.put(b.id(), b);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
+		dev.larattalabs.architect.apiimpl.SettlementSignals.siteChanged(was, b); // (8b EV) a row's edge: version, deviations, updating, pause
 	}
 
 	/**
