@@ -252,6 +252,15 @@ public final class StyleBrowserScreen extends PickerScreen {
 			my = -1000;
 		}
 		super.extractRenderState(g, mx, my, a);
+	}
+
+	/** (PR A3, W1) Duplicate / Edit and the menus: drawn inside the picker's text-size scaling and under its "?" overlay. */
+	@Override
+	protected void extractAbove(GuiGraphicsExtractor g, int mx, int my, float a) {
+		if (U3Dev.park) {
+			mx = -1000;
+			my = -1000;
+		}
 		StyleCatalog.Card c = selectedCard();
 		int[] d = detailGeometry();
 		int ew = Button.width(font, "Edit");
@@ -369,8 +378,12 @@ public final class StyleBrowserScreen extends PickerScreen {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
 		message = null;
-		double mx = e.x();
-		double my = e.y();
+		if (keysOverlay().isOpen()) {
+			return super.mouseClicked(e, doubleClick); // the overlay takes the click (PickerScreen closes it)
+		}
+		// (PR A3) the subclass's own controls are laid out in the scaled coordinates; super maps e itself
+		double mx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e.x());
+		double my = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e.y());
 		if (menu != null) {
 			boolean inside = mx >= menuRect[0] && mx < menuRect[0] + menuRect[2] && my >= menuRect[1] && my < menuRect[1] + menuRect[3];
 			if (inside) {
@@ -421,7 +434,9 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double sx, double sy) {
-		if (menu == Menu.BUILTIN && builtinList.mouseScrolled(mx, my, sy) || menu == Menu.TAGS && tagList.mouseScrolled(mx, my, sy)) {
+		double smx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", mx);
+		double smy = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", my);
+		if (menu == Menu.BUILTIN && builtinList.mouseScrolled(smx, smy, sy) || menu == Menu.TAGS && tagList.mouseScrolled(smx, smy, sy)) {
 			return true;
 		}
 		return super.mouseScrolled(mx, my, sx, sy);
@@ -429,6 +444,9 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		if (keysOverlay().keyPressed(e, searchFocused())) {
+			return true; // (PR W1) the "?" overlay first
+		}
 		if (menu != null) {
 			if (e.isEscape()) {
 				menu = null;

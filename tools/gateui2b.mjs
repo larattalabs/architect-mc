@@ -843,22 +843,23 @@ steps.gallery = async () => {
     await call('dev.build.cancel').catch(() => null);
     await G({ reset: true, survival: false });
     await sec('ui', 'guide', 'offer', async () => { await G({ reset: true, survival: false }); await openTab('library'); await G({ event: 'screen_opened_no_sites' }); });
-    await sec('ui', 'guide', 'step1', async () => { await G({ reset: true }); await G({ event: 'start' }); await openTab('library'); });
+    await sec('ui', 'guide', 'step1', async () => { await G({ reset: true }); await openTab('library'); await G({ event: 'start', survival: false }); });
     await sec('ui', 'guide', 'step2', async () => { await G({ reset: true }); await G({ event: 'start' }); await G({ event: 'picked', arg: 'cabin' }); await openTab('library'); await call('dev.library.select', { entry: 'cabin' }).catch(() => null); });
-    const world = async (events) => {
-      await G({ reset: true }); await G({ event: 'start' });
+    const world = async (events, below = false) => {
+      await G({ reset: true, survival: false }); await G({ event: 'start' });
       await call('dev.screen', { open: null });
       await call('dev.build.cancel').catch(() => null);
-      await call('dev.build.start', { blueprint: 'cabin', origin: [100, 64, 100], ground: true, turns: 0 });
+      // step 4 below the world: refused, so the card stays on "read the outline" (a fitting ghost moves it on at once)
+      await call('dev.build.start', { blueprint: 'cabin', origin: below ? [100, -70, 100] : [100, 64, 100], ground: !below, turns: 0 });
       for (const e of events) await G({ event: e });
       await gcam();
     };
     await sec('world', 'guide', 'step3', () => world([]), { closeScreen: false });
-    await sec('world', 'guide', 'step4', () => world(['rotated']), { closeScreen: false });
+    await sec('world', 'guide', 'step4', () => world(['rotated'], true), { closeScreen: false });
     await sec('world', 'guide', 'step5', () => world(['rotated', 'verdict_ok']), { closeScreen: false });
     await call('dev.build.cancel').catch(() => null);
     await sec('world', 'guide', 'step6', async () => { await world(['rotated', 'verdict_ok']); await call('dev.build.cancel').catch(() => null); await G({ event: 'placed' }); await gcam(); }, { closeScreen: false });
-    await sec('ui', 'guide', 'closing', async () => { await G({ reset: true }); await G({ event: 'start' }); await G({ event: 'placed' }); await G({ event: 'keep' }); await openTab('library'); });
+    await sec('ui', 'guide', 'closing', async () => { await G({ reset: true, survival: false }); await G({ event: 'start' }); await G({ event: 'placed' }); await G({ event: 'keep' }); await openTab('library'); });
     await sec('world', 'guide', 'survival_crate', async () => {
       await G({ reset: true, survival: true }); await G({ event: 'start' }); await G({ event: 'placed' }); await call('dev.screen', { open: null }); await gcam();
     }, { scales: [2], closeScreen: false });

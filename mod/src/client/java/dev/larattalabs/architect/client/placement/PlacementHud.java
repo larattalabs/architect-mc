@@ -82,8 +82,8 @@ final class PlacementHud implements HudZones.Element {
 			add.accept(Row.text(TextUtil.ellipsize(font, title, inner), HudInk.text()), dev.larattalabs.architect.placement.HudFit.KEEP);
 			// (PR W1) what this HUD is, until the first placement (or Status hides it)
 			var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement");
-			if (!BuildPlacement.preview() && tip.shown()) {
-				add.accept(Row.text(TextUtil.ellipsize(font, tip.text(), inner), HudInk.soft()), 2);
+			if (!BuildPlacement.preview() && tip.shown() && !legend) { // the legend needs the room
+				add.accept(Row.text(TextUtil.ellipsize(font, tip.text(), inner), dev.larattalabs.labui.client.ui.UiStyle.OnDark.muted()), 2);
 			}
 			add.accept(Row.chips(chips(v)), dev.larattalabs.architect.placement.HudFit.KEEP);
 			if (BuildPlacement.tooFar()) {

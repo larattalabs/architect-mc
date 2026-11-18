@@ -328,29 +328,67 @@ public final class ArchitectScreen extends Screen {
 	private final List<Hit> guideHits = new ArrayList<>();
 
 	/** (PR F1) The guide's card inside the screen: the offer, a paused tour, the in-screen steps, the closing card. */
-	private void drawGuide(GuiGraphicsExtractor g, int mx, int my) {
-		guideHits.clear();
+	private static boolean guideModal(dev.larattalabs.architect.client.help.GuideModel m) {
+		return switch (m.state()) {
+			case OFFERED, PAUSED, CLOSING -> true;
+			default -> false;
+		};
+	}
+
+	/**
+	 * (PR F1) A running tour's step inside the screen: a band under the tabs (in place of the "what's this" line), so it never covers the
+	 * control it points at. Returns the height used (0 when there is no step to show).
+	 */
+	private int guideBand(GuiGraphicsExtractor g, int x, int y, int w, int mx, int my) {
 		var m = dev.larattalabs.architect.client.help.GuideFeature.model();
 		var c = dev.larattalabs.architect.client.help.GuideFeature.card();
-		if (c == null) {
+		if (c == null || m.state() != dev.larattalabs.architect.client.help.GuideModel.State.RUNNING) {
+			return 0;
+		}
+		String keep = c.buttons().isEmpty() ? null : c.buttons().get(0)[1];
+		int bwid = keep == null ? 0 : bw(keep) + 6;
+		List<String> body = TextUtil.wrapPlain(font, c.body(), w - 12 - bwid).stream().limit(2).toList();
+		int h = 4 + 10 + body.size() * 10 + 4;
+		h = Math.max(h, keep == null ? 0 : 26);
+		dev.larattalabs.labui.client.widget.Paint.box(g, x, y - 2, w, h, UiStyle.withAlpha(UiStyle.PAPER, 255), UiStyle.selectedEdge());
+		g.fill(x, y - 2, x + 2, y - 2 + h, UiStyle.BRASS);
+		g.text(font, c.title() + " · first build (Esc in the world pauses)", x + 6, y + 2, UiStyle.clayText(), false);
+		int ly = y + 12;
+		for (String l : body) {
+			g.text(font, l, x + 6, ly, UiBits.ink(), false);
+			ly += 10;
+		}
+		if (keep != null) {
+			String id = c.buttons().get(0)[0];
+			int before = hits.size();
+			button(g, id, keep, x + w - bwid, y + (h - 20) / 2 - 2, bwid - 6, false, true, mx, my, () -> dev.larattalabs.architect.client.help.GuideFeature
+				.press(id));
+			while (hits.size() > before) {
+				guideHits.add(hits.remove(hits.size() - 1));
+			}
+		}
+		return h + 2;
+	}
+
+	/** (PR F1) The tour's offer, pause and closing cards: modal, centred over a dimmed screen. */
+	private void drawGuide(GuiGraphicsExtractor g, int mx, int my) {
+		var m = dev.larattalabs.architect.client.help.GuideFeature.model();
+		var c = dev.larattalabs.architect.client.help.GuideFeature.card();
+		if (c == null || !guideModal(m)) {
 			return;
 		}
+		guideHits.clear();
 		boolean offer = m.state() == dev.larattalabs.architect.client.help.GuideModel.State.OFFERED;
 		int w = Math.min(300, width - 24);
 		Kit.Padding pad = Kit.padding("panel_paper");
 		int inner = w - pad.left() - pad.right();
 		List<String> body = TextUtil.wrapPlain(font, c.body(), inner);
-		List<String[]> buttons = new ArrayList<>(c.buttons());
-		String pal = null;
-		if (offer) {
-			// (N-PR-4) the colour-blind safe ghost colours are offered here
-			pal = "Colour-blind safe ghost colours: " + (dev.larattalabs.labui.ui.GhostPalette.current() == dev.larattalabs.labui.ui.GhostPalette.Palette
-				.OKABE_ITO ? "on" : "off") + " (click)";
-		}
-		int h = pad.top() + 16 + body.size() * 10 + (pal != null ? 14 : 0) + (buttons.isEmpty() ? 0 : 26) + pad.bottom();
-		int x = width - w - 10;
-		int y = height - h - 30;
+		List<String[]> buttons = c.buttons();
+		int h = pad.top() + 16 + body.size() * 10 + (buttons.isEmpty() ? 0 : 26) + (offer ? 16 : 0) + pad.bottom();
+		int x = (width - w) / 2;
+		int y = (height - h) / 2;
 		g.nextStratum();
+		g.fill(0, 0, width, height, UiStyle.withAlpha(UiStyle.INK, 110));
 		Panels.panel(g, x, y, w, h);
 		int cx = x + pad.left();
 		int cy = y + pad.top();
@@ -360,18 +398,10 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, l, cx, cy, UiBits.ink(), false);
 			cy += 10;
 		}
-		if (pal != null) {
-			cy += 2;
-			Hit ph = new Hit("guide:okabe", pal, cx, cy, Math.min(inner, font.width(pal)), 12, true, false, () -> dev.larattalabs.architect.client.help
-				.GuideFeature.press("guide:okabe"));
-			guideHits.add(ph);
-			g.text(font, TextUtil.ellipsize(font, pal, inner), cx, cy + 2, UiStyle.link(), false);
-			cy += 12;
-		}
+		int before = hits.size();
 		if (!buttons.isEmpty()) {
 			cy += 4;
 			int bx = cx;
-			int before = hits.size();
 			for (int i = 0; i < buttons.size(); i++) {
 				String[] b = buttons.get(i);
 				String id = b[0];
@@ -383,11 +413,23 @@ public final class ArchitectScreen extends Screen {
 				});
 				bx += bw(b[1]) + 4;
 			}
-			// the card's buttons sit over the screen: they take clicks first
-			while (hits.size() > before) {
-				guideHits.add(hits.remove(hits.size() - 1));
-			}
+			cy += 24;
 		}
+		if (offer) {
+			// (N-PR-4) the colour-blind safe ghost colours, offered here: a checkbox under the choice
+			boolean on = dev.larattalabs.labui.ui.GhostPalette.current() == dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO;
+			String pal = "Use colour-blind safe ghost colours";
+			hits.add(new Hit("guide:okabe", pal, cx, cy, Math.min(inner, 13 + font.width(pal)), 12, true, on, () -> dev.larattalabs.architect.client.help
+				.GuideFeature.press("guide:okabe")));
+			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, cx, cy + 1, 10, 10, 0xFFFFFFFF);
+			g.text(font, TextUtil.ellipsize(font, pal, inner - 13), cx + 13, cy + 2, UiBits.ink(), false);
+		}
+		while (hits.size() > before) {
+			guideHits.add(hits.remove(hits.size() - 1));
+		}
+		// modal: nothing under the card takes a click
+		guideHits.add(new Hit("guide:modal", "", 0, 0, width, height, true, false, () -> {
+		}));
 	}
 
 	/** Opens the screen (B, /architect, after plot marking) at {@code tab} (null = the last one). */
@@ -446,7 +488,7 @@ public final class ArchitectScreen extends Screen {
 		y += 8;
 		// two columns when there is room (GUI scale 2), one at GUI scale 4
 		var sections = dev.larattalabs.labui.ui.Glossary.sections(dev.larattalabs.architect.client.help.ArchitectGlossary.OWNER);
-		if (w >= 360) {
+		if (w >= 560) {
 			int colW = (w - 14) / 2;
 			int yl = y;
 			int yr = y;
@@ -1382,7 +1424,9 @@ public final class ArchitectScreen extends Screen {
 		}
 		int top = ty + 22;
 		// (PR W1) the tab's "what's this" line under the tabs (× hides it; Status > Show tips again)
-		top += dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).draw(g, font, cx, top - 3, cw, mouseX, mouseY);
+		guideHits.clear();
+		int guideH = guideBand(g, cx, top - 1, cw, mouseX, mouseY); // (PR F1) a running tour's step takes the line's place
+		top += guideH > 0 ? guideH : dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).draw(g, font, cx, top - 3, cw, mouseX, mouseY);
 		int footerY = bottom - 20;
 		switch (tab) {
 			case DESIGN -> drawDesign(g, cx, top, cw, footerY, mouseX, mouseY);
@@ -2766,8 +2810,42 @@ public final class ArchitectScreen extends Screen {
 				}
 			}
 		}
-		// right: auth
+		// right: (PR A2, A3) Display first, so the text size, its fit note and the ghost colours are in view at every GUI scale
 		int ry = top;
+		g.text(font, "Display", rx, ry, UiStyle.clayText(), false);
+		ry += 12;
+		// (PR A3) the text size: 100 / 125 / 150 % of Architect's screens (lab-ui's setting); clamped to fit at this GUI scale
+		int pref = dev.larattalabs.labui.ui.TextScale.preference();
+		var tsr = dev.larattalabs.labui.client.prefs.TextScaleHost.result(this, "architect_mc");
+		String tl = "› Text size: " + pref + " %";
+		hits.add(new Hit("text_scale", tl, rx, ry, Math.min(colW, font.width(tl)), 12, true, pref != 100, () -> dev.larattalabs.labui.client.prefs.TextScaleHost
+			.set(dev.larattalabs.labui.ui.TextScale.next(pref))));
+		g.text(font, TextUtil.ellipsize(font, tl, colW), rx, ry + 2, UiStyle.link(), false);
+		ry += 12;
+		if (tsr.dropped()) {
+			for (String line : TextUtil.wrapPlain(font, "Shown at " + tsr.percent() + " %: " + pref + " % doesn't fit at this GUI scale. A smaller GUI "
+				+ "scale (Options > Video) makes room.", colW)) {
+				g.text(font, line, rx, ry + 2, UiStyle.warn(), false);
+				ry += 10;
+			}
+		}
+		ry += 2;
+		// (PR A2) the ghost colours: standard or colour-blind safe (lab-ui's setting: Steward's ghosts follow it)
+		var pal = dev.larattalabs.labui.ui.GhostPalette.current();
+		String pl = "› Ghost colours: " + pal.label();
+		hits.add(new Hit("ghost_palette", pl, rx, ry, Math.min(colW, font.width(pl)), 12, true, pal != dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD,
+			() -> dev.larattalabs.labui.client.prefs.LabUiPrefs.setGhostPalette(pal == dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD
+				? dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO : dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD)));
+		for (String line : TextUtil.wrapPlain(font, pl, colW)) {
+			g.text(font, line, rx, ry + 2, UiStyle.link(), false);
+			ry += 10;
+		}
+		for (String line : TextUtil.wrapPlain(font, "Outlines are dashed when a design can't go there, in both palettes.", colW)) {
+			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
+			ry += 10;
+		}
+		ry += 2;
+		ry += 6;
 		g.text(font, "Claude access", rx, ry, UiStyle.clayText(), false);
 		ry += 12;
 		SidecarState.Status s = Sidecar.state().status();
@@ -2856,37 +2934,6 @@ public final class ArchitectScreen extends Screen {
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
 		ry += 12;
-		// (PR A3) the text size: 100 / 125 / 150 % of Architect's screens (lab-ui's setting); clamped to fit at this GUI scale
-		int pref = dev.larattalabs.labui.ui.TextScale.preference();
-		var tsr = dev.larattalabs.labui.client.prefs.TextScaleHost.result(this, "architect_mc");
-		String tl = "Text size: " + pref + " % (click to change)";
-		hits.add(new Hit("text_scale", tl, rx, ry, Math.min(colW, font.width(tl)), 12, true, pref != 100, () -> dev.larattalabs.labui.client.prefs.TextScaleHost
-			.set(dev.larattalabs.labui.ui.TextScale.next(pref))));
-		g.text(font, TextUtil.ellipsize(font, tl, colW), rx, ry + 2, UiStyle.link(), false);
-		ry += 12;
-		if (tsr.dropped()) {
-			for (String line : TextUtil.wrapPlain(font, "Shown at " + tsr.percent() + " %: " + pref + " % doesn't fit at this GUI scale. A smaller GUI "
-				+ "scale (Options > Video) makes room.", colW)) {
-				g.text(font, line, rx, ry + 2, UiStyle.warn(), false);
-				ry += 10;
-			}
-		}
-		ry += 2;
-		// (PR A2) the ghost colours: standard or colour-blind safe (lab-ui's setting: Steward's ghosts follow it)
-		var pal = dev.larattalabs.labui.ui.GhostPalette.current();
-		String pl = "Ghost colours: " + pal.label() + " (click to change)";
-		hits.add(new Hit("ghost_palette", pl, rx, ry, Math.min(colW, font.width(pl)), 12, true, pal != dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD,
-			() -> dev.larattalabs.labui.client.prefs.LabUiPrefs.setGhostPalette(pal == dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD
-				? dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO : dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD)));
-		for (String line : TextUtil.wrapPlain(font, pl, colW)) {
-			g.text(font, line, rx, ry + 2, UiStyle.link(), false);
-			ry += 10;
-		}
-		for (String line : TextUtil.wrapPlain(font, "Outlines are dashed when a design can't go there, in both palettes.", colW)) {
-			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
-			ry += 10;
-		}
-		ry += 2;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.clayText(), false);

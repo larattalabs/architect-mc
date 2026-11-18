@@ -320,7 +320,12 @@ final class GhostRenderer {
 			float y = (float) (cells[i + 1] - cy);
 			float z = (float) (cells[i + 2] - cz);
 			switch (cue) {
-				case CROSS -> GhostCues.cross(box, x, y, z);
+				case CROSS -> {
+					// two-tone: a wider dark × under the coloured one, so it reads on dark wood and light stone alike
+					GhostCues.cross((x0, y0, z0, x1, y1, z1) -> n[0] += cube(pose, vc, x0, y0, z0, x1, y1, z1, 0xF0000000 | GhostPalette.CORE, 0x3F, false), x,
+						y, z, 0.13f, 0f);
+					GhostCues.cross(box, x, y, z, 0.08f, 0.03f);
+				}
 				case CORNER_TICKS -> GhostCues.cornerTicks(box, x, y, z);
 				case BANG -> GhostCues.bang(box, x, y, z);
 				default -> {

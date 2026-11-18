@@ -165,10 +165,23 @@ public final class RegionGhost {
 		return o;
 	}
 
+	/** (PR A2) The palette the shown tiles were tinted in: a change re-requests them (their tints are baked into the layers). */
+	private static dev.larattalabs.labui.ui.GhostPalette.Palette tintedIn = dev.larattalabs.labui.ui.GhostPalette.current();
+
 	private static void tick(Minecraft mc) {
 		GhostPlan p = plan;
 		if (p == null || mc.player == null || ++ticks % 10 != 0) {
 			return;
+		}
+		if (tintedIn != dev.larattalabs.labui.ui.GhostPalette.current()) {
+			tintedIn = dev.larattalabs.labui.ui.GhostPalette.current();
+			for (String k : List.copyOf(REQUESTED)) {
+				REQUESTED.remove(k);
+				SHOWN.remove(k);
+				SHAS.remove(k);
+				CompositePreview.clear(KEY + k);
+			}
+			gen++;
 		}
 		int px = mc.player.getBlockX();
 		int pz = mc.player.getBlockZ();

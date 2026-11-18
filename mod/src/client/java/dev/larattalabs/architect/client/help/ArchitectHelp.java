@@ -36,7 +36,7 @@ public final class ArchitectHelp {
 		tip("describe_style", "Say what a Style looks like and the design helper drafts it.", "Style", "design helper");
 		tip("crate", "This construction site builds from what you put in its crate.", "construction site", "crate", "stockpile");
 		tip("redirect", "Tell the design helper what to change before it adds the details.", "design", "design helper");
-		tip("hud.placement", "The ghost shows where the design goes. Its outline says whether it fits.", "ghost", "site", "build");
+		tip("hud.placement", "The ghost shows where it goes; its outline says if it fits.", "ghost", "site", "build");
 		tip("hud.plot", "Mark an area on the ground: look at a corner and press Enter.", "plot", "connector or link");
 		tip("hud.site", "A construction site near you: what it builds and what it still needs.", "construction site", "crate", "stockpile");
 	}
