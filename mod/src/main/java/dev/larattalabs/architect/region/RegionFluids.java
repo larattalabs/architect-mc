@@ -131,7 +131,7 @@ public final class RegionFluids {
 	 * (8cF) Whether this mod writes, drains and recovers flowing water by 8c's rules (slice WU): until then {@code flowingWater} is not
 	 * advertised (ApiRules), and a flowing body is drained as H's.
 	 */
-	static final boolean FLOWING_BUILD = false; // (8c WU failing-first: the in-game rows run red here; the next commit builds rivers)
+	static final boolean FLOWING_BUILD = !Boolean.getBoolean("architect.noFlowingWater"); // (8c WU) -Darchitect.noFlowingWater=true: H's drain, not advertised
 
 	/**
 	 * (8c WU) The item entities spawned this session in a flowing body's own or predicted cells (a wash the gate missed, a mint), by the

@@ -171,4 +171,35 @@ class RegionFluids8cFTest {
 		assertEquals(RegionFluids.flowingBuild(), ApiRules.features(2, List.of("job.run", "region.plan", "region.flowingWater")).contains("flowingWater"));
 		assertFalse(ApiRules.features(2, List.of("job.run", "region.plan")).contains("flowingWater"));
 	}
+
+	/** (8c WU) A river head at x 0 with a predicted current x 1..9 at y 70 (z 0). */
+	static final String RIVER = "{\"parts\":[{\"id\":\"r_r1\",\"stage\":\"fluids\",\"ops\":[{\"op\":\"fluid\",\"id\":\"r_r1\",\"part\":\"r\",\"fluid\":\"water\","
+		+ "\"level\":70,\"cells\":[[0,0,70,70]],\"spill\":[[1,0,70,70],[2,0,70,70],[3,0,70,70],[4,0,70,70],[5,0,70,70],[6,0,70,70],[7,0,70,70],[8,0,70,70],[9,0,70,70]],"
+		+ "\"predicted\":[[1,70,0,1],[2,70,0,2],[3,70,0,3],[4,70,0,4],[5,70,0,5],[6,70,0,6],[7,70,0,7]],\"settleTicks\":60,\"flow\":\"current\"}]}]}";
+
+	@Test
+	void theStrayPassTakesTheBodysOwnStaleFlowNeverForeignFedWater() {
+		RegionFluids.Regional st = new RegionFluids.Regional(RegionFluids.bodiesOf(JsonParser.parseString(RIVER).getAsJsonObject()));
+		st.states.get("r_r1").before.put(BlockPos.asLong(0, 70, 0), "minecraft:air");
+		// after the drain: the head's source gone; x 1..2 hold stale flow of its own (amounts 3, 2: nothing feeds x 1); a player's source at
+		// x 7 feeds x 6 and x 5 (amounts 7, 6); x 3, 4 dry
+		java.util.Map<Long, RegionFluids.Wet> w = new java.util.HashMap<>();
+		w.put(BlockPos.asLong(1, 70, 0), new RegionFluids.Wet(3, false, true));
+		w.put(BlockPos.asLong(2, 70, 0), new RegionFluids.Wet(2, false, true));
+		w.put(BlockPos.asLong(7, 70, 0), new RegionFluids.Wet(8, true, true));
+		w.put(BlockPos.asLong(6, 70, 0), new RegionFluids.Wet(7, false, true));
+		w.put(BlockPos.asLong(5, 70, 0), new RegionFluids.Wet(6, false, true));
+		List<long[]> take = RegionFluids.strayTake(st, k -> w.get(k), k -> true);
+		java.util.Set<Long> got = new java.util.HashSet<>();
+		for (long[] c : take) {
+			got.add(c[0]);
+		}
+		assertEquals(java.util.Set.of(BlockPos.asLong(1, 70, 0), BlockPos.asLong(2, 70, 0)), got, "own stale flow taken; the player's source and what it feeds left");
+		st.fluidBefore.put(BlockPos.asLong(1, 70, 0), "minecraft:water[level=3]");
+		java.util.Set<Long> got2 = new java.util.HashSet<>();
+		for (long[] c : RegionFluids.strayTake(st, k -> w.get(k), k -> true)) {
+			got2.add(c[0]);
+		}
+		assertFalse(got2.contains(BlockPos.asLong(1, 70, 0)), "water there before the realise is never taken");
+	}
 }

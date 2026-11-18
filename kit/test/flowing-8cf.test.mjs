@@ -87,3 +87,24 @@ test('8cF: river_demo nowash leaves the wash list out (the mint case\'s control)
   const p = await plan(river, 'river_demo.mjs', { variant: 'nowash' });
   assert.equal(fluidOps(p.ir).find((o) => o.id === 'river_r1').wash, undefined);
 });
+
+test('8c: W3 breach cells feed KC keep-out: a lot over the head\'s breach reach (its watch) is met (LEAK), and the registry keeps the reach', async () => {
+  const { reachMeetsKeep } = await import('../lib/fluids/place.mjs');
+  const { keepStore, registerBody, keptBy } = await import('../lib/fluids/keep.mjs');
+  const p = await plan(river, 'river_demo.mjs');
+  const op = fluidOps(p.ir).find((o) => o.id === 'river_r1');
+  const rec = { id: op.id, part: op.part, cells: fromRuns(op.cells), shell: fromRuns(op.shell), spill: fromRuns(op.spill), watch: fromRuns(op.watch), lining: fromRuns(op.lining ?? []) };
+  assert.ok(rec.watch.length > 0, 'the head has a single-breach reach');
+  const own = new Set([...rec.cells, ...rec.shell, ...rec.spill, ...rec.lining].map(k3));
+  // a breach cell no other set holds, and a 1 x 1 module lot two cells past it (keepReason grows a lot's box by 1)
+  const w = rec.watch.find((c) => !own.has(k3(c)));
+  assert.ok(w, 'a breach cell outside the body\'s other sets');
+  const env = { claim: { minX: CLAIM.minX, minZ: CLAIM.minZ, maxX: CLAIM.maxX, maxZ: CLAIM.maxZ }, protectedAreas: [], keepOut: [], buildRects: [], regions: [] };
+  const lot = { id: 'm1', box: { minX: w[0] + 1, maxX: w[0] + 1, minZ: w[2], maxZ: w[2], minY: w[1], maxY: w[1] } };
+  const hit = reachMeetsKeep({ lots: [lot] }, env, { ...rec, cells: [], shell: [], spill: [], watch: [w] });
+  assert.ok(hit && hit.reasons.includes('lot m1'), `the breach reach meets the lot (${JSON.stringify(hit)})`);
+  assert.equal(reachMeetsKeep({ lots: [] }, env, rec), null, 'river_demo on its own claim meets nothing');
+  const store = keepStore({});
+  registerBody(store, rec);
+  assert.equal(keptBy(store, ...w).set, 'watch', 'the registry keeps the breach reach (KC: no later part stands there)');
+});

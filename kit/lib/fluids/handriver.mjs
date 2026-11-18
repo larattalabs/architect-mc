@@ -25,7 +25,7 @@
 // short: the escape guard drains it).
 import { reachId } from './body.mjs';
 import { bodyAnswer } from './pond.mjs';
-import { volumeAnswer, bodiesMark, bodiesRollback } from './place.mjs';
+import { volumeAnswer, bodiesMark, bodiesRollback, leakRefusal, reachMeetsKeep } from './place.mjs';
 import { UNSAFE_EXT } from './hooks.mjs';
 
 export const acceptsOverflow = false;
@@ -165,6 +165,12 @@ export function emit(K, p, res) {
       const head = r.fluidBody(L.r1.cells, { id: L.r1.id, part: p.id, kind: 'header', stage, level: L.r1.level, outlets: L.r1.outlets, joins: [L.join], lip: 'form', on: island, shellRole, _unsafe: sp.variant === 'short' ? { predictShort: true } : null });
       bodies.unshift(head);
       (r.meta.courses ??= []).push({ id: p.id, part: p.id, kind: 'waterfall', look: 'built', flow: 'fall', bodies: L.ids, steps: [{ kind: 'fall', from: L.ids[0], to: L.ids[1], drop: L.drop }], ends: [{ end: 'from', kind: 'form', ref: island }, { end: 'to', kind: 'basin', ref: L.ids[1] }] });
+    }
+    // (8c, the coordinator's answer: W3 breach cells feed KC keep-out) every body's cells, shell, spill and single-breach reach (its watch)
+    // against the keep cells: no basin, spill or breach on a lot, a protected area or the claim's ring (M25:keep's reading, LEAK)
+    for (const b of bodies) {
+      const hit = reachMeetsKeep(r, K.env, b);
+      if (hit) throw leakRefusal(b, hit);
     }
     res.emitted = { bodies, notes: [] };
   } catch (e) {
