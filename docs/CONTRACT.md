@@ -33424,6 +33424,25 @@ so two module lots that share items can't each be held to their own measured bou
   read again under a later key); an Architect placement over a held cell is refused cell by cell (not up front); player open/break of a held
   box is T1's mixins, not exercised in game.
 
+### Slice T2a fix round (GPT NOT SAFE: 5 P1, 3 P2; one round)
+
+- **P1-1** write-back: every cell's receipt is deducted before any new write is planned (a later cell's receipt, after an earlier free
+  cell was written, paid twice). `FillsWriteBackT2Test` saves each cell's chunk on its own; the GPT case is red on afe39a21, green now.
+- **P1-2** menus, structurally: a click, slot toggle, button or recipe in a menu any slot of which is backed by a held box (a compound's
+  half included) is refused on the server thread and the menu closed (`TxnHoldMenuMixin`); such menus close every tick and when a hold
+  begins (`TxnServer.closeHeldMenus`); the crafter's own `stillValid` answers false.
+- **P1-3** golem: `pickUpItems`/`putDownItem` refused against a held box (a retained target too); the golem keeps what it carries.
+- **P1-4** `TxnServer.containerHeld` resolves a `CompoundContainer`; the Transfer API guard uses it. Premise checked: Fabric's own chest
+  lookup already splits a double chest into its halves (green on the base); a mod wrapping the compound itself was not held (red).
+- **P1-5** `ChestBlockEntity.swapContents` refused when either chest is held. **P2-6** a held crafter's trigger, countdown and slot states
+  frozen. **P2-7** receipt pruning waits for the next OK barrier whoever called the write-back (`DurableBarrier.afterNextOk`).
+- **P2-8** txn-holds compares each box's saved data (`dev.txn.cells` `nbt`) and adds rows: an open crafter menu (a real click packet), a
+  golem holding its target, a cached compound handle, the chest swap, an active brew; furnaces are loaded just before their holds.
+- **Red** on afe39a21 + the new driver (`gate-runs-T2-red/20261118-000832-change`): menu_crafter, crafter (data), golem_retained,
+  storage_cached, chest_swap. brewing_active is green there (T2a already held brewing; on 88f37a88 it has no guard).
+- **Ran** at 5acf610c: Gradle full 1566 (0 failed, 1 skipped); `gate-runs-T2/20261118-001032-change` txn-core 75/0, txn-holds 46/0 (42
+  boxes); `gate-runs-T2-fk/20261118-001652-change` fk-crash 66/0, fkb-crash 48/0. Leftover: receipts of write-backs whose OK barrier never
+  came this session stay on disk (stale: a later key never reads them).
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves
