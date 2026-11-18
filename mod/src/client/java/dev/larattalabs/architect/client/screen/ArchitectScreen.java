@@ -635,6 +635,8 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+		x = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", x); // (PR A3)
+		y = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", y);
 		Popup pp = popup;
 		if (pp != null) {
 			pp.list.mouseScrolled(x, y, scrollY);
@@ -658,6 +660,7 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || popup == null && dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).mouseClicked(e.x(), e
 			.y())) {
 			return true;
@@ -744,6 +747,9 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
+		dx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", dx);
+		dy = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", dy);
 		Popup pp = popup;
 		if (pp != null && pp.list.mouseDragged(e.x(), e.y(), e.button())) {
 			return true;
@@ -762,6 +768,7 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent e) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		Popup pp = popup;
 		if (pp != null && pp.list.mouseReleased(e.x(), e.y(), e.button())) {
 			return true;
@@ -1218,6 +1225,11 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mouseX, mouseY, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		if (U3Dev.park) {
 			mouseX = -1000;
 			mouseY = -1000;
@@ -2763,6 +2775,22 @@ public final class ArchitectScreen extends Screen {
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
 		ry += 12;
+		// (PR A3) the text size: 100 / 125 / 150 % of Architect's screens (lab-ui's setting); clamped to fit at this GUI scale
+		int pref = dev.larattalabs.labui.ui.TextScale.preference();
+		var tsr = dev.larattalabs.labui.client.prefs.TextScaleHost.result(this, "architect_mc");
+		String tl = "Text size: " + pref + " % (click to change)";
+		hits.add(new Hit("text_scale", tl, rx, ry, Math.min(colW, font.width(tl)), 12, true, pref != 100, () -> dev.larattalabs.labui.client.prefs.TextScaleHost
+			.set(dev.larattalabs.labui.ui.TextScale.next(pref))));
+		g.text(font, TextUtil.ellipsize(font, tl, colW), rx, ry + 2, UiStyle.link(), false);
+		ry += 12;
+		if (tsr.dropped()) {
+			for (String line : TextUtil.wrapPlain(font, "Shown at " + tsr.percent() + " %: " + pref + " % doesn't fit at this GUI scale. A smaller GUI "
+				+ "scale (Options > Video) makes room.", colW)) {
+				g.text(font, line, rx, ry + 2, UiStyle.warn(), false);
+				ry += 10;
+			}
+		}
+		ry += 2;
 		// (PR A2) the ghost colours: standard or colour-blind safe (lab-ui's setting: Steward's ghosts follow it)
 		var pal = dev.larattalabs.labui.ui.GhostPalette.current();
 		String pl = "Ghost colours: " + pal.label() + " (click to change)";

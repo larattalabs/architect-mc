@@ -123,6 +123,7 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("redirect").mouseClicked(e.x(), e.y())) {
 			return true;
 		}
@@ -158,6 +159,11 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mouseX, mouseY, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		int w = Math.min(360, width - 16);
 		Kit.Padding pad = Kit.padding("panel_paper");
 		int inner = w - pad.left() - pad.right();

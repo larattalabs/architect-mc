@@ -127,6 +127,11 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public final void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mx, my, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mx, int my, float a) {
 		if (U3Dev.park) {
 			mx = -1000;
 			my = -1000;
@@ -226,6 +231,7 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		double mx = e.x();
 		double my = e.y();
 		if (keysOverlay().mouseClicked(mx, my) || dev.larattalabs.architect.client.help.ArchitectHelp.tip(helpId()).mouseClicked(mx, my)) {
@@ -256,6 +262,9 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
+		dx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", dx);
+		dy = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", dy);
 		for (ArchitectScreen.MouseTarget t : List.copyOf(targets)) {
 			if (t.drag(e.x(), e.y(), e.button())) {
 				return true;
@@ -266,6 +275,7 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseReleased(MouseButtonEvent e) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		for (ArchitectScreen.MouseTarget t : List.copyOf(targets)) {
 			if (t.release(e.x(), e.y(), e.button())) {
 				return true;
@@ -276,6 +286,8 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+		mx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", mx); // (PR A3)
+		my = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", my);
 		for (ArchitectScreen.MouseTarget t : List.copyOf(targets)) {
 			if (t.wheel(mx, my, sy)) {
 				return true;

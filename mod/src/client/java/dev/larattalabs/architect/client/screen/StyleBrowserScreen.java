@@ -503,6 +503,12 @@ public final class StyleBrowserScreen extends PickerScreen {
 		mc.gui.setScreen(create(current, mc.gui.screen(), use));
 	}
 
+	// (PR A3) Architect's screens follow the text size
+	@Override
+	protected String textScaleOwner() {
+		return "architect_mc";
+	}
+
 	// (PR W1) the "what's this" line and the "?" overlay (lab-ui PickerScreen draws and routes them)
 	@Override
 	protected dev.larattalabs.labui.client.help.WhatsThis whatsThis() {

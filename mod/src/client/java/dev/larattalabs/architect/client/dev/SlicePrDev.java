@@ -43,5 +43,22 @@ public final class SlicePrDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.pr.textScale", 10_000, "{percent?: 100|125|150} - (PR A3) the text size, as Status sets it -> {percent, applied, "
+			+ "dropped} (applied: on the open screen)", (req, mc) -> {
+				Integer p = Fields.of(req).has("percent") ? Fields.of(req).optInt("percent", 100, 0, 1000) : null;
+				return DevBridge.onClient(mc, () -> {
+					if (p != null) {
+						dev.larattalabs.labui.client.prefs.TextScaleHost.set(p);
+					}
+					JsonObject o = new JsonObject();
+					o.addProperty("percent", dev.larattalabs.labui.ui.TextScale.preference());
+					if (mc.gui.screen() != null) {
+						var r = dev.larattalabs.labui.client.prefs.TextScaleHost.result(mc.gui.screen(), "architect_mc");
+						o.addProperty("applied", r.percent());
+						o.addProperty("dropped", r.dropped());
+					}
+					return o;
+				});
+			});
 	}
 }

@@ -813,12 +813,12 @@ steps.gallery = async () => {
     await call('dev.pr.tips', { reset: true }).catch(() => null);
     await sec('ui', 'status', 'tips_again', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('status'); });
     await call('dev.pr.tips', { reset: true }).catch(() => null);
-    if (process.env.GATEUIG_TEXT150 === '1') {
+    if (process.env.GATEUIG_TEXT150 !== '0') {
       // (PR A3) text at 150 % at GUI scale 4 on each screen
       await call('dev.pr.textScale', { percent: 150 }).catch((e) => GAL.notes.push(`dev.pr.textScale: ${errMsg(e)}`));
-      for (const tab of ['design', 'library', 'designs', 'status']) await sec('ui', tab, 'text150', async () => openTab(tab), { scales: [4] });
-      await sec('ui', 'styles', 'text150', async () => browser(), { scales: [4] });
-      await sec('ui', 'status', 'help_text150', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); }, { scales: [4] });
+      for (const tab of ['design', 'library', 'designs', 'status']) await sec('ui', tab, 'text150', async () => openTab(tab));
+      await sec('ui', 'styles', 'text150', async () => browser());
+      await sec('ui', 'status', 'help_text150', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); });
       await call('dev.pr.textScale', { percent: 100 }).catch(() => null);
     }
     await call('dev.screen', { open: null });

@@ -17,7 +17,8 @@ public class ArchitectClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		AutoWorld.init();
-		dev.larattalabs.labui.client.prefs.LabUiPrefs.applyStored(); // (PR A2) the stored ghost palette
+		dev.larattalabs.labui.ui.TextScale.optIn("architect_mc"); // (PR A3) Architect's screens follow lab-ui's text size (Steward: not yet)
+		dev.larattalabs.labui.client.prefs.LabUiPrefs.applyStored(); // (PR A2, A3) the stored ghost palette and text size
 		dev.larattalabs.architect.client.help.ArchitectGlossary.register(); // (PR G1) the shared glossary's Architect section
 		PlacementFeature.init();
 		dev.larattalabs.architect.client.placement.RoadCellsClient.init(); // phase 4e: road cells for the ghost's approach

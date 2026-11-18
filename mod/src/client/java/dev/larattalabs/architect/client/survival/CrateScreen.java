@@ -223,6 +223,7 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("crate").mouseClicked(e.x(), e.y())) {
 			return true;
 		}
@@ -247,6 +248,8 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double sx, double sy) {
+		x = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", x); // (PR A3)
+		y = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", y);
 		scroll = Math.max(0, scroll - (int) Math.signum(sy));
 		return true;
 	}
@@ -312,6 +315,11 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mouseX, mouseY, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		renderBody(g, mouseX, mouseY, a);
 		keysOverlay().draw(g, font, width, height); // (PR W1)
 	}
