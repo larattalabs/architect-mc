@@ -350,7 +350,7 @@ steps.survival = async () => {
     // generate the claim and its survey margin fully (FULL status: what "generated" means to the check), by forceloading it, then let go
     const FP = await call('dev.cx.plan', { kind: 'rope_bridge', from: fa, to: fb }, 60_000);
     const [cx0, cz0, cx1, cz1] = FP.claim;
-    const fl = `${cx0 - 32} ${cz0 - 32} ${cx1 + 32} ${cz1 + 32}`;
+    const fl = `${cx0 - 48} ${cz0 - 48} ${cx1 + 48} ${cz1 + 48}`;
     await call('dev.command', { cmd: `forceload add ${fl}` }, 600_000);
     await new Promise((res) => setTimeout(res, 15_000));
     await call('dev.command', { cmd: `forceload remove ${fl}` }, 600_000);
