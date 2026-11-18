@@ -564,6 +564,8 @@ export async function registerTCC(steps, h) {
         const st = await siteState(site);
         const mid = await parts([site], cp, items);
         R[tag] = { finish: fin, state: st?.state, before, mid };
+        const cs = pick(await crateItems(cp), items); // the crate's own ledger (the site's view hides a held crate's stock)
+        mid.total = [cs, mid.placed, mid.owed, mid.ground, mid.inventory].reduce((x, y) => G.plus(x, y), {});
         check(st?.state === 'building' && mid.crate && G.same(mid.total, before.total) && sum(mid.ground) === 0,
           `${tag}: a completing site whose settle's barriers are refused stays BUILDING (${st?.state}), its crate kept (${mid.crate ? 'stands' : 'gone'}), nothing lost: ${json(mid.total)} = ${json(before.total)}`, R[tag]);
         await noBarriers(0);
@@ -670,7 +672,7 @@ export async function registerTCC(steps, h) {
       const inv = ((await call('dev.items.near', { pos: W.at, radius: 2 }, 30_000)).inventory ?? {})[P0] ?? 0;
       const ow = ((await owedAll()).owed ?? []).find((e) => e.key === key);
       await noBarriers(1);
-      const c = await cmd(`/architect collect ${key}`).catch((e) => ({ messages: [String(e)] }));
+      const c = await cmd(`/architect collect "${key}"`).catch((e) => ({ messages: [String(e)] }));
       const said = (c.messages ?? []).join(' ');
       const inv2 = ((await call('dev.items.near', { pos: W.at, radius: 2 }, 30_000)).inventory ?? {})[P0] ?? 0;
       R[tag] = { r, inv, owed: ow?.items, said, inv2 };
