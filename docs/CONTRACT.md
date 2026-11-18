@@ -33457,6 +33457,13 @@ so two module lots that share items can't each be held to their own measured bou
   bounds the replay; the group crate's R effect probes APPLIED, so `TX:crate.settle:apply:3` is unreachable there; P1-1's base row is
   red only on no-drop (the bot never picked the drop up).
 
+- **Part 2b fix round** (final GPT check on 2c4c59aa: 3 P1, 2 P2). P1-a: the settle's abort reason is a plain string (it was quoted
+  JSON, so "aborted: barrier" never matched) and a held abort stays held: a completing site or last road stays BUILDING. P1-b: a road
+  removal settles nothing before its commit; its stash rides on the restore job and settles after the restore (keyed); a shared or
+  held crate's road owes its refunds alone. P1-c: removal stashes with refunds are saved with the ledger (confirmed) before the undo
+  commits; a K6 recovery settles from them. P2-a: an aborted owed txn gives nothing (REFUSED). P2-b: owed is never in refund totals.
+  Rows FR-a1/a2, FR-b1/b1s/b2, FR-c/cs, FR-d, FR-e: red on 2c4c59aa (gate-runs-fr), green on HEAD.
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is
