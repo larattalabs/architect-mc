@@ -125,6 +125,7 @@ public final class TxnServer {
 			QUEUED.clear();
 			core = emptyCore("no world loaded");
 			DurableBarrier.clearAfterOk();
+			dev.larattalabs.architect.site.PileAdopt.worldClosed(); // (T3b final check P2-3)
 		});
 	}
 
@@ -506,8 +507,9 @@ public final class TxnServer {
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
 				if ("stockpile_changed".equals(event) && payload.has("owner")) {
-					// (slice T3b fix round, GPT P2-4) the API event from the txn's persisted payload: at EFFECTS_DONE, again after a recovery
-					dev.larattalabs.architect.api.SiteEvents.STOCKPILE_CHANGED.invoker().onChanged(payload.get("owner").getAsString());
+					// (slice T3b fix round, GPT P2-4; final check P2-2) the txn's persisted payload marks the pile changed: Stockpiles' own limiter
+					// fires STOCKPILE_CHANGED (at least once, at most once per 20 ticks, never doubled with the ledger's own change)
+					dev.larattalabs.architect.site.Stockpiles.txnChanged(payload.get("owner").getAsString());
 				}
 				EVENTS.addLast(line);
 				while (EVENTS.size() > 32) {

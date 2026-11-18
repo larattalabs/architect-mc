@@ -1355,6 +1355,25 @@ public final class Stockpiles {
 		return a;
 	}
 
+	/** (T3b final check P2-2) Whether the rate-limited STOCKPILE_CHANGED of {@code p} fires at tick {@code ticks}. */
+	static boolean eventDue(Pile p, long ticks) {
+		return p.dirty && ticks - p.lastEvent >= EVENT_TICKS;
+	}
+
+	/**
+	 * (T3b final check P2-2) A txn's persisted {@code stockpile_changed} delivered (at EFFECTS_DONE, again after a recovery): the pile marked
+	 * changed for the normal limited emitter, so it fires at least once and is never doubled with the ledger's own change. No pile: nothing.
+	 */
+	public static void txnChanged(String owner) {
+		txnChanged(get(owner));
+	}
+
+	static void txnChanged(@Nullable Pile p) {
+		if (p != null) {
+			p.dirty = true;
+		}
+	}
+
 	/** Marks a stockpile changed (STOCKPILE_CHANGED, rate-limited, on the next tick). */
 	static void changed(Pile p) {
 		p.dirty = true;
@@ -1982,7 +2001,7 @@ public final class Stockpiles {
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Stockpile {}: feed step failed", p.owner, e);
 			}
-			if (p.dirty && ticks - p.lastEvent >= EVENT_TICKS) {
+			if (eventDue(p, ticks)) {
 				p.dirty = false;
 				p.lastEvent = ticks;
 				dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, p.owner);

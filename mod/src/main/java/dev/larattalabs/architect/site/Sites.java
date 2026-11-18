@@ -3662,6 +3662,16 @@ public final class Sites {
 
 	/** (slice T3b fix round) This world's sites file as a confirmed write ({@link #saveConfirmed}); null until first used, per world. */
 	private static @Nullable DurableFile durable;
+	/**
+	 * (T3b final check P2-1) Whether the sites file may hold a write no confirmed write covers: set by every ordinary save (it may have failed,
+	 * or not reached the disk) and at every load (the file read is not yet forced this session); cleared only by an OK {@link #saveConfirmed}.
+	 */
+	private static volatile boolean unconfirmed = true;
+
+	/** (T3b final check P2-1) Whether the sites file as written is acknowledged durable ({@link #saveConfirmed} OK since the last ordinary save). */
+	public static boolean confirmed() {
+		return !unconfirmed;
+	}
 
 	private static JsonObject root(State s) {
 		JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
@@ -3690,7 +3700,11 @@ public final class Sites {
 		if (d == null || !d.file().equals(f)) {
 			d = durable = new DurableFile("sites", f);
 		}
+		unconfirmed = true;
 		DurableFile.Result r = d.write(root(state), d.request());
+		if (r.ok()) {
+			unconfirmed = false;
+		}
 		return r.ok() ? null : r.outcome() + ": " + r.reason();
 	}
 
@@ -3729,6 +3743,7 @@ public final class Sites {
 		if (loadFailed) {
 			return;
 		}
+		unconfirmed = true; // (T3b final check P2-1) readable is not durable: only saveConfirmed acknowledges
 		Path f = file(server);
 		try {
 			if (FAIL_SAVES.get() > 0 && FAIL_SAVES.getAndDecrement() > 0) {
@@ -3750,6 +3765,7 @@ public final class Sites {
 
 	private static void load(MinecraftServer server) {
 		loadFailed = false;
+		unconfirmed = true;
 		groups = Map.of();
 		nextGroup = 1;
 		Infras.load(new JsonArray());

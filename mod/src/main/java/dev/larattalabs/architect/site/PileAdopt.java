@@ -185,7 +185,24 @@ public final class PileAdopt {
 	 * (T3b fix round, GPT P2-3) A release's journal commit not yet known durable, by effect key: {@code JournalStore.submit} shows the new head
 	 * at once, so the visible head alone would read a pending (or timed-out) release as done.
 	 */
-	static final Map<String, java.util.concurrent.CompletableFuture<Void>> PENDING_RELEASE = new java.util.concurrent.ConcurrentHashMap<>();
+	static final Map<String, Pending> PENDING_RELEASE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (T3b final check P2-3) A pending release and the journal instance it was submitted to (an entry of another world's journal is stale). */
+	record Pending(Object store, java.util.concurrent.CompletableFuture<Void> commit) {
+	}
+
+	/** (T3b final check P2-3) The world closed (server stop): no pending release outlives its journal. */
+	public static void worldClosed() {
+		PENDING_RELEASE.clear();
+	}
+
+	/**
+	 * (T3b final check P2-3, the pure seam) The pending commit that counts for the journal open now: none when the entry was submitted to
+	 * another journal instance (another world, or this one reopened).
+	 */
+	static java.util.concurrent.@Nullable CompletableFuture<Void> pendingFor(@Nullable Pending p, @Nullable Object current) {
+		return p == null || current == null || p.store() != current ? null : p.commit();
+	}
 
 	/**
 	 * (T3b fix round, GPT P2-3, the pure seam) A release's probe: a submitted commit still pending is UNKNOWN (held, never read as done); one
@@ -208,10 +225,14 @@ public final class PileAdopt {
 			if (!TxnServer.storesLoaded() || WorldJournal.storeOrNull() == null) {
 				return Probe.UNKNOWN;
 			}
-			var f = PENDING_RELEASE.get(e.key(t.id));
+			Pending pe = PENDING_RELEASE.get(e.key(t.id));
+			var f = pendingFor(pe, WorldJournal.storeOrNull());
+			if (pe != null && f == null) {
+				PENDING_RELEASE.remove(e.key(t.id), pe); // another journal's: stale
+			}
 			Probe p = releaseProbe(f, SiteJournal.idsOf(e.data().get("crateOwner").getAsString(), WorldJournal.CRATE).isEmpty());
 			if (f != null && f.isDone()) {
-				PENDING_RELEASE.remove(e.key(t.id), f);
+				PENDING_RELEASE.remove(e.key(t.id), pe);
 			}
 			return p;
 		}
@@ -229,10 +250,11 @@ public final class PileAdopt {
 				return;
 			}
 			var f = s.submit(jt);
-			PENDING_RELEASE.put(e.key(t.id), f); // (T3b fix round) kept until its probe sees it done
+			Pending pe = new Pending(s, f);
+			PENDING_RELEASE.put(e.key(t.id), pe); // (T3b fix round) kept until its probe sees it done, for this journal instance only
 			try {
 				f.get(30, TimeUnit.SECONDS); // confirmed before the next effect: the barrier does not cover the journal
-				PENDING_RELEASE.remove(e.key(t.id), f);
+				PENDING_RELEASE.remove(e.key(t.id), pe);
 			} catch (Exception x) {
 				throw new IllegalStateException("the journal release did not commit: " + x);
 			}
@@ -253,6 +275,15 @@ public final class PileAdopt {
 			return "journal " + e.data().get("crateOwner").getAsString();
 		}
 	};
+
+	/**
+	 * (T3b fix round P2-2, final check P2-1, the pure seam) A record clear's probe: APPLIED only when neither memory nor the sites file on disk
+	 * names the crate AND that file is acknowledged durable (a confirmed write since the last ordinary save); else ABSENT (the apply clears
+	 * and confirms again, holding while the confirmed write fails).
+	 */
+	static Probe clearProbe(boolean memoryNames, boolean confirmed, boolean diskNames) {
+		return !memoryNames && confirmed && !diskNames ? Probe.APPLIED : Probe.ABSENT;
+	}
 
 	/** {@code record.clear}: a group's, site's or road's crate reference cleared. Probe: the record names no crate at that cell (or is gone). */
 	static final TxnKind.Adapter CLEAR_ADAPTER = new TxnKind.Adapter() {
@@ -286,17 +317,18 @@ public final class PileAdopt {
 				return Probe.UNKNOWN; // the records load in SERVER_STARTED's default phase: never read as cleared before
 			}
 			Construction.Crate c = named(e);
-			if (c != null && at(c, e)) {
-				return Probe.ABSENT;
-			}
-			// (T3b fix round, GPT P2-2) cleared in memory is not enough: the sites file on disk must name no crate there either
+			boolean memory = c != null && at(c, e);
+			// (T3b final check P2-1) readable on disk is not durable: an ordinary save since the last confirmed write is confirmed here first
+			boolean confirmed = memory || Sites.confirmed() || Sites.saveConfirmed(srv) == null;
+			boolean disk;
 			try {
 				int[] d = Sites.savedCrate(srv, e.data().get("kind").getAsString(), e.data().get("id").getAsString());
 				JsonArray p = e.data().getAsJsonArray("pos");
-				return d != null && d[0] == p.get(0).getAsInt() && d[1] == p.get(1).getAsInt() && d[2] == p.get(2).getAsInt() ? Probe.ABSENT : Probe.APPLIED;
+				disk = d != null && d[0] == p.get(0).getAsInt() && d[1] == p.get(1).getAsInt() && d[2] == p.get(2).getAsInt();
 			} catch (Exception x) {
 				return Probe.UNKNOWN;
 			}
+			return clearProbe(memory, confirmed, disk);
 		}
 
 		@Override
