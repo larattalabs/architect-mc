@@ -33645,3 +33645,22 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   `fixtures/wm/lift_demo.mjs`; they join the 8c lane's shards. Tests: `kit/test/rv.test.mjs` (8).
 - **Seams:** RV-b (falls off forms, the hidden room); `say` and UNSETTLED in plan.json need 8cG's Java (`Reason`); a river's census and
   drain are WU's; Steward's compose rule and card lines (its slice).
+
+### CR: kill points FL7-FL9 and FL1-FL5 on rivers, conservation (strict)
+- FL7 in the gate (a region with wash clears, before the check), FL8 after the sources are drained and `drained` is saved, FL9 in the
+  stray pass after its first chunk; killAt takes them, bare and `+save`. On river_demo: FL7, FL8, FL9 bare and +save, FL1+save, FL2+save,
+  FL4+save, FL5+save; each resumed at the start: the realise to PLACED (a bare FL7 may lose the earlier stages' unsaved chunks: the start's
+  check then writes no body, H §3.5), the removal to REMOVED; E-flat 0, 0 item entities from the bodies' cells, the box's item entities
+  unchanged; a Remove asked again after the start joins the resumed removal (never SITE_BUSY).
+- Found by FL9 bare: a start in the stray pass met the river flowing again (the chunks older than the record), so `restoring` drains the
+  sources again and waits before the stray pass.
+
+### WU and CR failing-first (in game, `tools/gate8c.mjs`; red = a751cd63, the same code with `FLOWING_BUILD` off, driver at e3bf6d15)
+| row | red (H's drain, no live wash check) | green |
+|---|---|---|
+| nowash (the mint, recorded) | 4 item entities from the washed flowers | the live check holds the head: 0 items |
+| torch (wash at the gate) | the head written, the torch washed (1 item) | head drained `why: wash`, M25:wash; 0 items; PARTIAL |
+| foreign (W5 in the drain) | the player's source in the current removed | left standing |
+| FL7, FL8, FL9 | no such kill point (the server never halts) | resumed, E-flat 0, conservation |
+| join (Remove while draining) | joins (passes red too: Groups' removal already joins) | joins |
+| river, fall (PLACED, census, E-flat) | pass (H's drain also leaves E-flat 0 here) | pass |
