@@ -60,5 +60,29 @@ public final class SlicePrDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.pr.rebind", 10_000, "{action: <PlacingKeys id>, key?: <GLFW code> (absent: the default)} - (PR A4) rebind a placing key "
+			+ "as Controls does -> {action, label}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String id = f.nonBlank("action");
+				Integer code = f.has("key") ? f.optInt("key", -1, -1, 400) : null;
+				return DevBridge.onClient(mc, () -> {
+					dev.larattalabs.architect.client.hud.PlacingKeys.Action a = null;
+					for (var x : dev.larattalabs.architect.client.hud.PlacingKeys.Action.values()) {
+						if (x.id.equals(id)) {
+							a = x;
+						}
+					}
+					if (a == null) {
+						throw new DevBridge.DevException("no placing action " + id);
+					}
+					net.minecraft.client.KeyMapping k = dev.larattalabs.architect.client.hud.Keys.placing.get(a);
+					k.setKey(code == null ? k.getDefaultKey() : com.mojang.blaze3d.platform.InputConstants.Type.KEYBOARD.getOrCreate(code));
+					net.minecraft.client.KeyMapping.resetMapping();
+					JsonObject o = new JsonObject();
+					o.addProperty("action", a.id);
+					o.addProperty("label", dev.larattalabs.architect.client.hud.Keys.label(a));
+					return o;
+				});
+			});
 	}
 }

@@ -531,6 +531,12 @@ steps.gallery = async () => {
   await sec('world', 'ghost', 'normal', async () => { await start(); await cam(6, 16, 34); await waitVerdict(); }, { once: true, closeScreen: false });
   await sec('ui', 'placement_hud', 'legend', async () => { await call('dev.build.legend', { on: true }); await sleep(200); }, { closeScreen: false });
   await call('dev.build.legend', { on: false }).catch(() => null);
+  // (PR A4) the legend after rotate is rebound to G in Controls: the legend shows G and Shift+G
+  await sec('ui', 'placement_hud', 'legend_rebound', async () => {
+    await call('dev.pr.rebind', { action: 'rotate', key: 71 }); await call('dev.build.legend', { on: true }); await sleep(200);
+  }, { closeScreen: false });
+  await call('dev.build.legend', { on: false }).catch(() => null);
+  await call('dev.pr.rebind', { action: 'rotate' }).catch(() => null);
   // replaced: the ghost over blocks that will be replaced (a stone slab laid in its box)
   await sec('world', 'ghost', 'replaced', async () => {
     // real blocks inside the footprint, above the ground row (the cabin's walls and interior replace them): the HUD must read "N blocks replaced"
