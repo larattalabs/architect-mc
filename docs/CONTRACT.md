@@ -33789,6 +33789,13 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   a chest: 7), the kit model's `steady` on the same scenes (kit/test/flowing-8cf.test.mjs).
 - **P2-5:** a whole-region removal snapshots each revision record's watch sets too. **P2-6:** the composer's repair prompts gate their kind
   entries (`gateKindEntries`) on `st.flowingWater`.
+- **Failing-first:** wavechest red on 8285d622 (the DF-merge head) with the new driver: the head's wave wrote water over the player's
+  waterlogged chest -> green: the chest stands, the head held (`why: uncontained`). The P1-4 units red on the old `foreignOnly` (amount
+  0 at the column's foot and beside the chest) -> green 8 and 7. P1-2 and P1-3 are units on the new seams (`strayReady`,
+  `remainingWork`; the guarded drain of a held body's written source beside a chest).
+- **Green at 3c210117:** 8c-ingame 34/0, 8c-crash 47/0, h-ingame-smoke, h-crash, h-df, rs-df, hy-ingame-smoke, hy-crash-smoke,
+  irr-ingame-smoke, irr-crash, irr-holders, irr-df, rv-df, fl-ingame, fl-natural: 15 PASS; gradle build, kit, water lint, sidecar
+  956/956.
 
 ### SV: the join slice, survival rows (strict; branch `slice/SV` off `slice/8cG`, 8cG 3c210117 (with DF 211e3866) merged; versions NEXT; $0)
 - **Gate** `8c-survival` (tools/gate8c.mjs `survival`, rows in tools/lib/gate8c-sv.mjs, on gate6crs's survival base): `isle` (c05: the island
