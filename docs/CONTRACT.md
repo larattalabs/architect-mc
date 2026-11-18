@@ -33450,9 +33450,8 @@ so two module lots that share items can't each be held to their own measured bou
   paid by target from the intent; stock past capacity, decision 1: nothing dropped, no owed), `ledger.order` (L, marker `txn:<tx-n>/<i>`
   credited), `crate.restore` (W), `journal.release` (R, the journal commit confirmed), `record.clear` (R per group, site, road). Probes of
   the ledger, records and journal answer UNKNOWN until the first tick (those stores load after the recovery slot). PREPARED_DONE rolls back.
-- **`crate.restore` (new in `CrateTxn`, for T2b part 2b to reuse):** `CrateTxn.restore(dim, pos, snapshotState, snapshotNbt)` (W) and
-  `CrateTxn.RESTORE_ADAPTER`: `Builder.restoreCrateCell` (now public) as the holder, receipt `tx-n/i@restored` in the chunk's
-  `architect_mc:txn_receipts`; probe: that receipt (UNKNOWN when the chunk can't be read).
+- **`crate.restore`:** T2b part 2b's (`CrateTxn.restore`, `RESTORE_ADAPTER`, receipt `tx-n/i@restored`; a cell no longer a crate probes
+  APPLIED), so a GONE cell is never written over (only its journal kind released). The take reads `Ledger.heldStock()` (held by this txn).
 - **Legacy FINISH** (decision 3): `TxnCore.holdForOps` writes a quarantined entry (kind `pile.adopt.finish`) holding the crate and its records,
   indefinitely; reported deferred `held for ops`. (Ops removal waits for `/architect txn resolve`, still deferred from T1.)
 - **Core (additive):** `TxnKind.alias` (SAC1 = the last take applied, or `prepared` with no take; SAC2 = the first record cleared; live only),
@@ -33466,6 +33465,11 @@ so two module lots that share items can't each be held to their own measured bou
 - **Fixtures:** adopt-crate-held's stock check corrected (paused at `decided` the take has run: crate + in transit = the stock held);
   `adopt-kill-matrix` added (every traced point bare and +save on the shared group crate, the world restored from a copy per halt).
   `txn-crash-adopt` joins the `txn` chain; impact row "Slice T3b adoption on the txn layer".
+- **Ran:** red on the base f2cd4e60 with these fixtures (`_work/architect-mc-T3b-runs-red/20261118-050426-change`): txn-crash-adopt 42/12,
+  all 5 cases RED. Green at 34b69948 (9078:9079, 9084:9085, `--no-cache`): `_work/architect-mc-T3b-runs/20261118-060332-change` txn-crash-adopt
+  158/0 (5 GREEN; matrix 16 points x bare/+save = 32 halts, 8 back, 24 forward, 0 wrong), txn-core 75/0, txn-owed 73/0, txn-crate 68/0,
+  txn-holds 50/0; `_work/architect-mc-T3b-runs2/20261118-055313-change` sad-unit, sad-survival 56/0 (its SAC2 row now judged on the recovered
+  ledger), sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1607 (0 failed); api-compat --baselines 8/8.
 
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
