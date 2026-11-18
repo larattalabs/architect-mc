@@ -322,7 +322,9 @@ public final class RegionDev {
 				String region = Fields.of(req).nonBlank("region");
 				return ServerTasks.callOnServer(s -> {
 					JsonObject o = new JsonObject();
+					long t0 = System.nanoTime();
 					var v = dev.larattalabs.architect.api.ArchitectApi.get().regions().get(region).orElse(null);
+					o.addProperty("viewUs", (System.nanoTime() - t0) / 1000); // (8b review P2-6) the real RegionView build, statuses included
 					if (v == null) {
 						o.addProperty("missing", true);
 						return o;

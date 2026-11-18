@@ -383,6 +383,12 @@ export async function registerDRS(steps, h) {
       const S0 = json(saved());
       const L0 = (await pile()).ledger;
       const v0 = (await call('dev.region.state', { region: W.region }, 60_000)).view;
+      // (8b review P2-6) the real region-view build with every status (flags, never fails): the best of 10 reads of the town
+      const views = [];
+      for (let i = 0; i < 10; i++) views.push(await call('dev.region.status', { region: W.region }, 60_000));
+      const vb = Math.min(...views.map((x) => x.viewUs ?? 1e9));
+      out.viewBench = { bestUs: vb, lots: views[0]?.lots?.length, parts: views[0]?.parts?.length };
+      log(`  ${tag}: (8b) RegionView build with statuses: best ${vb} us over 10 reads (${views[0]?.lots?.length} lots, ${views[0]?.parts?.length} parts)`);
       await call('dev.stockpile.ps', { refuseSave: true }, 30_000);
       const rr = call('dev.region.remove', { region: W.region, requester: G.OWNER }, 600_000).catch((e) => ({ error: String(e) }));
       let v = null;

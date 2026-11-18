@@ -259,17 +259,7 @@ public final class SiteWaits {
 		Map<String, Integer> capped = BILL_CAPPED.get(id);
 		if (capped != null) {
 			// (BC, S-M5-9) the next cell would draw past the realise's maxBill: STARVED, typed; nextNeeded the capped items' units over the cap
-			List<ItemCount> its = new ArrayList<>();
-			int more = 0;
-			for (var e : capped.entrySet()) {
-				Item item = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
-				if (item == null || its.size() >= 8) {
-					more += e.getValue();
-				} else {
-					its.add(new ItemCount(item, e.getValue()));
-				}
-			}
-			return new SiteWait(id, true, CLOCK.held(id, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L))), its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id)); // (LCAP-Q1)
+			return capWait(id, capped, CLOCK.held(id, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L)))); // (LCAP-Q1) its scope
 		}
 		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
 		if (held != null) {
@@ -449,10 +439,60 @@ public final class SiteWaits {
 	public static @Nullable SiteWait statusView(MinecraftServer srv, String id) {
 		State st = STATES.get(id);
 		boolean waiting = st != null ? st.latch.waiting() : RESTORED.containsKey(id);
-		if (!waiting && !BILL_CAPPED.containsKey(id) && !FILL_BLOCKED.containsKey(id) && !dev.larattalabs.architect.txn.TxnServer.held("site:" + id)) {
+		boolean txn = txnHeld.test("site:" + id);
+		if (!waiting && !BILL_CAPPED.containsKey(id) && !FILL_BLOCKED.containsKey(id) && !txn) {
 			return new SiteWait(id, false, 0L, List.of(), 0);
 		}
-		return view(srv, id);
+		long since = st != null ? st.latch.since() : waiting ? RESTORED.getOrDefault(id, 0L) : 0L;
+		// (8b review P2-6) the typed holds from their retained data, never the materials walk: the status shows a txn hold or a cap as
+		// such (a cap's needs are its over-cap items), a blocked fill by its cells; only a materials wait reads its needs (view, cached by
+		// its latch)
+		if (txn) {
+			return new SiteWait(id, true, CLOCK.held(id, since), List.of(), 0, SiteWait.TXN_HELD, List.of());
+		}
+		Map<String, Integer> capped = BILL_CAPPED.get(id);
+		if (capped != null) {
+			return capWait(id, capped, CLOCK.held(id, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L))));
+		}
+		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
+		if (held != null) {
+			return new SiteWait(id, true, CLOCK.held(id, sinceOf(since, FILL_SINCE.getOrDefault(id, 0L))), List.of(), 0, SiteWait.FILL_BLOCKED, held);
+		}
+		return srv == null ? new SiteWait(id, waiting, waiting ? CLOCK.held(id, since) : 0L, List.of(), 0) : view(srv, id);
+	}
+
+	/** A cap's wait from its retained over-cap items (at most 8 named, the rest in moreUnits), its start and its scope. */
+	static SiteWait capWait(String id, Map<String, Integer> capped, long since) {
+		List<ItemCount> its = new ArrayList<>();
+		int more = 0;
+		for (var e : capped.entrySet()) {
+			Item item = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
+			if (item == null || its.size() >= 8) {
+				more += e.getValue();
+			} else {
+				its.add(new ItemCount(item, e.getValue()));
+			}
+		}
+		return new SiteWait(id, true, since, its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id));
+	}
+
+	/** Whether an open txn holds a resource (TxnServer.held; a test swaps it: the txn layer needs a server). */
+	static java.util.function.Predicate<String> txnHeld = dev.larattalabs.architect.txn.TxnServer::held;
+
+	/** (TEST) Holds {@code id} by a cap, as {@link #billCapped} records it, without a server. */
+	static void testCap(String id, Map<String, Integer> over, long since, String scope) {
+		BILL_CAPPED.put(id, Map.copyOf(over));
+		CAP_SINCE.put(id, since);
+		CAP_SCOPE.put(id, scope);
+		CLOCK.held(id, since);
+	}
+
+	/** (TEST) Drops every cap and clock entry the test hooks made. */
+	static void testClear() {
+		BILL_CAPPED.clear();
+		CAP_SINCE.clear();
+		CAP_SCOPE.clear();
+		CLOCK.clear();
 	}
 
 	/** {@code Sites.waiting}: empty when the id is not a construction target. */
