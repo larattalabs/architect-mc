@@ -73,4 +73,82 @@ class StockpileEmptyPendingDCTest {
 		assertEquals(stockBefore, p.ledger().stock(GRAVEL), "nothing minted at the start");
 		assertEquals(before, p.ledger().toJson().toString(), "after a restart: the ledger unchanged (nothing pending to settle)");
 	}
+
+	/** A clean stop and a start: the file read again, then the start's settle (Stockpiles.settlePendingCredits' decision and booking). */
+	static Stockpiles.Pile restartAndSettle() {
+		Stockpiles.readInto(JsonParser.parseString(Stockpiles.toJson().toString()).getAsJsonObject());
+		Stockpiles.Pile p = Stockpiles.get(OWNER);
+		for (String key : p.ledger().pendingKeys()) {
+			if (Stockpiles.pendingAction(key, p.ledger().credited(key), false, false) == Stockpiles.PendingAction.BOOK) {
+				Stockpiles.credit(null, p, key, new TreeMap<>(p.ledger().pendingItems(key)), BlockPos.of(p.ledger().pendingAt(key)));
+				p.ledger().dropPending(key);
+			}
+		}
+		return p;
+	}
+
+	static final String C71 = "road:c71@1794960000001", C72 = "road:c72@1794960000002";
+
+	/**
+	 * Steward's 0.78.0 RC stock-save flow: roads built, then removed with no refund line, and the reload "credited now" road:c71/c72/c73.
+	 * The only holder of a road's pending credit is a group removal (Groups.holdPending: Stockpiles.holdPendingCredits takes sites' decs,
+	 * a single road's RestoreJob holds none); its credit, live (Groups.removed -> Groups.credit) or resumed after a load, is
+	 * Builder.creditRefund. Here c71 paid 3 gravel and none of it stands to refund (an empty refundOf: the cells mined or another writer's),
+	 * c72 paid nothing: both credits of nothing.
+	 */
+	@Test
+	void aGroupRemovalsRoadCreditOfNothingLeavesNoPendingCreditForTheRestart() {
+		StockLedger l = new StockLedger();
+		l.giveBack(Map.of(GRAVEL, 3), CAP, id -> 64);
+		assertTrue(l.consume(GRAVEL, 3, CAP, id -> 64, new TreeMap<>()));
+		l.pay(C71, GRAVEL, 3);
+		JsonObject pile = new JsonObject();
+		pile.addProperty("id", "sp1");
+		pile.addProperty("owner", OWNER);
+		pile.addProperty("dimension", "minecraft:overworld");
+		pile.add("crates", new com.google.gson.JsonArray());
+		pile.add("ledger", l.toJson());
+		JsonObject root = new JsonObject();
+		root.addProperty("format", 2);
+		com.google.gson.JsonArray piles = new com.google.gson.JsonArray();
+		piles.add(pile);
+		root.add("stockpiles", piles);
+		Stockpiles.readInto(root);
+		Stockpiles.Pile p = Stockpiles.get(OWNER);
+
+		// the group removal's decCredit for its roads (Groups.start: RoadBuilder.refundOf, here empty), held pending by the real holdPending
+		Groups.Removal r = new Groups.Removal("g1", "rv9:ground", null, true);
+		r.decCredit.put("c71", new Groups.Credit(OWNER, C71, Map.of(), 11L));
+		r.decCredit.put("c72", new Groups.Credit(OWNER, C72, Map.of(), 12L));
+		assertTrue(Groups.holdPending(r), "both road credits held pending before the commit");
+		assertEquals(java.util.Set.of(C71, C72), p.ledger().pendingKeys());
+		// each road's restore written: Groups.credit's call, with the removal's saved credit
+		for (Groups.Credit c : r.decCredit.values()) {
+			assertFalse(Builder.creditRefund(null, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null), "nothing books for " + c.key());
+		}
+		assertEquals(java.util.Set.of(), p.ledger().pendingKeys(), "no road credit is left pending once its restore is written");
+		String before = p.ledger().toJson().toString();
+		int stockBefore = p.ledger().stock(GRAVEL);
+
+		p = restartAndSettle();
+		assertEquals(stockBefore, p.ledger().stock(GRAVEL), "nothing minted at the start");
+		assertEquals(before, p.ledger().toJson().toString(), "after a restart: the ledger unchanged (no road: pending credit to settle)");
+	}
+
+	/** Every live road credit path reaches Builder.creditRefund (or Stockpiles.credit itself): none returns before the pending credit drops. */
+	@Test
+	void everyRoadCreditGoesThroughCreditRefund() throws Exception {
+		String g = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Groups.java");
+		String gc = StockpileSaveHFTest.body(g, "private static void credit(MinecraftServer server, Removal r, String id)");
+		assertTrue(gc.contains("Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);"), "a group member's credit");
+		assertFalse(gc.contains("dropPending"), "Groups.credit leaves the pending credit to the credit rule");
+		String rj = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "RestoreJob.java");
+		assertTrue(rj.contains("Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null)"), "a single road's");
+		String b = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Builder.java");
+		String cr = StockpileSaveHFTest.body(b, "static boolean creditRefund(");
+		int nothing = cr.indexOf("if (items.isEmpty() && (p == null || p.ledger().custody(key).isEmpty()))");
+		int ret = cr.indexOf("return false;", nothing);
+		assertTrue(nothing > 0 && cr.indexOf("Stockpiles.creditOfNothing(p, key);", nothing) > nothing
+			&& cr.indexOf("Stockpiles.creditOfNothing(p, key);", nothing) < ret, "a credit of nothing drops its pending credit before it returns");
+	}
 }
