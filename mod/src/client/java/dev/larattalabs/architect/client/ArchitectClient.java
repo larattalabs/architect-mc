@@ -17,6 +17,7 @@ public class ArchitectClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		AutoWorld.init();
+		dev.larattalabs.architect.client.help.ArchitectGlossary.register(); // (PR G1) the shared glossary's Architect section
 		PlacementFeature.init();
 		dev.larattalabs.architect.client.placement.RoadCellsClient.init(); // phase 4e: road cells for the ghost's approach
 		dev.larattalabs.architect.client.placement.CompositePreview.init();

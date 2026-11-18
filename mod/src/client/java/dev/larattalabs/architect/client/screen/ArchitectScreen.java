@@ -342,6 +342,71 @@ public final class ArchitectScreen extends Screen {
 		tab = t;
 		lastTab = t;
 		listScroll = 0;
+		statusHelp = false;
+	}
+
+	/** (PR G1) The Status tab shows its Help page (the glossary) instead of its settings. */
+	boolean statusHelp;
+
+	/** (PR G1) Status > Help: the shared glossary (Architect's terms first, then any other mod's section), scrolled like the tab. */
+	private void drawStatusHelp(GuiGraphicsExtractor g, int x, int top0, int w, int footerY, int mx, int my) {
+		int viewH = footerY - 2 - top0;
+		listArea = new int[] {x, top0, w, viewH};
+		listAvailable = viewH;
+		scrollStep = 20;
+		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - viewH)));
+		int hitsBefore = hits.size();
+		boolean scrolls = listNeeded > viewH;
+		if (scrolls) {
+			w -= 10;
+		}
+		g.enableScissor(x, top0, x + w + 10, top0 + viewH);
+		int top = top0 - listScroll;
+		int y = top;
+		String back = "‹ Back to Status";
+		button(g, "status:help_back", back, x, y, bw(back), false, true, mx, my, () -> {
+			statusHelp = false;
+			listScroll = 0;
+		});
+		y += 24;
+		g.text(font, "Terms", x, y, UiStyle.clayText(), false);
+		y += 12;
+		for (String line : TextUtil.wrapPlain(font, "The words Architect's screens use. A screen's ? key (Shift+/) lists its keys and the terms it uses.", w)) {
+			g.text(font, line, x, y, UiBits.muted(), false);
+			y += 10;
+		}
+		y += 8;
+		// two columns when there is room (GUI scale 2), one at GUI scale 4
+		var sections = dev.larattalabs.labui.ui.Glossary.sections(dev.larattalabs.architect.client.help.ArchitectGlossary.OWNER);
+		if (w >= 360) {
+			int colW = (w - 14) / 2;
+			int yl = y;
+			int yr = y;
+			for (var sec : sections) {
+				List<dev.larattalabs.labui.ui.Glossary.Term> terms = sec.terms();
+				int half = (terms.size() + 1) / 2;
+				var a = new dev.larattalabs.labui.ui.Glossary.Section(sec.owner(), sec.title(), terms.subList(0, half));
+				var b = new dev.larattalabs.labui.ui.Glossary.Section(sec.owner(), sec.title() + " (more)", terms.subList(half, terms.size()));
+				int m = Math.max(yl, yr);
+				yl = m + dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, List.of(a), x, m, colW);
+				yr = m + dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, List.of(b), x + colW + 14, m, colW);
+			}
+			y = Math.max(yl, yr);
+		} else {
+			y += dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, sections, x, y, w);
+		}
+		g.disableScissor();
+		listNeeded = y - top;
+		for (int i = hits.size() - 1; i >= hitsBefore; i--) {
+			Hit h = hits.get(i);
+			if (h.y() + h.h() <= top0 || h.y() >= top0 + viewH) {
+				hits.remove(i);
+			}
+		}
+		if (scrolls) {
+			scrollbar(g, x + w + 4, top0, viewH);
+		}
+		UiBits.hints(g, font, x, footerY + 4, false, "Esc", "back", "?", "keys");
 	}
 
 	@Override
@@ -421,6 +486,9 @@ public final class ArchitectScreen extends Screen {
 				library.cancelEdit();
 			} else if (focus != Focus.NONE) {
 				setFocus(Focus.NONE);
+			} else if (tab == Tab.STATUS && statusHelp) {
+				statusHelp = false;
+				listScroll = 0;
 			} else if (tab == Tab.DESIGN && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
 				closeSet();
 			} else if (!(tab == Tab.LIBRARY && library.escape())) {
@@ -2457,6 +2525,10 @@ public final class ArchitectScreen extends Screen {
 	// ------------------------------------------------------------------ Status tab
 
 	private void drawStatus(GuiGraphicsExtractor g, int x, int top0, int w, int footerY, int mx, int my) {
+		if (statusHelp) {
+			drawStatusHelp(g, x, top0, w, footerY, mx, my);
+			return;
+		}
 		// (slice UI, A-placed "GUI-4 Status scroll"; UI-AUDIT 14) the tab scrolls when it is taller than the panel (GUI scale 4 cut it off)
 		int viewH = footerY - 2 - top0;
 		listArea = new int[] {x, top0, w, viewH};
@@ -2555,7 +2627,14 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, line, lx, y, UiBits.muted(), false);
 			y += 10;
 		}
-		y += 6;
+		y += 4;
+		// (PR G1) the Help page: the glossary
+		String help = "Help and terms…";
+		button(g, "status:help", help, lx, y, bw(help), false, true, mx, my, () -> {
+			statusHelp = true;
+			listScroll = 0;
+		});
+		y += 24;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
 			int th = Math.min(footerY - 4 - y, tail.size() * 9 + 6);
