@@ -21,6 +21,8 @@
 //   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
+//   node tools/gate6dgr.mjs txncrashadopt (txn-crash-adopt) slice T3a: the T3 design §4's failing-first adoption cases, written red
+//                                                       (the T3a block at the end; GATE_T3A_CASES=a,b picks cases)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -576,4 +578,288 @@ export async function registerSAD(steps, h) {
     spendZero();
     return out;
   };
+
+  // ------------------------------------------------------------------ (slice T3a) txn-crash-adopt: the T3 design §4's failing-first cases
+  // Written red: they assert the protocol T3b builds (pile.adopt on the txn layer, Noah's decisions 1-6) and fail on the code as it stands
+  // (main's Stockpiles.adopt, SAD's). Each case runs on a fresh Supplied town and records a row {case, red|green, failed checks}:
+  //   adopt-overflow-async  the pile set near capacity (dev.stockpile.ps capacity), the crate over it by up to a stack; halted at SAC1+save
+  //                         (the stand-in for +async: the chunks flushed before the halt; see the T3a as-built), the restart: rolled back or
+  //                         forward whole, no item entity anywhere, conservation exact; then the live call: the whole crate stock in the
+  //                         stock past capacity (decision 1), nothing dropped, no entity
+  //   adopt-road-unloaded   a construction road fed to BUILT from a shared crate beside a building house; a clean restart; the crate's chunk
+  //                         force-loaded, the road's other chunks unloaded; adoptCrates; the road's paid record == its BOM (the chunk rule:
+  //                         loaded up to a bound, or the crate deferred: never a partial rescan); its removal refunds == BOM
+  //   adopt-defer-retagged  ADP's base repro: the shared crate's owner tag changed; adoptCrates defers it: it stands with its stock, the
+  //                         ledger and feed order unchanged, both sites keep their reference; its tag back, the next call adopts it once
+  //   adopt-crate-held      an insert (dev.crate.insert), a hopper and the feed's draw into the crate while its adoption is open (paused at
+  //                         TX:pile.adopt:decided by dev.txn.pauseAt, a hook T3b adds): each refused, the crate's stock unchanged; released,
+  //                         the adoption finishes once; conservation exact
+  {
+    const T3_BOX = (gy) => ({ min: [CX - 45, gy - 12, CZ - 45], max: [CX + 175, gy + 40, CZ + 110] });
+    const crateBlock = 'architect_mc:construction_crate';
+    const audit = (area) => call('dev.stockpile.audit', { owner: OWNER, min: area.min, max: area.max }, 120_000);
+    const standing = (a) => {
+      let t = {};
+      for (const m of [a.inventory, a.containers, a.entities, a.stock, a.paidStanding, a.legacyCrateStock]) t = G.plus(t, m ?? {});
+      for (const k of Object.keys(t)) if (!t[k]) delete t[k];
+      return t;
+    };
+    const conserver = (out, area, H0) => async (tag) => {
+      const a = await audit(area);
+      const hN = standing(a);
+      const d = G.minus(hN, H0);
+      for (const k of Object.keys(d)) if (!d[k]) delete d[k];
+      out.conserve = { ...(out.conserve ?? {}), [tag]: { diff: d } };
+      check(Object.keys(d).length === 0, `${tag}: conservation: what stands (stock, paid cells standing, crate stock, item entities, containers, inventory: ${sum(hN)}) equals what stood before (${sum(H0)}): ${json(d)}`, out.conserve[tag]);
+    };
+    const tagOf = async (at) => json((await cmd(`/data get block ${at.join(' ')} Site`).catch((e) => ({ messages: [String(e)] }))).messages ?? []);
+    const retag = (at, t) => cmd(`/data merge block ${at.join(' ')} {Site:"${t}"}`).catch(() => null);
+    const ledgerSame = (a, b) => G.same(a?.delivered, b?.delivered) && G.same(a?.dropped ?? {}, b?.dropped ?? {}) && json(a?.paid ?? {}) === json(b?.paid ?? {}) && G.same(stockOf(a), stockOf(b));
+    const stacks = (m) => Object.values(m ?? {}).reduce((n, v) => n + Math.ceil(v / 64), 0);
+    const loaded = async ([x, y, z]) => { const r = await L.cmd(`/execute if loaded ${x} ${y} ${z}`).catch(() => null); return !!(r?.success || Number(r?.result) > 0); };
+    const entitiesNear = async (pos, radius = 12) => (await call('dev.items.near', { pos, radius }, 30_000));
+    const noEntities = (n) => sum(n?.items ?? {}) === 0;
+    /** A fresh Supplied town with a stockpile: the shared crate's cell, tag and ledger, the conservation baseline. */
+    async function t3Town(name) {
+      const out = {};
+      const W = await world(name);
+      const town = await suppliedTown('T3', W);
+      const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+      check(!cr.refused, `T3: a stockpile of 4 crates for ${OWNER}`);
+      const s40 = await siteState(town.ids.house_4);
+      const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
+      const tag = `group:${town.b2.group}`;
+      const got = await tagOf(at);
+      out.crate = { at, tag, got, stock: s40.ledger?.stock };
+      check(s40.crate?.present === true && got.includes(tag) && sum(s40.ledger?.stock) > 0, `T3: the shared crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items`, out.crate);
+      const area = T3_BOX(W.gy);
+      const H0 = standing(await audit(area));
+      return { out, W, ...town, s40, at, tag, area, conserve: conserver(out, area, H0), p0: await pile() };
+    }
+    /** One case: a row with its failed checks (red when any), errors caught so the next case still runs. */
+    async function rowOf(name, rows, body) {
+      const f0 = L.fails();
+      const t0 = Date.now();
+      let error = null, data = null;
+      log(`== T3a case ${name}`);
+      try {
+        data = await body();
+      } catch (e) {
+        error = String(e?.stack ?? e).slice(0, 2000);
+        check(false, `${name}: the case stopped: ${String(e?.message ?? e).slice(0, 300)}`);
+      }
+      const failed = L.fails() - f0;
+      rows.push({ case: name, result: failed ? 'red' : 'green', failed, error, data, sec: Math.round((Date.now() - t0) / 1000) });
+      log(`   T3a ${name}: ${failed ? `RED (${failed} failed check(s))` : 'GREEN'}`);
+      await L.leaveWorld().catch(() => null);
+    }
+
+    steps.txncrashadopt = async () => {
+      await ensure();
+      const rows = [];
+      const only = (process.env.GATE_T3A_CASES ?? '').split(',').filter(Boolean);
+      const want = (c) => !only.length || only.includes(c);
+
+      if (want('adopt-overflow-async')) await rowOf('adopt-overflow-async', rows, async () => {
+        const F = await t3Town('G6B T3 Overflow');
+        const { out, W, at, s40 } = F;
+        const S = s40.ledger?.stock ?? {};
+        const room = async () => {
+          const st = (await call('dev.stockpile.state', { owner: OWNER }, 60_000)).stockpile ?? {};
+          const cap = Math.max(0, (st.usedStacks ?? 0) + stacks(S) - 1);
+          await call('dev.stockpile.ps', { capacity: cap }, 30_000);
+          return { used: st.usedStacks, cap, crateStacks: stacks(S) };
+        };
+        out.room = await room();
+        check(out.room.crateStacks >= 1, `overflow: the pile's room set to ${out.room.cap} stacks (used ${out.room.used}); the crate's ${out.room.crateStacks} stack(s) pass it by one`, out.room);
+        const pileAt = PILE_AT(W.gy)[0];
+        const b = await baseline('overflow SAC1+save');
+        await call('dev.journal.killAt', { point: 'SAC1+save' }, 10_000);
+        const Ld = await halt('overflow SAC1+save', W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp: false });
+        if (Ld) {
+          const stands = await isBlock(at, crateBlock);
+          const c = await siteState(F.ids.house_4);
+          const p1 = await pile();
+          const moved = G.minus(stockOf(p1.ledger), stockOf(F.p0.ledger));
+          const nearPile = await entitiesNear([pileAt[0], pileAt[1] + 1, pileAt[2]]);
+          const nearCrate = await entitiesNear(at);
+          const back = stands && G.same(c.ledger?.stock, S) && sum(moved) === 0;
+          const fwd = !stands && G.same(moved, S);
+          out.restart = { stands, moved, crateStock: c.ledger?.stock, entities: { pile: nearPile.items, crate: nearCrate.items }, dropped: p1.ledger?.dropped, back, fwd };
+          check(back || fwd, `overflow SAC1+save: after the restart the adoption is whole: rolled back (the crate stands with its stock) or forward (its whole stock in the stock): stands ${stands}, moved ${json(moved)}`, out.restart);
+          check(noEntities(nearPile) && noEntities(nearCrate), `overflow SAC1+save: no item entity beside the pile or the crate (pile ${json(nearPile.items ?? {})}, crate ${json(nearCrate.items ?? {})}): an overflow is never an entity`, out.restart);
+          await F.conserve('overflow SAC1+save');
+        }
+        // the live call (when the crate still stands): the whole stock in, past capacity
+        if (await isBlock(at, crateBlock)) {
+          out.room2 = await room();
+          const pB = await pile();
+          const a = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+          const pA = await pile();
+          const moved = G.minus(stockOf(pA.ledger), stockOf(pB.ledger));
+          const dropped = G.minus(pA.ledger?.dropped ?? {}, pB.ledger?.dropped ?? {});
+          const st = (await call('dev.stockpile.state', { owner: OWNER }, 60_000)).stockpile ?? {};
+          const nearPile = await entitiesNear([pileAt[0], pileAt[1] + 1, pileAt[2]]);
+          out.live = { refused: a.refused ?? null, moved, dropped, used: st.usedStacks, cap: st.capacityStacks, entities: nearPile.items };
+          check(!a.refused && G.same(moved, S) && sum(dropped) === 0, `overflow live: adoptCrates booked the crate's whole stock (${json(moved)}; it held ${json(S)}) into the stock, nothing dropped (${json(dropped)})`, out.live);
+          check(noEntities(nearPile) && (st.usedStacks ?? 0) > (st.capacityStacks ?? 0), `overflow live: past capacity (${st.usedStacks}/${st.capacityStacks} stacks), no item entity (${json(nearPile.items ?? {})})`, out.live);
+          await F.conserve('overflow live');
+        }
+        await call('dev.stockpile.ps', { capacity: -1 }, 30_000).catch(() => null);
+        return out;
+      });
+
+      if (want('adopt-road-unloaded')) await rowOf('adopt-road-unloaded', rows, async () => {
+        const out = {};
+        const W = await world('G6B T3 Road');
+        const entry = await ig.installCabin('sad_cabin');
+        await call('dev.survival.set', { on: true });
+        const X = CX + 20, Z = CZ + 20;
+        await cmd('/gamemode creative');
+        await L.tp(X + 20.5, W.gy + 30, Z + 10.5, 0, 89);
+        const y = await groundY(X, Z) + 1;
+        await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 42} ${y - 1} ${Z + 3} minecraft:stone`);
+        await cmd(`/fill ${X - 3} ${y} ${Z - 3} ${X + 42} ${y + 3} ${Z + 3} minecraft:air`);
+        await L.settle(2000);
+        const road = { points: [[X, y, Z], [X + 39, y, Z]], width: 1, owner: OWNER, mode: 'CONSTRUCTION' };
+        const rc = await api(`roadcheck ${json(road)}`);
+        check(rc.ok && rc.construction && sum(rc.bom) > 0, `road: a paid construction road over 3 chunks (BOM ${json(rc.bom)})`, rc.refusals);
+        const area = { min: [CX - 45, y - 12, Z - 60], max: [X + 60, y + 30, Z + 20] };
+        const crateAt = [X + 20, y, Z - 10];
+        const batch = { owner: OWNER, sharedCrate: true, autoApprove: true, crateAt, items: [
+          { key: 'h1', bp: entry, at: [X, y, Z - 40], mode: 'AUTO' }, { key: 'r1', road: { ...road, mode: 'AUTO' } }] };
+        const bid = await later(`bqueue ${json(batch)}`);
+        let bv;
+        for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((it) => ['PLACED', 'FAILED'].includes(it.status))) break; await sleep(1000); }
+        const items = Object.fromEntries((bv.items ?? []).map((it) => [it.key, it]));
+        check(['h1', 'r1'].every((k) => items[k]?.status === 'PLACED'), `road: the batch placed (${json(bv.items?.map((i) => [i.key, i.status, i.reason]))})`);
+        const roadId = items.r1?.site, h1 = items.h1?.site;
+        if (!roadId || !h1) return out;
+        await pause(h1, true);
+        const ins = await call('dev.crate.insert', { site: roadId, items: rc.bom }, 60_000);
+        let rv;
+        for (let i = 0; i < 180; i++) { rv = (await api('sites')).all.find((s) => s.id === roadId); if (rv?.state === 'BUILT') break; await sleep(1000); }
+        check(rv?.state === 'BUILT' && G.same(ins.accepted, rc.bom), `road: ${roadId} fed its BOM and BUILT (${rv?.state}); the house ${h1} still building on the shared crate`);
+        const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+        check(!cr.refused, `road: a stockpile for ${OWNER}`);
+        const H0 = standing(await audit(area));
+        const conserve = conserver(out, area, H0);
+        // a clean restart; the crate's chunk and the pile's force-loaded, the player far away: the road's other chunks unload
+        const dir = path.basename(W.dir);
+        await L.leaveWorld();
+        await L.openWorld(dir);
+        const pileAt = PILE_AT(W.gy)[0];
+        await cmd(`/forceload add ${crateAt[0]} ${crateAt[2]}`).catch(() => null);
+        await cmd(`/forceload add ${pileAt[0]} ${pileAt[2]} ${pileAt[0] + 8} ${pileAt[2]}`).catch(() => null);
+        await L.tp(CX + 4000, 120, CZ + 4000);
+        const far = [[X, y, Z], [X + 39, y, Z]];
+        let un = [];
+        for (let i = 0; i < 40; i++) {
+          un = [];
+          for (const c of far) if (!(await loaded(c))) un.push(c);
+          if (un.length === far.length) break;
+          await sleep(3000);
+        }
+        out.chunks = { crateLoaded: await loaded(crateAt), unloaded: un };
+        check(out.chunks.crateLoaded && un.length === far.length, `road: after the restart the crate's chunk is loaded, the road's ends unloaded (${json(un)})`, out.chunks);
+        const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        await L.tp(X + 20.5, y + 30, Z + 10.5, 0, 89);
+        await sleep(3000);
+        const p1 = await pile();
+        const rec = Object.entries(p1.ledger?.paid ?? {}).find(([k]) => k.startsWith(`road:${roadId}@`));
+        const stands = await isBlock(crateAt, crateBlock);
+        out.adopt = { refused: ac.refused ?? null, record: rec ?? null, stands, order: p1.feedOrder };
+        check(!ac.refused && (stands || (!!rec && G.same(rec[1], rc.bom))), `road: adoptCrates with the road's chunks unloaded: either the crate deferred whole (stands ${stands}) or the BUILT road's paid record complete (${rec ? json(rec[1]) : 'none'}; its BOM ${json(rc.bom)}): never a partial rescan`, out.adopt);
+        if (stands) {
+          // deferred past the bound: with every chunk loaded the next call adopts it
+          const ac2 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+          const p2 = await pile();
+          const rec2 = Object.entries(p2.ledger?.paid ?? {}).find(([k]) => k.startsWith(`road:${roadId}@`));
+          out.adopt2 = { refused: ac2.refused ?? null, record: rec2 ?? null };
+          check(!ac2.refused && !!rec2 && G.same(rec2[1], rc.bom), `road: loaded, the next adoptCrates keys the BUILT road's paid record (${rec2 ? json(rec2[1]) : 'none'})`, out.adopt2);
+        }
+        await conserve('road: adopted');
+        const before = await pile();
+        const rm = await later(`remove ${roadId} ${OWNER} noforce`);
+        await L.settle(3000);
+        const after = await pile();
+        const back = G.minus(stockOf(after.ledger), stockOf(before.ledger));
+        out.remove = { removed: rm.removed, back, bom: rc.bom };
+        check(rm.removed && G.same(back, rc.bom), `road: its removal refunded its BOM into the stockpile (${json(back)}; BOM ${json(rc.bom)})`, out.remove);
+        await conserve('road: removed');
+        await cmd('/forceload remove all').catch(() => null);
+        return out;
+      });
+
+      if (want('adopt-defer-retagged')) await rowOf('adopt-defer-retagged', rows, async () => {
+        const F = await t3Town('G6B T3 Retag');
+        const { out, ids, at, tag, s40, conserve, p0 } = F;
+        const m = await retag(at, 'adp:other');
+        check(m?.success !== false, `retagged: the crate's owner tag changed to adp:other (${json(m?.messages ?? [])})`);
+        const a = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        const p = await pile();
+        const stands = await isBlock(at, crateBlock);
+        const s3 = await siteState(ids.house_3);
+        const s4 = await siteState(ids.house_4);
+        out.deferred = { refused: a.refused ?? null, deferred: a.deferred ?? null, stands, refs: [s3.crate, s4.crate], order: p.feedOrder, same: ledgerSame(p.ledger, p0.ledger) };
+        check(!a.refused && stands && ledgerSame(p.ledger, p0.ledger), `retagged: adoptCrates deferred the unreadable crate: it stands (${stands}), the stockpile's ledger unchanged`, out.deferred);
+        check(s3.crate?.x === at[0] && s4.crate?.x === at[0] && json(p.feedOrder ?? []) === json(p0.feedOrder ?? []), `retagged: both sites keep their crate reference (house_3 ${json(s3.crate)}, house_4 ${json(s4.crate)}); the feed order unchanged`, out.deferred);
+        await retag(at, tag);
+        const s4b = await siteState(ids.house_4);
+        check(s4b.crate?.present === true && G.same(s4b.ledger?.stock, s40.ledger?.stock), `retagged: its tag back, the crate reads with its stock as before (${sum(s4b.ledger?.stock)} of ${sum(s40.ledger?.stock)})`, { stock: s4b.ledger?.stock });
+        await conserve('retagged: deferred');
+        const a2 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        const p2 = await pile();
+        const moved = G.minus(stockOf(p2.ledger), stockOf(p0.ledger));
+        out.adopted = { refused: a2.refused ?? null, moved, stands: await isBlock(at, crateBlock) };
+        check(!a2.refused && G.same(moved, s40.ledger?.stock ?? {}) && !out.adopted.stands, `retagged: the next adoptCrates took it once (${json(moved)})`, out.adopted);
+        await conserve('retagged: adopted');
+        return out;
+      });
+
+      if (want('adopt-crate-held')) await rowOf('adopt-crate-held', rows, async () => {
+        const F = await t3Town('G6B T3 Held');
+        const { out, ids, at, s40, conserve } = F;
+        const paused = await call('dev.txn.pauseAt', { point: 'TX:pile.adopt:decided' }, 10_000).then((r) => ({ ok: !r?.refused, r }), (e) => ({ ok: false, error: String(e?.message ?? e).slice(0, 200) }));
+        out.pause = paused;
+        check(paused.ok, `held: the adoption paused open at TX:pile.adopt:decided (dev.txn.pauseAt: ${paused.ok ? 'armed' : `unavailable: ${paused.error ?? json(paused.r)}; T3b adds the hook with the kind`})`, paused);
+        if (!paused.ok) return out;
+        const ans = call('dev.stockpile.adopt', { owner: OWNER }, 300_000).catch((e) => ({ error: String(e) }));
+        let st;
+        for (let i = 0; i < 30; i++) { st = await call('dev.txn.state', {}, 10_000); if ((st.open ?? []).some((t) => t.kind === 'pile.adopt')) break; await sleep(500); }
+        const tx = (st.open ?? []).find((t) => t.kind === 'pile.adopt');
+        out.open = tx ?? null;
+        check(!!tx && (tx.resources ?? []).some((r) => r.startsWith('crate:') && r.endsWith(`@${at.join(',')}`)), `held: an open pile.adopt holds the crate (${json(tx?.resources ?? [])})`, tx);
+        const before = (await siteState(ids.house_4)).ledger?.stock;
+        const ins = await call('dev.crate.insert', { site: ids.house_4, items: { 'minecraft:cobblestone': 1 } }, 60_000).catch((e) => ({ refused: String(e?.message ?? e) }));
+        const hop = [at[0], at[1] + 1, at[2]];
+        await cmd(`/setblock ${hop.join(' ')} minecraft:hopper[facing=down]`);
+        await cmd(`/item replace block ${hop.join(' ')} container.0 with minecraft:cobblestone 3`);
+        await pause(ids.house_4, false);
+        await call('dev.wait', { ms: 6000 }, 30_000);
+        await pause(ids.house_4, true);
+        const inHopper = (await call('dev.txn.cells', { cells: [hop] }, 30_000).catch(() => null))?.cells?.[0]?.slots ?? null;
+        const after = (await siteState(ids.house_4)).ledger?.stock;
+        await cmd(`/setblock ${hop.join(' ')} minecraft:air`);
+        out.writers = { insert: ins, inHopper, before, after };
+        check(String(ins?.refused ?? '').includes('held') && sum(ins?.accepted ?? {}) === 0, `held: dev.crate.insert into the adopting crate refused held(..) (${json(ins?.refused ?? ins)})`, out.writers);
+        check(G.same(before, after) && G.same(before, s40.ledger?.stock), `held: neither the hopper nor the feed's draw changed the crate's stock (${sum(before)} -> ${sum(after)})`, out.writers);
+        await call('dev.txn.pauseAt', { point: null }, 10_000).catch(() => null);
+        const done = await ans;
+        out.done = done;
+        let st2;
+        for (let i = 0; i < 40; i++) { st2 = await call('dev.txn.state', {}, 10_000); if (!(st2.open ?? []).some((t) => t.kind === 'pile.adopt')) break; await sleep(1000); }
+        const p = await pile();
+        const moved = G.minus(stockOf(p.ledger), stockOf(F.p0.ledger));
+        check(!done?.refused && G.same(moved, s40.ledger?.stock ?? {}), `held: released, the adoption finished once (${json(moved)})`, { done, moved });
+        await conserve('held: adopted');
+        return out;
+      });
+
+      const out = { rows, red: rows.filter((r) => r.result === 'red').map((r) => r.case), green: rows.filter((r) => r.result === 'green').map((r) => r.case) };
+      log(`T3a rows: ${rows.map((r) => `${r.case} ${r.result.toUpperCase()}${r.failed ? ` (${r.failed})` : ''}`).join('; ')}`);
+      spendZero();
+      return out;
+    };
+  }
 }
