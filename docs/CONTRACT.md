@@ -33561,12 +33561,16 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
 - **Limits (N-8c-3, read as lip form's only, so H stays byte-identical), each refused at limit + 1:** drop 48 (the form's over the basin,
   or the part's `drop`): LIMIT {limit: drop}; 4 falls per region (every fall counts; only a lip form fall is refused, at emit, in plan
   order): LIMIT {falls}; curtain 5: SCHEMA at `$.width` (and `formFallLimits`); basin depth: NO_FEATURE {basinDepth, min}; lots and zones
-  within 2: KEEP_OUT {lots}. An H waterfall past 24 (the schema now takes 48) is LIMIT {drop, max 24}. Catalogue: `limits.form`.
+  within 2: KEEP_OUT {lots} (both paths through `formFallLimits`). An H waterfall past 24 (the schema now takes 48) is LIMIT {drop, max 24}.
+  The 2 round the fall stay KC-kept after emit (`<part>#near`: walls, later bodies). **Readings:** routes keep off the bodies' cells and
+  bridge plan water (T3), but don't read KC, so the 2-cell route buffer is not enforced (seam); a lot within 2 of a fall is not reachable in a
+  plan (zones keep ZONE_GAP off the island's rect, which holds the basin), so the lots pair is `formFallLimits`' only. S-H-7 as H's.
 - **Hosts (readings):** a floating island's rim fits; a hollow mountain's and a crater's slopes give no clear drop (NO_ROOM with whys).
 - **Hidden room:** behind a lip form fall, in the form's rock through a passage of up to 8 from the doorway (an island's rim is thin),
   kept only when the cells its carve opens are outside the fall's watch set and its sets' face neighbours (`outsideWatch`).
 - **Byte-identity:** the 138 non-8c corpus entries plan to identical IRs, blobs, answers, lint and meta (heap figures aside); c01-c04 too.
 - **Fixtures** (`kit/test/fixtures/river/`, the 8c lane): c05 (island fall and grotto), c06 (drop 48), c07 (five falls), c08 (join 2 deep),
-  c09 (lots on c03's river line: the river routed round them). Tests: `kit/test/rv-b.test.mjs` (13, property tests among them).
+  c09 (lots on c03's river line: the river routed round them). Tests: `kit/test/rv-b.test.mjs` (15, property tests among them).
 - **Seams (8cG):** the in-game row "a fall off a staged island waits `terrain`, then settles" (c05 in survival: the island's ops staged,
-  the header's `on`); the mapping moves `fall_island`'s basin and `river_demo`'s tail off wm; the `flowingWater` kinds; Steward's schema copy.
+  the header's `on`); the mapping moves `fall_island`'s basin and `river_demo`'s tail off wm; handriver's `on` is an IR part name that only
+  matches the plan part id by chance; the `flowingWater` kinds; Steward's schema copy; a route buffer of 2 round a fall (the route pass).

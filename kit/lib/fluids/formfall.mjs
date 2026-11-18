@@ -24,6 +24,8 @@ import { VC, classAt } from '../region/volume.mjs';
 import { bodyAnswer, emitPond, iceFor, shellCheck } from './pond.mjs';
 import { localWorld, reachId } from './body.mjs';
 import { craterGen, islandGen, mountainGen } from '../forms/bigForms.mjs';
+import { reserve } from './keep.mjs';
+import { hollowIn } from './waterfall.mjs';
 import { RIM } from '../forms/crater.mjs';
 
 /** The lip form's limits and frame constants (N-8c-3). */
@@ -97,6 +99,8 @@ export function fallHost(C, id) {
   return { id, kind: q.kind, rect, top, solid: (x, y, z) => { const t = top(x, z); return t !== null ? y <= t : y <= env.S.groundAt(x, z); }, roots: [], pads: [] };
 }
 
+/** How far apart two rects stand (Chebyshev: 1 side by side, 0 when they meet): `lotGap` of formFallLimits. */
+export const rectGap = (a, b) => Math.max(0, b.minX - a.maxX, a.minX - b.maxX, b.minZ - a.maxZ, a.minZ - b.maxZ);
 const inBox = (b, x, y, z) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && y >= b.minY && y <= b.maxY;
 
 /**
@@ -223,7 +227,7 @@ export function resolveFormFall(C, p, sp) {
   const obstacles = (C.taken ?? []).filter((t) => !own.has(rectArr(t).join(',')) && !own.has(rectArr(grow(t, -1)).join(',')));
   const whys = new Map();
   const why = (k) => whys.set(k, (whys.get(k) ?? 0) + 1);
-  let best = null, tall = null, shallow = null;
+  let best = null, tall = null, shallow = null, nearest = null;
   for (const F of framesOff(H, sp.width)) {
     const s = judgeFormSite(env, H, F, sp.width, { maxDrop, basin: sp.basin });
     if (!s.ok) {
@@ -233,7 +237,8 @@ export function resolveFormFall(C, p, sp) {
       continue;
     }
     const g = grow(s.rect, FORM_FALL.near);
-    if (obstacles.some((o) => meets(g, o))) { why('lot'); continue; }
+    const hit = obstacles.find((o) => meets(g, o));
+    if (hit) { why('lot'); const d = rectGap(s.rect, hit); if (nearest === null || d < nearest) nearest = d; continue; }
     if (protectedMet(env, g)) { why('protected'); continue; }
     if (loc && !loc.valid(s.rect)) continue;
     const move = loc ? loc.move(s.rect) : 0;
@@ -248,14 +253,17 @@ export function resolveFormFall(C, p, sp) {
       return refused(l.code, `${l.message}: every site off ${hostId} drops more`, { ...l.evidence, host: hostId });
     }
     if (shallow) { const l = formFallLimits({ drop: shallow.drop, basinDepth: shallow.joinDepth }); return refused(l.code, l.message, { ...l.evidence, host: hostId }); }
-    if (whys.get('lot') || whys.get('protected')) return refused('KEEP_OUT', `every site off ${hostId} stands within ${FORM_FALL.near} of a lot, zone or protected area`, { limit: 'lots', within: FORM_FALL.near, ...ev });
+    if (whys.get('lot') || whys.get('protected')) { const l = formFallLimits({ lotGap: nearest ?? 0 }); return refused(l.code, `every site off ${hostId}: ${l.message}`, { ...l.evidence, ...ev }); }
     return refused('NO_ROOM', `no ${sp.width}-wide fall off ${hostId}: no edge of its top drops clear into a basin on the ground (${[...whys.keys()].sort().join(', ') || 'no edge'})`, ev);
   }
   const s = best.site;
-  const j = C.judge([{ what: 'move', value: best.move, ...C.tolOf(part, 'move') }]);
+  const j0 = C.judge([{ what: 'move', value: best.move, ...C.tolOf(part, 'move') }]);
+  // (S-H-7, as H's: a hollow asked only in the fall's own words is never dropped silently; a form.hidden_room hosted by it builds it)
+  const hollowPart = C.order.find((x) => x.family === 'form' && x.kind === 'hidden_room' && x.part?.host === p.id);
+  const hollow = hollowIn(part) && !hollowPart ? { what: 'count', kind: 'hollow', value: 1, max: 0, block: 'form.hidden_room', exceeds: true, note: 'the hollow behind the curtain is not built from the fall\'s own words: a form.hidden_room part hosted by this fall (entrance waterfall) builds it' } : null;
+  const j = { ...j0, klass: j0.klass === 'fits' && hollow ? 'adjusted' : j0.klass, deviations: [...j0.deviations, ...(hollow ? [hollow] : [])] };
   if (part.drop !== undefined && part.drop !== s.drop) notes.push(`drop ${s.drop} (the form's over the basin; at most ${maxDrop})`);
   notes.push(`lip form off ${hostId}, basin ${s.basin}${sp.basin === 'auto' ? ' (auto)' : ''}: a ${sp.width}-wide fall of ${s.drop} into water ${s.depth} deep`);
-  const hollowPart = C.order.find((x) => x.family === 'form' && x.kind === 'hidden_room' && x.part?.host === p.id);
   if (hollowPart) notes.push(`the hollow behind the curtain is its own part (form.hidden_room ${hollowPart.id})`);
   return {
     klass: j.klass, rect: s.rect, footprints: s.rects.map((r) => rectArr(grow(r, FORM_FALL.near))), deviations: j.deviations, notes,
@@ -325,7 +333,7 @@ export function emitForm(K, p, res) {
     // the lots now laid (the zones emit before the H parts): none within FORM_FALL.near of the curtain or the basin
     const g = grow(s.rect, FORM_FALL.near);
     const lot = r.lots.find((l) => meets(g, l.box));
-    if (lot) throw refusal('KEEP_OUT', `the fall would stand within ${FORM_FALL.near} of lot ${lot.id}`, { limit: 'lots', within: FORM_FALL.near, lot: lot.id });
+    if (lot) { const l = formFallLimits({ lotGap: rectGap(s.rect, lot.box) }); throw refusal(l.code, `${l.message}: lot ${lot.id}`, { ...l.evidence, lot: lot.id }); }
     const H = fallHostAt(K, res.host.id);
     const out = emitFormFall(r, { part: p.id, F, width: sp.width, site: s, stage: K.stageOf('forms'), roles: fluidRolesOf(K.ctx), hostTop: H.top, on: res.host.id, basinIce });
     // the curtain in the plan's own world so far (the form's real cells, its roots): air from the lip down to the basin
@@ -340,6 +348,10 @@ export function emitForm(K, p, res) {
       if (hit) throw leakRefusal(b, hit);
       shellCheck(r, b);
     }
+    // ((N-8c-3) none within 2: KC's reservation of the footprint is replaced by the bodies' exact sets (compile.mjs registerBody), so the
+    // 2 round the curtain, the basin and the header stay kept under a record of their own (`<part>#near`), which the routes, walls and
+    // later writers read (keptColumns); it rides the emit's checkpoint, so a rollback drops it)
+    if (Array.isArray(K.keep)) reserve(K.keep, { part: `${p.id}#near`, body: out.pool.id, rects: s.rects.map((q) => rectArr(grow(q, FORM_FALL.near))), y0: s.Lb - 6, y1: s.L + 2 });
     res.emitted = { bodies: out.bodies, notes };
   } catch (e) {
     bodiesRollback(r, m);

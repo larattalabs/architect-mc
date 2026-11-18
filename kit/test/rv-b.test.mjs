@@ -94,7 +94,31 @@ test('RV-b hidden room: a form.hidden_room behind a fall off a form lies outside
   assert.equal(outsideWatch([[floor[0], floor[1] - 1, floor[2]]], sets), false, 'under the pool\'s floor');
   const w = fromRuns(head.watch)[0] ?? fromRuns(head.spill)[0];
   assert.equal(outsideWatch([w], sets), false);
-  assert.ok((p.ir.secrets ?? p.meta?.secrets ?? []).length >= 0);
+});
+
+test('RV-b S-H-7: a fall off a form whose own words ask for a hollow (and no hidden room builds it) answers adjusted with a count deviation', async () => {
+  const fx = clone(fixture('c05_island_fall.json'));
+  fx.plan.forms = fx.plan.forms.slice(0, 2);
+  fx.plan.forms[1].label = 'a fall with a cave behind the falls';
+  const a = answerOf((await planFx(fx, 'c05h')).p, 'fall');
+  assert.equal(a.class, 'adjusted');
+  assert.ok(a.deviations.some((d) => d.what === 'count' && d.kind === 'hollow' && d.block === 'form.hidden_room'));
+});
+
+test('RV-b routes: a road past the island keeps off the fall\'s cells, shell and spill (it bridges plan water); the fall\'s 2 round stay KC-kept for walls and later bodies', async () => {
+  const fx = clone(fixture('c05_island_fall.json'));
+  fx.plan.forms = fx.plan.forms.slice(0, 2);
+  fx.anchors.ra = [4030, 65, 4092];
+  fx.anchors.rb = [4100, 65, 4092];
+  fx.plan.connectors = [{ id: 'road', kind: 'road', from: { anchor: 'ra' }, to: { anchor: 'rb' } }];
+  const { p } = await planFx(fx, 'c05r');
+  assert.equal(answerOf(p, 'road').class, 'fits');
+  assert.equal(answerOf(p, 'fall').class, 'fits');
+  const water = fluidOps(p.ir).filter((o) => o.part === 'fall').flatMap((o) => [...fromRuns(o.cells), ...fromRuns(o.shell), ...fromRuns(o.spill)]);
+  const e = p.meta.route.edges[0];
+  let gap = Infinity;
+  for (const q of e.path) for (const w of water) gap = Math.min(gap, Math.max(Math.abs(q[0] - w[0]), Math.abs(q[2] - w[2])) - (e.width >> 1));
+  assert.ok(gap > FORM_FALL.near, `the road's edge ${gap} off the fall`);
 });
 
 test('RV-b limits: formFallLimits refuses each limit at limit + 1 with a typed reason, and passes it at the limit', () => {
@@ -185,7 +209,7 @@ test('RV-b falls property: whatever the plan order, the first four falls stand a
   }
 });
 
-test('RV-b width: the curtain fits 5 wide; 6 is malformed (SCHEMA at $.width), and params.width 6 is not read', async () => {
+test('RV-b width: the curtain fits 5 wide; 6 is malformed (SCHEMA at $.width)', async () => {
   const fx = fixture('c05_island_fall.json');
   const v = validatePlan({ schemaVersion: 'plan/0', planId: 't', forms: [{ id: 'isle', kind: 'floating_island', where: { inside: { claim: true } } }, { id: 'fall', kind: 'waterfall', lip: 'form', on: { part: 'isle' }, width: 6 }] });
   const bad = v.parts.find((q) => q.id === 'fall');
