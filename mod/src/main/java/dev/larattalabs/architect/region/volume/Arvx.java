@@ -26,9 +26,9 @@ import java.util.zip.GZIPOutputStream;
  * (version 2 only, 6c B) varint blockCount, then blockCount x (varint byteLength + UTF-8 block id; entry 0 is minecraft:air)
  *                   columns, x-major: runs bottom-up of (varint blockIndex, varint length)
  * (version 3 only, 6c H) version 2, then columns, x-major: runs bottom-up of (u8 fluid code, varint length) ({@link #FLUID_CODES})
- * (version 4 only, 8c VS) version 3 (its fluid runs included, byte for byte), then columns, x-major: runs bottom-up of (u8 level,
- *                   varint length): each cell's LiquidBlock.LEVEL (0 a source or no liquid block, 1-7 flowing by distance, 8-15 falling),
- *                   0 for any cell that is not a liquid block (a waterlogged block, a MISSING column)
+ * (version 4 only, 8c VS; the layout of kit/lib/region/volume.mjs, slice WM) version 3 with each fluid run carrying its level: columns,
+ *                   x-major: runs bottom-up of (u8 fluid code, u8 level, varint length), the level each cell's LiquidBlock.LEVEL: 1-7 for
+ *                   a flowing cell (codes water_flowing, lava_flowing), 8-15 for a falling one (water_falling), 0 for every other code
  * </pre>
  * The file on disk is the gzip of these bytes; the volume's sha is SHA-256 of the <b>uncompressed</b> bytes. Varints are
  * unsigned LEB128 (as {@code kit/lib/region/pack.mjs}). Pure: no Minecraft classes.
@@ -43,6 +43,8 @@ public final class Arvx {
 	public static final int VERSION_LEVELS = 4;
 	/** (6c H) The fluid codes of version 3 (index = code), as kit/lib/region/volume.mjs FLUID_CODES. */
 	public static final List<String> FLUID_CODES = List.of("none", "water_source", "water_flowing", "water_falling", "waterlogged", "lava_source", "lava_flowing");
+	/** (8c VS) Version 4: the levels each fluid code may carry ([min, max]; index = code), as kit/lib/region/volume.mjs FLUID_LEVELS. */
+	public static final int[][] FLUID_LEVELS = {{0, 0}, {0, 0}, {1, 7}, {8, 15}, {0, 0}, {0, 0}, {1, 7}};
 	public static final String AIR = "minecraft:air";
 	private static final byte[] MAGIC = "ARVX".getBytes(StandardCharsets.US_ASCII);
 	private static final int OWNED = VoxelClass.OWNED.ordinal();
@@ -71,9 +73,8 @@ public final class Arvx {
 		/** (6c H) version 3: the fluid runs, written after the block runs. */
 		final boolean fluids;
 		final Out fluidRuns = new Out(1 << 10);
-		/** (8c VS) version 4: the level runs, written after the fluid runs. */
+		/** (8c VS) version 4: each fluid run carries its level. */
 		final boolean levels;
-		final Out levelRuns = new Out(1 << 10);
 
 		/** {@code box} = {minX, minY, minZ, maxX, maxY, maxZ}, inclusive. */
 		public Encoder(int[] box) {
@@ -165,19 +166,23 @@ public final class Arvx {
 			if (level.length != height) {
 				throw new IllegalArgumentException("column of " + level.length + " levels, the box is " + height + " high");
 			}
-			column2(cls, owner, block, fluid);
-			runs(levelRuns, level);
-		}
-
-		private static void runs(Out o, byte[] v) {
+			if (fluid.length != height) {
+				throw new IllegalArgumentException("column of " + fluid.length + " fluids, the box is " + height + " high");
+			}
+			column1(cls, owner, block);
 			int i = 0;
-			while (i < v.length) {
+			while (i < height) {
 				int j = i + 1;
-				while (j < v.length && v[j] == v[i]) {
+				while (j < height && fluid[j] == fluid[i] && level[j] == level[i]) {
 					j++;
 				}
-				o.u8(v[i] & 0xFF);
-				o.varint(j - i);
+				int f = fluid[i] & 0xFF, lv = level[i] & 0xFF;
+				if (f < FLUID_LEVELS.length && (lv < FLUID_LEVELS[f][0] || lv > FLUID_LEVELS[f][1])) {
+					throw new IllegalArgumentException("level " + lv + " for fluid code " + FLUID_CODES.get(f));
+				}
+				fluidRuns.u8(f);
+				fluidRuns.u8(lv);
+				fluidRuns.varint(j - i);
 				i = j;
 			}
 		}
@@ -270,11 +275,10 @@ public final class Arvx {
 			}
 			if (fluids) {
 				fluidRuns.u8(0);
+				if (levels) {
+					fluidRuns.u8(0);
+				}
 				fluidRuns.varint(height);
-			}
-			if (levels) {
-				levelRuns.u8(0);
-				levelRuns.varint(height);
 			}
 		}
 
@@ -306,9 +310,6 @@ public final class Arvx {
 			}
 			if (fluids) {
 				out.bytes(fluidRuns.result());
-			}
-			if (levels) {
-				out.bytes(levelRuns.result());
 			}
 			return out.result();
 		}
@@ -497,45 +498,34 @@ public final class Arvx {
 			}
 		}
 		List<int[][]> fcols = null;
+		List<int[][]> lcols = ver == VERSION_LEVELS ? new ArrayList<>() : null;
 		if (ver >= VERSION_FLUIDS) {
 			fcols = new ArrayList<>();
 			for (long c = 0; c < n; c++) {
 				List<int[]> runs = new ArrayList<>();
+				List<int[]> lruns = new ArrayList<>();
 				int sum = 0;
 				while (sum < h) {
 					int f = in.u8();
+					int lv = lcols != null ? in.u8() : 0; // (8c VS) version 4: the run's level
 					int len = (int) in.varint();
 					if (len <= 0 || f >= FLUID_CODES.size()) {
 						throw new IllegalArgumentException("bad fluid run in column " + c);
 					}
+					if (lcols != null && (lv < FLUID_LEVELS[f][0] || lv > FLUID_LEVELS[f][1])) {
+						throw new IllegalArgumentException("level " + lv + " for fluid code " + FLUID_CODES.get(f) + " in column " + c);
+					}
 					runs.add(new int[] {f, len});
+					lruns.add(new int[] {lv, len});
 					sum += len;
 				}
 				if (sum != h) {
 					throw new IllegalArgumentException("column " + c + "'s fluids sum to " + sum + ", not " + h);
 				}
 				fcols.add(runs.toArray(new int[0][]));
-			}
-		}
-		List<int[][]> lcols = null;
-		if (ver == VERSION_LEVELS) {
-			lcols = new ArrayList<>();
-			for (long c = 0; c < n; c++) {
-				List<int[]> runs = new ArrayList<>();
-				int sum = 0;
-				while (sum < h) {
-					int lv = in.u8();
-					int len = (int) in.varint();
-					if (len <= 0 || lv > 15) {
-						throw new IllegalArgumentException("bad level run in column " + c);
-					}
-					runs.add(new int[] {lv, len});
-					sum += len;
+				if (lcols != null) {
+					lcols.add(lruns.toArray(new int[0][]));
 				}
-				if (sum != h) {
-					throw new IllegalArgumentException("column " + c + "'s levels sum to " + sum + ", not " + h);
-				}
-				lcols.add(runs.toArray(new int[0][]));
 			}
 		}
 		if (in.p != a.length) {

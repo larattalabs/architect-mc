@@ -202,4 +202,20 @@ class RegionFluids8cFTest {
 		}
 		assertFalse(got2.contains(BlockPos.asLong(1, 70, 0)), "water there before the realise is never taken");
 	}
+
+	@Test
+	void theUnsettledRefusalIsRead() {
+		JsonObject a = JsonParser.parseString("{\"part\":\"river\",\"class\":\"refused\",\"reasons\":[{\"code\":\"UNSETTLED\",\"message\":\"m\","
+			+ "\"say\":\"The river was too long to settle here; a shorter one fits\",\"evidence\":{\"body\":\"river_r1\",\"cap\":\"regionCells\",\"limit\":32768,"
+			+ "\"regionWide\":true,\"cells\":40000,\"rounds\":9}}],\"wouldFit\":[{\"part\":\"river\",\"why\":\"shorter\",\"cells\":900}]}").getAsJsonObject();
+		dev.larattalabs.architect.api.Unsettled u = dev.larattalabs.architect.api.Unsettled.of(a).orElseThrow();
+		assertEquals("river", u.part());
+		assertEquals("river_r1", u.body());
+		assertEquals("regionCells", u.cap());
+		assertEquals(32768, u.limit());
+		assertTrue(u.regionWide());
+		assertEquals(1, u.wouldFit().size());
+		assertTrue(u.say().contains("shorter one fits"));
+		assertTrue(dev.larattalabs.architect.api.Unsettled.of(JsonParser.parseString("{\"part\":\"p\",\"class\":\"fits\"}").getAsJsonObject()).isEmpty());
+	}
 }

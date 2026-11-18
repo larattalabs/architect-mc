@@ -586,13 +586,23 @@ public final class VolumeSurvey {
 
 	/**
 	 * (8c VS) The LiquidBlock level of a block state (ARVX version 4): a liquid block's {@code LiquidBlock.LEVEL} as it stands (0 a source,
-	 * 1-7 flowing by distance, 8-15 falling); 0 for any other block (a waterlogged block holds a source: its fluid code says so).
+	 * 1-7 flowing by distance, 8-15 falling), kept in its fluid code's range; 0 for any other block (a waterlogged block holds a source).
 	 */
 	public static byte levelOf(BlockState s) {
-		if (s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
-			return (byte) (int) s.getValue(net.minecraft.world.level.block.LiquidBlock.LEVEL);
+		if (!(s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock)) {
+			return 0;
 		}
-		return 0;
+		int lv = s.getValue(net.minecraft.world.level.block.LiquidBlock.LEVEL);
+		// the version-4 ranges by fluid code (Arvx.FLUID_LEVELS): a source 0; flowing water 1-7, falling 8-15; lava, flowing or falling (one
+		// code), 1-7 (a falling lava cell's distance, at least 1)
+		net.minecraft.world.level.material.FluidState f = s.getFluidState();
+		if (f.isEmpty() || f.isSource()) {
+			return 0;
+		}
+		if (f.getType().isSame(net.minecraft.world.level.material.Fluids.LAVA)) {
+			return (byte) Math.max(1, lv >= 8 ? lv - 8 : lv);
+		}
+		return (byte) (f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING) ? Math.max(8, lv) : Math.max(1, Math.min(7, lv)));
 	}
 
 	/** (6c H) With {@code fluids} (per cell a fluid code): ARVX version 3 (blocks must be given too). Pure. */
