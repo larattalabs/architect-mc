@@ -92,6 +92,11 @@ public final class ArchitectScreen extends Screen {
 	static final int CHIP_H = dev.larattalabs.labui.client.widget.Chip.H;
 	private static final int ROW_H = 24;
 
+	/** (PR A3) A list row's height at the text size: its two text lines grow. */
+	static int rowH() {
+		return ROW_H + 2 * Panels.textGrow();
+	}
+
 	enum Focus {
 		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT,
 		/** (4c) the Designs tab's redirect notes for a set's item. */
@@ -311,7 +316,7 @@ public final class ArchitectScreen extends Screen {
 	private int listScroll;
 	private int listNeeded;
 	private int listAvailable;
-	private int scrollStep = ROW_H;
+	private int scrollStep = rowH();
 	private int[] listArea = new int[4];
 	/** The Designs tab's set detail: its item list (wheel-scrolled by rows). */
 	private int[] groupArea = new int[4];
@@ -1406,7 +1411,7 @@ public final class ArchitectScreen extends Screen {
 		boolean jhov = jh.contains(mouseX, mouseY);
 		dev.larattalabs.labui.client.widget.Paint.box(g, jx, band[0], jw, band[1], jhov ? UiStyle.rowHover() : UiStyle.withAlpha(UiStyle.PAPER, 255),
 			waiting > 0 ? UiStyle.selectedEdge() : jhov ? UiStyle.rowHoverEdge() : UiStyle.chipEdge());
-		g.text(font, jl, jx + 6, band[0] + (band[1] - 8) / 2 + 1, UiBits.ink(), false);
+		g.text(font, jl, jx + 6, band[0] + (band[1] - TextUtil.lh(8)) / 2 + 1, UiBits.ink(), false);
 		// tabs
 		int grow = Panels.textGrow(); // (PR A3) the header and tabs grow with the text size
 		int ty = cy + 16 + grow;
@@ -1633,7 +1638,7 @@ public final class ArchitectScreen extends Screen {
 			int lh = footerY - 16 - ly;
 			listArea = new int[] {x, ly, listW, lh};
 			listAvailable = lh;
-			scrollStep = ROW_H;
+			scrollStep = rowH();
 			Panels.inset(g, x, ly, listW, lh);
 			drawSites(g, x, ly, listW, lh, x + listW + 12, w - listW - 12, footerY, mx, my);
 		}
@@ -1705,7 +1710,7 @@ public final class ArchitectScreen extends Screen {
 			LibraryFeature::nameOf);
 		int needed = 4;
 		for (var gr : groups) {
-			needed += SITE_HEAD_H + gr.rows().size() * ROW_H;
+			needed += SITE_HEAD_H + gr.rows().size() * rowH();
 		}
 		listNeeded = needed;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
@@ -1726,20 +1731,20 @@ public final class ArchitectScreen extends Screen {
 				if (sel && gr.readOnly()) {
 					managedBy = gr.title().substring("Managed by ".length());
 				}
-				if (ry + ROW_H > ly && ry < ly + lh) {
-					Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(ROW_H - 2, ly + lh - ry), true, sel,
+				if (ry + rowH() > ly && ry < ly + lh) {
+					Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(rowH() - 2, ly + lh - ry), true, sel,
 						() -> selectedSite = s.id());
 					hits.add(h);
 					if (sel) {
-						Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+						Panels.selectedRow(g, x + 2, ry, listW - 4, rowH() - 2);
 					} else if (h.contains(mx, my)) {
-						Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+						Panels.hoverRow(g, x + 2, ry, listW - 4, rowH() - 2);
 					}
 					g.text(font, TextUtil.ellipsize(font, row.name(), listW - 16), x + 8, ry + 2, UiBits.ink(), false);
 					g.text(font, TextUtil.ellipsize(font, "at " + s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + (s.placing() ? " · placing" : ""),
-						listW - 16), x + 8, ry + 12, UiBits.muted(), false);
+						listW - 16), x + 8, ry + 2 + TextUtil.lh(10), UiBits.muted(), false);
 				}
-				ry += ROW_H;
+				ry += rowH();
 			}
 		}
 		g.disableScissor();
@@ -2184,7 +2189,7 @@ public final class ArchitectScreen extends Screen {
 		int lh = footerY - 16 - top;
 		listArea = new int[] {x, top, listW, lh};
 		listAvailable = lh;
-		scrollStep = ROW_H;
+		scrollStep = rowH();
 		Panels.inset(g, x, top, listW, lh);
 		Job sel = null;
 		for (Job j : jobs) {
@@ -2196,20 +2201,20 @@ public final class ArchitectScreen extends Screen {
 			sel = jobs.get(0);
 			selectedDesign = sel.id();
 		}
-		listNeeded = jobs.size() * ROW_H + 4;
+		listNeeded = jobs.size() * rowH() + 4;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
 		g.enableScissor(x + 1, top + 1, x + listW - 1, top + lh - 1);
 		int ry = top + 3 - listScroll;
 		for (Job j : jobs) {
 			boolean isSel = j == sel;
-			if (ry + ROW_H > top && ry < top + lh) {
-				Hit h = new Hit("design:" + j.id(), j.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(ROW_H - 2, top + lh - ry), true, isSel,
+			if (ry + rowH() > top && ry < top + lh) {
+				Hit h = new Hit("design:" + j.id(), j.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(rowH() - 2, top + lh - ry), true, isSel,
 					() -> selectedDesign = j.id());
 				hits.add(h);
 				if (isSel) {
-					Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					Panels.selectedRow(g, x + 2, ry, listW - 4, rowH() - 2);
 				} else if (h.contains(mx, my)) {
-					Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					Panels.hoverRow(g, x + 2, ry, listW - 4, rowH() - 2);
 				}
 				Panels.paperDot(g, j.fam(), x + 6, ry + 4);
 				String kind = j.kind().equals("design") ? "" : j.kind().toUpperCase(Locale.ROOT);
@@ -2218,9 +2223,9 @@ public final class ArchitectScreen extends Screen {
 				if (!kind.isEmpty()) {
 					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, UiStyle.clayText(), false);
 				}
-				g.text(font, TextUtil.ellipsize(font, jobLine(j), listW - 24), x + 16, ry + 12, UiBits.muted(), false);
+				g.text(font, TextUtil.ellipsize(font, jobLine(j), listW - 24), x + 16, ry + 2 + TextUtil.lh(10), UiBits.muted(), false);
 			}
-			ry += ROW_H;
+			ry += rowH();
 		}
 		g.disableScissor();
 		if (jobs.isEmpty()) {

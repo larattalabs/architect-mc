@@ -297,12 +297,16 @@ final class LibraryTab {
 		// search, right of the Designs/Placed chips
 		// (U3) at a narrow width (GUI scale 4) the search keeps to the room the chips leave, and the filters get short labels
 		boolean narrow = gridW < 330;
-		int sw = Math.max(56, gx + gridW - chipsRight - 6);
+		// (PR A3) when the chips leave less than 80 px (a large text size at GUI 4), the search takes a row of its own
+		int room = gx + gridW - chipsRight - 6;
+		boolean searchRow = room < 80;
+		int sw = searchRow ? gridW : room;
 		int sx = gx + gridW - sw;
-		s.textField(g, Focus.SEARCH, searchView, search, sx, top, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
+		int sy = searchRow ? top + ArchitectScreen.CHIP_H + 3 : top;
+		s.textField(g, Focus.SEARCH, searchView, search, sx, sy, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
 		// filters row (slice UI, A-chips: kit chips at 18 px; GUI 4 keeps whole words and wraps to a second row instead of "Coll.", a bare ★
 		// and a bare ↕)
-		int fy = top + ArchitectScreen.CHIP_H + 3;
+		int fy = sy + ArchitectScreen.CHIP_H + 3;
 		LibraryQuery q = LibraryFeature.query();
 		List<LibraryCard> all = LibraryFeature.cards();
 		int rowEnd = gx + gridW;

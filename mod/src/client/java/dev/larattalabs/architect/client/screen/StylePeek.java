@@ -208,7 +208,7 @@ public final class StylePeek {
 		int surface = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, cx, cz);
 		BlockPos origin = new BlockPos(cx - m.sx() / 2, surface - m.groundY(), cz - m.sz() / 2);
 		shown = m;
-		CompositePreview.showCells(KEY, java.util.List.of(new CompositePreview.CellLayer("style_peek", CompositeMesh.Style.GHOST, origin, m.sx(), m.sy(), m
+		CompositePreview.showCells(KEY, java.util.List.of(new CompositePreview.CellLayer("style_peek", CompositeMesh.Style.PEEK, origin, m.sx(), m.sy(), m
 			.sz(), m.xyz(), m.argb())));
 	}
 

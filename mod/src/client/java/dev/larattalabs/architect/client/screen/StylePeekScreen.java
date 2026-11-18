@@ -101,28 +101,34 @@ public final class StylePeekScreen extends Screen {
 		super.extractRenderState(g, mx, my, a);
 		StyleCatalog.Card c = card();
 		String name = c == null ? "?" : c.bible().name();
-		int h = 30 + TextUtil.lh(10) * 2;
+		int line = TextUtil.lh(10);
+		int lines = StylePeek.thinned() ? 3 : 2;
+		int h = 6 + Button.H + 4 + lines * line + 6;
 		int w = Math.min(width - 16, 520);
 		int x = (width - w) / 2;
 		int y = height - h - 8;
 		Panels.panel(g, x, y, w, h);
 		int bx = x + 8;
 		int by = y + 6;
+		// ◀ ▶ stay put; the name follows them
 		prev.draw(g, font, bx, by, 20, Button.H, mx, my);
-		int nw = Math.min(w - 20 - 20 - 16 - Button.width(font, "Use this style") - Button.width(font, "Back") - 24, font.width(name) + 8);
-		g.text(font, TextUtil.ellipsize(font, name, nw), bx + 24, by + 6, UiBits.ink(), false);
-		next.draw(g, font, bx + 24 + nw + 4, by, 20, Button.H, mx, my);
+		next.draw(g, font, bx + 24, by, 20, Button.H, mx, my);
 		int bw = Button.width(font, "Back");
 		int uw = Button.width(font, "Use this style");
+		int nameRoom = w - 16 - 48 - uw - bw - 12;
+		g.text(font, TextUtil.ellipsize(font, name, nameRoom), bx + 50, by + (Button.H - TextUtil.lh(8)) / 2, UiBits.ink(), false);
 		back.draw(g, font, x + w - 8 - bw, by, bw, Button.H, mx, my);
 		use.draw(g, font, x + w - 8 - bw - 4 - uw, by, uw, Button.H, mx, my);
 		int ly = by + Button.H + 4;
-		String what = "Materials only: shapes and parts come when it's designed" + (target.sample() ? " · on " + target.name() : " · " + target.name());
-		g.text(font, TextUtil.ellipsize(font, what, w - 16), x + 8, ly, UiStyle.mutedText(), false);
-		ly += TextUtil.lh(10);
-		String note = StylePeek.thinned() ? "Large design: only its outline and roof are drawn" : (index + 1) + " of " + ids.size() + " · ◀ ▶ or Left/Right · "
-			+ "Enter uses it · Esc back";
-		g.text(font, TextUtil.ellipsize(font, note, w - 16), x + 8, ly, StylePeek.thinned() ? UiStyle.warn() : UiStyle.mutedText(), false);
+		String what = "Materials only: shapes and parts come when it's designed · " + (target.sample() ? "on " : "") + target.name();
+		g.text(font, TextUtil.ellipsize(font, what, w - 16), x + 8, ly, UiBits.muted(), false);
+		ly += line;
+		g.text(font, TextUtil.ellipsize(font, (index + 1) + " of " + ids.size() + " · Left/Right or ◀ ▶ · Enter uses it · Esc back", w - 16), x + 8, ly,
+			UiBits.muted(), false);
+		if (StylePeek.thinned()) {
+			ly += line;
+			g.text(font, TextUtil.ellipsize(font, "A large design: only its outline and roof are drawn", w - 16), x + 8, ly, UiStyle.error(), false);
+		}
 	}
 
 	@Override

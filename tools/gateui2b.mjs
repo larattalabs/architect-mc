@@ -837,7 +837,7 @@ steps.gallery = async () => {
   if (onlyWants('preview', 'styles')) {
     await call('dev.screen', { open: null });
     await call('dev.build.cancel').catch(() => null);
-    await L.tp(160.5, 70, 120.5, 0, 22);
+    await L.tp(160.5, 70, 120.5, 0, 12);
     const peek = async (style, extra) => {
       await browser(); await call('dev.pr.peek', { select: style, open: true });
       if (extra) await call('dev.pr.peek', extra);

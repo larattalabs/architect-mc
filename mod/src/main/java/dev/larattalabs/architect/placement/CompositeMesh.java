@@ -17,7 +17,9 @@ import org.jspecify.annotations.Nullable;
 public final class CompositeMesh {
 	/** A layer's tint (mirrors the API's {@code PreviewStyle}). */
 	public enum Style {
-		GHOST, MASSING, ADDED, REMOVED, CHANGED, KEPT
+		GHOST, MASSING, ADDED, REMOVED, CHANGED, KEPT,
+		/** (PR P1) Preview on ghost: the block colours nearly opaque, so a Style's materials read; a dark edge. Client-only. */
+		PEEK
 	}
 
 	/** The cap per key and the full-detail distance (ArchitectClientApi). */
@@ -96,6 +98,7 @@ public final class CompositeMesh {
 	public static int tint(Style s, int blockArgb) {
 		return switch (s) {
 			case GHOST -> 0x5A000000 | (blockArgb & 0xFFFFFF);
+			case PEEK -> 0xC8000000 | (blockArgb & 0xFFFFFF);
 			case MASSING -> 0x88000000 | mix(blockArgb, SLATE, 0.35f);
 			// (PR A2) the change colours follow the ghost palette (lab-ui GhostPalette: standard is today's, Okabe-Ito the CVD-safe set)
 			case ADDED -> 0x96000000 | mix(blockArgb, pal(Cat.REGION_ADDED), 0.72f);
@@ -109,6 +112,7 @@ public final class CompositeMesh {
 	public static int outlineColor(Style s) {
 		return switch (s) {
 			case GHOST -> 0xC8E8E0D0;
+			case PEEK -> 0xD0111111;
 			case MASSING -> 0xE05F86D0;
 			case ADDED -> 0xF0000000 | pal(Cat.REGION_ADDED);
 			case CHANGED -> 0xF0000000 | pal(Cat.COMPOSITE_CHANGED);
@@ -120,7 +124,7 @@ public final class CompositeMesh {
 	/** How far each style's cubes are inflated, so overlapping layers (a REMOVED over a GHOST) do not z-fight. */
 	static float inflate(Style s) {
 		return switch (s) {
-			case GHOST -> 0.005f;
+			case GHOST, PEEK -> 0.005f;
 			case MASSING -> 0.007f;
 			case ADDED, CHANGED -> 0.012f;
 			case REMOVED -> 0.02f;
