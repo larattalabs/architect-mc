@@ -667,8 +667,25 @@ final class LibraryTab {
 		// (5a) its critique: the verdict line, the scores, the open issues (at most 2 lines)
 		var critique = bomOpen ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : critiqueOf(c.id());
 		int critLines = critique.map(cr -> 1 + (cr.scores().isEmpty() ? 0 : 1) + Math.min(2, cr.openIssues().size())).orElse(0);
-		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (mats ? 1 : 0) + (survival ? 1 : 0) + critLines;
-		int textH = textLines * 10 + 4 + (edit != Edit.NONE ? 12 : 0);
+		// (PR A3) the lines that fit over the buttons with at least a 36 px preview: the critique goes first, then the materials line,
+		// then the description, so a large text size never runs text into the buttons
+		int lineH = TextUtil.lh(10);
+		int chipsRoom = PreviewImages.find(c.id()).size() > 1 ? ArchitectScreen.CHIP_H + 3 : 0;
+		int fit = (buttonsTop - 4 - chipsRoom - y - 36 - 4 - (edit != Edit.NONE ? 12 : 0)) / lineH;
+		int fixedLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + (survival ? 1 : 0);
+		if (fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) + critLines > fit) {
+			critique = java.util.Optional.empty();
+			critLines = 0;
+		}
+		if (fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) > fit) {
+			mats = false;
+		}
+		int descRoom = Math.max(0, Math.min(2, fit - fixedLines - (mats ? 1 : 0)));
+		if (desc.size() > descRoom) {
+			desc = descRoom == 0 ? List.of() : List.of(desc.subList(0, descRoom).toArray(String[]::new));
+		}
+		int textLines = fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) + critLines;
+		int textH = textLines * lineH + 4 + (edit != Edit.NONE ? 12 : 0);
 		List<String> kinds = new ArrayList<>();
 		for (PreviewImages.Found f : PreviewImages.find(c.id())) {
 			kinds.add(f.kind());

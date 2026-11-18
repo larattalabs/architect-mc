@@ -201,7 +201,8 @@ public final class StylePeek {
 			return;
 		}
 		double yaw = Math.toRadians(mc.player.getYRot());
-		double d = Math.max(m.sx(), m.sz()) / 2.0 + 5;
+		// far enough that the whole design is in view above the strip
+		double d = Math.max(m.sx(), Math.max(m.sy(), m.sz())) * 1.3 + 6;
 		int cx = (int) Math.floor(mc.player.getX() - Math.sin(yaw) * d);
 		int cz = (int) Math.floor(mc.player.getZ() + Math.cos(yaw) * d);
 		int surface = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, cx, cz);
