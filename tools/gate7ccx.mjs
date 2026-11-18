@@ -339,6 +339,23 @@ steps.survival = async () => {
   out.check = { overall: ck.check?.overall, survival: ck.check?.survival, class: part?.class, sv };
   check(ck.check?.survival === true && ck.check?.overall === 'READY' && part?.class === 'fits' && sv?.free === 0 && sv?.held > 0 && sum(sv?.bom) > 0,
     `the connector's plan checked in survival: ${ck.check?.overall}; link ${part?.class}: one target, free ${sv?.free}, held ${sv?.held}, its bill ${json(sv?.bom)}`, out.check);
+  // (8b final check P2) far from the built land (chunks never generated): the dry run refuses NOT_GENERATED and generates nothing; after the
+  // area is generated (a generating plan check of the very plan, no key), the same key checks afresh (not the frozen count), and the place too
+  {
+    const far = (a) => [a[0] + 20000, a[1], a[2] + 20000];
+    const fa = far(s.wp.anchors.cx_from), fb = far(s.wp.anchors.cx_to);
+    const g0 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
+    out.farBefore = g0;
+    check(g0.fits === false && g0.refusal?.reason === 'NOT_GENERATED', `(8b) far, never generated: checkConnector ${g0.refusal?.reason} (${g0.refusal?.message})`, g0);
+    const FP = await call('dev.cx.plan', { kind: 'rope_bridge', from: fa, to: fb }, 60_000);
+    await call('dev.region.checkPlan', { plan: FP.plan, claim: FP.claim, owner: G.OWNER, anchors: FP.anchors, load: 'generate' }, 1_800_000);
+    const g1 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
+    out.farAfter = g1;
+    check(g1.refusal?.reason !== 'NOT_GENERATED', `(8b) the area generated: the same key checks afresh: fits ${g1.fits}${g1.refusal ? `, ${g1.refusal.reason} (${g1.refusal.message})` : ''}`, g1);
+    const gp = await place(s, { from: fa, to: fb, opKey: 'gate.cx.far', typed: true, maxBill: {} });
+    out.farPlace = gp;
+    check(!(gp.refusals ?? []).some((q) => q.reason === 'NOT_GENERATED'), `(8b) then the place under the key is not refused NOT_GENERATED: ${json(gp.refusals?.map((q) => q.reason))}`, gp);
+  }
   // (8b CK) the dry run: checkConnector fits with a quote equal to the check's bill, item for item; under a cap one short it does not fit
   const dc = await call('dev.cx.check', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: 'gate.cx', typed: true }, 1_800_000);
   out.dryRun = dc;

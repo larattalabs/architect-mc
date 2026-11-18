@@ -229,6 +229,7 @@ public final class ConnectorPlace {
 			}
 			if (!generate && ungenerated(ck) > 0) {
 				// (8b review P1) the API never generates: a claim over chunks never generated is refused, nothing written or generated
+				forgetStale(level, owner, r.opKey(), p.claim());
 				return CompletableFuture.completedFuture(refused(Reason.NOT_GENERATED, notGenerated(ck)));
 			}
 			notes.add("the plan answered " + cls + " (check " + ck.checkId() + ")");
@@ -277,6 +278,28 @@ public final class ConnectorPlace {
 				}
 				return new PlaceResult(true, Optional.of(region), List.of(), notes);
 			});
+	}
+
+	/**
+	 * (8b final check P2) A check refused NOT_GENERATED is dropped, with the claim's cached "not generated" chunk answers, so the retry
+	 * after the area is generated gets a fresh check of the land as it is then, never the frozen count. Server thread.
+	 */
+	static void forgetStale(ServerLevel level, @Nullable String owner, String opKey, BoundingBox claim) {
+		dev.larattalabs.architect.region.PlanChecks.forgetKeyed(owner, opKey);
+		for (long ck : chunksOf(claim)) {
+			dev.larattalabs.architect.region.ChunkGen.forget(level, ck);
+		}
+	}
+
+	/** The claim's chunks plus the survey margin (two chunks each side), packed as {@code ChunkPos.pack}. Pure. */
+	static List<Long> chunksOf(BoundingBox c) {
+		List<Long> out = new ArrayList<>();
+		for (int x = (c.minX() >> 4) - 2; x <= (c.maxX() >> 4) + 2; x++) {
+			for (int z = (c.minZ() >> 4) - 2; z <= (c.maxZ() >> 4) + 2; z++) {
+				out.add(net.minecraft.world.level.ChunkPos.pack(x, z));
+			}
+		}
+		return out;
 	}
 
 	/** A check's chunks never generated ({@code cost.chunksToGenerate}), 0 when it names none. */
@@ -351,6 +374,7 @@ public final class ConnectorPlace {
 					+ nl.refusals().get(0).message()));
 			}
 			if (ungenerated(ck) > 0) {
+				forgetStale(level, owner, r.opKey(), c);
 				return CompletableFuture.completedFuture(no(Reason.NOT_GENERATED, notGenerated(ck), c, ends));
 			}
 			if (!survival) {
