@@ -98,6 +98,22 @@ public final class CrateSettle {
 		return null;
 	}
 
+	/**
+	 * (T2b part 2b, coordinator must-fix) A completed site's crate as it is built: its leftover stock owed {@code crate_settle} or credited to
+	 * the recipient's pile, its cell restored and its entry released, never dropped. Keyed {@code built:<creditKey>}: a later removal of the
+	 * BUILT site settles under its own key ({@link #stash}), so its refunds never replay this answer.
+	 */
+	static JsonObject builtStash(Site s) {
+		Construction.Crate cc = java.util.Objects.requireNonNull(s.construction().crate());
+		BlockPos pos = new BlockPos(cc.x(), cc.y(), cc.z());
+		String recipient = recipientOf(s);
+		SiteGroupRec shared = Builder.sharedGroup(s);
+		SiteGroupRec g = s.group() == null ? null : Sites.group(s.group());
+		String owner = Builder.crateOwner(s);
+		return stashOf(CrateTxn.settleKey(owner, pos, "built:" + Builder.creditKey(s)), s.dimension(), pos, recipient, pileOf(recipient, s.dimension()),
+			s.id(), regionOf(g), Map.of(), owner, cc, shared != null ? shared.id() : null);
+	}
+
 	/** A road's group crate as the last road completes or goes (its stock; {@code refund}: a removal's refunds), keyed by this placement. */
 	static JsonObject roadStash(Infra road, Construction.Crate cc, Map<String, Integer> refund, String why) {
 		BlockPos pos = new BlockPos(cc.x(), cc.y(), cc.z());
@@ -218,8 +234,8 @@ public final class CrateSettle {
 				}
 				Settled s = run(new CrateTxn.Settle(key, dim, pos, stock, refund, recipient, pile, site, region, stash.get("state").getAsString(), stash.has("nbt")
 					? stash.get("nbt").getAsString() : null, owner, true));
-				if (s.refused() == null || !s.refused().startsWith("aborted")) {
-					return s;
+				if (!s.done() || s.refused() == null || !s.refused().startsWith("aborted")) {
+					return s; // done, or held (retried: the crate keeps its stock)
 				}
 				// e0 refused (the crate changed under the begin): the refunds alone below, the crate as it stands (an orphan: no loss)
 			} else {
@@ -240,7 +256,9 @@ public final class CrateSettle {
 			return Settled.NONE;
 		}
 		CrateTxn.Answer a = CrateTxn.settle(in);
-		if (a.refused() != null && (a.refused().startsWith("held") || a.refused().startsWith("journal_unavailable"))) {
+		// (T2b part 2b) a barrier refused before the decision aborts the attempt (its take compensated: the stock back in the crate); an aborted
+		// attempt is never cached under the key, so it is retried as a hold, never taken for "the crate changed" (that orphaned the crate)
+		if (a.refused() != null && (a.refused().startsWith("held") || a.refused().startsWith("journal_unavailable") || a.refused().startsWith("aborted: barrier"))) {
 			Architect.LOGGER.info("crate.settle {}: {}: retried later, the crate keeps its stock", in.key(), a.refused());
 			return new Settled(List.of(), Map.of(), a.refused(), a.refused()); // not begun: nothing of it will happen unless retried
 		}

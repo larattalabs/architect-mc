@@ -2186,7 +2186,6 @@ public final class Builder {
 		Construction c = s.construction();
 		// a group's shared crate stays while another of its sites still builds (R6)
 		boolean keepCrate = !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty();
-		keepDelivered(srv, s, crate, keepCrate);
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
 		// (slice T2b, DFG/ADP) never over a crate this site can't read as its own (an adoption deferred it, another owner's tag) or one a txn
 		// holds: its stock is still in it, so its cell stays and its journal entry is kept
@@ -2196,12 +2195,27 @@ public final class Builder {
 			Architect.LOGGER.warn("Construction site {}: built, but the crate at {} does not read as its own or is held; it stays (its stock with it) and its "
 				+ "journal entry is kept", s.id(), at.toShortString());
 		}
-		Map<String, Integer> left = crate != null && !keepCrate && !foreign ? crate.ledger().takeStock() : Map.of();
-		if (restoresCrateCell(c.crate() != null, keepCrate, foreign, crate != null, level.isLoaded(at))) {
-			restoreCrateCell(level, c.crate());
-			SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // its cell is the ground again (phase 4e)
+		if (foreign && c.crate() != null && crate != null && dev.larattalabs.architect.txn.TxnServer.boxHeld(level, at)) {
+			return; // (T2b part 2b) its own crate, held by a txn: the settle would wait anyway; the site stays BUILDING and completes on a later tick
 		}
-		dropItems(level, at, left, null);
+		Map<String, Integer> left = Map.of();
+		boolean owedLeft = false;
+		if (crate != null && !keepCrate && !foreign && c.crate() != null) {
+			// (T2b part 2b, coordinator must-fix) the leftovers through crate.settle (owed with no pile, credited with one; never dropped), then its
+			// cell and its entry (the settle's W and R effects); a shared crate's delivered counts go to the group there. Held: stays BUILDING
+			CrateSettle.Settled st = CrateSettle.settle(level, CrateSettle.builtStash(s));
+			if (!st.done()) {
+				return;
+			}
+			left = st.given();
+			owedLeft = !st.owed().isEmpty();
+		} else {
+			keepDelivered(srv, s, crate, keepCrate);
+			if (restoresCrateCell(c.crate() != null, keepCrate, foreign, crate != null, level.isLoaded(at))) {
+				restoreCrateCell(level, c.crate()); // (a crate gone: its cell only)
+				SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // its cell is the ground again (phase 4e)
+			}
+		}
 		// the crate record stays (its block is gone): a later deconstruct drops its refunds on that cell, outside the box
 		Site done = s.withConstruction(c.withState(Construction.BUILT, c.crate()).withPaused(false));
 		Sites.replace(srv, done);
@@ -2209,7 +2223,7 @@ public final class Builder {
 		r.blockedSince.clear();
 		SiteWaits.ended(srv, s.id());
 		String msg = r.name + " (" + s.id() + ") is built" + (left.isEmpty() ? "" : "; the crate's leftovers ("
-			+ Refunds.Tally.total(left) + " items) lie where it stood");
+			+ Refunds.Tally.total(left) + " items) " + (owedLeft ? "are owed to you: /architect collect" : "went to your stockpile"));
 		for (ServerPlayer p : level.players()) {
 			if (near(p, s.restoreBox(), RANGE) || c.owner() != null && c.owner().equals(p.getUUID().toString())) {
 				p.sendSystemMessage(Component.literal("[Architect] " + msg));
