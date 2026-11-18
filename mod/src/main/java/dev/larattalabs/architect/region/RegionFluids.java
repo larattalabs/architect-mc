@@ -698,10 +698,7 @@ public final class RegionFluids {
 		// (slice DF, rule 3) the stage goes on only while its record is durably on disk: an owed record is written again first (one try a
 		// second, in every phase: round 2, P2 10)
 		if (st != null && !mayWrite(l, st)) {
-			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
-			if ("gate".equals(st.phase)) {
-				WorldJournal.kill("FL1r"); // (slice DF) the record's save refused again at its gate, no source written
-			}
+			waitNotDurable(b, stage, st);
 			return false;
 		}
 		if (st != null && st.recheck) {
@@ -2279,7 +2276,7 @@ public final class RegionFluids {
 		if (l != null && stage != null && STAGE.equals(Revisions.plainStage(stage))) {
 			Regional st = of(l);
 			if (st != null && !mayWrite(l, st)) {
-				RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+				waitNotDurable(b, stage, st);
 				return false;
 			}
 		}
@@ -2748,6 +2745,14 @@ public final class RegionFluids {
 
 	/** (slice DF) How often an owed record is tried again. */
 	static final long RETRY_NANOS = 1_000_000_000L;
+
+	/** (slice DF) The fluids stage waits SITE_BUSY on its owed record; at its gate (nothing written yet) that is kill point FL1r. */
+	static void waitNotDurable(QBatch b, String stage, Regional st) {
+		RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+		if ("gate".equals(st.phase)) {
+			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused (again) at its gate, no source written
+		}
+	}
 
 	/** (slice DF) The stage's wait while its record is owed. */
 	static String notDurable(Regional st) {
