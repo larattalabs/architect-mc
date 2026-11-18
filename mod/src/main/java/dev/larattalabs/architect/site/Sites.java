@@ -1925,6 +1925,7 @@ public final class Sites {
 		drops.clearNew(level);
 		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
 		if (dec != null) {
+			WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: the site's restore written; its refunds and its crate's stock not yet settled
 			Builder.dropDeconstruction(level, b, dec, drops);
 			if (dec.settle() != null) {
 				// (T2b part 2b) after the restore: the crate's stock and the refunds in one keyed crate.settle, then its cell and its entry; held:
@@ -2531,6 +2532,7 @@ public final class Sites {
 		Map<String, Integer> handed) throws SiteException {
 		Drops drops = Drops.before(level, b.restoreBox());
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
+		WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: a member's restore written; its refunds and its crate.settle not yet
 		drops.clearNew(level);
 		BlockPos where = at != null ? at : Builder.dropPos(b);
 		Builder.dropItems(level, where, items, drops);

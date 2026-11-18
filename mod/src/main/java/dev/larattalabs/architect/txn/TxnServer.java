@@ -53,6 +53,9 @@ public final class TxnServer {
 	static final Deque<String> EVENTS = new ArrayDeque<>();
 	/** (TEST, dev.txn.failPersist) the next txn.json writes that are refused before the rename. */
 	static final AtomicInteger FAIL_WRITES = new AtomicInteger();
+	/** (TEST, dev.txn.failBarrier, T2b txn-crash-crate) barriers let through before the refused ones, then the refused ones. */
+	static final AtomicInteger BARRIER_SKIP = new AtomicInteger();
+	static final AtomicInteger BARRIER_FAIL = new AtomicInteger();
 
 	private static TxnCore emptyCore(@Nullable String why) {
 		TxnCore c = new TxnCore(new GameEnv());
@@ -431,6 +434,9 @@ public final class TxnServer {
 			}
 			if (!ticking) {
 				return Barrier.refused("deferred to the first tick (the stores load in SERVER_STARTED)");
+			}
+			if (BARRIER_FAIL.get() > 0 && BARRIER_SKIP.getAndUpdate(n -> Math.max(0, n - 1)) == 0 && BARRIER_FAIL.getAndDecrement() > 0) {
+				return Barrier.refused("TEST dev.txn.failBarrier"); // (TEST) a save not confirmed (IN_DOUBT as the txn sees it: not OK)
 			}
 			DurableBarrier.Result r;
 			try {

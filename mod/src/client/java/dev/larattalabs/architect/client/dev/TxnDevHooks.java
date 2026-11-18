@@ -46,6 +46,9 @@ public final class TxnDevHooks {
 			+ "to another (T2a: chests and either half of a double chest with its partner, barrels, shulker boxes, hoppers, droppers, dispensers, crafters, "
 			+ "furnaces, brewing stands; anything else refused; dimension a canonical key) through a txn (take B with its chunk receipt, the barrier, PREPARED_DONE, the decision, put B, the barrier, "
 			+ "EFFECTS_DONE, retirement) -> begin, txn (the id), persist, status, phase, decision, held (or refused / detail / replayed)");
+		op("dev.txn.failBarrier", "failBarrier", "{n?: 1, skip?: 0} - (T2b txn-crash-crate) TEST: the next n txn barriers are refused (a save not "
+			+ "confirmed), after skip barriers let through");
+		op("dev.txn.halt", "halt", "{save?: false} - (T2b txn-crash-crate) TEST: halts the JVM now, no shutdown hooks (save: the chunks saved first)");
 		op("dev.txn.failPersist", "failPersist", "{n?: 1} - (slice T1) TEST: the next n txn.json writes are refused before the rename (model R)");
 		op("dev.txn.resolve", "resolve", "{txn, how: commit|abort} - (slice T1) ops resolve (§3.6): abort refused once decided or when the decision probe "
 			+ "is APPLIED or UNKNOWN; commit only from PREPARED_DONE -> refused, state");

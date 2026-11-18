@@ -36,6 +36,20 @@ public final class TxnDev {
 				o.addProperty("failWrites", TxnServer.FAIL_WRITES.get());
 				yield o;
 			}
+			case "failBarrier" -> { // (TEST, T2b txn-crash-crate) the next n barriers refused, after skip barriers let through
+				TxnServer.BARRIER_SKIP.set(req.has("skip") ? req.get("skip").getAsInt() : 0);
+				TxnServer.BARRIER_FAIL.set(req.has("n") ? req.get("n").getAsInt() : 1);
+				JsonObject o = new JsonObject();
+				o.addProperty("skip", TxnServer.BARRIER_SKIP.get());
+				o.addProperty("fail", TxnServer.BARRIER_FAIL.get());
+				yield o;
+			}
+			case "halt" -> { // (TEST, T2b txn-crash-crate) halts the JVM now (save: the chunks saved first, as a kill point's +save)
+				boolean save = req.has("save") && req.get("save").getAsBoolean();
+				dev.larattalabs.architect.journal.WorldJournal.killAt(save ? "HALT+save" : "HALT");
+				dev.larattalabs.architect.journal.WorldJournal.kill("HALT");
+				yield new JsonObject();
+			}
 			case "resolve" -> {
 				JsonObject o = new JsonObject();
 				String why = TxnServer.core().resolve(req.get("txn").getAsString(), req.get("how").getAsString());

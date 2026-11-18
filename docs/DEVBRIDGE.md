@@ -805,7 +805,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.txn.points {kind?}` (the kill points reached this session: `TX:<kind>:<step>`, recovery's `TX:recover:<kind>:<step>`),
   `dev.txn.trace {on?}` (on: record every point reached; off: answer them in order), `dev.txn.run {from, to, items, key?, dimension?}` (the
   TEST kind `test.move` between two containers: `{begin, txn, persist, status, phase, decision, held}` (the id is `txn`: a reply's `id` is the bridge's), or `refused` / `detail` / `replayed`),
-  `dev.txn.failPersist {n?}` (the next n txn.json writes refused before the rename), `dev.txn.resolve {txn, how: commit|abort}` (ops resolve,
+  `dev.txn.failPersist {n?}` (the next n txn.json writes refused before the rename), `dev.txn.failBarrier {n?, skip?}` (T2b, TEST: the next n txn barriers refused after skip let through), `dev.txn.halt {save?}` (T2b, TEST: halts the JVM now; save: the chunks saved first), `dev.txn.resolve {txn, how: commit|abort}` (ops resolve,
   §3.6's refusals) and `dev.txn.conservation {owner?, min, max, baseline?}` (report-only, docs/TXN-DESIGN.md §5: parts, `total`, `unread`,
   `violations`; with `baseline` a `diff` and a `verdict`: match, differs or inconclusive; never fails). `dev.journal.killAt` takes every
   `TX:` point (and `+save`). Driven by `tools/lib/gatetxn.mjs` (step `txn-core`).

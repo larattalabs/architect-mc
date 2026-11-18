@@ -32,6 +32,8 @@
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery
+//     txncrashcrate (txn-crash-crate)  slice T2b part 2b: a removed crate-fed site's crate.settle halted at K5/K6/R4 and every TX point, single and
+//                                      group, bare and +save; CXD's 4 P1s and the must-fix rows (tools/lib/gatetxncc.mjs)
 //     txnowed   (txn-owed)             slice T2b: owed collectibles collected exactly once, halted at each point (tools/lib/gatetxn.mjs)
 //     txnholds  (txn-holds)            slice T2a: every writer against ~35 held boxes; state, block entity, slots, drops unchanged (tools/lib/gatetxn.mjs)
 //     txncore   (txn-core)             slice T1: the txn core's TEST kind (dev.txn.run) halted at each kill point, bare and +save; recovery
@@ -1051,6 +1053,13 @@ steps.look = async () => {
 {
   const { registerTXN } = await import('./lib/gatetxn.mjs');
   await registerTXN(steps, { L, call, check, cmd, log, OUT, json, ensure, spendZero, groundY, CX, CZ, haltWait, freshFlat });
+}
+
+// ------------------------------------------------------------------ (slice T2b part 2b) txncrashcrate: tools/lib/gatetxncc.mjs
+
+{
+  const { registerTCC } = await import('./lib/gatetxncc.mjs');
+  await registerTCC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, haltWait });
 }
 
 // ------------------------------------------------------------------ (slice PS) pscrash: tools/lib/gatemps.mjs
