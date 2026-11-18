@@ -33548,3 +33548,25 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   `fixtures/wm/lift_demo.mjs`; they join the 8c lane's shards. Tests: `kit/test/rv.test.mjs` (8).
 - **Seams:** RV-b (falls off forms, the hidden room); `say` and UNSETTLED in plan.json need 8cG's Java (`Reason`); a river's census and
   drain are WU's; Steward's compose rule and card lines (its slice).
+
+## Slice RV-b, waterfalls off forms (8c kit lane; branch `slice/RVb` off `slice/8cK` cd8d78e8; 2026-11-17; DEV MODE, light; versions NEXT; $0): as built
+
+- **Scope:** §6's `form.waterfall` `lip: "form"`, `on: {part}` (`kit/lib/fluids/formfall.mjs`; waterfall.mjs dispatches on the lip, so
+  every H waterfall is byte for byte as before). The site is found at resolve from the host's own generator (bigForms.mjs `islandGen`,
+  `mountainGen`, `craterGen`, emitBig's code factored out, ops unchanged), so KC reserves its footprint (grown by 2) and later zones keep off
+  it; emit re-checks the curtain in the draft world (an island's roots). The header pool (`<part>_r1`, kind `header`, lip form, `on`) sits
+  in the form's top; the basin (`<part>_r2`, kind `basin`, `flow: "level"`, a plain HY body) is a rect pond whose landing cells are 2 deep,
+  3 past a 24 drop, or a join into natural water. `on.part` is the host's plan part id (Steward's join, 8cG's RegionFluids passes it through).
+- **Mapping (coordinator):** body.mjs maps only `flow: "current"` to model `wm` (both sites); `flow: "level"` keeps its 8c members on a plain body.
+- **Limits (N-8c-3, read as lip form's only, so H stays byte-identical), each refused at limit + 1:** drop 48 (the form's over the basin,
+  or the part's `drop`): LIMIT {limit: drop}; 4 falls per region (every fall counts; only a lip form fall is refused, at emit, in plan
+  order): LIMIT {falls}; curtain 5: SCHEMA at `$.width` (and `formFallLimits`); basin depth: NO_FEATURE {basinDepth, min}; lots and zones
+  within 2: KEEP_OUT {lots}. An H waterfall past 24 (the schema now takes 48) is LIMIT {drop, max 24}. Catalogue: `limits.form`.
+- **Hosts (readings):** a floating island's rim fits; a hollow mountain's and a crater's slopes give no clear drop (NO_ROOM with whys).
+- **Hidden room:** behind a lip form fall, in the form's rock through a passage of up to 8 from the doorway (an island's rim is thin),
+  kept only when the cells its carve opens are outside the fall's watch set and its sets' face neighbours (`outsideWatch`).
+- **Byte-identity:** the 138 non-8c corpus entries plan to identical IRs, blobs, answers, lint and meta (heap figures aside); c01-c04 too.
+- **Fixtures** (`kit/test/fixtures/river/`, the 8c lane): c05 (island fall and grotto), c06 (drop 48), c07 (five falls), c08 (join 2 deep),
+  c09 (lots on c03's river line: the river routed round them). Tests: `kit/test/rv-b.test.mjs` (13, property tests among them).
+- **Seams (8cG):** the in-game row "a fall off a staged island waits `terrain`, then settles" (c05 in survival: the island's ops staged,
+  the header's `on`); the mapping moves `fall_island`'s basin and `river_demo`'s tail off wm; the `flowingWater` kinds; Steward's schema copy.
