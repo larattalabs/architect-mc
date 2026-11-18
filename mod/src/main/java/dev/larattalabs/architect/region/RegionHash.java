@@ -329,7 +329,42 @@ public final class RegionHash {
 	 * now; {@code live}: the same block whose block entity changed, on a block the world itself changes ({@link LiveBlocks#LIVE_BE}: bees in
 	 * a nest, a furnace, a hopper); {@code grazed} (6b): grass or fern now air (a sheep ate it); else {@code none} (a block-entity change on any other block is unexplained).
 	 */
+	/**
+	 * (8c WU, CL's E-normal class) Whether a changed cell is {@code refed}: natural flowing water before (a stream's, not a source) and flowing
+	 * water of the same fluid now, at another level, with a live feeder ({@code fed}: water over it, or beside it at a higher amount):
+	 * foreign water re-fed it after a river's drain changed its neighbours. Outside the watch sets only: inside one, any mismatch is an undo
+	 * error ({@link RegionFluids#watchedByFlowing}). The exact rule (the level the foreign sources alone predict) is the kit's (water.mjs
+	 * flowClasses); the mod reads a live feeder instead. Pure.
+	 */
+	static boolean refed(String was, String now, boolean fed) {
+		if (!fed) {
+			return false;
+		}
+		java.util.regex.Matcher w = java.util.regex.Pattern.compile("^(minecraft:(?:water|lava))\\[level=(\\d+)\\]$").matcher(was);
+		java.util.regex.Matcher n = java.util.regex.Pattern.compile("^(minecraft:(?:water|lava))\\[level=(\\d+)\\]$").matcher(now);
+		return w.matches() && n.matches() && w.group(1).equals(n.group(1)) && Integer.parseInt(w.group(2)) > 0 && Integer.parseInt(n.group(2)) > 0 && !was.equals(now);
+	}
+
+	/** (8c WU) Whether the world feeds a flowing cell: the same fluid over it, or beside it at a higher amount. */
+	static boolean fed(ServerLevel level, BlockPos p) {
+		net.minecraft.world.level.material.FluidState f = level.getBlockState(p).getFluidState();
+		if (f.isEmpty()) {
+			return false;
+		}
+		for (net.minecraft.core.Direction d : new net.minecraft.core.Direction[] {net.minecraft.core.Direction.UP, net.minecraft.core.Direction.NORTH,
+			net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST}) {
+			net.minecraft.world.level.material.FluidState q = level.getBlockState(p.relative(d)).getFluidState();
+			if (!q.isEmpty() && q.getType().isSame(f.getType()) && (d == net.minecraft.core.Direction.UP || q.getAmount() > f.getAmount())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static String classify(ServerLevel level, BlockPos p, String was, @Nullable String now) {
+		if (now != null && refed(was, now, true) && level != null && !RegionFluids.watchedByFlowing(p.asLong()) && fed(level, p)) {
+			return "refed"; // (8c CL) a stream's water re-fed by the world after a river's drain, outside every watch set
+		}
 		if (now != null) {
 			String be = LiveBlocks.sameBlockChange(was, now);
 			if (be != null) {

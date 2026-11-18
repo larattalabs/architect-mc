@@ -128,6 +128,9 @@ package dev.larattalabs.architect.api;
  * <li>{@code BILL_CAP} (BC, since 1.60.0): a survival realise with a {@code maxBill} ({@link RealiseRequest#maxBill},
  * {@link ApprovedRealise#maxBill}) whose bill at put-down (its quote, {@link Regions#quote}) is past the cap for an item; the message names
  * the items, the bill and the cap. Refused before anything is reserved or written.</li>
+ * <li>{@code UNSETTLED} (8c, since NEXT; feature {@code "flowingWater"}): a part's flowing water would not settle within a cost limit (a plan
+ * check's part answer, plan.json's reason code): {@link Unsettled#of} reads its {@code say}, the cap that was hit and its wouldFit. A plan
+ * answer, deterministic: never retried on its own.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -162,5 +165,7 @@ public enum Reason {
 	// 1.60.0 (BC, S-M5-9): a survival realise's bill past its maxBill
 	BILL_CAP,
 	// 1.67.0 (DR): a repair whose plan's cells changed since its diagnosis (diagnose again)
-	REPAIR_STALE
+	REPAIR_STALE,
+	// NEXT (8c): a part's flowing water would not settle (plan.json's UNSETTLED; Unsettled.of reads say, the cap and wouldFit)
+	UNSETTLED
 }

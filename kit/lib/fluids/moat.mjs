@@ -278,7 +278,8 @@ export function passInput(K) {
     // lands a bridge on it; a course's end within 8 of the claim's edge reaches the edge (a course from edge to edge seals the claim,
     // as a closed moat does). Only for courses: an H plan's input is as before)
     // ((6c KC, §4) any other body's spill (a spout's fall, a curtain) is shell to the routes, as a course's lining is: no route writes in it)
-    if (b.kind !== 'course' && b.kind !== 'ditch') {
+    // ((8c RV) a river's current reach (kind 'river') is a course's reach here)
+    if (b.kind !== 'course' && b.kind !== 'ditch' && b.kind !== 'river') {
       for (const [x, y, z] of b.spill ?? []) {
         const k = k2(x, z);
         if (water.has(k) || lava.has(k)) continue;
@@ -287,7 +288,7 @@ export function passInput(K) {
         shell.set(k, q);
       }
     }
-    if (b.kind === 'course' || b.kind === 'ditch') {
+    if (b.kind === 'course' || b.kind === 'ditch' || b.kind === 'river') {
       for (const [x, y, z] of b.spill) { const k = k2(x, z); if (!water.has(k)) water.set(k, Math.min(y, b.level)); }
       for (const [x, y, z] of b.lining ?? []) {
         const k = k2(x, z);

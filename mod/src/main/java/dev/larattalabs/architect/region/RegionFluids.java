@@ -161,6 +161,18 @@ public final class RegionFluids {
 		}
 	}
 
+	/** (8c WU) Whether a cell is in a standing flowing body's watch set (E-normal's {@code refed} never applies there: E-flat does). */
+	public static boolean watchedByFlowing(long p) {
+		for (Regional st : STATE.values()) {
+			for (Body b : st.bodies) {
+				if (b.flowing() && b.watchSet().contains(p)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** (8c WU) The items counted for a region's record (its id), kept after the region is removed. */
 	public static int itemsOf(String regionId) {
 		return ITEMS.getOrDefault(regionId, 0);

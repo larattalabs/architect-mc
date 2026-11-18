@@ -22,8 +22,13 @@ import org.jspecify.annotations.Nullable;
  */
 public record Unsettled(String part, @Nullable String body, String say, String cap, long limit, boolean regionWide, int cells, int rounds,
 	List<JsonObject> wouldFit) {
-	/** The reason code. */
+	/** The reason code ({@link Reason#UNSETTLED}'s name). */
 	public static final String CODE = "UNSETTLED";
+
+	/** The typed reason. */
+	public Reason reason() {
+		return Reason.UNSETTLED;
+	}
 
 	public Unsettled {
 		wouldFit = wouldFit == null ? List.of() : List.copyOf(wouldFit);

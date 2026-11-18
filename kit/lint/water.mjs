@@ -10,6 +10,9 @@
 //   W3 breach       the single breach of every shell cell at or under the surface: vanilla's flow from the opened cell (the steady state,
 //                   not the reach) stays in the body's cells, spill and recorded breach reach, inside its watch box (cells, shell, spill,
 //                   breach grown by WATCH_GROW): what the census watches; an irrigation body's stays inside its own lot (IRR's broken side)
+//                   (8c SE) a wm body's W3 runs per bank segment (sim.mjs bankSegments: 32 shell, lining or weir cells at or under the
+//                   surface opened at once), from the settled state (the breach opens beside standing water, as in game) under the water
+//                   model, each segment's flow at most BREACH_CAP (W3:cap); a segment counts once against maxBreach
 //   W4 fire         M20 on every lava body (its exposed cells' fire reach), with the flammable variants caught
 //   W5 fed          the source/flowing distinction and foreign sources: "what this source fed" (attribution: the flow present only
 //                   because of this body's sources), over generated breach and drain cases; written to kit/lint/fixtures/drain-cases.json,
@@ -26,7 +29,7 @@ import { asColumns } from '../lib/region/pack.mjs';
 import { bodiesOf } from '../lib/region/checkFluids.mjs';
 import { kindOf, wmKinds } from '../lib/fluids/world.mjs';
 import { irFields } from '../lib/fluids/irrfield.mjs';
-import { reach, settleBound, simulate, steady, WATCH_GROW, mapWorld } from '../lib/fluids/sim.mjs';
+import { reach, settleBound, simulate, steady, WATCH_GROW, mapWorld, wmMaxTick, bankSegments, BREACH_CAP } from '../lib/fluids/sim.mjs';
 
 export const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ROOT = path.resolve(KIT, '..');
@@ -59,8 +62,21 @@ export function corpus() {
   out.push({ name: 'demo/hy_core_demo', kind: 'hy_core' });
   for (const [variant, rules] of Object.entries(HY_VARIANTS)) out.push({ name: `demo/hy_core_demo:${variant}`, kind: 'hy_core', variant, rules });
   out.push({ name: 'demo/water_demo:flat', kind: 'water_demo' });
+  // ((8c SE) the kit lane's flowing water: test-only regions with wm bodies, in their own shards (lane '8c'), so the shards above keep
+  // their entries)
+  for (const e of WM_ENTRIES) out.push({ ...e, kind: 'wm', lane: '8c' });
+  // ((8c RV) the rivers' plan fixtures, kit/test/fixtures/river (not under plan/: the shards above keep their entries)
+  const RIVERS = path.join(KIT, 'test', 'fixtures', 'river');
+  if (fs.existsSync(RIVERS)) for (const f of fs.readdirSync(RIVERS).filter((x) => x.endsWith('.json')).sort()) out.push({ name: `river/${f}`, kind: 'fixture', fx: JSON.parse(fs.readFileSync(path.join(RIVERS, f), 'utf8')), dir: 'river', lane: '8c' });
   return out;
 }
+
+/** (8c SE) The 8c lane's corpus entries: a test-only region (kit/test/fixtures/wm) with its params and claim (width x depth, flat 64). */
+export const WM_ENTRIES = Object.freeze([
+  { name: 'wm/wm_demo', demo: 'wm_demo', params: {}, claim: [64, 64] },
+  { name: 'wm/river_se', demo: 'river_se', params: {}, claim: [128, 48] },
+  { name: 'wm/river_se:wide', demo: 'river_se', params: { runs: 24, width: 5 }, claim: [224, 48] },
+]);
 
 /** The demos' broken variants and the rules each must raise (h-core.test, hy-core.test). */
 export const H_VARIANTS = Object.freeze({
@@ -96,6 +112,17 @@ export async function planEntry(e) {
     const { planHy } = await import('../test/hy-helpers.mjs');
     const p = await planHy(e.variant ? { variant: e.variant } : {});
     return { ir: p.ir, meta: p.meta, blobs: p.blobs, volumes: p.volumes.map((v) => v.decoded), survey: fillMissing(asColumns(p.world.survey)).columns, answers: [], overall: null, expect: null };
+  }
+  if (e.kind === 'wm') {
+    const { planTwice } = await import('../test/h-helpers.mjs');
+    const { columnsOf, worldOf } = await import('../test/region-helpers.mjs');
+    const file = path.join(KIT, 'test', 'fixtures', 'wm', `${e.demo}.mjs`);
+    const demo = await import(file);
+    const [W, D] = e.claim;
+    const CLAIM = { minX: 0, minZ: 0, maxX: W - 1, maxZ: D - 1, minY: -64, maxY: 319 };
+    const SURVEY = columnsOf(worldOf({ flat: 64 }), 0, 0, W, D, 1);
+    const p = await planTwice({ program: demo, programSource: fs.readFileSync(file, 'utf8'), params: e.params ?? {}, survey: SURVEY, seed: '7', claim: CLAIM, node: 'test' });
+    return { ir: p.ir, meta: p.meta, blobs: p.blobs, volumes: p.volumes.map((v) => v.decoded), survey: SURVEY, answers: [], overall: null, expect: null };
   }
   if (e.kind === 'water_demo') {
     const { waterPlan } = await import('../regions/water_demo.mjs');
@@ -184,7 +211,8 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
     const others = new Map([...fluidOf].filter(([k]) => !own.has(k)));
     const at = (x, y, z) => { const k = k3(x, y, z); if (own.has(k)) return b.fluid; const o = others.get(k); return o ?? W.at(x, y, z); };
     // ((8c WM) a wm body's own settle under its model; SE sizes the bounds and caps, and runs W3 per bank segment)
-    const wmo = b.model === 'wm' ? { wl: (x, y, z) => (at(x, y, z) === 'stop' ? W.wl(x, y, z) : null), level: W.level, order: 'yxz', onCap: 'result' } : {};
+    const wm = b.model === 'wm';
+    const wmo = wm ? { wl: (x, y, z) => (at(x, y, z) === 'stop' ? W.wl(x, y, z) : null), level: W.level, order: 'yxz', onCap: 'result', maxTick: wmMaxTick(b.fluid, s.reached.length) } : {};
     const st = steady(at, b.cells, b.fluid, wmo);
     if (st.unsettled) add('W2:settle', b.id, `the steady state did not settle in ${st.unsettled.rounds - 1} tick rounds`);
     if (st.ticks > b.settleTicks) add('W2:settle', b.id, `vanilla's steady state settles at tick ${st.ticks}, past the bound ${b.settleTicks}`);
@@ -198,7 +226,33 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
       const field = W.fields.find((f) => f.bodies.has(b.id));
       const candidates = [...b.shell, ...b.lining].filter((c) => c[1] <= b.level);
       let ran = 0;
-      for (const c of candidates) {
+      // ((8c SE) a wm body: per bank segment, from the settled state, under the water model)
+      if (wm) {
+        out.breaches.segments = (out.breaches.segments ?? 0);
+        for (const seg of bankSegments([...b.shell, ...b.lining], b.level)) {
+          out.breaches.opened += seg.length;
+          const opened = new Set(seg.map(kc));
+          const atB = (x, y, z) => { const k = k3(x, y, z); return opened.has(k) ? 'open' : at(x, y, z); };
+          if (!seg.some((c) => D6.some(([dx, dy, dz]) => { const q = k3(c[0] + dx, c[1] + dy, c[2] + dz); const w = atB(c[0] + dx, c[1] + dy, c[2] + dz); return (w === 'open' || w === `flowing_${b.fluid}`) && !own.has(q) && !opened.has(q); }))) {
+            out.breaches.trivial += seg.length;
+            continue;
+          }
+          if (!full && ran >= maxBreach) { out.breaches.skipped += seg.length; continue; }
+          ran++;
+          out.breaches.sampled += seg.length;
+          out.breaches.segments++;
+          const sb2 = steady(atB, b.cells, b.fluid, { ...wmo, init: st.cells, wake: seg });
+          const flow = [...sb2.cells.keys()].filter((k) => !own.has(k) && !opened.has(k));
+          const name = `segment ${kc(seg[0])}..${kc(seg[seg.length - 1])}`;
+          if (sb2.unsettled) add('W3:cap', b.id, `opening ${name}: the breach's flow did not settle by tick ${sb2.unsettled.limit}`);
+          if (flow.length > BREACH_CAP) add('W3:cap', b.id, `opening ${name}: vanilla's flow reaches ${flow.length} cells (more than ${BREACH_CAP})`);
+          const leak = flow.filter((k) => !allowed.has(k));
+          if (leak.length) add('W3:breach', b.id, `opening ${name}: vanilla's flow reaches ${leak.length} cell(s) outside its cells, spill and recorded breach reach (${leak.slice(0, 4).join(' ')})`);
+          const unwatched = flow.filter((k) => !box.has(k));
+          if (unwatched.length) add('W3:watch', b.id, `opening ${name}: ${unwatched.length} flow cell(s) outside the census's watch box`);
+        }
+      }
+      for (const c of wm ? [] : candidates) {
         out.breaches.opened++;
         const opened = kc(c);
         const atB = (x, y, z) => { const k = k3(x, y, z); return k === opened ? 'open' : at(x, y, z); };
@@ -236,9 +290,15 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
  * both reach where this body's water stands higher than foreign water alone would leave: its flow, which a drain may take; foreign water
  * refills its own level), joint: Set (cells both reach at the level foreign water alone leaves: the foreign water's, never taken)}.
  */
-export function fedBy(at, own, foreign, fluid = 'water') {
-  const all = steady(at, [...own, ...foreign], fluid).cells;
-  const fo = foreign.length ? steady(at, foreign, fluid).cells : new Map();
+export function fedBy(at, own, foreign, fluid = 'water', wm = null) {
+  // ((8c CL) wm: {wl, level}: the water model; a foreign cell the world holds as a block source (wl: a waterlogged block, kelp,
+  // seagrass; a wm body's `foreign` list) is ticked, never written, in both runs)
+  const wmo = wm ? { wl: wm.wl, level: wm.level ?? null, order: 'yxz', onCap: 'result' } : null;
+  const isWl = (c) => !!wmo && at(c[0], c[1], c[2]) === 'stop' && wm.wl(c[0], c[1], c[2]) != null;
+  const plain = wmo ? foreign.filter((c) => !isWl(c)) : foreign;
+  const kick = wmo ? foreign.filter(isWl) : [];
+  const all = steady(at, [...own, ...plain], fluid, wmo ? { ...wmo, kick } : {}).cells;
+  const fo = foreign.length ? steady(at, plain, fluid, wmo ? { ...wmo, kick } : {}).cells : new Map();
   const ownSet = new Set(own.map(kc));
   const amount = (lv) => (lv === 0 || lv === 8 ? 8 : 8 - lv);
   const ownOnly = new Set(), raised = new Set(), joint = new Set();
@@ -330,6 +390,107 @@ export function drainCases() {
   return [...cases, ...strays];
 }
 
+// ------------------------------------------------------------------ (8c CL) what a river's drain takes, and E-normal's classes
+
+/**
+ * (8c CL, the 8c contract §3) The class of each cell of a flowing body's world after its water settled, and after its drain. `at`: the
+ * world before the body (natural water as 'water' / 'flowing_water', `level` its LiquidBlock.LEVEL from ARVX v4); `own`: the body's
+ * sources (lifted conversions among them); `foreign`: every foreign source (natural, a player's, another body's) plus the body's
+ * `foreign` list (wl blocks); `watch`: Set "x,y,z" (the body's watch set); `wm`: {wl, level}. Returns Map k -> {class, drain, now,
+ * after}: inside the watch set `source` (a written source: drained), `own` (own-only flow: drained), `raised` (higher than foreign water
+ * alone: the drain takes it down to the foreign level), `joint` (at the foreign level: kept), `foreign` (foreign water only), `block`
+ * (a foreign wl source, a solid: never written); outside it E-normal's `refed` (natural flowing water before, now at the level foreign
+ * water alone predicts, which is not its frozen level: a stale worldgen level re-levelled by a tick our build caused) or `eflat`.
+ * `now`/`after`: the level held with the body / after its drain (null: no water).
+ */
+export function flowClasses(at, own, foreign, watch, wm) {
+  const f = fedBy(at, own, foreign, 'water', wm);
+  const ownSet = new Set(own.map(kc));
+  const out = new Map();
+  const lvBefore = (k) => { const [x, y, z] = un3(k); const w = at(x, y, z); if (w === 'water') return 0; if (w !== 'flowing_water') return null; const l = wm.level?.(x, y, z); return Number.isInteger(l) ? l : 1; };
+  const cells = new Set([...watch, ...f.all.keys(), ...f.foreignOnly.keys()]);
+  for (const k of cells) {
+    const [x, y, z] = un3(k);
+    const now = f.all.get(k) ?? null, fo = f.foreignOnly.get(k) ?? null;
+    if (watch.has(k)) {
+      let cls;
+      if (ownSet.has(k)) cls = 'source';
+      else if (at(x, y, z) === 'stop') { if (wm.wl(x, y, z) == null) continue; cls = 'block'; }
+      else if (f.ownOnly.has(k)) cls = 'own';
+      else if (f.raised.has(k)) cls = 'raised';
+      else if (f.joint.has(k)) cls = 'joint';
+      else if (fo !== null) cls = 'foreign';
+      else continue;
+      const drain = cls === 'source' || cls === 'own' || cls === 'raised' ? 'take' : 'keep';
+      out.set(k, { class: cls, drain, now, after: cls === 'source' || cls === 'own' ? lvBefore(k) : cls === 'raised' ? fo : now });
+    } else {
+      const before = lvBefore(k);
+      if (before === null && fo === null) continue;
+      out.set(k, { class: before !== null && before !== 0 && fo !== null && fo !== before ? 'refed' : 'eflat', drain: 'keep', now: fo, after: fo });
+    }
+  }
+  return out;
+}
+
+/**
+ * (8c CL) The river classification cases (§3's fixtures), each with its expected class per cell: a river over a natural stream (joint
+ * and raised cells, and a stale stream level outside the watch set: refed), a player's bucket beside a bank, a waterlogged stair in the
+ * reach (a foreign wl source: block, its flow joint), a drained river with a rain-filled cauldron (a volatile level: still ours, never
+ * written), a converted cell lifted into a written source. Written to kit/lint/fixtures/river-cases.json (not drain-cases.json: the
+ * mod's RegionFluidsLintTest reads that one through breachTake, which has no refed class yet; slice WU wires this file in).
+ */
+export function riverCases() {
+  // the bed: a channel 3 wide (z -1..1) on a floor at y 63, walls at z -2 and 2 for x < 4; open ground past x 4 (the river's mouth)
+  const base = (x, y, z) => (y <= 63 ? 'stop' : x < 4 && (z === -2 || z === 2) ? 'stop' : x <= -4 ? 'stop' : 'open');
+  const own0 = [];
+  for (let x = -3; x <= -1; x++) for (let z = -1; z <= 1; z++) own0.push([x, 64, z]);
+  const mk = (name, { own: own1 = own0, foreign = [], extra = new Map(), levels = new Map(), wls = new Map(), volatile = [] }) => {
+    const at = (x, y, z) => extra.get(k3(x, y, z)) ?? base(x, y, z);
+    const wm = { wl: (x, y, z) => wls.get(k3(x, y, z)) ?? null, level: (x, y, z) => levels.get(k3(x, y, z)) ?? null };
+    // (the planner's lift (slice RV): every simulated conversion becomes a written source, until none is left)
+    let own = own1.map((c) => [...c]), body, lifted = [];
+    for (let guard = 0; guard < 16; guard++) {
+      body = simulate({ at, wl: wm.wl, level: wm.level }, [{ id: 'river_r1', fluid: 'water', level: 64, cells: own, model: 'wm' }]).bodies[0];
+      if (!body.converted.length) break;
+      lifted = [...lifted, ...body.converted];
+      own = [...own, ...body.converted];
+    }
+    const watch = new Set();
+    for (const c of [...body.reached, ...own]) for (let dx = -WATCH_GROW; dx <= WATCH_GROW; dx++) for (let dy = -WATCH_GROW; dy <= WATCH_GROW; dy++) for (let dz = -WATCH_GROW; dz <= WATCH_GROW; dz++) watch.add(k3(c[0] + dx, c[1] + dy, c[2] + dz));
+    const fl = flowClasses(at, own, [...foreign, ...body.foreign], watch, wm);
+    const cells = [...fl].map(([k, v]) => ({ at: un3(k), ...v })).filter((c) => c.class !== 'eflat' || c.now !== null);
+    // (a volatile block in the watch set: a cauldron the rain filled while the river stood: still ours (StillOurs: level is volatile for
+    // cauldrons and composters), the drain never writes it)
+    for (const c of volatile) cells.push({ at: c.at, class: 'volatile', drain: 'keep', before: c.before, now: c.now, state: true });
+    for (const c of lifted) { const e = cells.find((q) => kc(q.at) === kc(c)); if (e) e.lifted = true; }
+    return { name: `river/${name}`, kind: 'river', own: own.map((c) => [...c]), lifted: lifted.map((c) => [...c]), foreign: [...foreign, ...body.foreign].map((c) => [...c]), cells: cells.sort((a, b) => (kc(a.at) < kc(b.at) ? -1 : 1)) };
+  };
+  const cases = [];
+  // 1. a natural stream: a spring at 9,64,3 whose flow meets the river's mouth; its frozen levels at 14..15,64,3 stale (worldgen's 1)
+  {
+    const levels = new Map([['14,64,3', 1], ['15,64,3', 1]]);
+    const extra = new Map([['14,64,3', 'flowing_water'], ['15,64,3', 'flowing_water']]);
+    cases.push(mk('stream', { foreign: [[9, 64, 3]], extra, levels }));
+  }
+  // 2. a player's bucket on the open ground beside the river's mouth
+  cases.push(mk('bucket', { foreign: [[6, 64, 3]] }));
+  // 3. a waterlogged stair in the reach (facing east, its back to the flow), a foreign wl source the body's flow wakes
+  cases.push(mk('waterlogged', { extra: new Map([['2,64,0', 'stop']]), wls: new Map([['2,64,0', FACE_EAST | FACE_DOWN]]) }));
+  // 4. a drained river and a cauldron the rain filled in its watch set (a solid to the flow)
+  cases.push(mk('cauldron', { extra: new Map([['3,64,-1', 'stop']]), volatile: [{ at: [3, 64, -1], before: 'minecraft:cauldron', now: 'minecraft:water_cauldron[level=1]' }] }));
+  // 5. a converted cell: two sources a gap apart over the floor (the gap converts); the planner lifted it into the body's cells
+  cases.push(mk('converted', { own: [...own0, [1, 64, 0]] }));
+  return cases;
+}
+const FACE_EAST = 1, FACE_DOWN = 32;
+
+/** (8c CL) The committed river cases (kit/lint/fixtures/river-cases.json). */
+export const RIVER_CASES = path.join(KIT, 'lint', 'fixtures', 'river-cases.json');
+
+export function riverCasesJson() {
+  return `${JSON.stringify({ about: 'generated by kit/lint/water.mjs riverCases() (8c CL, W5 over rivers and E-normal\'s refed class); node kit/lint/water.mjs --write regenerates it; slice WU drives the mod\'s drain over it', cases: riverCases() })}\n`;
+}
+
 /** The committed cases file the mod's RegionFluidsLintTest reads. */
 export const DRAIN_CASES = path.join(KIT, 'lint', 'fixtures', 'drain-cases.json');
 
@@ -341,6 +502,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   fs.mkdirSync(path.dirname(DRAIN_CASES), { recursive: true });
   fs.writeFileSync(DRAIN_CASES, drainCasesJson());
   console.log(`wrote ${DRAIN_CASES}`);
+  fs.writeFileSync(RIVER_CASES, riverCasesJson());
+  console.log(`wrote ${RIVER_CASES}`);
 }
 
 export { reach };

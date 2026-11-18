@@ -100,7 +100,8 @@ export async function fixtureVolume(box, spec, survey, claim) {
   if (box.fluids) {
     const { synthVolume } = await import('./h-helpers.mjs');
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
-    return synthVolume(b, survey, claim, { fluids: true, edits: spec?.edits ?? [] });
+    // ((8c RV) a box asked with levels: version 4, unless the fixture's volume says levels: false (a mod before VS: version 3))
+    return synthVolume(b, survey, claim, { fluids: true, edits: spec?.edits ?? [], levels: !!box.levels && spec?.levels !== false });
   }
   const { encodeArvx, decodeArvx, VC } = await import('../lib/region/volume.mjs');
   const { surveyApi } = await import('../lib/region/survey.mjs');

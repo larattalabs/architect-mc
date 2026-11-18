@@ -46,9 +46,10 @@
 // version 4). Its op carries `model: 'wm'` (the kind `flowingWater` waits for 8cF/VS); its record carries `converted`, `foreign` and `wash`
 // (the cells the planner must lift into sources or clear first: slice RV's seam). Every other body is planned exactly as before.
 import { simulate, settleBound, WM_MODEL } from './sim.mjs';
+import { LIMITS, unsettledAnswer } from './flowing.mjs';
+import { levelsMissing } from '../region/volume.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf, wmKinds } from './world.mjs';
-import { unsettledAnswer } from './flowing.mjs';
 import { _bindFluidBody } from '../region/program.mjs';
 import { _bindLinkWorld } from '../region/links.mjs';
 import { draftIR } from '../region/plan.mjs';
@@ -210,15 +211,63 @@ export function localWorld(r, box, { world = null } = {}) {
 }
 
 /**
- * (8c WM, §2.5) The refusal of a wm body whose steady state did not settle: `UNSETTLED {cells, rounds, sample}` (the planner answers it,
- * never throws). The code joins plan.json's reason codes with the 8c API (8cF): until then only a wm body (none in a shipped plan) raises it.
+ * (8c WM, §2.5; 8c SE) The refusal of a wm body that did not settle within a cap: thrown as 'UNSETTLED: message' (the compiler answers the
+ * part refused, never throws), carrying flowing.mjs's unsettledAnswer shape: `evidence` {body, cap, limit, regionWide, cells, rounds,
+ * sample}, `say` (the player's line) and `wouldFit` when the caller (the planner, slice RV) gives one (`u.wouldFit`). `u`: sim.mjs's
+ * unsettled {cap, limit, cells, rounds, sample} or a region cap {cap: 'regionCells' | 'regionBodies', cells, rounds: 0, sample}. The code joins plan.json's
+ * reason codes with the 8c API (8cF): until then only a wm body (none in a shipped plan) raises it.
  */
 export function unsettledRefusal(id, u, part = null) {
-  // ((8cF) Steward's reviewed shape (flowing.mjs unsettledAnswer): say, the cap that was hit (rounds unless the model names another), its
-  // limit, regionWide, and a wouldFit when the kit found one; the evidence keeps WM's body, cells, rounds and sample)
-  const a = unsettledAnswer({ part: part ?? id, body: id, cap: u.cap ?? 'rounds', cells: u.cells, rounds: u.rounds, sample: u.sample ?? [], maxRounds: u.maxRounds ?? (u.rounds - 1), wouldFit: u.wouldFit ?? null });
-  const r = a.reasons[0];
-  return Object.assign(new Error(`UNSETTLED: body ${id}: the steady state did not settle in ${u.rounds - 1} tick rounds (${u.cells} flowing cell(s))`), { evidence: r.evidence, say: r.say, ...(a.wouldFit ? { wouldFit: a.wouldFit } : {}) });
+  // ((8c SE) 8cG's signature (part third, the wouldFit on `u`), so the lanes' callers agree)
+  const ans = unsettledAnswer({ part: part ?? id, body: id, cap: u.cap ?? 'rounds', cells: u.cells ?? 0, rounds: u.rounds ?? 0, sample: u.sample ?? [], wouldFit: u.wouldFit ?? null, maxRounds: u.cap === 'rounds' || u.cap === undefined ? u.limit ?? null : null });
+  const reason = ans.reasons[0];
+  return Object.assign(new Error(`UNSETTLED: ${reason.message}`), { evidence: reason.evidence, say: reason.say, ...(ans.wouldFit ? { wouldFit: ans.wouldFit } : {}) });
+}
+
+/**
+ * (8c SE, §2.6) The region's caps over its wm (river) bodies so far plus one more of `flowing` predicted cells: null, or the unsettled
+ * record of the cap it passes (regionBodies first: more than 8 river bodies; then regionCells: more than 32,768 flowing cells). The tally
+ * reads r._fluidBodies, so a part rolled back (bodiesRollback) un-counts its bodies.
+ */
+export function regionCapOf(r, flowing, sample = []) {
+  const wm = (r._fluidBodies ?? []).filter((b) => b.model === WM_MODEL);
+  const cells = wm.reduce((n, b) => n + b.predicted.length, 0) + flowing;
+  if (wm.length + 1 > LIMITS.regionBodies) return { cap: 'regionBodies', limit: LIMITS.regionBodies, cells, rounds: 0, sample: sample.slice(0, 16), bodies: wm.length + 1 };
+  if (cells > LIMITS.regionCells) return { cap: 'regionCells', limit: LIMITS.regionCells, cells, rounds: 0, sample: sample.slice(0, 16), bodies: wm.length + 1 };
+  return null;
+}
+
+/**
+ * (8c RV) The conversions a wm body's flow makes (sim.mjs `converted`), lifted into its cells until none is left (at most 16 rounds):
+ * the body simulated over its plan world (the draft, its declared shell, lining and solid cells stopping the flow, its plan joins' landing
+ * cells the joined body's fluid) as r.fluidBody simulates it, with no breach and nothing written. Returns the lifted cells [[x, y, z]].
+ */
+function liftConversions(r, cells0, opts, fluid) {
+  const claim = r.claim;
+  const overflow = Array.isArray(opts.overflow) ? opts.overflow : [];
+  const outlets = cellsOf([...(opts.outlets ?? []), ...overflow.flatMap((o) => o.cells ?? [])], 'outlets', claim);
+  const joinsIn = [...(opts.joins ?? []), ...overflow.map((o) => o.into).filter(Boolean)];
+  const landing = new Set(joinsIn.filter((j) => j && !Array.isArray(j)).flatMap((j) => (j.cells ?? []).map((c) => k3(...c))));
+  const solid = cellsOf(opts.solid ?? [], 'solid', null);
+  let cells = cellsOf(cells0, 'cells', claim);
+  const level = opts.level ?? Math.max(...cells.map((c) => c[1]));
+  const lifted = [];
+  for (let guard = 0; guard < 16; guard++) {
+    const shell = shellOf(cells, { open: outlets, rim: opts.rim !== false });
+    const sh0 = new Set(shell.map((c) => k3(...c)));
+    const lining = cellsOf([...(opts.lining ?? []), ...overflow.flatMap((o) => o.lining ?? []), ...(opts.weir ?? [])], 'lining', claim).filter((c) => !sh0.has(k3(...c)));
+    const lw = localWorld(r, boxOf([...cells, ...shell, ...lining]), { world: opts.world ?? null });
+    const stop = new Set([...shell, ...solid, ...lining].map((c) => k3(...c)));
+    const K = wmKinds(lw.vw);
+    const world = { at: (x, y, z) => (stop.has(k3(x, y, z)) ? 'stop' : landing.has(k3(x, y, z)) ? fluid : lw.at(x, y, z)), solid: (x, y, z) => stop.has(k3(x, y, z)) || lw.solid(x, y, z),
+      wl: (x, y, z) => (stop.has(k3(x, y, z)) ? null : K.wl(x, y, z)), level: K.level };
+    const b = simulate(world, [{ id: 'lift', fluid, level, cells, model: WM_MODEL }]).bodies[0];
+    const add = b.unsettled ? [] : b.converted.filter((c) => c[1] <= level);
+    if (!add.length) break;
+    lifted.push(...add);
+    cells = [...cells, ...add];
+  }
+  return lifted;
 }
 
 /** The per-part volume cap (§10, T3b's): past it the body asks for no volume and its part answers incomplete VOLUME. */
@@ -317,6 +366,12 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (!r.stageList.includes(FLUIDS_STAGE)) throw new Error(`fluidBody ${id}: the region has no '${FLUIDS_STAGE}' stage (declare it last: r.stages([..., '${FLUIDS_STAGE}']))`);
   if (r.stageList[r.stageList.length - 1] !== FLUIDS_STAGE) throw new Error(`fluidBody ${id}: the '${FLUIDS_STAGE}' stage must be the last (every solid before any source, §3.1)`);
   const claim = r.claim;
+  // ((8c RV) a wm body lifts every simulated source conversion into its written sources (the 8c contract §2.2), until none is left; the
+  // op lists them (8cF's `converted`). opts.lift false: not lifted (M25:convert names them)
+  if ((opts.model ?? (typeof opts.flow === 'string' ? WM_MODEL : undefined)) === WM_MODEL && opts.lift !== false) {
+    const lifted = liftConversions(r, cellsIn, opts, fluid);
+    if (lifted.length) { cellsIn = [...cellsIn, ...lifted]; opts = { ...opts, converted: [...(opts.converted ?? []), ...lifted] }; }
+  }
   const cells = cellsOf(cellsIn, 'cells', claim);
   if (!cells.length) throw new Error(`fluidBody ${id}: no cells`);
   if (cells.length > MAX_BODY_CELLS) throw new Error(`fluidBody ${id}: ${cells.length} cells (at most ${MAX_BODY_CELLS})`);
@@ -414,9 +469,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const vb = opts.volumeBox;
   if (vb && vb.minX <= vbox.minX && vb.minY <= vbox.minY && vb.minZ <= vbox.minZ && vb.maxX >= vbox.maxX && vb.maxY >= vbox.maxY && vb.maxZ >= vbox.maxZ) vbox = { minX: vb.minX, minY: vb.minY, minZ: vb.minZ, maxX: vb.maxX, maxY: vb.maxY, maxZ: vb.maxZ };
   const vcells = (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1);
-  let volume = null, volumeState = 'off';
-  // ((8cF, the coordinator's mapping) a plan's `flow` (the contract's name: "current", "level") is WM's model, internal: model 'wm')
-  const model = opts.model ?? (typeof opts.flow === 'string' ? WM_MODEL : undefined);
+  let volume = null, volumeState = 'off', levelsWhy = null;
+  // ((8cF, the coordinator's mapping) a plan's `flow: "current"` (the contract's name) is WM's model, internal: model 'wm')
+  const model = opts.model ?? (opts.flow === 'current' ? WM_MODEL : undefined); // (the coordinator: only a current is WM's; "level" stays a plain HY body)
   const wm = model === WM_MODEL;
   if (model !== undefined && !wm) throw new Error(`fluidBody ${id}: model must be '${WM_MODEL}' or absent`);
   if (opts.volume !== false) {
@@ -424,6 +479,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
     else {
       const v = r.needVolume(vbox, wm ? { fluids: true, levels: true } : { fluids: true });
       volumeState = v ? 'given' : 'asked';
+      // ((8c RV) a wm body given its box without levels (an ARVX version 3 volume: a mod before VS): refused VOLUME {why: 'levels'})
+      if (!v && wm) { const v3 = (r.ctx.volumes ?? []).find((x) => x.box && x.box.minX === vbox.minX && x.box.minY === vbox.minY && x.box.minZ === vbox.minZ && x.box.maxX === vbox.maxX && x.box.maxY === vbox.maxY && x.box.maxZ === vbox.maxZ && x.decoded?.fluids); const why = v3 ? levelsMissing(v3.decoded) : null; if (why) { volumeState = 'levels'; levelsWhy = why; } }
       if (v) { const u = Object.values(r.volumesUsed).find((q) => q.box.minX === vbox.minX && q.box.minY === vbox.minY && q.box.minZ === vbox.minZ && q.box.maxX === vbox.maxX && q.box.maxY === vbox.maxY && q.box.maxZ === vbox.maxZ); if (u) volume = { sha: u.sha, box: [vbox.minX, vbox.minY, vbox.minZ, vbox.maxX, vbox.maxY, vbox.maxZ] }; }
     }
   }
@@ -437,7 +494,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // ((6c HY) the single breach covers the lining and the weir too: its reach is watched as the shell's is)
   const sim = simulate(world, [{ id, part, fluid, level, cells, shell: lining.length ? [...shell, ...lining] : shell, ...(wm ? { model: WM_MODEL, ...(bubble.length ? { carried: bubble.map((c) => [c[0], c[1], c[2]]) } : {}) } : {}) }], { breach });
   const b = sim.bodies[0];
-  if (b.unsettled) throw unsettledRefusal(id, b.unsettled, part);
+  if (b.unsettled) throw unsettledRefusal(id, { ...b.unsettled, wouldFit: opts.wouldFit ?? null }, part);
+  // ((8c SE) the region's caps over its river bodies)
+  if (wm) { const rc = regionCapOf(r, b.predicted.length, b.predicted.map((q) => q.slice(0, 3))); if (rc) throw unsettledRefusal(id, { ...rc, wouldFit: opts.wouldFit ?? null }, part); }
   let spill = b.spill;
   let predicted = b.predicted;
   if (_unsafe?.predictShort && spill.length) {
@@ -471,6 +530,13 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // ((6c F3-c) the decor set, only when non-empty)
   const decorCells = corals.filter((c) => !c.other).flatMap((c) => c.gen.decor);
   if (decorCells.length) op.decor = decorRuns(decorCells);
+  // ((8c RV) a wm body's wash (§2.4): the natural washable blocks of its predicted cells, cleared to air in the shell's stage as
+  // IF_NATURAL writes (journaled: the undo puts them back, no drop); the op lists them (8cF's `wash`) unless the caller did)
+  if (wm && b.wash.length && opts.wash === undefined) {
+    const wp = r.part(`${id}_wash`.slice(0, 48), { stage: opts.stage ?? r.stageList[0] });
+    wp.columns({ abs: 0 }, { abs: 0 }, b.wash.flatMap(([x, y, z]) => [x, z, y, y, 0]), [null], { cond: 0 });
+    opts = { ...opts, wash: b.wash };
+  }
   // ((8cF, flowing.mjs) 8c's members, each only when given: every op before 8c is byte for byte as it was)
   if (typeof opts.flow === 'string') { op.flow = opts.flow; op.kind = kind; }
   if (opts.lip === 'form') { op.lip = 'form'; op.kind = kind; if (typeof opts.on === 'string') op.on = { part: opts.on }; }
@@ -488,7 +554,7 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const wall = lining.length ? [...shell, ...lining] : shell;
   const skip = planJoins.length ? [...spill, ...joins, ...planJoins.flatMap((j) => j.cells)] : [...spill, ...joins];
   const guardRuns = volume ? toRuns(bufferOf(cells, wall, skip, 2).concat(wall, joins)) : null;
-  const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns,
+  const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns, ...(levelsWhy ? { levelsWhy } : {}),
     lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary), ...(bubble.length ? { bubble: bubble.map((c) => [...c]) } : {}),
     ...(wm ? { model: WM_MODEL, converted: b.converted, foreign: b.foreign, wash: b.wash } : {}) };
   (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState, ...(decorCells.length ? { decor: decorCells.length } : {}), ...(bubble.length ? { bubble: bubble.length } : {}) });
