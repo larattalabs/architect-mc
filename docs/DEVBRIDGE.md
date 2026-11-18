@@ -809,3 +809,8 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   §3.6's refusals) and `dev.txn.conservation {owner?, min, max, baseline?}` (report-only, docs/TXN-DESIGN.md §5: parts, `total`, `unread`,
   `violations`; with `baseline` a `diff` and a `verdict`: match, differs or inconclusive; never fails). `dev.journal.killAt` takes every
   `TX:` point (and `+save`). Driven by `tools/lib/gatetxn.mjs` (step `txn-core`).
+- **2026-11-18 (slice DF, fluids.json on DurableFile):** `dev.region.failNextSave` takes `sticky: true` (every write of that file fails until
+  `off`; the answer gains `sticky`); on `fluids.json` the fluids stage then waits SITE_BUSY ("the fluids record is not durable"), nothing
+  written. `dev.fluid.state {region}` gains `owed` (the outcome and reason while the record is not on disk). `dev.journal.killAt` gains
+  `FL1r` (the gate's save of the record refused or in doubt, no source written) and `FL3d` (a removal's `draining` record saved, nothing
+  drained yet), each also with `+save`.

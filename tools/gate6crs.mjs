@@ -15,6 +15,7 @@
 //     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), lv7 (L-V7:
 //                                       dried farmland across a restart), 14 (rs02 on S3's natural claim); GATE_P3=smoke: one build per proof
 //     crash     (rs-crash)              item 11
+//     df        (rs-df)                 slice DF: fluids.json refused in survival (rs03_water), FL1r+save, conservation and the charge once
 //     toggle    (rs-toggle)             item 18 (fix/survival-off-storm): /architect survival off mid-build: 0 chunks generated or charged
 //                                       outside claim + 2, a forceloaded chunk not charged, built in its mode as its twin, E-flat 0
 //     report                            REPORT.md over the step JSONs
@@ -806,6 +807,69 @@ steps.item10 = async () => {
     const judged = C.points.filter((p) => p.label !== 'reopened mid-removal');
     check(judged.every(G.exact) && ef.length === 0, `item 10 (${tag}): conservation exact at ${judged.map((p) => p.label).join(', ')}${leave ? ` (mid-removal after the reopen, recorded: ${json(C.points.find((p) => p.label === 'reopened mid-removal')?.diff)})` : ''}, E-flat ${ef.length}`, ef.slice(0, 6));
   }
+  return out;
+};
+
+// ------------------------------------------------------------------ (slice DF, rule 3) the fluids record refused in survival
+
+/**
+ * (slice DF, CONTRACT 8c §4.4) rs03_water in survival with fluids.json's save refused (dev.region.failNextSave sticky): fed to its
+ * fluids gate, the stage waits ("the fluids record is not durable"), no lava standing, the charge (a lava bucket a source) booked once,
+ * conservation exact; then the halt at FL1r+save (the refusal again, nothing written): the start lifts the hook (a new JVM), the stage
+ * runs from its gate: PLACED, every body settled, the charge still once, conservation exact, no new item entity in the box; Regions.remove
+ * exact (the scoop once), conservation exact.
+ */
+steps.df = async () => {
+  await ensure();
+  const out = {};
+  const tag = 'rs03df';
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, `rs-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  const crateAt = await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  const a0 = await C.start();
+  await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let owed = null;
+  // fed to the fluids gate: the record's state read each wave (feed's extra hook), the feed ends once the record is owed
+  await G.feed(ctx, region, { cons: C, fraction: 0.5, timeoutMs: 2_400_000, until: (st) => !!owed || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+    extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.owed) owed = x; return {}; } });
+  await sleep(20_000);
+  const fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
+  const rs1 = await G.rsState(ctx, region);
+  const p1 = await C.point('refused');
+  out.refused = { owed: fs1?.owed ?? null, phase: fs1?.phase, bodies: (fs1?.bodies ?? []).map((b) => [b.id, b.state]), charged: rs1.record?.charged ?? null, point: p1 };
+  check(!!owed && fs1?.phase === 'gate' && (fs1?.bodies ?? []).every((b) => !['written', 'settled'].includes(b.state)) && sum(p1.fluid) === 0, `DF survival (${tag}): fluids.json refused at the fluids gate: the stage waits (${fs1?.owed}), phase ${fs1?.phase}, no body written, fluid standing ${json(p1.fluid)}`);
+  check(G.exact(p1) && sum(rs1.record?.charged) > 0, `DF survival (${tag}): the charge booked once (${json(rs1.record?.charged)}), conservation exact while refused (${json(p1.diff)})`);
+  // the halt at FL1r+save: the gate refuses again on its next try
+  await L.call('dev.journal.killAt', { point: 'FL1r+save' }, 10_000);
+  let down = false;
+  for (let i = 0; i < 180 && !down; i++) {
+    await sleep(2000);
+    const x = await L.call('dev.state', {}, 10_000).catch(() => null);
+    down = !!x && x.inWorld === false;
+  }
+  check(down, `DF survival (${tag}): the kill point FL1r+save halted the server`);
+  await L.openWorld(s.world);
+  const w = await G.waitFor(ctx, region, (st) => ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state), { timeoutMs: 1_800_000 });
+  const rs2 = await G.rsState(ctx, region);
+  const fl = w.st.view.ext?.['architect_mc:fluids'] ?? [];
+  const p2 = await C.point('resumed');
+  out.resumed = { state: w.st.view.state, fluids: fl.map((x) => [x.body, x.state]), charged: rs2.record?.charged ?? null, point: p2 };
+  check(w.st.view.state === 'PLACED' && fl.length > 0 && fl.every((x) => x.state === 'settled'), `DF survival (${tag}, FL1r+save resumed): the stage from its gate: ${w.st.view.state}, every body settled (${json(out.resumed.fluids)})`);
+  check(G.same(rs2.record?.charged ?? {}, rs1.record?.charged ?? {}) && G.exact(p2) && p2.entities === sum(a0.entities), `DF survival (${tag}, FL1r+save resumed): charged once (${json(rs2.record?.charged)}), conservation exact (${json(p2.diff)}), item entities in the box ${p2.entities} (at the start ${sum(a0.entities)})`);
+  const rm = await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  const p3 = await C.point('removed');
+  out.removed = { removed: rm.removed, eflat: ef.length, point: p3 };
+  check(rm.removed && ef.length === 0 && G.exact(p3), `DF survival (${tag}): Regions.remove: E-flat ${ef.length} (the crates aside), conservation exact (${json(p3.diff)})`, ef.slice(0, 8));
+  out.points = C.points;
   return out;
 };
 

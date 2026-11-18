@@ -300,6 +300,39 @@ public final class DurableFile {
 		requested.accumulateAndGet(gen, Math::max);
 	}
 
+	/**
+	 * (slice DF) A whole file of bytes written on the same durable path, with no {@value #MEMBER} member and no generation (the region
+	 * store's records and binary shards keep their exact bytes): every folder entry from the file's folder up to the world folder confirmed
+	 * ({@link #confirmTo}: a folder this write creates included), a temp file written and forced, the atomic rename, then the file's folder
+	 * forced. {@link Outcome#REFUSED}: a failure before the rename (the old file stays); {@link Outcome#IN_DOUBT}: the rename happened and the
+	 * folder's force failed. Any thread.
+	 */
+	public static Result writeBytes(Path file, byte[] data) {
+		Path dir = file.toAbsolutePath().getParent();
+		Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+		try {
+			Files.createDirectories(dir);
+			confirmTo(dir);
+			try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+				ByteBuffer b = ByteBuffer.wrap(data);
+				while (b.hasRemaining()) {
+					ch.write(b);
+				}
+				FORCER.file(ch);
+			}
+			Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (IOException | RuntimeException e) {
+			return new Result(Outcome.REFUSED, 0, "write: " + e);
+		}
+		try {
+			FORCER.dir(dir);
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.error("Durable file {}: renamed but its folder's force failed ({}): in doubt", file, e.toString());
+			return new Result(Outcome.IN_DOUBT, 0, "directory force: " + e);
+		}
+		return new Result(Outcome.OK, 0, null);
+	}
+
 	/** Creates the missing folders of {@code dir}, each one remembered until its entry in its parent is forced. */
 	private void createDirs(Path dir) throws IOException {
 		List<Path> missing = new ArrayList<>();

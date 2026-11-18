@@ -4,13 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.larattalabs.architect.site.DurableFile;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import org.jspecify.annotations.Nullable;
 
@@ -23,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * &lt;world&gt;/architect-regions/&lt;regionId&gt;/ir.json         the IR (the sidecar may have lost its plan dir)
  * &lt;world&gt;/architect-regions/&lt;regionId&gt;/heights/&lt;tx&gt;.&lt;tz&gt;.bin   frozen heights, ARSV per tile (H0)
  * </pre>
- * Every write is write, fsync, atomic rename; heights shards are also read back and compared.
+ * Every write is write, fsync, atomic rename, folder fsync (slice DF: T0's DurableFile path); heights shards are also read back and compared.
  */
 public final class RegionStore {
 	public static final String DIR = "architect-regions";
@@ -69,21 +67,35 @@ public final class RegionStore {
 	 * read-only disk would: the gate's stand-in for a region record that cannot be saved. Null: off.
 	 */
 	public static volatile @org.jspecify.annotations.Nullable String failNext;
+	/** (slice DF, TEST: {@code dev.region.failNextSave {sticky: true}}) {@link #failNext} stays armed (every write of that file fails) until off. */
+	public static volatile boolean failSticky;
 
-	/** Write, fsync, atomic rename (and the directory exists). */
-	public static void write(Path f, byte[] data) throws IOException {
+	/** (slice DF) The injected failure of a write of {@code f} ({@link #failNext}), spent unless sticky; null when none is armed for it. */
+	public static @Nullable IOException injected(Path f) {
 		String fail = failNext;
-		if (fail != null && fail.equals(f.getFileName().toString())) {
+		if (fail == null || !fail.equals(f.getFileName().toString())) {
+			return null;
+		}
+		if (!failSticky) {
 			failNext = null;
-			throw new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
 		}
-		Files.createDirectories(f.getParent());
-		Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
-		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-			ch.write(java.nio.ByteBuffer.wrap(data));
-			ch.force(true);
+		return new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+	}
+
+	/**
+	 * (slice DF, rule 3) Write, fsync, atomic rename, then the folder forced, on T0's durable path ({@link DurableFile#writeBytes}: every
+	 * folder entry up to the world folder confirmed, a new folder's too). Throws on REFUSED (the old file stays) and on IN_DOUBT (renamed, the
+	 * folder's force failed): a caller never reads an unconfirmed write as saved.
+	 */
+	public static void write(Path f, byte[] data) throws IOException {
+		IOException fail = injected(f);
+		if (fail != null) {
+			throw fail;
 		}
-		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		DurableFile.Result r = DurableFile.writeBytes(f, data);
+		if (!r.ok()) {
+			throw new IOException(f.getFileName() + " " + r.outcome() + ": " + r.reason());
+		}
 	}
 
 	/** {@link #write}, then read back and compared (heights shards: H0). */
