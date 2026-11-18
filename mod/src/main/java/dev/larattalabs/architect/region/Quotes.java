@@ -340,6 +340,11 @@ public final class Quotes {
 		return null;
 	}
 
+	/** (8b CK) {@link #overCap} for the connector check (the same test the realise's put-down runs). */
+	public static List<String> overCapOf(JsonObject bom, Map<String, Integer> cap) {
+		return overCap(bom, cap);
+	}
+
 	/** (BC) The items of a bill past a cap ({@code item n > cap}; an item the cap does not name: 0), sorted. */
 	static List<String> overCap(JsonObject bom, Map<String, Integer> cap) {
 		List<String> over = new ArrayList<>();

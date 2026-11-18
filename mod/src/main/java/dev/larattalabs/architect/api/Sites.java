@@ -533,7 +533,8 @@ public interface Sites {
 	/**
 	 * (7c) Places a single connector outside any region (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1): a 7a connector (rope
 	 * bridge, ladder, catwalk, rock stair, spiral) between two marked points, or from a site house's port to ground, as one site group.
-	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
+	 * For players, and (8b, N-8b-3) for a mod placing one for a player (Steward may call it, and {@code checkConnector} first). Built by
+	 * slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
 	 *
 	 * <p>(CX, since 1.58.0) The connector is a one-part plan/0 (part {@code link} from anchor {@code cx_from} to {@code cx_to}) over a claim of
 	 * the ends' x/z box plus 16 each side, checked in the world's mode and realised as one region: {@code siteId} is the region id, and
@@ -544,6 +545,12 @@ public interface Sites {
 	 * The mode is the world's (AUTO; CONSTRUCTION outside survival and INSTANT in survival refuse {@link Reason#NOT_ALLOWED}). A connector the
 	 * plan can't build answers {@code placed: false} with {@link Reason#NO_LINK} (the message starts with the kit's code, such as
 	 * {@code NO_GAP}); a bad request {@link Reason#FIELD_LIMIT}; the check's and the realise's typed refusals come back as refusals too.
+	 *
+	 * <p>(8b, feature {@code "connectorCheck"}; Since 1.69.0) The request's typed {@code owner}, {@code dimension} and {@code actor} win over the
+	 * params keys. Its {@code maxBill}, {@code maxBillPerLot} and {@code ext} go to the realise as {@link ApprovedRealise}'s do: a survival
+	 * connector whose bill at put-down is past {@code maxBill} answers {@code placed: false} with {@link Reason#BILL_CAP} and writes nothing,
+	 * and a later draw past it holds the target ({@link SiteWait#BILL_CAP}). Any thread; the future completes on the server thread (a bad
+	 * request is answered with a future already complete).
 	 */
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.placeConnector is reserved: it throws until slice CX ships (feature placeConnector)");
@@ -592,5 +599,27 @@ public interface Sites {
 	/** (DR) Whether the auto-diagnose is still running ({@link #suspects()} is not final yet). Feature {@code "repairSuspects"}. Since 1.67.0. */
 	default boolean suspectsPending() {
 		throw new UnsupportedOperationException("Sites.suspectsPending needs Architect API 1.67.0");
+	}
+
+	// ------------------------------------------------------------------ phase 8b: settlement data (docs/CONTRACT.md "Phase 8b" §3)
+
+	/**
+	 * (8b CK, feature {@code "connectorCheck"}) The dry run of {@link #placeConnector}: the same plan check in the world's mode, and in
+	 * survival its quote held against the request's {@code maxBill}, under the request's {@code opKey} (a {@link #placeConnector} with the
+	 * same key and body reuses the check). Read-only, $0: nothing is written, reserved or consumed. A connector that does not fit answers
+	 * {@code fits: false} with its typed refusal ({@link Reason#NO_LINK} and the kit's code; {@link Reason#BILL_CAP} past the cap, or a lot cap,
+	 * which a connector cannot have; {@link Reason#FIELD_LIMIT}, {@link Reason#NOT_ALLOWED} for a bad request), never a throw. Any thread; the
+	 * future completes on the server thread (a bad request is answered with a future already complete). Since 1.69.0.
+	 */
+	default CompletableFuture<ConnectorCheck> checkConnector(ConnectorRequest request) {
+		throw new UnsupportedOperationException("Sites.checkConnector needs Architect API 1.69.0 (feature connectorCheck)");
+	}
+
+	/**
+	 * (8b BL, feature {@code "regionBill"}, Steward's review §2a) One construction target's bill (a site or a road, in a region or outside
+	 * one: a supplied batch build, an update). Empty for an unknown id or an instant site. Survival only. Server thread. Since 1.69.0.
+	 */
+	default Optional<TargetBill> targetBill(String targetId) {
+		throw new UnsupportedOperationException("Sites.targetBill needs Architect API 1.69.0 (feature regionBill)");
 	}
 }

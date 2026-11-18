@@ -95,6 +95,8 @@ public final class SiteWaits {
 	private static final Map<String, State> STATES = new ConcurrentHashMap<>();
 	/** Waits read from disk that no builder tick has claimed yet: id -> waitingSince. */
 	private static final Map<String, Long> RESTORED = new ConcurrentHashMap<>();
+	/** (8b review P2-4) The canonical wait start per target, whatever the kind: what waitingSince reports and the file keeps. */
+	static final WaitClock CLOCK = new WaitClock();
 	private static boolean dirty;
 
 	private SiteWaits() {
@@ -109,6 +111,7 @@ public final class SiteWaits {
 			BILL_CAPPED.clear(); // (BC) re-derived by the next step
 			CAP_SCOPE.clear();
 			CAP_SINCE.clear();
+			CLOCK.clear();
 			dirty = false;
 		});
 	}
@@ -129,6 +132,9 @@ public final class SiteWaits {
 		}
 		if (st.latch.tick(now, o)) {
 			dirty = true;
+			if (!st.latch.waiting()) {
+				freeIfIdle(id); // (8b review P2-4) the latch ended: the start goes only when no typed wait holds it either
+			}
 		}
 		WaitCalc.Edge e = st.latch.poll(now);
 		if (e != WaitCalc.Edge.NONE) {
@@ -144,6 +150,7 @@ public final class SiteWaits {
 		BILL_CAPPED.remove(id); // (BC) a gone target is no longer held by its cap
 		CAP_SCOPE.remove(id);
 		CAP_SINCE.remove(id);
+		CLOCK.free(id); // (8b review P2-4) a gone target waits for nothing
 		State st = STATES.remove(id);
 		Long was = RESTORED.remove(id);
 		if (was != null) {
@@ -227,7 +234,7 @@ public final class SiteWaits {
 		boolean waiting = st != null ? st.latch.waiting() : RESTORED.containsKey(id);
 		long since = st != null ? st.latch.since() : waiting ? RESTORED.get(id) : 0L;
 		if (r == null || level == null) {
-			return new SiteWait(id, waiting, since, List.of(), 0);
+			return new SiteWait(id, waiting, waiting ? CLOCK.held(id, since) : 0L, List.of(), 0);
 		}
 		Supply supply = source.supply(srv, level, probe);
 		WaitCalc.Needs needs = WaitCalc.Needs.NONE;
@@ -247,29 +254,41 @@ public final class SiteWaits {
 		}
 		if (dev.larattalabs.architect.txn.TxnServer.held("site:" + id)) {
 			// (slice T1, §3.12.3) held by an open txn: the feed skips it (Stockpiles.feed), not short of materials
-			return new SiteWait(id, true, since, items(needs), needs.moreUnits(), SiteWait.TXN_HELD, List.of());
+			return new SiteWait(id, true, CLOCK.held(id, since), items(needs), needs.moreUnits(), SiteWait.TXN_HELD, List.of());
 		}
 		Map<String, Integer> capped = BILL_CAPPED.get(id);
 		if (capped != null) {
 			// (BC, S-M5-9) the next cell would draw past the realise's maxBill: STARVED, typed; nextNeeded the capped items' units over the cap
-			List<ItemCount> its = new ArrayList<>();
-			int more = 0;
-			for (var e : capped.entrySet()) {
-				Item item = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
-				if (item == null || its.size() >= 8) {
-					more += e.getValue();
-				} else {
-					its.add(new ItemCount(item, e.getValue()));
-				}
-			}
-			return new SiteWait(id, true, since > 0 ? since : CAP_SINCE.getOrDefault(id, 0L), its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id)); // (LCAP-Q1)
+			return capWait(id, capped, CLOCK.held(id, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L)))); // (LCAP-Q1) its scope
 		}
 		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
 		if (held != null) {
 			// (M5 FK) a declared container not empty at the fill: a typed wait, not for materials
-			return new SiteWait(id, true, since > 0 ? since : FILL_SINCE.getOrDefault(id, 0L), items(needs), needs.moreUnits(), SiteWait.FILL_BLOCKED, held);
+			return new SiteWait(id, true, CLOCK.held(id, sinceOf(since, FILL_SINCE.getOrDefault(id, 0L))), items(needs), needs.moreUnits(), SiteWait.FILL_BLOCKED, held);
 		}
-		return new SiteWait(id, waiting, since, items(needs), needs.moreUnits());
+		return new SiteWait(id, waiting, waiting ? CLOCK.held(id, since) : 0L, items(needs), needs.moreUnits());
+	}
+
+	/** (8b review P2-4) Frees the canonical start when no wait of any kind (latch, cap, fill) holds the target. */
+	static void freeIfIdle(String id) {
+		State st = STATES.get(id);
+		boolean latched = st != null ? st.latch.waiting() : RESTORED.containsKey(id);
+		if (!latched && !BILL_CAPPED.containsKey(id) && !FILL_BLOCKED.containsKey(id)) {
+			CLOCK.free(id);
+		}
+	}
+
+	/**
+	 * (8b BS, S-8b-1) A typed wait's {@code waitingSince}: the earlier of the materials latch's start and the typed wait's own start (each 0
+	 * when absent). The latch starts 100 ticks after a cap or a fill began to hold, so preferring it would move {@code waitingSince} on the
+	 * same wait; the earlier keeps it stable while the wait changes kind (materials to bill_cap: the latch's; bill_cap, then the latch: the
+	 * cap's). Pure.
+	 */
+	static long sinceOf(long latch, long typed) {
+		if (latch <= 0) {
+			return Math.max(0L, typed);
+		}
+		return typed <= 0 ? latch : Math.min(latch, typed);
 	}
 
 	/** The {@code nextNeeded} walk over a run's unbuilt cells in build order. */
@@ -345,6 +364,8 @@ public final class SiteWaits {
 		List<net.minecraft.core.BlockPos> was = FILL_BLOCKED.put(id, List.copyOf(cells));
 		if (was == null) {
 			FILL_SINCE.put(id, srv.overworld().getGameTime());
+			CLOCK.held(id, FILL_SINCE.get(id));
+			dirty = true;
 		}
 		if (!cells.equals(was)) {
 			SiteView v = liveView(srv, id);
@@ -359,6 +380,8 @@ public final class SiteWaits {
 	static void fillUnblocked(MinecraftServer srv, String id) {
 		if (FILL_BLOCKED.remove(id) != null) {
 			FILL_SINCE.remove(id);
+			freeIfIdle(id);
+			dirty = true;
 			SiteView v = liveView(srv, id);
 			if (v != null) {
 				ApiEvents.waiting(v, new SiteWait(id, false, 0L, List.of(), 0));
@@ -383,6 +406,8 @@ public final class SiteWaits {
 		String wasScope = CAP_SCOPE.put(id, scope);
 		if (was == null) {
 			CAP_SINCE.put(id, srv.overworld().getGameTime());
+			CLOCK.held(id, CAP_SINCE.get(id));
+			dirty = true;
 		}
 		if (!over.equals(was) || !scope.equals(wasScope)) {
 			SiteView v = liveView(srv, id);
@@ -398,11 +423,76 @@ public final class SiteWaits {
 		if (BILL_CAPPED.remove(id) != null) {
 			CAP_SINCE.remove(id);
 			CAP_SCOPE.remove(id);
+			freeIfIdle(id);
+			dirty = true;
 			SiteView v = liveView(srv, id);
 			if (v != null) {
 				ApiEvents.waiting(v, new SiteWait(id, false, 0L, List.of(), 0));
 			}
 		}
+	}
+
+	/**
+	 * (8b BS) {@link #view} for a status read: a target that is not waiting (no latch, no typed hold) answers not waiting without the
+	 * needs walk over its unbuilt cells (which a never-starved target would redo uncached on every read). Server thread.
+	 */
+	public static @Nullable SiteWait statusView(MinecraftServer srv, String id) {
+		State st = STATES.get(id);
+		boolean waiting = st != null ? st.latch.waiting() : RESTORED.containsKey(id);
+		boolean txn = txnHeld.test("site:" + id);
+		if (!waiting && !BILL_CAPPED.containsKey(id) && !FILL_BLOCKED.containsKey(id) && !txn) {
+			return new SiteWait(id, false, 0L, List.of(), 0);
+		}
+		long since = st != null ? st.latch.since() : waiting ? RESTORED.getOrDefault(id, 0L) : 0L;
+		// (8b review P2-6) the typed holds from their retained data, never the materials walk: the status shows a txn hold or a cap as
+		// such (a cap's needs are its over-cap items), a blocked fill by its cells; only a materials wait reads its needs (view, cached by
+		// its latch)
+		if (txn) {
+			return new SiteWait(id, true, CLOCK.held(id, since), List.of(), 0, SiteWait.TXN_HELD, List.of());
+		}
+		Map<String, Integer> capped = BILL_CAPPED.get(id);
+		if (capped != null) {
+			return capWait(id, capped, CLOCK.held(id, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L))));
+		}
+		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
+		if (held != null) {
+			return new SiteWait(id, true, CLOCK.held(id, sinceOf(since, FILL_SINCE.getOrDefault(id, 0L))), List.of(), 0, SiteWait.FILL_BLOCKED, held);
+		}
+		return srv == null ? new SiteWait(id, waiting, waiting ? CLOCK.held(id, since) : 0L, List.of(), 0) : view(srv, id);
+	}
+
+	/** A cap's wait from its retained over-cap items (at most 8 named, the rest in moreUnits), its start and its scope. */
+	static SiteWait capWait(String id, Map<String, Integer> capped, long since) {
+		List<ItemCount> its = new ArrayList<>();
+		int more = 0;
+		for (var e : capped.entrySet()) {
+			Item item = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
+			if (item == null || its.size() >= 8) {
+				more += e.getValue();
+			} else {
+				its.add(new ItemCount(item, e.getValue()));
+			}
+		}
+		return new SiteWait(id, true, since, its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id));
+	}
+
+	/** Whether an open txn holds a resource (TxnServer.held; a test swaps it: the txn layer needs a server). */
+	static java.util.function.Predicate<String> txnHeld = dev.larattalabs.architect.txn.TxnServer::held;
+
+	/** (TEST) Holds {@code id} by a cap, as {@link #billCapped} records it, without a server. */
+	static void testCap(String id, Map<String, Integer> over, long since, String scope) {
+		BILL_CAPPED.put(id, Map.copyOf(over));
+		CAP_SINCE.put(id, since);
+		CAP_SCOPE.put(id, scope);
+		CLOCK.held(id, since);
+	}
+
+	/** (TEST) Drops every cap and clock entry the test hooks made. */
+	static void testClear() {
+		BILL_CAPPED.clear();
+		CAP_SINCE.clear();
+		CAP_SCOPE.clear();
+		CLOCK.clear();
 	}
 
 	/** {@code Sites.waiting}: empty when the id is not a construction target. */
@@ -427,6 +517,7 @@ public final class SiteWaits {
 			JsonObject o = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
 			JsonObject w = o.has("waits") ? o.getAsJsonObject("waits") : new JsonObject();
 			w.entrySet().forEach(e -> RESTORED.put(e.getKey(), e.getValue().getAsLong()));
+			CLOCK.load(RESTORED); // (8b review P2-4) the canonical starts, as reported before the restart
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("{} could not be read; waits start over: {}", f, e.toString());
 		}
@@ -440,7 +531,7 @@ public final class SiteWaits {
 		Map<String, Long> out = new TreeMap<>();
 		STATES.forEach((id, st) -> {
 			if (st.latch.waiting()) {
-				out.put(id, st.latch.since());
+				out.put(id, CLOCK.of(id) > 0 ? CLOCK.of(id) : st.latch.since()); // (8b review P2-4) the canonical start
 			}
 		});
 		RESTORED.forEach((id, since) -> {
@@ -448,6 +539,17 @@ public final class SiteWaits {
 				out.put(id, since); // not claimed yet (its chunks have not loaded): keep it
 			}
 		});
+		// (8b review P2-4) a target held only by a cap or a fill (its latch not yet started) keeps its start too
+		for (String id : new java.util.TreeSet<>(BILL_CAPPED.keySet())) {
+			if (CLOCK.of(id) > 0) {
+				out.putIfAbsent(id, CLOCK.of(id));
+			}
+		}
+		for (String id : new java.util.TreeSet<>(FILL_BLOCKED.keySet())) {
+			if (CLOCK.of(id) > 0) {
+				out.putIfAbsent(id, CLOCK.of(id));
+			}
+		}
 		Path f = file(srv);
 		if (out.isEmpty() && !Files.exists(f)) {
 			return;

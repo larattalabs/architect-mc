@@ -49,6 +49,8 @@ public final class RegionRec {
 	/** (DR-S) How the last removal stopped (RegionView.removalStop) and its reason; NONE when none stopped since the last removal began. */
 	public dev.larattalabs.architect.api.RemovalStop removalStop = dev.larattalabs.architect.api.RemovalStop.NONE;
 	public @Nullable String removalStopReason;
+	/** (S-DRS-1) The last stop's typed cause (RegionView.removalStopCause); null with NONE, or OTHER for a record saved before it. */
+	public dev.larattalabs.architect.api.@Nullable RemovalStopCause removalStopCause;
 	public @Nullable String opKey;
 	public @Nullable String opHash;
 	/**
@@ -273,6 +275,9 @@ public final class RegionRec {
 		}
 		if (removalStop != dev.larattalabs.architect.api.RemovalStop.NONE) { // (DR-S) additive
 			o.addProperty("removalStop", removalStop.name());
+			if (removalStopCause != null) {
+				o.addProperty("removalStopCause", removalStopCause.name()); // (S-DRS-1) additive
+			}
 			if (removalStopReason != null) {
 				o.addProperty("removalStopReason", removalStopReason);
 			}
@@ -380,6 +385,7 @@ public final class RegionRec {
 				r.removalStop = dev.larattalabs.architect.api.RemovalStop.NONE;
 			}
 			r.removalStopReason = o.has("removalStopReason") ? o.get("removalStopReason").getAsString() : null;
+			r.removalStopCause = causeOf(o.has("removalStopCause") ? o.get("removalStopCause").getAsString() : null, r.removalStop);
 		}
 		if (o.get("consented") instanceof JsonArray cs) {
 			cs.forEach(e -> r.consented.add(e.getAsString()));
@@ -413,5 +419,20 @@ public final class RegionRec {
 	/** The stage names in order. */
 	public List<String> stageNames() {
 		return new ArrayList<>(stages.keySet());
+	}
+
+	/** (S-DRS-1) A saved cause read back: its name, OTHER for a stop saved before the cause (or an unknown name), null with no stop. */
+	static dev.larattalabs.architect.api.@Nullable RemovalStopCause causeOf(@Nullable String name, dev.larattalabs.architect.api.RemovalStop stop) {
+		if (stop == dev.larattalabs.architect.api.RemovalStop.NONE) {
+			return null;
+		}
+		if (name != null) {
+			try {
+				return dev.larattalabs.architect.api.RemovalStopCause.valueOf(name);
+			} catch (IllegalArgumentException e) {
+				// a later cause read by an older build: OTHER
+			}
+		}
+		return dev.larattalabs.architect.api.RemovalStopCause.OTHER;
 	}
 }

@@ -380,6 +380,17 @@ after its last module. The apitest mod's `compinfo <entry>` answers `CompositeIn
 | `dev.region.dump` | {box: [x0,y0,z0,x1,y1,z1], light?: true, file (absolute, or relative to the game dir)} - the ARWD dump (kit/REGIONS.md "Realised-world dumps"), one chunk column per 3 ms slice, written off the server thread -> {file, cells, bytes, rawBytes, sha (of the uncompressed bytes), palette, light, unloadedChunks (read as air), ms, ticks, maxTickMs}. At most 64M cells |
 | `dev.region.planStale` | {at: accept\|realise\|resume, planId? (realise), region? (resume), format?, kitVersion?, requires?: [kind]} (default `format: 3`) - gate 10(b): doctors an IR so the PLAN_STALE gate fires. `accept`: the next accepted plan's IR (then `dev.region.plan` must answer `refused: PLAN_STALE`); `realise`: the held plan's IR, memory and plan file (then `dev.region.realise` must refuse); `resume`: the region's IR in memory and its `ir.json` (its items wait PLAN_STALE at once and after a relog; `dev.region.state` shows `stale`; `dev.region.hash` must not change) -> {doctored, stale} |
 
+### Settlement data (phase 8b)
+
+| hook | arguments, result |
+|---|---|
+| `dev.region.status` | {region} - (8b BS) the region's statuses as Steward reads them: {region, state, lots: [{id, siteId, state, revision, box, status}], parts (survival: its `RegionBuild.parts`, each with `status` and `lot`), besideNote, land, removalStop, removalStopCause} or {missing} |
+| `dev.region.layout` | {region} - (8b LY) `Regions.layout`: {region, irSha, revision, parts: [{part, kind, stage, box, ends, revision, lot, targets}]} or {missing} |
+| `dev.cx.check` | dev.cx.place's request - (8b CK) `Sites.checkConnector`: {fits, refusal?: {reason, message}, quote?: {bom, exact}, claim, ends, say, ms} |
+
+`dev.cx.place` also takes `typed` (owner and dimension as the request's typed members), `maxBill`, `maxBillPerLot` and `ext` (8b CXC).
+`dev.region.bill` is not built: it ships with BL, after T2b.
+
 ### Stamps (phase 6c slice F2)
 
 | hook | arguments, result |
@@ -394,6 +405,10 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-11-18 (phase 8b, slice/8b):** new `dev.region.status`, `dev.region.layout` and `dev.cx.check`; `dev.cx.place` takes `typed`,
+  `maxBill`, `maxBillPerLot` and `ext`. `dev.region.state`'s view gains `removalStopCause`, `besideNote`, `land` and each lot's `box` and
+  `status` (and each build part's `status` and `lot`).
 
 - **2026-11-16 (slice M1, S-M5-19):** `dev.command` answers `ok: false` with the error text when the command did not run (no result
   callback: unknown, incomplete or not permitted), instead of `ok: true, success: false`; the reply keeps `cmd`, `messages`,

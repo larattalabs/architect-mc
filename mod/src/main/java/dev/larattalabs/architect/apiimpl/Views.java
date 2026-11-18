@@ -59,14 +59,51 @@ public final class Views {
 			p = q == null ? new int[] {0, 0} : q;
 		}
 		Site.Member m = s.member();
+		State st = s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT;
+		dev.larattalabs.architect.api.SiteWait sw = server == null || s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.view(server, s.id());
+		int rid = StatusViews.rid(s.ext());
+		// (8b BS) one status from what the view already holds: its state, its wait (read once), its pause and its group's removal
+		dev.larattalabs.architect.api.BuildStatus status = dev.larattalabs.architect.api.BuildStatus.ofTarget(s.id(), st, sw, s.construction() != null && s
+			.construction().paused(), removing(m), rid);
 		return new SiteView(s.id(), s.blueprint(), s.owner(), s.ext(), box(s.box()), box(s.restoreBox()), rotation(s.rotation()),
-			dimension(s.dimension()), s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT, p[0], p[1], m == null ? null : m.group(),
+			dimension(s.dimension()), st, p[0], p[1], m == null ? null : m.group(),
 			m == null ? null : m.batchId(), m == null ? null : m.itemKey(), "building", dev.larattalabs.architect.api.Policy.BOX,
 			dev.larattalabs.architect.site.SiteJournal.coveredSites(s.id()), dev.larattalabs.architect.site.SiteJournal.related(s.id(), true),
 			s.versioning().version() > 0 || server == null ? Math.max(1, s.versioning().version()) : Math.max(1,
 				dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s)), Math.max(1, dev.larattalabs.architect.site.SiteDeltas.headVersion(s
 					.blueprint())), s.versioning().deviations(), s.versioning().updating() > 0 || s.versioning().reverting() > 0, regionOfGroup(m == null
-						? null : m.group()), server == null || s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.view(server, s.id()));
+						? null : m.group()), sw, status, StatusViews.part(s.ext()), StatusViews.str(s.ext(), StatusViews.EXT_LOT), rid);
+	}
+
+	/**
+	 * (8b BS) A construction target's status by id (a site or a road), as its view has it, without building the whole view; null when the id
+	 * is neither. Server thread.
+	 */
+	public static dev.larattalabs.architect.api.@Nullable BuildStatus targetStatus(MinecraftServer server, String id) {
+		Site s = dev.larattalabs.architect.site.Sites.get(id);
+		if (s != null) {
+			State st = s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT;
+			var sw = s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.statusView(server, id);
+			return dev.larattalabs.architect.api.BuildStatus.ofTarget(id, st, sw, s.construction() != null && s.construction().paused(), removing(s.member()),
+				StatusViews.rid(s.ext()));
+		}
+		dev.larattalabs.architect.site.Infra i = dev.larattalabs.architect.site.Infras.get(id);
+		if (i == null) {
+			return null;
+		}
+		State st = i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT;
+		var sw = i.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.statusView(server, id);
+		return dev.larattalabs.architect.api.BuildStatus.ofTarget(id, st, sw, i.construction() != null && i.construction().paused(), removing(i.member()),
+			StatusViews.rid(i.ext()));
+	}
+
+	/** (8b BS) Whether a member's group is being removed (its whole-group removal runs). */
+	static boolean removing(Site.@Nullable Member m) {
+		if (m == null || m.group() == null) {
+			return false;
+		}
+		dev.larattalabs.architect.site.SiteGroupRec g = dev.larattalabs.architect.site.Sites.group(m.group());
+		return g != null && dev.larattalabs.architect.site.SiteGroupRec.REMOVING.equals(g.state());
 	}
 
 	/** A road or cell site as the API sees it (phase 4e). */
@@ -76,12 +113,23 @@ public final class Views {
 			? dev.larattalabs.architect.api.Policy.CELL : dev.larattalabs.architect.api.Policy.BOX;
 		String region = i.spec().has("tile") ? i.spec().get("tile").getAsString().split("\\|")[0] : regionOfGroup(m == null ? null : m.group());
 		int[] prog = dev.larattalabs.architect.site.RoadBuilder.progress(dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), i); // 6c 0c (C16)
+		State st = i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT;
+		MinecraftServer srv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();
+		dev.larattalabs.architect.api.SiteWait sw = i.construction() == null || srv == null ? null : dev.larattalabs.architect.site.SiteWaits.view(srv, i.id());
+		int rid = StatusViews.rid(i.ext());
+		dev.larattalabs.architect.api.BuildStatus status = dev.larattalabs.architect.api.BuildStatus.ofTarget(i.id(), st, sw, i.construction() != null && i
+			.construction().paused(), removing(m), rid);
+		String roadPart = m != null && m.itemKey() != null && m.itemKey().startsWith("road:") ? m.itemKey().substring(5) : StatusViews.part(i.ext());
 		return new SiteView(i.id(), i.kind(), i.owner(), i.ext(), box(i.box()), box(i.box()), Rotation.NONE, dimension(i.dimension()),
-			i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT, prog[0], prog[1], m == null ? null : m.group(), m == null ? null
+			st, prog[0], prog[1], m == null ? null : m.group(), m == null ? null
 				: m.batchId(), m == null ? null : m.itemKey(),
 			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true),
-			1, 1, 0, false, region, i.construction() == null || dev.larattalabs.architect.site.SiteDeltas.serverOrNull() == null ? null
-				: dev.larattalabs.architect.site.SiteWaits.view(dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), i.id()));
+			1, 1, 0, false, region, sw, status, roadPart, StatusViews.str(i.ext(), StatusViews.EXT_LOT), rid);
+	}
+
+	/** (8b) {@link #regionOfGroup} for other packages. */
+	public static @Nullable String regionOfGroupPublic(@Nullable String group) {
+		return regionOfGroup(group);
 	}
 
 	/** Phase 6a: the region of a site group (its batch ext names it), or null. */
@@ -108,8 +156,18 @@ public final class Views {
 	public static dev.larattalabs.architect.api.ItemEvent itemEvent(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
 		// (6c close-out A, §8) a region tile or road item queued before its tags: shown with them
 		com.google.gson.JsonObject filled = dev.larattalabs.architect.site.RegionWaitTags.backfill(b, i);
-		return new dev.larattalabs.architect.api.ItemEvent(b.id, i.key, filled != null ? filled : i.ext.deepCopy(), Optional.ofNullable(i.siteId), reason(i.reason),
-			i.message);
+		com.google.gson.JsonObject ext = filled != null ? filled : i.ext.deepCopy();
+		// (8b, S-8b-8) the typed homes of the keys a caller read from the ext, and the item's status
+		String region = StatusViews.str(ext, StatusViews.EXT_REGION);
+		if (region == null) {
+			region = regionOfGroup(b.group);
+		}
+		String part = StatusViews.part(ext);
+		if (part == null && i.key.startsWith("road:")) {
+			part = i.key.substring(5);
+		}
+		return new dev.larattalabs.architect.api.ItemEvent(b.id, i.key, ext, Optional.ofNullable(i.siteId), reason(i.reason), i.message, region, part,
+			StatusViews.str(ext, StatusViews.EXT_LOT), StatusViews.rid(ext), StatusViews.item(i.key, i.status.name(), i.reason, i.siteId, ext));
 	}
 
 	public static Optional<dev.larattalabs.architect.api.Reason> reason(@Nullable String name) {
@@ -172,7 +230,17 @@ public final class Views {
 		};
 		return new dev.larattalabs.architect.api.SiteGroup(g.id(), g.owner(), g.ext(), g.sites(), g.stages().stream().map(Views::stage).toList(), state,
 			g.crate() == null ? Optional.empty() : Optional.of(new BlockPos(g.crate().x(), g.crate().y(), g.crate().z())),
-			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty());
+			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty(), stopOf(g.id()), causeOf(g.id()));
+	}
+
+	private static dev.larattalabs.architect.api.RemovalStop stopOf(String group) {
+		var st = dev.larattalabs.architect.site.Groups.lastStop(group);
+		return st == null ? dev.larattalabs.architect.api.RemovalStop.NONE : st.stop();
+	}
+
+	private static dev.larattalabs.architect.api.@Nullable RemovalStopCause causeOf(String group) {
+		var st = dev.larattalabs.architect.site.Groups.lastStop(group);
+		return st == null ? null : st.cause();
 	}
 
 	/** Item ids -> items (unknown ids dropped). */

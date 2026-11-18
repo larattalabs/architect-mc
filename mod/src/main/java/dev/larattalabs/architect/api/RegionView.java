@@ -16,12 +16,20 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Since 1.67.0 (feature {@code "removalStop"}): {@code removalStop}, how its last removal stopped ({@link RemovalStop}: NOT_STARTED, nothing
  * written, apart from PARTIAL, part taken down), and {@code removalStopReason}, that removal's blockers joined (null with NONE).
+ *
+ * <p>(S-DRS-1, feature {@code "removalStopCause"}; Since 1.69.0) {@code removalStopCause}: that stop's typed cause ({@link RemovalStopCause}:
+ * SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), so a caller tells a refused save apart without parsing
+ * {@code removalStopReason} (whose text is unchanged); null with {@link RemovalStop#NONE}.
+ *
+ * <p>(8b, Steward's S-8b-8; Since 1.69.0) {@code besideNote}: the typed home of ext {@code architect_mc:beside} ({@link BesideNote}; null for a
+ * region not planned beside one); {@code land}: of ext {@code architect_mc:land} ({@link RegionLand}; null for a region that is not a
+ * districts region). The ext keys stay.
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
 	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
 	@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
-	@Nullable String removalStopReason) {
+	@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land) {
 	public RegionView {
 		removalStop = removalStop == null ? RemovalStop.NONE : removalStop;
 		ext = ext == null ? new JsonObject() : ext;
@@ -31,6 +39,16 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		actions = actions == null ? List.of() : List.copyOf(actions);
 		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
 		revisions = revisions == null ? List.of() : List.copyOf(revisions);
+	}
+
+	/** The 1.67.0 constructor: no typed stop cause (null). */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
+		@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
+		@Nullable String removalStopReason) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, buildHits,
+			beside, build, position, busy, revisions, removalStop, removalStopReason, null, null, null);
 	}
 
 	/** The 1.43.0 constructor: no removal stop (since 1.67.0: {@link RemovalStop#NONE}, no reason). */

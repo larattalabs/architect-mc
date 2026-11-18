@@ -1089,4 +1089,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	public CompletableFuture<PlaceResult> placeConnector(dev.larattalabs.architect.api.ConnectorRequest r) {
 		return ConnectorPlace.place(server, r);
 	}
+
+	/** (8b CK) The dry run of placeConnector: the same check, and in survival the quote against the request's cap ({@link ConnectorPlace#check}). */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.ConnectorCheck> checkConnector(dev.larattalabs.architect.api.ConnectorRequest r) {
+		return ConnectorPlace.check(server, r);
+	}
 }

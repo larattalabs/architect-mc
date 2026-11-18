@@ -109,6 +109,46 @@ public final class PlanChecks {
 		server = s;
 	}
 
+	/**
+	 * (8b final check P2) Forgets a keyed check (its key, and the key on its stored record, so a restart does not bring it back): the next
+	 * {@code checkPlan} under the same key checks afresh. For a check refused on its frozen land (a NOT_GENERATED connector), so a retry after
+	 * the area is generated is not answered by the stale cached check. Server thread.
+	 */
+	public static void forgetKeyed(@Nullable String owner, String opKey) {
+		MinecraftServer s = server;
+		forgetKeyedAt(s == null ? null : s.getWorldPath(LevelResource.ROOT), owner, opKey);
+	}
+
+	/** {@link #forgetKeyed} in a world dir (tests; null: the registry only). */
+	static void forgetKeyedAt(@Nullable Path world, @Nullable String owner, String opKey) {
+		Keyed k = KEYS.remove(RegionKeys.scope(owner, "region.checkPlan", opKey));
+		if (k == null || world == null) {
+			return;
+		}
+		Path f = checks(world).resolve(k.checkId() + ".json");
+		try {
+			JsonObject o = Files.isRegularFile(f) ? RegionStore.readJson(f) : null;
+			if (o != null && (o.has("opKey") || o.has("opHash"))) {
+				o.remove("opKey");
+				o.remove("opHash");
+				RegionStore.writeJson(f, o);
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Plan check {}: its key could not be dropped from its record: {}", k.checkId(), e.toString());
+		}
+	}
+
+	/** (TEST) Registers a keyed check as a finished check would. */
+	static void testKeyed(@Nullable String owner, String opKey, String hash, String checkId) {
+		KEYS.put(RegionKeys.scope(owner, "region.checkPlan", opKey), new Keyed(hash, checkId));
+	}
+
+	/** (TEST) The check id a key answers with, or null. */
+	static @Nullable String testKeyedCheck(@Nullable String owner, String opKey) {
+		Keyed k = KEYS.get(RegionKeys.scope(owner, "region.checkPlan", opKey));
+		return k == null ? null : k.checkId();
+	}
+
 	/** The world start: the keyed checks into the registry. */
 	static void started(MinecraftServer s) {
 		server = s;

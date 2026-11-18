@@ -49,6 +49,15 @@ public final class ApiRules {
 		"maxBillPerLot",
 		// (slice T2b) Sites.owed, collectOwed, creditOwedToStock, SiteEvents.OWED_CHANGED (owed collectibles, never a drop)
 		"owed",
+		// (S-DRS-1) RegionView.removalStopCause and SiteGroup.removalStop/removalStopCause: a removal's stop typed (SAVE_REFUSED, PLAYER_IN_BOX, ...)
+		"removalStopCause",
+		// (8b BS) BuildStatus on SiteView, LotState (with its box), PartBuild and ItemEvent; the typed ext homes (part, lot, revision,
+		// region, waitsFor, beside, land)
+		"buildStatus",
+		// (8b LY) Regions.layout: lots (pads too) and parts with kind, box and ends, cached per IR sha and head revision
+		"regionLayout",
+		// (8b EV) SiteEvents.SETTLEMENT_CHANGED: one coalesced "re-read" signal per (owner, region)
+		"settlementChanged",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 
@@ -171,6 +180,7 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.planCheck")) {
 				out.add("placeConnector"); // 7c CX: Sites.placeConnector (a one-part plan through Regions.checkPlan and realiseApproved; since 1.58.0)
+				out.add("connectorCheck"); // 8b CK: Sites.checkConnector, ConnectorRequest's typed owner/dimension/actor/maxBill/ext, markConnector
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
