@@ -622,7 +622,7 @@ export async function registerFK(steps, h) {
     await L.fresh(name, G.SURV);
     await L.setRules('exact');
     await cmd('/weather clear');
-    await cmd('/gamerule randomTickSpeed 0'); // the grass stays grass, and no other soil changes on its own
+    await cmd('/gamerule random_tick_speed 0'); // the grass stays grass, and no other soil changes on its own
     const { Blueprint, palette } = await h.imp('lib/kit.mjs');
     const { writeBlueprint } = await h.imp('lib/write.mjs');
     const X = 6, Z = 4, H = 4;
