@@ -33460,8 +33460,8 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
 - **Rules** (26.3 bytecode cited in `kit/test/wm.test.mjs`): wl foreign sources (waterlogged blocks, kelp, seagrass; never entered, they
   feed, convert and spread through the faces their collision shape leaves open), levels from the frozen volume, conversion simulated
   (`converted`, M25:convert; never in `predicted`), M25:bubble (a lift's carried cells aside), the wash classifier (`wash` to clear,
-  M25:wash), a typed UNSETTLED. ARVX v4 (levels in the fluid runs) in the kit's decoder and encoder, `needVolume({levels})`, IR kinds
-  `flowingWater` and `volume:levels`. Lint W6 (conversion) and W7 (wash) run on every corpus body; only the broken `two_source_corner`
+  M25:wash), a typed UNSETTLED. ARVX v4 (levels in the fluid runs) in the kit's decoder and encoder, `needVolume({levels})`, no new IR kind
+  (`flowingWater`/`volume:levels` need IrStale too: 8cF/VS). Lint W6 (conversion) and W7 (wash) run on every corpus body; only the broken `two_source_corner`
   raises W6.
 - **Builder reading (tie order):** over 150 random scenes (conversions in many), the scheduling order, (due, y desc, x, z) and random
   permutations of every batch gave the same fixed point: the order does not matter, conversions included. wm bodies use (due, y desc,
@@ -33472,4 +33472,4 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
 - **Seams:** RV lifts `converted` into cells and emits the IF_NATURAL clears for `wash`, answers `levelsMissing`'s `VOLUME {why:
   'levels'}`, and adds UNSETTLED to plan.json's codes (8cF; `unsettledRefusal` raises it today only for a wm body). SE sets `maxTicks`
   (settleBound x 4), the caps and per-segment W3 (W3 still runs H's steady for a wm body). CL reads `foreign` for W5 and `refed`. VS
-  writes v4 and teaches IrStale the two kinds.
+  writes v4; 8cF/VS add both kinds to KINDS_FORMAT2 and IrStale together.

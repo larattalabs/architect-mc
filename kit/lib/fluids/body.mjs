@@ -43,7 +43,7 @@
 //
 // (8c WM, the 8c contract §2) `opts.model: 'wm'` simulates the body with the water model (sim.mjs header: foreign wl sources, the
 // frozen volume's levels, conversion, bubble columns, the wash rule, a typed UNSETTLED) and asks its frozen volume with levels (ARVX
-// version 4). Its op carries `model: 'wm'` (the IR then requires `flowingWater`); its record carries `converted`, `foreign` and `wash`
+// version 4). Its op carries `model: 'wm'` (the kind `flowingWater` waits for 8cF/VS); its record carries `converted`, `foreign` and `wash`
 // (the cells the planner must lift into sources or clear first: slice RV's seam). Every other body is planned exactly as before.
 import { simulate, settleBound, WM_MODEL } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';

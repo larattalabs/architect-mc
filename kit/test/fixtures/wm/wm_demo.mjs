@@ -1,6 +1,6 @@
 // (8c WM) wm_demo: a test-only region (not in the catalogue) for slice WM's water model: h_core_demo's spout and basin with the spout
-// simulated by the opt-in model (`model: 'wm'`): its frozen volume asked with levels (ARVX version 4), the IR requiring
-// `flowingWater` and `volume:levels`. Its basin is an H body, planned as before.
+// simulated by the opt-in model (`model: 'wm'`): its frozen volume asked with levels (ARVX version 4) (the IR kinds
+// `flowingWater` and `volume:levels` wait for 8cF/VS). Its basin is an H body, planned as before.
 import { region } from '../../../lib/region/program.mjs';
 
 export const id = 'wm_demo';

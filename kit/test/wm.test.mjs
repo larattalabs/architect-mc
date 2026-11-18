@@ -352,17 +352,14 @@ test('WM ARVX v4: the virtual world reads its levels and waterlogged cells; a v3
   assert.notEqual(P3.states[b3(0, 61, 1)], 'minecraft:oak_fence[waterlogged=true]', 'v3: the class block, as before');
 });
 
-test('WM: an IR with a levels volume requires volume:levels; a wm fluid op requires flowingWater; neither otherwise', () => {
-  const ir = (vols, ops = []) => ({ parts: [{ id: 'p', ops }], volumes: vols });
-  assert.ok(walkKinds(ir({ a: { fluids: true, levels: true } })).includes('volume:levels'));
-  assert.ok(!walkKinds(ir({ a: { fluids: true } })).includes('volume:levels'));
-  assert.ok(walkKinds(ir({}, [{ op: 'fluid', model: 'wm' }])).includes('flowingWater'));
-  assert.ok(!walkKinds(ir({}, [{ op: 'fluid' }])).includes('flowingWater'));
+test('WM: the kit walks no new IR kind yet (KINDS_FORMAT2 equals the mod\'s IrStale; 8cF/VS add flowingWater and volume:levels on both sides)', () => {
+  const ir = { parts: [{ id: 'p', ops: [{ op: 'fluid', model: 'wm' }] }], volumes: { a: { fluids: true, levels: true } } };
+  assert.deepEqual(walkKinds(ir).filter((k) => k === 'flowingWater' || k === 'volume:levels'), []);
 });
 
 // ------------------------------------------------------------------ the opt-in path end to end
 
-test('WM end to end: a wm body asks a levels volume (ARVX v4), its op carries model wm, the IR requires flowingWater and volume:levels; the checker and the water lint are clean; 1 and 4 tile workers agree', async () => {
+test('WM end to end: a wm body asks a levels volume (ARVX v4), its op carries model wm, the IR records the levels volume; the checker and the water lint are clean; 1 and 4 tile workers agree', async () => {
   const { planTwice } = await import('./h-helpers.mjs');
   const { columnsOf, worldOf } = await import('./region-helpers.mjs');
   const { checkRegion } = await import('../lib/region/check.mjs');
@@ -375,7 +372,7 @@ test('WM end to end: a wm body asks a levels volume (ARVX v4), its op carries mo
   assert.ok(p.first.needVolumes.some((v) => v.levels === true), 'the spout asks levels');
   assert.ok(p.first.needVolumes.some((v) => v.fluids === true && !v.levels), 'the H basin asks fluids only');
   assert.ok(p.volumes.some((v) => v.decoded.version === 4) && p.volumes.some((v) => v.decoded.version === 3));
-  assert.ok(p.ir.requires.includes('flowingWater') && p.ir.requires.includes('volume:levels'), p.ir.requires.join(' '));
+  assert.ok(Object.values(p.ir.volumes).some((v) => v.levels === true) && Object.values(p.ir.volumes).some((v) => v.fluids === true && !v.levels));
   const ops = p.ir.parts.flatMap((q) => (q.ops ?? []).filter((o) => o.op === 'fluid'));
   assert.equal(ops.find((o) => o.id === 'spout').model, 'wm');
   assert.equal(ops.find((o) => o.id === 'basin').model, undefined);

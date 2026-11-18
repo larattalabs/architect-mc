@@ -102,11 +102,11 @@ test('8aF: a brush stroke\'s survival IR is not staged (the player\'s instant to
 
 test('8aF: stagedTerrain is a known kind, walked from the ops; a kit without it refuses PLAN_STALE', () => {
   assert.ok(KINDS_FORMAT2.includes('stagedTerrain'));
-  assert.equal(KINDS_FORMAT2.indexOf('stagedTerrain'), KINDS_FORMAT2.indexOf('bubbleColumns') + 1, 'appended (rebase point; (8c WM) flowingWater and volume:levels after it)');
+  assert.equal(KINDS_FORMAT2[KINDS_FORMAT2.length - 1], 'stagedTerrain', 'appended');
   assert.deepEqual(walkKinds({ parts: [{ ops: [{ op: 'shape', staged: true }] }] }), ['stagedTerrain']);
   assert.deepEqual(walkKinds({ parts: [{ ops: [{ op: 'shape', free: true }] }] }), []);
   assert.equal(staleReason({ format: 2, requires: ['survival', 'stagedTerrain'] }), null);
   // an older kit's list: the plan names the missing kind
-  const missing = ['survival', 'stagedTerrain'].filter((k) => !KINDS_FORMAT2.slice(0, KINDS_FORMAT2.indexOf('stagedTerrain')).includes(k));
+  const missing = ['survival', 'stagedTerrain'].filter((k) => !KINDS_FORMAT2.slice(0, -1).includes(k));
   assert.deepEqual(missing, ['stagedTerrain']);
 });

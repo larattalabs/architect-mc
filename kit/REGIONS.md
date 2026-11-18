@@ -1091,8 +1091,8 @@ a village mid, fields low) on S3's pinned claim (scenario `districts_demo`, phas
   `levelsMissing(v)` -> null or `{why: 'levels', version}` (the `VOLUME {why: "levels"}` evidence RV answers). The virtual world reads a
   v4 volume's flowing cells at their levels and its waterlogged cells as `<id>[waterlogged=true]` (kelp and seagrass by id); a v3 volume
   reads as before. Kit fixture `kit/test/fixtures/wm/levels.{bin,json}` (raw bytes).
-- **IR kinds:** `volume:levels` (a volume with levels) and `flowingWater` (a fluid op with `model: 'wm'`), appended to `KINDS_FORMAT2`.
-  The mod's IrStale doesn't list them yet, so today's mod refuses such a plan PLAN_STALE.
+- **IR kinds:** not yet. The 8c contract's `volume:levels` and `flowingWater` must land in `KINDS_FORMAT2` and the mod's IrStale together
+  (PlanStaleTest pins them equal): 8cF/VS. Until then a wm IR carries `volumes[name].levels` and the op's `model` with no new kind.
 - **The model** (`lib/fluids/sim.mjs`, opt-in per body: `model: 'wm'` on `simulate`'s body, `r.fluidBody(cells, {model: 'wm'})`, the op's
   `model`): wl foreign sources (waterlogged blocks, kelp, seagrass: `world.wl` -> face mask), the world's levels (`world.level`), simulated
   conversion (`converted`, M25:convert, never in `predicted`), M25:bubble (`world.bubbler`), the wash rule (`world.wash`: `wash` to
