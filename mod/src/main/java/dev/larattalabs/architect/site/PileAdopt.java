@@ -60,6 +60,8 @@ public final class PileAdopt {
 	}
 
 	public static final String NAME = "pile.adopt";
+	/** (T3b fix round) The persisted event: STOCKPILE_CHANGED(owner), delivered by {@code TxnServer}'s event sink. */
+	public static final String STOCKPILE_CHANGED = "stockpile_changed";
 	/** (decision 3) The quarantined entry that holds a legacy FINISH crate for ops (no kind of this name: it stays quarantined). */
 	public static final String FINISH_HELD = "pile.adopt.finish";
 	static final String CREDIT = "ledger.adopt", ORDER = "ledger.order", RELEASE = "journal.release", CLEAR = "record.clear";
@@ -179,14 +181,39 @@ public final class PileAdopt {
 		}
 	};
 
-	/** {@code journal.release}: the crate's journal kind released and confirmed (after its cell's W). Probe: no active crate entry left. */
+	/**
+	 * (T3b fix round, GPT P2-3) A release's journal commit not yet known durable, by effect key: {@code JournalStore.submit} shows the new head
+	 * at once, so the visible head alone would read a pending (or timed-out) release as done.
+	 */
+	static final Map<String, java.util.concurrent.CompletableFuture<Void>> PENDING_RELEASE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/**
+	 * (T3b fix round, GPT P2-3, the pure seam) A release's probe: a submitted commit still pending is UNKNOWN (held, never read as done); one
+	 * that failed reads the head again (the journal put it back); otherwise the head: no active crate entry left is APPLIED.
+	 */
+	static Probe releaseProbe(java.util.concurrent.@Nullable CompletableFuture<Void> pending, boolean noneActive) {
+		if (pending != null && !pending.isDone()) {
+			return Probe.UNKNOWN;
+		}
+		if (pending != null && pending.isCompletedExceptionally()) {
+			return Probe.ABSENT; // the view is back at the durable state: released again
+		}
+		return noneActive ? Probe.APPLIED : Probe.ABSENT;
+	}
+
+	/** {@code journal.release}: the crate's journal kind released and confirmed (after its cell's W). Probe: {@link #releaseProbe}. */
 	static final TxnKind.Adapter RELEASE_ADAPTER = new TxnKind.Adapter() {
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			if (!TxnServer.storesLoaded() || WorldJournal.storeOrNull() == null) {
 				return Probe.UNKNOWN;
 			}
-			return SiteJournal.idsOf(e.data().get("crateOwner").getAsString(), WorldJournal.CRATE).isEmpty() ? Probe.APPLIED : Probe.ABSENT;
+			var f = PENDING_RELEASE.get(e.key(t.id));
+			Probe p = releaseProbe(f, SiteJournal.idsOf(e.data().get("crateOwner").getAsString(), WorldJournal.CRATE).isEmpty());
+			if (f != null && f.isDone()) {
+				PENDING_RELEASE.remove(e.key(t.id), f);
+			}
+			return p;
 		}
 
 		@Override
@@ -201,8 +228,11 @@ public final class PileAdopt {
 			if (jt.isEmpty()) {
 				return;
 			}
+			var f = s.submit(jt);
+			PENDING_RELEASE.put(e.key(t.id), f); // (T3b fix round) kept until its probe sees it done
 			try {
-				s.submit(jt).get(30, TimeUnit.SECONDS); // confirmed before the next effect: the barrier does not cover the journal
+				f.get(30, TimeUnit.SECONDS); // confirmed before the next effect: the barrier does not cover the journal
+				PENDING_RELEASE.remove(e.key(t.id), f);
 			} catch (Exception x) {
 				throw new IllegalStateException("the journal release did not commit: " + x);
 			}
@@ -251,11 +281,22 @@ public final class PileAdopt {
 
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
-			if (!TxnServer.storesLoaded()) {
+			MinecraftServer srv = TxnServer.server();
+			if (!TxnServer.storesLoaded() || srv == null) {
 				return Probe.UNKNOWN; // the records load in SERVER_STARTED's default phase: never read as cleared before
 			}
 			Construction.Crate c = named(e);
-			return c != null && at(c, e) ? Probe.ABSENT : Probe.APPLIED;
+			if (c != null && at(c, e)) {
+				return Probe.ABSENT;
+			}
+			// (T3b fix round, GPT P2-2) cleared in memory is not enough: the sites file on disk must name no crate there either
+			try {
+				int[] d = Sites.savedCrate(srv, e.data().get("kind").getAsString(), e.data().get("id").getAsString());
+				JsonArray p = e.data().getAsJsonArray("pos");
+				return d != null && d[0] == p.get(0).getAsInt() && d[1] == p.get(1).getAsInt() && d[2] == p.get(2).getAsInt() ? Probe.ABSENT : Probe.APPLIED;
+			} catch (Exception x) {
+				return Probe.UNKNOWN;
+			}
 		}
 
 		@Override
@@ -268,23 +309,28 @@ public final class PileAdopt {
 			switch (e.data().get("kind").getAsString()) {
 				case "group" -> {
 					SiteGroupRec g = Sites.group(id);
-					if (g != null) {
+					if (g != null && g.crate() != null) {
 						Sites.putGroup(srv, g.withCrate(null));
 					}
 				}
 				case "road" -> {
 					Infra i = Infras.get(id);
-					if (i != null && i.construction() != null) {
+					if (i != null && i.construction() != null && i.construction().crate() != null) {
 						Infras.put(srv, i.withConstruction(i.construction().withCrate(null)));
 					}
 				}
 				default -> {
 					Site s = Sites.get(id);
-					if (s != null && s.construction() != null) {
+					if (s != null && s.construction() != null && s.construction().crate() != null) {
 						Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
 						Builder.forgetRun(id);
 					}
 				}
+			}
+			// (T3b fix round, GPT P2-2) the clear acknowledged on disk before the effect counts (a redo writes it again)
+			String why = Sites.saveConfirmed(srv);
+			if (why != null) {
+				throw new IllegalStateException("the sites file's save was not acknowledged (" + why + "): held, written again");
 			}
 		}
 
@@ -357,6 +403,25 @@ public final class PileAdopt {
 			return r;
 		}
 	};
+
+	/**
+	 * (decision 3; T3b fix round, GPT P1) Holds a legacy FINISH crate (credited, still standing) for ops: a quarantined {@link #FINISH_HELD}
+	 * entry over its {@code crate:} resource and the records naming it ({@code records}), unless a txn holds the crate already. Called by
+	 * adoptCrates and by the start's repair (before it would clear the references). Server thread.
+	 */
+	static void holdFinish(String owner, String dim, BlockPos at, List<String> records) {
+		String crate = CrateTxn.resource(dim, at);
+		if (TxnServer.heldWhy(crate) != null) {
+			return;
+		}
+		List<String> res = new ArrayList<>();
+		res.add(crate);
+		records.stream().filter(r -> !res.contains(r) && TxnServer.heldWhy(r) == null).forEach(res::add);
+		String id = TxnServer.core().holdForOps(FINISH_HELD, res, "legacy adoptCrates FINISH: " + owner + "'s crate at " + at.toShortString()
+			+ " is credited and still stands");
+		Architect.LOGGER.warn("Stockpile {}: the crate at {} was credited by an earlier adoptCrates that stopped before taking it; held for ops ({}): never "
+			+ "drained or credited again, its references kept", owner, at.toShortString(), id);
+	}
 
 	// ------------------------------------------------------------------ adoptCrates
 
@@ -464,15 +529,7 @@ public final class PileAdopt {
 			// records naming it are held by a quarantined txn entry (kind pile.adopt.finish), indefinitely, for ops
 			deferred.put(k, "held for ops");
 			AdoptPlan.CrateRead r = reads.stream().filter(x -> x.key().equals(k)).findFirst().orElseThrow();
-			List<String> res = new ArrayList<>();
-			res.add(r.resource());
-			res.addAll(records.getOrDefault(k, List.of()));
-			if (TxnServer.heldWhy(r.resource()) == null) {
-				String id = TxnServer.core().holdForOps(FINISH_HELD, res, "legacy adoptCrates FINISH: " + r.adoptKey() + " is credited and its crate stands at "
-					+ r.x() + "," + r.y() + "," + r.z());
-				Architect.LOGGER.warn("Stockpile {}: crate {} was credited by an earlier adoptCrates that stopped before taking it; held for ops ({}): never "
-					+ "drained or credited again", owner, k, id);
-			}
+			holdFinish(owner, p.dimension, new BlockPos(r.x(), r.y(), r.z()), records.getOrDefault(k, List.of()));
 		}
 		plan.deferred().forEach((k, v) -> Architect.LOGGER.warn("Stockpile {}: crate {} not adopted ({}): it stays as it is (its stock, its journal entry, "
 			+ "its targets' references); a later adoptCrates retries it", owner, k, v.wire));
@@ -552,6 +609,9 @@ public final class PileAdopt {
 				core.plan(t, Effect.of(CLEAR, EffectClass.R).data("kind", f.kind()).data("id", f.id()).data("pos", pos.deepCopy()));
 			}
 		}
+		JsonObject ev = new JsonObject();
+		ev.addProperty("owner", owner);
+		core.payload(t, STOCKPILE_CHANGED, ev); // (T3b fix round, GPT P2-4) fired from the txn's lifecycle at EFFECTS_DONE, again after a recovery
 		var o = core.persist(t);
 		if (o == DurableFile.Outcome.REFUSED) {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "txn.json: the intent's write was refused; nothing adopted", "txn_journal");

@@ -286,6 +286,7 @@ public final class Sites {
 			Drops.reset();
 			SiteDeltas.cleanStop(worldDir);
 			worldDir = null;
+			durable = null; // (T3b fix round) the next world's sites file gets its own
 			notifyListeners();
 		});
 	}
@@ -3658,6 +3659,71 @@ public final class Sites {
 
 	/** (slice T3b fix round, TEST {@code dev.stockpile.ps failSitesSaves}) the next n saves of the sites file fail as an I/O error would. */
 	public static final java.util.concurrent.atomic.AtomicInteger FAIL_SAVES = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** (slice T3b fix round) This world's sites file as a confirmed write ({@link #saveConfirmed}); null until first used, per world. */
+	private static @Nullable DurableFile durable;
+
+	private static JsonObject root(State s) {
+		JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
+		JsonArray infra = Infras.toJson();
+		if (!infra.isEmpty()) {
+			root.add("infra", infra);
+		}
+		return root;
+	}
+
+	/**
+	 * (slice T3b fix round, GPT P2-2) The sites file written now as a confirmed write (temp forced, atomic rename, folder forced:
+	 * {@link DurableFile}); null when acknowledged OK, else why not. A txn's record effect requires it ({@link #save} swallows I/O errors).
+	 * Server thread.
+	 */
+	public static @Nullable String saveConfirmed(MinecraftServer server) {
+		if (loadFailed) {
+			return "the sites file failed to load this session";
+		}
+		if (FAIL_SAVES.get() > 0 && FAIL_SAVES.getAndDecrement() > 0) {
+			Architect.LOGGER.warn("Could not save {} (TEST: dev.stockpile.ps failSitesSaves)", file(server));
+			return "TEST: the sites file's save failed";
+		}
+		Path f = file(server);
+		DurableFile d = durable;
+		if (d == null || !d.file().equals(f)) {
+			d = durable = new DurableFile("sites", f);
+		}
+		DurableFile.Result r = d.write(root(state), d.request());
+		return r.ok() ? null : r.outcome() + ": " + r.reason();
+	}
+
+	/**
+	 * (slice T3b fix round, GPT P2-2) The crate cell a record names in the sites file on disk ({@code kind} site, road or group), or null when
+	 * the record is absent or names none. Throws when the file can't be read (a probe answers UNKNOWN). Server thread.
+	 */
+	public static int @Nullable [] savedCrate(MinecraftServer server, String kind, String id) throws IOException {
+		Path f = file(server);
+		if (!Files.exists(f)) {
+			return null;
+		}
+		JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+		String arr = switch (kind) {
+			case "group" -> "groups";
+			case "road" -> "infra";
+			default -> "sites";
+		};
+		if (!(root.get(arr) instanceof JsonArray a)) {
+			return null;
+		}
+		for (var e : a) {
+			if (!(e instanceof JsonObject o) || !o.has("id") || !id.equals(o.get("id").getAsString())) {
+				continue;
+			}
+			JsonObject c = kind.equals("group") ? o : o.get("construction") instanceof JsonObject co ? co : null;
+			if (c == null || !(c.get("crate") instanceof JsonObject cr) || !(cr.get("pos") instanceof JsonArray pos) || pos.size() != 3) {
+				return null;
+			}
+			return new int[] {pos.get(0).getAsInt(), pos.get(1).getAsInt(), pos.get(2).getAsInt()};
+		}
+		return null;
+	}
 
 	private static void save(MinecraftServer server, State s) {
 		if (loadFailed) {

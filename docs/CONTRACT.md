@@ -33471,6 +33471,18 @@ so two module lots that share items can't each be held to their own measured bou
   txn-holds 50/0; `_work/architect-mc-T3b-runs2/20261118-055313-change` sad-unit, sad-survival 56/0 (its SAC2 row now judged on the recovered
   ledger), sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1607 (0 failed); api-compat --baselines 8/8.
 
+### Slice T3b fix round (GPT NOT SAFE: 1 P1, 3 P2; one round; origin/main v0.80.0 merged, DFG already in it)
+
+- **P1** the start's repair (`repairJoinedCrates`) clears a credited reference only when its crate no longer stands (`startRepairs`); a
+  credited crate still standing is legacy FINISH: held for ops (`PileAdopt.holdFinish`, the quarantined `pile.adopt.finish` entry), its
+  references kept. Row `legacy-finish-at-start` (a key credited by `dev.stockpile.ps creditKey`, a clean restart).
+- **P2-2** `record.clear` requires `Sites.saveConfirmed` (the sites file through `DurableFile`); its probe reads the file on disk too
+  (`Sites.savedCrate`). Row `gone-save-refused` (`dev.stockpile.ps failSitesSaves 3`, a GONE crate, a halt right after).
+- **P2-3** a release keeps its submitted commit (`PENDING_RELEASE`); `releaseProbe` answers UNKNOWN while it is pending.
+- **P2-4** `stockpile_changed {owner}` is the txn's persisted payload, fired at EFFECTS_DONE and again after recovery; `TxnServer`'s emit
+  delivers `SiteEvents.STOCKPILE_CHANGED`. The matrix checks it on every committed point before the emit.
+- Units: `PileAdoptFixT3bTest` (the P1 and P2-3 seams).
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is

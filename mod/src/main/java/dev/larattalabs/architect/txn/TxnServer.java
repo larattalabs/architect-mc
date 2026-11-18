@@ -505,6 +505,10 @@ public final class TxnServer {
 			String line = t.id + " " + event + (replayed ? " (replayed)" : "") + " " + payload;
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
+				if ("stockpile_changed".equals(event) && payload.has("owner")) {
+					// (slice T3b fix round, GPT P2-4) the API event from the txn's persisted payload: at EFFECTS_DONE, again after a recovery
+					dev.larattalabs.architect.api.SiteEvents.STOCKPILE_CHANGED.invoker().onChanged(payload.get("owner").getAsString());
+				}
 				EVENTS.addLast(line);
 				while (EVENTS.size() > 32) {
 					EVENTS.pollFirst();

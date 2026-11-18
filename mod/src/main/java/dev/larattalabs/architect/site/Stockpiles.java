@@ -1179,8 +1179,21 @@ public final class Stockpiles {
 		boolean any = false;
 		for (Pile p : List.copyOf(PILES.values())) {
 			List<Object> joined = new ArrayList<>();
+			// (T3b fix round, GPT P1) a credited key whose crate still stands is legacy FINISH (an A-model save): never repaired here (its stock
+			// would be paid again through a freed crate), but held for ops with its references kept. Unknown cell (no level): not repaired either
+			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			Map<BlockPos, List<String>> finish = new LinkedHashMap<>();
+			java.util.function.BiPredicate<Construction.Crate, String> repairs = (c, res) -> {
+				BlockPos at = new BlockPos(c.x(), c.y(), c.z());
+				if (startRepairs(true, level == null || crateBlockAt(level, at))) {
+					return true;
+				}
+				finish.computeIfAbsent(at, k -> new ArrayList<>()).add(res);
+				return false;
+			};
 			for (Site s : Sites.all()) {
-				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s) && !Sites.txnHeld(s.id())) { // (T3b) an open txn's: its own
+				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s) && !Sites.txnHeld(s.id()) && repairs.test(s
+					.construction().crate(), "site:" + s.id())) { // (T3b) an open txn's: its own
 					Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
 					Builder.forgetRun(s.id());
 					any = true;
@@ -1194,7 +1207,8 @@ public final class Stockpiles {
 			for (Infra i : Infras.all()) {
 				Construction c = i.construction();
 				if (c != null && c.crate() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && i.group() != null && namesJoined(
-					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z()) && !Sites.txnHeld(i.id())) {
+					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z()) && !Sites.txnHeld(i.id()) && repairs.test(c.crate(),
+						"road:" + i.id())) {
 					Infras.put(srv, i.withConstruction(c.withCrate(null)));
 					any = true;
 					if (i.building()) {
@@ -1204,11 +1218,13 @@ public final class Stockpiles {
 			}
 			for (SiteGroupRec g : Sites.groups()) {
 				Construction.Crate c = g.crate();
-				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z()) && !Sites.txnHeld(g.id())) {
+				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z()) && !Sites.txnHeld(g.id())
+					&& repairs.test(c, "group:" + g.id())) {
 					Sites.putGroup(srv, g.withCrate(null));
 					any = true;
 				}
 			}
+			finish.forEach((at, res) -> PileAdopt.holdFinish(p.owner, p.dimension, at, res));
 			joined.sort(java.util.Comparator.comparingLong(Stockpiles::placedAt));
 			for (Object t : joined) {
 				if (t != null && !p.order.contains(idOf(t))) {
@@ -1223,6 +1239,15 @@ public final class Stockpiles {
 		if (any) {
 			saveWithWorld(srv);
 		}
+	}
+
+	/**
+	 * (T3b fix round, GPT P1, the pure seam) Whether the start's repair clears a reference: only to a crate this ledger credited AND whose cell
+	 * holds no crate block now (JOINED). A credited crate that still stands is legacy FINISH: held for ops, its references kept. (Before: every
+	 * credited reference was cleared, freeing a standing crate whose stock was already credited.)
+	 */
+	static boolean startRepairs(boolean credited, boolean crateStands) {
+		return credited && !crateStands;
 	}
 
 	/**
