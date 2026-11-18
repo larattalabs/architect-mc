@@ -121,7 +121,7 @@ public final class Reconcile {
 	/** The hub's report for a building whose template does not stand. */
 	public static String mismatch(String id, int match, int total) {
 		int pct = total == 0 ? 0 : (int) Math.round(100.0 * match / total);
-		return id + " does not match its blueprint (" + pct + " % of its blocks in place): the world may not have saved it before the game "
+		return id + " does not match its design (" + pct + " % of its blocks in place): the world may not have saved it before the game "
 			+ "stopped, or it was taken apart. Remove puts back the terrain saved before it was placed; \"remove <id> forget\" only drops the record";
 	}
 }

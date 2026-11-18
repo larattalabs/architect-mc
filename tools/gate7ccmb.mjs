@@ -371,7 +371,7 @@ steps.crash = async () => {
   check(!!r?.removed && e.n === 0, `Sites.remove(${g}) of the recovered composite is exact (E-flat 0 over ${c0.size} cells)`, { r, first: e.first });
   out.eflat = e.n;
   const logNow = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
-  const jr = logNow.split('\n').filter((l) => /does not match its blueprint/.test(l));
+  const jr = logNow.split('\n').filter((l) => /does not match its (blueprint|design)/.test(l));
   out.jrSymptom = jr.slice(0, 5);
   log(jr.length ? `NOTE: "does not match its blueprint" after the restart (slice JR's symptom): ${jr.length} line(s)` : 'no "does not match its blueprint" line after the restart');
   await L.leaveWorld();

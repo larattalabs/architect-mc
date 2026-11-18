@@ -91,6 +91,10 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		// (PR W1) the notes field always has the focus, so "?" types; F1 opens the overlay
+		if (keysOverlay().keyPressed(e, true)) {
+			return true;
+		}
 		if (e.isEscape()) {
 			goBack();
 			return true;
@@ -119,6 +123,9 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("redirect").mouseClicked(e.x(), e.y())) {
+			return true;
+		}
 		if (in(sendRect, e.x(), e.y())) {
 			submit();
 			return true;
@@ -151,11 +158,18 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mouseX, mouseY, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		int w = Math.min(360, width - 16);
 		Kit.Padding pad = Kit.padding("panel_paper");
 		int inner = w - pad.left() - pad.right();
 		int fieldH = view.height(font, notes, inner, style());
-		int h = pad.top() + 14 + 22 + fieldH + 8 + 20 + pad.bottom() + (error != null ? 11 : 0);
+		var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("redirect");
+		int tipH = tip.height();
+		int h = pad.top() + 14 + 22 + tipH + fieldH + 8 + 20 + pad.bottom() + (error != null ? 11 : 0);
 		int x = (width - w) / 2;
 		int y = height - h - 24;
 		Panels.panel(g, x, y, w, h);
@@ -163,17 +177,18 @@ public final class RedirectScreen extends Screen {
 		int cy = y + pad.top();
 		Panels.header(g, font, "Redirect the massing", cx - 2, cy - 2, inner + 4);
 		cy += 16;
+		cy += tip.draw(g, font, cx, cy - 2, inner, mouseX, mouseY); // (PR W1)
 		for (String line : TextUtil.wrapPlain(font, what, inner).stream().limit(2).toList()) {
 			g.text(font, line, cx, cy, UiBits.muted(), false);
-			cy += 10;
+			cy += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
-		cy = y + pad.top() + 14 + 22;
+		cy = y + pad.top() + 14 + 22 + tipH;
 		fieldRect = new int[] {cx, cy, inner};
 		view.draw(g, font, notes, cx, cy, inner, true, style());
 		cy += fieldH + 8;
 		if (error != null) {
 			g.text(font, TextUtil.ellipsize(font, error, inner), cx, cy - 4, UiBits.errorText(), false);
-			cy += 11;
+			cy += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		String go = "Redirect";
 		int gw = UiBits.buttonWidth(font, go, 0);
@@ -190,5 +205,11 @@ public final class RedirectScreen extends Screen {
 		if (UiBits.hintsWidth(font, hints) <= bx - cx - 6) {
 			UiBits.hints(g, font, cx, cy + 4, false, hints);
 		}
+		keysOverlay().draw(g, font, width, height);
+	}
+
+	/** (PR W1) The redirect's "?" overlay (F1: the notes field takes "?"). */
+	static dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay("redirect", "Redirect the massing", dev.larattalabs.architect.client.help.ArchitectHelp::redirectKeys);
 	}
 }

@@ -121,6 +121,43 @@ public final class StyleRoles {
 		return List.copyOf(woods.keySet());
 	}
 
+	/** (PR P1) The wood a block belongs to ({@code minecraft:spruce_door -> spruce}), or null. */
+	public @Nullable String woodOfBlock(@Nullable String b) {
+		return b == null ? null : woodOf.get(qualify(b));
+	}
+
+	/** (PR P1) Every block of the table's wood blocks ({@code woodOf}'s keys): the wood families' known members. */
+	public java.util.Set<String> woodBlocks() {
+		return Collections.unmodifiableSet(woodOf.keySet());
+	}
+
+	/** (PR P1) The stone family of a block ({@code minecraft:andesite_stairs -> andesite}), or null. */
+	public @Nullable String stoneFamilyOf(@Nullable String b) {
+		return b == null ? null : stoneOf.get(qualify(b));
+	}
+
+	/** (PR P1) Every block the table knows the stone family of. */
+	public java.util.Set<String> stoneBlocks() {
+		return Collections.unmodifiableSet(stoneOf.keySet());
+	}
+
+	/** (PR P1) A stairs or slab block's full block ({@code fullOf}), or the block itself. */
+	public String fullOfBlock(String b) {
+		return fullBlockOf(b);
+	}
+
+	/** (PR P1) The shape variants the table knows of a full block (its stairs, slab, …: {@code fullOf} read backwards). */
+	public List<String> variantsOf(String full) {
+		String q = qualify(full);
+		List<String> out = new ArrayList<>();
+		fullOf.forEach((v, f) -> {
+			if (f.equals(q)) {
+				out.add(v);
+			}
+		});
+		return out;
+	}
+
 	/** Which roles each main row drives ({@code wood -> [wall, frame, floor]}, ...). */
 	public Map<String, List<String>> fanOutRoles() {
 		return Collections.unmodifiableMap(fanOut);

@@ -116,6 +116,12 @@ final class SiteHud implements HudZones.Element {
 		int w = font.width(full) + p.left() + p.right() + 4; // the short line is a prefix of the full one: it fits too
 		int lineH = font.lineHeight + p.top() + p.bottom() + 2;
 		int h = mode == UiPrefs.SiteHud.FULL ? font.lineHeight + p.top() + p.bottom() + 8 : lineH;
+		// (PR W1) what this HUD is (full mode), until the crate is first opened
+		var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.site");
+		if (mode == UiPrefs.SiteHud.FULL && tip.shown()) {
+			h += 10;
+			w = Math.max(w, Math.min(maxW, font.width(tip.text()) + p.left() + p.right() + 4));
+		}
 		return HudZones.Size.of(w, h).shrinkTo(lineH);
 	}
 
@@ -147,5 +153,9 @@ final class SiteHud implements HudZones.Element {
 		int by = y + p.top() + font.lineHeight + 2;
 		g.fill(x + p.left() + 2, by, x + p.left() + 2 + bw, by + 2, HudInk.track());
 		g.fill(x + p.left() + 2, by, x + p.left() + 2 + (int) Math.round(bw * frac), by + 2, s.paused() ? HudInk.armed() : HudInk.ok());
+		var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.site");
+		if (tip.shown() && slot.h() >= font.lineHeight + p.top() + p.bottom() + 18) {
+			Panels.text(g, font, TextUtil.ellipsize(font, tip.text(), bw), x + p.left() + 2, by + 6, HudInk.soft());
+		}
 	}
 }

@@ -1,6 +1,9 @@
 package dev.larattalabs.architect.client.placement;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.larattalabs.labui.ui.GhostCues;
+import dev.larattalabs.labui.ui.GhostPalette;
+import dev.larattalabs.labui.ui.GhostPalette.Cat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.larattalabs.architect.placement.GhostModel;
 import dev.larattalabs.labui.client.ui.UiStyle;
@@ -32,15 +35,42 @@ import net.minecraft.world.phys.Vec3;
  */
 final class GhostRenderer {
 	static final int GHOST_ALPHA = 0x5A; // ~35 %
-	static final int OBSTRUCTED = 0x70E0782A;
-	static final int BLOCKED = 0xB8E0302A;
-	static final int FOUNDATION = 0x78989490;
-	static final int CLEARED = 0x30F4EBD8;
-	static final int WATER = 0x803C78E6;
-	static final int LAVA = 0xC8FFB000;
-	static final int PATH = 0x90C8A060;
+	// (PR A2) the category colours come from lab-ui's GhostPalette (standard or Okabe-Ito, the player's choice); the alphas stay
+	static int obstructed() {
+		return GhostPalette.argb(Cat.OBSTRUCTED, 0x70);
+	}
+
+	static int blocked() {
+		return GhostPalette.argb(Cat.BLOCKED, 0xB8);
+	}
+
+	static int foundation() {
+		return GhostPalette.argb(Cat.FOUNDATION, 0x78);
+	}
+
+	static int cleared() {
+		return GhostPalette.argb(Cat.CLEARED, 0x30);
+	}
+
+	static int water() {
+		return GhostPalette.argb(Cat.WATER, 0x80);
+	}
+
+	static int lava() {
+		return GhostPalette.argb(Cat.LAVA, 0xC8);
+	}
+
+	static int path() {
+		return GhostPalette.argb(Cat.PATH, 0x90);
+	}
+
 	/** Site warnings ({@code SiteWarnings}): water, lava, drops, cave openings in front of the door, gullies and caves under the path. */
-	static final int HAZARD = 0x90D040C8;
+	static int hazard() {
+		return GhostPalette.argb(Cat.HAZARD, 0x90);
+	}
+
+	/** (PR A2) At most this many cells of one category get their cue (an ×, ticks, a "!"); the colour still marks the rest. */
+	static final int MAX_CUED = 600;
 	static final float INFLATE = 0.005f;
 	static final float EDGE = 0.045f;
 
@@ -200,24 +230,29 @@ final class GhostRenderer {
 			float z = bz + m.z(i);
 			quads += cube(pose, vc, x - INFLATE, y - INFLATE, z - INFLATE, x + 1 + INFLATE, y + 1 + INFLATE, z + 1 + INFLATE, base, faces, true);
 		}
-		quads += cells(pose, vc, v.fill(), FOUNDATION, 0.008f, cx, cy, cz);
-		quads += cells(pose, vc, v.clear(), CLEARED, 0.006f, cx, cy, cz);
-		quads += cells(pose, vc, v.path(), PATH, 0.009f, cx, cy, cz);
-		quads += cells(pose, vc, v.water(), WATER, 0.01f, cx, cy, cz);
-		quads += cells(pose, vc, v.lava(), LAVA, 0.02f, cx, cy, cz);
-		quads += cells(pose, vc, v.hazards(), HAZARD, 0.015f, cx, cy, cz);
-		quads += cells(pose, vc, v.obstructed(), OBSTRUCTED, 0.012f, cx, cy, cz);
-		quads += cells(pose, vc, v.blocked(), BLOCKED, 0.03f, cx, cy, cz);
+		quads += cells(pose, vc, v.fill(), foundation(), 0.008f, cx, cy, cz);
+		quads += cells(pose, vc, v.clear(), cleared(), 0.006f, cx, cy, cz);
+		quads += cells(pose, vc, v.path(), path(), 0.009f, cx, cy, cz);
+		quads += cells(pose, vc, v.water(), water(), 0.01f, cx, cy, cz);
+		quads += cells(pose, vc, v.lava(), lava(), 0.02f, cx, cy, cz);
+		quads += cells(pose, vc, v.hazards(), hazard(), 0.015f, cx, cy, cz);
+		quads += cells(pose, vc, v.obstructed(), obstructed(), 0.012f, cx, cy, cz);
+		quads += cells(pose, vc, v.blocked(), blocked(), 0.03f, cx, cy, cz);
+		// (PR A2) the second, non-colour cue (both palettes): an × on blocked cells, corner ticks on obstructed ones, a "!" over hazards and lava
+		quads += cues(pose, vc, v.blocked(), GhostPalette.Cue.CROSS, GhostPalette.argb(Cat.BLOCKED, 0xF0), cx, cy, cz);
+		quads += cues(pose, vc, v.obstructed(), GhostPalette.Cue.CORNER_TICKS, 0xF0111111, cx, cy, cz);
+		quads += cues(pose, vc, v.hazards(), GhostPalette.Cue.BANG, GhostPalette.argb(Cat.HAZARD, 0xF0), cx, cy, cz);
+		quads += cues(pose, vc, v.lava(), GhostPalette.Cue.BANG, GhostPalette.argb(Cat.LAVA, 0xF0), cx, cy, cz);
 
 		// the outline of what is drawn (GhostModel.outline: the footprint's perimeter, not the template's box,
 		// whose corners can be cells the template never writes, e.g. beside the studio's porch)
 		// the client's refusals, or the server's verdict (S4) when it refuses a site the client passed
 		dev.larattalabs.architect.site.Sites.Verdict sv = BuildPlacement.serverVerdict();
 		boolean refused = !v.refusals().isEmpty() || sv != null && !sv.ok();
-		int edge = refused ? UiStyle.withAlpha(0xFFD0402A, 0xE8) : UiStyle.withAlpha(UiStyle.SAGE, 0xE0);
+		int edge = refused ? GhostPalette.argb(Cat.REFUSED, 0xE8) : GhostPalette.argb(Cat.OK_OUTLINE, 0xE0);
 		float t = EDGE;
 		for (GhostModel.Edge e : m.outline()) {
-			quads += bar(pose, vc, bx, by, bz, e, t, edge);
+			quads += outlineBar(pose, vc, bx, by, bz, e, t, edge, refused);
 		}
 		// the whole box place() reserves, faintly, when a refusal is about the box itself (an overlap, the
 		// player standing in it, or block entities, which place() refuses anywhere in the box), so a corner the
@@ -249,6 +284,55 @@ final class GhostRenderer {
 			quads += bar(pose, vc, bx, by, bz, e, t * 2.2f, brass);
 		}
 		return quads;
+	}
+
+	/**
+	 * (PR A2) One outline edge: dashed when refused (the cue), and with Okabe-Ito two-tone, a dark core under the hue and a white rim on
+	 * it, so it reads on any terrain (GhostPalette.CORE / RIM).
+	 */
+	private static int outlineBar(PoseStack.Pose pose, VertexConsumer vc, float bx, float by, float bz, GhostModel.Edge e, float t, int argb,
+		boolean dashed) {
+		int n = 0;
+		if (GhostPalette.twoTone()) {
+			n += edgeBar(pose, vc, bx, by - 1.7f * t, bz, e, t * 0.7f, 0xF0000000 | GhostPalette.CORE, dashed);
+			n += edgeBar(pose, vc, bx, by + 1.5f * t, bz, e, t * 0.5f, 0xF0000000 | GhostPalette.RIM, dashed);
+		}
+		return n + edgeBar(pose, vc, bx, by, bz, e, t, argb, dashed);
+	}
+
+	private static int edgeBar(PoseStack.Pose pose, VertexConsumer vc, float bx, float by, float bz, GhostModel.Edge e, float t, int argb,
+		boolean dashed) {
+		if (!dashed) {
+			return bar(pose, vc, bx, by, bz, e, t, argb);
+		}
+		int[] n = {0};
+		GhostCues.dashedBar((x0, y0, z0, x1, y1, z1) -> n[0] += cube(pose, vc, x0, y0, z0, x1, y1, z1, argb, 0x3F, false), bx + e.x0(), by + e.y0(),
+			bz + e.z0(), bx + e.x1(), by + e.y1(), bz + e.z1(), t);
+		return n[0];
+	}
+
+	/** (PR A2) A cue on each of the first {@link #MAX_CUED} cells (x, y, z, mask quadruples). */
+	private static int cues(PoseStack.Pose pose, VertexConsumer vc, int[] cells, GhostPalette.Cue cue, int argb, double cx, double cy, double cz) {
+		int[] n = {0};
+		GhostCues.Box box = (x0, y0, z0, x1, y1, z1) -> n[0] += cube(pose, vc, x0, y0, z0, x1, y1, z1, argb, 0x3F, false);
+		for (int i = 0, k = 0; i + 3 < cells.length && k < MAX_CUED; i += 4, k++) {
+			float x = (float) (cells[i] - cx);
+			float y = (float) (cells[i + 1] - cy);
+			float z = (float) (cells[i + 2] - cz);
+			switch (cue) {
+				case CROSS -> {
+					// two-tone: a wider dark × under the coloured one, so it reads on dark wood and light stone alike
+					GhostCues.cross((x0, y0, z0, x1, y1, z1) -> n[0] += cube(pose, vc, x0, y0, z0, x1, y1, z1, 0xF0000000 | GhostPalette.CORE, 0x3F, false), x,
+						y, z, 0.17f, 0f);
+					GhostCues.cross(box, x, y, z, 0.11f, 0.03f);
+				}
+				case CORNER_TICKS -> GhostCues.cornerTicks(box, x, y, z);
+				case BANG -> GhostCues.bang(box, x, y, z);
+				default -> {
+				}
+			}
+		}
+		return n[0];
 	}
 
 	/** A straight model edge (rotated-local corner coordinates) as a thin bar of half-thickness {@code t}. */

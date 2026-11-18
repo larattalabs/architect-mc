@@ -26,6 +26,21 @@ final class PlotHud implements HudZones.Element {
 	private List<String[]> lines = List.of();
 	private String[] hints = new String[0];
 
+	/** (PR A4) The hint keycaps as bound now: Enter, F, PgUp/Dn, Backspace follow their mappings (Esc is fixed). */
+	static String[] live(String... h) {
+		String[] o = h.clone();
+		for (int i = 0; i < o.length; i += 2) {
+			o[i] = switch (o[i]) {
+				case "Enter" -> dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM);
+				case "F" -> dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.FIT);
+				case "PgUp/Dn" -> dev.larattalabs.architect.client.hud.Keys.heightLabel();
+				case "Backspace", "Bksp" -> dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL);
+				default -> o[i];
+			};
+		}
+		return o;
+	}
+
 	@Override
 	public HudZones.@org.jspecify.annotations.Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
@@ -64,14 +79,14 @@ final class PlotHud implements HudZones.Element {
 				} else if (v.first() == null) {
 					lines.add(new String[] {"Build a link: look at the first end, Enter · " + kind, Integer.toString(cream)});
 					lines.add(new String[] {"end " + h[0] + ", " + h[1] + ", " + h[2], Integer.toString(soft)});
-					hints = new String[] {"Enter", "first end", "F", "kind", "Esc", "cancel"};
+					hints = live("Enter", "first end", "F", "kind", "Esc", "cancel");
 				} else {
 					int[] a = v.first();
 					int dx = Math.abs(h[0] - a[0]), dy = h[1] - a[1], dz = Math.abs(h[2] - a[2]);
 					lines.add(new String[] {"Build a " + kind + " to here: Enter", Integer.toString(cream)});
 					lines.add(new String[] {"from " + a[0] + ", " + a[1] + ", " + a[2] + " · " + Math.max(dx, dz) + " across, " + (dy >= 0 ? "+" : "") + dy + " up",
 						Integer.toString(brassInk)});
-					hints = new String[] {"Enter", "build", "F", "kind", "Bksp", "first end", "Esc", "cancel"};
+					hints = live("Enter", "build", "F", "kind", "Bksp", "first end", "Esc", "cancel");
 				}
 				String st = PlotMarker.status();
 				if (fresh && st != null && st.startsWith("No ") && v.phase() == PlotMarker.Phase.SECOND) {
@@ -80,18 +95,18 @@ final class PlotHud implements HudZones.Element {
 			} else if (v.phase() == PlotMarker.Phase.SAMPLING) {
 				lines.add(new String[] {"Sampling the site… (" + fitWords(v.fit()) + ")", Integer.toString(cream)});
 				lines.add(new String[] {"freezing the plot and 8 around it, finding its " + kindWords(v.fit()), Integer.toString(soft)});
-				hints = new String[] {"Backspace", "back", "Esc", "cancel"};
+				hints = live("Backspace", "back", "Esc", "cancel");
 			} else if (v.phase() == PlotMarker.Phase.FRAME && v.site() != null) {
 				DesignSpec.Plot plot = v.plot(PlotMarker.dimension());
 				lines.add(new String[] {"Confirm the frame: entrance " + v.front() + " · " + fitWords(v.fit()), Integer.toString(cream)});
 				lines.add(new String[] {"lot " + plot.dx() + " × " + plot.height() + " × " + plot.dz() + " · " + v.site().ports().size() + " port"
 					+ (v.site().ports().size() == 1 ? "" : "s") + " (brass) · " + v.site().keepCritical().size() + " kept", Integer.toString(brassInk)});
-				hints = new String[] {"Enter", "confirm", "Backspace", "re-mark", "Esc", "back"};
+				hints = live("Enter", "confirm", "Backspace", "re-mark", "Esc", "back");
 			} else if (v.first() == null) {
 				lines.add(new String[] {"Mark a plot: look at the first corner, Enter", Integer.toString(cream)});
 				lines.add(new String[] {"corner " + h[0] + ", " + h[1] + ", " + h[2] + " · height limit " + v.height() + " · " + fitLine, Integer.toString(soft)});
-				hints = v.fitLocked() ? new String[] {"Enter", "first corner", "PgUp/Dn", "height", "Esc", "back to the form"}
-					: new String[] {"Enter", "first corner", "F", "fit", "PgUp/Dn", "height", "Esc", "back"};
+				hints = v.fitLocked() ? live("Enter", "first corner", "PgUp/Dn", "height", "Esc", "back to the form")
+					: live("Enter", "first corner", "F", "fit", "PgUp/Dn", "height", "Esc", "back");
 			} else {
 				DesignSpec.Plot plot = v.plot(PlotMarker.dimension());
 				lines.add(new String[] {"Plot " + plot.dx() + " × " + plot.dz() + " (x by z) · height " + plot.height() + (v.fit() == dev.larattalabs.architect.api.FitMode.ON_PAD
@@ -107,8 +122,8 @@ final class PlotHud implements HudZones.Element {
 					lines.add(new String[] {"Larger than " + DesignSpec.MAX_XZ + " a side: the limit is capped at " + DesignSpec.MAX_XZ,
 						Integer.toString(dev.larattalabs.architect.client.hud.HudInk.warn())});
 				}
-				hints = v.fitLocked() ? new String[] {"Enter", "done", "PgUp/Dn", "height", "Backspace", "first corner", "Esc", "back"}
-					: new String[] {"Enter", "done", "F", "fit", "PgUp/Dn", "height", "Bksp", "corner", "Esc", "back"};
+				hints = v.fitLocked() ? live("Enter", "done", "PgUp/Dn", "height", "Backspace", "first corner", "Esc", "back")
+					: live("Enter", "done", "F", "fit", "PgUp/Dn", "height", "Bksp", "corner", "Esc", "back");
 			}
 			String st = PlotMarker.status();
 			if (v.connector() == null && fresh && st != null && st.startsWith("Not a ") && v.phase() == PlotMarker.Phase.SECOND) {
@@ -120,14 +135,19 @@ final class PlotHud implements HudZones.Element {
 		}
 		if (hints.length > 0 && UiBits.hintsWidth(font, hints) > inner) {
 			// 426x240 (4K at auto GUI scale): the row was dropped altogether; keep the keys that finish the plot
-			hints = v != null && v.connector() != null ? new String[] {"Enter", "end", "F", "kind", "Esc", "cancel"}
-				: v != null && v.phase() == PlotMarker.Phase.FRAME ? new String[] {"Enter", "confirm", "Esc", "back"}
-				: v != null && v.phase() == PlotMarker.Phase.SAMPLING ? new String[] {"Esc", "cancel"}
-				: v != null && v.first() == null ? new String[] {"Enter", "corner", "F", "fit", "Esc", "back"}
-				: new String[] {"Enter", "done", "F", "fit", "Esc", "back"};
+			hints = v != null && v.connector() != null ? live("Enter", "end", "F", "kind", "Esc", "cancel")
+				: v != null && v.phase() == PlotMarker.Phase.FRAME ? live("Enter", "confirm", "Esc", "back")
+				: v != null && v.phase() == PlotMarker.Phase.SAMPLING ? live("Esc", "cancel")
+				: v != null && v.first() == null ? live("Enter", "corner", "F", "fit", "Esc", "back")
+				: live("Enter", "done", "F", "fit", "Esc", "back");
 		}
 		int hintW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 		int textW = hintW;
+		// (PR W1) what this HUD is, until the first plot is confirmed
+		var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.plot");
+		if (v != null && tip.shown()) {
+			lines.add(new String[] {tip.text(), Integer.toString(soft)});
+		}
 		for (String[] l : lines) {
 			textW = Math.max(textW, font.width(l[0]));
 		}

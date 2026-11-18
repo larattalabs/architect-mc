@@ -347,6 +347,7 @@ public final class PlotMarker {
 		if (!active || mc.player == null) {
 			return;
 		}
+		dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.plot").hide(); // (PR W1) the plot HUD's tip has done its job
 		if (phase == Phase.SAMPLING || phase == Phase.PLACING) {
 			return; // wait for the sample (or the connector's answer)
 		}

@@ -49,6 +49,8 @@ public final class StyleBrowserScreen extends PickerScreen {
 	private final Map<String, StyleCatalog.Card> cards;
 	private final Button duplicate = new Button("Duplicate", this::duplicateSelected);
 	private final Button edit = new Button("Edit", this::editSelected);
+	/** (PR P1) Preview on ghost: the browser collapses to a strip and the world shows the design wearing the Style. */
+	private final Button preview = new Button("Preview in world", this::previewSelected);
 	/** The "+ New style" menu (null: closed) and, under it, the built-in list. */
 	private @Nullable Menu menu;
 	private boolean gridClick;
@@ -67,6 +69,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	private StyleBrowserScreen(PickerSpec spec, Map<String, StyleCatalog.Card> cards, @Nullable Screen parent, Consumer<Bible> use) {
 		super(spec, parent);
+		dev.larattalabs.architect.client.help.ArchitectHelp.closeOverlays(); // (PR W1)
 		this.cards = cards;
 		this.use = use;
 		builtinList = ScrollList.text((Bible b) -> b.name()).filter(Bible::name, "Search built-ins…");
@@ -161,6 +164,28 @@ public final class StyleBrowserScreen extends PickerScreen {
 		}
 	}
 
+	/** A card by Style id (the peek strip). */
+	StyleCatalog.@Nullable Card cardById(String id) {
+		return cards.get(id);
+	}
+
+	/** (PR P1) Opens the peek strip on the selected Style, stepping through the grid's current filter. */
+	public void previewSelected() {
+		StyleCatalog.Card c = selectedCard();
+		StylePeek.Target t = StylePeek.target();
+		if (c == null || t == null || Minecraft.getInstance().level == null) {
+			return;
+		}
+		List<String> ids = new ArrayList<>();
+		for (PickerEntry e : model().visible()) {
+			ids.add(e.id());
+		}
+		if (!ids.contains(c.id())) {
+			ids.add(0, c.id());
+		}
+		Minecraft.getInstance().gui.setScreen(new StylePeekScreen(this, ids, ids.indexOf(c.id()), t));
+	}
+
 	public void duplicateSelected() {
 		StyleCatalog.Card c = selectedCard();
 		if (c != null) {
@@ -251,6 +276,15 @@ public final class StyleBrowserScreen extends PickerScreen {
 			my = -1000;
 		}
 		super.extractRenderState(g, mx, my, a);
+	}
+
+	/** (PR A3, W1) Duplicate / Edit and the menus: drawn inside the picker's text-size scaling and under its "?" overlay. */
+	@Override
+	protected void extractAbove(GuiGraphicsExtractor g, int mx, int my, float a) {
+		if (U3Dev.park) {
+			mx = -1000;
+			my = -1000;
+		}
 		StyleCatalog.Card c = selectedCard();
 		int[] d = detailGeometry();
 		int ew = Button.width(font, "Edit");
@@ -259,6 +293,11 @@ public final class StyleBrowserScreen extends PickerScreen {
 		boolean stack = dw + 4 + ew > d[1];
 		int rowTop = d[2] - Button.H - 4;
 		int top = stack ? rowTop - Button.H - 4 : rowTop;
+		// (PR P1) Preview in world, a row of its own above Duplicate / Edit (in a world only)
+		boolean canPeek = Minecraft.getInstance().level != null && StylePeek.target() != null;
+		if (canPeek) {
+			top -= Button.H + 4;
+		}
 		g.nextStratum();
 		// Duplicate / Edit above "Use this style": a band of the pane's paper first, from a line boundary of the pane's detail lines
 		// (PickerScreen's layout: the big sheet, the name, the subtitle, then lines 10 px apart), so no line is cut in half under them
@@ -266,17 +305,26 @@ public final class StyleBrowserScreen extends PickerScreen {
 		int paneH = height - 8 - gg[2];
 		// (slice UI, UI-AUDIT 14 "the Style browser's detail drops its body" at GUI 4) the thumbnail height comes from lab-ui 0.5.0, a fifth of a short pane
 		int thumb = dev.larattalabs.labui.client.picker.PickerScreen.detailThumbH(paneH);
-		int first = gg[2] + 6 + (thumb > 0 ? thumb + 5 : 0) + 10 + 10 + 2;
+		// (PR A3) the pane's lines are TextUtil.lh(10) apart at the text size: snap to that grid, so no line is cut in half
+		int line = dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+		int first = gg[2] + 6 + (thumb > 0 ? thumb + 5 : 0) + line + line + 2;
 		int band = top - 3;
 		if (band > first) {
-			band = first + (band - first) / 10 * 10;
+			band = first + (band - first) / line * line;
 		}
 		g.fill(d[0] - 6, band, d[0] - 6 + d[3] - 1, d[2] - 1, UiStyle.CREAM);
 		if (c != null) {
 			edit.disabled(!c.canEdit()).tooltip(c.canEdit() ? null : c.bible().builtin() ? "Built-in: duplicate it to make your own"
 				: "Owned by a mod: duplicate it to make your own");
+			if (canPeek) {
+				preview.tooltip(StylePeek.target().sample() ? "Shown on " + StylePeek.target().name() + ": the design isn't made yet" : null);
+				preview.draw(g, font, d[0], top, d[1], Button.H, mx, my);
+			} else {
+				preview.hide();
+			}
+			int dupTop = canPeek ? top + Button.H + 4 : top;
 			if (stack) {
-				duplicate.draw(g, font, d[0], top, d[1], Button.H, mx, my);
+				duplicate.draw(g, font, d[0], dupTop, d[1], Button.H, mx, my);
 				edit.draw(g, font, d[0], rowTop, d[1], Button.H, mx, my);
 			} else {
 				duplicate.draw(g, font, d[0], rowTop, dw, Button.H, mx, my);
@@ -287,6 +335,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 			}
 		} else {
 			duplicate.hide();
+			preview.hide();
 			edit.hide();
 		}
 		if (message != null) {
@@ -368,6 +417,10 @@ public final class StyleBrowserScreen extends PickerScreen {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
 		message = null;
+		if (keysOverlay().isOpen()) {
+			return super.mouseClicked(e, doubleClick); // the overlay takes the click (PickerScreen closes it)
+		}
+		// (PR A3) the subclass's own controls are laid out in the scaled coordinates; super maps e itself
 		double mx = e.x();
 		double my = e.y();
 		if (menu != null) {
@@ -389,7 +442,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 				return true;
 			}
 		}
-		if (duplicate.mouseClicked(mx, my, e.button()) || edit.mouseClicked(mx, my, e.button())) {
+		if (duplicate.mouseClicked(mx, my, e.button()) || edit.mouseClicked(mx, my, e.button()) || preview.mouseClicked(mx, my, e.button())) {
 			return true;
 		}
 		int[] gg = gridGeometry();
@@ -420,7 +473,9 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double sx, double sy) {
-		if (menu == Menu.BUILTIN && builtinList.mouseScrolled(mx, my, sy) || menu == Menu.TAGS && tagList.mouseScrolled(mx, my, sy)) {
+		double smx = mx;
+		double smy = my;
+		if (menu == Menu.BUILTIN && builtinList.mouseScrolled(smx, smy, sy) || menu == Menu.TAGS && tagList.mouseScrolled(smx, smy, sy)) {
 			return true;
 		}
 		return super.mouseScrolled(mx, my, sx, sy);
@@ -428,6 +483,9 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		if (keysOverlay().keyPressed(e, searchFocused())) {
+			return true; // (PR W1) the "?" overlay first
+		}
 		if (menu != null) {
 			if (e.isEscape()) {
 				menu = null;
@@ -501,5 +559,22 @@ public final class StyleBrowserScreen extends PickerScreen {
 	static void open(@Nullable String current, Consumer<Bible> use) {
 		Minecraft mc = Minecraft.getInstance();
 		mc.gui.setScreen(create(current, mc.gui.screen(), use));
+	}
+
+	// (PR A3) Architect's screens follow the text size
+	@Override
+	protected String textScaleOwner() {
+		return "architect_mc";
+	}
+
+	// (PR W1) the "what's this" line and the "?" overlay (lab-ui PickerScreen draws and routes them)
+	@Override
+	protected dev.larattalabs.labui.client.help.WhatsThis whatsThis() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.tip("styles");
+	}
+
+	@Override
+	protected dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay("styles", "Styles", dev.larattalabs.architect.client.help.ArchitectHelp::styleKeys);
 	}
 }

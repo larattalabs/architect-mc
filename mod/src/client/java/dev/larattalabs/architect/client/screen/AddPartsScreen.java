@@ -96,6 +96,16 @@ final class AddPartsScreen extends U3Screen {
 	}
 
 	@Override
+	protected String helpId() {
+		return "add_parts";
+	}
+
+	@Override
+	protected String ctrlEnterVerb() {
+		return "draft";
+	}
+
+	@Override
 	protected String hint() {
 		return "Ctrl+Enter draft · Esc back";
 	}
@@ -115,13 +125,13 @@ final class AddPartsScreen extends U3Screen {
 		for (String para : lines) {
 			for (String l : TextUtil.wrapPlain(font, para, cw)) {
 				g.text(font, l, cx, y, UiStyle.clayText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			y += 4;
 		}
 		for (String l : TextUtil.wrapPlain(font, costLine(), cw)) {
 			g.text(font, l, cx, y, UiStyle.color("palette.ui.teal_text", 0xFF1E7472), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		int by = Math.min(bottom - 8 - Button.H, y + 10);
 		String why = refusal();
