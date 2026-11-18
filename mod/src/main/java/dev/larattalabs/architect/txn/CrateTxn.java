@@ -30,6 +30,28 @@ public final class CrateTxn {
 	}
 
 	public static final String TAKE = "crate.take";
+	/**
+	 * (slice T2b part 2b) The W effect {@code crate.restore}: the crate's cell back to its snapshot as the holder, with the receipt
+	 * {@code tx-n/i@restored} in the chunk attachment in the same change. Probe: the receipt, or the cell no longer a crate (APPLIED);
+	 * UNKNOWN unloaded. Data {@code dim}, {@code pos}, {@code state} (the snapshot block state), {@code nbt} (its block entity, optional).
+	 * Stable for T3b: {@link #restore(String, BlockPos, String, String)} and {@link #ADAPTER} answers it.
+	 */
+	public static final String RESTORE = "crate.restore";
+	/** (part 2b) The R effect {@code crate.release}: the crate owner's CRATE journal entries released; probe: none active (APPLIED). */
+	public static final String RELEASE = "crate.release";
+	/** (part 2b) The L effect {@code pile.credit} (keyed by {@code key} in the pile's credited set) and the O effect {@code owed.owe}. */
+	public static final String PILE_CREDIT = "pile.credit", OWE = "owed.owe";
+	/** (part 2b) The kind: a removed construction site's crate stock (and a crate-fed site's refunds) settled once, keyed. */
+	public static final String SETTLE = "crate.settle";
+
+	/** A position as the effects' {@code pos} (no TestMove: its attachment registers at class load). */
+	static JsonArray posJson(BlockPos p) {
+		JsonArray a = new JsonArray();
+		a.add(p.getX());
+		a.add(p.getY());
+		a.add(p.getZ());
+		return a;
+	}
 
 	/** The crate hold resource. */
 	public static String resource(String dim, BlockPos p) {
@@ -38,8 +60,274 @@ public final class CrateTxn {
 
 	/** The {@code crate.take} effect of {@code items} from the crate at {@code p} (a prepare effect: compensated on an abort). */
 	public static Effect.Builder take(String dim, BlockPos p, Map<String, Integer> items) {
-		return Effect.of(TAKE, EffectClass.B).prepare().items(items).move("crate", Effect.TRANSIT).data("dim", dim).data("pos", TestMove.pos(p));
+		return Effect.of(TAKE, EffectClass.B).prepare().items(items).move("crate", Effect.TRANSIT).data("dim", dim).data("pos", posJson(p));
 	}
+
+	/** The {@code crate.restore} effect of the crate cell at {@code p} back to {@code state} (and {@code nbt}). */
+	public static Effect.Builder restore(String dim, BlockPos p, String state, @Nullable String nbt) {
+		Effect.Builder b = Effect.of(RESTORE, EffectClass.W).data("dim", dim).data("pos", posJson(p)).data("state", state);
+		return nbt == null ? b : b.data("nbt", nbt);
+	}
+
+	/** The settle's dedupe key: {@code crate:<crateOwner>@x,y,z/<siteKey>} (a re-run after a crash attaches or replays, never re-takes). */
+	public static String settleKey(String crateOwner, BlockPos p, String siteKey) {
+		return "crate:" + crateOwner + "@" + p.getX() + "," + p.getY() + "," + p.getZ() + "/" + siteKey;
+	}
+
+	/**
+	 * One settle's input. {@code stock}: the crate's (taken by e0); {@code refund}: a crate-fed site's refunds (owed {@code group_refund} or
+	 * credited); {@code pile}: the recipient's pile owner, or null (owed); {@code restore}: the crate's cell restored and its journal entry
+	 * released ({@code crateOwner}); false for a refund-only settle.
+	 */
+	public record Settle(String key, String dim, BlockPos pos, Map<String, Integer> stock, Map<String, Integer> refund, String recipient,
+		@Nullable String pile, @Nullable String site, @Nullable String region, @Nullable String state, @Nullable String nbt,
+		@Nullable String crateOwner, boolean restore) {
+	}
+
+	/** What a settle answered: owed keys, what it gave back (owed or credited), a hold's detail, a refusal. */
+	public record Answer(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused, boolean replayed) {
+	}
+
+	/** The pure plan of a settle (R-1): its effects in order. The seam {@code CrateSettlePlanTest} drives. */
+	static List<Effect.Builder> plan(Settle in) {
+		List<Effect.Builder> out = new java.util.ArrayList<>();
+		if (!in.stock().isEmpty()) {
+			out.add(take(in.dim(), in.pos(), in.stock()));
+			out.add(book(in, in.key(), in.stock(), dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE));
+		}
+		if (!in.refund().isEmpty()) {
+			out.add(book(in, "refund:" + in.key(), in.refund(), dev.larattalabs.architect.site.OwedLedger.GROUP_REFUND).move("world", in.pile() != null
+				? "stock" : "owed"));
+		}
+		if (in.restore()) {
+			out.add(restore(in.dim(), in.pos(), java.util.Objects.requireNonNull(in.state()), in.nbt()));
+			out.add(Effect.of(RELEASE, EffectClass.R).data("owner", java.util.Objects.requireNonNull(in.crateOwner())));
+		}
+		return out;
+	}
+
+	static Effect.Builder book(Settle in, String key, Map<String, Integer> items, String reason) {
+		if (in.pile() != null) {
+			return Effect.of(PILE_CREDIT, EffectClass.L).items(items).move(Effect.TRANSIT, "stock").data("owner", in.pile()).data("key", key);
+		}
+		Effect.Builder b = Effect.of(OWE, EffectClass.O).items(items).move(Effect.TRANSIT, "owed").data("key", key).data("recipient", in.recipient())
+			.data("dim", in.dim()).data("pos", posJson(in.pos())).data("reason", reason);
+		if (in.site() != null) {
+			b.data("site", in.site());
+		}
+		if (in.region() != null) {
+			b.data("region", in.region());
+		}
+		return b;
+	}
+
+	/** Runs one settle. Server thread. A begin refused (held, journal unavailable) touches nothing: the crate keeps its stock. */
+	public static Answer settle(Settle in) {
+		TxnCore c = TxnServer.core();
+		List<String> res = List.of(resource(in.dim(), in.pos()));
+		TxnCore.Started s = c.begin(SETTLE, in.key(), res, in.recipient());
+		if (s.status() == TxnCore.Begin.UNAVAILABLE) {
+			return new Answer(List.of(), Map.of(), null, "journal_unavailable: " + s.detail(), false);
+		}
+		if (s.status() == TxnCore.Begin.REPLAYED) {
+			return new Answer(owedOf(in), Map.of(), null, null, true);
+		}
+		if (s.status() == TxnCore.Begin.ATTACHED) {
+			return new Answer(owedOf(in), Map.of(), s.detail() != null ? s.detail() : "attached", null, true);
+		}
+		if (s.status() == TxnCore.Begin.HELD) {
+			return new Answer(List.of(), Map.of(), null, "held: " + s.detail(), false);
+		}
+		TxnEntry t = s.entry();
+		for (Effect.Builder b : plan(in)) {
+			c.plan(t, b);
+		}
+		dev.larattalabs.architect.site.DurableFile.Outcome p = c.persist(t);
+		if (p == dev.larattalabs.architect.site.DurableFile.Outcome.REFUSED) {
+			return new Answer(List.of(), Map.of(), null, "journal_unavailable: txn.json " + p, false);
+		}
+		TxnCore.Status st = c.drive(t);
+		if (t.decision != null && t.decision.isAbort()) {
+			return new Answer(List.of(), Map.of(), null, "aborted: " + t.result.get("refused"), false); // e0 refused: the stock stayed in the crate
+		}
+		Map<String, Integer> given = new java.util.TreeMap<>(in.stock());
+		in.refund().forEach((k, v) -> given.merge(k, v, Integer::sum));
+		return new Answer(owedOf(in), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
+	}
+
+	static List<String> owedOf(Settle in) {
+		if (in.pile() != null) {
+			return List.of();
+		}
+		List<String> out = new java.util.ArrayList<>();
+		if (!in.stock().isEmpty()) {
+			out.add(in.key());
+		}
+		if (!in.refund().isEmpty()) {
+			out.add("refund:" + in.key());
+		}
+		return out;
+	}
+
+	/** {@code crate.restore}: the cell back as the holder, its receipt in the same chunk change. */
+	static final TxnKind.Adapter RESTORER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return !e.data().has("dim") || !e.data().has("pos") || !e.data().has("state") ? "dim, pos and state are required" : null;
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			ServerLevel level = level(e);
+			BlockPos p = TestMove.posOf(e);
+			LevelChunk ch = level == null ? null : TestMove.chunkFor(t, level, p);
+			if (ch == null) {
+				return Probe.UNKNOWN;
+			}
+			if (TestMove.receipts(ch).contains(e.key(t.id) + "@restored")) {
+				return Probe.APPLIED;
+			}
+			return level.getBlockEntity(p) instanceof CrateBlockEntity ? Probe.ABSENT : Probe.APPLIED; // the cell no longer a crate: restored
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			TxnServer.asHolder(t, () -> {
+				ServerLevel level = level(e);
+				BlockPos p = TestMove.posOf(e);
+				LevelChunk ch = level == null ? null : TestMove.chunkFor(t, level, p);
+				if (ch == null) {
+					throw new IllegalStateException("the crate's chunk is not loaded");
+				}
+				dev.larattalabs.architect.site.CrateSettle.restoreCell(level, p, e.data().get("state").getAsString(), e.data().has("nbt") ? e.data().get("nbt")
+					.getAsString() : null);
+				TestMove.addReceipt(ch, e.key(t.id) + "@restored"); // the same tick, the same chunk
+			});
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("a restore is never a prepare effect");
+		}
+
+		@Override
+		public String where(TxnEntry t, Effect e) {
+			return "crate cell at " + TestMove.posOf(e).toShortString();
+		}
+	};
+
+	static final TxnKind.Adapter RELEASER = new TxnKind.Adapter() {
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return dev.larattalabs.architect.site.CrateSettle.journalActive(e.data().get("owner").getAsString()) ? Probe.ABSENT : Probe.APPLIED;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			dev.larattalabs.architect.site.CrateSettle.releaseJournal(e.data().get("owner").getAsString());
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("a release is never a prepare effect");
+		}
+
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("owner") ? null : "owner is required";
+		}
+	};
+
+	static final TxnKind.Adapter CREDITOR = new TxnKind.Adapter() {
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return dev.larattalabs.architect.site.CrateSettle.credited(e.data().get("owner").getAsString(), e.data().get("key").getAsString()) ? Probe.APPLIED
+				: Probe.ABSENT;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			MinecraftServer s = TxnServer.server();
+			if (s == null) {
+				throw new IllegalStateException("no server");
+			}
+			dev.larattalabs.architect.site.CrateSettle.credit(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.items());
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("a credit is never a prepare effect");
+		}
+
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("owner") && e.data().has("key") && !e.items().isEmpty() ? null : "owner, key and items are required";
+		}
+	};
+
+	static final TxnKind.Adapter OWER = new TxnKind.Adapter() {
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			String key = e.data().get("key").getAsString();
+			return dev.larattalabs.architect.site.OwedLedger.applied(e.key(t.id)) || dev.larattalabs.architect.site.OwedLedger.known(key) ? Probe.APPLIED
+				: Probe.ABSENT;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			com.google.gson.JsonObject d = e.data();
+			BlockPos p = TestMove.posOf(e);
+			MinecraftServer s = TxnServer.server();
+			long tick = s == null ? 0 : s.getTickCount();
+			var entry = new dev.larattalabs.architect.site.OwedLedger.Entry(d.get("key").getAsString(), d.get("recipient").getAsString(), d.get("dim")
+				.getAsString(), p.getX(), p.getY(), p.getZ(), e.items(), d.get("reason").getAsString(), tick, System.currentTimeMillis(), d.has("site") ? d
+					.get("site").getAsString() : null, d.has("region") ? d.get("region").getAsString() : null);
+			dev.larattalabs.architect.site.OwedLedger.owe(entry, e.key(t.id));
+			dev.larattalabs.architect.site.Stockpiles.owedChanged();
+			OwedTxn.changed(entry);
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("an owe is never a prepare effect");
+		}
+
+		@Override
+		public @Nullable String invalid(Effect e) {
+			com.google.gson.JsonObject d = e.data();
+			return d.has("key") && d.has("recipient") && d.has("dim") && d.has("pos") && d.has("reason") && !e.items().isEmpty() ? null
+				: "key, recipient, dim, pos, reason and items are required";
+		}
+	};
+
+	static @Nullable ServerLevel level(Effect e) {
+		MinecraftServer s = TxnServer.server();
+		return s == null ? null : Sites.levelOf(s, e.data().get("dim").getAsString());
+	}
+
+	public static final TxnKind SETTLE_KIND = new TxnKind() {
+		@Override
+		public String name() {
+			return SETTLE;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public TxnKind.Adapter adapter(Effect e) {
+			return switch (e.op()) {
+				case TAKE -> ADAPTER;
+				case RESTORE -> RESTORER;
+				case RELEASE -> RELEASER;
+				case PILE_CREDIT -> CREDITOR;
+				case OWE -> OWER;
+				default -> null;
+			};
+		}
+	};
 
 	public static final TxnKind.Adapter ADAPTER = new TxnKind.Adapter() {
 		@Nullable ServerLevel level(Effect e) {
