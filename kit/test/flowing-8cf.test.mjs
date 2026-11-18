@@ -127,3 +127,19 @@ test('8c (the v0.81.0 review\'s P1): a check for a mod without flowingWater answ
   const on = await H.checkPlanLocal(plan, o);
   for (const id of rivers) assert.notEqual(on.check.parts.find((q) => q.part === id).class, 'unsupported', 'the kit\'s default: on');
 });
+
+test('8c round 2 (P1-4): the kit model on the Java unit\'s scenes: a 48-high falling column stays falling; a waterlogged chest feeds level 1 beside it', async () => {
+  const { steady } = await import('../lib/fluids/sim.mjs');
+  const { wlMask } = await import('../lib/fluids/world.mjs');
+  const k = (x, y, z) => `${x},${y},${z}`;
+  // a foreign source at 0,113,0 over open air down to a floor at 63
+  const col = steady((x, y) => (y <= 63 ? 'stop' : 'open'), [[0, 113, 0]], 'water', { order: 'yxz', onCap: 'result' });
+  for (let y = 64; y <= 112; y++) assert.equal(col.cells.get(k(0, y, 0)), 8, `falling at ${y}`);
+  // a waterlogged chest at 0,64,0 (no face mask: every face open) on a flat floor: it feeds 1,64,0 at level 1 (amount 7)
+  assert.equal(wlMask('minecraft:chest[facing=north,type=single,waterlogged=true]'), 0);
+  const at = (x, y, z) => (y <= 63 ? 'stop' : x === 0 && y === 64 && z === 0 ? 'stop' : 'open');
+  // (a body's source 2 cells off wakes it, as a river's flow does; the chest then feeds its other side at level 1, past the body's own 3)
+  const st = steady(at, [[0, 64, -2]], 'water', { order: 'yxz', onCap: 'result', wl: (x, y, z) => (x === 0 && y === 64 && z === 0 ? 0 : null) });
+  assert.equal(st.cells.get(k(1, 64, 0)), 1, 'beside the chest: level 1 (amount 7), the chest feeding it');
+  assert.equal(st.cells.get(k(0, 64, 1)), 1, 'its far side too');
+});
