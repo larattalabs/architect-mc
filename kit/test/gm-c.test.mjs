@@ -44,7 +44,7 @@ test('catalogue 16: connector.drawbridge flips reserved -> supported (schemaVers
   assert.deepEqual([d.added.filter((x) => x.id !== 'program.authored' && x.id !== 'form.arch_span' && x.id !== 'feature.cave' && x.id !== 'ladder.port'), d.removed, d.retired, d.otherStateChanges], [[], [], [], []]); // ((7cF) program.authored: f7c-foundation.test.mjs; (7c PF) form.arch_span: pf.test.mjs)
   // ((7bF, N-7b-1) form.hidden_room and rule.suspended re-reserved until 7c are f7b-foundation.test.mjs's)
   // ((7b SL) layout.elevated's flip is sl.test.mjs's)
-  const changed = golden.entries.filter((e) => !['form.hidden_room', 'rule.suspended', 'layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct', 'form.arch_span', 'feature.cave', 'ladder.port', 'channel.course'].includes(e.id) && JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
+  const changed = golden.entries.filter((e) => !['form.hidden_room', 'rule.suspended', 'layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct', 'form.arch_span', 'feature.cave', 'ladder.port', 'channel.course', 'form.waterfall'].includes(e.id) && JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
   assert.deepEqual(changed, ['connector.drawbridge']);
   const e = golden.entries.find((x) => x.id === 'connector.drawbridge');
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);

@@ -168,7 +168,7 @@ export function emitPond(r, o) {
   // ((6c HY, §1.5) a course leaving the pond: its overflows open side shell cells at the surface; only when there are any, so an H pond's
   // body is as before)
   const ov = Array.isArray(o.overflow) && o.overflow.length ? { overflow: o.overflow, raised: true } : {};
-  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null, ...ov, ...(Array.isArray(o.decor) && o.decor.length ? { decor: o.decor } : {}) });
+  const rec = r.fluidBody(cells, { id: o.id, part: o.part ?? null, kind: o.kind ?? 'pond', fluid, stage: o.stage, level, shellRole, ice: o.ice ?? null, outlets: exits, _unsafe: o._unsafe ?? null, ...ov, ...(Array.isArray(o.decor) && o.decor.length ? { decor: o.decor } : {}), ...(typeof o.flow === 'string' ? { flow: o.flow } : {}) });
   return Object.assign(rec, { rect: o.rect, level, depth, cols: cols.length, rim, shellStates: shellStatesOf(rec, shellRole) });
 }
 

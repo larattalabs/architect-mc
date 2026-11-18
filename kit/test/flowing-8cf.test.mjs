@@ -72,7 +72,7 @@ for (const [name, mod, file, kinds] of [['river_demo', river, 'river_demo.mjs', 
     assert.deepEqual(ops.map((o) => [o.id, o.kind ?? null]).sort(), [[`${part}_r1`, kinds[0]], [`${part}_r2`, null]], 'the head carries its kind; the tail is a plain HY body');
     assert.ok(p.ir.requires.includes('flowingWater') && p.ir.requires.includes('courses'));
     const head = ops.find((o) => o.id === `${part}_r1`);
-    if (name === 'river_demo') assert.equal(head.flow, 'current'); else { assert.equal(head.lip, 'form'); assert.equal(head.on.part, 'fall_island'); }
+    if (name === 'river_demo') assert.equal(head.flow, 'current'); else { assert.equal(head.lip, 'form'); assert.equal(head.on.part, 'isle'); }
     const spill = new Set(fromRuns(head.spill).map(k3));
     const flowing = head.predicted.filter((q) => q[3] > 0);
     assert.ok(flowing.length >= (name === 'river_demo' ? 100 : 30), `a long flow (${flowing.length} cells)`);

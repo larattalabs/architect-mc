@@ -136,6 +136,7 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   flipped.add('feature.cave'); // ((slice CAVE) feature.cave added: cave.test.mjs)
   flipped.add('ladder.port'); // ((slice PL2) ladder.port added: pl2.test.mjs)
   flipped.add('channel.course'); // ((8c RV) flow current in its limits: rv.test.mjs)
+  flipped.add('form.waterfall'); // ((8c RV-b) lip form's limits: rv-b.test.mjs)
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);

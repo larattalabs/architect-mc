@@ -42,7 +42,9 @@ export function handRiverSpec(part) {
   const role = ROLES.includes(h.role) ? h.role : 'river';
   const origin = Array.isArray(h.origin) && h.origin.length === 2 && h.origin.every(Number.isInteger) ? h.origin : null;
   const variant = VARIANTS.includes(h.variant) ? h.variant : 'none';
-  return { role, origin, variant };
+  // (the host form's id for the header's `on`: explicit, the island's own part (a hand IR has no plan part for its island); default 'isle')
+  const on = typeof h.on === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(h.on) ? h.on : 'isle';
+  return { role, origin, variant, on };
 }
 
 const box = (x0, y0, z0, x1, y1, z1) => { const out = []; for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) out.push([x, y, z]); return out; };
@@ -156,7 +158,7 @@ export function emit(K, p, res) {
       (r.meta.courses ??= []).push({ id: p.id, part: p.id, kind: 'river', look: 'built', flow: 'current', bodies: L.ids, steps: Array.from({ length: RUNS }, (_, k) => ({ kind: 'riffle', run: RUN, drop: 1, k })), ends: [{ end: 'from', kind: 'spring', ref: L.ids[0] }, { end: 'to', kind: 'pool', ref: L.ids[1] }] });
     } else {
       const L = fallLayout(sp.origin, res.g, sp.variant, p.id);
-      const island = `${p.id}_island`.slice(0, 48);
+      const island = sp.on; // (the island's part is named by the spec's `on`: the header's on: {part} names it explicitly)
       solid(r, island, stage, [L.island]);
       solid(r, `${p.id}_plinth`, stage, [L.plinth]);
       carveAll(r, `${p.id}_carve`, stage, L.carve);

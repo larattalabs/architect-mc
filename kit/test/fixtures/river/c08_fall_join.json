@@ -1,0 +1,67 @@
+{
+ "about": "(8c RV-b, N-8c-3) always a basin, 3 deep past a 24 drop: the island floats over a lake 2 deep that fills the claim, and its fall (basin join) would land in it: NO_FEATURE {limit: basinDepth, min: 3, value: 2}; rv-b.test deepens the lake to 3 and the fall joins it",
+ "terrain": {
+  "W": 128,
+  "D": 128,
+  "x0": 4000,
+  "z0": 4000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 4000,
+    "x1": 4127,
+    "z0": 4000,
+    "z1": 4127,
+    "y": 61,
+    "water": 2
+   }
+  ]
+ },
+ "anchors": {
+  "isle_at": [
+   4064,
+   65,
+   4064
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "fall",
+  "class": "refused"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rvb_c08",
+  "zones": [],
+  "forms": [
+   {
+    "id": "isle",
+    "kind": "floating_island",
+    "required": true,
+    "label": "The sky isle",
+    "where": {
+     "near": {
+      "anchor": "isle_at",
+      "within": 8
+     }
+    },
+    "size": {
+     "preset": "M"
+    }
+   },
+   {
+    "id": "fall",
+    "kind": "waterfall",
+    "required": true,
+    "label": "the isle's fall",
+    "lip": "form",
+    "on": {
+     "part": "isle"
+    },
+    "basin": "join"
+   }
+  ],
+  "connectors": [],
+  "rules": []
+ }
+}

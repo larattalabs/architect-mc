@@ -31,7 +31,7 @@ export function fallPlan(claim, P = {}) {
   const variant = P.variant ?? 'none';
   const anchors = { fi_head: [o[0] + 4, 65, o[1]], fi_basin: [o[0] + 12, 65, o[1]] };
   const connectors = [{ id: 'fall', kind: 'channel', label: 'a fall off a floating island into a basin', look: 'built', from: { anchor: 'fi_head' }, to: { anchor: 'fi_basin' },
-    ext: { 'architect_mc:unsafe': { handRiver: { role: 'fall', origin: o, variant } } } }];
+    ext: { 'architect_mc:unsafe': { handRiver: { role: 'fall', origin: o, variant, on: 'isle' } } } }];
   return { plan: { schemaVersion: 'plan/0', planId: `fall_island_${variant}`, zones: [], forms: [], connectors, rules: [] }, anchors, origin: o };
 }
 

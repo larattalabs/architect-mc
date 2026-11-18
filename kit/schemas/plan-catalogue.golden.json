@@ -1060,7 +1060,12 @@
      1,
      5
     ],
-    "sculpt": 12
+    "sculpt": 12,
+    "form": {
+     "drop": 48,
+     "perRegion": 4,
+     "deepPast": 24
+    }
    }
   },
   {

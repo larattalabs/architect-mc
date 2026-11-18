@@ -27,8 +27,9 @@ import { FLAG_FROZEN, FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mj
 import { bodiesMark, bodiesRollback, flagsAt, fluidRolesOf, grow, inside, intIn, linesBody, locatorOf, locatorRefusal, meets, protectedMet, reachMeetsKeep,
   readParams, rectArr, scanRects, shellBlock, sketchPoint, spawnAvoid, takenRects, volumeAnswer, volumeKeep, MARGIN, refusal, leakRefusal } from './place.mjs';
 import { shellCheck, bodyAnswer, bodyId, emitPond, iceFor, naturalOf, shellStatesOf } from './pond.mjs';
+import { answerForm, emitForm, resolveFormFall } from './formfall.mjs';
 
-export const WATERFALL = Object.freeze({ width: 3, drop: 6, pool: 3, sculpt: 12, basinRows: 4, basinDepth: 2, maxRough: 1, maxRoughExisting: 3 });
+export const WATERFALL = Object.freeze({ width: 3, drop: 6, pool: 3, sculpt: 12, basinRows: 4, basinDepth: 2, maxRough: 1, maxRoughExisting: 3, maxDrop: 24 });
 const DIRS = Object.freeze({ n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] });
 const FACINGS = Object.freeze(['n', 'e', 's', 'w']);
 /** A frame's lane vector (right of the facing). */
@@ -193,6 +194,9 @@ export function siteOf(C, part, sp, { lips = null, ignore = {} } = {}) {
 export function resolve(C, p) {
   const env = C.env, part = p.part;
   const sp = waterfallSpec(part);
+  // ((8c RV-b) lip form: a fall off a plan form (formfall.mjs); every other lip keeps H's drop of 24 (the schema allows 48 for lip form)
+  if (part.lip === 'form') return resolveFormFall(C, p, sp);
+  if (sp.drop > WATERFALL.maxDrop) return { klass: 'refused', notes: sp.notes, reasons: [{ code: 'LIMIT', message: `drop ${sp.drop}: a waterfall off the land drops at most ${WATERFALL.maxDrop} (a fall off a form, lip form, up to 48)`, evidence: { limit: 'drop', max: WATERFALL.maxDrop, value: sp.drop, lip: sp.lip } }] };
   if (sp.fluid === 'lava') {
     const frag = { ...part, params: Object.fromEntries(Object.entries(part.params ?? {}).filter(([k]) => k !== 'fluid')) };
     const water = resolve(C, { ...p, part: frag });
@@ -321,6 +325,7 @@ export function emitWaterfall(r, o) {
 
 /** Write the part. */
 export function emit(K, p, res) {
+  if (res.site?.lip === 'form') return emitForm(K, p, res);
   const r = K.r, env = K.env, sp = res.spec;
   const F = frameOf(res.frame.O, res.frame.facing);
   const m = bodiesMark(r);
@@ -355,6 +360,7 @@ const smallerDropAtEmit = () => null;
 
 /** The answer's fields. */
 export function answer(K, p, res) {
+  if (res.site?.lip === 'form') return answerForm(K, p, res);
   const e = res.emitted;
   if (!e) return null;
   const vol = volumeAnswer(K.r, e.bodies);

@@ -368,7 +368,7 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const claim = r.claim;
   // ((8c RV) a wm body lifts every simulated source conversion into its written sources (the 8c contract §2.2), until none is left; the
   // op lists them (8cF's `converted`). opts.lift false: not lifted (M25:convert names them)
-  if ((opts.model ?? (typeof opts.flow === 'string' ? WM_MODEL : undefined)) === WM_MODEL && opts.lift !== false) {
+  if ((opts.model ?? (opts.flow === 'current' ? WM_MODEL : undefined)) === WM_MODEL && opts.lift !== false) {
     const lifted = liftConversions(r, cellsIn, opts, fluid);
     if (lifted.length) { cellsIn = [...cellsIn, ...lifted]; opts = { ...opts, converted: [...(opts.converted ?? []), ...lifted] }; }
   }
@@ -470,8 +470,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (vb && vb.minX <= vbox.minX && vb.minY <= vbox.minY && vb.minZ <= vbox.minZ && vb.maxX >= vbox.maxX && vb.maxY >= vbox.maxY && vb.maxZ >= vbox.maxZ) vbox = { minX: vb.minX, minY: vb.minY, minZ: vb.minZ, maxX: vb.maxX, maxY: vb.maxY, maxZ: vb.maxZ };
   const vcells = (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1);
   let volume = null, volumeState = 'off', levelsWhy = null;
-  // ((8cF, the coordinator's mapping) a plan's `flow: "current"` (the contract's name) is WM's model, internal: model 'wm')
-  const model = opts.model ?? (opts.flow === 'current' ? WM_MODEL : undefined); // (the coordinator: only a current is WM's; "level" stays a plain HY body)
+  // ((8cF, the coordinator's mapping; RV-b: only `flow: "current"`) a river's current is WM's model, internal: model 'wm'; every other
+  // flow ("level": a basin, a terminal pool) stays a plain HY body with its 8c members)
+  const model = opts.model ?? (opts.flow === 'current' ? WM_MODEL : undefined);
   const wm = model === WM_MODEL;
   if (model !== undefined && !wm) throw new Error(`fluidBody ${id}: model must be '${WM_MODEL}' or absent`);
   if (opts.volume !== false) {
