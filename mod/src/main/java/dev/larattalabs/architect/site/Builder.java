@@ -2558,6 +2558,10 @@ public final class Builder {
 			}
 		}
 		Architect.LOGGER.info("{} {}", paused ? "Paused" : "Resumed", id);
+		// (8b EV) a pause is a status edge (a road's record is not a site's: marked here for both)
+		String owner = s != null ? s.owner() : i.owner();
+		Site.Member pm = s != null ? s.member() : i.member();
+		dev.larattalabs.architect.apiimpl.SettlementSignals.mark(owner, dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(pm == null ? null : pm.group()));
 	}
 
 	private static Site requireBuilding(String id) throws Sites.SiteException {

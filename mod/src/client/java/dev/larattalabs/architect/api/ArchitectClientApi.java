@@ -77,4 +77,16 @@ public interface ArchitectClientApi {
 	default void clearRegionPreview() {
 		throw new UnsupportedOperationException("ArchitectClientApi.clearRegionPreview needs Architect API 1.9.0");
 	}
+
+	/**
+	 * (8b CK, feature {@code "connectorCheck"}) Starts the plot marker's connector mode in mark-only mode: the same ghost, HUD and F-cycle
+	 * as a player's connector, but Enter on the second end hands the marks back instead of placing ({@code done} gets the link; null when
+	 * the player cancels). {@code kind} as {@link dev.larattalabs.architect.api.ConnectorRequest#kind}; {@code firstEnd} pre-marks the first
+	 * end, or null. Close any screen first: the marker needs the world view. The caller then checks and places it through its own server
+	 * action ({@code Sites.checkConnector}, {@code Sites.placeConnector}). Client thread. Since NEXT.
+	 */
+	default void markConnector(String kind, net.minecraft.core.@org.jspecify.annotations.Nullable BlockPos firstEnd,
+		java.util.function.Consumer<@org.jspecify.annotations.Nullable MarkedLink> done) {
+		throw new UnsupportedOperationException("ArchitectClientApi.markConnector needs Architect API NEXT (feature connectorCheck)");
+	}
 }

@@ -65,6 +65,17 @@ public final class ClientApiImpl implements ArchitectClientApi {
 		dev.larattalabs.architect.client.placement.RegionGhost.show(planId, stage);
 	}
 
+	/** (8b CK) The plot marker's connector mode, mark-only. */
+	@Override
+	public void markConnector(String kind, net.minecraft.core.@org.jspecify.annotations.Nullable BlockPos firstEnd,
+		java.util.function.Consumer<dev.larattalabs.architect.api.@org.jspecify.annotations.Nullable MarkedLink> done) {
+		if (kind == null || done == null) {
+			throw new IllegalArgumentException("markConnector needs a kind and a callback");
+		}
+		dev.larattalabs.architect.client.placement.PlotMarker.startMarkConnector(kind.toLowerCase(java.util.Locale.ROOT), firstEnd == null ? null : new int[] {
+			firstEnd.getX(), firstEnd.getY(), firstEnd.getZ()}, done);
+	}
+
 	@Override
 	public void clearRegionPreview() {
 		dev.larattalabs.architect.client.placement.RegionGhost.hide();

@@ -339,10 +339,51 @@ steps.survival = async () => {
   out.check = { overall: ck.check?.overall, survival: ck.check?.survival, class: part?.class, sv };
   check(ck.check?.survival === true && ck.check?.overall === 'READY' && part?.class === 'fits' && sv?.free === 0 && sv?.held > 0 && sum(sv?.bom) > 0,
     `the connector's plan checked in survival: ${ck.check?.overall}; link ${part?.class}: one target, free ${sv?.free}, held ${sv?.held}, its bill ${json(sv?.bom)}`, out.check);
+  // (8b final check P2) far from the built land (chunks never generated): the dry run refuses NOT_GENERATED and generates nothing; after the
+  // area is generated (a generating plan check of the very plan, no key), the same key checks afresh (not the frozen count), and the place too
+  {
+    const far = (a) => [a[0] + 20000, a[1], a[2] + 20000];
+    const fa = far(s.wp.anchors.cx_from), fb = far(s.wp.anchors.cx_to);
+    const g0 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
+    out.farBefore = g0;
+    check(g0.fits === false && g0.refusal?.reason === 'NOT_GENERATED', `(8b) far, never generated: checkConnector ${g0.refusal?.reason} (${g0.refusal?.message})`, g0);
+    // generate the claim and its survey margin fully (FULL status: what "generated" means to the check), by forceloading it, then let go
+    const FP = await call('dev.cx.plan', { kind: 'rope_bridge', from: fa, to: fb }, 60_000);
+    const [cx0, cz0, cx1, cz1] = FP.claim;
+    const fl = `${cx0 - 48} ${cz0 - 48} ${cx1 + 48} ${cz1 + 48}`;
+    await call('dev.command', { cmd: `forceload add ${fl}` }, 600_000);
+    await new Promise((res) => setTimeout(res, 15_000));
+    await call('dev.command', { cmd: `forceload remove ${fl}` }, 600_000);
+    const g1 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
+    out.farAfter = g1;
+    check(g1.refusal?.reason !== 'NOT_GENERATED', `(8b) the area generated: the same key checks afresh: fits ${g1.fits}${g1.refusal ? `, ${g1.refusal.reason} (${g1.refusal.message})` : ''}`, g1);
+    const gp = await place(s, { from: fa, to: fb, opKey: 'gate.cx.far', typed: true, maxBill: {} });
+    out.farPlace = gp;
+    check(!(gp.refusals ?? []).some((q) => q.reason === 'NOT_GENERATED'), `(8b) then the place under the key is not refused NOT_GENERATED: ${json(gp.refusals?.map((q) => q.reason))}`, gp);
+  }
+  // (8b CK) the dry run: checkConnector fits with a quote equal to the check's bill, item for item; under a cap one short it does not fit
+  const dc = await call('dev.cx.check', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: 'gate.cx', typed: true }, 1_800_000);
+  out.dryRun = dc;
+  check(dc.fits === true && G.same(dc.quote?.bom, sv?.bom), `(8b CK) Sites.checkConnector: fits ${dc.fits}, its quote ${json(dc.quote?.bom)} == the check's bill ${json(sv?.bom)}`, dc);
   const crateAt = await G.pile(ctx, s, 3);
+  // (8b, Steward's HARD ask) a survival connector is capped as a realise is: a maxBill one under its bill is refused BILL_CAP at put-down,
+  // nothing written (the crates aside); a lot cap is refused too (a connector has no lots); the real place below runs at exactly its bill
+  const first = Object.keys(sv?.bom ?? {}).sort()[0];
+  const under = { ...(sv?.bom ?? {}), [first]: Math.max(0, (sv?.bom?.[first] ?? 0) - 1) };
+  const dcc = await call('dev.cx.check', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: 'gate.cx.capped', typed: true, maxBill: under }, 1_800_000);
+  check(dcc.fits === false && dcc.refusal?.reason === 'BILL_CAP', `(8b CK) checkConnector under the cap: fits ${dcc.fits}, ${dcc.refusal?.reason} (${dcc.refusal?.message})`, dcc);
+  const rc = await place(s, { opKey: 'gate.cx.capped', typed: true, maxBill: under });
+  out.capped = rc;
+  const ec = (await G.diff(ctx, box, pre)).list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  check(rc.placed === false && rc.refusals?.[0]?.reason === 'BILL_CAP' && ec.length === 0,
+    `(8b) maxBill one ${first} under the bill: refused ${rc.refusals?.[0]?.reason} (${rc.refusals?.[0]?.message}), ${ec.length} cells written`, { rc, ec: ec.slice(0, 8) });
+  const rl = await place(s, { opKey: 'gate.cx.lotcap', typed: true, maxBill: sv?.bom ?? {}, maxBillPerLot: { lot1: { [first]: 1 } } });
+  out.lotCapped = rl;
+  check(rl.placed === false && rl.refusals?.[0]?.reason === 'BILL_CAP' && /lot1/.test(rl.refusals?.[0]?.message ?? ''),
+    `(8b) a lot cap on a connector (it has no lots): refused ${rl.refusals?.[0]?.reason} (${rl.refusals?.[0]?.message})`, rl);
   const C = new G.Conservation(ctx, box);
   await C.start();
-  const r = await place(s);
+  const r = await place(s, { typed: true, maxBill: sv?.bom ?? {}, ext: { 'gate:cx': 'capped-at-bill' } });
   out.place = r;
   check(r.placed === true && /^\S+$/.test(r.siteId ?? '') && (r.notes ?? []).some((n) => /survival: a construction site/.test(n)) && (r.notes ?? []).some((n) => n.startsWith('its bill: ')),
     `Sites.placeConnector (AUTO) in survival: placed ${r.siteId}, a construction site (${json(r.notes)})`, r);

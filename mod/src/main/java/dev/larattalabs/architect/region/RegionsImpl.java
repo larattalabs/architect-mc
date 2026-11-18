@@ -2974,6 +2974,13 @@ public final class RegionsImpl implements Regions {
 		return l == null ? Optional.empty() : Optional.of(view(l));
 	}
 
+	/** (8b LY) {@code Regions.layout} ({@link Layouts}). */
+	@Override
+	public Optional<dev.larattalabs.architect.api.RegionLayout> layout(String regionId) {
+		Live l = REGIONS.get(regionId);
+		return l == null ? Optional.empty() : Optional.of(Layouts.of(l));
+	}
+
 	@Override
 	public List<RegionView> list(@Nullable String owner) {
 		List<RegionView> out = new ArrayList<>();
@@ -2993,8 +3000,7 @@ public final class RegionsImpl implements Regions {
 			SiteGroupRec.StageRec sr = g == null ? null : g.stage(name);
 			st.add(new StageProgress(name, sr == null ? Stage.State.PLANNED : sr.state(), s.tilesDone, s.tilesTotal, s.cells));
 		});
-		List<LotState> lots = new ArrayList<>();
-		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state, Revisions.lotRevision(ls))));
+		List<LotState> lots = LotViews.lots(l, server);
 		Refusal waiting = null;
 		for (var e : r.drift.entrySet()) {
 			if (e.getValue().startsWith("held:")) {
@@ -3049,14 +3055,18 @@ public final class RegionsImpl implements Regions {
 		}
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
-			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason);
+			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason, r.removalStop == dev.larattalabs.architect.api.RemovalStop.NONE ? null
+				: r.removalStopCause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : r.removalStopCause,
+			dev.larattalabs.architect.apiimpl.StatusViews.beside(r.ext), dev.larattalabs.architect.apiimpl.StatusViews.land(r.ext));
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
 	static RegionView tombView(RegionRec r) {
 		int[] c = r.claim;
 		List<LotState> lots = new ArrayList<>();
-		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
+		// (8b BS) a removed region's lots read removed
+		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state, Revisions.lotRevision(ls), null, dev.larattalabs.architect.api.BuildStatus.of(
+			dev.larattalabs.architect.api.BuildStatus.REMOVED, Revisions.lotRevision(ls)))));
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
 			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r), r.buildHitList(), r.beside);
 	}
@@ -3387,7 +3397,7 @@ public final class RegionsImpl implements Regions {
 				BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
 			}
 			l.rec().state = RegionState.REMOVING;
-			finishRemoval(l, true, System.currentTimeMillis(), "orphan record", false);
+			finishRemoval(l, true, System.currentTimeMillis(), "orphan record", false, null);
 			return CompletableFuture.completedFuture(new RemoveResult(true, List.of(), Map.of(), 0, 0, Map.of(), List.of()));
 		}
 		// (6c D3, Steward's RC) the owner rule first: a refused caller changes nothing (the region's state and its sites' stay as they
@@ -3406,6 +3416,7 @@ public final class RegionsImpl implements Regions {
 		l.rec().state = RegionState.REMOVING;
 		l.rec().removalStop = dev.larattalabs.architect.api.RemovalStop.NONE; // (DR-S) this removal's stop, when it stops, replaces it
 		l.rec().removalStopReason = null;
+		l.rec().removalStopCause = null;
 		save(l);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 		// (C23) the region's end state is set by groupEnded (Groups.GROUP_ENDED), from the removal itself, not from this future:
@@ -3421,7 +3432,7 @@ public final class RegionsImpl implements Regions {
 					String why = e != null ? "it failed: " + (e.getCause() != null ? e.getCause() : e) : String.join("; ", res.blockers());
 					Runnable end = () -> {
 						if (!dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
-							finishRemoval(l, false, 0L, why, true); // (answered at once: nothing was written)
+							finishRemoval(l, false, 0L, why, true, dev.larattalabs.architect.api.RemovalStopCause.OTHER); // (answered at once: nothing was written)
 						}
 					};
 					if (s.isSameThread()) {
@@ -3453,24 +3464,30 @@ public final class RegionsImpl implements Regions {
 			if (l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId)) {
 				SiteGroupRec g = Sites.group(groupId);
 				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(), String.join("; ", res.blockers()),
-					!res.removed() && dev.larattalabs.architect.site.Groups.endedUntouched(groupId));
+					!res.removed() && dev.larattalabs.architect.site.Groups.endedUntouched(groupId), res.stopCause());
 			}
 		}
 	}
 
 	/** (DR-S) Records how a removal stopped: NOT_STARTED (nothing written: the region keeps its state) or PARTIAL, with its reason. */
 	static void stopOf(RegionRec r, boolean notStarted, @Nullable String why) {
-		r.removalStop = notStarted ? dev.larattalabs.architect.api.RemovalStop.NOT_STARTED : dev.larattalabs.architect.api.RemovalStop.PARTIAL;
-		r.removalStopReason = why == null || why.isBlank() ? null : why;
+		stopOf(r, notStarted, why, null);
 	}
 
-	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why, boolean untouched) {
+	/** (S-DRS-1) {@link #stopOf} with the stop's typed cause (null: OTHER). */
+	static void stopOf(RegionRec r, boolean notStarted, @Nullable String why, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
+		r.removalStop = notStarted ? dev.larattalabs.architect.api.RemovalStop.NOT_STARTED : dev.larattalabs.architect.api.RemovalStop.PARTIAL;
+		r.removalStopReason = why == null || why.isBlank() ? null : why;
+		r.removalStopCause = cause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : cause;
+	}
+
+	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why, boolean untouched, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
 		if (REGIONS.get(l.rec().id) != l || l.rec().state != RegionState.REMOVING) {
 			return;
 		}
 		RegionState before = BEFORE_REMOVAL.remove(l.rec().id);
 		if (!removed) {
-			stopOf(l.rec(), untouched && before != null, why); // (DR-S) NOT_STARTED apart from PARTIAL, typed on RegionView
+			stopOf(l.rec(), untouched && before != null, why, cause); // (DR-S) NOT_STARTED apart from PARTIAL, typed on RegionView
 		}
 		if (!removed && untouched && before != null) {
 			// (6c D3, Steward's RC) stopped before it wrote anything: the region stays as it was
@@ -3545,6 +3562,7 @@ public final class RegionsImpl implements Regions {
 			note.addProperty("dangling", true);
 			note.addProperty("since", at);
 			o.rec().ext.add(EXT_BESIDE, note);
+			dev.larattalabs.architect.apiimpl.SettlementSignals.mark(o.rec().owner, o.rec().id); // (8b EV) a beside/land ext change
 			// (6c D3, §6, S-D3-3) its land: standingRemoved set, inside and outside kept (the cells are still the district's)
 			if (o.rec().ext.get(DistrictLand.EXT_LAND) instanceof JsonObject land) {
 				land.addProperty("standingRemoved", at);
@@ -3575,7 +3593,7 @@ public final class RegionsImpl implements Regions {
 			Architect.LOGGER.info("Region {} was REMOVING with no removal of group {} in progress: it ends {}", l.rec().id, l.rec().groupId,
 				removed ? "REMOVED (the group is removed)" : "PARTIAL");
 			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(),
-				"the world was loaded with the region REMOVING and no removal of its group in progress (remove it again)", false);
+				"the world was loaded with the region REMOVING and no removal of its group in progress (remove it again)", false, null);
 		}
 	}
 

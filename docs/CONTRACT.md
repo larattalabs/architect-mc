@@ -33473,3 +33473,45 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   'levels'}`, and adds UNSETTLED to plan.json's codes (8cF; `unsettledRefusal` raises it today only for a wm body). SE sets `maxTicks`
   (settleBound x 4), the caps and per-segment W3 (W3 still runs H's steady for a wm body). CL reads `foreign` for W5 and `refed`. VS
   writes v4; 8cF/VS add both kinds to KINDS_FORMAT2 and IrStale together.
+## Phase 8b: settlement data APIs (as built, slice/8b; the draft and Steward's review are in the coordinator's notes)
+
+The rule: Architect owns the data and the actions; Steward owns every settlement screen. Everything is additive, binary compatible and
+stamped `Since NEXT`; no new Reason, no new store. Decisions: no Architect history store (N-8b-1); the Regions view deferred (N-8b-2);
+Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N-8b-4).
+
+**For Steward (what to read, by feature):**
+- `connectorCheck`: `ConnectorRequest` gains `owner`, `dimension`, `actor` (a `ServerPlayer`, as `ApprovedRealise`), `maxBill`,
+  `maxBillPerLot` and `ext`; typed owner and dimension win over the params keys. A survival connector is capped exactly as a realise
+  (`BILL_CAP` at put-down, nothing written; the `bill_cap` hold on later draws); a lot cap on a connector is `BILL_CAP` (it has no lots).
+  `Sites.checkConnector` is the dry run (same check under the opKey, quote against the cap); `ArchitectClientApi.markConnector` is the
+  mark-only plot marker (Enter hands back a `MarkedLink`, Esc null). Both futures complete on the server thread; a bad request is answered
+  with a future already complete.
+- `buildStatus`: `BuildStatus(state, reason, waitsOn, needs, moreUnits, since, say, revision, capScope)` on `SiteView.status`,
+  `LotState.status` (+ `box`), `PartBuild.status` (+ `lot`) and `ItemEvent.status`, never null on the first three. States: planned, placing,
+  building, waiting, paused, built, removing, removed, failed (no `updating`: a SiteView fact). Reasons: materials, bill_cap, fill_blocked,
+  txn_held, terrain, stage, approval, not_loaded, occupied, player_in_box, `failed:<Reason>`. `waitsOn` is always a typed id (terrain: the
+  part; stage: the target waited for; bill_cap and the target waits: the target). A maxBill hold is `bill_cap` with the over-cap items in
+  `needs` and its `revision`. `since == SiteWait.waitingSince`, which now stays put across a change of kind. `say` is display only.
+  Precedence: `BuildStatus.PRECEDENCE`, a strict order (removing > failed > paused > txn_held > approval > stage > terrain > bill_cap >
+  fill_blocked > materials > occupied > player_in_box > not_loaded > removed > placing > building > planned > built). `approval` is
+  derived only for a batch item held by drift (APPROVE_STAGE); a batch item's wait with no typed cause (PLAN_STALE,
+  JOURNAL_UNAVAILABLE, a bare SITE_BUSY) is `waiting` with a null reason, never guessed, ranked just above built.
+- Typed ext homes (S-8b-8): `SiteView.part/lot/revision`, `ItemEvent.region/part/lot/revision/status` (the home of `waitsFor`),
+  `RegionView.besideNote` (`beside`) and `RegionView.land` (`land`'s outside/inside runs). The ext keys stay.
+- `regionLayout`: `Regions.layout(region)` -> `RegionLayout(region, irSha, revision, parts)`; `PartShape.part == PartBuild.part`, with
+  `lot` and `targets`. Lots (pads too) are kind `lot`; a plan/0 region's parts carry their block as the kind and their geometry's rect,
+  link ends or route legs (at most 64 points); a bundled program's IR parts are kind `tile`, its roads `route`. Send it on screen open and
+  when `irSha` or `revision` changes.
+- `settlementChanged`: `SiteEvents.SETTLEMENT_CHANGED(owner, region)`, a signal; re-read. Sources: every wait edge, a pause, site placed,
+  removed, built, versioned, its deviations, updating or construction state, a region's state/actions/revision, its beside or land ext,
+  `STOCKPILE_CHANGED`, item waits; once per owner at world load. At most once per 20 ticks per (owner, region), never dropped.
+- `removalStopCause` (S-DRS-1): `RegionView.removalStopCause` and `SiteGroup.removalStop/removalStopCause` (SAVE_REFUSED,
+  PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, OTHER); the blocker text is unchanged.
+- **Not built (BL, after T2b):** `Regions.bill` (paged and target-filtered), `Sites.targetBill` and `RegionBill`/`TargetBill` are declared
+  and throw "needs Architect API NEXT"; feature `regionBill` is not advertised. The seam: paid from RL's cell books per target,
+  outstanding from the ledger's per-target bill, charges (fluids, mech) as item maps, `owed` from T2b's `Owed.region`, and
+  `OWED_CHANGED` registered in `SettlementSignals.init` as `mark(recipient, null)`.
+
+**Gates:** units per slice (CXC failing first on main; the BuildStatus precedence table; the 200-target budget, 39 us of 500; layout over
+the goldens; the coalescer). In the batch: `cx-survival` checks the dry run's quote against the check's bill, a maxBill one under the bill
+refused BILL_CAP with nothing written, a lot cap refused, the place typed at exactly its bill; gatedrs DR12 checks SAVE_REFUSED.

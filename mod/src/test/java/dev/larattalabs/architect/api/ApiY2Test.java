@@ -63,8 +63,10 @@ class ApiY2Test {
 	@Test
 	void siteViewKeepsItsOldConstructorsAndAppendsTheWait() throws Exception {
 		var rc = SiteView.class.getRecordComponents();
-		assertEquals("siteWait", rc[rc.length - 1].getName(), "the contract's 'wait' clashes with Object.wait()");
-		assertEquals("region", rc[rc.length - 2].getName());
+		// (8b BS) status, part, lot and revision appended after the wait
+		assertEquals(List.of("status", "part", "lot", "revision"), java.util.Arrays.stream(rc).skip(rc.length - 4).map(c -> c.getName()).toList());
+		assertEquals("siteWait", rc[rc.length - 5].getName(), "the contract's 'wait' clashes with Object.wait()");
+		assertEquals("region", rc[rc.length - 6].getName());
 		// the 1.8.0 shape (region last), by descriptor
 		SiteView.class.getConstructor(String.class, String.class, String.class, JsonObject.class, BoundingBox.class, BoundingBox.class, Rotation.class,
 			ResourceKey.class, State.class, int.class, int.class, String.class, String.class, String.class, String.class, Policy.class, List.class,

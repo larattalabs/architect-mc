@@ -302,6 +302,26 @@ public interface SiteEvents {
 		}
 	});
 
+	/**
+	 * (8b EV, feature {@code "settlementChanged"}) Something an owner's settlement screens show changed: re-read it. A signal with no data
+	 * ({@code region} names the region when the change is one region's, else null). It fires on edges, never on progress counts: a
+	 * {@link BuildStatus} edge of one of the owner's targets; a region's state, actions, revision or layout change; an ext change Steward
+	 * reads (beside, land); one of the owner's sites placed, removed, versioned, its deviations or its updating changed;
+	 * {@link #STOCKPILE_CHANGED} of the owner; and (once owed ships) {@code OWED_CHANGED} of the owner. At least once, coalesced to at most
+	 * once per 20 ticks per (owner, region): an edge sooner is deferred, never dropped. Once per owner after a world load (edges while it
+	 * was down are lost). Server thread. Since NEXT.
+	 */
+	Event<SettlementChanged> SETTLEMENT_CHANGED = EventFactory.createArrayBacked(SettlementChanged.class, ls -> (owner, region) -> {
+		for (SettlementChanged l : ls) {
+			Guard.run(() -> l.onChanged(owner, region), "SETTLEMENT_CHANGED");
+		}
+	});
+
+	@FunctionalInterface
+	interface SettlementChanged {
+		void onChanged(String owner, @org.jspecify.annotations.Nullable String region);
+	}
+
 	@FunctionalInterface
 	interface SiteRepaired {
 		void onRepaired(String siteId, @org.jspecify.annotations.Nullable String regionId, RepairResult result);

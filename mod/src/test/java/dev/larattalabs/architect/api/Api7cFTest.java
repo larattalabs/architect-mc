@@ -56,7 +56,7 @@ class Api7cFTest {
 		// (7c CP appends level and owner after the frozen seven; the frozen constructor stays: ApiCPTest)
 		assertEquals(List.of("brief", "claim", "styleId", "images", "budgetUsd", "opKey", "ext", "level", "owner"), names(ComposeRequest.class));
 		assertEquals(List.of("brief", "claim", "planId", "partId", "budgetUsd", "opKey", "ext"), names(AuthorRequest.class));
-		assertEquals(List.of("kind", "from", "to", "styleId", "params", "mode", "opKey"), names(ConnectorRequest.class));
+		assertEquals(List.of("kind", "from", "to", "styleId", "params", "mode", "opKey", "owner", "dimension", "actor", "maxBill", "maxBillPerLot", "ext"), names(ConnectorRequest.class));
 		assertEquals(new JsonObject(), new ConnectorRequest("ladder", BlockPos.ZERO, BlockPos.ZERO, null, null, Mode.INSTANT, "k").params());
 		assertThrows(NullPointerException.class, () -> new ComposeRequest(null, CLAIM, null, false, null, "k", null));
 		assertThrows(NullPointerException.class, () -> new AuthorRequest("b", CLAIM, null, null, null, null, null));

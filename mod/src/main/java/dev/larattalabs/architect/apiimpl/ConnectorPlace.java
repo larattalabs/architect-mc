@@ -42,10 +42,13 @@ import org.jspecify.annotations.Nullable;
  * survival row (its bill fed from the owner's stockpile, refunded on removal). The answer's {@code siteId} is the region id:
  * {@code Regions.remove} (or {@code Sites.removeGroup} of its group) takes it off exactly.
  *
- * <p>The frozen {@link ConnectorRequest} has no level, owner or actor: the API call reads {@code params["architect_mc:dimension"]} (a
+ * <p>The 1.55.0 {@link ConnectorRequest} had no level, owner or actor: the API call reads {@code params["architect_mc:dimension"]} (a
  * dimension id; default the overworld) and {@code params["architect_mc:owner"]} (the owner whose stockpile feeds it in survival; default
- * none); the player path ({@link #place(MinecraftServer, ConnectorRequest, ServerLevel, String, ServerPlayer)}) passes them directly.
- * Every {@code architect_mc:*} key is read here and never reaches the plan. Any thread; the work runs on the server thread.
+ * none); (8b) the request's typed {@code owner}, {@code dimension} and {@code actor} win over them. The player path
+ * ({@link #place(MinecraftServer, ConnectorRequest, ServerLevel, String, ServerPlayer)}) passes them directly. Every {@code architect_mc:*}
+ * key is read here and never reaches the plan. (8b) The realise carries the request's {@code maxBill}, {@code maxBillPerLot} and
+ * {@code ext} ({@link #approvedOf}), so a survival connector is capped exactly as a realise is. Any thread; the work runs on the server
+ * thread, and the answer's future completes on the server thread.
  */
 public final class ConnectorPlace {
 	/** The params key naming the dimension (API calls; the player path passes the level). */
@@ -144,11 +147,19 @@ public final class ConnectorPlace {
 		return o;
 	}
 
-	/** The API call: the level and owner from the params ({@link #PARAM_DIMENSION}, {@link #PARAM_OWNER}), no actor. */
+	/**
+	 * The API call: the level, owner and actor from the request's typed members (8b), else from the params ({@link #PARAM_DIMENSION},
+	 * {@link #PARAM_OWNER}; no actor).
+	 */
 	static CompletableFuture<PlaceResult> place(MinecraftServer server, ConnectorRequest r) {
 		String dim = str(r.params(), PARAM_DIMENSION);
 		ServerLevel level;
-		if (dim == null) {
+		if (r.dimension() != null) {
+			level = server.getLevel(r.dimension());
+			if (level == null) {
+				return CompletableFuture.completedFuture(refused(Reason.FIELD_LIMIT, "dimension: no dimension " + r.dimension().identifier()));
+			}
+		} else if (dim == null) {
 			level = server.overworld();
 		} else {
 			Identifier id = Identifier.tryParse(dim);
@@ -157,7 +168,7 @@ public final class ConnectorPlace {
 				return CompletableFuture.completedFuture(refused(Reason.FIELD_LIMIT, "params." + PARAM_DIMENSION + ": no dimension " + dim));
 			}
 		}
-		return place(server, r, level, str(r.params(), PARAM_OWNER), null);
+		return place(server, r, level, r.owner() != null ? r.owner() : str(r.params(), PARAM_OWNER), r.actor(), false);
 	}
 
 	/**
@@ -170,6 +181,21 @@ public final class ConnectorPlace {
 	 */
 	public static CompletableFuture<PlaceResult> place(MinecraftServer server, ConnectorRequest r, ServerLevel level, @Nullable String owner,
 		@Nullable ServerPlayer actor) {
+		return place(server, r, level, owner, actor, true);
+	}
+
+	/**
+	 * The claim's survey policy: the claim's chunks plus the survey margin. {@code generate}: the player's own marker path, which may
+	 * generate missing chunks (dev.region.checkPlan's "generate"); otherwise (8b, every API call and the dry run) chunks already generated
+	 * only, so a check (and a capped place's check, before its cap is known) never generates terrain. Pure.
+	 */
+	static LoadPolicy surveyPolicy(BoundingBox c, boolean generate) {
+		int chunks = ((c.maxX() >> 4) - (c.minX() >> 4) + 5) * ((c.maxZ() >> 4) - (c.minZ() >> 4) + 5);
+		return generate ? LoadPolicy.LOAD_BOUNDED(chunks) : LoadPolicy.GENERATED_ONLY(chunks);
+	}
+
+	static CompletableFuture<PlaceResult> place(MinecraftServer server, ConnectorRequest r, ServerLevel level, @Nullable String owner,
+		@Nullable ServerPlayer actor, boolean generate) {
 		boolean survival = RegionSurvival.on(server);
 		if (r.mode() == Mode.CONSTRUCTION && !survival) {
 			return CompletableFuture.completedFuture(refused(Reason.NOT_ALLOWED, "a connector builds in the world's mode: CONSTRUCTION needs a survival world"));
@@ -187,9 +213,7 @@ public final class ConnectorPlace {
 			return CompletableFuture.completedFuture(refused(Reason.FIELD_LIMIT, e.getMessage()));
 		}
 		BoundingBox c = p.claim();
-		// the claim's chunks plus the survey margin, loaded or generated as needed (dev.region.checkPlan's "generate")
-		int chunks = ((c.maxX() >> 4) - (c.minX() >> 4) + 5) * ((c.maxZ() >> 4) - (c.minZ() >> 4) + 5);
-		PlanRequest pr = new PlanRequest(p.plan(), level, c, p.anchors(), owner, r.styleId(), null, null, r.opKey(), new JsonObject(), LoadPolicy.LOAD_BOUNDED(chunks));
+		PlanRequest pr = new PlanRequest(p.plan(), level, c, p.anchors(), owner, r.styleId(), null, null, r.opKey(), new JsonObject(), surveyPolicy(c, generate));
 		String what = r.kind() + " from " + r.from().toShortString() + " to " + r.to().toShortString();
 		CompletableFuture<PlaceResult> out = new CompletableFuture<>();
 		CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().checkPlan(pr), server).thenCompose(f -> f).thenCompose(ck -> {
@@ -200,24 +224,34 @@ public final class ConnectorPlace {
 			if (part != null && part.get("notes") instanceof JsonArray ns) {
 				ns.forEach(n -> notes.add(n.isJsonPrimitive() ? n.getAsString() : n.toString()));
 			}
+			if (!generate && ungenerated(ck) > 0) {
+				// (8b review P1) the API never generates: a claim over chunks never generated is refused, nothing written or generated;
+				// first, before the fit verdict (a plan over missing land says nothing true about the connector)
+				forgetStale(level, owner, r.opKey(), p.claim());
+				return CompletableFuture.completedFuture(refused(Reason.NOT_GENERATED, notGenerated(ck)));
+			}
 			if (ck.overall() != PlanCheck.Overall.READY || ck.artifactSha() == null || !("fits".equals(cls) || "adjusted".equals(cls))) {
 				return CompletableFuture.completedFuture(noLink(ck, part, cls, notes));
 			}
 			notes.add("the plan answered " + cls + " (check " + ck.checkId() + ")");
+			if (survival && (r.maxBill() != null || r.maxBillPerLot() != null)) {
+				// (8b review P1) the cap is held against the quote before the realise is asked (the realise's own put-down holds it again)
+				String sha = ck.artifactSha();
+				return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().quoteApproved(sha, Map.of()), server).thenCompose(f -> f).thenCompose(q -> {
+					dev.larattalabs.architect.api.ConnectorCheck cc = capped(q, r, p.claim(), List.of(r.from(), r.to()), cls);
+					if (!cc.fits()) {
+						notes.add("its bill: " + q.bom() + "; nothing placed");
+						return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), List.of(cc.refusal()), notes));
+					}
+					notes.add("its bill: " + q.bom() + " (within the request's maxBill)");
+					return realise(server, r, ck, survival, actor, notes);
+				});
+			}
 			if (survival && part.get("cost") instanceof JsonObject cost && cost.get("survival") instanceof JsonObject sv && sv.get("bom") instanceof JsonObject bom) {
 				notes.add("its bill: " + bom);
 			}
-			Mode mode = survival ? Mode.CONSTRUCTION : Mode.INSTANT;
-			return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(ck.artifactSha(), mode, actor, Map.of(), r.opKey(),
-				new JsonObject())), server).thenCompose(f -> f).thenApply(region -> {
-				if (actor != null) {
-					// ((7c CN) the player-facing remove: /architect region remove, as the link's owner, names this region by default)
-					dev.larattalabs.architect.region.RegionCommands.rememberRegion(actor.getName().getString(), region);
-					notes.add("remove it with /architect region remove " + region);
-				}
-				return new PlaceResult(true, Optional.of(region), List.of(), notes);
-			});
-		}).whenComplete((res, t) -> {
+			return realise(server, r, ck, survival, actor, notes);
+		}).whenComplete((res, t) -> onServer(server, () -> {
 			if (t == null) {
 				out.complete(res);
 				return;
@@ -228,8 +262,169 @@ public final class ConnectorPlace {
 			} else {
 				out.completeExceptionally(cause);
 			}
-		});
+		}));
 		return out;
+	}
+
+	/** The checked connector realised (its caps and ext carried: {@link #approvedOf}). */
+	private static CompletableFuture<PlaceResult> realise(MinecraftServer server, ConnectorRequest r, PlanCheck ck, boolean survival, @Nullable ServerPlayer actor,
+		List<String> notes) {
+		Mode mode = survival ? Mode.CONSTRUCTION : Mode.INSTANT;
+		return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().realiseApproved(approvedOf(r, ck.artifactSha(), mode, actor)), server).thenCompose(f -> f)
+			.thenApply(region -> {
+				if (actor != null) {
+					// ((7c CN) the player-facing remove: /architect region remove, as the link's owner, names this region by default)
+					dev.larattalabs.architect.region.RegionCommands.rememberRegion(actor.getName().getString(), region);
+					notes.add("remove it with /architect region remove " + region);
+				}
+				return new PlaceResult(true, Optional.of(region), List.of(), notes);
+			});
+	}
+
+	/**
+	 * (8b final check P2) A check refused NOT_GENERATED is dropped, with the claim's cached "not generated" chunk answers, so the retry
+	 * after the area is generated gets a fresh check of the land as it is then, never the frozen count. Server thread.
+	 */
+	static void forgetStale(ServerLevel level, @Nullable String owner, String opKey, BoundingBox claim) {
+		dev.larattalabs.architect.region.PlanChecks.forgetKeyed(owner, opKey);
+		for (long ck : chunksOf(claim)) {
+			dev.larattalabs.architect.region.ChunkGen.forget(level, ck);
+		}
+	}
+
+	/** The claim's chunks plus the survey margin (two chunks each side), packed as {@code ChunkPos.pack}. Pure. */
+	static List<Long> chunksOf(BoundingBox c) {
+		List<Long> out = new ArrayList<>();
+		for (int x = (c.minX() >> 4) - 2; x <= (c.maxX() >> 4) + 2; x++) {
+			for (int z = (c.minZ() >> 4) - 2; z <= (c.maxZ() >> 4) + 2; z++) {
+				out.add(net.minecraft.world.level.ChunkPos.pack(x, z));
+			}
+		}
+		return out;
+	}
+
+	/** A check's chunks never generated ({@code cost.chunksToGenerate}), 0 when it names none. */
+	static long ungenerated(PlanCheck ck) {
+		return ck.cost() != null && ck.cost().get("chunksToGenerate") instanceof JsonElement e && e.isJsonPrimitive() ? e.getAsLong() : 0L;
+	}
+
+	private static String notGenerated(PlanCheck ck) {
+		return ungenerated(ck) + " chunk(s) of the connector's claim were never generated: an API call never generates terrain (go there, or "
+			+ "Regions.prepare the area first)";
+	}
+
+	/**
+	 * (8b) The realise a checked connector asks for: its artifact, mode and actor, its operation key, and the request's caps and ext. Pure.
+	 */
+	static ApprovedRealise approvedOf(ConnectorRequest r, String artifactSha, Mode mode, @Nullable ServerPlayer actor) {
+		return new ApprovedRealise(artifactSha, mode, actor, Map.of(), r.opKey(), r.ext().deepCopy(), r.maxBill(), r.maxBillPerLot());
+	}
+
+	// ------------------------------------------------------------------ (8b CK) the dry run
+
+	/**
+	 * {@code Sites.checkConnector}: the level and owner as {@link #place(MinecraftServer, ConnectorRequest)} reads them, the same request
+	 * checks (mode, opKey, the plan), the same {@code Regions.checkPlan} under the request's opKey (so a place with the same key and body
+	 * reuses it), and in survival the artifact's quote ({@code Regions.quoteApproved}) held against {@code maxBill} and {@code maxBillPerLot}
+	 * exactly as the realise's put-down holds them. Writes nothing. Any thread; the future completes on the server thread.
+	 */
+	static CompletableFuture<dev.larattalabs.architect.api.ConnectorCheck> check(MinecraftServer server, ConnectorRequest r) {
+		BlockPos a = r.from(), b = r.to();
+		List<BlockPos> ends = List.of(a, b);
+		BoundingBox naive = new BoundingBox(Math.min(a.getX(), b.getX()) - PAD, Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()) - PAD, Math.max(a.getX(), b
+			.getX()) + PAD, Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()) + PAD);
+		ServerLevel level;
+		String dim = str(r.params(), PARAM_DIMENSION);
+		if (r.dimension() != null) {
+			level = server.getLevel(r.dimension());
+		} else if (dim == null) {
+			level = server.overworld();
+		} else {
+			Identifier id = Identifier.tryParse(dim);
+			level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+		}
+		if (level == null) {
+			return done(no(Reason.FIELD_LIMIT, "no such dimension", naive, ends));
+		}
+		String owner = r.owner() != null ? r.owner() : str(r.params(), PARAM_OWNER);
+		boolean survival = RegionSurvival.on(server);
+		if (r.mode() == Mode.CONSTRUCTION && !survival) {
+			return done(no(Reason.NOT_ALLOWED, "a connector builds in the world's mode: CONSTRUCTION needs a survival world", naive, ends));
+		}
+		if (r.mode() == Mode.INSTANT && survival) {
+			return done(no(Reason.NOT_ALLOWED, "a connector builds in the world's mode: in survival it is a construction site (AUTO or CONSTRUCTION)", naive, ends));
+		}
+		if (Wire0a.opKey(r.opKey()) == null) {
+			return done(no(Reason.FIELD_LIMIT, "opKey: [A-Za-z0-9_.:-]{1,128}", naive, ends));
+		}
+		Plan p;
+		try {
+			p = planOf(r, level.getMinY(), level.getMaxY());
+		} catch (Bad e) {
+			return done(no(Reason.FIELD_LIMIT, e.getMessage(), naive, ends));
+		}
+		BoundingBox c = p.claim();
+		PlanRequest pr = new PlanRequest(p.plan(), level, c, p.anchors(), owner, r.styleId(), null, null, r.opKey(), new JsonObject(), surveyPolicy(c, false));
+		CompletableFuture<dev.larattalabs.architect.api.ConnectorCheck> out = new CompletableFuture<>();
+		CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().checkPlan(pr), server).thenCompose(f -> f).thenCompose(ck -> {
+			JsonObject part = ck.parts().stream().filter(q -> PART.equals(str(q, "part"))).findFirst().orElse(null);
+			String cls = part == null ? null : str(part, "class");
+			if (ungenerated(ck) > 0) {
+				forgetStale(level, owner, r.opKey(), c);
+				return CompletableFuture.completedFuture(no(Reason.NOT_GENERATED, notGenerated(ck), c, ends));
+			}
+			if (ck.overall() != PlanCheck.Overall.READY || ck.artifactSha() == null || !("fits".equals(cls) || "adjusted".equals(cls))) {
+				PlaceResult nl = noLink(ck, part, cls, new ArrayList<>());
+				return CompletableFuture.completedFuture(new dev.larattalabs.architect.api.ConnectorCheck(false, nl.refusals().get(0), null, c, ends, "it does not fit: "
+					+ nl.refusals().get(0).message()));
+			}
+			if (!survival) {
+				return CompletableFuture.completedFuture(new dev.larattalabs.architect.api.ConnectorCheck(true, null, null, c, ends, "it fits (" + cls + ")"));
+			}
+			return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().quoteApproved(ck.artifactSha(), Map.of()), server).thenCompose(f -> f).thenApply(
+				q -> capped(q, r, c, ends, cls));
+		}).whenComplete((res, t) -> onServer(server, () -> {
+			if (t == null) {
+				out.complete(res);
+				return;
+			}
+			Throwable cause = t instanceof CompletionException && t.getCause() != null ? t.getCause() : t;
+			if (cause instanceof ArchitectRefused ar) {
+				out.complete(no(ar.reason(), ar.getMessage(), c, ends));
+			} else {
+				out.completeExceptionally(cause);
+			}
+		}));
+		return out;
+	}
+
+	/**
+	 * A survival quote held against the request's caps, as the realise's put-down holds them (pure): a lot cap names a lot the connector's plan
+	 * does not realise (it has none): BILL_CAP; a bill past maxBill: BILL_CAP naming the items; else it fits, with the quote.
+	 */
+	static dev.larattalabs.architect.api.ConnectorCheck capped(dev.larattalabs.architect.api.Quote q, ConnectorRequest r, BoundingBox c, List<BlockPos> ends,
+		@Nullable String cls) {
+		if (r.maxBillPerLot() != null && !r.maxBillPerLot().isEmpty()) {
+			String lot = r.maxBillPerLot().keySet().iterator().next();
+			return new dev.larattalabs.architect.api.ConnectorCheck(false, new Refusal(Reason.BILL_CAP, "maxBillPerLot names lot " + lot
+				+ ", which a connector does not realise (it has no lots)"), q, c, ends, "a lot cap on a connector");
+		}
+		if (r.maxBill() != null) {
+			List<String> over = dev.larattalabs.architect.region.Quotes.overCapOf(q.bom(), r.maxBill());
+			if (!over.isEmpty()) {
+				return new dev.larattalabs.architect.api.ConnectorCheck(false, new Refusal(Reason.BILL_CAP, "the connector's bill at put-down is past its maxBill ("
+					+ String.join(", ", over) + ")"), q, c, ends, "its bill is past the approved bound");
+			}
+		}
+		return new dev.larattalabs.architect.api.ConnectorCheck(true, null, q, c, ends, "it fits (" + cls + ")");
+	}
+
+	private static dev.larattalabs.architect.api.ConnectorCheck no(Reason reason, String message, BoundingBox claim, List<BlockPos> ends) {
+		return new dev.larattalabs.architect.api.ConnectorCheck(false, new Refusal(reason, message), null, claim, ends, message);
+	}
+
+	private static <T> CompletableFuture<T> done(T v) {
+		return CompletableFuture.completedFuture(v);
 	}
 
 	/** The plan could not build the connector: NO_LINK with the kit's first reason (its code and message), or the check's overall. */
@@ -248,6 +443,15 @@ public final class ConnectorPlace {
 		}
 		notes.add("the plan answered " + ck.overall() + (cls == null ? "" : " (the connector " + cls + ")") + "; nothing placed");
 		return new PlaceResult(false, Optional.empty(), rs, notes);
+	}
+
+	/** (8b) Runs {@code r} on the server thread: now when already on it, else as the next task (the futures' documented thread). */
+	static void onServer(MinecraftServer server, Runnable r) {
+		if (server.isSameThread()) {
+			r.run();
+		} else {
+			server.execute(r);
+		}
 	}
 
 	static PlaceResult refused(Reason reason, String message) {

@@ -2537,6 +2537,15 @@ public final class RegionTargets {
 			long terrainBuilt;
 			boolean anyBuilt;
 			boolean allDone = true;
+			// (8b BS) the winning status of its targets that are not built, and the lot it builds
+			dev.larattalabs.architect.api.@Nullable BuildStatus st;
+			@Nullable String lot;
+
+			void see(dev.larattalabs.architect.api.@Nullable BuildStatus b) {
+				if (b != null && !dev.larattalabs.architect.api.BuildStatus.BUILT.equals(b.state())) {
+					st = st == null ? b : dev.larattalabs.architect.api.BuildStatus.winner(st, b);
+				}
+			}
 		}
 		Map<String, Acc> parts = new LinkedHashMap<>();
 		Map<String, Integer> outstanding = new TreeMap<>();
@@ -2557,16 +2566,29 @@ public final class RegionTargets {
 			}
 			a.anyBuilt |= c.built() > 0 || c.startedAny();
 			a.allDone &= c.done();
+			if (!c.done()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, c.id()));
+			}
 			paid += c.paid();
 			paidBuilt += c.paidBuilt();
 			anyBuilding |= !c.done();
 			c.outstanding().forEach((k, v) -> outstanding.merge(k, v, Integer::sum));
 		}
 		// the lots (construction sites) and the 4e roads (construction roads), under their pad's and road's part
-		Map<String, String> lotPart = new java.util.HashMap<>();
-		for (var lot : l.ir().lots()) {
-			lotPart.put(lot.id(), planPartOf.apply(lot.part()));
+		// (8b review P2) every lot of the head: the realised IR's, then each standing revision's (a revision lot's item carries its lot, no part)
+		List<JsonObject> irs = new ArrayList<>();
+		irs.add(l.ir().json());
+		var revs = new ArrayList<>(rec.revisions);
+		revs.sort(java.util.Comparator.comparingInt(v -> v.position));
+		for (var rv : revs) {
+			if (rv.standing() && rv.position <= rec.position) {
+				var rir = dev.larattalabs.architect.region.Revisions.irOf(l, rv.rid);
+				if (rir != null) {
+					irs.add(rir.json());
+				}
+			}
 		}
+		Map<String, String> lotPart = lotParts(irs);
 		for (Site s : Sites.all()) {
 			if (!group.equals(s.group()) || s.construction() == null) {
 				continue;
@@ -2575,6 +2597,12 @@ public final class RegionTargets {
 			Acc a = parts.computeIfAbsent(lotId == null ? "lots" : lotPart.getOrDefault(lotId, "lots"), k -> new Acc());
 			int[] pr = Builder.progress(srv, s);
 			a.targets.add(s.id());
+			if (lotId != null && lotPart.containsKey(lotId)) {
+				a.lot = lotId;
+			}
+			if (s.building()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, s.id()));
+			}
 			a.cells += pr[1];
 			a.built += pr[0];
 			a.anyBuilt |= pr[0] > 0;
@@ -2605,6 +2633,9 @@ public final class RegionTargets {
 			Acc a = parts.computeIfAbsent(roadPart == null ? "roads" : roadPart, k -> new Acc());
 			int[] pr = RoadBuilder.progress(srv, i);
 			a.targets.add(i.id());
+			if (i.building()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, i.id()));
+			}
 			a.cells += pr[1];
 			a.built += pr[0];
 			a.anyBuilt |= pr[0] > 0;
@@ -2624,10 +2655,42 @@ public final class RegionTargets {
 				}
 			}
 		}
+		// (8b review P2) the region's items not yet put down (queued, waiting, placing) count in their parts: a terrain, stage, approval or
+		// whole-charge cap wait enters the part's precedence, and a part with an item still to come is never built nor missing
+		List<String> bids = new ArrayList<>();
+		bids.add(rec.batchId);
+		for (var rv : rec.revisions) {
+			if (rv.batchId != null && !bids.contains(rv.batchId)) {
+				bids.add(rv.batchId);
+			}
+		}
+		List<dev.larattalabs.architect.batch.QItem> pendingItems = new ArrayList<>();
+		for (String bid : bids) {
+			var qb = bid == null ? null : Batches.get(bid);
+			if (qb != null) {
+				qb.items.stream().filter(x -> !x.status.terminal()).forEach(pendingItems::add);
+			}
+		}
+		itemStatuses(pendingItems, lotPart).forEach((part, st) -> {
+			Acc a = parts.computeIfAbsent(part, k -> new Acc());
+			a.allDone = false;
+			a.see(st);
+			if (a.st == null) {
+				a.st = st;
+			}
+		});
 		JsonObject freeCells = rec.survival.get("freeCells") instanceof JsonObject o ? o : new JsonObject();
 		List<dev.larattalabs.architect.api.PartBuild> out = new ArrayList<>();
-		parts.forEach((part, a) -> out.add(new dev.larattalabs.architect.api.PartBuild(part, a.allDone ? "built" : a.anyBuilt ? "building" : "waiting", a.targets,
-			a.cells, a.built, freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L, a.terrainCells, a.terrainBuilt)));
+		boolean removingRegion = rec.state == dev.larattalabs.architect.api.RegionState.REMOVING;
+		parts.forEach((part, a) -> {
+			// (8b BS) built when every target is; else its targets' winner (a wait, a pause), else building; removing with its region
+			dev.larattalabs.architect.api.BuildStatus status = removingRegion ? dev.larattalabs.architect.api.BuildStatus.of(
+				dev.larattalabs.architect.api.BuildStatus.REMOVING, 0) : a.allDone ? dev.larattalabs.architect.api.BuildStatus.of(
+					dev.larattalabs.architect.api.BuildStatus.BUILT, 0) : a.st != null ? a.st : dev.larattalabs.architect.api.BuildStatus.of(
+						dev.larattalabs.architect.api.BuildStatus.BUILDING, 0);
+			out.add(new dev.larattalabs.architect.api.PartBuild(part, a.allDone ? "built" : a.anyBuilt ? "building" : "waiting", a.targets, a.cells, a.built,
+				freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L, a.terrainCells, a.terrainBuilt, status, a.lot));
+		});
 		// parts with only free cells (nothing to build) are not listed; their free cells are in the record
 		var b = Batches.get(rec.batchId);
 		boolean itemsDown = b == null || b.items.stream().allMatch(x -> x.status.terminal());
@@ -2643,6 +2706,60 @@ public final class RegionTargets {
 			}
 		});
 		return new dev.larattalabs.architect.api.RegionBuild(built, done, percent, items, out, SurvivalWorld.terrainPerTick());
+	}
+
+	/**
+	 * (8b review P2) Every lot's plan part over IRs (pure): each IR's lots under that IR's own survival groups ({@code survival.parts} ->
+	 * {@code survival.groups}), the first IR to name a lot winning (the realised plan's first, then the revisions in position order); a lot
+	 * whose IR part has no group keeps the part's id, one with no part {@code "?"}.
+	 */
+	static Map<String, String> lotParts(List<JsonObject> irs) {
+		Map<String, String> out = new java.util.HashMap<>();
+		for (JsonObject ir : irs) {
+			List<String> groups = dev.larattalabs.architect.region.RegionSurvival.groups(ir);
+			JsonObject pm = ir.get("survival") instanceof JsonObject sv && sv.get("parts") instanceof JsonObject o ? o : new JsonObject();
+			if (ir.get("lots") instanceof JsonArray la) {
+				for (var e : la) {
+					if (e instanceof JsonObject lo && lo.get("id") != null) {
+						String part = lo.get("part") instanceof com.google.gson.JsonPrimitive pp ? pp.getAsString() : null;
+						String mapped = part == null ? "?" : pm.has(part) && pm.get(part).getAsInt() >= 0 && pm.get(part).getAsInt() < groups.size() ? groups.get(pm.get(part)
+							.getAsInt()) : part;
+						out.putIfAbsent(lo.get("id").getAsString(), mapped);
+					}
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (8b review P2) The statuses region items not yet put down give their plan parts (pure): a lot item its lot's part, a road or a single-part
+	 * tile its {@code architect_mc:part}, a tile its {@code architect_mc:parts}; per part the winner by precedence of its items' statuses
+	 * ({@code StatusViews.item}: a queued item planned, a waiting one its typed wait).
+	 */
+	static Map<String, dev.larattalabs.architect.api.BuildStatus> itemStatuses(List<dev.larattalabs.architect.batch.QItem> items, Map<String, String> lotPart) {
+		Map<String, dev.larattalabs.architect.api.BuildStatus> out = new LinkedHashMap<>();
+		for (var i : items) {
+			if (i.status.terminal()) {
+				continue;
+			}
+			List<String> ps = new ArrayList<>();
+			if (i.ext.get("architect_mc:lot") instanceof com.google.gson.JsonPrimitive lp && lotPart.containsKey(lp.getAsString())) {
+				ps.add(lotPart.get(lp.getAsString()));
+			} else if (i.ext.get(EXT_PART) instanceof com.google.gson.JsonPrimitive pp) {
+				ps.add(pp.getAsString());
+			} else if (i.ext.get(RegionWaitTags.EXT_PARTS) instanceof JsonArray pa) {
+				pa.forEach(e -> ps.add(e.getAsString()));
+			}
+			if (ps.isEmpty()) {
+				continue;
+			}
+			var st = dev.larattalabs.architect.apiimpl.StatusViews.item(i.key, i.status.name(), i.reason, i.siteId, i.ext);
+			for (String p : ps) {
+				out.merge(p, st, dev.larattalabs.architect.api.BuildStatus::winner);
+			}
+		}
+		return out;
 	}
 
 	/** The DevBridge's and the gate's view of a survival region's build (RegionBuild, by item id). */
