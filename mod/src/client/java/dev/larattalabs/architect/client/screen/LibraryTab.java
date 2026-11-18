@@ -56,6 +56,11 @@ final class LibraryTab {
 	static final int CARD_MIN_W = 84;
 	/** (U3) a shorter card: more rows of designs in the same grid. */
 	static final int CARD_H = 70;
+
+	/** (PR A3) A card's height at the text size: its two text lines grow, the preview keeps its size. */
+	static int cardH() {
+		return CARD_H + 2 * dev.larattalabs.labui.client.ui.Panels.textGrow();
+	}
 	static final int GAP = 5;
 	static final List<String> VIEW_KINDS = List.of("iso", "top", "front", "cutaway");
 	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ROOT).withZone(ZoneId.systemDefault());
@@ -501,15 +506,15 @@ final class LibraryTab {
 		int cols = Math.max(1, (inner + GAP) / (CARD_MIN_W + GAP));
 		int cw = (inner - (cols - 1) * GAP) / cols;
 		int rows = (cards.size() + cols - 1) / cols;
-		int needed = rows * (CARD_H + GAP) + 4;
-		s.setScrollArea(x, y, w - 6, h, needed, CARD_H + GAP);
+		int needed = rows * (cardH() + GAP) + 4;
+		s.setScrollArea(x, y, w - 6, h, needed, cardH() + GAP);
 		int scroll = s.scroll();
 		g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
 		for (int i = 0; i < cards.size(); i++) {
 			LibraryCard c = cards.get(i);
 			int cx = x + 4 + (i % cols) * (cw + GAP);
-			int cy = y + 4 + (i / cols) * (CARD_H + GAP) - scroll;
-			if (cy + CARD_H < y || cy > y + h) {
+			int cy = y + 4 + (i / cols) * (cardH() + GAP) - scroll;
+			if (cy + cardH() < y || cy > y + h) {
 				continue;
 			}
 			drawCard(g, c, cx, cy, cw, y, y + h, c == sel || sel != null && sel.id().equals(c.id()), mx, my);
@@ -536,7 +541,7 @@ final class LibraryTab {
 	private void drawCard(GuiGraphicsExtractor g, LibraryCard c, int x, int y, int w, int clipTop, int clipBottom, boolean selected, int mx, int my) {
 		Font font = font();
 		int hy = Math.max(y, clipTop);
-		int hh = Math.min(y + CARD_H, clipBottom) - hy;
+		int hh = Math.min(y + cardH(), clipBottom) - hy;
 		boolean hover = mx >= x && mx < x + w && my >= hy && my < hy + hh;
 		// star first: it takes the click before the card does
 		int starX = x + w - 13;
@@ -551,13 +556,13 @@ final class LibraryTab {
 				cancelEdit();
 			}));
 		}
-		g.fill(x, y, x + w, y + CARD_H, selected ? 0x30D97757 : hover ? 0x16000000 : 0x0C000000);
+		g.fill(x, y, x + w, y + cardH(), selected ? 0x30D97757 : hover ? 0x16000000 : 0x0C000000);
 		int border = selected ? UiStyle.CLAY_DARK : 0x26000000;
 		g.fill(x, y, x + w, y + 1, border);
-		g.fill(x, y + CARD_H - 1, x + w, y + CARD_H, border);
-		g.fill(x, y, x + 1, y + CARD_H, border);
-		g.fill(x + w - 1, y, x + w, y + CARD_H, border);
-		int ph = CARD_H - 27;
+		g.fill(x, y + cardH() - 1, x + w, y + cardH(), border);
+		g.fill(x, y, x + 1, y + cardH(), border);
+		g.fill(x + w - 1, y, x + w, y + cardH(), border);
+		int ph = CARD_H - 27; // the preview keeps its size; the text rows under it grow
 		g.fill(x + 2, y + 2, x + w - 2, y + 2 + ph, 0x22FFFFFF);
 		drawPreview(g, c.id(), "iso", x + 3, y + 3, w - 6, ph - 2);
 		// star (filled when starred, faint outline on hover)
@@ -574,7 +579,7 @@ final class LibraryTab {
 			g.text(font, badge, x + 6, y + ph - 9, UiStyle.OnDark.text(), false); // on the dark badge bar: the on-dark token
 		}
 		g.text(font, TextUtil.ellipsize(font, c.name(), w - 6), x + 3, y + ph + 4, UiBits.ink(), false);
-		g.text(font, TextUtil.ellipsize(font, c.type() + " · " + c.sizeText(), w - 6), x + 3, y + ph + 14, UiBits.muted(), false);
+		g.text(font, TextUtil.ellipsize(font, c.type() + " · " + c.sizeText(), w - 6), x + 3, y + ph + 4 + TextUtil.lh(10), UiBits.muted(), false);
 	}
 
 	/** A preview image of {@code kind}, else the iso one, else the built-in top-down plan. */

@@ -384,7 +384,8 @@ public final class ArchitectScreen extends Screen {
 		int inner = w - pad.left() - pad.right();
 		List<String> body = TextUtil.wrapPlain(font, c.body(), inner);
 		List<String[]> buttons = c.buttons();
-		int h = pad.top() + 16 + body.size() * 10 + (buttons.isEmpty() ? 0 : 26) + (offer ? 16 : 0) + pad.bottom();
+		int lh10 = TextUtil.lh(10);
+		int h = pad.top() + (TextUtil.wrapPlain(font, c.title(), inner).size() * lh10 + 4) + body.size() * lh10 + (buttons.isEmpty() ? 0 : 26) + (offer ? TextUtil.lh(16) : 0) + pad.bottom();
 		int x = (width - w) / 2;
 		int y = (height - h) / 2;
 		g.nextStratum();
@@ -392,11 +393,14 @@ public final class ArchitectScreen extends Screen {
 		Panels.panel(g, x, y, w, h);
 		int cx = x + pad.left();
 		int cy = y + pad.top();
-		g.text(font, TextUtil.ellipsize(font, c.title(), inner), cx, cy, UiStyle.clayText(), false);
-		cy += dev.larattalabs.labui.client.ui.TextUtil.lh(14);
+		for (String l : TextUtil.wrapPlain(font, c.title(), inner)) {
+			g.text(font, l, cx, cy, UiStyle.clayText(), false);
+			cy += lh10;
+		}
+		cy += 4;
 		for (String l : body) {
 			g.text(font, l, cx, cy, UiBits.ink(), false);
-			cy += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+			cy += lh10;
 		}
 		int before = hits.size();
 		if (!buttons.isEmpty()) {
@@ -1404,18 +1408,19 @@ public final class ArchitectScreen extends Screen {
 			waiting > 0 ? UiStyle.selectedEdge() : jhov ? UiStyle.rowHoverEdge() : UiStyle.chipEdge());
 		g.text(font, jl, jx + 6, band[0] + (band[1] - 8) / 2 + 1, UiBits.ink(), false);
 		// tabs
-		int ty = cy + 16;
+		int grow = Panels.textGrow(); // (PR A3) the header and tabs grow with the text size
+		int ty = cy + 16 + grow;
 		int tx = cx;
 		for (Tab t : Tab.values()) {
 			String label = t.label() + badge(t);
 			int w = font.width(label) + 16;
-			Hit h = new Hit("tab:" + t.id(), label, tx, ty, w, 16, true, t == tab, () -> setTab(t));
+			Hit h = new Hit("tab:" + t.id(), label, tx, ty, w, 16 + grow, true, t == tab, () -> setTab(t));
 			hits.add(h);
-			Panels.sprite(g, t == tab ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, tx, ty, w, 16);
+			Panels.sprite(g, t == tab ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, tx, ty, w, 16 + grow);
 			g.text(font, label, tx + 8, ty + 4, t == tab ? UiBits.ink() : h.contains(mouseX, mouseY) ? UiBits.ink() : UiBits.muted(), false);
 			tx += w + 3;
 		}
-		int top = ty + 22;
+		int top = ty + 22 + grow;
 		// (PR W1) the tab's "what's this" line under the tabs (× hides it; Status > Show tips again)
 		guideHits.clear();
 		int guideH = guideBand(g, cx, top - 1, cw, mouseX, mouseY); // (PR F1) a running tour's step takes the line's place
