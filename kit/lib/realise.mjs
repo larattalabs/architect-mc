@@ -51,6 +51,8 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
 // cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
 // before 8a would write them at once, so it refuses the plan PLAN_STALE.
+// (8c WM) The 8c contract §8's kinds 'flowingWater' (a fluid op with `model: 'wm'`) and 'volume:levels' (a volume with `levels`) are
+// not walked yet: KINDS_FORMAT2 must equal the mod's IrStale (PlanStaleTest), so 8cF/VS add them on both sides at once.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -76,7 +78,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.72.0';
+export const EVAL_KIT_VERSION = '0.73.0';
 
 /**
  * (6c D3) An IR's `reach` columns (row runs [x0, z, x1, z]) as a lookup: z -> sorted [x0, x1, ...] pairs; null without a reach.

@@ -1081,3 +1081,22 @@ a village mid, fields low) on S3's pinned claim (scenario `districts_demo`, phas
 - **Metrics** `M15`: `{mass, supports, cantileverMax, cantileverLimit, heldMax, spans: [{part, type, length, limit}], necks, joints:
   [{link, lot, port, end, cells, written, dist, held}]}`.
 - **Feature:** the sidecar's `region.m15` (appended last), advertised by the mod as `regionM15`.
+
+# Phase 8c slice WM additions (the water model; 8c contract §2, "Slice WM as built" in docs/CONTRACT.md)
+
+- **ARVX version 4** (WM's proposal; slice VS's Java sampler must write the same bytes): version 3 with each fluid run carrying its
+  `LiquidBlock.LEVEL`: per column (x-major) runs bottom-up of `(u8 fluid code, u8 level, varint length)`; the level is 1..7 for
+  `water_flowing` and `lava_flowing`, 8..15 for `water_falling`, 0 otherwise (`FLUID_LEVELS`; the decoder refuses any other). Asked with
+  `r.needVolume(box, {levels: true})` (implies `fluids`; `needVolumes[].levels`, `volumesUsed[].levels`); `levelAt(v, x, y, z)`;
+  `levelsMissing(v)` -> null or `{why: 'levels', version}` (the `VOLUME {why: "levels"}` evidence RV answers). The virtual world reads a
+  v4 volume's flowing cells at their levels and its waterlogged cells as `<id>[waterlogged=true]` (kelp and seagrass by id); a v3 volume
+  reads as before. Kit fixture `kit/test/fixtures/wm/levels.{bin,json}` (raw bytes).
+- **IR kinds:** not yet. The 8c contract's `volume:levels` and `flowingWater` must land in `KINDS_FORMAT2` and the mod's IrStale together
+  (PlanStaleTest pins them equal): 8cF/VS. Until then a wm IR carries `volumes[name].levels` and the op's `model` with no new kind.
+- **The model** (`lib/fluids/sim.mjs`, opt-in per body: `model: 'wm'` on `simulate`'s body, `r.fluidBody(cells, {model: 'wm'})`, the op's
+  `model`): wl foreign sources (waterlogged blocks, kelp, seagrass: `world.wl` -> face mask), the world's levels (`world.level`), simulated
+  conversion (`converted`, M25:convert, never in `predicted`), M25:bubble (`world.bubbler`), the wash rule (`world.wash`: `wash` to
+  clear, M25:wash refused), a typed UNSETTLED (finding, `unsettled`; `fluidBody` throws `unsettledRefusal`), ticks in (due, y desc, x,
+  z). `lib/fluids/world.mjs`: `wlMask(state)`, `levelOf(state)`, `wmKinds(vw, {cleared})`. Every other body is simulated as before.
+- **Water lint:** W6 (no conversion outside a body's cells, in the steady state or the IR's prediction) and W7 (no predicted cell holds
+  a block the flow would wash away), on every body of the corpus; shown in `kit/lint/rules.lint.mjs`.
