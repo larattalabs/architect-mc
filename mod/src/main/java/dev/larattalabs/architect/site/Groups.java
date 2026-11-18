@@ -262,9 +262,46 @@ public final class Groups {
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
-		List<String> cascaded, int kept) {
+		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
-			this(removed, blockers, refund, 0, Map.of(), List.of(), 0);
+			this(removed, blockers, refund, 0, Map.of(), List.of(), 0, null);
+		}
+
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded, int kept) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, kept, null);
+		}
+
+		/** (S-DRS-1) A stop with its typed cause (the blocker text as before). */
+		public Removed(String blocker, Map<String, Integer> refund, dev.larattalabs.architect.api.RemovalStopCause cause) {
+			this(false, List.of(blocker), refund, 0, Map.of(), List.of(), 0, cause);
+		}
+
+		/** (S-DRS-1) The typed cause of a stop: {@code cause}, or OTHER when it has none; null when removed. */
+		public dev.larattalabs.architect.api.@Nullable RemovalStopCause stopCause() {
+			return removed ? null : cause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : cause;
+		}
+
+		/** (S-DRS-1) A refused save before anything changed: the text Steward parses today, unchanged. */
+		static Removed saveRefused(String group, String why, Map<String, Integer> refund) {
+			return new Removed("the removal of group " + group + " was not started: " + why, refund, dev.larattalabs.architect.api.RemovalStopCause.SAVE_REFUSED);
+		}
+
+		/** (S-DRS-1) A player stayed in a member's box past the wait (or a member is still being placed: OTHER). */
+		static Removed waitedOut(String id, boolean player, Map<String, Integer> refund) {
+			return new Removed(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed", refund, player
+				? dev.larattalabs.architect.api.RemovalStopCause.PLAYER_IN_BOX : dev.larattalabs.architect.api.RemovalStopCause.OTHER);
+		}
+
+		/** (S-DRS-1) Covering sites outside the removal, refused. */
+		static Removed covered(java.util.Collection<String> outside, Map<String, Integer> refund) {
+			return new Removed("COVERED: " + String.join(", ", outside) + " cover cells of the sites", refund, dev.larattalabs.architect.api.RemovalStopCause.COVERED);
+		}
+
+		/** (S-DRS-1) A member's blockers: the owner's things in its box ({@code cargo} false) or a filled container's cargo. */
+		static Removed blocked(String id, List<String> blockers, boolean cargo, Map<String, Integer> refund) {
+			return new Removed(Sites.blockersMessage(id, blockers), refund, cargo ? dev.larattalabs.architect.api.RemovalStopCause.CARGO
+				: dev.larattalabs.architect.api.RemovalStopCause.THINGS_IN_BOX);
 		}
 
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
@@ -316,6 +353,24 @@ public final class Groups {
 	 * it was) through {@link #endedUntouched}; set in {@link #end} before {@link #GROUP_ENDED} is called.
 	 */
 	private static final Set<String> UNTOUCHED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** (S-DRS-1) How a group's last whole-group removal stopped and why, typed (SiteGroup.removalStop, removalStopCause). */
+	public record Stop(dev.larattalabs.architect.api.RemovalStop stop, dev.larattalabs.architect.api.RemovalStopCause cause) {
+	}
+
+	/** (S-DRS-1) The last stop per group (in memory, as {@link #UNTOUCHED}); a removal that removes the group clears it. */
+	private static final Map<String, Stop> LAST_STOP = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (S-DRS-1) The group's last whole-group removal's stop, or null. */
+	public static @Nullable Stop lastStop(String groupId) {
+		return LAST_STOP.get(groupId);
+	}
+
+	/** (S-DRS-1) The stop a whole-group removal's end records: null when it removed the group. Pure. */
+	static @Nullable Stop stopOf(Removed result, boolean untouched) {
+		return result.removed() ? null : new Stop(untouched ? dev.larattalabs.architect.api.RemovalStop.NOT_STARTED : dev.larattalabs.architect.api.RemovalStop.PARTIAL,
+			result.stopCause());
+	}
 
 	/** Whether the group's last whole-group removal ended having written nothing (see {@link #UNTOUCHED}). Server thread. */
 	public static boolean endedUntouched(String groupId) {
@@ -721,7 +776,7 @@ public final class Groups {
 		if (r.undo == null && r.planned == null && !r.probed && survival(r)) {
 			String refused = probe(() -> Stockpiles.saveWithWorld(server));
 			if (refused != null) {
-				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + refused), Map.copyOf(r.refund)));
+				end(server, r, Removed.saveRefused(r.group, refused, Map.copyOf(r.refund)));
 				return;
 			}
 			r.probed = true;
@@ -952,8 +1007,7 @@ public final class Groups {
 				r.waited += Batches.RECHECK;
 				r.nextCheck = tick + Batches.RECHECK;
 				if (r.waited >= MAX_WAIT) {
-					end(server, r, new Removed(false, List.of(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed"),
-						Map.copyOf(r.refund)));
+					end(server, r, Removed.waitedOut(id, player, Map.copyOf(r.refund)));
 				}
 				return;
 			}
@@ -996,7 +1050,7 @@ public final class Groups {
 		}
 		r.outsideF = null;
 		if (!outside.isEmpty() && r.covered == Sites.Covered.REFUSE) {
-			end(server, r, new Removed(false, List.of("COVERED: " + String.join(", ", outside) + " cover cells of the sites"), Map.copyOf(r.refund)));
+			end(server, r, Removed.covered(outside, Map.copyOf(r.refund)));
 			return;
 		}
 		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE && r.blockerScan == 0) {
@@ -1015,7 +1069,7 @@ public final class Groups {
 			}
 			List<String> blockers = Sites.removalBlockers(level, s, s.owner()); // 6c 0c (C18): the site owner's tagged entities
 			if (!blockers.isEmpty()) {
-				end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
+				end(server, r, Removed.blocked(id, blockers, false, Map.copyOf(r.refund)));
 				return;
 			}
 			if (System.nanoTime() >= Placement.deadline() && r.blockerScan < ids.size()) {
@@ -1037,7 +1091,7 @@ public final class Groups {
 							Fills.writeBack(level, b);
 						}
 					}
-					end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, List.of(cargo))), Map.copyOf(r.refund)));
+					end(server, r, Removed.blocked(id, List.of(cargo), true, Map.copyOf(r.refund)));
 					return;
 				}
 				custody = true;
@@ -1052,7 +1106,7 @@ public final class Groups {
 						Fills.writeBack(level, b);
 					}
 				}
-				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + refused), Map.copyOf(r.refund)));
+				end(server, r, Removed.saveRefused(r.group, refused, Map.copyOf(r.refund)));
 				return;
 			}
 			dev.larattalabs.architect.journal.WorldJournal.kill("FKC1"); // (TEST) the custody saved, the undo's world write not yet
@@ -1119,7 +1173,7 @@ public final class Groups {
 						Fills.writeBack(level, b);
 					}
 				}
-				end(server, r, new Removed(false, List.of("the removal of group " + r.group + " was not started: " + e.getMessage()), Map.copyOf(r.refund)));
+				end(server, r, Removed.saveRefused(r.group, e.getMessage(), Map.copyOf(r.refund)));
 				return;
 			}
 		}
@@ -1377,6 +1431,12 @@ public final class Groups {
 			} else {
 				UNTOUCHED.remove(r.group);
 			}
+			Stop stop = stopOf(result, untouched);
+			if (stop == null) {
+				LAST_STOP.remove(r.group);
+			} else {
+				LAST_STOP.put(r.group, stop);
+			}
 		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
 		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {
@@ -1436,6 +1496,7 @@ public final class Groups {
 	static void load(JsonArray a) {
 		REMOVALS.clear();
 		STALLED.clear();
+		LAST_STOP.clear(); // (S-DRS-1) a world's stops are its own
 		for (JsonElement e : a) {
 			try {
 				Removal rm = Removal.fromJson(e.getAsJsonObject());
@@ -1491,6 +1552,7 @@ public final class Groups {
 		REMOVALS.forEach(r -> r.futures.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		REMOVALS.clear();
 		STALLED.clear();
+		LAST_STOP.clear(); // (S-DRS-1) a world's stops are its own
 		tick = 0;
 	}
 }

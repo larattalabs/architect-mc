@@ -172,7 +172,17 @@ public final class Views {
 		};
 		return new dev.larattalabs.architect.api.SiteGroup(g.id(), g.owner(), g.ext(), g.sites(), g.stages().stream().map(Views::stage).toList(), state,
 			g.crate() == null ? Optional.empty() : Optional.of(new BlockPos(g.crate().x(), g.crate().y(), g.crate().z())),
-			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty());
+			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty(), stopOf(g.id()), causeOf(g.id()));
+	}
+
+	private static dev.larattalabs.architect.api.RemovalStop stopOf(String group) {
+		var st = dev.larattalabs.architect.site.Groups.lastStop(group);
+		return st == null ? dev.larattalabs.architect.api.RemovalStop.NONE : st.stop();
+	}
+
+	private static dev.larattalabs.architect.api.@Nullable RemovalStopCause causeOf(String group) {
+		var st = dev.larattalabs.architect.site.Groups.lastStop(group);
+		return st == null ? null : st.cause();
 	}
 
 	/** Item ids -> items (unknown ids dropped). */

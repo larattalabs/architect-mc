@@ -396,6 +396,8 @@ export async function registerDRS(steps, h) {
       log(`  ${tag}: remove answered ${json(res).slice(0, 300)}; view ${v?.state} ${v?.removalStop}: ${v?.removalStopReason}`);
       check(v?.state === v0.state && v?.removalStop === 'NOT_STARTED' && /was not started: .*ledger was not saved/.test(v?.removalStopReason ?? ''),
         `${tag}: the refused removal ended NOT_STARTED; the region stays ${v0.state} (${v?.state}, ${v?.removalStop}: ${v?.removalStopReason})`);
+      // (S-DRS-1) the stop's typed cause beside the unchanged text
+      check(v?.removalStopCause === 'SAVE_REFUSED', `${tag}: (S-DRS-1) RegionView.removalStopCause ${v?.removalStopCause} (want SAVE_REFUSED)`);
       const pc = await call('dev.box.hash', { min: [px, py, pz], max: [px, py, pz], cells: true }, 60_000);
       const near = (await call('dev.items.near', { pos: [px, py, pz], radius: 48 }, 60_000)).items ?? {};
       const L1 = (await pile()).ledger;
@@ -403,7 +405,7 @@ export async function registerDRS(steps, h) {
         `${tag}: nothing changed in the world: the town's box hashes as before, the player's sponge stands, no item dropped (${json(near)})`);
       check(json(saved()) === S0 && G.same(back(L1), back(L0)) && Object.keys(L1?.pendingCredit ?? {}).filter((k) => k !== W.ckey).length === 0 && Object.keys(L1?.custody ?? {}).length === 0,
         `${tag}: nothing changed in the ledger: the saved file as before, nothing credited, no hold or custody left`);
-      out.DR12 = { cell, stop: v?.removalStop, reason: v?.removalStopReason, state: v?.state };
+      out.DR12 = { cell, stop: v?.removalStop, cause: v?.removalStopCause, reason: v?.removalStopReason, state: v?.state };
     }
 
     // DR4b: the rest removed as a region; its decCredit held pending on disk (DR-S); the hall stuck, repaired, credited once

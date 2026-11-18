@@ -48,7 +48,9 @@ public final class ApiRules {
 		// (LCAP, S-M5-16) RealiseRequest/ApprovedRealise.maxBillPerLot (a per-lot cap beside maxBill) and Quote.lotBill
 		"maxBillPerLot",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion");
+		"apiVersion",
+		// (S-DRS-1) RegionView.removalStopCause and SiteGroup.removalStop/removalStopCause: a removal's stop typed (SAVE_REFUSED, PLAYER_IN_BOX, ...)
+		"removalStopCause");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:
