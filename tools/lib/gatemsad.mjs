@@ -19,6 +19,7 @@
 //                                                       paid records and returned equal the saved ledger's; the building lot then builds
 //                                                       from the stockpile; Regions.remove exact
 //   node tools/gate6dgr.mjs dfgdefer     (dfg-defer)     slice DFG: adoptCrates defers a crate it cannot read (the DFG block at the end)
+//   node tools/gate6dgr.mjs dfgmissing   (dfg-missing)   slice DFG: a building target whose crate is gone (nothing credited) is fed
 //   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
@@ -672,6 +673,40 @@ export async function registerSAD(steps, h) {
     out.C = { refused: aC.refused ?? null };
     check(!aC.refused && ledgerSame(pC.ledger, pB.ledger) && json(pC.feedOrder) === json(pB.feedOrder), 'DFG C: adoptCrates a third time adds nothing (delivered, dropped, paid records, stock, feed order)', out.C);
     await conserve('DFG C');
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  // dfg-missing (DFG fix round, GPT P1): house_4's shared crate gone (its cell air, nothing credited): adoptCrates has nothing to take, so
+  //            main's path: the references cleared, house_4 joins the feed order and is fed to BUILT from the stockpile. Red on 8290b06b
+  //            (deferred: the reference kept, house_4 waiting for a crate that does not exist)
+  steps.dfgmissing = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B DFG Missing');
+    const { ids } = await suppliedTown('DFG missing', W);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `DFG missing: a stockpile of 4 crates for ${OWNER}`);
+    const s40 = await siteState(ids.house_4);
+    const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
+    await cmd(`/setblock ${at.join(' ')} minecraft:air`);
+    const gone = !(await isBlock(at, crateBlock));
+    const s41 = await siteState(ids.house_4);
+    out.gone = { at, gone, crate: s41.crate };
+    check(gone && s41.crate?.x === at[0] && !['BUILT', 'built'].includes(s41.state), `DFG missing: the shared crate's cell is air; house_4 (${s41.state}, ${s41.built}/${s41.queue}) still names it`, out.gone);
+    const p0 = await pile();
+    const a = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const p1 = await pile();
+    const s4 = await siteState(ids.house_4);
+    out.adopt = { refused: a.refused ?? null, crate: s4.crate, order: p1.feedOrder, same: ledgerSame(p1.ledger, p0.ledger) };
+    check(!a.refused && s4.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4) && ledgerSame(p1.ledger, p0.ledger),
+      `DFG missing: adoptCrates cleared house_4's reference to the missing crate and put it in the feed order (${json(p1.feedOrder ?? [])}); nothing credited (no crate, no stock)`, out.adopt);
+    await pause(ids.house_4, false);
+    const ok = await feedPile(async () => ['BUILT', 'built'].includes((await siteState(ids.house_4)).state));
+    const s4b = await siteState(ids.house_4);
+    out.fed = { ok, state: s4b.state, built: s4b.built, queue: s4b.queue };
+    check(ok && ['BUILT', 'built'].includes(s4b.state), `DFG missing: house_4 fed from the stockpile to ${s4b.state} (${s4b.built}/${s4b.queue}), not waiting for a crate`, out.fed);
     await L.leaveWorld();
     spendZero();
     return out;
