@@ -38,13 +38,22 @@ describe('WR2: the CPU-time limit', () => {
     for (const m of [kitTimeoutMessage('plan', { ...base, cpu: true, hit: 'cpu' }), kitTimeoutMessage('plan', { ...base, cpu: true, hit: 'wall', elapsedMs: 600_000 })]) expect(m).toMatch(/^the plan took longer than \d+ s/);
   });
 
+  // The child spins until its own CPU time (process.cpuUsage) reaches its target, not for a wall-clock span: on a loaded machine a
+  // wall-clock spin gets fewer CPU ms (240 < 300 at load ~32), while CPU work stays CPU work. It then idles so the last polls see it.
+  // Two children, 300 and 900 ms of work: each reading reaches most of its work, and the bigger job reads more.
   it.skipIf(process.platform === 'win32')('reads a real child\'s CPU time', async () => {
-    const r = await run(process.execPath, ['-e', 'const t = Date.now(); while (Date.now() - t < 600) {}; setTimeout(() => {}, 400)'], { cpuLimitMs: 60_000, cpuPollMs: 100, timeoutMs: 10_000 });
-    expect(r.timedOut).toBe(false);
-    expect(r.limit).toBeUndefined();
-    expect(r.cpuMs).toBeGreaterThan(300);
+    const spin = (ms: number) => `const c = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; }; while (c() < ${ms}) {}; setTimeout(() => {}, 600)`;
+    const small = await run(process.execPath, ['-e', spin(300)], { cpuLimitMs: 60_000, cpuPollMs: 100, timeoutMs: 60_000 });
+    const big = await run(process.execPath, ['-e', spin(900)], { cpuLimitMs: 60_000, cpuPollMs: 100, timeoutMs: 60_000 });
+    for (const r of [small, big]) {
+      expect(r.timedOut).toBe(false);
+      expect(r.limit).toBeUndefined();
+    }
+    expect(small.cpuMs).toBeGreaterThan(200);
+    expect(big.cpuMs).toBeGreaterThan(700);
+    expect(big.cpuMs!).toBeGreaterThan(small.cpuMs! + 300);
     expect(await childCpuMs(process.pid)).toBeGreaterThan(0);
-  });
+  }, 120_000);
 
   it.skipIf(process.platform === 'win32')('a busy child is stopped by CPU time; a sleeping one only by the wall-clock backstop', async () => {
     const busy = await run(process.execPath, ['-e', 'for (;;) {}'], { cpuLimitMs: 500, cpuPollMs: 100, timeoutMs: 20_000 });
