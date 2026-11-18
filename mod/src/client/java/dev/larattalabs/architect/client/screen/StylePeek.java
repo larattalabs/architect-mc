@@ -116,7 +116,7 @@ public final class StylePeek {
 		}
 		Palettes.Inputs from = StyleSwap.inferMain(table, counts);
 		Palettes.Inputs to = table.mainOf(style.roles());
-		StyleSwap swap = new StyleSwap(table, from, to, id -> {
+		StyleSwap swap = new StyleSwap(table, from, to, style.roles(), id -> {
 			Identifier rl = Identifier.tryParse(id);
 			return rl != null && BuiltInRegistries.BLOCK.containsKey(rl);
 		});

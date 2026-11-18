@@ -95,5 +95,11 @@ class StyleSwapTest {
 		assertEquals("minecraft:deepslate_tile_stairs", s.swap("minecraft:dark_oak_stairs"), "a wood roof onto a stone roof, as stairs");
 		assertNotEquals("minecraft:glass_pane", s.swap("minecraft:spruce_planks"));
 		assertEquals("minecraft:glass_pane", s.swap("minecraft:glass_pane"));
+		// with the Style's roles: planks take its wall block, logs its frame block
+		REG.add("minecraft:white_concrete");
+		StyleSwap r = new StyleSwap(T, m, STYLES.get(0), Map.of("wall", "minecraft:white_concrete", "frame", "minecraft:birch_log"), StyleSwapTest::exists);
+		assertEquals("minecraft:white_concrete", r.swap("minecraft:spruce_planks"));
+		assertEquals("minecraft:birch_log", r.swap("minecraft:spruce_log"));
+		assertEquals("minecraft:birch_stairs", r.swap("minecraft:spruce_stairs"), "shapes still follow the wood");
 	}
 }

@@ -19,6 +19,8 @@ public final class StyleSwap {
 	private final Palettes.Inputs to;
 	private final Predicate<String> exists;
 	private final Map<String, String> memo = new HashMap<>();
+	/** The target Style's roles (wall, frame, …), when known: a full plank or log block takes its role's block, not just the wood's. */
+	private final Map<String, String> toRoles;
 
 	/**
 	 * @param from the design's main rows ({@link #inferMain} when it has no Style of its own)
@@ -26,6 +28,12 @@ public final class StyleSwap {
 	 * @param exists whether a block id exists (the registry on the client; any set in tests)
 	 */
 	public StyleSwap(StyleRoles table, Palettes.Inputs from, Palettes.Inputs to, Predicate<String> exists) {
+		this(table, from, to, Map.of(), exists);
+	}
+
+	/** With the target Style's roles: the design's main-wood planks become its {@code wall} block and its logs its {@code frame} block. */
+	public StyleSwap(StyleRoles table, Palettes.Inputs from, Palettes.Inputs to, Map<String, String> toRoles, Predicate<String> exists) {
+		this.toRoles = Map.copyOf(toRoles);
 		this.table = table;
 		this.from = from;
 		this.to = to;
@@ -42,6 +50,11 @@ public final class StyleSwap {
 		// wood, then stone, then roof, then accent (MAIN_FIELDS order)
 		String w = table.woodOfBlock(q);
 		if (w != null && w.equals(from.wood()) && to.wood() != null) {
+			String role = q.equals("minecraft:" + w + "_planks") ? "wall" : q.equals("minecraft:" + w + "_log") ? "frame" : null;
+			String r = role == null ? null : toRoles.get(role);
+			if (r != null && exists.test(StyleRoles.qualify(r))) {
+				return StyleRoles.qualify(r);
+			}
 			return woodTo(q, w, to.wood());
 		}
 		String fam = table.stoneFamilyOf(q);
