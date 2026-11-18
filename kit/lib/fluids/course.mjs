@@ -87,7 +87,7 @@ export function courseSpec(part, block = 'channel.course') {
     depth: { read: intIn(1, 3), why: 'not 1..3' },
     drop: { read: intIn(1, 8), why: 'not 1..8' },
     look: { read: (v) => (v === 'natural' || v === 'built' ? v : undefined), why: 'not natural or built' },
-    flow: { read: (v) => (['level', 'pools', 'riffles'].includes(v) ? v : undefined), why: 'not level, pools or riffles' },
+    flow: { read: (v) => (['level', 'pools', 'riffles', 'current'].includes(v) ? v : undefined), why: 'not level, pools, riffles or current' },
     riffle: { read: intIn(2, 6), why: 'not 2..6' },
     cut: { read: intIn(0, 6), why: 'not 0..6' },
     fill: { read: intIn(0, 2), why: 'not 0..2' },
@@ -308,7 +308,7 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   }
   // the levels never rise, and stand at most `fill` over the ground - 1 the router allowed
   for (let i = 1; i < nR; i++) pcols[i].level = Math.min(pcols[i].level, pcols[i - 1].level);
-  const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, ...(spec.riffleCells ? { riffleCells: spec.riffleCells } : {}), flow: o.frozen && spec.flow === 'riffles' ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
+  const prof = profileOf(pcols, { minReach: PROFILE.minReach, drop: spec.drop, ...(spec.riffleCells ? { riffleCells: spec.riffleCells } : {}), flow: o.frozen && (spec.flow === 'riffles' || spec.flow === 'current') ? 'pools' : spec.flow, riffle: spec.riffle, cut: spec.cut, minDrop: o.minDrop ?? 1 });
   if (prof.refused) return prof;
   // (a frozen course: a spillway's submerged outlet would join two reaches at one level; its upper reach takes the lower level)
   if (o.frozen) {
@@ -442,9 +442,9 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
   const carve = [];
   for (const R of reaches) for (const { x, z, depth } of R.cols.values()) carve.push([x, z, R.level - depth + 1]);
   for (const st of steps) for (const [x, y, z] of st.cells) carve.push([x, z, y, st.frozen ? y : null]);
-  // a riffle's banks are exits all along: the bank over its side lining carved open
+  // a riffle's banks are exits all along: the bank over its side lining carved open ((8c RV) a current's too)
   for (const st of steps) {
-    if (st.kind !== 'riffle') continue;
+    if (st.kind !== 'riffle' && st.kind !== 'current') continue;
     const up = reaches.find((r) => r.id === st.from);
     for (const c of up.lining) if (st.cells.some((s) => s[1] === c[1] && Math.abs(s[0] - c[0]) + Math.abs(s[2] - c[2]) === 1) && !isOpen(c[0], c[1] + 1, c[2])) carve.push([c[0], c[2], c[1] + 1]);
   }
@@ -767,6 +767,9 @@ export function layCourse(r, geo, o) {
       lining: R.lining, weir: R.weir, joins: [...R.joins, ...R.planJoins], solid: R.solid, ice: R.ice.length ? R.ice : null,
       ...(R.grate?.length ? { grate: R.grate } : {}), ...(overflow.length ? { overflow } : {}), ...(R.raised ? { raised: true } : {}),
       ...(unsafe[R.k] ? { _unsafe: unsafe[R.k] } : {}),
+      // ((8c RV) a river (flow current): a reach whose step is a current is a wm body (kind river, flow current: 8cF's op members); its
+      // other reaches are plain HY reaches (they hold no current), so only the currents count against the region's 8 river bodies)
+      ...(o.flow === 'current' && geo.steps.some((s) => s.from === R.id && s.kind === 'current') ? { flow: 'current', kind: 'river', model: 'wm', wouldFit: o.wouldFit ?? null } : {}),
     });
     rec.shellStates = shellStatesOf(rec, shellRole);
     for (const c of rec.lining) rec.shellStates.push(shellRole(c[0], c[1], c[2], R.weir.some((w) => w[0] === c[0] && w[1] === c[1] && w[2] === c[2]) ? 'weir' : 'lining'));
@@ -823,7 +826,7 @@ export function course(r, pathIn, opts = {}) {
     if (opts.ice) for (const R of geo.reaches) R.ice = iceOf(r.ctx, R, geo, opts.ice === 'all');
     const m = bodiesMark(r);
     try {
-      const out = layCourse(r, geo, { id, part: opts.part ?? null, look: spec.look, stage: opts.stage ?? r.stageList[0], unsafe: opts._unsafe ?? null, exits: opts.exits, survey: S });
+      const out = layCourse(r, geo, { id, part: opts.part ?? null, look: spec.look, stage: opts.stage ?? r.stageList[0], unsafe: opts._unsafe ?? null, exits: opts.exits, survey: S, ...(spec.flow === 'current' ? { flow: 'current' } : {}) });
       rec.bodies = out.bodies;
       // ((R2) an aqueduct's span record, as the plan router's: M15 judges its parts as one connector type's spans)
       if (geo.span?.part) {
@@ -1304,7 +1307,9 @@ export function emit(K, p, res) {
       }
     }
     const unsafe = p.part.ext?.['architect_mc:unsafe']?.course ?? null;
-    const out = layCourse(r, geo, { id: p.id, part: p.id, look: res.spec.look, stage: K.stageOf('forms'), unsafe, fill: res.spec.fill, noNotch });
+    // ((8c RV) a river: its UNSETTLED answer's wouldFit is the same course as pools (level reaches and spillways: more source reaches))
+    const riverFit = res.spec.flow === 'current' ? [{ fragment: { ...p.part, flow: 'pools' }, why: 'source', cells: 0 }] : null;
+    const out = layCourse(r, geo, { id: p.id, part: p.id, look: res.spec.look, stage: K.stageOf('forms'), unsafe, fill: res.spec.fill, noNotch, ...(riverFit ? { flow: 'current', wouldFit: riverFit } : {}) });
     const vk = volumeKeep(r, VC, classAt);
     for (const b of out.bodies) {
       const hit = reachMeetsKeep(r, env, b, { volClass: vk });

@@ -33519,3 +33519,29 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
 - **Tests:** `kit/lint/river.lint.mjs` (8; it runs in the water-lint step's glob).
 - **Seams:** WU drives the mod's drain and stray pass over `river-cases.json` (the Java half of CL's gate) and classifies `refed`
   outside the watch sets; Steward's undo diff learns `refed` (its slice 7).
+
+## Slice RV, the planner's rivers (8c kit lane; branch `slice/8cK`; 2026-11-17; DEV MODE, light; versions NEXT; $0): as built (rivers; falls not yet)
+
+- **Scope built:** `connector.channel` `flow: "current"` end to end, and §5's settlement rules for rivers. Every other course and body
+  plans as before: the 138 non-8c corpus entries are byte-identical to `slice/WM` again (IRs, blobs, checker, lint, breaches, answers);
+  the goldens re-plan byte for byte. **Not built:** waterfalls `lip: "form"` off BF forms (§6: the 48 drop, 4 per region, the 5 curtain,
+  the 3-deep basin past 24, never onto lots or routes) and `form.hidden_room` behind such a fall: the next kit slice (RV-b).
+- **Profile** (`profile.mjs currentProfile`): few source reaches joined by currents, runs of at most 6 cells (with the overhang, levels
+  1..7), each ending in a 1-block step. Greedy from the head: a reach holds while the router allows, its current starts one run before
+  the ground drops and runs on while the path is straight, under the router's level (else it ends in a fall of at most `drop`), within
+  `cut`, and less than 2 (`CURRENT_SLACK`) under the router's level at each new run. A path it cannot lay is the pools profile.
+- **Bodies** (`course.mjs layCourse`): a reach whose step is a current is a wm body with 8cF's members (`flow: "current"`, `kind:
+  "river"`; the coordinator's mapping, flow -> model wm, is in body.mjs as on 8cG); the other reaches are plain HY reaches, so only the
+  currents count against the region's 8 river bodies. Routes, light and KC read a `river` reach as a course's (moat.mjs, light.mjs).
+- **body.mjs (wm only):** conversions lifted into written sources until none is left (op `converted`; `lift: false` leaves
+  M25:convert); natural washable blocks in predicted cells cleared IF_NATURAL in the shell's stage (`<id>_wash`, op `wash`); a box
+  given without levels (ARVX v3) refuses VOLUME `{why: 'levels', version}` (place.mjs volumeAnswer). 8cF's op-member hunk and plan.json's
+  UNSETTLED/`say` are 8cG's text verbatim (identical hunks).
+- **UNSETTLED** from a river carries the pools course as its wouldFit (`{fragment: {..., flow: 'pools'}, why: 'source'}`).
+- **Catalogue:** channel.course `flows` gains `current` (plan.json, the golden, siteplan's flow and step kinds); no schemaVersion bump
+  (an additive enum value). The older catalogue tests list `channel.course` with the other slices' entries.
+- **Fixtures:** `kit/test/fixtures/river/` c01 (a stepped meadow: 3 currents, 4 reaches), c02 (v3: VOLUME levels), c03 (through a
+  hamlet: lots off its cells, spill and breach; the road bridges it), c04 (three rivers: the ninth river body refused); test-only region
+  `fixtures/wm/lift_demo.mjs`; they join the 8c lane's shards. Tests: `kit/test/rv.test.mjs` (8).
+- **Seams:** RV-b (falls off forms, the hidden room); `say` and UNSETTLED in plan.json need 8cG's Java (`Reason`); a river's census and
+  drain are WU's; Steward's compose rule and card lines (its slice).

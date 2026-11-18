@@ -65,6 +65,9 @@ export function corpus() {
   // ((8c SE) the kit lane's flowing water: test-only regions with wm bodies, in their own shards (lane '8c'), so the shards above keep
   // their entries)
   for (const e of WM_ENTRIES) out.push({ ...e, kind: 'wm', lane: '8c' });
+  // ((8c RV) the rivers' plan fixtures, kit/test/fixtures/river (not under plan/: the shards above keep their entries)
+  const RIVERS = path.join(KIT, 'test', 'fixtures', 'river');
+  if (fs.existsSync(RIVERS)) for (const f of fs.readdirSync(RIVERS).filter((x) => x.endsWith('.json')).sort()) out.push({ name: `river/${f}`, kind: 'fixture', fx: JSON.parse(fs.readFileSync(path.join(RIVERS, f), 'utf8')), dir: 'river', lane: '8c' });
   return out;
 }
 

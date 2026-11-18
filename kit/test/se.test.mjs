@@ -102,17 +102,17 @@ test('SE region: more than 8 river bodies, or more than 32,768 flowing cells ove
 });
 
 test('SE UNSETTLED: the refusal carries flowing.mjs\'s answer shape (code, say, evidence {body, cap, limit, regionWide, cells, rounds, sample}, wouldFit)', () => {
-  const e = unsettledRefusal('river_r1', { cap: 'cells', limit: 4096, cells: 4200, rounds: 900, sample: [[1, 2, 3]] }, { part: 'river' });
+  const e = unsettledRefusal('river_r1', { cap: 'cells', limit: 4096, cells: 4200, rounds: 900, sample: [[1, 2, 3]] }, 'river');
   assert.match(e.message, /^UNSETTLED: body river_r1: /);
   const want = unsettledAnswer({ part: 'river', body: 'river_r1', cap: 'cells', cells: 4200, rounds: 900, sample: [[1, 2, 3]] }).reasons[0];
   assert.deepEqual(e.evidence, want.evidence);
   assert.equal(e.say, 'The river was too long to settle here; it waits');
   assert.equal(e.wouldFit, undefined);
-  const r = unsettledRefusal('river_r1', { cap: 'rounds', limit: 10360, cells: 50, rounds: 2073, sample: [] }, { part: 'river', wouldFit: [{ fragment: { flow: 'pools' }, why: 'source', cells: 0 }] });
+  const r = unsettledRefusal('river_r1', { cap: 'rounds', limit: 10360, cells: 50, rounds: 2073, sample: [], wouldFit: [{ fragment: { flow: 'pools' }, why: 'source', cells: 0 }] }, 'river');
   assert.deepEqual([r.evidence.cap, r.evidence.limit, r.evidence.regionWide], ['rounds', 10360, false]);
   assert.equal(r.say, 'The river was too long to settle here; a shorter one fits');
   assert.deepEqual(r.wouldFit, [{ part: 'river', fragment: { flow: 'pools' }, why: 'source', cells: 0 }]);
-  const g = unsettledRefusal('river_r1', { cap: 'regionBodies', limit: 8, cells: 100, rounds: 0, sample: [] }, { part: 'river' });
+  const g = unsettledRefusal('river_r1', { cap: 'regionBodies', limit: 8, cells: 100, rounds: 0, sample: [] }, 'river');
   assert.equal(g.evidence.regionWide, true);
 });
 

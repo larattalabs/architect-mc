@@ -628,7 +628,8 @@
     "flows": [
      "level",
      "pools",
-     "riffles"
+     "riffles",
+     "current"
     ],
     "looks": [
      "natural",
