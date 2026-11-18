@@ -228,7 +228,9 @@ export async function registerPSV(steps, h) {
     const site = bv.items?.[0]?.site;
     check(!!site, `${tag}: an actorless construction rs_hut from the group's shared crate (${site}, group ${bv.group})`, bv);
     if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
-    const pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+    // paused once it is building (its placement's job done: before that the pause refuses it)
+    let pz;
+    for (let i = 0; i < 60; i++) { pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000); if (!pz?.refused) break; await L.sleep(1000); }
     check(!pz?.refused, `${tag}: the site paused (${json(pz?.refused ?? 'paused')})`);
     const st0 = await call('dev.site.state', { site }, 60_000);
     const give = {};
