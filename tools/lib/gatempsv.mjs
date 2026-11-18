@@ -21,6 +21,11 @@
 //           crate stands, its stock + placed as before (the builder may go on placing from it), the group not taken down (bb95ec19: R1 took the crate's stock and restored its cell,
 //           then ended unwritten: the stock lost)
 //   PSV1/PSV2 also check the refund equals what the town consumed (the total; GPT: once-only was too weak)
+//     PSV5  (slice PSVLC3, the v0.77.0 fix review's P1 1) no stockpile: PSV4's crate-fed rs_hut (paused, stock inserted, /save-all flush),
+//           the group's removal halted at its commit point (dev.journal.killAt K5: the queue file holds the planned undo and the crate's
+//           carried stock, the world's last save the crate with it), reopened: the loaded removal ends REMOVED and the crate's stock drops
+//           once (adef7f9b: the carried stock plus the stock taken again, twice)
+//     PSV6  the same halted at K5+save (the chunks saved first: the crate gone on disk): the carried stock drops once, none lost
 //
 // Evidence: artifacts/gate6d-gr/psvcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -205,6 +210,67 @@ export async function registerPSV(steps, h) {
     await L.leaveWorld();
   }
 
+  /** PSV5/PSV6: a legacy crate's stock across a crash at the removal's commit point: dropped exactly once. */
+  async function crateCrashCase(out, tag, point) {
+    await G.survivalBase(ctx);
+    const name = `G6B PSV ${tag}`;
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await G.designs(ctx);
+    const gy = await groundY();
+    const at = [CX + 40, gy + 1, CZ + 40];
+    await L.tp(at[0] + 3, gy + 2, at[2] + 30);
+    const spec = { id: tag.toLowerCase(), proximity: false, sharedCrate: true, items: [{ key: 'h1', bp: 'rs_hut', at, rot: 0, mode: 'CONSTRUCTION' }] };
+    const bid = await later(`bqueue ${JSON.stringify(spec)}`, 120_000);
+    let bv;
+    for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site)) break; await L.sleep(1000); }
+    const site = bv.items?.[0]?.site;
+    check(!!site, `${tag}: an actorless construction rs_hut from the group's shared crate (${site}, group ${bv.group})`, bv);
+    if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
+    const pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+    check(!pz?.refused, `${tag}: the site paused (${json(pz?.refused ?? 'paused')})`);
+    const st0 = await call('dev.site.state', { site }, 60_000);
+    const give = {};
+    for (const [k, v] of Object.entries(st0.bom ?? {}).slice(0, 3)) give[k] = Math.max(1, Math.floor(v / 2));
+    await call('dev.crate.insert', { site, items: give, exact: true }, 120_000);
+    await call('dev.wait', { ms: 3000 }, 30_000);
+    await cmd('/save-all flush');
+    await call('dev.wait', { ms: 2000 }, 30_000);
+    const s1 = await call('dev.site.state', { site }, 60_000);
+    const stock = pos(s1.ledger?.stock);
+    const placed = pos(s1.ledger?.placed);
+    const crate = [s1.crate?.x, s1.crate?.y, s1.crate?.z];
+    check(s1.crate?.present === true && sum(stock) > 0, `${tag}: the crate stands with stock ${sum(stock)} (placed ${sum(placed)})`, s1.crate);
+    const near0 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    await call('dev.journal.killAt', { point }, 10_000);
+    api(`sgremove ${bv.group}`).catch(() => null);
+    const down = await haltWait();
+    check(down, `${tag}: the removal halted at ${point}`);
+    const n = { tag, point, site, group: bv.group, stock, placed, crate, near0: near0.items };
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); out[tag] = n; await L.leaveWorld(); return; }
+    await L.openWorld(name);
+    await L.tp(at[0] + 3, gy + 2, at[2] + 30);
+    let g;
+    for (let i = 0; i < 150; i++) {
+      g = await api(`sgroup ${bv.group}`).catch(() => null);
+      if (/^removed$/i.test(g?.state ?? '')) break;
+      await call('dev.wait', { ms: 2000 }, 30_000);
+    }
+    n.groupAfter = g?.state ?? null;
+    check(/^removed$/i.test(n.groupAfter ?? ''), `${tag}: reopened, the loaded removal ends REMOVED (${n.groupAfter})`);
+    await call('dev.wait', { ms: 3000 }, 30_000);
+    const near1 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    const dropped = G.minus(near1.items ?? {}, near0.items ?? {});
+    n.dropped = dropped;
+    // the crate's stock drops once; a placed block's refund may come on top (at most what was placed); nothing beyond
+    const bad = Object.keys(stock).filter((k) => (dropped[k] ?? 0) < stock[k] || (dropped[k] ?? 0) > stock[k] + (placed[k] ?? 0));
+    check(bad.length === 0, `${tag}: the crate's stock dropped once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}${placed[k] ? ` +${placed[k]} placed` : ''}`).join(', ')}; twice is the double)`, { stock, placed, dropped });
+    log(`  ${tag}: ${json(n)}`);
+    out[tag] = n;
+    await L.leaveWorld();
+  }
+
   async function oneCase(out, tag) {
     const W = await survivalWorld(`G6B PSV ${tag}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
@@ -278,11 +344,13 @@ export async function registerPSV(steps, h) {
   steps.psvcrash = async () => {
     await ensure();
     const out = {};
-    const parts = (process.env.GATE_PSV_PARTS ?? 'PSV1,PSV2,PSV3,PSV4').split(',');
+    const parts = (process.env.GATE_PSV_PARTS ?? 'PSV1,PSV2,PSV3,PSV4,PSV5,PSV6').split(',');
     for (const tag of parts) {
       try {
         if (tag === 'PSV3') await replanCase(out, tag);
         else if (tag === 'PSV4') await notSavedCase(out, tag);
+        else if (tag === 'PSV5') await crateCrashCase(out, tag, 'K5');
+        else if (tag === 'PSV6') await crateCrashCase(out, tag, 'K5+save');
         else await oneCase(out, tag);
       } catch (e) {
         check(false, `${tag}: ${String(e?.message ?? e).slice(0, 300)}`);
