@@ -569,4 +569,24 @@ public interface Sites {
 	default boolean suspectsPending() {
 		throw new UnsupportedOperationException("Sites.suspectsPending needs Architect API 1.67.0");
 	}
+
+	// ------------------------------------------------------------------ phase 8b: settlement data (docs/CONTRACT.md "Phase 8b" §3)
+
+	/**
+	 * (8b CK, feature {@code "connectorCheck"}) The dry run of {@link #placeConnector}: the same plan check in the world's mode, and in
+	 * survival its quote held against the request's {@code maxBill}, under the request's {@code opKey} (a {@link #placeConnector} with the
+	 * same key and body reuses the check). Read-only, $0: nothing is written, reserved or consumed. Any thread; the future completes on the
+	 * server thread. Since NEXT.
+	 */
+	default CompletableFuture<ConnectorCheck> checkConnector(ConnectorRequest request) {
+		throw new UnsupportedOperationException("Sites.checkConnector needs Architect API NEXT (feature connectorCheck)");
+	}
+
+	/**
+	 * (8b BL, feature {@code "regionBill"}, Steward's review §2a) One construction target's bill (a site or a road, in a region or outside
+	 * one: a supplied batch build, an update). Empty for an unknown id or an instant site. Survival only. Server thread. Since NEXT.
+	 */
+	default Optional<TargetBill> targetBill(String targetId) {
+		throw new UnsupportedOperationException("Sites.targetBill needs Architect API NEXT (feature regionBill)");
+	}
 }

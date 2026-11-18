@@ -461,4 +461,31 @@ public interface Regions {
 	default CompletableFuture<Quote> quoteApproved(String artifactSha, java.util.Map<String, String> lotEntries) {
 		throw new UnsupportedOperationException("Regions.quoteApproved needs Architect API 1.55.0");
 	}
+
+	// ------------------------------------------------------------------ phase 8b: settlement data (docs/CONTRACT.md "Phase 8b" §3)
+
+	/**
+	 * (8b LY, feature {@code "regionLayout"}) A region's geometry for a map: its lots (pads too) and parts, with kind, box and ends
+	 * ({@link RegionLayout}). Cached per IR sha and head revision; the same in creative and survival. Empty for an unknown region. Server
+	 * thread; loads no chunk, asks no sidecar. Since NEXT.
+	 */
+	default Optional<RegionLayout> layout(String regionId) {
+		throw new UnsupportedOperationException("Regions.layout needs Architect API NEXT (feature regionLayout)");
+	}
+
+	/**
+	 * (8b BL, feature {@code "regionBill"}) A survival region's bill, a page of its targets' bills ordered by target id: {@code offset} from
+	 * 0, {@code limit} 1 to {@link Limits#BILL_PAGE_MAX}. Empty for an unknown region; empty maps in creative. Server thread. Since NEXT.
+	 */
+	default Optional<RegionBill> bill(String regionId, int offset, int limit) {
+		throw new UnsupportedOperationException("Regions.bill needs Architect API NEXT (feature regionBill)");
+	}
+
+	/**
+	 * (8b BL, Steward's S-8b-3c) {@link #bill(String, int, int)} for these targets only (ids not the region's are left out), in target id
+	 * order: the building panel's read. Server thread. Since NEXT.
+	 */
+	default Optional<RegionBill> bill(String regionId, java.util.Set<String> targets) {
+		throw new UnsupportedOperationException("Regions.bill needs Architect API NEXT (feature regionBill)");
+	}
 }
