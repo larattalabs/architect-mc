@@ -180,10 +180,14 @@ public final class TxnDev {
 					break;
 				}
 				int slot = req.has("slot") ? req.get("slot").getAsInt() : 0;
+				o.addProperty("before", m.getSlot(slot).getItem().toString());
+				o.addProperty("valid", m.stillValid(player));
+				o.addProperty("mode", player.gameMode().getName());
 				// a real quick-move click packet, through the server's own handler (its validity check, and the hold's guard)
 				player.connection.handleContainerClick(new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(m.containerId, m.getStateId(),
 					(short) slot, (byte) 0, net.minecraft.world.inventory.ContainerInput.QUICK_MOVE, new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<>(),
 					net.minecraft.network.HashedStack.EMPTY));
+				o.addProperty("after", m.getSlot(slot).getItem().toString());
 				o.addProperty("result", player.containerMenu == m ? "clicked, still open" : "clicked, closed");
 			}
 			case "cacheStorage" -> {
