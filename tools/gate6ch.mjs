@@ -20,6 +20,8 @@
 //     holders   (h-holders)            fix/drain-holders: a separate site's waterlogged stair layered over a pond source cell; Regions.remove
 //                                      keeps it standing (the drain skips cells another entry holds on top) and hands the cell down to it;
 //                                      E-flat 0 outside it, then 0 after the stair site goes (tools/lib/gate6ch-holders.mjs)
+//     df        (h-df)                 slice DF: a refused fluids.json save waits SITE_BUSY with 0 sources (main wrote them), then
+//                                      settles and undoes exactly; the halt at FL1r bare and +save resumes from the gate
 //     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
 //                                      file not saved), K7+save (mid-R4)
 //     probe     (h-probe)              item 14: (a) the sand anomaly (a sand cell on a rewritten cell, dry and under water, re-read with
@@ -185,6 +187,11 @@ steps.ingame = async () => {
 steps.crash = async () => {
   await ensure();
   return { core: await (await import('./lib/gate6ch-core.mjs')).crash(ctx), halves: await halves('crash') };
+};
+// (slice DF) a refused fluids.json save stops the stage before any source; the halt at FL1r bare and +save
+steps.df = async () => {
+  await ensure();
+  return await (await import('./lib/gate6ch-core.mjs')).df(ctx);
 };
 // (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
 steps.holders = async () => {

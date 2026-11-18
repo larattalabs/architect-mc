@@ -69,13 +69,26 @@ public final class RegionStore {
 	 * read-only disk would: the gate's stand-in for a region record that cannot be saved. Null: off.
 	 */
 	public static volatile @org.jspecify.annotations.Nullable String failNext;
+	/** (slice DF, TEST: {@code dev.region.failNextSave {sticky: true}}) {@link #failNext} stays armed (every write of that file fails) until off. */
+	public static volatile boolean failSticky;
+
+	/** (slice DF) The injected failure of a write of {@code f} ({@link #failNext}), spent unless sticky; null when none is armed for it. */
+	public static @Nullable IOException injected(Path f) {
+		String fail = failNext;
+		if (fail == null || !fail.equals(f.getFileName().toString())) {
+			return null;
+		}
+		if (!failSticky) {
+			failNext = null;
+		}
+		return new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+	}
 
 	/** Write, fsync, atomic rename (and the directory exists). */
 	public static void write(Path f, byte[] data) throws IOException {
-		String fail = failNext;
-		if (fail != null && fail.equals(f.getFileName().toString())) {
-			failNext = null;
-			throw new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+		IOException fail = injected(f);
+		if (fail != null) {
+			throw fail;
 		}
 		Files.createDirectories(f.getParent());
 		Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
