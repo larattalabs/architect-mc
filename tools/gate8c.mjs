@@ -10,6 +10,9 @@
 //     ingame    (8c-ingame)            WU: river_demo and fall_island PLACED, census equal, Remove E-flat 0 in the watch sets; the wash
 //                                      rule; foreign water left by the drain; a Remove while draining joins it; 0 new item entities
 //     crash     (8c-crash)             CR: FL7, FL8, FL9 bare and +save, then FL1+save, FL2+save, FL4+save and FL5+save on the river
+//     survival  (8c-survival)          SV: c05 in survival (the staged island's typed terrain wait, the hidden room), river_demo's
+//                                      wash in survival (and its nowash control), c03 a river through a hamlet in survival (bills,
+//                                      Remove exact), Steward's rows through dev.region.state (tools/lib/gate8c-sv.mjs)
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate8c/<step>.json in the main checkout (GATE8C_OUT overrides), all.log, REPORT.md, spend.json.
@@ -77,14 +80,16 @@ steps.base = async () => {
 
 const INGAME_SECTIONS = G.INGAME.map((it) => it.key);
 const CRASH_SECTIONS = G.CRASH.map((it) => it.key);
-async function items(list, sections) {
+const SV = await import('./lib/gate8c-sv.mjs');
+const SURVIVAL_SECTIONS = SV.SURVIVAL.map((it) => it.key);
+async function items(list, sections, c = ctx) {
   const P = gatePart(sections, { log });
   const out = {};
   for (const it of list) {
     if (!P.want(it.key)) continue;
     log(`-- ${it.key}: ${it.name}`);
     try {
-      out[it.key] = await it.run(ctx);
+      out[it.key] = await it.run(c);
     } catch (e) {
       log(String(e?.stack ?? e));
       check(false, `${it.key}: ${String(e?.message ?? e).slice(0, 300)}`);
@@ -97,6 +102,12 @@ async function items(list, sections) {
 steps.probe = async () => { await ensure(); spendZero(); return G.probe(ctx); };
 steps.ingame = async () => { await ensure(); spendZero(); return items(G.INGAME, INGAME_SECTIONS); };
 steps.crash = async () => { await ensure(); spendZero(); return items(G.CRASH, CRASH_SECTIONS); };
+steps.survival = async () => {
+  await ensure();
+  spendZero();
+  const svCtx = { ...ctx, B: await import('./lib/gate6chy-b.mjs'), core: await import('./lib/gate6chy-core.mjs'), G: await import('./lib/gate6crs-game.mjs') };
+  return items(SV.SURVIVAL, SURVIVAL_SECTIONS, svCtx);
+};
 
 steps.report = async () => {
   const files = fs.readdirSync(OUT).filter((f) => f.endsWith('.json') && f !== 'spend.json');
