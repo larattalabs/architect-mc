@@ -448,18 +448,30 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	 * @param at when it was taken down (ms)
 	 * @param why {@code removed} or {@code moved}
 	 */
-	public record Pending(Site site, long at, String why) {
+	/**
+	 * A removed (or moved) site's record kept until the next start settles it. {@code settle} (slice T2b part 2b): the removal's
+	 * {@code crate.settle} input ({@link CrateSettle#stash}) while it has not settled: the crate keeps its stock until then, and a
+	 * restart settles it from here (never from the world as it stands then).
+	 */
+	public record Pending(Site site, long at, String why, @org.jspecify.annotations.Nullable JsonObject settle) {
+		public Pending(Site site, long at, String why) {
+			this(site, at, why, null);
+		}
+
 		public JsonObject toJson() {
 			JsonObject o = new JsonObject();
 			o.add("site", site.toJson());
 			o.addProperty("at", at);
 			o.addProperty("why", why);
+			if (settle != null) {
+				o.add("settle", settle);
+			}
 			return o;
 		}
 
 		public static Pending fromJson(JsonObject o) {
 			return new Pending(Site.fromJson(o.getAsJsonObject("site")), o.has("at") ? o.get("at").getAsLong() : 0L,
-				o.has("why") ? o.get("why").getAsString() : "removed");
+				o.has("why") ? o.get("why").getAsString() : "removed", o.has("settle") && o.get("settle").isJsonObject() ? o.getAsJsonObject("settle") : null);
 		}
 	}
 

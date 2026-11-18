@@ -1299,9 +1299,12 @@ public final class Adopt {
 		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, only) : null;
 		Sites.Drops drops = Sites.Drops.before(level, wb != null ? wb : b.restoreBox());
 		String group = SiteJournal.group(b.id());
-		SiteJournal.Undone undone = SiteJournal.undoEntries(level, ids, group);
+		// (T2b part 2b) its own crate's CRATE entry stays out of the undo: the removal's crate.settle (afterRestore) restores that cell
+		List<String> keep = CrateSettle.excluded(b, dec == null ? null : dec.settle());
+		List<String> undoIds = keep.isEmpty() ? ids : ids.stream().filter(i -> !keep.contains(i)).toList();
+		SiteJournal.Undone undone = SiteJournal.undoEntries(level, undoIds, group);
 		SiteJournal.await(undone.commit(), "the removal of " + b.id());
-		Sites.markPending(server, b, "removed");
+		Sites.markPending(server, b, "removed", dec == null ? null : dec.settle());
 		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
 		Sites.Removed done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), Sites.statsOf(undone.work(), b.id()), Map.of(), List.of(),
 			List.of());

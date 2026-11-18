@@ -316,7 +316,8 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	}
 
 	static RemoveResult result(Sites.Removed done) {
-		return new RemoveResult(true, List.of(), Views.items(done.returned()), done.restored(), done.kept(), done.handedDown(), done.cascaded());
+		return new RemoveResult(true, List.of(), Views.items(done.returned()), done.restored(), done.kept(), done.handedDown(), done.cascaded(),
+			done.owed());
 	}
 
 	/** A road's or cell site's removal (over ticks): the owner rule, then the job. */

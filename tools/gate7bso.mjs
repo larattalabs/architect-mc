@@ -227,6 +227,16 @@ async function refill(site, feed, into, cap = Infinity) {
   return stacks.length;
 }
 /** Item entities near a point (per id). */
+// (T2b part 2b) a crate-fed site's refunds and its crate's stock are owed to the player (crate.settle), never dropped: what a
+// deconstruct gives back = what lies near + what it owed (the owed totals' growth over the call)
+async function owedTotal() {
+  return (await call('dev.stockpile.owed', {}, 30_000)).total ?? {};
+}
+function owedSince(before, after) {
+  const out = {};
+  for (const [k, v] of Object.entries(after)) if (v - (before[k] ?? 0) > 0) out[k] = v - (before[k] ?? 0);
+  return out;
+}
 async function itemsNear(p, radius = 16) {
   const r = await call('dev.items.near', { pos: p, radius }, 30_000);
   return r.items ?? r.byId ?? {};
@@ -306,9 +316,10 @@ steps.survival = async () => {
     const intoA = {};
     const stA = await feedUntil(sa, feedA, intoA, (s) => s.state === 'built' || (s.built ?? 0) * 100 >= (s.queue ?? 1) * 30, { minutes: 15 });
     const scafMid = count(await cellsOf(ctx.area), SCAF);
+    const oA = await owedTotal();
     const dA = await call('dev.site.deconstruct', { site: sa }, 120_000);
     await L.settle(3000);
-    const backA = plus(await itemsNear(feedA.crate), await containerItems(feedA.chest), await containerItems(feedA.hop));
+    const backA = plus(plus(await itemsNear(feedA.crate), await containerItems(feedA.chest), await containerItems(feedA.hop)), owedSince(oA, await owedTotal()));
     const lostA = sub(intoA, backA);
     const feedKeys = new Set([feedA.hop, feedA.chest].map((c) => k3(...c)));
     const eA = diff(pre, await cellsOf(ctx.area), feedKeys);
@@ -386,9 +397,10 @@ steps.survival = async () => {
     const book = sub(into, plus(bom, left));
     check(Object.keys(book).length === 0 && !scafItems(left), `${id}: items in = items out: fed ${tot(into)} = paid standing ${tot(bom)} + crate leftovers and the chain's ${tot(left)}`, { book });
     // c) identical to its instant placement, after the deconstruct (all back, land exact)
+    const oD = await owedTotal();
     const d = await call('dev.site.deconstruct', { site: s }, 120_000);
     await L.settle(3000);
-    const back = plus(await itemsNear(feed.crate), await containerItems(feed.chest), await containerItems(feed.hop));
+    const back = plus(plus(await itemsNear(feed.crate), await containerItems(feed.chest), await containerItems(feed.hop)), owedSince(oD, await owedTotal()));
     const lost = sub(into, back);
     const e = diff(pre2, await cellsOf(ctx.area), feedSet);
     check(d.removed && Object.keys(lost).length === 0 && e.n === 0, `${id}: deconstructed: every item fed (${tot(into)}) back, the land exact (E-flat 0)`, { lost, eflat: e.first });

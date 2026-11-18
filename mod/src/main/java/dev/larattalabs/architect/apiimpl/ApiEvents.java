@@ -67,7 +67,7 @@ public final class ApiEvents {
 
 	public static void removed(MinecraftServer server, Sites.Removed r) {
 		guard("SITE_REMOVED", () -> SiteEvents.SITE_REMOVED.invoker().onRemoved(Views.site(null, r.site()),
-			new RemoveResult(true, List.of(), Views.items(r.returned()))));
+			new RemoveResult(true, List.of(), Views.items(r.returned()), 0, 0, java.util.Map.of(), List.of(), r.owed())));
 	}
 
 	/** A site moved to another version of its entry (phase 5b: an apply or a revert; SITE_UPDATED, wired with API 1.7.0). */

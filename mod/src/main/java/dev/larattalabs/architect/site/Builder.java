@@ -2668,14 +2668,23 @@ public final class Builder {
 
 	/** What a deconstruct gives back: refunds, the player's blocks and the crate's stock, and where they drop. */
 	record Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing, @Nullable String stockpile,
-		@Nullable String key) {
+		@Nullable String key, @Nullable JsonObject settle) {
 		Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing) {
-			this(tally, crateStock, at, queued, missing, null, null);
+			this(tally, crateStock, at, queued, missing, null, null, null);
 		}
 
-		/** What drops at {@link #at}: refunds (a legacy site), the player's blocks and the crate's stock. A stockpile's refunds are credited instead. */
+		Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing, @Nullable String stockpile,
+			@Nullable String key) {
+			this(tally, crateStock, at, queued, missing, stockpile, key, null);
+		}
+
+		/**
+		 * What drops at {@link #at}: refunds (a legacy site), the player's blocks and the crate's stock. A stockpile's refunds are credited
+		 * instead; (T2b part 2b) a crate-fed site's refunds and its crate's stock go through its {@code crate.settle} ({@link #settle}), never
+		 * as item entities.
+		 */
 		Map<String, Integer> all() {
-			Map<String, Integer> m = new TreeMap<>(stockpile == null ? tally.refund() : Map.of());
+			Map<String, Integer> m = new TreeMap<>(stockpile == null && settle == null ? tally.refund() : Map.of());
 			tally.playerBlocks().forEach((k, v) -> m.merge(k, v, Integer::sum));
 			crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum));
 			return m;
@@ -2705,6 +2714,9 @@ public final class Builder {
 			if (stockpile != null) {
 				o.addProperty("stockpile", stockpile);
 				o.addProperty("creditKey", key);
+			}
+			if (settle != null) {
+				o.addProperty("settleKey", settle.get("key").getAsString()); // (T2b part 2b) the crate.settle the removal runs after its restore
 			}
 			return o;
 		}
@@ -2829,20 +2841,14 @@ public final class Builder {
 			lastDeconstruction = d;
 			return d;
 		}
+		JsonObject settle = null;
 		if (c.crate() != null) {
+			// (T2b part 2b) nothing of the crate is taken here: it keeps its stock and its cell until the removal's own crate.settle (after the
+			// commit and the restore; the undo leaves its CRATE entry out). Only which crate, and the refunds it settles, are fixed now
 			at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
-			CrateBlockEntity crate = crate(level, s, true);
-			// a shared crate other sites still build from stays; this site's refunds drop at its cell (R6)
-			if (crate != null && otherBuildingShared(s).isEmpty() && (s.group() == null || RoadBuilder.building(s.group()).isEmpty())) {
-				keepDelivered(srv, s, crate, false);
-				stock = crate.ledger().takeStock();
-				restoreCrateCell(level, c.crate());
-				if (sharedGroup(s) != null) {
-					SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // the group's crate went (its own entry, phase 4e)
-				}
-			}
+			settle = CrateSettle.stash(s, tally.refund());
 		}
-		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing);
+		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing, null, null, settle);
 		lastDeconstruction = d;
 		return d;
 	}

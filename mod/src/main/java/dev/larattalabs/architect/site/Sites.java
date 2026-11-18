@@ -1547,9 +1547,14 @@ public final class Sites {
 	 * kept, the cells handed down per covering site, and the sites a cascade removed first.
 	 */
 	public record Removed(Site site, Map<String, Integer> returned, int restored, int kept, Map<String, Integer> handedDown, List<String> cascaded,
-		List<String> notes) {
+		List<String> notes, List<String> owed) {
 		public Removed(Site site, Map<String, Integer> returned) {
 			this(site, returned, 0, 0, Map.of(), List.of(), List.of());
+		}
+
+		public Removed(Site site, Map<String, Integer> returned, int restored, int kept, Map<String, Integer> handedDown, List<String> cascaded,
+			List<String> notes) {
+			this(site, returned, restored, kept, handedDown, cascaded, notes, List.of());
 		}
 	}
 
@@ -1689,14 +1694,21 @@ public final class Sites {
 		}
 		WorldJournal.kill("K5");
 		String group = SiteJournal.group(id);
-		SiteJournal.Undone undone = SiteJournal.undo(level, ids, group);
+		// (T2b part 2b) a crate a removal settles keeps its CRATE entry out of the undo: the settle restores its cell after the restore
+		List<String> keep = new ArrayList<>();
+		for (Site x : all) {
+			Builder.Deconstruction d = decs.get(x.id());
+			keep.addAll(CrateSettle.excluded(x, d == null ? null : d.settle()));
+		}
+		SiteJournal.Undone undone = keep.isEmpty() ? SiteJournal.undo(level, ids, group) : SiteJournal.undoEntries(level, CrateSettle.undoIds(ids, keep), group);
 		tr.mark("plan");
 		SiteJournal.await(undone.commit(), "the removal of " + id);
 		tr.mark("commit");
 		WorldJournal.kill("K6");
-		// R3: the records pending
+		// R3: the records pending (with the crate.settle each owes: a restart before it settles it from there)
 		for (Site x : all) {
-			markPending(server, x, "removed");
+			Builder.Deconstruction d = decs.get(x.id());
+			markPending(server, x, "removed", d == null ? null : d.settle());
 		}
 		for (String c : cascade) {
 			if (Infras.get(c) != null) {
@@ -1859,12 +1871,17 @@ public final class Sites {
 	}
 
 	static void markPending(MinecraftServer server, Site b, String why) {
+		markPending(server, b, why, null);
+	}
+
+	/** {@link #markPending} with the {@code crate.settle} the removal owes ({@link CrateSettle#stash}), kept with the record until it settles. */
+	static void markPending(MinecraftServer server, Site b, String why, @Nullable JsonObject settle) {
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.remove(b.id());
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
 		pending.removeIf(p -> p.site().id().equals(b.id()) && p.site().placedAt() == b.placedAt() && "removed".equals(p.why()));
-		pending.add(new Site.Pending(b, System.currentTimeMillis(), why));
+		pending.add(new Site.Pending(b, System.currentTimeMillis(), why, settle));
 		reports.remove(b.id());
 		dropFromGroup(b);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
@@ -1906,8 +1923,19 @@ public final class Sites {
 		MinecraftServer server = level.getServer();
 		String id = b.id();
 		drops.clearNew(level);
+		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
 		if (dec != null) {
 			Builder.dropDeconstruction(level, b, dec, drops);
+			if (dec.settle() != null) {
+				// (T2b part 2b) after the restore: the crate's stock and the refunds in one keyed crate.settle, then its cell and its entry; held:
+				// retried each tick from the pending record (the crate keeps its stock meanwhile)
+				settled = CrateSettle.settle(level, dec.settle());
+				if (settled.done()) {
+					settled(server, id);
+				} else {
+					CrateSettle.resumeLater(server, id);
+				}
+			}
 		} else {
 			Builder.forget(server, id);
 		}
@@ -1918,7 +1946,9 @@ public final class Sites {
 		notifyListeners();
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; its journal entries are kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
-		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.reported()), stats.restored(), stats.changed(), handed, cascaded, notes);
+		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : dec.reported());
+		settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum));
+		Removed r = new Removed(b, Map.copyOf(returned), stats.restored(), stats.changed(), handed, cascaded, notes, List.copyOf(settled.owed()));
 		if (event) {
 			ApiEvents.removed(server, r);
 		}
@@ -2524,6 +2554,35 @@ public final class Sites {
 		return List.copyOf(m.values());
 	}
 
+	/** The last pending entry of {@code id} (its settle stash included), or null. */
+	static Site.@Nullable Pending pendingOf(String id) {
+		Site.Pending found = null;
+		for (Site.Pending p : state.pending()) {
+			if (p.site().id().equals(id)) {
+				found = p;
+			}
+		}
+		return found;
+	}
+
+	/** (T2b part 2b) {@code id}'s crate.settle is done: its pending entries keep no stash (a restart never settles it again). */
+	static void settled(MinecraftServer server, String id) {
+		State s = state;
+		boolean any = false;
+		List<Site.Pending> pending = new ArrayList<>();
+		for (Site.Pending p : s.pending()) {
+			if (p.site().id().equals(id) && p.settle() != null) {
+				pending.add(new Site.Pending(p.site(), p.at(), p.why()));
+				any = true;
+			} else {
+				pending.add(p);
+			}
+		}
+		if (any) {
+			commit(server, new State(s.byId(), s.next(), List.copyOf(pending)));
+		}
+	}
+
 	static @Nullable Site pendingRecord(String id) {
 		Site.Pending found = null;
 		for (Site.Pending p : state.pending()) {
@@ -3089,6 +3148,12 @@ public final class Sites {
 		// records come from the journal
 		Set<String> pendingIds = new HashSet<>();
 		pending.forEach(p -> pendingIds.add(p.site().id()));
+		Set<String> pendingSettles = new HashSet<>(); // (T2b part 2b) pending records whose crate.settle is still owed
+		pending.forEach(p -> {
+			if (p.settle() != null) {
+				pendingSettles.add(p.site().id());
+			}
+		});
 		List<String> releaseNow = new ArrayList<>();
 		Map<String, List<JournalStore.Meta>> bySite = new LinkedHashMap<>();
 		for (JournalStore.Meta m : js.index().entries().values()) {
@@ -3104,6 +3169,9 @@ public final class Sites {
 			boolean placing = e.getValue().stream().anyMatch(m -> m.status() == Journal.Status.PLACING);
 			JournalStore.Meta main = e.getValue().stream().filter(m -> !m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)
 				&& !m.kind().equals(WorldJournal.DELTA) && !m.kind().equals(WorldJournal.SCAFFOLD)).findFirst().orElse(null);
+			if (!placing && main == null && pendingSettles.contains(sid) && e.getValue().stream().allMatch(m -> m.kind().equals(WorldJournal.CRATE))) {
+				continue; // (T2b part 2b) a removed site's crate its pending crate.settle restores and releases (below): never released bare here
+			}
 			if (placing || main == null) {
 				// K2: committed before its record, never written (or only guard entries left): released, nothing written
 				e.getValue().forEach(m -> releaseNow.add(m.id()));
@@ -3138,8 +3206,9 @@ public final class Sites {
 		}
 		// K6: the undo committed (R2) before the record went pending (R3): the record follows the journal, then the evidence decides
 		for (Site b : List.copyOf(map.values())) {
-			if (b.placing() || jobSites.contains(b.id()) || pendingIds.contains(b.id()) || !SiteJournal.active(b.id()).isEmpty()) {
-				continue;
+			if (b.placing() || jobSites.contains(b.id()) || pendingIds.contains(b.id()) || SiteJournal.active(b.id()).stream().anyMatch(m -> !m.kind()
+				.equals(WorldJournal.CRATE))) {
+				continue; // (T2b part 2b) a crate a removal settles stays out of its undo: its CRATE entry alone is no standing site
 			}
 			long at = Long.MIN_VALUE;
 			for (JournalStore.Meta m : SiteJournal.entries(b.id())) {
@@ -3149,7 +3218,12 @@ public final class Sites {
 			}
 			if (at != Long.MIN_VALUE) {
 				map.remove(b.id());
-				pending.add(new Site.Pending(b, at, "removed"));
+				// (T2b part 2b) the crate its undo left out settles from the record (its stock; the refunds tallied at prepare are not known here)
+				JsonObject st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
+				pending.add(new Site.Pending(b, at, "removed", st));
+				if (st != null) {
+					pendingSettles.add(b.id());
+				}
 				pendingIds.add(b.id());
 				changed = true;
 				Architect.LOGGER.info("Sites check: {}'s removal was committed to the journal before its record went pending; it is settled now", b.id());
@@ -3210,9 +3284,13 @@ public final class Sites {
 					group = m.undoGroup();
 				}
 			}
+			if (group == null && p.settle() != null) {
+				CrateSettle.resumeLater(server, gone.id()); // (T2b part 2b) its undo was released, its crate.settle not done: it settles first
+				continue;
+			}
 			if (group == null) {
 				// nothing undone in the journal: the undo was never committed (the record went pending first) or it was released
-				if (!map.containsKey(gone.id()) && !SiteJournal.active(gone.id()).isEmpty() && !moved) {
+				if (!map.containsKey(gone.id()) && SiteJournal.active(gone.id()).stream().anyMatch(m -> !m.kind().equals(WorldJournal.CRATE)) && !moved) {
 					map.put(gone.id(), gone);
 					recovered.add(gone.id());
 					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
@@ -3250,7 +3328,11 @@ public final class Sites {
 			switch (action) {
 				case RELEASE -> {
 					releaseAfter.addAll(groupIds);
-					pending.remove(p);
+					if (p.settle() != null) {
+						CrateSettle.resumeLater(server, gone.id()); // (T2b part 2b) kept pending (with its stash) until its crate.settle is done
+					} else {
+						pending.remove(p);
+					}
 					changed = true;
 				}
 				case RECOVER -> {
@@ -3278,6 +3360,9 @@ public final class Sites {
 					+ Anchors.str(gone.box()) + " too: the move was only partly saved" : "removed " + gone.id() + " stands again but could not get its "
 						+ "record back") + ". Its journal entries are kept; nothing was changed");
 				case KEEP -> {
+					if (p.settle() != null) {
+						CrateSettle.resumeLater(server, gone.id()); // (T2b part 2b) the restore stands: its crate.settle may run (keyed: once)
+					}
 				}
 			}
 		}

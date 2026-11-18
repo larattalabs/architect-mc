@@ -517,21 +517,17 @@ public final class RoadBuilder {
 		Construction c = road.construction();
 		String group = road.group();
 		boolean keepCrate = group != null && (Builder.anyBuildingShared(group) || building(group).stream().anyMatch(x -> !x.id().equals(road.id())));
-		Map<String, Integer> left = Map.of();
 		if (!keepCrate && c.crate() != null && dev.larattalabs.architect.txn.TxnServer.boxHeld(level, new BlockPos(c.crate().x(), c.crate().y(), c.crate()
 			.z()))) {
 			return; // (T2b final check P1-4) a txn holds the crate: its restore would be refused, so nothing is released or marked BUILT; next tick
 		}
 		if (!keepCrate && crate != null && c.crate() != null) {
-			SiteGroupRec g = Sites.group(group);
-			if (g != null) {
-				Sites.putGroup(srv, g.withDelivered(crate.ledger().delivered()));
+			// (T2b part 2b) the group's crate settles through crate.settle (its stock owed or credited, never dropped; its cell and entry after);
+			// held: the road stays BUILDING and completes on a later tick (the crate keeps its stock)
+			CrateSettle.Settled st = CrateSettle.settle(level, CrateSettle.roadStash(road, c.crate(), Map.of(), "road-built"));
+			if (!st.done()) {
+				return;
 			}
-			left = crate.ledger().takeStock();
-			BlockPos at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
-			Builder.restoreCrateCell(level, c.crate());
-			SiteJournal.releaseKind(SiteGroupRec.CRATE_PREFIX + group, WorldJournal.CRATE);
-			Builder.dropItems(level, at, left, null);
 		}
 		if (RegionTargets.is(road)) {
 			RegionTargets.realisedBuilt(road); // (RP) its cells WRITTEN in the tile's realised record, before it is marked BUILT
@@ -547,7 +543,7 @@ public final class RoadBuilder {
 				p.sendSystemMessage(Component.literal("[Architect] " + (target ? r.name : "road " + road.id()) + " is built"));
 			}
 		}
-		Architect.LOGGER.info("{} {}: built ({} cells); crate leftovers {}", target ? "Region target" : "Construction road", road.id(), r.size(), left);
+		Architect.LOGGER.info("{} {}: built ({} cells)", target ? "Region target" : "Construction road", road.id(), r.size());
 		PROGRESS.remove(road.id());
 		dev.larattalabs.architect.apiimpl.ApiEvents.builtInfra(srv, done);
 		// (6c close-out A) a survival region's target or road built: its heights become the later stages' drift baseline
@@ -653,18 +649,17 @@ public final class RoadBuilder {
 				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
 			}
 		}
+		CrateSettle.Settled settled = null;
 		if (c.building() && c.crate() != null && road.group() != null && !Builder.anyBuildingShared(road.group()) && building(road.group()).stream()
 			.allMatch(x -> x.id().equals(road.id()))) {
 			CrateBlockEntity crate = Builder.crate(level, probe(road), true);
 			// (T2b final check P1-4) a crate a txn holds keeps its stock, its cell and its journal entry (an orphan crate: no loss)
 			if (crate != null && !dev.larattalabs.architect.txn.TxnServer.boxHeld(level, crate.getBlockPos())) {
-				SiteGroupRec g = Sites.group(road.group());
-				if (g != null) {
-					Sites.putGroup(srv, g.withDelivered(crate.ledger().delivered()));
+				// (T2b part 2b) the crate's stock and the road's refunds in one keyed crate.settle (owed or credited, never dropped)
+				settled = CrateSettle.settle(level, CrateSettle.roadStash(road, c.crate(), refund, "road-removed"));
+				if (settled.refused() != null && settled.held() != null) {
+					settled = null; // not begun: nothing of it happens; the refunds drop as before, the crate keeps its stock (an orphan: no loss)
 				}
-				crate.ledger().takeStock().forEach((k, v) -> refund.merge(k, v, Integer::sum));
-				Builder.restoreCrateCell(level, c.crate());
-				SiteJournal.releaseKind(SiteGroupRec.CRATE_PREFIX + road.group(), WorldJournal.CRATE);
 			}
 		}
 		if (r != null) {
@@ -674,8 +669,11 @@ public final class RoadBuilder {
 		BEFORE.remove(road.id());
 		PROGRESS.remove(road.id());
 		SiteWaits.ended(srv, road.id());
-		Builder.dropItems(level, at, refund, null);
-		Architect.LOGGER.info("Construction road {} removed: refunds and crate stock {} at {}", road.id(), refund, at.toShortString());
+		if (settled == null) {
+			Builder.dropItems(level, at, refund, null);
+		}
+		Architect.LOGGER.info("Construction road {} removed: refunds {} at {}{}", road.id(), refund, at.toShortString(), settled == null ? "" : " (crate.settle: owed "
+			+ settled.owed() + ", given " + settled.given() + ")");
 		return null;
 	}
 

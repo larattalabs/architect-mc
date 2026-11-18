@@ -88,6 +88,14 @@ public final class Groups {
 		 * restore is written: tallied before the undo (rule 7), saved apart from the items that drop, credited once per key.
 		 */
 		final Map<String, Credit> decCredit = new LinkedHashMap<>();
+		/**
+		 * (T2b part 2b) per crate-fed member, its {@code crate.settle} ({@link CrateSettle#stash}: its own crate, or its refunds alone), fixed
+		 * before the undo and run once its restore is written; held, it stays here and runs again next tick (saved with the queue: a restart
+		 * runs it, keyed, once).
+		 */
+		final Map<String, JsonObject> decSettle = new LinkedHashMap<>();
+		/** (T2b part 2b) The group's shared crate's settle (its stock), once every member is written; null when none or done. */
+		@Nullable JsonObject crateSettle;
 
 		Removal(String group, @Nullable String stage, @Nullable String requester, boolean force) {
 			this.group = group;
@@ -154,6 +162,14 @@ public final class Groups {
 				decCredit.forEach((site, x) -> c.add(site, x.toJson()));
 				o.add("credit", c);
 			}
+			if (!decSettle.isEmpty()) {
+				JsonObject c = new JsonObject();
+				decSettle.forEach(c::add);
+				o.add("settle", c);
+			}
+			if (crateSettle != null) {
+				o.add("crateSettle", crateSettle);
+			}
 			return o;
 		}
 
@@ -198,6 +214,12 @@ public final class Groups {
 					r.decItems.put(e.getKey(), items);
 					r.decAt.put(e.getKey(), new long[] {x.get("at").getAsLong()});
 				});
+			}
+			if (o.has("settle")) {
+				o.getAsJsonObject("settle").entrySet().forEach(e -> r.decSettle.put(e.getKey(), e.getValue().getAsJsonObject()));
+			}
+			if (o.has("crateSettle") && o.get("crateSettle").isJsonObject()) {
+				r.crateSettle = o.getAsJsonObject("crateSettle");
 			}
 			if (o.has("credit")) {
 				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
@@ -758,6 +780,10 @@ public final class Groups {
 		} else {
 			pendAll(server, r); // after a load: the records go pending if they did not yet (R3)
 		}
+		// (T2b part 2b) the crate.settle of each member written: before the next member (held: this tick ends, retried next)
+		if (!settleWritten(server, r)) {
+			return;
+		}
 		// R4: the writes, last placed first
 		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null
 			&& Infras.pending(r.sites.get(0)) == null)) {
@@ -765,6 +791,17 @@ public final class Groups {
 				credit(server, r, r.sites.get(0)); // 6c Y: written before a load (its record is gone): credited now, once per key
 			}
 			r.sites.remove(0);
+		}
+		if (r.sites.isEmpty() && r.crateSettle != null) {
+			// (T2b part 2b) every member written: the group's shared crate settles (its stock), then its cell and its entry
+			ServerLevel cl = Sites.levelOf(server, r.crateSettle.get("dim").getAsString());
+			CrateSettle.Settled st = cl == null ? CrateSettle.Settled.NONE : CrateSettle.settle(cl, r.crateSettle);
+			if (!st.done()) {
+				return;
+			}
+			st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			r.crateSettle = null;
+			Placement.save(server, false);
 		}
 		if (r.sites.isEmpty()) {
 			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells));
@@ -800,12 +837,42 @@ public final class Groups {
 			}
 			r.sites.remove(0);
 			written.add(id);
+			settleWritten(server, r); // (T2b part 2b) its crate.settle now (held: next tick, before the next member)
 			Placement.save(server, false);
 			return;
 		}
 		r.current = id;
 		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
 		killAfterAMember(r);
+	}
+
+	/**
+	 * (T2b part 2b) Runs the crate.settle of every member already written (not in {@code r.sites}): its own crate's stock and its refunds,
+	 * keyed (a replay after a restart never settles twice). False when one is held: the removal waits (the crate keeps its stock).
+	 */
+	private static boolean settleWritten(MinecraftServer server, Removal r) {
+		boolean changed = false;
+		for (var it = r.decSettle.entrySet().iterator(); it.hasNext();) {
+			var e = it.next();
+			if (r.sites.contains(e.getKey())) {
+				continue;
+			}
+			ServerLevel level = Sites.levelOf(server, e.getValue().get("dim").getAsString());
+			CrateSettle.Settled st = level == null ? CrateSettle.Settled.NONE : CrateSettle.settle(level, e.getValue());
+			if (!st.done()) {
+				if (changed) {
+					Placement.save(server, false);
+				}
+				return false;
+			}
+			st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			it.remove();
+			changed = true;
+		}
+		if (changed) {
+			Placement.save(server, false);
+		}
+		return true;
 	}
 
 	/**
@@ -1065,6 +1132,9 @@ public final class Groups {
 				Builder.Deconstruction d = Builder.prepareDeconstruct(level, s);
 				r.decItems.put(id, Map.copyOf(d.all()));
 				r.decAt.put(id, new long[] {d.at().asLong()});
+				if (d.settle() != null) {
+					r.decSettle.put(id, d.settle()); // (T2b part 2b) its crate's stock and its refunds: settled once its restore is written
+				}
 				if (d.stockpile() != null) {
 					r.decCredit.put(id, new Credit(d.stockpile(), d.key(), Map.copyOf(d.credit()), d.at().asLong()));
 				}
@@ -1131,12 +1201,37 @@ public final class Groups {
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
 		List<String> withCrate = new ArrayList<>(ids);
 		if (r.stage == null) {
-			withCrate.add(SiteGroupRec.CRATE_PREFIX + r.group); // the group's shared crate goes with the group
+			// (T2b part 2b) the group's shared crate settles after every member is written (its cell restored by that settle, its entry released
+			// there): its CRATE entry stays out of the undo; with no crate to settle it goes with the group's undo as before
+			List<Site> members = new ArrayList<>();
+			for (String id : ids) {
+				Site m = Sites.get(id);
+				if (m != null) {
+					members.add(m);
+				}
+			}
+			String owner = SiteGroupRec.CRATE_PREFIX + r.group;
+			boolean memberSettles = r.decSettle.values().stream().anyMatch(st -> CrateSettle.hasCrate(st) && owner.equals(st.get("crateOwner").getAsString()));
+			r.crateSettle = memberSettles ? null : CrateSettle.groupStash(r.group, members);
+			if (r.crateSettle == null) {
+				withCrate.add(owner); // the group's shared crate goes with the group
+			}
 		}
 		try {
 			List<String> entries = new ArrayList<>();
+			List<String> keep = new ArrayList<>();
+			for (String id : ids) {
+				Site m = Sites.get(id);
+				if (m != null) {
+					keep.addAll(CrateSettle.excluded(m, r.decSettle.get(id))); // (T2b part 2b) a member's own crate its settle restores
+				}
+			}
 			for (String id : withCrate) {
-				SiteJournal.active(id).forEach(m -> entries.add(m.id()));
+				SiteJournal.active(id).forEach(m -> {
+					if (!keep.contains(m.id())) {
+						entries.add(m.id());
+					}
+				});
 			}
 			if (entries.isEmpty()) {
 				end(server, r, new Removed(false, List.of("nothing of group " + r.group + " is in the world journal"), Map.copyOf(r.refund)));
