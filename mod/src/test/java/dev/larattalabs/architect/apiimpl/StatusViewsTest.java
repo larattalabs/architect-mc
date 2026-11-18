@@ -48,7 +48,7 @@ class StatusViewsTest {
 		BuildStatus cap = StatusViews.item("mech:gate", "WAITING", "BILL_CAP", null, j("{\"architect_mc:revision\":{\"rid\":2},\"architect_mc:waitsFor\":{\"kind\":\"bill_cap\","
 			+ "\"missing\":{\"minecraft:iron_ingot\":4},\"say\":\"Main gatehouse's portcullis waits bill_cap\"}}"));
 		assertEquals(List.of(BuildStatus.BILL_CAP, "mech:gate", 2, 1), List.of(cap.reason(), cap.waitsOn(), cap.revision(), cap.needs().size()));
-		assertEquals(4, cap.needs().get(0).count(), "the over-cap items in needs");
+		assertEquals(4, cap.needs().get(net.minecraft.world.item.Items.IRON_INGOT), "the over-cap items in needs");
 		BuildStatus bill = StatusViews.item("mech:gate", "WAITING", "SITE_BUSY", null, j("{\"architect_mc:waitsFor\":{\"kind\":\"bill\",\"missing\":{\"minecraft:stone\":9}}}"));
 		assertEquals(BuildStatus.MATERIALS, bill.reason());
 		assertEquals(BuildStatus.PLAYER_IN_BOX, StatusViews.item("lot:a", "WAITING", "PLAYER_IN_BOX", null, new JsonObject()).reason());

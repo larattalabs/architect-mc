@@ -24,14 +24,14 @@ class BuildStatusTest {
 	}
 
 	private static BuildStatus waiting(String why) {
-		return new BuildStatus(BuildStatus.WAITING, why, "t1", List.of(), 0, 5L, "", 0, null);
+		return new BuildStatus(BuildStatus.WAITING, why, "t1", null, 0, 5L, "", 0, null);
 	}
 
 	/** One status per row of the table, in the table's order. */
 	private static List<BuildStatus> table() {
 		List<BuildStatus> out = new ArrayList<>();
 		out.add(BuildStatus.of(BuildStatus.REMOVING, 0));
-		out.add(new BuildStatus(BuildStatus.FAILED, "failed:NO_ROOM", null, List.of(), 0, 0, "", 0, null));
+		out.add(new BuildStatus(BuildStatus.FAILED, "failed:NO_ROOM", null, null, 0, 0, "", 0, null));
 		out.add(BuildStatus.of(BuildStatus.PAUSED, 0));
 		for (String r : List.of(BuildStatus.TXN_HELD, BuildStatus.APPROVAL, BuildStatus.STAGE, BuildStatus.TERRAIN, BuildStatus.BILL_CAP, BuildStatus.FILL_BLOCKED,
 			BuildStatus.MATERIALS, BuildStatus.OCCUPIED, BuildStatus.PLAYER_IN_BOX, BuildStatus.NOT_LOADED)) {
@@ -94,6 +94,16 @@ class BuildStatusTest {
 		assertEquals(BuildStatus.BUILT, new PartBuild("p", "built", List.of(), 1, 1, 0).status().state());
 		assertEquals(BuildStatus.BUILDING, new PartBuild("p", "waiting", List.of(), 1, 0, 0).status().state(), "nothing built yet is building, not a wait");
 		assertNotNull(new ItemEvent("b", "k", null, java.util.Optional.empty(), java.util.Optional.empty(), null).ext());
+	}
+
+	@Test
+	void aViewHoldingAStatusStaysGsonSerialisable() {
+		// RegionView was plain-Gson serialisable (dev.region.state, RegionPreviews' note); a status with needs keeps it so
+		SiteWait mat = new SiteWait("s1", true, 400L, List.of(new ItemCount(net.minecraft.world.item.Items.STONE, 3)), 0);
+		BuildStatus b = BuildStatus.ofTarget("s1", State.BUILDING, mat, false, false, 0);
+		assertEquals(3, b.needs().get(net.minecraft.world.item.Items.STONE));
+		String s = new com.google.gson.Gson().toJson(new LotState("a", "s1", "placed", 0, null, b));
+		assertTrue(s.contains("\"materials\""), s);
 	}
 
 	@Test

@@ -19,8 +19,9 @@ import org.jspecify.annotations.Nullable;
  * @param waitsOn always a typed id, never text: for {@link #TERRAIN} the part whose staged terrain it waits on; for {@link #STAGE} the
  *                target (site, road or item key) it waits for; for {@link #BILL_CAP}, {@link #MATERIALS}, {@link #FILL_BLOCKED} and
  *                {@link #TXN_HELD} the target itself; otherwise null
- * @param needs for {@link #MATERIALS} {@link SiteWait#nextNeeded()} (at most 8); for {@link #BILL_CAP} the capped items' units over the cap;
- *              else empty
+ * @param needs item to count, in build order: for {@link #MATERIALS} {@link SiteWait#nextNeeded()} (at most 8); for {@link #BILL_CAP} the
+ *              capped items' units over the cap; else empty. A map of items (as {@link RegionBuild#outstanding}), so a view holding a status
+ *              stays plain-Gson serialisable
  * @param moreUnits the units of the shortfalls past {@code needs} ({@link SiteWait#moreUnits()})
  * @param since the game tick the wait (or pause, or failure) began: for a target equal to {@link SiteWait#waitingSince()}, and stable while
  *              the wait changes kind (materials to bill_cap and back); 0 when not waiting, or not known
@@ -29,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  *                 {@code maxBill} holds it (Steward's TakeUp needs the region and the rid)
  * @param capScope for {@link #BILL_CAP}: {@link SiteWait#capScope()} ({@code region}, {@code lot:<id>}, or both); else null
  */
-public record BuildStatus(String state, @Nullable String reason, @Nullable String waitsOn, List<ItemCount> needs, int moreUnits, long since, String say,
+public record BuildStatus(String state, @Nullable String reason, @Nullable String waitsOn, java.util.Map<net.minecraft.world.item.Item, Integer> needs, int moreUnits, long since, String say,
 	int revision, @Nullable String capScope) {
 	public static final String PLANNED = "planned";
 	public static final String PLACING = "placing";
@@ -62,13 +63,13 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 
 	public BuildStatus {
 		Objects.requireNonNull(state, "state");
-		needs = needs == null ? List.of() : List.copyOf(needs);
+		needs = needs == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(needs));
 		say = say == null ? "" : say;
 	}
 
 	/** A status with no wait: {@code state} alone. */
 	public static BuildStatus of(String state, int revision) {
-		return new BuildStatus(state, null, null, List.of(), 0, 0L, sayOf(state, null), revision, null);
+		return new BuildStatus(state, null, null, java.util.Map.of(), 0, 0L, sayOf(state, null), revision, null);
 	}
 
 	/**
@@ -102,11 +103,11 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 			return of(BUILT, revision);
 		}
 		if (paused) {
-			return new BuildStatus(PAUSED, null, null, List.of(), 0, 0L, sayOf(PAUSED, null), revision, null);
+			return new BuildStatus(PAUSED, null, null, java.util.Map.of(), 0, 0L, sayOf(PAUSED, null), revision, null);
 		}
 		if (w != null && w.waiting()) {
 			String why = w.blocked() != null ? w.blocked() : MATERIALS;
-			return new BuildStatus(WAITING, why, id, w.nextNeeded(), w.moreUnits(), w.waitingSince(), sayOf(WAITING, why), revision, BILL_CAP.equals(why)
+			return new BuildStatus(WAITING, why, id, needsOf(w.nextNeeded()), w.moreUnits(), w.waitingSince(), sayOf(WAITING, why), revision, BILL_CAP.equals(why)
 				? w.capScope() : null);
 		}
 		return of(BUILDING, revision);
@@ -125,7 +126,7 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 		}
 		if (lotState.startsWith("failed")) {
 			String r = lotState.indexOf(':') > 0 ? "failed:" + lotState.substring(lotState.indexOf(':') + 1) : "failed:OTHER";
-			return new BuildStatus(FAILED, r, null, List.of(), 0, 0L, sayOf(FAILED, r), revision, null);
+			return new BuildStatus(FAILED, r, null, java.util.Map.of(), 0, 0L, sayOf(FAILED, r), revision, null);
 		}
 		return of(PLANNED, revision);
 	}
@@ -133,6 +134,13 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 	/** A plan part's status from its {@link PartBuild#state} string alone: waiting (nothing built yet) building, ... Pure. */
 	public static BuildStatus ofPartState(@Nullable String partState) {
 		return of("built".equals(partState) ? BUILT : BUILDING, 0);
+	}
+
+	/** {@link SiteWait#nextNeeded()} as an ordered item map. */
+	public static java.util.Map<net.minecraft.world.item.Item, Integer> needsOf(List<ItemCount> l) {
+		java.util.Map<net.minecraft.world.item.Item, Integer> m = new java.util.LinkedHashMap<>();
+		l.forEach(c -> m.merge(c.item(), c.count(), Integer::sum));
+		return m;
 	}
 
 	/** The default English line of a state and reason (display only). */

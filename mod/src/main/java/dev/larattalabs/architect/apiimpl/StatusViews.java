@@ -58,7 +58,7 @@ public final class StatusViews {
 				return BuildStatus.of(BuildStatus.BUILT, rev);
 			case "FAILED": {
 				String r = "failed:" + (reason == null ? "OTHER" : reason);
-				return new BuildStatus(BuildStatus.FAILED, r, null, List.of(), 0, 0L, BuildStatus.sayOf(BuildStatus.FAILED, r), rev, null);
+				return new BuildStatus(BuildStatus.FAILED, r, null, java.util.Map.of(), 0, 0L, BuildStatus.sayOf(BuildStatus.FAILED, r), rev, null);
 			}
 			case "PLACING":
 				return BuildStatus.of(BuildStatus.PLACING, rev);
@@ -72,7 +72,7 @@ public final class StatusViews {
 		String kind = str(w, "kind");
 		String why;
 		String on;
-		List<ItemCount> needs = List.of();
+		java.util.Map<Item, Integer> needs = java.util.Map.of();
 		int more = 0;
 		if (w != null && "terrain".equals(kind)) {
 			why = BuildStatus.TERRAIN;
@@ -96,14 +96,14 @@ public final class StatusViews {
 			on = BuildStatus.BILL_CAP.equals(why) ? self : null;
 		}
 		if (w != null && w.get("missing") instanceof JsonObject m) {
-			List<ItemCount> its = new ArrayList<>();
+			java.util.Map<Item, Integer> its = new java.util.LinkedHashMap<>();
 			for (var e : m.entrySet()) {
 				int n = e.getValue() instanceof JsonPrimitive p && p.isNumber() ? p.getAsInt() : 0;
 				Item item = n <= 0 ? null : BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
 				if (item == null || its.size() >= 8) {
 					more += Math.max(0, n);
 				} else {
-					its.add(new ItemCount(item, n));
+					its.merge(item, n, Integer::sum);
 				}
 			}
 			needs = its;
