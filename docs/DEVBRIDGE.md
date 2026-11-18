@@ -821,3 +821,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   written), `FL8` (a removal's sources drained and the flow dying, before the stray pass) and `FL9` (the stray pass half done: one chunk's
   cells restored, the next not), each also with `+save`. Driven by `tools/gate8c.mjs` (steps `8c-probe`, `8c-ingame`, `8c-crash`; slice SV's `8c-survival` reads the same hooks with
   `dev.region.terrain`'s waits, `dev.region.quote` and the stockpile's, no new hook).
+- **2026-11-18 (slice DF round 2):** `dev.region.failNextSave` takes `inDoubt: true` (the armed file's write is renamed into place and then
+  answers IN_DOUBT, as a folder force that failed after the rename; one write, or every write with `sticky`). `dev.journal.killAt` gains
+  `FL3x` (a removal's `done` fluids record saved after T0's world barrier, the solids not restored yet), also with `+save`. New gate steps
+  `irr-df` (gate6cirr `df`) and `rv-df` (gate6drv `df`).

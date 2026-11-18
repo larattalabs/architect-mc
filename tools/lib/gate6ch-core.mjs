@@ -753,5 +753,22 @@ export async function df(ctx) {
     check(rr.state === 'REMOVED' && (bare || dx.mismatches === 0), `DF (b, ${point}${bare ? '' : ', then the removal halted at FL3d+save and resumed'}): Regions.remove: ${rr.state}${bare ? ` (E-flat ${dx.mismatches}, recorded: the bare halt loses the shells' chunks)` : `, E-flat ${dx.mismatches}`}`, dx.sample);
     await L.leaveWorld();
   }
+  // (c, slice DF round 2, the review's P1 2) a removal halted bare at FL3x (its done record saved, the solids not restored yet): the drain's
+  // writes are on disk before done is (T0's chunk barrier), so the start's solids never stand round surviving sources: E-flat 0
+  {
+    const w = `${world} fl3x`;
+    await freshFlat(ctx, w, 'exact');
+    const dd = await planDemo(ctx, { lava: true });
+    const f = await snap(ctx, box, 'h-df-fl3x');
+    const r = await L.realise(dd.p.planId);
+    const st0 = await L.waitRegion(r, 3_600_000);
+    await crashAt(ctx, w, 'FL3x', async () => { await L.call('dev.region.remove', { region: r, requester: OWNER }, 600_000); });
+    const rr = await removeWait(ctx, r).catch((e) => ({ state: `error ${e.message}` }));
+    await sleep(3000);
+    const dx = await diff(ctx, box, f);
+    out.fl3x = { placed: st0.view.state, removal: rr.state, mismatches: dx.mismatches, classes: dx.classes };
+    check(st0.view.state === 'PLACED' && rr.state === 'REMOVED' && dx.mismatches === 0, `DF (c, FL3x bare: the done record saved, the world not): the removal resumed: ${rr.state}, E-flat ${dx.mismatches} (no fluid left round the restored solids)`, dx.sample);
+    await L.leaveWorld();
+  }
   return out;
 }

@@ -495,14 +495,21 @@ public final class VolumeSurvey {
 	 * out is kept (never rewritten).
 	 */
 	public static void freeze(Path file, byte[] gz, String sha) throws IOException {
+		boolean there = false;
 		if (Files.isRegularFile(file)) {
 			try {
-				if (Arvx.sha256(Arvx.gunzip(Files.readAllBytes(file))).equals(sha)) {
-					return;
-				}
+				there = Arvx.sha256(Arvx.gunzip(Files.readAllBytes(file))).equals(sha);
 			} catch (IOException e) {
 				// a bad file: written again below
 			}
+		}
+		if (there) {
+			// (slice DF round 2, P2) confirmed on disk (forced again), not trusted: an earlier write may have failed its folder's force
+			var c = dev.larattalabs.architect.site.DurableFile.confirmBytes(file);
+			if (!c.ok()) {
+				throw new IOException(file.getFileName() + " is there but not confirmed on disk: " + c.reason());
+			}
+			return;
 		}
 		RegionStore.write(file, gz);
 		byte[] back = Files.readAllBytes(file);

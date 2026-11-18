@@ -845,7 +845,12 @@ steps.df = async () => {
   const p1 = await C.point('refused');
   out.refused = { owed: fs1?.owed ?? null, phase: fs1?.phase, bodies: (fs1?.bodies ?? []).map((b) => [b.id, b.state]), charged: rs1.record?.charged ?? null, point: p1 };
   check(!!owed && fs1?.phase === 'gate' && (fs1?.bodies ?? []).every((b) => !['written', 'settled'].includes(b.state)) && sum(p1.fluid) === 0, `DF survival (${tag}): fluids.json refused at the fluids gate: the stage waits (${fs1?.owed}), phase ${fs1?.phase}, no body written, fluid standing ${json(p1.fluid)}`);
-  check(G.exact(p1) && sum(rs1.record?.charged) > 0, `DF survival (${tag}): the charge booked once (${json(rs1.record?.charged)}), conservation exact while refused (${json(p1.diff)})`);
+  // (the charge is booked in the ledger before the record's save, as on main; standing nothing yet, the audit's diff is that charge: the
+  // lava buckets and the grates' bars held under the key, an empty bucket back per lava source)
+  const charged = rs1.record?.charged ?? {};
+  const held = G.minus(G.plus({}, charged['minecraft:lava_bucket'] ? { 'minecraft:bucket': charged['minecraft:lava_bucket'] } : {}), charged);
+  out.refused.held = held;
+  check(sum(charged) > 0 && G.same(p1.diff, held) && p1.identity, `DF survival (${tag}): the charge booked once (${json(charged)}); conservation while refused: the diff ${json(p1.diff)} is exactly that charge held in the ledger (${json(held)}), nothing else moved`);
   // the halt at FL1r+save: the gate refuses again on its next try
   await L.call('dev.journal.killAt', { point: 'FL1r+save' }, 10_000);
   let down = false;
@@ -870,6 +875,38 @@ steps.df = async () => {
   out.removed = { removed: rm.removed, eflat: ef.length, point: p3 };
   check(rm.removed && ef.length === 0 && G.exact(p3), `DF survival (${tag}): Regions.remove: E-flat ${ef.length} (the crates aside), conservation exact (${json(p3.diff)})`, ef.slice(0, 8));
   out.points = C.points;
+  // (slice DF round 2, the review's P1 4) the other order: charged, the record refused, then removed before any source is written: the
+  // charge comes back (the scoop counts what the record says was charged, not only what stands), conservation exact
+  {
+    const tag2 = 'rs03dfr';
+    const s2 = await G.site(ctx, tag2, fx);
+    const box2 = G.boxOf(s2.W);
+    const pre2 = await G.snap(ctx, box2, `rs-${tag2}-pre`);
+    const ck2 = await G.check(ctx, tag2, s2);
+    const crate2 = await G.pile(ctx, s2, 4);
+    const C2 = new G.Conservation(ctx, box2);
+    await C2.start();
+    await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+    const region2 = await G.realise(ctx, ck2.check.artifactSha, entries);
+    let owed2 = null;
+    await G.feed(ctx, region2, { cons: C2, fraction: 0.5, timeoutMs: 2_400_000, until: (st) => !!owed2 || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+      extra: async () => { const x = await L.call('dev.fluid.state', { region: region2 }, 10_000).catch(() => null); if (x?.owed) owed2 = x; return {}; } });
+    const rsA = await G.rsState(ctx, region2);
+    const pA = await C2.point('refused');
+    const rmP = L.call('dev.region.remove', { region: region2, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    let v2 = null;
+    for (let i = 0; i < 60; i++) { await sleep(1000); v2 = await L.call('dev.region.state', { region: region2 }, 60_000).catch(() => null); if (v2?.view?.state === 'REMOVING') break; }
+    await sleep(3000);
+    await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+    await rmP;
+    for (let i = 0; i < 900; i++) { const x = await L.call('dev.region.state', { region: region2 }, 60_000).catch(() => null); const sx = x?.view?.state; if (!sx || ['REMOVED', 'PARTIAL', 'FAILED'].includes(sx)) break; await sleep(1000); }
+    await L.settle(2000);
+    const e2 = await G.diff(ctx, box2, pre2);
+    const ef2 = e2.list.filter((m) => !crate2.some((c) => c.join(',') === m.pos));
+    const pB = await C2.point('removed before written');
+    out.neverWritten = { charged: rsA.record?.charged ?? null, refused: pA, removed: pB, eflat: ef2.length };
+    check(sum(rsA.record?.charged) > 0 && G.exact(pB) && ef2.length === 0, `DF survival (${tag2}): charged (${json(rsA.record?.charged)}), the record refused, removed before any source was written: the charge returned, conservation exact (${json(pB.diff)}), E-flat ${ef2.length}`, ef2.slice(0, 8));
+  }
   return out;
 };
 
