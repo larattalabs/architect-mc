@@ -224,13 +224,14 @@ public final class ConnectorPlace {
 			if (part != null && part.get("notes") instanceof JsonArray ns) {
 				ns.forEach(n -> notes.add(n.isJsonPrimitive() ? n.getAsString() : n.toString()));
 			}
-			if (ck.overall() != PlanCheck.Overall.READY || ck.artifactSha() == null || !("fits".equals(cls) || "adjusted".equals(cls))) {
-				return CompletableFuture.completedFuture(noLink(ck, part, cls, notes));
-			}
 			if (!generate && ungenerated(ck) > 0) {
-				// (8b review P1) the API never generates: a claim over chunks never generated is refused, nothing written or generated
+				// (8b review P1) the API never generates: a claim over chunks never generated is refused, nothing written or generated;
+				// first, before the fit verdict (a plan over missing land says nothing true about the connector)
 				forgetStale(level, owner, r.opKey(), p.claim());
 				return CompletableFuture.completedFuture(refused(Reason.NOT_GENERATED, notGenerated(ck)));
+			}
+			if (ck.overall() != PlanCheck.Overall.READY || ck.artifactSha() == null || !("fits".equals(cls) || "adjusted".equals(cls))) {
+				return CompletableFuture.completedFuture(noLink(ck, part, cls, notes));
 			}
 			notes.add("the plan answered " + cls + " (check " + ck.checkId() + ")");
 			if (survival && (r.maxBill() != null || r.maxBillPerLot() != null)) {
@@ -368,14 +369,14 @@ public final class ConnectorPlace {
 		CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().checkPlan(pr), server).thenCompose(f -> f).thenCompose(ck -> {
 			JsonObject part = ck.parts().stream().filter(q -> PART.equals(str(q, "part"))).findFirst().orElse(null);
 			String cls = part == null ? null : str(part, "class");
+			if (ungenerated(ck) > 0) {
+				forgetStale(level, owner, r.opKey(), c);
+				return CompletableFuture.completedFuture(no(Reason.NOT_GENERATED, notGenerated(ck), c, ends));
+			}
 			if (ck.overall() != PlanCheck.Overall.READY || ck.artifactSha() == null || !("fits".equals(cls) || "adjusted".equals(cls))) {
 				PlaceResult nl = noLink(ck, part, cls, new ArrayList<>());
 				return CompletableFuture.completedFuture(new dev.larattalabs.architect.api.ConnectorCheck(false, nl.refusals().get(0), null, c, ends, "it does not fit: "
 					+ nl.refusals().get(0).message()));
-			}
-			if (ungenerated(ck) > 0) {
-				forgetStale(level, owner, r.opKey(), c);
-				return CompletableFuture.completedFuture(no(Reason.NOT_GENERATED, notGenerated(ck), c, ends));
 			}
 			if (!survival) {
 				return CompletableFuture.completedFuture(new dev.larattalabs.architect.api.ConnectorCheck(true, null, null, c, ends, "it fits (" + cls + ")"));
