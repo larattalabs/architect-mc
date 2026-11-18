@@ -367,11 +367,21 @@ export async function registerTXN(steps, h) {
     const inv = async () => ((await report()).parts?.inventories ?? {})[P] ?? 0;
     const owedOf = async () => ((await call('dev.stockpile.owed', {}, 30_000)).total ?? {})[P] ?? 0;
     const state = async () => call('dev.txn.state', {}, 30_000);
+    // a barrier that ran OK: the players (a /clear), the chunks and the ledger (an owed entry) on disk before a case starts
+    const barrier = async () => {
+      for (let i = 0; i < 5; i++) {
+        const b = await call('dev.stockpile.barrier', { run: true }, 120_000).catch(() => null);
+        if (b?.last?.outcome === 'OK') return b;
+        await call('dev.wait', { ms: 1000 }, 30_000);
+      }
+      check(false, 'a barrier ran OK before the case');
+      return null;
+    };
     let n = 0;
     const owe = async (count) => {
       const key = `test:owed/${++n}`;
       const r = await call('dev.owed.add', { key, items: { [P]: count }, at }, 30_000);
-      await call('dev.stockpile.barrier', {}, 60_000).catch(() => null); // published as the ledger is
+      await barrier(); // published as the ledger is
       return { key, recipient: r.recipient };
     };
     // ---------------------------------------------------------------- a collect traced, then the API's answers

@@ -23,7 +23,7 @@ import org.jspecify.annotations.Nullable;
  * (slice T2b) Owed collectibles out of the owed ledger, as txn kinds on T1's layer:
  * <ul>
  * <li>{@code owed.collect}: effect 0 (L) takes the amounts off the entry, marked by its effect key in the owed ledger; effect 1 (P) gives
- * them to the player, its receipt in the player attachment {@code architect_mc:txn_receipts} saved in the player's file with the inventory.
+ * them to the player, its receipt in the player attachment {@code architect_mc:txn_player_receipts} saved in the player's file with the inventory.
  * The barrier saves the players (acknowledged) before the ledger, and the txn retires only after it. A player offline at recovery makes
  * effect 1 UNKNOWN: held for that player, never compensated (decision 4). Only what fits is planned, in the same server call as its apply;
  * at a redo with too little room the give refuses and the txn is held until there is room.</li>
@@ -39,7 +39,7 @@ public final class OwedTxn {
 	public static final String COLLECT = "owed.collect", CREDIT = "owed.credit";
 	/** The receipts of every P effect applied to a player: persistent, saved with the player, kept through death. */
 	public static final AttachmentType<List<String>> PLAYER_RECEIPTS = AttachmentRegistry.<List<String>>builder().persistent(Codec.STRING.listOf())
-		.copyOnDeath().buildAndRegister(Architect.id("txn_receipts"));
+		.copyOnDeath().buildAndRegister(Architect.id("txn_player_receipts")); // its own id: one id per attachment type (the chunk's is txn_receipts)
 
 	static void init() {
 		Architect.LOGGER.debug("Txn player receipts attachment {}", PLAYER_RECEIPTS.identifier());
