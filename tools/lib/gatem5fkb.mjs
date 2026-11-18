@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { gameTime } from './sprint.mjs';
 
 const SLAB = 'minecraft:petrified_oak_slab';
 const FLINT = 'minecraft:flint';
@@ -172,10 +173,31 @@ export async function registerFKB(steps, h) {
     check(!pr.refused, `${tag}: ${site} paused for the swap`);
     const fed = await deliver({ fill: true });
     const r0 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
+    // dev.fk.swap answers {retry} (and does nothing: no swap, no resume) in the one tick of 20 whose step rescans first. The tries
+    // came back to back, so all of them could land between the same two ticks and every one answer retry (v0.79.0 verifier, twice):
+    // the site stayed paused and the step went silent. After a retry, wait until the game time has moved (a tick has run), then try.
     let sw = null;
+    let tries = 0;
+    const t0w = Date.now();
     for (let i = 0; i < 20 && !sw?.swapped; i++) {
+      if (sw?.retry) {
+        const g0 = await gameTime(cmd);
+        for (const end = Date.now() + 10_000; Date.now() < end;) {
+          const g = await gameTime(cmd);
+          if (g0 === null || g === null || g > g0) break;
+          await L.sleep(10);
+        }
+      }
+      tries++;
       sw = await call('dev.fk.swap', { pos: P(at), block: 'minecraft:dropper', site }, 30_000);
       if (sw?.error) break;
+    }
+    log(`  ${tag} swap: ${tries} attempt(s) in ${Date.now() - t0w} ms (${json(sw)})`);
+    if (!sw?.swapped) {
+      // never leave the site paused: the swap hook resumes it only when it swaps
+      await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
+      check(false, `${tag}: dev.fk.swap never swapped in ${tries} attempt(s) (${json(sw)}): the driver's swap failed (the site resumed), not the fill`, sw);
+      return fed;
     }
     await L.sleep(3000);
     const r1 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
