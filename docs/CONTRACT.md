@@ -33714,3 +33714,9 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - **P2-11:** the stray pass runs `STRAY_BUDGET` (4,096) cells a tick over its chunk-sorted work; a river's census reads `CENSUS_BUDGET`
   (32,768) cells a census tick and judges on a whole sweep; the removal's wait reads ticks every 5 ticks. Measured: the foreign-only
   fixed point over 4,096 cells, 12 ms (unit); the census at the cap is not measured in game.
+- **Failing-first** (red 7d7ba1b7, the rows with the old code; green a452b37f): chest (the player's waterlogged chest removed -> it
+  stands), bucket (the player's source removed by the unsettled abort and the removal -> it stands, `why: foreign_water`), wavetorch
+  (the torch washed, 2 items -> the head held at its wave, `why: wash`, 0 items), FL3 bare (E-flat 4 and 4 item entities -> E-flat 0,
+  0 items; FL3+save passed on both). P1-3 and P1-6 are units (`standingCharged`; the river cases' resulting levels).
+- Green at a452b37f: 8c-ingame 31/0, 8c-crash 47/0, h-ingame-smoke, h-crash, h-df, hy-ingame-smoke, hy-crash-smoke, irr-ingame-smoke,
+  irr-crash, irr-holders, fl-ingame, fl-natural all PASS; gradle build, kit 1619+, water lint, sidecar 955/955, api-compat clean.
