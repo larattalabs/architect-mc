@@ -674,7 +674,7 @@ async function sourcesIn(ctx, bodies) {
  * cells, no fluids.json on disk; on main the stage went on and wrote the sources (the failing-first case). Then the failure is lifted:
  * the record saved, every body settled, the census equal, Regions.remove E-flat 0. (b) the halt at FL1r (the refused save, nothing
  * written), bare and +save: the start takes the stage again from the gate; settled or (bare: the shells lost) not written; 0 fluid
- * outside; the undo exact.
+ * outside; the undo exact (+save: the removal halted at FL3d+save, its draining record durable, then resumed).
  */
 export async function df(ctx) {
   const { L, check, json, log } = ctx;
@@ -744,11 +744,13 @@ export async function df(ctx) {
     let o = 0;
     for (const b of dd.bodies) o += (await censusOf(ctx, b, null, dd.bodies)).outsideCount;
     check(o === 0, `DF (b, ${point}): 0 fluid outside the declared cells (${o})`);
+    // (+save) the removal halted at FL3d+save: its draining record durable, nothing drained; the start drains it again from the start
+    if (!bare) await crashAt(ctx, w, 'FL3d+save', async () => { await L.call('dev.region.remove', { region: r, requester: OWNER }, 600_000); });
     const rr = await removeWait(ctx, r).catch((e) => ({ state: `error ${e.message}` }));
     await sleep(3000);
     const dx = await diff(ctx, box, f);
     out[tag].removal = rr.state; out[tag].mismatches = dx.mismatches;
-    check(rr.state === 'REMOVED' && (bare || dx.mismatches === 0), `DF (b, ${point}): Regions.remove: ${rr.state}${bare ? ` (E-flat ${dx.mismatches}, recorded: the bare halt loses the shells' chunks)` : `, E-flat ${dx.mismatches}`}`, dx.sample);
+    check(rr.state === 'REMOVED' && (bare || dx.mismatches === 0), `DF (b, ${point}${bare ? '' : ', then the removal halted at FL3d+save and resumed'}): Regions.remove: ${rr.state}${bare ? ` (E-flat ${dx.mismatches}, recorded: the bare halt loses the shells' chunks)` : `, E-flat ${dx.mismatches}`}`, dx.sample);
     await L.leaveWorld();
   }
   return out;
