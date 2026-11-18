@@ -69,6 +69,11 @@ public final class CrateTxn {
 		return nbt == null ? b : b.data("nbt", nbt);
 	}
 
+	/** A W restore's receipt in the chunk: {@code tx-n/i@restored} (the same name and shape as T3b's wip 3cea8c81, so the merge is one hunk). */
+	public static String restoredKey(TxnEntry t, Effect e) {
+		return e.key(t.id) + "@restored";
+	}
+
 	/** The settle's dedupe key: {@code crate:<crateOwner>@x,y,z/<siteKey>} (a re-run after a crash attaches or replays, never re-takes). */
 	public static String settleKey(String crateOwner, BlockPos p, String siteKey) {
 		return "crate:" + crateOwner + "@" + p.getX() + "," + p.getY() + "," + p.getZ() + "/" + siteKey;
@@ -170,7 +175,7 @@ public final class CrateTxn {
 	}
 
 	/** {@code crate.restore}: the cell back as the holder, its receipt in the same chunk change. */
-	static final TxnKind.Adapter RESTORER = new TxnKind.Adapter() {
+	public static final TxnKind.Adapter RESTORE_ADAPTER = new TxnKind.Adapter() {
 		@Override
 		public @Nullable String invalid(Effect e) {
 			return !e.data().has("dim") || !e.data().has("pos") || !e.data().has("state") ? "dim, pos and state are required" : null;
@@ -184,7 +189,7 @@ public final class CrateTxn {
 			if (ch == null) {
 				return Probe.UNKNOWN;
 			}
-			if (TestMove.receipts(ch).contains(e.key(t.id) + "@restored")) {
+			if (TestMove.receipts(ch).contains(restoredKey(t, e))) {
 				return Probe.APPLIED;
 			}
 			return level.getBlockEntity(p) instanceof CrateBlockEntity ? Probe.ABSENT : Probe.APPLIED; // the cell no longer a crate: restored
@@ -201,7 +206,7 @@ public final class CrateTxn {
 				}
 				dev.larattalabs.architect.site.CrateSettle.restoreCell(level, p, e.data().get("state").getAsString(), e.data().has("nbt") ? e.data().get("nbt")
 					.getAsString() : null);
-				TestMove.addReceipt(ch, e.key(t.id) + "@restored"); // the same tick, the same chunk
+				TestMove.addReceipt(ch, restoredKey(t, e)); // the same tick, the same chunk
 			});
 		}
 
@@ -320,7 +325,7 @@ public final class CrateTxn {
 		public TxnKind.Adapter adapter(Effect e) {
 			return switch (e.op()) {
 				case TAKE -> ADAPTER;
-				case RESTORE -> RESTORER;
+				case RESTORE -> RESTORE_ADAPTER;
 				case RELEASE -> RELEASER;
 				case PILE_CREDIT -> CREDITOR;
 				case OWE -> OWER;
