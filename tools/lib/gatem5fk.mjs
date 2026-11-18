@@ -193,6 +193,10 @@ export async function registerFK(steps, h) {
     const next = Object.fromEntries((s.wait?.nextNeeded ?? []).map((x) => [x.item, x.count]));
     check(s.state === 'BUILDING' && !s.phase && s.containers.every((c) => sum(c.holds) === 0) && s.wait?.waiting === true && !s.wait?.blocked && G.same(only(next, FK), FILL),
       `every cell stands, the fill not fed: the site still BUILDING (${s.state}, phase ${s.phase ?? 'none'}), its hoppers empty, waiting for the fill's items (waiting ${s.wait?.waiting}, next ${json(s.wait?.nextNeeded ?? [])})`, s);
+    // a declared container with an item in it at the fill: never filled over; the typed wait fill_blocked names it. Put in first, so the
+    // restart case's inserts below can never complete the fill before the blocker is there (LIFT-S-1 review P2)
+    const h0 = s.containers[0].at;
+    await hand(h0, { add: { [FLINT]: 1 } });
     // (LIFT-S-1) half the fill stocked, then a restart: the run is rebuilt at load, where the Sites check ran before Builder knew the
     // server (v0.78.0 left the fill out of it: the outstanding lost it, an insert of the rest was refused and the site waited forever).
     // The fill stays owed, drawn from what is stocked; the rest is accepted
@@ -214,9 +218,6 @@ export async function registerFK(steps, h) {
     const rIn = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: rest, exact: true }, 120_000)).accepted ?? {};
     out.restart.restAccepted = rIn;
     check(G.same(rIn, rest), `after the restart the rest of the fill is accepted (${json(rIn)} of ${json(rest)})`, out.restart);
-    // a declared container with an item in it at the fill: never filled over; the typed wait fill_blocked names it
-    const h0 = s.containers[0].at;
-    await hand(h0, { add: { [FLINT]: 1 } });
     await deliver({ fill: true });
     await L.sleep(5000);
     s = await fk(site);
@@ -603,6 +604,129 @@ export async function registerFK(steps, h) {
     return res;
   }
 
+  // ------------------------------------------------------------------ (LIFT-S-1 review P1) a paid soil cell vanilla changed, across loads
+
+  /**
+   * A partly built fed site with a paid dirt cell grown to grass (a setblock, random ticks off), then an unclean and a clean restart. The
+   * Sites check makes and caches the site's run at load before the stockpiles are loaded: in v0.78.0 that run had no paid bits
+   * (Stockpiles.attachPaid found no pile), so the grass cell counted unbuilt: the unclean reconcile gave its dirt back as lost while it
+   * stood, and a clean load left the site waiting for ever on a cell it can't write. Each load: the cell stays built, nothing given back,
+   * nothing more owed; then fed to the end, consumed = the quote.
+   */
+  async function soilCase() {
+    const tag = 'LIFT-S-1 soil';
+    const name = 'G6B FK Soil';
+    const HOLD = 'minecraft:glass_pane';
+    const res = {};
+    await G.survivalBase(ctx);
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await cmd('/gamerule randomTickSpeed 0'); // the grass stays grass, and no other soil changes on its own
+    const { Blueprint, palette } = await h.imp('lib/kit.mjs');
+    const { writeBlueprint } = await h.imp('lib/write.mjs');
+    const X = 6, Z = 4, H = 4;
+    const bp = new Blueprint({ id: 'lift_soil', name: 'lift_soil', description: 'LIFT-S-1 soil', type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 5], origin: [0, 0, 0], groundY: 1, front: 'south', palette: palette({}), approach: false, interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
+    bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall: 'minecraft:bricks', floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
+    bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, HOLD); bp.set(5, 2, Z, HOLD); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); });
+    bp.part('soil', () => { for (let x = 1; x <= 5; x++) bp.set(x, 1, 2, 'minecraft:dirt'); });
+    bp.part('approach', () => bp.floor(2, Z + 1, 4, Z + 4, 0, 'minecraft:gravel'));
+    bp.spot('entrance', 3, Z + 1, 180);
+    bp.spot('spawn', 3, Z + 3, 180);
+    const dir = path.join(L.LIBRARY, 'lift_soil');
+    fs.rmSync(dir, { recursive: true, force: true });
+    writeBlueprint(bp, dir);
+    await L.cmd('/architect reload');
+    await L.settle(1500);
+    await L.tp(CX + 80, 80, CZ + 56);
+    const gy = await groundY();
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+    check(!cr.refused, `${tag}: a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const q = await call('dev.region.quote', { planId: p0.planId, lotEntries: { cottage_1: 'lift_soil' } }, 300_000);
+    const ps0 = await pile();
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'lift_soil' } });
+    // fed everything but the glass panes until lift_soil's dirt cells all stand (the site still BUILDING, waiting for its panes)
+    let site = null, cells = null;
+    for (let i = 0; i < 400 && !site; i++) {
+      const ps = await pile();
+      for (const id of Object.keys(ps.targets ?? {})) {
+        const c = await call('dev.site.cells', { site: id }, 30_000).catch(() => ({}));
+        if (Object.values(c).includes('minecraft:bricks')) { site = id; cells = c; break; }
+      }
+      if (site) break;
+      const need = {};
+      for (const [it, n] of Object.entries(ps.outstanding ?? {})) if (it !== HOLD && n - (ps.stock?.[it] ?? 0) > 0) need[it] = n - (ps.stock?.[it] ?? 0);
+      if (Object.keys(need).length) await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000);
+      await L.sleep(2500);
+    }
+    check(!!site, `${tag}: lift_soil's site joined the feed (${site})`);
+    if (!site) { await L.leaveWorld(); return res; }
+    const soil = Object.entries(cells).filter(([, b]) => b === 'minecraft:dirt').map(([k]) => k);
+    let t = null;
+    for (let i = 0; i < 400; i++) {
+      const ps = await pile();
+      t = ps.targets?.[site];
+      if (t && !(t.outstanding?.['minecraft:dirt'] > 0) && t.built < t.queued) break;
+      const need = {};
+      for (const [it, n] of Object.entries(ps.outstanding ?? {})) if (it !== HOLD && n - (ps.stock?.[it] ?? 0) > 0) need[it] = n - (ps.stock?.[it] ?? 0);
+      if (Object.keys(need).length) await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000);
+      await L.sleep(2500);
+    }
+    check(t && !(t.outstanding?.['minecraft:dirt'] > 0) && t.built < t.queued, `${tag}: fed but its panes: lift_soil's ${soil.length} dirt cells built and paid, the site partly built (${t?.built}/${t?.queued})`, t);
+    const C = soil[0];
+    await cmd(`/setblock ${C.split(',').join(' ')} minecraft:grass_block`);
+    const blockAt = async (k) => {
+      const [x, y, z] = k.split(',').map(Number);
+      const hb = await call('dev.box.hash', { min: [x, y, z], max: [x, y, z], cells: true }, 60_000);
+      return String(hb.cells?.[0] ?? '').split(' ')[1] ?? '';
+    };
+    await L.settle(3000);
+    const before = (await pile()).targets?.[site];
+    res.before = before;
+    // the save that records the grass cell as standing paid in the site's book, then a halt with nothing saved after it
+    await cmd('/save-all flush');
+    await L.settle(3000);
+    const pre = await pile();
+    const preT = pre.targets?.[site];
+    await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+    check(await haltWait(), `${tag}: dev.stockpile.halt (now) halted the server`);
+    await L.openWorld(name);
+    await L.tp(CX + 80, 80, CZ + 56);
+    await L.settle(4000);
+    const a1 = await call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
+    const rc = a1.reconciled?.[site] ?? {};
+    const u = (await pile()).targets?.[site];
+    const gU = await blockAt(C);
+    res.unclean = { rc, target: u, at: gU, unclean: a1.uncleanStart };
+    check(a1.uncleanStart === true && (rc.lostCells ?? 0) === 0 && sum(rc.creditedBack) === 0 && u?.built === preT?.built && !(u?.outstanding?.['minecraft:dirt'] > 0) && /grass_block/.test(gU),
+      `${tag}: the unclean restart: the grass cell at ${C} (${gU}) still counts built and paid: lost ${rc.lostCells ?? 0} cell(s), given back ${json(rc.creditedBack ?? {})}; built ${u?.built} = ${preT?.built}; dirt owed ${u?.outstanding?.['minecraft:dirt'] ?? 0}`, res.unclean);
+    // a clean restart
+    await L.leaveWorld();
+    await L.openWorld(name);
+    await L.tp(CX + 80, 80, CZ + 56);
+    await L.settle(4000);
+    await L.sleep(6000);
+    const c1 = (await pile()).targets?.[site];
+    const gC = await blockAt(C);
+    res.clean = { target: c1, at: gC };
+    const cleanOk = c1?.built === preT?.built && !(c1?.outstanding?.['minecraft:dirt'] > 0) && /grass_block/.test(gC);
+    check(cleanOk, `${tag}: the clean restart: the grass cell at ${C} (${gC}) still counts built: built ${c1?.built} = ${preT?.built}; dirt owed ${c1?.outstanding?.['minecraft:dirt'] ?? 0}`, res.clean);
+    if (cleanOk) {
+      // the panes fed: PLACED; conservation: consumed = the quote item for item (the grass cell never laid or paid again, nothing given back)
+      const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 900_000, every: 2500 });
+      const ps1 = await pile();
+      const consumed = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+      const gF = await blockAt(C);
+      res.done = { state: f.last.st.view.state, consumed, quote: q.bom, at: gF };
+      check(f.last.st.view.state === 'PLACED' && G.same(consumed, q.bom) && /grass_block/.test(gF),
+        `${tag}: the panes fed: the town ${f.last.st.view.state}; consumed equals the quote item for item (${sum(consumed)} = ${sum(q.bom)}; differ ${json(G.minus(consumed, q.bom))}); the grass cell left as it is (${gF})`, res.done);
+    }
+    await L.leaveWorld();
+    return res;
+  }
+
   const LOGS = {};
   function out_log(tag, res) {
     LOGS[tag] = res;
@@ -616,6 +740,7 @@ export async function registerFK(steps, h) {
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1 = await singleCase('CS1'); // (J2) a single site's credit save halted
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1o = await singleCase('CS1', { full: true }); // (OVF) the same into a full stockpile
+    if (process.env.GATE_FK_ONLY !== 'fill') out.SOIL = await soilCase(); // (LIFT-S-1 review P1) a paid soil cell changed, across loads
     spendZero();
     return out;
   };
