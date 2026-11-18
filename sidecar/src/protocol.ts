@@ -1448,6 +1448,7 @@ export const RegionPlanMsg = z.object({
     .optional()
     .describe("(6c VOC-c) a plan check with a rule.palette: each bound lot's block histogram (lot id -> {block id: count}), the non-air blocks of its named entry's template, read by the mod; a palette rule measures the lot from it"),
   survival: z.boolean().optional().describe("(6c RS) plan in survival (the world's mode: the toggle on in a world whose default game type is not creative): the IR's free marks and target groups"),
+  flowingWater: z.boolean().optional().describe("(8c, the v0.81.0 review's P1) the mod advertises flowingWater: a plan check may hold a river (flow \"current\") or a fall off a form (lip \"form\"); absent or false: the kit answers them unsupported (--no-flowing-water)"),
   planCache: z.string().min(1).max(256).optional().describe('(6c P0) a plan check: the owner whose per-part cache the kit reads (<data>/regions/plancache/<sha(owner)>/; 24 h or 256 checks per owner), and region.planned carries planCheck'),
   previewViews: z.array(z.enum(['top', 'section', 'iso', 'siteplan'])).min(1).max(4).optional().describe('(6c P0) the previews to render after the check (default all four; a plan check renders siteplan only: images on request)'),
   timeoutMs: z.number().int().min(1).max(600_000).optional().describe("(6c P0) at most this plan time (a check's maxMs plus its grace; never more than the program's budget)"),
@@ -1576,6 +1577,7 @@ export const RegionComposeMsg = z.object({
   owner: Owner.optional(),
   ext: Ext.optional().describe('kept on the design; on the sim backend only, ext["architect:simCompose"] scripts the rounds\' answers ({plan, reason} per round) and ext["architect:simAnswers"] the pick\'s'),
   dimension: z.string().max(200).optional().describe("(7c CP) the claim's level when it is not the Overworld (the mod checks every round and plans a pick there); absent: the Overworld"),
+  flowingWater: z.boolean().optional().describe("(8c, the v0.81.0 review's P1) the mod advertises flowingWater (it writes, drains and recovers rivers): the composer's plan/0 offers flow \"current\" and lip \"form\"; absent or false: they are left out of the prompt (the mod's check would answer them unsupported)"),
 });
 /**
  * (7c AU, feature region.author; docs/CONTRACT.md "Phase 7c" §3 row 13) Program authoring: a design (kind "program") whose rounds (at

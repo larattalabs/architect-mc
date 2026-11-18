@@ -608,6 +608,7 @@
     "kit/test/fixtures/regions/eval-worker.mjs",
     "kit/test/fixtures/regions/floating_island.golden.json",
     "kit/test/fixtures/regions/mega_bench.golden.json",
+    "kit/test/fixtures/river/c01_river.json",
     "kit/test/fixtures/rv/make-merge.mjs",
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/schem/make.mjs",

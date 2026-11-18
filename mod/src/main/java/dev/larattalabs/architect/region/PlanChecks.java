@@ -239,6 +239,10 @@ public final class PlanChecks {
 		if (r.level() != null && RegionSurvival.on(r.level().getServer())) {
 			o.addProperty("survival", true);
 		}
+		// (8c) a check with flowing water on answers otherwise (a river is supported): its key says so (a mod without it keeps its hash)
+		if (RegionFluids.flowingBuild()) {
+			o.addProperty("flowingWater", true);
+		}
 		// (7c HR) the secrets asked (PlanRequest ext architect_mc:secrets) answer otherwise (the preview carries them): only when asked, so
 		// every other key keeps its hash
 		if (secretsAsked(r)) {

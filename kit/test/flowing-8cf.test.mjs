@@ -109,3 +109,21 @@ test('8c: W3 breach cells feed KC keep-out: a lot over the head\'s breach reach 
   registerBody(store, rec);
   assert.equal(keptBy(store, ...w).set, 'watch', 'the registry keeps the breach reach (KC: no later part stands there)');
 });
+
+test('8c (the v0.81.0 review\'s P1): a check for a mod without flowingWater answers a river (flow "current") unsupported; with it, the river fits', async () => {
+  const H = await import('./plan-helpers.mjs');
+  const fx = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'river', 'c01_river.json'), 'utf8'));
+  const plan = fx.plan ?? fx.answer?.plan;
+  const s = fx.terrain ? H.flatSurvey(fx.terrain) : H.flatSurvey();
+  const o = { survey: s.bytes, claim: s.claim, anchors: { ...H.stewardAnchors(s.claim), ...(fx.anchors ?? {}) } };
+  const off = await H.checkPlanLocal(plan, { ...o, flowingWater: false });
+  const rivers = (plan.connectors ?? []).filter((c) => (c.flow ?? c.params?.flow) === 'current').map((c) => c.id);
+  assert.ok(rivers.length >= 1, 'c01 holds a river');
+  for (const id of rivers) {
+    const a = off.check.parts.find((q) => q.part === id);
+    assert.equal(a.class, 'unsupported', `${id}: ${JSON.stringify(a.reasons)}`);
+    assert.equal(a.reasons[0].evidence.feature, 'flowingWater');
+  }
+  const on = await H.checkPlanLocal(plan, o);
+  for (const id of rivers) assert.notEqual(on.check.parts.find((q) => q.part === id).class, 'unsupported', 'the kit\'s default: on');
+});

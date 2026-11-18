@@ -969,6 +969,10 @@ public final class RegionsImpl implements Regions {
 		if (RegionSurvival.on(r.level().getServer())) {
 			m.addProperty("survival", true);
 		}
+		// (8c, the v0.81.0 review's P1) the kit plans rivers and falls off forms only for a mod that writes, drains and recovers them
+		if (RegionFluids.flowingBuild()) {
+			m.addProperty("flowingWater", true);
+		}
 		m.add("params", r.params().deepCopy());
 		if (r.seed() != null) {
 			m.addProperty("seed", Long.toUnsignedString(r.seed()));
