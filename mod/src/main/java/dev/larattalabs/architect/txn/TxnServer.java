@@ -65,6 +65,7 @@ public final class TxnServer {
 		c.register(TestMove.KIND);
 		c.register(OwedTxn.COLLECT_KIND); // (slice T2b)
 		c.register(OwedTxn.CREDIT_KIND);
+		c.register(CrateTxn.SETTLE_KIND); // (slice T2b part 2b)
 		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
 	}
 
@@ -189,6 +190,21 @@ public final class TxnServer {
 			Architect.LOGGER.info("Txn: recovering {} open txn(s) in the recovery slot (before the legacy reconciles)", core.open().size());
 			core.recover();
 		}
+		owedAtLoad();
+	}
+
+	/**
+	 * (T2b final check P2-5) OWED_CHANGED at least once across a crash after retirement: on every load, once per recipient with owed entries,
+	 * on the first tick (listeners re-read {@code owed()}; a spurious one is harmless, a missed one is not).
+	 */
+	static void owedAtLoad() {
+		later(() -> {
+			java.util.LinkedHashSet<String> rs = new java.util.LinkedHashSet<>();
+			dev.larattalabs.architect.site.OwedLedger.all().forEach(e -> rs.add(e.recipient())); // read on the tick: every store loaded
+			for (String r : rs) {
+				dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(r);
+			}
+		});
 	}
 
 	static void tick(MinecraftServer srv) {
@@ -210,6 +226,7 @@ public final class TxnServer {
 			if (core.anyOpen()) {
 				core.recover();
 			}
+			owedAtLoad();
 		}
 		closeHeldMenus(srv); // (T2a fix round) menus open over a box when its hold began, or reopened since: closed every tick
 		if (core.open().isEmpty() && !core.unsynced()) {
@@ -442,7 +459,15 @@ public final class TxnServer {
 			if (!ticking) {
 				return Barrier.refused("deferred to the first tick (the stores load in SERVER_STARTED)");
 			}
-			DurableBarrier.Result r = Stockpiles.barrier(s);
+			DurableBarrier.Result r;
+			try {
+				r = Stockpiles.barrier(s);
+			} catch (RuntimeException x) {
+				// (T2b final check P1-3, found by txn-owed's thrown-save row) a step that throws is a refused barrier: before, the exception left
+				// drive mid-step with the txn open, not held and not retried (wedged)
+				Architect.LOGGER.warn("Txn barrier threw: refused", x);
+				return Barrier.refused("threw: " + x.getMessage());
+			}
 			if (!r.ok()) {
 				return Barrier.refused(r.outcome() + ": " + r.reason());
 			}

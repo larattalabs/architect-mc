@@ -442,6 +442,30 @@ export async function registerTXN(steps, h) {
       await cmd('/clear @s');
       await barrier();
     }
+    // ---------------------------------------------------------------- (T2b final check P1-3) the save path throws: nothing stays given
+    {
+      await cmd('/clear @s');
+      const e = await owe(9);
+      await call('dev.owed.throwPlayerSave', { n: 1 }, 30_000); // the give's own confirmed save throws once
+      const r = await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000).catch((x) => ({ status: 'THREW', why: String(x) }));
+      const ivHeld = await inv();
+      const st = await state();
+      out.thrownSave = { r, inventory: ivHeld, open: st.openCount };
+      check(ivHeld === 0 && (st.openCount >= 1 || (await owedOf()) === 9), `thrown player save: the give taken back in its tick (inventory ${ivHeld}, open ${st.openCount}: ${r.status} ${r.detail ?? r.why ?? ''})`, out.thrownSave);
+      let s2 = await state();
+      for (let i = 0; i < 60 && s2.openCount > 0; i++) {
+        await call('dev.wait', { ms: 1000 }, 30_000);
+        s2 = await state();
+      }
+      let iv2 = await inv();
+      if (s2.openCount === 0 && iv2 === 0 && (await owedOf()) === 9) {
+        await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000); // aborted before its decision: collect again
+        iv2 = await inv();
+      }
+      check(s2.openCount === 0 && iv2 === 9 && (await owedOf()) === 0, `thrown player save: given once afterwards (inventory ${iv2}, open ${s2.openCount})`, { iv2 });
+      await cmd('/clear @s');
+      await barrier();
+    }
     // ---------------------------------------------------------------- a kill point at each step, bare and +save
     for (const p of points) {
       for (const v of ['', '+save']) {

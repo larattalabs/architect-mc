@@ -504,7 +504,7 @@ public final class PileAdopt {
 			BlockPos cp = new BlockPos(r.x(), r.y(), r.z());
 			CrateBlockEntity be = (CrateBlockEntity) level.getBlockEntity(cp);
 			Ledger l = java.util.Objects.requireNonNull(be).ledger();
-			Map<String, Integer> stock = new TreeMap<>(l.stock());
+			Map<String, Integer> stock = new TreeMap<>(l.heldStock()); // held by this txn now: the raw count (stock() hides held stock)
 			Map<String, Map<String, Integer>> byTarget = Stockpiles.adoptedPaid(srv, level, r.key(), sites, roads, l.placed());
 			if (!stock.isEmpty()) {
 				core.plan(t, CrateTxn.take(p.dimension, cp, stock));
@@ -532,7 +532,11 @@ public final class PileAdopt {
 		}
 		for (AdoptPlan.CrateRead r : moved) {
 			Construction.Crate c = crates.get(r.key());
-			core.plan(t, CrateTxn.restore(p.dimension, new BlockPos(c.x(), c.y(), c.z()), c.snapshotState(), c.snapshotNbt()));
+			if (plan.join().contains(r)) {
+				// (T2b's crate.restore: its probe reads a cell that is no longer a crate as restored, so a GONE cell is never written over:
+				// whatever stands there now stays; only its journal kind is released)
+				core.plan(t, CrateTxn.restore(p.dimension, new BlockPos(c.x(), c.y(), c.z()), c.snapshotState(), c.snapshotNbt()));
+			}
 			core.plan(t, Effect.of(RELEASE, EffectClass.R).data("crateOwner", r.key()));
 		}
 		for (AdoptPlan.CrateRead r : moved) {

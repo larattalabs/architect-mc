@@ -165,8 +165,11 @@ public final class Builder {
 		/** What the target may use of {@code item} now. */
 		int stock(String item);
 
-		/** The builder placed a cell: its items are consumed. */
-		void pay(List<SurvivalItems.Cost> costs);
+		/**
+		 * The builder places a cell: its items are consumed. False (nothing consumed) when they can't be paid now (a held crate: T2b final
+		 * check P1-1): the caller does not place it.
+		 */
+		boolean pay(List<SurvivalItems.Cost> costs);
 
 		/** A swap's old block (paid) goes back: into the stockpile, or dropped at {@code fallback} (beside a legacy crate). */
 		void giveBack(Map<String, Integer> items, BlockPos fallback);
@@ -199,8 +202,8 @@ public final class Builder {
 			}
 
 			@Override
-			public void pay(List<SurvivalItems.Cost> costs) {
-				Builder.pay(ledger, costs);
+			public boolean pay(List<SurvivalItems.Cost> costs) {
+				return Builder.pay(ledger, costs);
 			}
 
 			@Override
@@ -585,7 +588,10 @@ public final class Builder {
 					owedShort = true; // it stands, the stock cannot pay it: the target waits for materials
 					continue;
 				}
-				purse.pay(cost.get(i));
+				if (!purse.pay(cost.get(i))) {
+					owedShort = true; // (T2b final check P1-1) not paid (a held crate): it waits, still owed
+					continue;
+				}
 				o.clear(i);
 				markBuilt(i, true);
 				paid++;
@@ -1912,11 +1918,17 @@ public final class Builder {
 				r.blockedSince.putIfAbsent(i, ticks);
 				continue;
 			}
+			List<SurvivalItems.Cost> both = r.cost.get(i);
+			if (j >= 0) {
+				both = new ArrayList<>(both);
+				both.addAll(r.cost.get(j));
+			}
+			if (!purse.pay(both)) {
+				continue; // (T2b final check P1-1) not paid (a held crate): nothing placed, the cell waits
+			}
 			r.paidAgain(i, now);
-			purse.pay(r.cost.get(i));
 			put(level, r, i, p, true);
 			if (j >= 0) {
-				purse.pay(r.cost.get(j));
 				put(level, r, j, q, false);
 			}
 			// a cell finish placed free, mined since and now paid for: it is refundable again
@@ -2051,10 +2063,17 @@ public final class Builder {
 		return a;
 	}
 
-	private static void pay(Ledger ledger, List<SurvivalItems.Cost> costs) {
+	/** Consumes every cost, or none (false) when any can't be paid now: a held crate's or a short stock (T2b final check P1-1). */
+	static boolean pay(Ledger ledger, List<SurvivalItems.Cost> costs) {
+		Map<String, Integer> need = new HashMap<>();
+		costs.forEach(c -> need.merge(c.item(), c.count(), Integer::sum));
+		if (ledger.frozen() || need.entrySet().stream().anyMatch(e -> ledger.stock(e.getKey()) < e.getValue())) {
+			return false;
+		}
 		for (SurvivalItems.Cost c : costs) {
 			ledger.consume(c.item(), c.count());
 		}
+		return true;
 	}
 
 	/**

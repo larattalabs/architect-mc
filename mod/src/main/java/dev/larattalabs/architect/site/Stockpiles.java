@@ -2079,8 +2079,9 @@ public final class Stockpiles {
 					}
 
 					@Override
-					public void pay(List<SurvivalItems.Cost> costs) {
+					public boolean pay(List<SurvivalItems.Cost> costs) {
 						feedPay(srv, p, keyOf(t), costs, cap, drawn, lotDrawn, fallback);
+						return true; // a stockpile target's stock is checked by its feed (stock - reserved) before the cell
 					}
 
 					@Override
@@ -2717,7 +2718,7 @@ public final class Stockpiles {
 			}
 			CrateBlockEntity be = Builder.crate(level, s, false);
 			if (be != null && crates.add(be.getBlockPos())) {
-				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+				be.ledger().heldStock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
 		}
 		List<Infra> infs = new ArrayList<>(Infras.all());
@@ -2757,7 +2758,7 @@ public final class Stockpiles {
 			}
 			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), false);
 			if (be != null && crates.add(be.getBlockPos())) {
-				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+				be.ledger().heldStock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
 		}
 		// (6c RS) a survival region's standing lava sources (a lava bucket less its bucket each) and grates: what its bodies took

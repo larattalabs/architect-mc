@@ -75,11 +75,12 @@ class RunOwedRLTest {
 		}
 
 		@Override
-		public void pay(java.util.List<dev.larattalabs.architect.survival.SurvivalItems.Cost> costs) {
+		public boolean pay(java.util.List<dev.larattalabs.architect.survival.SurvivalItems.Cost> costs) {
 			costs.forEach(c -> {
 				stock.merge(c.item(), -c.count(), Integer::sum);
 				paid.merge(c.item(), c.count(), Integer::sum);
 			});
+			return true;
 		}
 
 		@Override

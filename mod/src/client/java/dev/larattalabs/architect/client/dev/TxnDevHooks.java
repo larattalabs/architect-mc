@@ -28,6 +28,8 @@ public final class TxnDevHooks {
 			+ "{status: DONE|HELD|REFUSED, given, stillOwed, why, detail}");
 		op("dev.owed.failPlayerSave", "owedFailPlayerSave", "{n?: 1} - (slice T2b fix round) TEST: the next n confirmed player saves of a collect's give fail "
 			+ "(the give is taken back in its tick, the txn held)");
+		op("dev.owed.throwPlayerSave", "owedThrowPlayerSave", "{n?: 1} - (T2b final check P1-3) TEST: the next n confirmed player saves "
+			+ "(DurableBarrier.savePlayersConfirmed, the give's own) throw: the give and its receipt taken back in the same tick");
 		op("dev.owed.credit", "owedCredit", "{owner, key} - (slice T2b) creditOwedToStock through the owed.credit txn -> {status, given, stillOwed, why}");
 		op("dev.txn.cells", "cells", "{cells: [[x,y,z], ..]} - (slice T2a) per cell: state, be (type), beId (identity: a replaced block entity changes it), "
 			+ "slots {slot: 'item xN'}, nbt (the saved data), drops (item entities within 2 blocks): what txn-holds compares before and after a writer");

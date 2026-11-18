@@ -1282,7 +1282,9 @@ public final class RegionTargets {
 				continue;
 			}
 			r.blockedSince.remove(q);
-			purse.pay(r.cost.get(q));
+			if (!purse.pay(r.cost.get(q))) {
+				continue; // (T2b final check P1-1) not paid: nothing placed
+			}
 			// (XL, XR) the block this write takes up goes back when another writer of the region (a target, a construction road, a lot)
 			// owns it and paid for it; a soil cell over a soil cell too (XR: the later writer owns it, the earlier one is shadowed)
 			if (!now.isAir()) {

@@ -114,6 +114,11 @@ public final class OwedLedger {
 		return ENTRIES.get(key);
 	}
 
+	/** (part 2b) Whether {@code key} is owed now or has ended (a source owes one key once: the O probe of a re-begun attempt). */
+	public static synchronized boolean known(String key) {
+		return ENTRIES.containsKey(key) || ENDED.contains(key);
+	}
+
 	/** Whether the txn effect {@code effectKey} changed the owed ledger (its probe). */
 	public static synchronized boolean applied(String effectKey) {
 		return APPLIED.contains(effectKey);
