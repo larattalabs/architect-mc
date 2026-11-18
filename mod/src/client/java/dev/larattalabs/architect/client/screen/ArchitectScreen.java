@@ -2351,6 +2351,8 @@ public final class ArchitectScreen extends Screen {
 		}
 		int by = footerY - 16 - 20;
 		int bx = dx;
+		// (PR A3) the button row owns its band: detail lines that reach it at a large text size are covered, not drawn through
+		g.fill(dx - 1, by - 3, x + w, by + 21, UiStyle.CREAM);
 		if (j.design() != null) {
 			String cancel = "Cancel";
 			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), !j.running() ? "It has finished"

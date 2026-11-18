@@ -803,7 +803,9 @@ final class LibraryTab {
 		}
 		// buttons: Place, Edit, ⋯
 		String placeL = c.pinned() ? (survival ? "Construction site on its site" : "Place on its site") : survival ? "Place construction site" : "Place";
-		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 14));
+		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 6 - 8));
+		// (PR A3) the button row owns its band: nothing above runs under the buttons at a large text size
+		g.fill(x, buttonsTop - 3, x + w, buttonsTop + 21, UiStyle.CREAM);
 		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, NO_WORLD, mx, my, () -> place(c.id()));
 		int ex = x + pw + 4;
 		// Edit: the design's variants editor (its Style, materials and parameters), else a remix (an import has no source)
