@@ -286,10 +286,12 @@ export async function registerSAD(steps, h) {
     let la2 = null;
     if (Ld2) {
       la2 = (await pile()).ledger ?? {};
-      const moved2 = G.plus(G.minus(stockOf(Ld2), stockOf(p0.ledger)), G.minus(Ld2.dropped ?? {}, p0.ledger?.dropped ?? {}));
-      out.sac2 = { moved: moved2, crateStock: crateBefore.ledger?.stock, records: Object.keys(Ld2.paid ?? {}), sameAsSaved: json(Ld2) === json(la2) };
-      check(json(Ld2.paid ?? {}) === json(la2.paid ?? {}) && G.same(stockOf(Ld2), stockOf(la2)) && G.same(moved2, crateBefore.ledger?.stock ?? {})
-        && Object.keys(Ld2.paid ?? {}).some((k) => k.startsWith(`site:${ids.house_3}@`)), `SAC2: after the unclean restart the stockpile holds the crate's stock once (${json(moved2)}) and the keyed records (${Object.keys(Ld2.paid ?? {}).length}) as saved`, out.sac2);
+      // (slice T3b) SAC2 is now pile.adopt's first record clear: the decision is durable, the credit in memory (the txn's last barrier saves
+      // it), so the ledger on disk at the halt may not hold it yet; the restart rolls forward from the intent. Judged on the recovered ledger
+      const moved2 = G.plus(G.minus(stockOf(la2), stockOf(p0.ledger)), G.minus(la2.dropped ?? {}, p0.ledger?.dropped ?? {}));
+      out.sac2 = { moved: moved2, crateStock: crateBefore.ledger?.stock, records: Object.keys(la2.paid ?? {}), savedAtHalt: Object.keys(Ld2.paid ?? {}) };
+      check(G.same(moved2, crateBefore.ledger?.stock ?? {}) && Object.keys(la2.paid ?? {}).some((k) => k.startsWith(`site:${ids.house_3}@`)),
+        `SAC2: after the unclean restart (rolled forward) the stockpile holds the crate's stock once (${json(moved2)}) and the keyed records (${Object.keys(la2.paid ?? {}).length})`, out.sac2);
       // the world's start repaired the references before any reader: no crate-fed path is left to double-spend the joined crate
       const s3w = await siteState(ids.house_3);
       const s4w = await siteState(ids.house_4);
