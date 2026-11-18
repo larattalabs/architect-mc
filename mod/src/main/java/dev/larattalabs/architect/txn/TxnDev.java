@@ -122,7 +122,7 @@ public final class TxnDev {
 					cr.ledger().stock().forEach((k, v) -> sl.addProperty("stock:" + k, k + " x" + v));
 					c.add("slots", sl); // (T2b) a crate's slots are its ledger's stock
 				}
-				if (be instanceof net.minecraft.world.Container k) {
+				if (be instanceof net.minecraft.world.Container k && !(be instanceof dev.larattalabs.architect.survival.CrateBlockEntity)) {
 					JsonObject sl = new JsonObject();
 					for (int i = 0; i < k.getContainerSize(); i++) {
 						net.minecraft.world.item.ItemStack st = k.getItem(i);
