@@ -73,15 +73,25 @@ public final class Layouts {
 		} catch (RuntimeException e) {
 			ir = l.ir().json();
 		}
-		return shapes(ir, artifactBody(r), r.claim[1], r.claim[4], id -> r.lots.get(id) == null ? 0 : Revisions.lotRevision(r.lots.get(id)));
+		return shapes(ir, bodies(r), r.claim[1], r.claim[4], id -> r.lots.get(id) == null ? 0 : Revisions.lotRevision(r.lots.get(id)));
 	}
 
 	/**
 	 * Every shape of an effective IR (pure): its lots, then the artifact's plan parts when {@code body} is given (a plan/0 region), else the
 	 * IR's parts and roads. {@code y0}/{@code y1}: the claim's height range, for boxes the plan gives in x/z only.
 	 */
-	static List<PartShape> shapes(JsonObject ir, @Nullable JsonObject body, int y0, int y1, java.util.function.ToIntFunction<String> lotRev) {
-		List<PartShape> out = new ArrayList<>();
+	/** An artifact's body and the rid of the revision it realised (0: the region's own). */
+	record Body(JsonObject body, int rid) {
+	}
+
+	/**
+	 * Every shape of the head (pure): the effective IR's lots; then each artifact's plan parts, the realised artifact's first and each
+	 * standing revision's after it in position order (a later answer for the same part replaces the earlier: a changed zone shows the head's
+	 * geometry), each stamped with its revision's rid; then the effective IR's roads (kind route), so a growth's street appears; and, for a
+	 * bundled program's region (no artifact), the effective IR's parts (kind tile). A part an artifact names is not repeated from the IR.
+	 */
+	static List<PartShape> shapes(JsonObject ir, List<Body> bodies, int y0, int y1, java.util.function.ToIntFunction<String> lotRev) {
+		Map<String, PartShape> out = new LinkedHashMap<>();
 		Map<String, BoundingBox> lotBoxes = LotViews.boxesOf(ir);
 		Map<String, String> lotStage = new LinkedHashMap<>();
 		if (ir.get("lots") instanceof JsonArray la) {
@@ -91,31 +101,23 @@ public final class Layouts {
 				}
 			}
 		}
-		lotBoxes.forEach((id, box) -> out.add(new PartShape(id, "lot", lotStage.get(id), box, List.of(), lotRev.applyAsInt(id), id, List.of())));
-		if (body != null && body.get("parts") instanceof JsonArray ps) {
-			for (JsonElement e : ps) {
-				if (e instanceof JsonObject p && StatusViews.str(p, "part") != null) {
-					PartShape s = ofAnswer(p, y0, y1);
-					if (s != null && !lotBoxes.containsKey(s.part())) {
-						out.add(s);
-					}
-				}
-			}
-			return List.copyOf(out);
-		}
-		if (ir.get("parts") instanceof JsonArray ps) {
-			for (JsonElement e : ps) {
-				if (e instanceof JsonObject p && StatusViews.str(p, "id") != null) {
-					BoundingBox box = opsBox(p, y0, y1);
-					if (box != null) {
-						out.add(new PartShape(StatusViews.str(p, "id"), "tile", StatusViews.str(p, "stage"), box, List.of(), rid(p), null, List.of()));
+		lotBoxes.forEach((id, box) -> out.put(id, new PartShape(id, "lot", lotStage.get(id), box, List.of(), lotRev.applyAsInt(id), id, List.of())));
+		for (Body b : bodies) {
+			if (b.body().get("parts") instanceof JsonArray ps) {
+				for (JsonElement e : ps) {
+					if (e instanceof JsonObject p && StatusViews.str(p, "part") != null) {
+						PartShape sh = ofAnswer(p, y0, y1);
+						if (sh != null && !lotBoxes.containsKey(sh.part())) {
+							out.put(sh.part(), new PartShape(sh.part(), sh.kind(), sh.stage(), sh.box(), sh.ends(), b.rid(), null, List.of()));
+						}
 					}
 				}
 			}
 		}
 		if (ir.get("roads") instanceof JsonArray rs) {
 			for (JsonElement e : rs) {
-				if (e instanceof JsonObject rd && rd.get("points") instanceof JsonArray pts && StatusViews.str(rd, "id") != null) {
+				if (e instanceof JsonObject rd && rd.get("points") instanceof JsonArray pts && StatusViews.str(rd, "id") != null && !out.containsKey(StatusViews.str(rd,
+					"id"))) {
 					List<BlockPos> line = new ArrayList<>();
 					for (JsonElement q : pts) {
 						JsonArray a = q.getAsJsonArray();
@@ -124,12 +126,45 @@ public final class Layouts {
 					int w = rd.has("width") ? rd.get("width").getAsInt() : 3;
 					BoundingBox box = boxOf(line, w / 2, y0, y1);
 					if (box != null) {
-						out.add(new PartShape(StatusViews.str(rd, "id"), "route", StatusViews.str(rd, "stage"), box, simplify(line), rid(rd), null, List.of()));
+						out.put(StatusViews.str(rd, "id"), new PartShape(StatusViews.str(rd, "id"), "route", StatusViews.str(rd, "stage"), box, simplify(line), rid(rd), null,
+							List.of()));
 					}
 				}
 			}
 		}
-		return List.copyOf(out);
+		// a bundled program's IR parts (a plan/0 region's IR parts are its plan parts' writes, already shown by their answers)
+		if (bodies.isEmpty() && ir.get("parts") instanceof JsonArray ps) {
+			for (JsonElement e : ps) {
+				if (e instanceof JsonObject p && StatusViews.str(p, "id") != null && !out.containsKey(StatusViews.str(p, "id"))) {
+					BoundingBox box = opsBox(p, y0, y1);
+					if (box != null) {
+						out.put(StatusViews.str(p, "id"), new PartShape(StatusViews.str(p, "id"), "tile", StatusViews.str(p, "stage"), box, List.of(), rid(p), null, List.of()));
+					}
+				}
+			}
+		}
+		return List.copyOf(out.values());
+	}
+
+	/** The artifacts a plan/0 region was realised and revised from: its own, then every standing revision's up to the head, in position order. */
+	static List<Body> bodies(RegionRec r) {
+		List<Body> out = new ArrayList<>();
+		JsonObject b = artifactBody(r);
+		if (b != null) {
+			out.add(new Body(b, 0));
+		}
+		List<Revisions.Rev> revs = new ArrayList<>(r.revisions);
+		revs.sort(java.util.Comparator.comparingInt(v -> v.position));
+		for (Revisions.Rev v : revs) {
+			if (v.standing() && v.position <= r.position && v.artifact != null) {
+				try {
+					PlanChecks.artifact(v.artifact).ifPresent(a -> out.add(new Body(a.body(), v.rid)));
+				} catch (RuntimeException e) {
+					// an unreadable revision artifact: its parts come from the effective IR only
+				}
+			}
+		}
+		return out;
 	}
 
 	/** The artifact a plan/0 region was realised from, its body; null for a bundled program's region. */
