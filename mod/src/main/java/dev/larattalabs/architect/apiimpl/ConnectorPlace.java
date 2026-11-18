@@ -42,10 +42,13 @@ import org.jspecify.annotations.Nullable;
  * survival row (its bill fed from the owner's stockpile, refunded on removal). The answer's {@code siteId} is the region id:
  * {@code Regions.remove} (or {@code Sites.removeGroup} of its group) takes it off exactly.
  *
- * <p>The frozen {@link ConnectorRequest} has no level, owner or actor: the API call reads {@code params["architect_mc:dimension"]} (a
+ * <p>The 1.55.0 {@link ConnectorRequest} had no level, owner or actor: the API call reads {@code params["architect_mc:dimension"]} (a
  * dimension id; default the overworld) and {@code params["architect_mc:owner"]} (the owner whose stockpile feeds it in survival; default
- * none); the player path ({@link #place(MinecraftServer, ConnectorRequest, ServerLevel, String, ServerPlayer)}) passes them directly.
- * Every {@code architect_mc:*} key is read here and never reaches the plan. Any thread; the work runs on the server thread.
+ * none); (8b) the request's typed {@code owner}, {@code dimension} and {@code actor} win over them. The player path
+ * ({@link #place(MinecraftServer, ConnectorRequest, ServerLevel, String, ServerPlayer)}) passes them directly. Every {@code architect_mc:*}
+ * key is read here and never reaches the plan. (8b) The realise carries the request's {@code maxBill}, {@code maxBillPerLot} and
+ * {@code ext} ({@link #approvedOf}), so a survival connector is capped exactly as a realise is. Any thread; the work runs on the server
+ * thread, and the answer's future completes on the server thread.
  */
 public final class ConnectorPlace {
 	/** The params key naming the dimension (API calls; the player path passes the level). */
@@ -144,11 +147,19 @@ public final class ConnectorPlace {
 		return o;
 	}
 
-	/** The API call: the level and owner from the params ({@link #PARAM_DIMENSION}, {@link #PARAM_OWNER}), no actor. */
+	/**
+	 * The API call: the level, owner and actor from the request's typed members (8b), else from the params ({@link #PARAM_DIMENSION},
+	 * {@link #PARAM_OWNER}; no actor).
+	 */
 	static CompletableFuture<PlaceResult> place(MinecraftServer server, ConnectorRequest r) {
 		String dim = str(r.params(), PARAM_DIMENSION);
 		ServerLevel level;
-		if (dim == null) {
+		if (r.dimension() != null) {
+			level = server.getLevel(r.dimension());
+			if (level == null) {
+				return CompletableFuture.completedFuture(refused(Reason.FIELD_LIMIT, "dimension: no dimension " + r.dimension().identifier()));
+			}
+		} else if (dim == null) {
 			level = server.overworld();
 		} else {
 			Identifier id = Identifier.tryParse(dim);
@@ -157,7 +168,7 @@ public final class ConnectorPlace {
 				return CompletableFuture.completedFuture(refused(Reason.FIELD_LIMIT, "params." + PARAM_DIMENSION + ": no dimension " + dim));
 			}
 		}
-		return place(server, r, level, str(r.params(), PARAM_OWNER), null);
+		return place(server, r, level, r.owner() != null ? r.owner() : str(r.params(), PARAM_OWNER), r.actor());
 	}
 
 	/**
@@ -208,8 +219,8 @@ public final class ConnectorPlace {
 				notes.add("its bill: " + bom);
 			}
 			Mode mode = survival ? Mode.CONSTRUCTION : Mode.INSTANT;
-			return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(ck.artifactSha(), mode, actor, Map.of(), r.opKey(),
-				new JsonObject())), server).thenCompose(f -> f).thenApply(region -> {
+			return CompletableFuture.supplyAsync(() -> ArchitectApi.get().regions().realiseApproved(approvedOf(r, ck.artifactSha(), mode, actor)), server).thenCompose(f -> f)
+				.thenApply(region -> {
 				if (actor != null) {
 					// ((7c CN) the player-facing remove: /architect region remove, as the link's owner, names this region by default)
 					dev.larattalabs.architect.region.RegionCommands.rememberRegion(actor.getName().getString(), region);
@@ -217,7 +228,7 @@ public final class ConnectorPlace {
 				}
 				return new PlaceResult(true, Optional.of(region), List.of(), notes);
 			});
-		}).whenComplete((res, t) -> {
+		}).whenComplete((res, t) -> onServer(server, () -> {
 			if (t == null) {
 				out.complete(res);
 				return;
@@ -228,8 +239,15 @@ public final class ConnectorPlace {
 			} else {
 				out.completeExceptionally(cause);
 			}
-		});
+		}));
 		return out;
+	}
+
+	/**
+	 * (8b) The realise a checked connector asks for: its artifact, mode and actor, its operation key, and the request's caps and ext. Pure.
+	 */
+	static ApprovedRealise approvedOf(ConnectorRequest r, String artifactSha, Mode mode, @Nullable ServerPlayer actor) {
+		return new ApprovedRealise(artifactSha, mode, actor, Map.of(), r.opKey(), r.ext().deepCopy(), r.maxBill(), r.maxBillPerLot());
 	}
 
 	/** The plan could not build the connector: NO_LINK with the kit's first reason (its code and message), or the check's overall. */
@@ -248,6 +266,15 @@ public final class ConnectorPlace {
 		}
 		notes.add("the plan answered " + ck.overall() + (cls == null ? "" : " (the connector " + cls + ")") + "; nothing placed");
 		return new PlaceResult(false, Optional.empty(), rs, notes);
+	}
+
+	/** (8b) Runs {@code r} on the server thread: now when already on it, else as the next task (the futures' documented thread). */
+	static void onServer(MinecraftServer server, Runnable r) {
+		if (server.isSameThread()) {
+			r.run();
+		} else {
+			server.execute(r);
+		}
 	}
 
 	static PlaceResult refused(Reason reason, String message) {

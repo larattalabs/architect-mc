@@ -340,9 +340,22 @@ steps.survival = async () => {
   check(ck.check?.survival === true && ck.check?.overall === 'READY' && part?.class === 'fits' && sv?.free === 0 && sv?.held > 0 && sum(sv?.bom) > 0,
     `the connector's plan checked in survival: ${ck.check?.overall}; link ${part?.class}: one target, free ${sv?.free}, held ${sv?.held}, its bill ${json(sv?.bom)}`, out.check);
   const crateAt = await G.pile(ctx, s, 3);
+  // (8b, Steward's HARD ask) a survival connector is capped as a realise is: a maxBill one under its bill is refused BILL_CAP at put-down,
+  // nothing written (the crates aside); a lot cap is refused too (a connector has no lots); the real place below runs at exactly its bill
+  const first = Object.keys(sv?.bom ?? {}).sort()[0];
+  const under = { ...(sv?.bom ?? {}), [first]: Math.max(0, (sv?.bom?.[first] ?? 0) - 1) };
+  const rc = await place(s, { opKey: 'gate.cx.capped', typed: true, maxBill: under });
+  out.capped = rc;
+  const ec = (await G.diff(ctx, box, pre)).list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  check(rc.placed === false && rc.refusals?.[0]?.reason === 'BILL_CAP' && ec.length === 0,
+    `(8b) maxBill one ${first} under the bill: refused ${rc.refusals?.[0]?.reason} (${rc.refusals?.[0]?.message}), ${ec.length} cells written`, { rc, ec: ec.slice(0, 8) });
+  const rl = await place(s, { opKey: 'gate.cx.lotcap', typed: true, maxBill: sv?.bom ?? {}, maxBillPerLot: { lot1: { [first]: 1 } } });
+  out.lotCapped = rl;
+  check(rl.placed === false && rl.refusals?.[0]?.reason === 'BILL_CAP' && /lot1/.test(rl.refusals?.[0]?.message ?? ''),
+    `(8b) a lot cap on a connector (it has no lots): refused ${rl.refusals?.[0]?.reason} (${rl.refusals?.[0]?.message})`, rl);
   const C = new G.Conservation(ctx, box);
   await C.start();
-  const r = await place(s);
+  const r = await place(s, { typed: true, maxBill: sv?.bom ?? {}, ext: { 'gate:cx': 'capped-at-bill' } });
   out.place = r;
   check(r.placed === true && /^\S+$/.test(r.siteId ?? '') && (r.notes ?? []).some((n) => /survival: a construction site/.test(n)) && (r.notes ?? []).some((n) => n.startsWith('its bill: ')),
     `Sites.placeConnector (AUTO) in survival: placed ${r.siteId}, a construction site (${json(r.notes)})`, r);

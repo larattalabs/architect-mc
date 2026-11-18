@@ -503,7 +503,8 @@ public interface Sites {
 	/**
 	 * (7c) Places a single connector outside any region (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1): a 7a connector (rope
 	 * bridge, ladder, catwalk, rock stair, spiral) between two marked points, or from a site house's port to ground, as one site group.
-	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
+	 * For players, and (8b, N-8b-3) for a mod placing one for a player (Steward may call it, and {@code checkConnector} first). Built by
+	 * slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
 	 *
 	 * <p>(CX, since 1.58.0) The connector is a one-part plan/0 (part {@code link} from anchor {@code cx_from} to {@code cx_to}) over a claim of
 	 * the ends' x/z box plus 16 each side, checked in the world's mode and realised as one region: {@code siteId} is the region id, and
@@ -514,6 +515,11 @@ public interface Sites {
 	 * The mode is the world's (AUTO; CONSTRUCTION outside survival and INSTANT in survival refuse {@link Reason#NOT_ALLOWED}). A connector the
 	 * plan can't build answers {@code placed: false} with {@link Reason#NO_LINK} (the message starts with the kit's code, such as
 	 * {@code NO_GAP}); a bad request {@link Reason#FIELD_LIMIT}; the check's and the realise's typed refusals come back as refusals too.
+	 *
+	 * <p>(8b, feature {@code "connectorCheck"}; Since NEXT) The request's typed {@code owner}, {@code dimension} and {@code actor} win over the
+	 * params keys. Its {@code maxBill}, {@code maxBillPerLot} and {@code ext} go to the realise as {@link ApprovedRealise}'s do: a survival
+	 * connector whose bill at put-down is past {@code maxBill} answers {@code placed: false} with {@link Reason#BILL_CAP} and writes nothing,
+	 * and a later draw past it holds the target ({@link SiteWait#BILL_CAP}). Any thread; the future completes on the server thread.
 	 */
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.placeConnector is reserved: it throws until slice CX ships (feature placeConnector)");
