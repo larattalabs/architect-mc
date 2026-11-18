@@ -917,6 +917,27 @@ export function composeKeyBody(msg: Record<string, unknown>): Record<string, unk
 
 /** The kit's catalogue module (planCatalogueKinds), imported once per kit dir. */
 const catalogueModules = new Map<string, Promise<Record<string, unknown>>>();
+/**
+ * (8c, the review's round-2 P2-6) A repair prompt's kind entries gated on the mod's flowingWater, as the round's system is: off, each
+ * entry's def loses flow "current" and lip "form" (and a waterfall's `on`), channel.course's limits.flows its "current", form.waterfall's
+ * limits their `form`. A copy; on, the entries as the kit gives them.
+ */
+export function gateKindEntries(entries: Array<Record<string, unknown>>, flowingWater: boolean): Array<Record<string, unknown>> {
+  if (flowingWater) return entries;
+  const out = JSON.parse(JSON.stringify(entries)) as Array<Record<string, unknown>>;
+  const obj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+  const cut = (o: unknown, v: string) => { if (obj(o) && Array.isArray(o.enum)) o.enum = o.enum.filter((x) => x !== v); };
+  for (const e of out) {
+    const def = obj(e.def) ? e.def : null;
+    const props = def && obj(def.properties) ? def.properties : null;
+    if (props) { cut(props.flow, 'current'); cut(props.lip, 'form'); if (e.id === 'form.waterfall' || /waterfall/.test(String(e.id))) delete props.on; }
+    const lim = obj(e.limits) ? e.limits : null;
+    if (lim && Array.isArray(lim.flows)) lim.flows = lim.flows.filter((x) => x !== 'current');
+    if (lim && e.id === 'form.waterfall') delete lim.form;
+  }
+  return out;
+}
+
 async function kitKinds(kitDir: string, kinds: string[]): Promise<{ entries: Array<Record<string, unknown>> }> {
   const file = path.join(kitDir, 'lib', 'plan', 'catalogue.mjs');
   let mod = catalogueModules.get(file);
@@ -1272,7 +1293,7 @@ export class ComposeDesigns {
           const kinds = repairKinds(prev.plan, prev.check);
           let kindsText = '';
           try {
-            kindsText = truncate(JSON.stringify((await kitKinds(sc.config.kitDir, kinds)).entries), KINDS_TEXT_MAX);
+            kindsText = truncate(JSON.stringify(gateKindEntries((await kitKinds(sc.config.kitDir, kinds)).entries, st.flowingWater === true)), KINDS_TEXT_MAX);
           } catch (e) {
             kindsText = `unavailable (${(e as Error).message})`;
           }

@@ -33773,7 +33773,24 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - Green at a452b37f: 8c-ingame 31/0, 8c-crash 47/0, h-ingame-smoke, h-crash, h-df, hy-ingame-smoke, hy-crash-smoke, irr-ingame-smoke,
   irr-crash, irr-holders, fl-ingame, fl-natural all PASS; gradle build, kit 1619+, water lint, sidecar 955/955, api-compat clean.
 
-### SV: the join slice, survival rows (strict; branch `slice/SV` off `slice/8cG`, 8cG 1b784f1d and DF 211e3866 merged; versions NEXT; $0)
+### 8cG review round 2 (the last narrow round: 4 P1, 2 P2)
+- DF round 2 (211e3866) merged first: the drain's own cells need both 8c's `ownStillOurs` and DF's `bodyWrote`; spill and watch both
+  `flowStillOurs` and DF's `ownFluid`; `scoopSurvival` takes DF's charged-max; the river's removal uses DF's `Stockpiles.barrier` and
+  reaches FL3x after done.
+- **P1-1:** `writeBody` writes only into air or what the body wrote (never a block entity or a player's waterlogged block); every wave's
+  and forced tick's `emissionCheck` reads the body's own cells too (a chest there holds it, `why: uncontained`). Row `wavechest`.
+- **P1-2:** entering `restoring` saves the stray pass's chunk list (`strayChunks`); a pass re-tickets every watch set and waits until each
+  remaining chunk is loaded (`strayReady`), seeds over the whole watch set, works only the remaining chunks (`remainingWork`), saves as
+  each chunk finishes; `done` only with none left. Units.
+- **P1-3:** a held body (`holdBody`, at its wave or forced tick, unordered bodies too) has its tile-written sources drained through the
+  ownership checks before it is reported drained. Unit (the drain over a written source and a chest).
+- **P1-4:** `foreignOnly` runs a worklist to its real fixed point (amounts only rise: at most 8 x the take); an own cell holding water the
+  body didn't write (a waterlogged chest: a source, no liquid block) feeds. Units (a 48-high falling column: amount 8 to its foot; beside
+  a chest: 7), the kit model's `steady` on the same scenes (kit/test/flowing-8cf.test.mjs).
+- **P2-5:** a whole-region removal snapshots each revision record's watch sets too. **P2-6:** the composer's repair prompts gate their kind
+  entries (`gateKindEntries`) on `st.flowingWater`.
+
+### SV: the join slice, survival rows (strict; branch `slice/SV` off `slice/8cG`, 8cG 3c210117 (with DF 211e3866) merged; versions NEXT; $0)
 - **Gate** `8c-survival` (tools/gate8c.mjs `survival`, rows in tools/lib/gate8c-sv.mjs, on gate6crs's survival base): `isle` (c05: the island
   staged, the fall's ops not; the fluids item waits SITE_BUSY `waitsFor {kind: terrain, part: isle}` while the island builds, no water till
   it is BUILT, both bodies settle, census equal, the header's row `on: "isle"`; the grotto's opened rock outside the fall's watch set, the
@@ -33786,8 +33803,7 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   it waits for the island's staged target before it starts (red: run 20261118-095922); then the grotto's one-cell staged target (run
   -101241). `RegionTargets.firstBuildingForFluids` names the building staged target with the most cells left (`stagedFirst`, pure;
   `FluidsBarrierSVTest`). After the island is BUILT the bodies wait for the shell, untyped (recorded).
-- **Merge readings:** RegionFluids keeps 8cG's `ownStillOurs`/`flowStillOurs` for the drain and stray take and `scoopSurvival` for every
-  removal, with DF round 2's P1 4 (the charged items back when none stands) folded in; DF's `mayWrite` guards stay; one `barrierTriedAt`.
+- **Merge readings:** RegionFluids, JournalDev take 8cG round 2's own resolution of DF 211e3866; SV adds only the barrier's target.
 - **Ran** (gate-runs in `_work/architect-mc-SV-out`): 20261118-102801 (2 shards): unit-mod 1601/0, 8c-ingame 31/0, 8c-crash 47/0, h-df,
   rs-df, irr-df, rv-df, h-ingame-smoke, h-probe-smoke, h-crash, hy-ingame-smoke, hy-crash-smoke, hy-cold-smoke, irr-ingame-smoke,
   irr-crash, fl-ingame PASS (no fl smoke or crash step exists); 8c-survival 30/0 after the gate's wait check (20261118-112516).

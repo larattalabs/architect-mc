@@ -160,7 +160,30 @@ export const INGAME = [
   { key: 'chest', name: 'P1-1: a player\'s waterlogged chest in a head source cell after the build: the removal leaves it', run: chest },
   { key: 'bucket', name: 'P1-2: a player\'s bucket in the current while it settles: the unsettled abort (foreign_water) leaves the source', run: bucket },
   { key: 'wavetorch', name: 'P1-5: a torch set in a predicted cell before the head\'s wave (after the gate): the head is held (why wash), 0 items', run: wavetorch },
+  // (round 2, P1-1) a player's waterlogged chest set in a head source cell before its wave (the cell cleared, the pool below settling)
+  { key: 'wavechest', name: 'round 2 P1-1: a waterlogged chest set in a head source cell before its wave: never overwritten; the head is held', run: wavechest },
 ];
+
+async function wavechest(ctx) {
+  const { L, check, json } = ctx;
+  const { M, ck } = await riverWorld(ctx, 'wavechest');
+  const top = M.r1.cells.find((q) => q[1] === M.H);
+  const c = [top[0] + 2, M.H, top[2] + 1];
+  await L.call('dev.fluid.beforeWave', { setblock: [[...c, 'minecraft:chest[waterlogged=true]']] }, 10_000);
+  const r = await realise(ctx, ck.artifactSha);
+  if (r.refused) { check(false, `wavechest: refused ${json(r.refused)}`); return {}; }
+  await sleep(2000);
+  const head = r.fluids.find((x) => x.body === 'river_r1');
+  const tail = r.fluids.find((x) => x.body === 'river_r2');
+  const at = await blockAt(ctx, c);
+  check(/^minecraft:chest\[.*waterlogged=true/.test(at ?? ''), `wavechest: the player's waterlogged chest is never overwritten by the head's wave (${at})`);
+  check(head?.state === 'drained' && head?.why === 'uncontained' && tail?.state === 'settled', `wavechest: the head is held at its wave (${head?.state}, why ${head?.why}: ${String(head?.reason ?? '').slice(0, 90)}); the pool stands (${tail?.state})`);
+  const rm = await removeWatched(ctx, r.region);
+  const after = await blockAt(ctx, c);
+  check(rm.state === 'REMOVED' && /^minecraft:chest\[.*waterlogged=true/.test(after ?? ''), `wavechest: the removal leaves it too (${after}; ${rm.state})`);
+  await L.leaveWorld();
+  return { at, head, tail, after };
+}
 
 /** A river laid on a fresh world: its layout, the check, the snapshot box and file. */
 async function riverWorld(ctx, tag) {

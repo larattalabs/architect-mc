@@ -47,3 +47,18 @@ describe.skipIf(!HAS_KIT)('8c (the review\'s P2-8): every plan/0 system-ref rend
     expect(planCompactBlock(await planCompactParts(KIT, { flowingWater: true }))).toBe(await expandSystemRefs(KIT, ['plan/0#compact'], { flowingWater: true }));
   });
 });
+
+describe.skipIf(!HAS_KIT)('8c (the review\'s round-2 P2-6): a repair prompt\'s kind entries are gated too', () => {
+  it('gateKindEntries strips flow "current" and lip "form" off, keeps them on', async () => {
+    const { gateKindEntries } = await import('../src/compose.js');
+    const { pathToFileURL } = await import('node:url');
+    const cat = await import(pathToFileURL(path.join(KIT, 'lib', 'plan', 'catalogue.mjs')).href);
+    const entries = cat.planCatalogueKinds(['connector.channel', 'channel.course', 'form.waterfall']).entries as Array<Record<string, unknown>>;
+    const raw = JSON.stringify(entries);
+    expect(raw).toMatch(/"current"/);
+    const off = JSON.stringify(gateKindEntries(entries, false));
+    expect(off).not.toMatch(/"current"/);
+    expect(off).not.toMatch(/"lip":\{[^}]*"form"/);
+    expect(JSON.stringify(gateKindEntries(entries, true))).toBe(raw);
+  });
+});
