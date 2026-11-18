@@ -699,7 +699,7 @@ steps.df = async () => {
   const r1 = await call('dev.region.realise', { planId: p1.planId }, 300_000).catch((e) => ({ refused: String(e.message ?? e) }));
   await call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
   const onDisk = JSON.parse(fs.readFileSync(path.join(L.SAVES, world, 'architect-regions', T.region, 'region.json'), 'utf8'));
-  const diskHead = (onDisk.revisions ?? []).some((r) => r.rid === rid);
+  const diskHead = (onDisk.revisions?.list ?? onDisk.revisions ?? []).some?.((r) => r.rid === rid) ?? false;
   out.inDoubt = { refused: r1.refused ?? null, diskHasHead: diskHead };
   check(!(r1.refused && diskHead), `DF (a): a publication in doubt is never refused while the disk holds the new head (refused ${json(r1.refused ?? null)}, region.json names revision ${rid}: ${diskHead})`);
   const w1 = r1.refused ? null : await rvWait(T.region, rid).catch((e) => ({ r: { state: `error ${e.message}` } }));
