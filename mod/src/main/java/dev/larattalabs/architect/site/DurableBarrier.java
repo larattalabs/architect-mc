@@ -146,10 +146,13 @@ public final class DurableBarrier {
 	 * gives, before anything can move the items. Server thread.
 	 */
 	public static @Nullable String savePlayersConfirmed(MinecraftServer srv) {
+		if (THROW_PLAYER_SAVE.get() > 0 && THROW_PLAYER_SAVE.getAndDecrement() > 0) {
+			throw new IllegalStateException("TEST: the player save path threw (dev.owed.throwPlayerSave)"); // (T2b final check P1-3)
+		}
 		return new ServerSteps(srv).players();
 	}
 
-	/** (TEST, T2b final check P1-3, {@code dev.txn owedThrowPlayerSave}) the next n player-save steps throw from inside the save path. */
+	/** (TEST, T2b final check P1-3, {@code dev.txn owedThrowPlayerSave}) the next n confirmed player saves (a give's own) throw inside the save call. */
 	public static final java.util.concurrent.atomic.AtomicInteger THROW_PLAYER_SAVE = new java.util.concurrent.atomic.AtomicInteger();
 
 	/** (slice T2) Run after the next barrier that returns OK (every store it covers durable): the custody write-backs' receipt pruning. */
@@ -191,9 +194,6 @@ public final class DurableBarrier {
 
 		@Override
 		public @Nullable String players() {
-			if (THROW_PLAYER_SAVE.get() > 0 && THROW_PLAYER_SAVE.getAndDecrement() > 0) {
-				throw new IllegalStateException("TEST: the player save path threw (dev.owed.throwPlayerSave)"); // (T2b final check P1-3)
-			}
 			// (review P1-1, P1-2) each player's save acknowledged by its real replace result, a failed one owed per player (offline too) until
 			// a later save of it succeeds; an owed offline player's kept snapshot written again first
 			Path dir = srv.getWorldPath(LevelResource.PLAYER_DATA_DIR);

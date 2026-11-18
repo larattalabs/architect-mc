@@ -432,7 +432,15 @@ public final class TxnServer {
 			if (!ticking) {
 				return Barrier.refused("deferred to the first tick (the stores load in SERVER_STARTED)");
 			}
-			DurableBarrier.Result r = Stockpiles.barrier(s);
+			DurableBarrier.Result r;
+			try {
+				r = Stockpiles.barrier(s);
+			} catch (RuntimeException x) {
+				// (T2b final check P1-3, found by txn-owed's thrown-save row) a step that throws is a refused barrier: before, the exception left
+				// drive mid-step with the txn open, not held and not retried (wedged)
+				Architect.LOGGER.warn("Txn barrier threw: refused", x);
+				return Barrier.refused("threw: " + x.getMessage());
+			}
 			if (!r.ok()) {
 				return Barrier.refused(r.outcome() + ": " + r.reason());
 			}

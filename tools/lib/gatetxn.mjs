@@ -446,7 +446,7 @@ export async function registerTXN(steps, h) {
     {
       await cmd('/clear @s');
       const e = await owe(9);
-      await call('dev.owed.throwPlayerSave', { n: 2 }, 30_000);
+      await call('dev.owed.throwPlayerSave', { n: 1 }, 30_000); // the give's own confirmed save throws once
       const r = await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000).catch((x) => ({ status: 'THREW', why: String(x) }));
       const ivHeld = await inv();
       const st = await state();
