@@ -145,7 +145,7 @@ public final class RegionFluids {
 	 * farm beside the river is not counted.
 	 */
 	public static void itemSpawned(Entity e) {
-		if (!(e instanceof net.minecraft.world.entity.item.ItemEntity it) || it.getAge() != 0 || e.tickCount != 0 || STATE.isEmpty()) {
+		if (!(e instanceof net.minecraft.world.entity.item.ItemEntity it) || it.getAge() > 1 || STATE.isEmpty()) {
 			return;
 		}
 		long p = e.blockPosition().asLong();
@@ -2856,6 +2856,30 @@ public final class RegionFluids {
 		if (st.removal != null) {
 			o.addProperty("removal", st.removal);
 		}
+		// (8c WU) the item entities standing now in a flowing body's own or predicted cells (or beside one: water carries them a cell)
+		int now = 0;
+		for (Body b : st.bodies) {
+			if (!b.flowing()) {
+				continue;
+			}
+			int[] wb = b.watchBox();
+			for (var it : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, new AABB(wb[0], wb[1], wb[2], wb[3] + 1, wb[4] + 1, wb[5] + 1))) {
+				BlockPos q = it.blockPosition();
+				boolean near = false;
+				for (int dx = -1; dx <= 1 && !near; dx++) {
+					for (int dy = -1; dy <= 1 && !near; dy++) {
+						for (int dz = -1; dz <= 1 && !near; dz++) {
+							long k = BlockPos.asLong(q.getX() + dx, q.getY() + dy, q.getZ() + dz);
+							near = b.predicted.containsKey(k) || b.ownSet().contains(k);
+						}
+					}
+				}
+				if (near) {
+					now++;
+				}
+			}
+		}
+		o.addProperty("itemsNow", now);
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			JsonObject x = new JsonObject();

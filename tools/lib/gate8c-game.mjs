@@ -67,7 +67,7 @@ async function fluidsIn(ctx, box) {
 async function river(ctx, region) {
   return ctx.L.call('dev.fluid.river', { region }, 120_000).catch((e) => ({ error: String(e.message ?? e) }));
 }
-const itemsOf = (rv) => (typeof rv?.items === 'number' ? rv.items : -1);
+const itemsOf = (rv) => (typeof rv?.items === 'number' ? rv.items + (rv.itemsNow ?? 0) : -1); // (the spawn counter, plus the items standing in the bodies' own and predicted cells now)
 
 /** A Remove watched until it ends: the fluids removal phases seen on the view, the final state. */
 async function removeWatched(ctx, region, { again = false } = {}) {
@@ -227,7 +227,7 @@ async function foreign(ctx) {
   const at = await L.call('dev.fluid.census', { box: [...s, ...s] }, 60_000);
   const src = at.fluids.find((q) => q[0] === s[0] && q[1] === s[1] && q[2] === s[2]);
   const out = { removal: rm.state, phases: rm.phases, source: src ?? null };
-  check(rm.state === 'REMOVED' && !!src && src[3] === 'minecraft:water', `foreign: the removal leaves the player's source in the current (${json(src ?? null)}; ${rm.state}, phases ${json(rm.phases)})`);
+  check(rm.state === 'REMOVED' && !!src && /^minecraft:water(\[level=0\])?$/.test(src[3]), `foreign: the removal leaves the player's source in the current (${json(src ?? null)}; ${rm.state}, phases ${json(rm.phases)})`);
   await L.leaveWorld();
   return out;
 }
@@ -371,6 +371,47 @@ export async function probe(ctx) {
     out.falls = res.map((q) => ({ depth: q.depth, drop: q.h, fall: q.fall }));
     log(`  PB, recorded: fall damage by (depth, drop): ${json(res.map((q) => [q.depth, q.h, q.fall]))}`);
     check(true, `PB (recorded): fall damage landing in water by (depth, drop): ${json(res.map((q) => [q.depth, q.h, q.fall]))}`);
+    await L.leaveWorld();
+  }
+  {
+    // (c) WM's approximations (the coordinator's PB item): a waterlogged block is a foreign source whose collision faces stop its water
+    // (world.mjs wlMask: stairs, slabs and closed trapdoors only); each block alone on a stone pad, its 4 sides and the cell under it open:
+    // which faces does vanilla's water leave by, against the faces WM's mask leaves open? Recorded, not judged. (A v4 volume's block ids
+    // carry no properties: the planner reads a waterlogged state only from the plan's own writes.)
+    await fresh(ctx, 'G6B 8c WL');
+    const g = -61;
+    const W = await import(pathToFileURL(path.join(ctx.KIT, 'lib', 'fluids', 'world.mjs')).href);
+    const states = ['minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]', 'minecraft:oak_stairs[facing=north,half=top,shape=straight,waterlogged=true]',
+      'minecraft:oak_slab[type=bottom,waterlogged=true]', 'minecraft:oak_slab[type=top,waterlogged=true]', 'minecraft:oak_trapdoor[half=bottom,open=false,waterlogged=true]',
+      'minecraft:oak_trapdoor[facing=north,half=bottom,open=true,waterlogged=true]', 'minecraft:oak_fence[waterlogged=true]', 'minecraft:cobblestone_wall[waterlogged=true]',
+      'minecraft:glass_pane[waterlogged=true]', 'minecraft:iron_bars[waterlogged=true]', 'minecraft:lantern[waterlogged=true]', 'minecraft:ladder[facing=north,waterlogged=true]'];
+    const F = { east: [1, 0, 0], west: [-1, 0, 0], south: [0, 0, 1], north: [0, 0, -1], down: [0, -1, 0] };
+    const BIT = { east: 1, west: 2, south: 4, north: 8, up: 16, down: 32 };
+    const rows = [];
+    let x = CLAIM[0] + 6;
+    const z = CLAIM[1] + 30;
+    for (const st of states) {
+      // a pad of stone 7 x 7 at g + 3 with a 1-cell well under the block (to g + 1), the block at g + 4
+      await L.cmd(`/fill ${x - 3} ${g + 3} ${z - 3} ${x + 3} ${g + 3} ${z + 3} minecraft:stone`);
+      await L.cmd(`/setblock ${x} ${g + 3} ${z} minecraft:air`);
+      await L.cmd(`/setblock ${x} ${g + 4} ${z} ${st}`);
+      rows.push({ state: st, at: [x, g + 4, z] });
+      x += 9;
+    }
+    await L.call('dev.fluid.tick', { cells: rows.map((r) => r.at) }, 10_000).catch(() => null);
+    await sleep(6000);
+    for (const r of rows) {
+      const [bx, by, bz] = r.at;
+      const c = await L.call('dev.fluid.census', { box: [bx - 1, by - 1, bz - 1, bx + 1, by, bz + 1] }, 60_000);
+      const wet = new Set(c.fluids.filter((q) => /^minecraft:water/.test(q[3])).map((q) => `${q[0]},${q[1]},${q[2]}`));
+      r.vanilla = Object.entries(F).filter(([, d]) => wet.has(`${bx + d[0]},${by + d[1]},${bz + d[2]}`)).map(([k]) => k);
+      const m = W.wlMask(r.state);
+      r.wm = m === null ? 'none' : Object.keys(F).filter((k) => !(m & BIT[k]));
+      r.agree = Array.isArray(r.wm) && JSON.stringify([...r.wm].sort()) === JSON.stringify([...r.vanilla].sort());
+      r.noProps = W.wlMask(r.state.replace(/\[.*$/, '')); // (what a v4 volume's id alone gives)
+    }
+    out.waterlogged = rows.map((r) => ({ state: r.state, vanilla: r.vanilla, wm: r.wm, agree: r.agree, fromIdAlone: r.noProps }));
+    check(true, `PB (recorded): a waterlogged block's open faces, vanilla against WM's mask: ${json(out.waterlogged.map((r) => [r.state.replace('minecraft:', '').replace(/,?waterlogged=true/, ''), r.vanilla.join('+'), Array.isArray(r.wm) ? r.wm.join('+') : r.wm, r.agree]))}`);
     await L.leaveWorld();
   }
   const f = path.join(ctx.root, 'kit', 'lint', 'water-calibration.json');
