@@ -51,6 +51,8 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
 // cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
 // before 8a would write them at once, so it refuses the plan PLAN_STALE.
+// (8c WM) The 8c contract §8's kinds 'flowingWater' (a fluid op with `model: 'wm'`) and 'volume:levels' (a volume with `levels`) are
+// not walked yet: KINDS_FORMAT2 must equal the mod's IrStale (PlanStaleTest), so 8cF/VS add them on both sides at once.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS

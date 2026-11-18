@@ -7,7 +7,7 @@ import { BLOCKS, collisionOf, emissionOf, isClimbable, isFloor, isPassable, isSp
 import { compileIR, evalTile } from '../realise.mjs';
 import { FLAG_MISSING, FLAG_TREE, FLAG_WATER, asColumns, makeColumns, unpack } from './pack.mjs';
 import { sampleIndex } from './survey.mjs';
-import { VC, classAt, fluidAt } from './volume.mjs';
+import { VC, FC, classAt, fluidAt, levelAt, blockAt } from './volume.mjs';
 import { centreCells, crossOffsets, segmentAxis, rightOf } from './geom.mjs';
 
 export const AIR = 'minecraft:air';
@@ -219,12 +219,22 @@ export function surveyBase(survey, palette, volumes = []) {
   // (6c H) a version-3 volume's fluid layer: flowing and falling water and flowing lava with a level (the level within a flow is not
   // recorded: 1 for flowing, 8 for falling), a source in a plant cell (kelp, seagrass) as water
   const FLUID = [-1, S.water, P.of('minecraft:water[level=1]'), P.of('minecraft:water[level=8]'), -1, S.lava, P.of('minecraft:lava[level=1]')];
+  // ((8c WM) a version-4 volume: each flowing cell at its recorded level, and a waterlogged cell (code 4) as its block holding water (a
+  // foreign source for the water model: kelp and seagrass by their id, any other block with waterlogged=true); a v3 volume as before)
+  const PLANTS = new Set(['minecraft:kelp', 'minecraft:kelp_plant', 'minecraft:seagrass', 'minecraft:tall_seagrass']);
+  const v4 = (v, f, x, y, z) => {
+    if (f === FC.water_flowing || f === FC.water_falling) return P.of(`minecraft:water[level=${levelAt(v, x, y, z)}]`);
+    if (f === FC.lava_flowing) return P.of(`minecraft:lava[level=${levelAt(v, x, y, z)}]`);
+    if (f === FC.waterlogged) { const id = blockAt(v, x, y, z); if (id && id !== 'minecraft:air') return P.of(PLANTS.has(id) ? id : `${id}[waterlogged=true]`); }
+    return -1;
+  };
   const base = (x, y, z) => {
     for (const v of volumes) {
       const cl = classAt(v, x, y, z);
       if (cl === VC.MISSING) continue;
       if (v.fluids) {
         const f = fluidAt(v, x, y, z);
+        if (v.levels && f) { const s = v4(v, f, x, y, z); if (s >= 0) return s; }
         if (f && FLUID[f] >= 0 && (cl === VC.WATER || cl === VC.LAVA || f === 1)) return FLUID[f];
       }
       return VCS[cl];

@@ -40,9 +40,14 @@
 //            wins its cells, as a grate's bars do); the mod gives these cells a block tick instead of a fluid tick (vanilla keeps the
 //            column over its base). The body asks no frozen volume (its shell is the plan's own, the face's natural cells read 2.5D).
 // A bubble set makes the IR require `bubbleColumns` (a mod or kit before LF would write still water: no lift).
-import { simulate, settleBound } from './sim.mjs';
+//
+// (8c WM, the 8c contract §2) `opts.model: 'wm'` simulates the body with the water model (sim.mjs header: foreign wl sources, the
+// frozen volume's levels, conversion, bubble columns, the wash rule, a typed UNSETTLED) and asks its frozen volume with levels (ARVX
+// version 4). Its op carries `model: 'wm'` (the kind `flowingWater` waits for 8cF/VS); its record carries `converted`, `foreign` and `wash`
+// (the cells the planner must lift into sources or clear first: slice RV's seam). Every other body is planned exactly as before.
+import { simulate, settleBound, WM_MODEL } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
-import { kindOf } from './world.mjs';
+import { kindOf, wmKinds } from './world.mjs';
 import { _bindFluidBody } from '../region/program.mjs';
 import { _bindLinkWorld } from '../region/links.mjs';
 import { draftIR } from '../region/plan.mjs';
@@ -201,6 +206,14 @@ export function localWorld(r, box, { world = null } = {}) {
     },
     solid: (x, y, z) => P.solid[vw.get(x, y, z)],
   };
+}
+
+/**
+ * (8c WM, §2.5) The refusal of a wm body whose steady state did not settle: `UNSETTLED {cells, rounds, sample}` (the planner answers it,
+ * never throws). The code joins plan.json's reason codes with the 8c API (8cF): until then only a wm body (none in a shipped plan) raises it.
+ */
+export function unsettledRefusal(id, u) {
+  return Object.assign(new Error(`UNSETTLED: body ${id}: the steady state did not settle in ${u.rounds - 1} tick rounds (${u.cells} flowing cell(s))`), { evidence: { body: id, cells: u.cells, rounds: u.rounds, sample: u.sample } });
 }
 
 /** The per-part volume cap (§10, T3b's): past it the body asks for no volume and its part answers incomplete VOLUME. */
@@ -397,10 +410,12 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (vb && vb.minX <= vbox.minX && vb.minY <= vbox.minY && vb.minZ <= vbox.minZ && vb.maxX >= vbox.maxX && vb.maxY >= vbox.maxY && vb.maxZ >= vbox.maxZ) vbox = { minX: vb.minX, minY: vb.minY, minZ: vb.minZ, maxX: vb.maxX, maxY: vb.maxY, maxZ: vb.maxZ };
   const vcells = (vbox.maxX - vbox.minX + 1) * (vbox.maxY - vbox.minY + 1) * (vbox.maxZ - vbox.minZ + 1);
   let volume = null, volumeState = 'off';
+  const wm = opts.model === WM_MODEL;
+  if (opts.model !== undefined && !wm) throw new Error(`fluidBody ${id}: model must be '${WM_MODEL}' or absent`);
   if (opts.volume !== false) {
     if (vcells > VOLUME_CAP) volumeState = 'cap';
     else {
-      const v = r.needVolume(vbox, { fluids: true });
+      const v = r.needVolume(vbox, wm ? { fluids: true, levels: true } : { fluids: true });
       volumeState = v ? 'given' : 'asked';
       if (v) { const u = Object.values(r.volumesUsed).find((q) => q.box.minX === vbox.minX && q.box.minY === vbox.minY && q.box.minZ === vbox.minZ && q.box.maxX === vbox.maxX && q.box.maxY === vbox.maxY && q.box.maxZ === vbox.maxZ); if (u) volume = { sha: u.sha, box: [vbox.minX, vbox.minY, vbox.minZ, vbox.maxX, vbox.maxY, vbox.maxZ] }; }
     }
@@ -410,9 +425,12 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // (6c HY) a plan join's landing cells hold that body's fluid (the flow stops there, as on any other body's water)
   const landing = new Set(planJoins.flatMap((j) => j.cells.map((c) => k3(...c))));
   const world = { at: (x, y, z) => (stop.has(k3(x, y, z)) ? 'stop' : landing.has(k3(x, y, z)) ? fluid : lw.at(x, y, z)), solid: (x, y, z) => stop.has(k3(x, y, z)) || lw.solid(x, y, z) };
+  // ((8c WM) the model's world facts over the draft virtual world: a declared shell or solid cell is the plan's, never a foreign source)
+  if (wm) { const K = wmKinds(lw.vw); Object.assign(world, { wl: (x, y, z) => (stop.has(k3(x, y, z)) ? null : K.wl(x, y, z)), level: K.level, bubbler: K.bubbler, wash: K.wash }); }
   // ((6c HY) the single breach covers the lining and the weir too: its reach is watched as the shell's is)
-  const sim = simulate(world, [{ id, part, fluid, level, cells, shell: lining.length ? [...shell, ...lining] : shell }], { breach });
+  const sim = simulate(world, [{ id, part, fluid, level, cells, shell: lining.length ? [...shell, ...lining] : shell, ...(wm ? { model: WM_MODEL, ...(bubble.length ? { carried: bubble.map((c) => [c[0], c[1], c[2]]) } : {}) } : {}) }], { breach });
   const b = sim.bodies[0];
+  if (b.unsettled) throw unsettledRefusal(id, b.unsettled);
   let spill = b.spill;
   let predicted = b.predicted;
   if (_unsafe?.predictShort && spill.length) {
@@ -434,6 +452,7 @@ export function fluidBody(r, cellsIn, opts = {}) {
     predicted, settleTicks: settleBound(fluid, b.path),
   };
   if (_unsafe?.flowingState) op.state = `${SOURCE_STATE[fluid]}[level=1]`; // (the broken variant: lint FLUID_STATE)
+  if (wm) op.model = WM_MODEL; // ((8c WM) only on a wm body: every other op is byte for byte as before)
   // (6c HY) the course members, each only when non-empty (an H body's op is unchanged)
   const opAfter = Array.isArray(_unsafe?.after) ? _unsafe.after.filter((b) => typeof b === 'string') : after;
   if (planJoins.length) op.joins = [...op.joins, ...planJoins.map((j) => ({ body: j.body, cells: toRuns(j.cells) }))];
@@ -454,7 +473,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const skip = planJoins.length ? [...spill, ...joins, ...planJoins.flatMap((j) => j.cells)] : [...spill, ...joins];
   const guardRuns = volume ? toRuns(bufferOf(cells, wall, skip, 2).concat(wall, joins)) : null;
   const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns,
-    lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary), ...(bubble.length ? { bubble: bubble.map((c) => [...c]) } : {}) };
+    lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary), ...(bubble.length ? { bubble: bubble.map((c) => [...c]) } : {}),
+    ...(wm ? { model: WM_MODEL, converted: b.converted, foreign: b.foreign, wash: b.wash } : {}) };
   (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState, ...(decorCells.length ? { decor: decorCells.length } : {}), ...(bubble.length ? { bubble: bubble.length } : {}) });
   (r._fluidBodies ??= []).push(rec);
   return rec;

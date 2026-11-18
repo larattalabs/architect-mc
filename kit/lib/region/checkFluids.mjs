@@ -7,11 +7,11 @@
 // columns: [[x, z, y0, y1]]}: the columns a pier, a harbour wall section or a quay writes through natural water). Runs only when the
 // plan has either, so every other plan's report is unchanged. A body without a frozen volume over its box is a finding (M25:shell
 // "no volume"), never a pass (§9).
-import { simulate } from '../fluids/sim.mjs';
+import { simulate, WM_MODEL } from '../fluids/sim.mjs';
 import { FLUID_OP, decorCellsOf, fromRuns, isCourseOp, splitJoins } from '../fluids/body.mjs';
 import { VC, classAt } from './volume.mjs';
 import { F_WRITTEN } from './vworld.mjs';
-import { kindOf } from '../fluids/world.mjs';
+import { kindOf, wmKinds } from '../fluids/world.mjs';
 import { irFields } from '../fluids/irrfield.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
@@ -42,7 +42,9 @@ export function bodiesOf(ir) {
         lining: fromRuns(o.lining), after: Array.isArray(o.after) ? o.after : [], planJoins: j.plan.map((q) => ({ body: q.body, cells: fromRuns(q.cells) })), grate: fromRuns(o.grate), course: isCourseOp(o),
         decor: decorCellsOf(o.decor).map((c) => [c[0], c[1], c[2]]),
         // ((7a LF) a lift's bubble columns (decor's shape: [{state, cells}]); a lift body is `lift`)
-        bubble: decorCellsOf(o.bubble).map((c) => [c[0], c[1], c[2]]), bubbleStates: decorCellsOf(o.bubble), lift: Array.isArray(o.bubble) && o.bubble.length > 0 });
+        bubble: decorCellsOf(o.bubble).map((c) => [c[0], c[1], c[2]]), bubbleStates: decorCellsOf(o.bubble), lift: Array.isArray(o.bubble) && o.bubble.length > 0,
+        // ((8c WM) a body simulated by the water model)
+        ...(o.model === WM_MODEL ? { model: WM_MODEL } : {}) });
     }
   });
   return out;
@@ -404,10 +406,12 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   const world = fields.length
     ? { at: (x, y, z) => (fieldAt(x, y, z) ? 'stop' : kindOf(P, vw.get(x, y, z))), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => fieldAt(x, y, z) || P.solid[vw.get(x, y, z)] }
     : { at: (x, y, z) => kindOf(P, vw.get(x, y, z)), keep, shell: shellCheck, surface, exit, solid: (x, y, z) => P.solid[vw.get(x, y, z)] };
+  // ((8c WM) the water model's world facts, read only for a wm body: the world after the wash clears (a natural block left is refused))
+  if (bodies.some((b) => b.model === WM_MODEL)) Object.assign(world, wmKinds(vw, { cleared: true }));
   // ((6c HY) a course's lining and weir stand with its shell: M25:shell and the single breach cover them; its plan joins are declared)
   const sim = simulate(world, bodies.map((b) => (b.course
-    ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
-    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins, ...(b.lift ? { carried: b.bubble } : {}) })), { breach: true });
+    ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0, ...(b.model ? { model: b.model } : {}) }
+    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins, ...(b.lift ? { carried: b.bubble } : {}), ...(b.model ? { model: b.model } : {}) })), { breach: true });
   const per = [];
   if (want.has('M25')) {
     for (const f of sim.findings) findings.push(finding(f.rule, bodies.find((b) => b.id === f.body)?.irPart ?? null, 'fluids', f.count, f.sample, `body ${f.body}: ${f.message}`));
