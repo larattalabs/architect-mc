@@ -85,6 +85,8 @@ public final class PlotMarker {
 	private static boolean connector;
 	private static int connectorKind;
 	private static @Nullable Consumer<dev.larattalabs.architect.api.PlaceResult> onPlaced;
+	/** (8b CK) Mark-only: Enter on the second end hands the marks here instead of placing ({@link #startMarkConnector}). */
+	private static @Nullable Consumer<dev.larattalabs.architect.api.@Nullable MarkedLink> onMarked;
 	private static @Nullable JsonObject lastConnector;
 	private static int placeGen;
 	private static DesignSpec.@Nullable Plot last;
@@ -160,6 +162,29 @@ public final class PlotMarker {
 		update(mc);
 	}
 
+	/**
+	 * (8b CK, {@code ArchitectClientApi.markConnector}) The connector mode in mark-only mode: the same ghost, HUD and F-cycle, {@code kind}
+	 * preselected (a {@link #CONNECTORS} name, or {@code stairs_around} for spiral), {@code from} the first end or null; Enter on the second end
+	 * ends the mode and hands {@code done} the marks (kind as picked with F, both ends); Esc hands it null. Nothing is placed.
+	 */
+	public static void startMarkConnector(String kind, int @Nullable [] from, Consumer<dev.larattalabs.architect.api.@Nullable MarkedLink> done) {
+		String k = "stairs_around".equals(kind) ? "spiral" : kind;
+		int i = java.util.Arrays.asList(CONNECTORS).indexOf(k);
+		if (i < 0) {
+			throw new IllegalArgumentException("kind: one of " + String.join(", ", CONNECTORS));
+		}
+		startConnector(from, r -> {
+		}, () -> done.accept(null));
+		connectorKind = i;
+		onMarked = done;
+		update(Minecraft.getInstance());
+	}
+
+	/** (8b CK) Whether the connector mode is mark-only. */
+	public static boolean markOnly() {
+		return connectorMode() && onMarked != null;
+	}
+
 	/** (7c CX) Whether the marking is a connector's ends. */
 	public static boolean connectorMode() {
 		return active && connector;
@@ -199,6 +224,7 @@ public final class PlotMarker {
 		sampleGen++;
 		connector = false;
 		onPlaced = null;
+		onMarked = null;
 		placeGen++;
 		if (fitLocked) {
 			fitLocked = false;
@@ -350,6 +376,16 @@ public final class PlotMarker {
 			pinned = null;
 			phase = Phase.SECOND;
 			update(mc);
+			return;
+		}
+		if (connector && onMarked != null) {
+			// (8b CK) mark-only: hand the two ends back; the caller checks and places through its own server action
+			var done = onMarked;
+			var link = new dev.larattalabs.architect.api.MarkedLink(CONNECTORS[connectorKind], new net.minecraft.core.BlockPos(first[0], first[1], first[2]),
+				new net.minecraft.core.BlockPos(v.hover()[0], v.hover()[1], v.hover()[2]), new com.google.gson.JsonObject());
+			reset();
+			setStatus("Connector marked");
+			done.accept(link);
 			return;
 		}
 		if (connector) {

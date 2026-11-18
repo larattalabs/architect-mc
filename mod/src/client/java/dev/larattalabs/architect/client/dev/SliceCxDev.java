@@ -31,6 +31,39 @@ public final class SliceCxDev {
 				long t0 = System.nanoTime();
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().sites(s).placeConnector(r)).thenCompose(x -> x).thenApply(pr -> json(pr, t0));
 			});
+		DevBridge.register("dev.cx.check", 1_800_000, "(8b CK) dev.cx.place's request -> Sites.checkConnector: {fits, refusal: {reason, message}?, quote: {bom, exact}?, "
+			+ "claim: [x0,y0,z0,x1,y1,z1], ends, say, ms}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				ConnectorRequest r = request(req, f);
+				long t0 = System.nanoTime();
+				return ServerTasks.callOnServer(s -> ArchitectApi.get().sites(s).checkConnector(r)).thenCompose(x -> x).thenApply(ck -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("fits", ck.fits());
+					if (ck.refusal() != null) {
+						JsonObject rf = new JsonObject();
+						rf.addProperty("reason", ck.refusal().reason().name());
+						rf.addProperty("message", ck.refusal().message());
+						o.add("refusal", rf);
+					}
+					if (ck.quote() != null) {
+						JsonObject q = new JsonObject();
+						q.add("bom", ck.quote().bom());
+						q.addProperty("exact", ck.quote().exact());
+						o.add("quote", q);
+					}
+					JsonArray c = new JsonArray();
+					for (int v : new int[] {ck.claim().minX(), ck.claim().minY(), ck.claim().minZ(), ck.claim().maxX(), ck.claim().maxY(), ck.claim().maxZ()}) {
+						c.add(v);
+					}
+					o.add("claim", c);
+					JsonArray e = new JsonArray();
+					ck.ends().forEach(p -> e.add(pos(p)));
+					o.add("ends", e);
+					o.addProperty("say", ck.say());
+					o.addProperty("ms", (System.nanoTime() - t0) / 1_000_000);
+					return o;
+				});
+			});
 		DevBridge.register("dev.cx.plan", 60_000, "{kind, from: [x,y,z], to: [x,y,z], params?: {}, opKey?} - (7c CX) the one-part plan Sites.placeConnector checks: "
 			+ "{plan, claim: [x0,z0,x1,z1], anchors: {cx_from: [x,y,z], cx_to: [x,y,z]}} or {refused, reason} (a bad request: FIELD_LIMIT's message)", (req, mc) -> {
 				Fields f = Fields.of(req);

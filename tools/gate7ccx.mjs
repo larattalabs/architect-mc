@@ -339,11 +339,17 @@ steps.survival = async () => {
   out.check = { overall: ck.check?.overall, survival: ck.check?.survival, class: part?.class, sv };
   check(ck.check?.survival === true && ck.check?.overall === 'READY' && part?.class === 'fits' && sv?.free === 0 && sv?.held > 0 && sum(sv?.bom) > 0,
     `the connector's plan checked in survival: ${ck.check?.overall}; link ${part?.class}: one target, free ${sv?.free}, held ${sv?.held}, its bill ${json(sv?.bom)}`, out.check);
+  // (8b CK) the dry run: checkConnector fits with a quote equal to the check's bill, item for item; under a cap one short it does not fit
+  const dc = await call('dev.cx.check', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: 'gate.cx', typed: true }, 1_800_000);
+  out.dryRun = dc;
+  check(dc.fits === true && G.same(dc.quote?.bom, sv?.bom), `(8b CK) Sites.checkConnector: fits ${dc.fits}, its quote ${json(dc.quote?.bom)} == the check's bill ${json(sv?.bom)}`, dc);
   const crateAt = await G.pile(ctx, s, 3);
   // (8b, Steward's HARD ask) a survival connector is capped as a realise is: a maxBill one under its bill is refused BILL_CAP at put-down,
   // nothing written (the crates aside); a lot cap is refused too (a connector has no lots); the real place below runs at exactly its bill
   const first = Object.keys(sv?.bom ?? {}).sort()[0];
   const under = { ...(sv?.bom ?? {}), [first]: Math.max(0, (sv?.bom?.[first] ?? 0) - 1) };
+  const dcc = await call('dev.cx.check', { kind: 'rope_bridge', from: s.wp.anchors.cx_from, to: s.wp.anchors.cx_to, owner: G.OWNER, opKey: 'gate.cx.capped', typed: true, maxBill: under }, 1_800_000);
+  check(dcc.fits === false && dcc.refusal?.reason === 'BILL_CAP', `(8b CK) checkConnector under the cap: fits ${dcc.fits}, ${dcc.refusal?.reason} (${dcc.refusal?.message})`, dcc);
   const rc = await place(s, { opKey: 'gate.cx.capped', typed: true, maxBill: under });
   out.capped = rc;
   const ec = (await G.diff(ctx, box, pre)).list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));

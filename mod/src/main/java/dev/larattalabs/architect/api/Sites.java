@@ -519,7 +519,8 @@ public interface Sites {
 	 * <p>(8b, feature {@code "connectorCheck"}; Since NEXT) The request's typed {@code owner}, {@code dimension} and {@code actor} win over the
 	 * params keys. Its {@code maxBill}, {@code maxBillPerLot} and {@code ext} go to the realise as {@link ApprovedRealise}'s do: a survival
 	 * connector whose bill at put-down is past {@code maxBill} answers {@code placed: false} with {@link Reason#BILL_CAP} and writes nothing,
-	 * and a later draw past it holds the target ({@link SiteWait#BILL_CAP}). Any thread; the future completes on the server thread.
+	 * and a later draw past it holds the target ({@link SiteWait#BILL_CAP}). Any thread; the future completes on the server thread (a bad
+	 * request is answered with a future already complete).
 	 */
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.placeConnector is reserved: it throws until slice CX ships (feature placeConnector)");
@@ -575,8 +576,10 @@ public interface Sites {
 	/**
 	 * (8b CK, feature {@code "connectorCheck"}) The dry run of {@link #placeConnector}: the same plan check in the world's mode, and in
 	 * survival its quote held against the request's {@code maxBill}, under the request's {@code opKey} (a {@link #placeConnector} with the
-	 * same key and body reuses the check). Read-only, $0: nothing is written, reserved or consumed. Any thread; the future completes on the
-	 * server thread. Since NEXT.
+	 * same key and body reuses the check). Read-only, $0: nothing is written, reserved or consumed. A connector that does not fit answers
+	 * {@code fits: false} with its typed refusal ({@link Reason#NO_LINK} and the kit's code; {@link Reason#BILL_CAP} past the cap, or a lot cap,
+	 * which a connector cannot have; {@link Reason#FIELD_LIMIT}, {@link Reason#NOT_ALLOWED} for a bad request), never a throw. Any thread; the
+	 * future completes on the server thread (a bad request is answered with a future already complete). Since NEXT.
 	 */
 	default CompletableFuture<ConnectorCheck> checkConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.checkConnector needs Architect API NEXT (feature connectorCheck)");

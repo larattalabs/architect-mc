@@ -178,6 +178,7 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.planCheck")) {
 				out.add("placeConnector"); // 7c CX: Sites.placeConnector (a one-part plan through Regions.checkPlan and realiseApproved; since 1.58.0)
+				out.add("connectorCheck"); // 8b CK: Sites.checkConnector, ConnectorRequest's typed owner/dimension/actor/maxBill/ext, markConnector
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
