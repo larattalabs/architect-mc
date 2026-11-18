@@ -991,8 +991,9 @@ export async function registerSAD(steps, h) {
         const s4 = await siteState(ids.house_4);
         const p1 = await pile();
         out.restart = { refs: [s3.crate, s4.crate], order: p1.feedOrder };
-        check(!a.refused && s4.crate?.x === undefined && s3.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4),
-          `gone-save: after the restart both references to the gone crate are cleared on disk (house_3 ${json(s3.crate)}, house_4 ${json(s4.crate)}), house_4 fed from the stockpile`, out.restart);
+        // (the BUILT house_3 is no candidate once its crate is gone: as on main and DFG, only the building target's reference is the txn's)
+        check(!a.refused && s4.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4),
+          `gone-save: after the restart the building house_4's reference to the gone crate is cleared on disk (${json(s4.crate)}; house_3, BUILT, ${json(s3.crate)}), house_4 fed from the stockpile`, out.restart);
         return out;
       });
 
