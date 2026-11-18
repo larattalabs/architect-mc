@@ -10,6 +10,9 @@
 //   W3 breach       the single breach of every shell cell at or under the surface: vanilla's flow from the opened cell (the steady state,
 //                   not the reach) stays in the body's cells, spill and recorded breach reach, inside its watch box (cells, shell, spill,
 //                   breach grown by WATCH_GROW): what the census watches; an irrigation body's stays inside its own lot (IRR's broken side)
+//                   (8c SE) a wm body's W3 runs per bank segment (sim.mjs bankSegments: 32 shell, lining or weir cells at or under the
+//                   surface opened at once), from the settled state (the breach opens beside standing water, as in game) under the water
+//                   model, each segment's flow at most BREACH_CAP (W3:cap); a segment counts once against maxBreach
 //   W4 fire         M20 on every lava body (its exposed cells' fire reach), with the flammable variants caught
 //   W5 fed          the source/flowing distinction and foreign sources: "what this source fed" (attribution: the flow present only
 //                   because of this body's sources), over generated breach and drain cases; written to kit/lint/fixtures/drain-cases.json,
@@ -26,7 +29,7 @@ import { asColumns } from '../lib/region/pack.mjs';
 import { bodiesOf } from '../lib/region/checkFluids.mjs';
 import { kindOf, wmKinds } from '../lib/fluids/world.mjs';
 import { irFields } from '../lib/fluids/irrfield.mjs';
-import { reach, settleBound, simulate, steady, WATCH_GROW, mapWorld } from '../lib/fluids/sim.mjs';
+import { reach, settleBound, simulate, steady, WATCH_GROW, mapWorld, wmMaxTick, bankSegments, BREACH_CAP } from '../lib/fluids/sim.mjs';
 
 export const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ROOT = path.resolve(KIT, '..');
@@ -59,8 +62,18 @@ export function corpus() {
   out.push({ name: 'demo/hy_core_demo', kind: 'hy_core' });
   for (const [variant, rules] of Object.entries(HY_VARIANTS)) out.push({ name: `demo/hy_core_demo:${variant}`, kind: 'hy_core', variant, rules });
   out.push({ name: 'demo/water_demo:flat', kind: 'water_demo' });
+  // ((8c SE) the kit lane's flowing water: test-only regions with wm bodies, in their own shards (lane '8c'), so the shards above keep
+  // their entries)
+  for (const e of WM_ENTRIES) out.push({ ...e, kind: 'wm', lane: '8c' });
   return out;
 }
+
+/** (8c SE) The 8c lane's corpus entries: a test-only region (kit/test/fixtures/wm) with its params and claim (width x depth, flat 64). */
+export const WM_ENTRIES = Object.freeze([
+  { name: 'wm/wm_demo', demo: 'wm_demo', params: {}, claim: [64, 64] },
+  { name: 'wm/river_se', demo: 'river_se', params: {}, claim: [128, 48] },
+  { name: 'wm/river_se:wide', demo: 'river_se', params: { runs: 24, width: 5 }, claim: [224, 48] },
+]);
 
 /** The demos' broken variants and the rules each must raise (h-core.test, hy-core.test). */
 export const H_VARIANTS = Object.freeze({
@@ -96,6 +109,17 @@ export async function planEntry(e) {
     const { planHy } = await import('../test/hy-helpers.mjs');
     const p = await planHy(e.variant ? { variant: e.variant } : {});
     return { ir: p.ir, meta: p.meta, blobs: p.blobs, volumes: p.volumes.map((v) => v.decoded), survey: fillMissing(asColumns(p.world.survey)).columns, answers: [], overall: null, expect: null };
+  }
+  if (e.kind === 'wm') {
+    const { planTwice } = await import('../test/h-helpers.mjs');
+    const { columnsOf, worldOf } = await import('../test/region-helpers.mjs');
+    const file = path.join(KIT, 'test', 'fixtures', 'wm', `${e.demo}.mjs`);
+    const demo = await import(file);
+    const [W, D] = e.claim;
+    const CLAIM = { minX: 0, minZ: 0, maxX: W - 1, maxZ: D - 1, minY: -64, maxY: 319 };
+    const SURVEY = columnsOf(worldOf({ flat: 64 }), 0, 0, W, D, 1);
+    const p = await planTwice({ program: demo, programSource: fs.readFileSync(file, 'utf8'), params: e.params ?? {}, survey: SURVEY, seed: '7', claim: CLAIM, node: 'test' });
+    return { ir: p.ir, meta: p.meta, blobs: p.blobs, volumes: p.volumes.map((v) => v.decoded), survey: SURVEY, answers: [], overall: null, expect: null };
   }
   if (e.kind === 'water_demo') {
     const { waterPlan } = await import('../regions/water_demo.mjs');
@@ -184,7 +208,8 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
     const others = new Map([...fluidOf].filter(([k]) => !own.has(k)));
     const at = (x, y, z) => { const k = k3(x, y, z); if (own.has(k)) return b.fluid; const o = others.get(k); return o ?? W.at(x, y, z); };
     // ((8c WM) a wm body's own settle under its model; SE sizes the bounds and caps, and runs W3 per bank segment)
-    const wmo = b.model === 'wm' ? { wl: (x, y, z) => (at(x, y, z) === 'stop' ? W.wl(x, y, z) : null), level: W.level, order: 'yxz', onCap: 'result' } : {};
+    const wm = b.model === 'wm';
+    const wmo = wm ? { wl: (x, y, z) => (at(x, y, z) === 'stop' ? W.wl(x, y, z) : null), level: W.level, order: 'yxz', onCap: 'result', maxTick: wmMaxTick(b.fluid, s.reached.length) } : {};
     const st = steady(at, b.cells, b.fluid, wmo);
     if (st.unsettled) add('W2:settle', b.id, `the steady state did not settle in ${st.unsettled.rounds - 1} tick rounds`);
     if (st.ticks > b.settleTicks) add('W2:settle', b.id, `vanilla's steady state settles at tick ${st.ticks}, past the bound ${b.settleTicks}`);
@@ -198,7 +223,33 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
       const field = W.fields.find((f) => f.bodies.has(b.id));
       const candidates = [...b.shell, ...b.lining].filter((c) => c[1] <= b.level);
       let ran = 0;
-      for (const c of candidates) {
+      // ((8c SE) a wm body: per bank segment, from the settled state, under the water model)
+      if (wm) {
+        out.breaches.segments = (out.breaches.segments ?? 0);
+        for (const seg of bankSegments([...b.shell, ...b.lining], b.level)) {
+          out.breaches.opened += seg.length;
+          const opened = new Set(seg.map(kc));
+          const atB = (x, y, z) => { const k = k3(x, y, z); return opened.has(k) ? 'open' : at(x, y, z); };
+          if (!seg.some((c) => D6.some(([dx, dy, dz]) => { const q = k3(c[0] + dx, c[1] + dy, c[2] + dz); const w = atB(c[0] + dx, c[1] + dy, c[2] + dz); return (w === 'open' || w === `flowing_${b.fluid}`) && !own.has(q) && !opened.has(q); }))) {
+            out.breaches.trivial += seg.length;
+            continue;
+          }
+          if (!full && ran >= maxBreach) { out.breaches.skipped += seg.length; continue; }
+          ran++;
+          out.breaches.sampled += seg.length;
+          out.breaches.segments++;
+          const sb2 = steady(atB, b.cells, b.fluid, { ...wmo, init: st.cells, wake: seg });
+          const flow = [...sb2.cells.keys()].filter((k) => !own.has(k) && !opened.has(k));
+          const name = `segment ${kc(seg[0])}..${kc(seg[seg.length - 1])}`;
+          if (sb2.unsettled) add('W3:cap', b.id, `opening ${name}: the breach's flow did not settle by tick ${sb2.unsettled.limit}`);
+          if (flow.length > BREACH_CAP) add('W3:cap', b.id, `opening ${name}: vanilla's flow reaches ${flow.length} cells (more than ${BREACH_CAP})`);
+          const leak = flow.filter((k) => !allowed.has(k));
+          if (leak.length) add('W3:breach', b.id, `opening ${name}: vanilla's flow reaches ${leak.length} cell(s) outside its cells, spill and recorded breach reach (${leak.slice(0, 4).join(' ')})`);
+          const unwatched = flow.filter((k) => !box.has(k));
+          if (unwatched.length) add('W3:watch', b.id, `opening ${name}: ${unwatched.length} flow cell(s) outside the census's watch box`);
+        }
+      }
+      for (const c of wm ? [] : candidates) {
         out.breaches.opened++;
         const opened = kc(c);
         const atB = (x, y, z) => { const k = k3(x, y, z); return k === opened ? 'open' : at(x, y, z); };

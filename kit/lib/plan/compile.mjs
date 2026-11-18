@@ -1861,7 +1861,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       releaseKeep(keep, p.id); // ((6c KC) and frees its footprint)
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
       // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
-      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
+      // ((8c SE) an UNSETTLED river carries the player's line, `say`, beside its message: flowing.mjs unsettledAnswer)
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(typeof e.say === 'string' ? { say: e.say } : {}), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
       geom.delete(p.id);
     }
   }

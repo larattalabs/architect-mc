@@ -33473,3 +33473,30 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   'levels'}`, and adds UNSETTLED to plan.json's codes (8cF; `unsettledRefusal` raises it today only for a wm body). SE sets `maxTicks`
   (settleBound x 4), the caps and per-segment W3 (W3 still runs H's steady for a wm body). CL reads `foreign` for W5 and `refed`. VS
   writes v4; 8cF/VS add both kinds to KINDS_FORMAT2 and IrStale together.
+
+## Slice SE, the settle step (8c kit lane; branch `slice/8cK` off `slice/WM`; 2026-11-17; DEV MODE, light; versions NEXT; $0): as built
+
+- **Scope:** the 8c contract's §2.5 and §2.6 for wm bodies only (`kit/lib/fluids/sim.mjs`, `body.mjs`, `kit/lint/water.mjs`); every
+  other body is simulated exactly as before: the 138 non-8c water-lint corpus entries re-plan to byte-identical IRs and blobs with
+  identical checker and lint findings, breach counts and answers (sha diff against `slice/WM` b13766a8), `drain-cases.json` unchanged,
+  the goldens re-plan byte for byte (`release-version --check --lenient`).
+- **Shapes:** `kit/lib/fluids/flowing.mjs` is 8cF's file byte for byte (blob 6a7d7f5c, from `slice/8cG`; never edited here, so the lanes'
+  add/add merges clean): `LIMITS` and `unsettledAnswer` are read from it. `unsettledRefusal(id, u, {part, wouldFit})` throws its shape
+  (`evidence {body, cap, limit, regionWide, cells, rounds, sample}`, `say`, `wouldFit`); compile.mjs carries `say` onto the reason.
+- **Caps:** rounds: `steady`'s new `maxTick` (game ticks, not rounds: every due is a multiple of the delay) = `wmMaxTick(fluid, reach)`
+  = settleBound(min(PATH_CAP 512, the conservative reach's cells)) x 4 (the predicted path never exceeds the reach's cells; at most
+  10,360 ticks). Cells: more than 4,096 predicted flowing cells (converted aside). Chunks: the watch set (cells, shell, spill,
+  predicted, breach, grown by 2) meets more than 64 chunks (`x >> 4`). Region (`regionCapOf` over `r._fluidBodies`' wm bodies, so a
+  rolled-back part un-counts): more than 8 river bodies, then more than 32,768 flowing cells. Each is a typed `unsettled {cap, ...}`.
+- **Breach per bank segment:** a wm body's shell at or under its surface in (x, z, y) order, 32 at a time (`bankSegments`), each opened
+  at once in one conservative reach against BREACH_CAP; an opened cell under a flow does not stop that flow's sideways spread, so the
+  segment's reach holds each of its single breaches (property test, 60 scenes). The lint's W3 for a wm body runs the same segments from
+  the settled state (`steady`'s `init`/`wake`: equal to a fresh steady state over 80 scenes) under the water model (WM's flagged gap:
+  W3 no longer runs H's steady for a wm body); W3:cap past BREACH_CAP; a segment counts once against maxBreach.
+- **Measured** (M5 Max, quiet): a 5-wide stepped current of 4,095 predicted cells (117 runs) plans in about 2.6 s per plan, its lint in
+  3.7 s (181 segments), 520 MB peak; 1,400 cells: 0.7 s and 1.0 s. The chunk cap binds first for a long narrow river (64 chunks is
+  about 1,000 cells of length in one chunk row).
+- **Shards:** `kit/lint/corpus-8c-{0,1}.lint.mjs` run the lane-'8c' entries (`WM_ENTRIES`: wm_demo, the test-only `river_se` at 168
+  and 840 cells); corpus-0..8 keep exactly their entries. Tests: `kit/test/se.test.mjs` (8).
+- **Seams:** plan.json's reason enum has no `UNSETTLED` and the reason has no `say` (8cF's shape, unschema'd: 8cG/SV). RV builds the
+  wouldFit fragment (SE passes `opts.wouldFit` through) and keeps a river's path within PATH_CAP.

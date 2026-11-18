@@ -46,6 +46,7 @@
 // version 4). Its op carries `model: 'wm'` (the kind `flowingWater` waits for 8cF/VS); its record carries `converted`, `foreign` and `wash`
 // (the cells the planner must lift into sources or clear first: slice RV's seam). Every other body is planned exactly as before.
 import { simulate, settleBound, WM_MODEL } from './sim.mjs';
+import { LIMITS, unsettledAnswer } from './flowing.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf, wmKinds } from './world.mjs';
 import { _bindFluidBody } from '../region/program.mjs';
@@ -209,11 +210,29 @@ export function localWorld(r, box, { world = null } = {}) {
 }
 
 /**
- * (8c WM, §2.5) The refusal of a wm body whose steady state did not settle: `UNSETTLED {cells, rounds, sample}` (the planner answers it,
- * never throws). The code joins plan.json's reason codes with the 8c API (8cF): until then only a wm body (none in a shipped plan) raises it.
+ * (8c WM, §2.5; 8c SE) The refusal of a wm body that did not settle within a cap: thrown as 'UNSETTLED: message' (the compiler answers the
+ * part refused, never throws), carrying flowing.mjs's unsettledAnswer shape: `evidence` {body, cap, limit, regionWide, cells, rounds,
+ * sample}, `say` (the player's line) and `wouldFit` when the caller (the planner, slice RV) gives one. `u`: sim.mjs's unsettled {cap,
+ * limit, cells, rounds, sample} or a region cap {cap: 'regionCells' | 'regionBodies', cells, rounds: 0, sample}. The code joins plan.json's
+ * reason codes with the 8c API (8cF): until then only a wm body (none in a shipped plan) raises it.
  */
-export function unsettledRefusal(id, u) {
-  return Object.assign(new Error(`UNSETTLED: body ${id}: the steady state did not settle in ${u.rounds - 1} tick rounds (${u.cells} flowing cell(s))`), { evidence: { body: id, cells: u.cells, rounds: u.rounds, sample: u.sample } });
+export function unsettledRefusal(id, u, { part = null, wouldFit = null } = {}) {
+  const ans = unsettledAnswer({ part: part ?? id, body: id, cap: u.cap ?? 'rounds', cells: u.cells ?? 0, rounds: u.rounds ?? 0, sample: u.sample ?? [], wouldFit, maxRounds: u.cap === 'rounds' || u.cap === undefined ? u.limit ?? null : null });
+  const reason = ans.reasons[0];
+  return Object.assign(new Error(`UNSETTLED: ${reason.message}`), { evidence: reason.evidence, say: reason.say, ...(ans.wouldFit ? { wouldFit: ans.wouldFit } : {}) });
+}
+
+/**
+ * (8c SE, §2.6) The region's caps over its wm (river) bodies so far plus one more of `flowing` predicted cells: null, or the unsettled
+ * record of the cap it passes (regionBodies first: more than 8 river bodies; then regionCells: more than 32,768 flowing cells). The tally
+ * reads r._fluidBodies, so a part rolled back (bodiesRollback) un-counts its bodies.
+ */
+export function regionCapOf(r, flowing, sample = []) {
+  const wm = (r._fluidBodies ?? []).filter((b) => b.model === WM_MODEL);
+  const cells = wm.reduce((n, b) => n + b.predicted.length, 0) + flowing;
+  if (wm.length + 1 > LIMITS.regionBodies) return { cap: 'regionBodies', limit: LIMITS.regionBodies, cells, rounds: 0, sample: sample.slice(0, 16), bodies: wm.length + 1 };
+  if (cells > LIMITS.regionCells) return { cap: 'regionCells', limit: LIMITS.regionCells, cells, rounds: 0, sample: sample.slice(0, 16), bodies: wm.length + 1 };
+  return null;
 }
 
 /** The per-part volume cap (§10, T3b's): past it the body asks for no volume and its part answers incomplete VOLUME. */
@@ -430,7 +449,9 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // ((6c HY) the single breach covers the lining and the weir too: its reach is watched as the shell's is)
   const sim = simulate(world, [{ id, part, fluid, level, cells, shell: lining.length ? [...shell, ...lining] : shell, ...(wm ? { model: WM_MODEL, ...(bubble.length ? { carried: bubble.map((c) => [c[0], c[1], c[2]]) } : {}) } : {}) }], { breach });
   const b = sim.bodies[0];
-  if (b.unsettled) throw unsettledRefusal(id, b.unsettled);
+  if (b.unsettled) throw unsettledRefusal(id, b.unsettled, { part, wouldFit: opts.wouldFit ?? null });
+  // ((8c SE) the region's caps over its river bodies)
+  if (wm) { const rc = regionCapOf(r, b.predicted.length, b.predicted.map((q) => q.slice(0, 3))); if (rc) throw unsettledRefusal(id, rc, { part, wouldFit: opts.wouldFit ?? null }); }
   let spill = b.spill;
   let predicted = b.predicted;
   if (_unsafe?.predictShort && spill.length) {
