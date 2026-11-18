@@ -813,9 +813,9 @@ steps.gallery = async () => {
     await call('dev.pr.tips', { reset: true }).catch(() => null);
     await sec('ui', 'status', 'help', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); });
     for (const tab of ['design', 'library', 'designs', 'status']) {
-      await sec('ui', tab, 'keys', async () => { await openTab(tab); await call('dev.key', { key: 'key.keyboard.f1' }); });
+      await sec('ui', tab, 'keys', async () => { await openTab(tab); await call('dev.pr.keys', { press: true }); });
     }
-    await sec('ui', 'styles', 'keys', async () => { await browser(); await call('dev.key', { key: 'key.keyboard.f1' }); });
+    await sec('ui', 'styles', 'keys', async () => { await browser(); await call('dev.pr.keys', { press: true }); });
     await sec('ui', 'keybinds', 'architect', async () => { await call('dev.screen', { open: 'keybinds' }); await sleep(600); });
     await sec('ui', 'library', 'tip_hidden', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('library'); });
     await call('dev.pr.tips', { reset: true }).catch(() => null);

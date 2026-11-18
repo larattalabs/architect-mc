@@ -89,6 +89,7 @@ public final class ArchitectHelp {
 			case "library" -> {
 				r.add(new Row("Click", "pick a design; Place puts it in the world"));
 				r.add(new Row("Esc", "close a dialog, then the screen"));
+				return common(r);
 			}
 			default -> {
 			}
