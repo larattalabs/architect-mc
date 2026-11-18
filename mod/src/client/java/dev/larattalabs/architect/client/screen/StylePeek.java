@@ -42,7 +42,7 @@ public final class StylePeek {
 	}
 
 	/** A built model: cells relative to the box corner, their colours, the box, and whether it was thinned. */
-	record Model(int[] xyz, int[] argb, int sx, int sy, int sz, int groundY, boolean thinned) {
+	record Model(int[] xyz, int[] argb, int sx, int sy, int sz, int groundY, boolean thinned, boolean close) {
 	}
 
 	private static final Map<String, Model> LRU = new LinkedHashMap<>(16, 0.75f, true) {
@@ -72,6 +72,11 @@ public final class StylePeek {
 		Blueprints.Entry e = Blueprints.entry(type);
 		String id = e != null && e.bundled() ? type : "cabin";
 		return Blueprints.entry(id) == null ? null : new Target(id, true, "a sample " + id);
+	}
+
+	/** True when the shown Style changes under a tenth of the design's blocks. */
+	public static boolean close() {
+		return shown != null && shown.close();
 	}
 
 	public static boolean thinned() {
@@ -127,9 +132,11 @@ public final class StylePeek {
 		int sy = bp.sizeY();
 		int sz = bp.sizeZ();
 		boolean[] keep = thinned ? shell(grid.xyz(), n, sx, sz) : null;
-		int[] xyz = new int[n * 3];
-		int[] argb = new int[n];
+		int ring = thinned ? 2 * (sx + sz) + 4 * sy + 8 : 0;
+		int[] xyz = new int[(n + ring) * 3];
+		int[] argb = new int[n + ring];
 		int k = 0;
+		int changed = 0;
 		for (int i = 0; i < n; i++) {
 			int x = grid.xyz()[i * 3];
 			int y = grid.xyz()[i * 3 + 1];
@@ -140,6 +147,9 @@ public final class StylePeek {
 			BlockState s = grid.states()[i];
 			String id = BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString();
 			String to2 = swap.swap(id);
+			if (!to2.equals(id)) {
+				changed++;
+			}
 			BlockState out = to2.equals(id) ? s : copy(s, BuiltInRegistries.BLOCK.getValue(Identifier.parse(to2)));
 			int c = TemplateCells.color(out);
 			if ((c >>> 24) == 0) {
@@ -151,7 +161,32 @@ public final class StylePeek {
 			argb[k] = (0x5A << 24) | (c & 0xFFFFFF);
 			k++;
 		}
-		return new Model(java.util.Arrays.copyOf(xyz, k * 3), java.util.Arrays.copyOf(argb, k), sx, sy, sz, bp.groundY(), thinned);
+		if (thinned) {
+			// the footprint's ring on the ground row and the four corner posts, dark, so the thinned design still has its outline
+			int gy = bp.groundY();
+			for (int x = 0; x < sx; x++) {
+				for (int z = 0; z < sz; z++) {
+					boolean edge = x == 0 || z == 0 || x == sx - 1 || z == sz - 1;
+					boolean corner = (x == 0 || x == sx - 1) && (z == 0 || z == sz - 1);
+					if (!edge) {
+						continue;
+					}
+					for (int y = gy; y < (corner ? sy : gy + 1); y++) {
+						if (k >= argb.length) {
+							break;
+						}
+						xyz[k * 3] = x;
+						xyz[k * 3 + 1] = y;
+						xyz[k * 3 + 2] = z;
+						argb[k] = 0xE0111111;
+						k++;
+					}
+				}
+			}
+		}
+		// close: the Style changes under a tenth of the design's blocks (it is near the design's own materials)
+		boolean close = n > 0 && changed * 10 < n;
+		return new Model(java.util.Arrays.copyOf(xyz, k * 3), java.util.Arrays.copyOf(argb, k), sx, sy, sz, bp.groundY(), thinned, close);
 	}
 
 	/**

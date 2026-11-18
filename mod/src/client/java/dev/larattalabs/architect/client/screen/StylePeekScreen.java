@@ -120,7 +120,8 @@ public final class StylePeekScreen extends Screen {
 		back.draw(g, font, x + w - 8 - bw, by, bw, Button.H, mx, my);
 		use.draw(g, font, x + w - 8 - bw - 4 - uw, by, uw, Button.H, mx, my);
 		int ly = by + Button.H + 4;
-		String what = "Materials only: shapes and parts come when it's designed · " + (target.sample() ? "on " : "") + target.name();
+		String what = (StylePeek.close() ? "Close to the design's own materials · " : "") + "Materials only: shapes and parts come when it's designed · "
+			+ (target.sample() ? "on " : "") + target.name();
 		g.text(font, TextUtil.ellipsize(font, what, w - 16), x + 8, ly, UiBits.muted(), false);
 		ly += line;
 		g.text(font, TextUtil.ellipsize(font, (index + 1) + " of " + ids.size() + " · Left/Right or ◀ ▶ · Enter uses it · Esc back", w - 16), x + 8, ly,
