@@ -2636,6 +2636,15 @@ public final class Stockpiles {
 					if (req.has("capacity")) {
 						testCapacity = req.get("capacity").getAsInt(); // (OVF) every pile's capacity in stacks; -1 the crates'
 					}
+					if (req.has("failSitesSaves")) {
+						Sites.FAIL_SAVES.set(req.get("failSitesSaves").getAsInt()); // (T3b fix round) the next n sites-file saves fail
+					}
+					if (req.has("creditKey") && owner != null && get(owner) != null) {
+						// (T3b fix round) a legacy key credited with nothing (an A-model adoption's credit: FINISH at the next start)
+						Pile cp = get(owner);
+						cp.ledger.credit(req.get("creditKey").getAsString(), Map.of(), Integer.MAX_VALUE, Stockpiles::maxStack);
+						changed(cp);
+					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}

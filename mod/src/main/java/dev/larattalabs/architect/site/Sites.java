@@ -3656,12 +3656,18 @@ public final class Sites {
 		return server.getWorldPath(LevelResource.ROOT).resolve(FILE);
 	}
 
+	/** (slice T3b fix round, TEST {@code dev.stockpile.ps failSitesSaves}) the next n saves of the sites file fail as an I/O error would. */
+	public static final java.util.concurrent.atomic.AtomicInteger FAIL_SAVES = new java.util.concurrent.atomic.AtomicInteger();
+
 	private static void save(MinecraftServer server, State s) {
 		if (loadFailed) {
 			return;
 		}
 		Path f = file(server);
 		try {
+			if (FAIL_SAVES.get() > 0 && FAIL_SAVES.getAndDecrement() > 0) {
+				throw new IOException("TEST: the sites file's save failed (dev.stockpile.ps failSitesSaves)");
+			}
 			Path tmp = f.resolveSibling(FILE + ".tmp");
 			JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
 			// phase 4e: roads and cell sites in their own array (0.7.0 never sees them; its saves drop it; the journal rebuilds them)

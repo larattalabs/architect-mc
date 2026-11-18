@@ -890,8 +890,10 @@ export async function registerSAD(steps, h) {
         const cases = [];
         const only = (process.env.GATE_T3B_POINTS ?? '').split(',').filter(Boolean);
         let decided = false;
+        let emitted = false;
         for (const p of points) {
           decided ||= p === 'TX:pile.adopt:decided';
+          emitted ||= p.startsWith('TX:pile.adopt:emit:');
           for (const v of ['', '+save']) {
             const point = p + v;
             if (only.length && !only.includes(point)) continue;
@@ -919,6 +921,11 @@ export async function registerSAD(steps, h) {
             cases.push(n);
             log(`  ${point}: open ${n.open}, ${got} (want ${want})`);
             check(st.openCount === 0 && got === want, `${point}: recovered exactly once (open ${st.openCount}): ${got}, want ${want} (stands ${stands}, moved ${json(moved)})`, n);
+            if (decided && !emitted) {
+              // (T3b fix round, GPT P2-4) committed and halted before its event fired: recovery fires STOCKPILE_CHANGED (from the persisted payload)
+              n.events = st.events ?? [];
+              check(n.events.some((e) => /pile\.adopt|stockpile_changed/.test(e) && e.includes('stockpile_changed')), `${point}: recovery fired the adoption's stockpile_changed (${json(n.events.slice(-3))})`, n);
+            }
             await conserve(point);
             await L.leaveWorld();
           }
@@ -929,6 +936,63 @@ export async function registerSAD(steps, h) {
         log(`  matrix: ${json(out.summary)}`);
         fs.rmSync(base, { recursive: true, force: true });
         await open();
+        return out;
+      });
+
+      // (T3b fix round, GPT P1) legacy-finish-at-start: the shared crate's adoption key credited with nothing (an A-model save: credited, the
+      // crate still standing), saved, a clean restart: the start's repair must not clear its references; the crate is held for ops (a
+      // quarantined pile.adopt.finish entry), an insert into it refused, its stock and references kept
+      if (want('legacy-finish-at-start')) await rowOf('legacy-finish-at-start', rows, async () => {
+        const F = await t3Town('G6B T3 Finish');
+        const { out, W, ids, at, s40, tag, conserve } = F;
+        const packed = ((BigInt(at[0]) & 0x3FFFFFFn) << 38n) | ((BigInt(at[2]) & 0x3FFFFFFn) << 12n) | (BigInt(at[1]) & 0xFFFn);
+        const key = `adopt:${tag}@${BigInt.asIntN(64, packed)}`;
+        const ps = await call('dev.stockpile.ps', { owner: OWNER, creditKey: key }, 30_000);
+        const sv = await call('dev.stockpile.save', {}, 120_000);
+        out.credit = { key, ps, saved: sv.written };
+        check(sv.written === true, `finish: the legacy key ${key} credited and saved`, out.credit);
+        await L.leaveWorld();
+        await L.openWorld(path.basename(W.dir));
+        await L.tp(CX + 80, 80, CZ + 48);
+        await sleep(3000);
+        const st = await call('dev.txn.state', {}, 30_000);
+        const s3 = await siteState(ids.house_3);
+        const s4 = await siteState(ids.house_4);
+        const stands = await isBlock(at, crateBlock);
+        const ins = await call('dev.crate.insert', { site: ids.house_4, items: { 'minecraft:cobblestone': 1 } }, 60_000).catch((e) => ({ refused: String(e?.message ?? e) }));
+        const held = (st.holds ?? []).some((r) => r.startsWith('crate:') && r.endsWith(`@${at.join(',')}`));
+        out.start = { refs: [s3.crate, s4.crate], stands, stock: s4.ledger?.stock, quarantined: st.quarantined, held, insert: ins };
+        check(s3.crate?.x === at[0] && s4.crate?.x === at[0] && stands, `finish: after the restart both references kept and the crate stands (house_3 ${json(s3.crate)}, house_4 ${json(s4.crate)})`, out.start);
+        check(held && (st.quarantined ?? []).some((q) => String(q.why).includes('held for ops')), `finish: the crate is held for ops by a quarantined entry (${json(st.quarantined)})`, out.start);
+        check(String(ins?.refused ?? '').includes('held'), `finish: an insert into the held crate is refused (${json(ins?.refused ?? ins)})`, out.start);
+        await conserve('finish: at start');
+        return out;
+      });
+
+      // (T3b fix round, GPT P2-2) gone-save-refused: the shared crate gone (GONE: nothing credited), the next 3 sites-file saves fail, adoptCrates,
+      // then a halt with nothing else saved: after the restart every reference to the gone crate is cleared on disk (the record clears waited for
+      // an acknowledged save), house_4 in the feed order; before the fix the txn retired on the swallowed failures and the references came back
+      if (want('gone-save-refused')) await rowOf('gone-save-refused', rows, async () => {
+        const F = await t3Town('G6B T3 GoneSave');
+        const { out, W, ids, at } = F;
+        await cmd(`/setblock ${at.join(' ')} minecraft:air`);
+        await call('dev.stockpile.ps', { failSitesSaves: 3 }, 30_000);
+        const a = await call('dev.stockpile.adopt', { owner: OWNER }, 300_000).catch((e) => ({ refused: String(e?.message ?? e) }));
+        out.adopt = a;
+        await call('dev.stockpile.ps', { failSitesSaves: 0 }, 30_000).catch(() => null);
+        call('dev.stockpile.halt', {}, 10_000).catch(() => null);
+        const down = await haltWait();
+        check(down, 'gone-save: halted with nothing else saved');
+        if (!down) return out;
+        await L.openWorld(path.basename(W.dir));
+        await L.tp(CX + 80, 80, CZ + 48);
+        await sleep(3000);
+        const s3 = await siteState(ids.house_3);
+        const s4 = await siteState(ids.house_4);
+        const p1 = await pile();
+        out.restart = { refs: [s3.crate, s4.crate], order: p1.feedOrder };
+        check(!a.refused && s4.crate?.x === undefined && s3.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4),
+          `gone-save: after the restart both references to the gone crate are cleared on disk (house_3 ${json(s3.crate)}, house_4 ${json(s4.crate)}), house_4 fed from the stockpile`, out.restart);
         return out;
       });
 
