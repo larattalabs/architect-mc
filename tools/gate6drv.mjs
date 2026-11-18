@@ -675,6 +675,75 @@ steps.undoCrash = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (slice DF round 2) the region record not durable
+
+/**
+ * (slice DF round 2, the review's P1 7 and 8) (a) a revision's publication in doubt (region.json renamed, then a failed force; one
+ * write): never refused while the disk holds the new head: accepted, it installs and places once the record is confirmed. (b) an undo
+ * whose commit save (region.json) is refused (sticky): nothing drained or removed, the revisions standing; lifted, the undo runs. (c) a
+ * Regions.remove whose REMOVING save is refused: nothing removed, the region stands; lifted, the removal runs, E-flat 0.
+ */
+steps.df = async () => {
+  await ensure();
+  const out = {};
+  const world = 'G6B RV DF';
+  await freshFlat(world);
+  const gy = await groundY();
+  const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+  const S0 = await cellsOf(BOX);
+  const T = await town();
+  // (a) the publication in doubt
+  const p1 = await rvPlan(T.region, { parts: [MOUND(1)] });
+  const rid = p1.revisionOf.rid;
+  await call('dev.region.failNextSave', { file: 'region.json', inDoubt: true }, 10_000);
+  const r1 = await call('dev.region.realise', { planId: p1.planId }, 300_000).catch((e) => ({ refused: String(e.message ?? e) }));
+  await call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  const onDisk = JSON.parse(fs.readFileSync(path.join(L.SAVES, world, 'architect-regions', T.region, 'region.json'), 'utf8'));
+  const diskHead = (onDisk.revisions ?? []).some((r) => r.rid === rid);
+  out.inDoubt = { refused: r1.refused ?? null, diskHasHead: diskHead };
+  check(!(r1.refused && diskHead), `DF (a): a publication in doubt is never refused while the disk holds the new head (refused ${json(r1.refused ?? null)}, region.json names revision ${rid}: ${diskHead})`);
+  const w1 = r1.refused ? null : await rvWait(T.region, rid).catch((e) => ({ r: { state: `error ${e.message}` } }));
+  out.inDoubt.state = w1?.r?.state ?? null;
+  check(!r1.refused && w1?.r?.state === 'PLACED', `DF (a): the in-doubt publication accepted, then installed and placed once its record was confirmed: ${w1?.r?.state ?? 'refused'}`);
+  // (b) the undo's commit save refused
+  const p2 = await rvPlan(T.region, { parts: [POND(2)] });
+  await rvRealise(T.region, p2);
+  const S1 = await cellsOf(BOX);
+  const before = await rvState(T.region);
+  await call('dev.region.failNextSave', { file: 'region.json', sticky: true }, 10_000);
+  const u = await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 600_000).catch((e) => ({ refused: String(e.message ?? e) }));
+  await sleep(5000);
+  const mid = await rvState(T.region);
+  const dU = diff(S1, await cellsOf(BOX));
+  await call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  out.undoRefused = { answer: u, busy: mid.busy, states: mid.revisions.map((r) => [r.rid, r.state]), changed: dU.n };
+  check(dU.n === 0 && mid.position === before.position && mid.revisions.every((r) => r.state !== 'UNDONE' && r.state !== 'UNDOING'), `DF (b): an undo whose commit save is refused drains and removes nothing: ${dU.n} cells changed, position ${mid.position}, ${json(out.undoRefused.states)}, busy ${mid.busy}`, dU.first);
+  let st = await rvState(T.region);
+  for (let i = 0; i < 60 && st.busy; i++) { await sleep(2000); st = await rvState(T.region); }
+  const u2 = await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000).catch((e) => ({ refused: String(e.message ?? e) }));
+  for (let i = 0; i < 900; i++) { st = await rvState(T.region); if (!st.busy) break; await sleep(2000); }
+  out.undoLifted = { answer: u2.removed ?? u2.refused ?? null, position: st.position, states: st.revisions.map((r) => [r.rid, r.state]) };
+  check(st.position === 0 && st.revisions.every((r) => r.state === 'UNDONE'), `DF (b): lifted, the undo runs: position ${st.position}, ${json(out.undoLifted.states)}`);
+  // (c) Regions.remove's REMOVING save refused
+  const S2 = await cellsOf(BOX);
+  await call('dev.region.failNextSave', { file: 'region.json', sticky: true }, 10_000);
+  const rm = await call('dev.region.remove', { region: T.region, requester: OWNER }, 600_000).catch((e) => ({ refused: String(e.message ?? e) }));
+  await sleep(8000);
+  const dR = diff(S2, await cellsOf(BOX));
+  const v = await call('dev.region.state', { region: T.region }, 60_000).catch(() => null);
+  await call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  out.removeRefused = { answer: rm.removed ?? rm.refused ?? null, state: v?.view?.state ?? null, changed: dR.n };
+  check(dR.n === 0 && v?.view?.state !== 'REMOVED' && v?.view?.state !== 'REMOVING', `DF (c): a removal whose REMOVING save is refused removes nothing: ${dR.n} cells changed, the region ${v?.view?.state}`, dR.first);
+  const rm2 = await call('dev.region.remove', { region: T.region, requester: OWNER }, 4 * 3_600_000);
+  await sleep(3000);
+  const dF = diff(S0, await cellsOf(BOX));
+  out.removeLifted = { removed: rm2.removed, diff: dF.n };
+  check(rm2.removed !== false && dF.n === 0, `DF (c): lifted, the removal runs: E-flat ${dF.n}`, dF.first);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ crash (item 10, the realise half)
 
 steps.crash = async () => {

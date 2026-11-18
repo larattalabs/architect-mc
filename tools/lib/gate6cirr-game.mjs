@@ -927,3 +927,41 @@ export async function look(ctx) {
   await L.leaveWorld();
   return { shots };
 }
+
+/**
+ * (slice DF round 2, the review's P1 3) A lot removal records before it drains: with fluids.json's save refused (sticky), f2's site
+ * removal refuses and nothing is drained or restored (its sources stand, its site stands); on main the drain ran and the site went. Lifted,
+ * the removal drains and restores (0 water in the lot's box); then the region, as item 6.
+ */
+export async function dfLot(ctx) {
+  const { L, check, json, B, core } = ctx;
+  const F = await installFields(ctx);
+  const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
+  const fx = B.fixture(ctx, 'valid/v62_irr_farm.json');
+  const o = await realiseIrr(ctx, 'dflot', fx, { entries: E62, fields: F });
+  if (!o.sha || !o.r) { check(false, `DF lot: v62 not realised (${json(o.parts ?? null)})`); await L.leaveWorld(); return {}; }
+  const sites = await lotSites(ctx, o.r.view);
+  const lot = o.r.ir.lots.find((l) => l.id === 'f2');
+  const b = lot.box;
+  const lotBox = [b.minX - 1, lot.floorY - 2, b.minZ - 1, b.maxX + 1, lot.floorY + 2, b.maxZ + 1];
+  const water0 = (await fluidsIn(ctx, lotBox)).size;
+  await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  const r1 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  await L.settle(3000);
+  const water1 = (await fluidsIn(ctx, lotBox)).size;
+  const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === sites.f2.siteId) ?? false;
+  await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  const out = { refused: { answer: r1.error ?? r1.removed ?? null, water: [water0, water1], siteStands: stands } };
+  check(water0 > 0 && water1 === water0 && stands, `DF lot (fluids.json refused): f2's removal drains nothing and restores nothing: water in its box ${water0} -> ${water1}, its site stands: ${stands} (answer ${json(out.refused.answer)})`);
+  const r2 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  await L.settle(5000);
+  const water2 = (await fluidsIn(ctx, lotBox)).size;
+  const r = await core.regionOf(ctx, o.r.region);
+  const rows = r.fluids.filter((x) => /^f2_irr_/.test(x.body));
+  out.lifted = { answer: r2.error ?? r2.removed ?? 'ok', water: water2, rows: rows.map((x) => [x.body, x.state, x.reason ?? null]) };
+  check(water2 === 0 && rows.length > 0 && rows.every((x) => x.state === 'drained' && /lot removed/.test(x.reason ?? '')), `DF lot (lifted): the removal drains and restores: 0 water in the lot's box (${water2}), rows ${json(out.lifted.rows)}`);
+  o.r = r;
+  out.removal = await removeRegion(ctx, o, 'DF lot: the region afterwards');
+  await L.leaveWorld();
+  return out;
+}
