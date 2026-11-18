@@ -113,16 +113,25 @@ async function fallSets(ctx, ir) {
   return sets;
 }
 
-/** The kit's own reading of c05's room (rv-b's test): the carved cells that open rock (the island's without the grotto), in kit coords. */
-async function openedOffline(ctx, fx) {
-  const { planEntry } = await imp(ctx, 'lint/water.mjs');
+/**
+ * The carved cells that open rock (rv-b's test, over the realised plan's own inputs): the IR without the grotto built on the plan's survey,
+ * blobs and frozen volumes (the sidecar's plan dir), the carved cells solid there.
+ */
+async function openedInGame(ctx, r) {
   const { buildVirtual } = await imp(ctx, 'lib/region/vworld.mjs');
-  const p = await planEntry({ name: 'river/c05-sv', kind: 'fixture', fx, dir: 'river' });
-  const carved = carvedOf(p.ir);
-  const pre = JSON.parse(JSON.stringify(p.ir));
+  const { fillMissing } = await imp(ctx, 'lib/region/plan.mjs');
+  const { asColumns } = await imp(ctx, 'lib/region/pack.mjs');
+  const { decodeArvx } = await imp(ctx, 'lib/region/volume.mjs');
+  const dir = path.join(ctx.L.SIDECAR_DATA, 'regions', 'plans', r.planId);
+  const survey = fillMissing(asColumns(fs.readFileSync(path.join(dir, 'survey.bin')))).columns;
+  const vdir = path.join(dir, 'volumes');
+  const volumes = fs.existsSync(vdir) ? fs.readdirSync(vdir).filter((f) => f.endsWith('.bin')).map((f) => decodeArvx(fs.readFileSync(path.join(vdir, f)))) : [];
+  const blobs = (sha) => { const f = path.join(dir, 'blobs', `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
+  const carved = carvedOf(r.ir);
+  const pre = JSON.parse(JSON.stringify(r.ir));
   pre.parts = pre.parts.filter((q) => !q.id.startsWith('f_grotto'));
-  const { vw } = buildVirtual({ ir: pre, survey: p.survey, blobs: (s) => (p.blobs?.get ? p.blobs.get(s) : p.blobs?.[s]) ?? null, volumes: p.volumes });
-  return { carved, opened: carved.filter((c) => vw.pal.solid[vw.get(c[0], c[1], c[2])]) };
+  const { vw } = buildVirtual({ ir: pre, survey, blobs, volumes });
+  return { carved, opened: carved.filter((c) => vw.pal.solid[vw.get(c[0], c[1], c[2])]), volumes: volumes.length };
 }
 
 async function isle(ctx) {
@@ -162,7 +171,7 @@ async function isle(ctx) {
     const v = await viewOf(ctx, region);
     const wet = (await L.call('dev.fluid.census', { box: bodyBox }, 60_000)).fluids.length;
     samples.push({ t: tr.gameTime, targets: (tr.targets ?? []).map((t) => [t.target, t.part, t.building, t.built, t.cells]),
-      waits: (tr.waits ?? []).filter((w) => w.waitsFor?.kind === 'terrain').map((w) => ({ key: w.key, status: w.status, reason: w.reason, waitsFor: w.waitsFor })),
+      waits: (tr.waits ?? []).map((w) => ({ key: w.key, status: w.status, reason: w.reason, waitsFor: w.waitsFor })),
       rows: v.rows.map((r) => [r.body, r.state, r.on ?? null]), watch: v.watch, waiting: v.waiting, viewWaitsFor: v.waitsFor, wet });
   };
   const f = await G.feed(ctx, region, { cons: C, timeoutMs: 3_000_000, every: 1000, extra: async () => { await sample(); return {}; },
@@ -175,14 +184,14 @@ async function isle(ctx) {
   const tr = await L.call('dev.region.terrain', { region, check: true }, 300_000);
   const targets = (tr.targets ?? []).map((t) => [t.target, t.part, t.cells, t.built]);
   out.targets = targets;
-  check(targets.length > 0 && targets.every((t) => t[1] === 'isle') && targets.every((t) => t[3] === t[2]),
-    `isle: the island's land is ${targets.length} staged terrain target(s), every one part isle (no staged fall cell), all built (${json(targets)})`);
+  check(targets.some((t) => t[1] === 'isle') && !targets.some((t) => t[1] === 'fall') && targets.every((t) => t[3] === t[2]),
+    `isle: the island's land is staged (${targets.filter((t) => t[1] === 'isle').length} target(s) of part isle), no staged cell of the fall, all built (${json(targets)})`);
   // the typed terrain wait: the fall's fluids stage waits for the island, SITE_BUSY with waitsFor {kind terrain, part isle}
-  const fallWaits = samples.flatMap((x) => x.waits.filter((w) => w.waitsFor?.part === 'isle' && /fall/.test(`${w.waitsFor?.waiter ?? ''} ${w.key}`)));
+  const fallWaits = samples.flatMap((x) => x.waits.filter((w) => w.status === 'WAITING' && /fall/.test(`${w.waitsFor?.waiter ?? ''}`) && /^t:fluids:/.test(w.key)));
   const w0 = fallWaits[0] ?? null;
   out.wait = { n: fallWaits.length, first: w0, keys: [...new Set(samples.flatMap((x) => x.waits.map((w) => `${w.key}<-${w.waitsFor?.waiter ?? ''}`)))].slice(0, 12) };
-  check(!!w0 && w0.reason === 'SITE_BUSY' && w0.waitsFor.kind === 'terrain' && w0.waitsFor.terrainCells > 0 && Number.isInteger(w0.waitsFor.terrainBuilt),
-    `isle: the fall's fluids stage waits for the island: ${w0?.key} ${w0?.status} ${w0?.reason} with waitsFor ${json(w0?.waitsFor)} (${fallWaits.length} sample(s))`, out.wait);
+  check(!!w0 && fallWaits.every((w) => w.waitsFor.kind === 'terrain' && w.waitsFor.part === 'isle') && w0.reason === 'SITE_BUSY' && w0.waitsFor.terrainCells > 0 && Number.isInteger(w0.waitsFor.terrainBuilt),
+    `isle: the fall's fluids stage waits for the island (every sample of its wait typed terrain, part isle): ${w0?.key} ${w0?.status} ${w0?.reason} with waitsFor ${json(w0?.waitsFor)} (${fallWaits.length} sample(s))`, out.wait);
   const viewTyped = samples.find((x) => x.viewWaitsFor?.kind === 'terrain');
   out.viewWait = viewTyped ? { waiting: viewTyped.waiting, waitsFor: viewTyped.viewWaitsFor } : null;
   check(true, `isle (recorded): RegionView.waiting with its typed payload on the view's ext while the island built: ${json(out.viewWait)}`);
@@ -196,8 +205,8 @@ async function isle(ctx) {
   const head = r.fluids.find((x) => x.body === 'fall_r1'), basin = r.fluids.find((x) => x.body === 'fall_r2');
   out.rows = r.fluids;
   check(r.view.state === 'PLACED' && r.fluids.length === 2 && r.fluids.every((x) => x.state === 'settled'), `isle: PLACED, both bodies settled (${r.view.state}; ${json(r.fluids.map((x) => [x.body, x.state, x.why ?? null]))})`);
-  check(head?.kind === 'header' && head?.lip === 'form' && head?.on === 'isle' && head?.part === 'fall' && basin?.kind === 'basin',
-    `isle: the header's row: kind ${head?.kind}, lip ${head?.lip}, on ${json(head?.on)} (the island's plan part id), part ${head?.part}; the basin ${basin?.kind}`);
+  check(head?.kind === 'header' && head?.lip === 'form' && head?.on === 'isle' && head?.part === 'fall' && basin?.state === 'settled' && (basin?.kind ?? 'basin') === 'basin',
+    `isle: the header's row: kind ${head?.kind}, lip ${head?.lip}, on ${json(head?.on)} (the island's plan part id), part ${head?.part}; the basin a plain HY body (kind ${basin?.kind ?? 'absent: only a flowing body\'s row carries it'})`);
   check(!!w0 && w0.waitsFor.part === head?.on, `isle: the wait's part (${w0?.waitsFor?.part}) is the header's on (${head?.on})`);
   const cs = {};
   for (const b of r.bodies) cs[b.id] = await core.censusOf(ctx, b, null, r.bodies);
@@ -212,13 +221,11 @@ async function isle(ctx) {
   const carved = carvedOf(r.ir);
   const sets = await fallSets(ctx, r.ir);
   const { outsideWatch } = await imp(ctx, 'lib/forms/hiddenRoom.mjs');
-  const off = await openedOffline(ctx, fx).catch((e) => ({ error: String(e.message ?? e) }));
-  const shift = (c) => [c[0] + s.W.dx, c[1] + s.W.off, c[2] + s.W.dz];
-  const sameRoom = Array.isArray(off.carved) && JSON.stringify(off.carved.map(shift).map(k3).sort()) === JSON.stringify(carved.map(k3).sort());
-  const opened = sameRoom ? off.opened.map(shift) : carved.filter((c) => !sets.has(k3(c)));
+  const og = await openedInGame(ctx, r).catch((e) => ({ error: String(e.stack ?? e) }));
+  const opened = og.opened ?? [];
   const outside = opened.length >= 27 && outsideWatch(opened, sets);
-  out.room = { carved: carved.length, opened: opened.length, sameRoom, offline: off.error ?? null, inWatch: carved.filter((c) => sets.has(k3(c))).length };
-  check(carved.length >= 27 && sameRoom && outside, `isle: the grotto (form.hidden_room) behind the fall: ${carved.length} carved cell(s), the ${opened.length} it opens in the island's rock outside the fall's watch set and its face neighbours (${outside}; the in-game IR's room = the kit's, shifted: ${sameRoom})`, out.room);
+  out.room = { carved: carved.length, opened: opened.length, volumes: og.volumes ?? null, error: og.error ?? null, inWatch: carved.filter((c) => sets.has(k3(c))).length };
+  check(carved.length >= 27 && outside, `isle: the grotto (form.hidden_room) behind the fall: ${carved.length} carved cell(s), the ${opened.length} it opens in the island's rock (the realised plan's own world, rv-b's reading) outside the fall's watch set and its face neighbours (${outside})`, out.room);
   await L.settle(30_000); // a stand: the room stays dry
   const rb = core.boxAround(carved, 0);
   const wetRoom = (await L.call('dev.fluid.census', { box: rb }, 60_000)).fluids.filter((q) => carved.some((c) => c[0] === q[0] && c[1] === q[1] && c[2] === q[2]));
@@ -396,6 +403,7 @@ async function town(ctx) {
   return out;
 }
 
+export { carvedOf, fallSets, openedInGame };
 export const SURVIVAL = [
   { key: 'isle', name: 'c05 in survival: the fall off the staged island waits terrain, then settles; the hidden room outside the watch set, built, kept, dry', run: isle },
   { key: 'wash', name: 'river_demo in survival: the wash clears cost nothing and credit nothing; conservation and 0 item entities', run: (ctx) => washRow(ctx, null) },

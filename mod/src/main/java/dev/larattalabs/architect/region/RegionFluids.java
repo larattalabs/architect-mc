@@ -988,7 +988,8 @@ public final class RegionFluids {
 			String waiting = survivalBarrier(s, l);
 			if (waiting != null) {
 				// (6c close-out A, §8) with waitsFor {target, part, waiter, say}: what the bodies wait for, sayable
-				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuilding(l.rec().groupId);
+				// (8c SV) a staged terrain target first: the paid targets of its tiles wait for it, so it is what the bodies wait for
+				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuildingForFluids(l.rec().groupId);
 				if (first != null) {
 					RegionItems.waitStageFor(s, b, stage, first[0], first[1], waiting); // (8a HB) typed on a staged terrain target
 				} else {

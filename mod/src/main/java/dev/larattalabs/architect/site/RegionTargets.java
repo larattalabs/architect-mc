@@ -2437,6 +2437,37 @@ public final class RegionTargets {
 	 * (6c close-out A, §8) A group's first target, lot (a construction site) or construction road still building, with its part
 	 * ({@code {id, part}}: a target's plan part, {@code lot <lot id>}, {@code road <road id>}), or null.
 	 */
+	/**
+	 * (8c SV) The target a survival region's fluids barrier names in its wait: a staged terrain target of the group still building first
+	 * ({@code {id, part}}, so the wait is typed {@code kind: "terrain"} on the land the bodies stand by: a paid target of the same tile
+	 * waits for that staged target before it starts, so naming the paid one said "waits for the fall" while the island built), else
+	 * {@link #firstBuilding}'s.
+	 */
+	public static @Nullable String[] firstBuildingForFluids(String groupId) {
+		List<Cand> cands = new ArrayList<>();
+		for (Infra i : Infras.all()) {
+			if (is(i) && groupId.equals(i.group())) {
+				cands.add(new Cand(i.id(), partOf(i), isTerrain(i), i.building()));
+			}
+		}
+		String[] staged = stagedFirst(cands);
+		return staged != null ? staged : firstBuilding(groupId);
+	}
+
+	/** (8c SV) A region target as the fluids barrier reads it. */
+	record Cand(String id, @Nullable String part, boolean terrain, boolean building) {
+	}
+
+	/** (8c SV) The first staged terrain target still building ({@code {id, part}}), or null (pure: the barrier's choice, unit-tested). */
+	static @Nullable String[] stagedFirst(List<Cand> cands) {
+		for (Cand c : cands) {
+			if (c.terrain() && c.building()) {
+				return new String[] {c.id(), c.part()};
+			}
+		}
+		return null;
+	}
+
 	public static @Nullable String[] firstBuilding(String groupId) {
 		for (Infra i : Infras.all()) {
 			if (is(i) && groupId.equals(i.group()) && i.building()) {
