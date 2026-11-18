@@ -176,6 +176,18 @@ export async function registerFKB(steps, h) {
     // dev.fk.swap answers {retry} (and does nothing: no swap, no resume) in the one tick of 20 whose step rescans first. The tries
     // came back to back, so all of them could land between the same two ticks and every one answer retry (v0.79.0 verifier, twice):
     // the site stayed paused and the step went silent. After a retry, wait until the game time has moved (a tick has run), then try.
+    if (process.env.GATE_FKB_SWAP_IN_WINDOW === '1') {
+      // (TEST of the driver) start the swap in the refused tick: a probe swap of air for air 40 above the hopper with no site (it
+      // answers retry in that tick, else an error and nothing changed), back to back until one answers retry; then a burst of 30
+      // probes counts how many back-to-back tries one refused tick answers retry (the old loop gave up after 20)
+      const probe = () => call('dev.fk.swap', { pos: [P(at)[0], P(at)[1] + 40, P(at)[2]], block: 'minecraft:air', site: 'gate-fkb-no-site' }, 30_000);
+      const inWindow = async () => { for (let i = 0; i < 400; i++) if ((await probe())?.retry) return true; return false; };
+      let burst = 0;
+      const tb = Date.now();
+      if (await inWindow()) for (let i = 0; i < 30 && (await probe())?.retry; i++) burst++;
+      log(`  ${tag} swap window probe: ${burst} more back-to-back retries in one refused tick (${Date.now() - tb} ms)`);
+      check(await inWindow(), `${tag}: the swap starts in the refused tick (GATE_FKB_SWAP_IN_WINDOW)`);
+    }
     let sw = null;
     let tries = 0;
     const t0w = Date.now();
