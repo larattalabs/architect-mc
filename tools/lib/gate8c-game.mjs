@@ -156,7 +156,92 @@ export const INGAME = [
   { key: 'torch', name: 'the wash rule at the gate: a torch placed in a predicted cell after approval holds the head (why wash), 0 items', run: torch },
   { key: 'foreign', name: 'W5 in the drain: a player\'s source in the current is foreign: the drain leaves it', run: foreign },
   { key: 'join', name: 'a Remove asked while the river drains joins the removal (never SITE_BUSY)', run: join },
+  // (the 8cG review's fix round: each P1's failing-first row)
+  { key: 'chest', name: 'P1-1: a player\'s waterlogged chest in a head source cell after the build: the removal leaves it', run: chest },
+  { key: 'bucket', name: 'P1-2: a player\'s bucket in the current while it settles: the unsettled abort (foreign_water) leaves the source', run: bucket },
+  { key: 'wavetorch', name: 'P1-5: a torch set in a predicted cell before the head\'s wave (after the gate): the head is held (why wash), 0 items', run: wavetorch },
 ];
+
+/** A river laid on a fresh world: its layout, the check, the snapshot box and file. */
+async function riverWorld(ctx, tag) {
+  const g = await fresh(ctx, `G6B 8c ${tag}`);
+  const M = await plantMeadow(ctx, g);
+  const ck = await checkHand(ctx, 'river_demo', tag);
+  const box = boxOf(g);
+  const file = await snap(ctx, box, `8c-${tag}`);
+  return { g, M, ck, box, file };
+}
+const blockAt = async (ctx, c) => {
+  const r = await ctx.L.call('dev.fluid.census', { box: [...c, ...c] }, 60_000);
+  return r.fluids.find((q) => q[0] === c[0] && q[1] === c[1] && q[2] === c[2])?.[3] ?? null;
+};
+
+async function chest(ctx) {
+  const { L, check, json } = ctx;
+  const { M, ck } = await riverWorld(ctx, 'chest');
+  const r = await realise(ctx, ck.artifactSha);
+  if (r.refused) { check(false, `chest: refused ${json(r.refused)}`); return {}; }
+  check(r.view.state === 'PLACED', `chest: PLACED (${r.view.state})`);
+  // the head's middle source cell (r1: dx 1..6, H - 1..H; its top row at H)
+  const c = [M.r1.cells.find((q) => q[1] === M.H)[0] + 2, M.H, M.r1.cells.find((q) => q[1] === M.H)[2] + 1];
+  await L.cmd(`/setblock ${c.join(' ')} minecraft:chest[waterlogged=true]`);
+  await sleep(2000);
+  const before = await blockAt(ctx, c);
+  const rm = await removeWatched(ctx, r.region);
+  await sleep(3000);
+  const after = await blockAt(ctx, c);
+  check(/^minecraft:chest\[.*waterlogged=true/.test(before ?? '') && rm.state === 'REMOVED' && /^minecraft:chest\[.*waterlogged=true/.test(after ?? ''), `chest: the player's waterlogged chest stands through the removal (${before} -> ${after}; ${rm.state})`);
+  await L.leaveWorld();
+  return { before, after, removal: rm.state };
+}
+
+async function bucket(ctx) {
+  const { L, check, json } = ctx;
+  const { M, ck } = await riverWorld(ctx, 'bucket');
+  const rr = await L.call('dev.region.realiseApproved', { sha: ck.artifactSha }, 300_000);
+  if (rr.refused) { check(false, `bucket: refused ${json(rr.refused)}`); return {}; }
+  // while the head settles (written, not settled): a player's water source in the current's run 2, the south lane (no wash cell)
+  let st = null;
+  for (let i = 0; i < 600; i++) {
+    st = await L.call('dev.fluid.state', { region: rr.region }, 10_000).catch(() => null);
+    const h = (st?.bodies ?? []).find((b) => b.id === 'river_r1');
+    if (h && h.state === 'written') break;
+    await sleep(250);
+  }
+  const lane = M.water.filter((q) => q[2] === M.meadow[0][2] + 1);
+  const c = lane[Math.floor(lane.length / 3)];
+  await L.cmd(`/setblock ${c.join(' ')} minecraft:water`);
+  await L.waitRegion(rr.region, 3_600_000);
+  const v = await regionOf(ctx, rr.region);
+  const head = v.fluids.find((x) => x.body === 'river_r1');
+  const src = await blockAt(ctx, c);
+  check(head?.state === 'drained' && head?.why === 'foreign_water' && /^minecraft:water(\[level=0\])?$/.test(src ?? ''), `bucket: the head aborted unsettled (why ${head?.why}: ${String(head?.reason ?? '').slice(0, 100)}); the player's source stands (${src})`);
+  const rm = await removeWatched(ctx, rr.region);
+  const src2 = await blockAt(ctx, c);
+  check(rm.state === 'REMOVED' && /^minecraft:water(\[level=0\])?$/.test(src2 ?? ''), `bucket: the removal leaves it too (${src2}; ${rm.state})`);
+  await L.leaveWorld();
+  return { head, src, src2 };
+}
+
+async function wavetorch(ctx) {
+  const { L, check, json } = ctx;
+  const { M, ck, box } = await riverWorld(ctx, 'wavetorch');
+  const t = [M.meadow[1][0], M.meadow[1][1], M.meadow[1][2] - 1];
+  await L.call('dev.fluid.beforeWave', { setblock: [[...t, 'minecraft:torch']] }, 10_000);
+  const r = await realise(ctx, ck.artifactSha);
+  if (r.refused) { check(false, `wavetorch: refused ${json(r.refused)}`); return {}; }
+  await sleep(3000);
+  const head = r.fluids.find((x) => x.body === 'river_r1');
+  const tail = r.fluids.find((x) => x.body === 'river_r2');
+  const rv = await river(ctx, r.region);
+  check(head?.state === 'drained' && head?.why === 'wash' && tail?.state === 'settled', `wavetorch: the head is not written at its wave (${head?.state}, why ${head?.why}); the pool stands (${tail?.state})`);
+  check(itemsOf(rv) === 0 && (await blockAt(ctx, t)) === null, `wavetorch: 0 item entities from the predicted cells (${itemsOf(rv)}), no water at the torch`);
+  const rm = await removeWatched(ctx, r.region);
+  void box;
+  check(rm.state === 'REMOVED', `wavetorch: removed (${rm.state})`);
+  await L.leaveWorld();
+  return { head, tail, items: itemsOf(rv) };
+}
 
 async function nowash(ctx) {
   const { L, check, json } = ctx;
@@ -330,6 +415,7 @@ export const CRASH = [
   ['FL8', 'removal'], ['FL8+save', 'removal'],
   ['FL9', 'removal'], ['FL9+save', 'removal'],
   ['FL1+save', 'realise'], ['FL2+save', 'realise'], ['FL4+save', 'realise'], ['FL5+save', 'removal'],
+  ['FL3', 'removal'], ['FL3+save', 'removal'], // (the review's P1-4) after the stray pass, its chunks durable, before the solids
 ].map(([point, during]) => ({ key: point.replace('+', 'p').toLowerCase(), name: `${point} (${during})`, run: (ctx) => crashRow(ctx, point, during) }));
 
 // ------------------------------------------------------------------ PB (8c-probe): recorded

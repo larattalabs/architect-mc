@@ -345,16 +345,25 @@ public final class RegionHash {
 		return w.matches() && n.matches() && w.group(1).equals(n.group(1)) && Integer.parseInt(w.group(2)) > 0 && Integer.parseInt(n.group(2)) > 0 && !was.equals(now);
 	}
 
-	/** (8c WU) Whether the world feeds a flowing cell: the same fluid over it, or beside it at a higher amount. */
+	/**
+	 * (8c WU; fix round, P2-7) Whether foreign water feeds a flowing cell at exactly the level it holds: the same fluid over it (the cell
+	 * falling), or beside it at one more amount; the feeder outside every flowing watch set, live or removed this session (foreign, not
+	 * a river's own stale water).
+	 */
 	static boolean fed(ServerLevel level, BlockPos p) {
 		net.minecraft.world.level.material.FluidState f = level.getBlockState(p).getFluidState();
-		if (f.isEmpty()) {
+		if (f.isEmpty() || f.isSource()) {
 			return false;
 		}
+		boolean falling = f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING);
 		for (net.minecraft.core.Direction d : new net.minecraft.core.Direction[] {net.minecraft.core.Direction.UP, net.minecraft.core.Direction.NORTH,
 			net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST}) {
-			net.minecraft.world.level.material.FluidState q = level.getBlockState(p.relative(d)).getFluidState();
-			if (!q.isEmpty() && q.getType().isSame(f.getType()) && (d == net.minecraft.core.Direction.UP || q.getAmount() > f.getAmount())) {
+			BlockPos q = p.relative(d);
+			net.minecraft.world.level.material.FluidState n = level.getBlockState(q).getFluidState();
+			if (n.isEmpty() || !n.getType().isSame(f.getType()) || RegionFluids.watchedByFlowing(q.asLong())) {
+				continue;
+			}
+			if (d == net.minecraft.core.Direction.UP ? falling : !falling && n.getAmount() == f.getAmount() + 1) {
 				return true;
 			}
 		}

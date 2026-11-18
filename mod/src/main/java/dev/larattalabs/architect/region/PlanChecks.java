@@ -1777,12 +1777,14 @@ public final class PlanChecks {
 				}
 				int w = was == plant ? air : was, k = is == plant ? air : is;
 				int fw = before.fluidAt(x, y, z), fk = now.fluidAt(x, y, z);
-				boolean fluidChanged = fw >= 0 && fk >= 0 && fw != fk;
+				// ((8c, the review's P2-10) a version-4 guard compares each cell's level too: flowing water at level 1 then 7 is a changed prediction)
+				int lw = before.levelAt(x, y, z), lk = now.levelAt(x, y, z);
+				boolean fluidChanged = fw >= 0 && fk >= 0 && fw != fk || lw >= 0 && lk >= 0 && lw != lk;
 				if (w != k || fluidChanged) {
 					n++;
 					if (named.size() < ROCK_CELLS_NAMED) {
-						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + (fw > 0 ? "/" + codes.get(fw) : "") + "->" + classes[is] + (fk > 0 ? "/" + codes
-							.get(fk) : ""));
+						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + (fw > 0 ? "/" + codes.get(fw) : "") + (lw > 0 ? "@" + lw : "") + "->" + classes[is]
+							+ (fk > 0 ? "/" + codes.get(fk) : "") + (lk > 0 ? "@" + lk : ""));
 					}
 				}
 			}

@@ -185,7 +185,7 @@ export function compactCatalogueText(cat: Record<string, Json>): string {
 }
 
 /** One ref's block (the schema file is read and rendered each time: about a millisecond; the catalogue module is imported once per sidecar process, the kit being fixed for it). */
-async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
+async function renderBlock(kitDir: string, p: ParsedRef, o: { flowingWater?: boolean } = {}): Promise<string> {
   const file = path.join(kitDir, 'schemas', p.doc.file);
   let text: string;
   try {
@@ -206,6 +206,12 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
       catalogue = await kitCatalogue(kitDir);
     } catch {
       throw refuse('system_ref_unavailable', `systemRefs: "${p.ref}" needs the kit's capability catalogue (lib/plan/catalogue.mjs), which this helper's kit lacks`);
+    }
+    // ((8c, the review's P2-8) every render of plan/0 is gated on the flowingWater flag, as the composer's: off, no flow "current" or lip "form")
+    if (o.flowingWater !== true && p.doc.id === 'plan/0') {
+      const x = schema['x-catalogue'];
+      catalogue = JSON.parse(JSON.stringify(catalogue)) as Record<string, Json>;
+      dropFlowingWater(schema, [...(isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : []), ...(Array.isArray(catalogue.entries) ? catalogue.entries.filter(isObj) : [])]);
     }
     delete schema['x-catalogue']; // rendered once, below, from the kit's own catalogue
   }
@@ -263,7 +269,7 @@ export async function planCompactParts(kitDir: string, o: { flowingWater?: boole
   const x = schema['x-catalogue'];
   const entries = isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : [];
   delete schema['x-catalogue'];
-  if (o.flowingWater === false) {
+  if (o.flowingWater !== true) { // ((8c, P2-8) off unless the mod advertises flowingWater)
     catalogue = JSON.parse(JSON.stringify(catalogue)) as Record<string, Json>;
     dropFlowingWater(schema, [...entries, ...(Array.isArray(catalogue.entries) ? catalogue.entries.filter(isObj) : [])]);
   }
@@ -278,17 +284,17 @@ export function planCompactBlock(parts: { schema: Record<string, Json>; catalogu
 }
 
 /** The ref blocks, joined; '' for no refs. Throws RefusedError (FIELD_LIMIT) for a bad ref. */
-export async function expandSystemRefs(kitDir: string, refs: readonly string[] | undefined): Promise<string> {
+export async function expandSystemRefs(kitDir: string, refs: readonly string[] | undefined, o: { flowingWater?: boolean } = {}): Promise<string> {
   if (!refs?.length) return '';
   const parsed = parseSystemRefs(refs);
   const out: string[] = [];
-  for (const p of parsed) out.push(await renderBlock(kitDir, p));
+  for (const p of parsed) out.push(await renderBlock(kitDir, p, o));
   return out.join('\n\n');
 }
 
 /** The system prompt of a job: the ref blocks first, then the caller's `system` (or the job kind's default). */
-export async function composeSystem(kitDir: string, refs: readonly string[] | undefined, system: string): Promise<string> {
-  const head = await expandSystemRefs(kitDir, refs);
+export async function composeSystem(kitDir: string, refs: readonly string[] | undefined, system: string, o: { flowingWater?: boolean } = {}): Promise<string> {
+  const head = await expandSystemRefs(kitDir, refs, o);
   return head ? `${head}\n\n${system}` : system;
 }
 

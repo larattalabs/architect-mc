@@ -32,3 +32,18 @@ describe.skipIf(!HAS_KIT)('8c: the composer gates flow "current" and lip "form" 
     expect(sOn).toMatch(/"current"/);
   });
 });
+
+describe.skipIf(!HAS_KIT)('8c (the review\'s P2-8): every plan/0 system-ref render is gated the same way', () => {
+  it('expandSystemRefs and planCompactParts omit flow "current" and lip "form" unless flowingWater', async () => {
+    const { expandSystemRefs, planCompactBlock, planCompactParts } = await import('../src/jobs/systemrefs.js');
+    for (const ref of ['plan/0#compact', 'plan/0']) {
+      const off = await expandSystemRefs(KIT, [ref]);
+      const on = await expandSystemRefs(KIT, [ref], { flowingWater: true });
+      expect(off, ref).not.toMatch(/"current"/);
+      expect(off, ref).not.toMatch(/"lip":\{"enum":\[[^\]]*"form"/);
+      expect(on, ref).toMatch(/"current"/);
+    }
+    expect(planCompactBlock(await planCompactParts(KIT))).toBe(await expandSystemRefs(KIT, ['plan/0#compact']));
+    expect(planCompactBlock(await planCompactParts(KIT, { flowingWater: true }))).toBe(await expandSystemRefs(KIT, ['plan/0#compact'], { flowingWater: true }));
+  });
+});

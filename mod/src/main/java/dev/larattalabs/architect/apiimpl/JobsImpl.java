@@ -652,6 +652,10 @@ final class JobsImpl implements Jobs {
 			JsonArray rs = new JsonArray();
 			s.systemRefs().forEach(rs::add);
 			o.add("systemRefs", rs);
+			// ((8c, the review's P2-8) plan/0's refs offer rivers and falls off forms only for a mod that builds them)
+			if (dev.larattalabs.architect.region.RegionFluids.flowingBuild()) {
+				o.addProperty("flowingWater", true);
+			}
 		}
 		return o;
 	}
