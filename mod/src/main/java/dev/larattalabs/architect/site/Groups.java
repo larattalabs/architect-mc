@@ -828,6 +828,9 @@ public final class Groups {
 			Map<String, Integer> items = r.decItems.getOrDefault(id, Map.of());
 			long[] at = r.decAt.get(id);
 			try {
+				if (r.sites.size() < r.undoSites.size()) {
+					dev.larattalabs.architect.journal.WorldJournal.kill("GM"); // (TEST, T2b txn-crash-crate) an earlier member written, this one not yet
+				}
 				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
 				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
 				credit(server, r, id); // 6c Y: its stockpile refunds, once its restore is written (once per key)

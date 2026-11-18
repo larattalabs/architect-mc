@@ -11,7 +11,7 @@
 //     G-<point>[s]  the same for a group's shared crate (an actorless batch, sharedCrate) removed with its group (sgremove)
 //     P1-1..P1-4    one row per P1 of CXD's last GPT review: (1) the evidence of a pickup is the owed ledger (collected, then a halt +save:
 //                   paid once); (2) a settle whose barrier fails after its decision is held, never discarded (then a halt +save); (3) a
-//                   two-member group's refunds are keyed effects, never queue amounts (halted at GW +save between the members); (4) a
+//                   two-member group's refunds are keyed effects, never queue amounts (halted at GM, bare and +save: the first member written and settled, the second not); (4) a
 //                   removal ended before its commit (dev.journal.failNextCommit) never touched the crate (the builder then consumes)
 //     MF1, MF2, MF4 the coordinator's must-fix rows: a held crate never funds a placement; an adoption that skips a held crate keeps every
 //                   reference to it; the last road over a held crate stays BUILDING. A crate is held by a test.move out of it under
@@ -318,7 +318,7 @@ export async function registerTCC(steps, h) {
     }
     // ---------------------------------------------------------------- P1-3: a two-member group's refunds, halted between the members
     if (want('P1-3')) {
-      for (const point of ['GW', 'GW+save']) {
+      for (const point of ['GM', 'GM+save']) {
         const tag = `P1-3${point.endsWith('+save') ? 's' : ''}`;
         const g = await grouped(tag, 2);
         if (g.sites.length === 2) await crashRow(R, tag, W, g.sites, point, () => api(`sgremove ${g.group}`), g.group, true);
