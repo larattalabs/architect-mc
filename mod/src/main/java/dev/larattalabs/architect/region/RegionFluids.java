@@ -699,6 +699,9 @@ public final class RegionFluids {
 		// second, in every phase: round 2, P2 10)
 		if (st != null && !mayWrite(l, st)) {
 			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+			if ("gate".equals(st.phase)) {
+				WorldJournal.kill("FL1r"); // (slice DF) the record's save refused again at its gate, no source written
+			}
 			return false;
 		}
 		if (st != null && st.recheck) {
