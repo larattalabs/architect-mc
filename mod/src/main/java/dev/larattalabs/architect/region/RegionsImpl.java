@@ -2974,6 +2974,13 @@ public final class RegionsImpl implements Regions {
 		return l == null ? Optional.empty() : Optional.of(view(l));
 	}
 
+	/** (8b LY) {@code Regions.layout} ({@link Layouts}). */
+	@Override
+	public Optional<dev.larattalabs.architect.api.RegionLayout> layout(String regionId) {
+		Live l = REGIONS.get(regionId);
+		return l == null ? Optional.empty() : Optional.of(Layouts.of(l));
+	}
+
 	@Override
 	public List<RegionView> list(@Nullable String owner) {
 		List<RegionView> out = new ArrayList<>();

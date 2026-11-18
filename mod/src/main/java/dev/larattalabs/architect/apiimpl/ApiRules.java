@@ -52,6 +52,8 @@ public final class ApiRules {
 		// (8b BS) BuildStatus on SiteView, LotState (with its box), PartBuild and ItemEvent; the typed ext homes (part, lot, revision,
 		// region, waitsFor, beside, land)
 		"buildStatus",
+		// (8b LY) Regions.layout: lots (pads too) and parts with kind, box and ends, cached per IR sha and head revision
+		"regionLayout",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 
