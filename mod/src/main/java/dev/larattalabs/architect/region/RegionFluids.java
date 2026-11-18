@@ -301,9 +301,15 @@ public final class RegionFluids {
 			return ownSet;
 		}
 
-		/** (8cF) Whether the body is 8c's flowing water: a {@code flow} member or {@code lip: "form"}. */
+		/** (8c) The op's {@code model} (the kit's WM: "wm"), else null. */
+		@Nullable String model;
+
+		/**
+		 * (8cF; the coordinator's decision) Whether the body is 8c's flowing water: {@code flow: "current"}, {@code lip: "form"} or the kit's
+		 * {@code model: "wm"}. Any other flow ({@code "level"}, an unknown value: kept, noted) is a plain HY body.
+		 */
 		boolean flowing() {
-			return flow != null || "form".equals(lip);
+			return "current".equals(flow) || "form".equals(lip) || "wm".equals(model);
 		}
 
 		/** (6c HY) Whether a cell is a grate cell. */
@@ -646,6 +652,7 @@ public final class RegionFluids {
 				b.flow = strOrNull(o, "flow");
 				b.kind = strOrNull(o, "kind");
 				b.lip = strOrNull(o, "lip");
+				b.model = strOrNull(o, "model");
 				b.on = o.get("on") instanceof JsonObject on ? strOrNull(on, "part") : strOrNull(o, "on");
 				b.wash = runs(o.get("wash"));
 				b.converted = runs(o.get("converted"));

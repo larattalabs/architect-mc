@@ -149,7 +149,7 @@ export function emit(K, p, res) {
       carveAll(r, `${p.id}_carve`, stage, L.carve);
       // (§2.4) the wash clears: the predicted cells' natural washable blocks to air, IF_NATURAL (journaled; the undo puts them back)
       if (L.wash.length) r.part(`${p.id}_wash`.slice(0, 48), { stage }).columns({ abs: 0 }, { abs: 0 }, L.wash.flatMap(([x, y, z]) => [x, z, y, y, 0]), [null], { cond: 0 });
-      const tail = r.fluidBody(L.r2.cells, { id: L.r2.id, part: p.id, kind: 'pool', stage, level: L.r2.level, outlets: L.r2.outlets, flow: 'level', shellRole });
+      const tail = r.fluidBody(L.r2.cells, { id: L.r2.id, part: p.id, kind: 'pool', stage, level: L.r2.level, outlets: L.r2.outlets, shellRole }); // (a plain HY pool: only a current is 8c's, the coordinator)
       bodies.push(tail);
       const head = r.fluidBody(L.r1.cells, { id: L.r1.id, part: p.id, kind: 'river', stage, level: L.r1.level, outlets: L.r1.outlets, lining: L.lining, joins: [L.join], flow: 'current', wash: L.wash, shellRole, _unsafe: sp.variant === 'short' ? { predictShort: true } : null });
       bodies.unshift(head);
@@ -160,7 +160,7 @@ export function emit(K, p, res) {
       solid(r, island, stage, [L.island]);
       solid(r, `${p.id}_plinth`, stage, [L.plinth]);
       carveAll(r, `${p.id}_carve`, stage, L.carve);
-      const tail = r.fluidBody(L.r2.cells, { id: L.r2.id, part: p.id, kind: 'basin', stage, level: L.r2.level, flow: 'level', shellRole });
+      const tail = r.fluidBody(L.r2.cells, { id: L.r2.id, part: p.id, kind: 'basin', stage, level: L.r2.level, shellRole }); // (a plain HY basin)
       bodies.push(tail);
       const head = r.fluidBody(L.r1.cells, { id: L.r1.id, part: p.id, kind: 'header', stage, level: L.r1.level, outlets: L.r1.outlets, joins: [L.join], lip: 'form', on: island, shellRole, _unsafe: sp.variant === 'short' ? { predictShort: true } : null });
       bodies.unshift(head);

@@ -58,7 +58,8 @@ class RegionFluids8cFTest {
 		assertEquals("braided", b.get(1).flow, "an unknown flow is kept, not refused");
 		assertEquals("form", b.get(2).lip);
 		assertEquals("isle", b.get(2).on);
-		assertTrue(b.get(0).flowing() && b.get(1).flowing() && b.get(2).flowing());
+		assertTrue(b.get(0).flowing() && b.get(2).flowing());
+		assertFalse(b.get(1).flowing(), "only a current is 8c's: an unknown flow is a plain HY body (the coordinator)");
 		assertFalse(b.get(3).flowing(), "an H pond is no 8c body");
 		assertNull(b.get(3).flow);
 	}

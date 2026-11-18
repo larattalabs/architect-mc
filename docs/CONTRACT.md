@@ -33485,13 +33485,17 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   `ticksLeft` ticks from now (20 a second), so Steward can say how long.
 - **The feature** `flowingWater` (helper `region.flowingWater`) is advertised only once `RegionFluids.flowingBuild()` is true (slice WU
   turns it on): before that a flowing body is drained as H's.
+- **Coordinator overrides of §8** (2026-11-18): `Reason.UNSETTLED` is added (§8 said no new Reason), with the reader `Unsettled.of`;
+  only `flow: "current"` (and `lip: "form"`, and the kit's `model: "wm"`) is 8c's: any other flow, `"level"` included, is a plain HY
+  body (river_demo's and fall_island's tails carry no flow member).
 - **A flowing body's watch set** also holds its predicted cells (an H body's is unchanged: cells, shell, spill, watch, lining).
 - **Hand IRs** (kit/lib/fluids/handriver.mjs, dispatched on ext `architect_mc:unsafe.handRiver`; not in the catalogue, so no fixture
   moves): `river_demo` (a head reach `river_r1` with `flow: "current"`, a 42-cell current of six 6-cell runs each ending in a 1-block
   step, the last over a meadow's natural grass whose 4 flower cells are `wash`; banks as lining; a terminal pool `river_r2`, `flow:
-  "level"`; 126 predicted cells, settle bound 240) and `fall_island` (a header pool `fall_r1` with `lip: "form"` on the island part, a
+  "level"` at first, now a plain HY pool; 126 predicted cells, settle bound 240) and `fall_island` (a header pool `fall_r1` with `lip: "form"` on the island part, a
   4-cell lip run and a 13-high fall into a raised basin `fall_r2` 3 deep; 51 predicted cells). Variants: `nowash` (the mint case's
-  control), `short` (the head's spill one cell short). Today's `steady` predicts both (no conversion, no waterlogged block in a reach).
+  control), `short` (the head's spill one cell short). Laid so the model predicts them exactly (no conversion, no waterlogged block in a reach): the heads now run on WM's model (`flow:
+  "current"` maps to `model: 'wm'`), with ARVX v4 volumes; the in-game census equals the prediction.
 - **ARVX version 4** (the coordinator's decision, WM's layout; written by VS): version 3 with each fluid run carrying its level:
   per column (x-major) runs bottom-up of `(u8 fluid code, u8 level, varint length)`, the level `LiquidBlock.LEVEL`: 1-7 flowing, 8-15
   falling, 0 for every other code (`FLUID_LEVELS` per code, both sides). Asked with `levels: true` on a volume request (it implies
@@ -33564,8 +33568,8 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - The gate re-checks a flowing body's predicted cells live before any source: a washable block holds the body (not written, `why: wash`,
   reason `M25:wash`), soul sand or magma `why: bubble`, any other block `uncontained`. Unsettled bodies say `foreign_water` or
   `census_drift`. Builder reading: the census is per body, every 5 ticks (no per-chunk round robin needed at these sizes).
-- Item entities: `dev.fluid.river` counts items standing within a cell of a flowing body's own or predicted cells (`itemsNow`); the
-  spawn counter (ENTITY_LOAD, age 0) saw none in game and stays a secondary count.
+- Item entities: `dev.fluid.river` counts item entities spawned in a flowing body's own or predicted cells (ENTITY_LOAD, age 0: the red
+  rerun's 4 washed flowers and the washed torch) plus `itemsNow`, those standing within a cell of them.
 - Remove while draining: Groups' removal already joins (a second `Regions.remove` answers `removed: true`, never SITE_BUSY), live and
   after a restart (CR's rows).
 - W3 breach cells feed KC keep-out: handriver checks every body's cells, shell, spill and breach reach (`watch`) with

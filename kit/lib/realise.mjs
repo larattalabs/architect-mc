@@ -163,7 +163,7 @@ export function walkKinds(ir) {
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
   if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.staged === true))) k.add('stagedTerrain'); // (8aF)
-  if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.op === 'fluid' && (typeof o.flow === 'string' || o.lip === 'form' || o.model === 'wm')))) k.add('flowingWater'); // (8cF; WM's model)
+  if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.op === 'fluid' && (o.flow === 'current' || o.lip === 'form' || o.model === 'wm')))) k.add('flowingWater'); // (8cF; WM's model)
   if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.levels === true)) k.add('volume:levels'); // (8cF)
   return [...k].sort();
 }

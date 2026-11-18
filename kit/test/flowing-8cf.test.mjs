@@ -35,7 +35,8 @@ test('8cF: the kinds are appended after stagedTerrain and walked from a flow or 
   assert.ok(walkKinds({ parts: [{ ops: [{ ...op, flow: 'current' }] }] }).includes('flowingWater'));
   assert.ok(walkKinds({ parts: [{ ops: [{ ...op, lip: 'form' }] }] }).includes('flowingWater'));
   assert.ok(walkKinds({ parts: [], volumes: { v: { levels: true, fluids: true } } }).includes('volume:levels'));
-  assert.ok(isFlowingOp({ ...op, flow: 'whatever' }), 'an open enum: an unknown flow is still flowing water');
+  assert.ok(!isFlowingOp({ ...op, flow: 'level' }) && !isFlowingOp({ ...op, flow: 'whatever' }), 'only a current is 8c\'s (the coordinator): level and unknown flows are plain HY bodies');
+  assert.deepEqual(walkKinds({ parts: [{ ops: [{ ...op, flow: 'level' }] }] }), ['fluid']);
   assert.ok(!isFlowingOp(op));
 });
 
@@ -68,7 +69,7 @@ for (const [name, mod, file, kinds] of [['river_demo', river, 'river_demo.mjs', 
     const ops = fluidOps(p.ir);
     const part = name === 'river_demo' ? 'river' : 'fall';
     assert.deepEqual(ops.map((o) => o.id).sort(), [`${part}_r1`, `${part}_r2`]);
-    assert.deepEqual(ops.map((o) => o.kind).sort(), [...kinds].sort());
+    assert.deepEqual(ops.map((o) => [o.id, o.kind ?? null]).sort(), [[`${part}_r1`, kinds[0]], [`${part}_r2`, null]], 'the head carries its kind; the tail is a plain HY body');
     assert.ok(p.ir.requires.includes('flowingWater') && p.ir.requires.includes('courses'));
     const head = ops.find((o) => o.id === `${part}_r1`);
     if (name === 'river_demo') assert.equal(head.flow, 'current'); else { assert.equal(head.lip, 'form'); assert.equal(head.on.part, 'fall_island'); }

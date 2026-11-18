@@ -82,7 +82,7 @@ export function unsettledAnswer({ part, body = null, cap, cells = 0, rounds = 0,
 
 /** Whether a fluid op is 8c's flowing water: a `flow` member, or `lip: "form"` (realise.mjs walkKinds inlines the same test). */
 export function isFlowingOp(o) {
-  return !!o && o.op === 'fluid' && (typeof o.flow === 'string' || o.lip === 'form');
+  return !!o && o.op === 'fluid' && (o.flow === 'current' || o.lip === 'form' || o.model === 'wm'); // (the coordinator: only a current; "level" and unknown flows are plain HY bodies)
 }
 
 /** The realise-time typed whys of the fluids rows (RegionFluids.WHYS; open). */
