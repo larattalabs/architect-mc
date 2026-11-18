@@ -60,9 +60,12 @@ export async function registerTCC(steps, h) {
       const v = await siteState(s);
       st[s] = v ? v.state : null;
       if (v) {
-        if (v.crate?.present && !seen) stock = G.plus(stock, v.ledger?.stock ?? {}); // a shared crate's stock once
-        seen = seen || !!v.crate?.present;
-        placed = G.plus(placed, v.ledger?.placed ?? {});
+        // a shared crate's ledger (its stock and its placed counts) is every member's: counted once
+        if (!seen) {
+          if (v.crate?.present) stock = G.plus(stock, v.ledger?.stock ?? {});
+          placed = G.plus(placed, v.ledger?.placed ?? {});
+        }
+        seen = true;
       }
     }
     const ow = await owedAll();
@@ -145,7 +148,7 @@ export async function registerTCC(steps, h) {
     return { txn: t, group: gs };
   }
 
-  function judge(out, tag, n, before, after, { committedOk = true } = {}) {
+  function judge(out, tag, n, before, after, { committedOk = true, standsStock = true } = {}) {
     n.before = before;
     n.after = after;
     out[tag] = n;
@@ -159,7 +162,7 @@ export async function registerTCC(steps, h) {
       check(!after.crate && (sum(after.owed) === sum(before.owed) || own.length > 0 && own.every((e) => !!e.site)),
         `${tag}: committed: the crate's cell restored (${after.crate ? 'a crate still stands' : 'restored'}), its stock owed to the site's recipient (${own.length} entr${own.length === 1 ? 'y' : 'ies'} naming ${json([...new Set(own.map((e) => e.site))])}${own.some((e) => e.region) ? ', region ' + own.find((e) => e.region).region : ''})`, after.owedEntries);
     }
-    if (!gone) check(after.crate && G.same(after.stock, before.stock), `${tag}: not committed: the site stands (${json(after.states)}), its crate holds its stock again ${json(after.stock)}`, n);
+    if (!gone && standsStock) check(after.crate && G.same(after.stock, before.stock), `${tag}: not committed: the site stands (${json(after.states)}), its crate holds its stock again ${json(after.stock)}`, n);
   }
 
   /** One crash row: the baseline, {@code point} armed, {@code remove}, the halt, the world again, the recovery, the judgement. */
@@ -349,7 +352,9 @@ export async function registerTCC(steps, h) {
           await L.openWorld(name);
           await L.tp(...W.at);
           const r = await settleWait([site], cp, null);
-          judge(R, tag, { tag, sites: [site], removal: rm, mid, txn: r.txn }, before, await parts([site], cp, items));
+          // the builder consumed the stock after the refused removal: the units are placed now, not in the crate
+          judge(R, tag, { tag, sites: [site], removal: rm, mid, txn: r.txn }, before, await parts([site], cp, items), { standsStock: false });
+          check(rm.removed === false, `${tag}: the removal ended before its commit (${json(rm).slice(0, 120)})`, rm);
         }
       }
     }
@@ -380,19 +385,19 @@ export async function registerTCC(steps, h) {
         await wait(6000);
         const s1 = await siteState(site);
         R[tag] = { s0: { built: s0?.built, stock: s0?.ledger?.stock, placed: s0?.ledger?.placed }, s1: { built: s1?.built, stock: s1?.ledger?.stock, placed: s1?.ledger?.placed } };
-        check(G.same(s1?.ledger?.stock, s0?.ledger?.stock) && G.same(s1?.ledger?.placed, s0?.ledger?.placed),
-          `${tag}: a held crate funds nothing: over 6 s unpaused, stock ${json(s1?.ledger?.stock)} = ${json(s0?.ledger?.stock)}, placed ${sum(s1?.ledger?.placed)} = ${sum(s0?.ledger?.placed)}`, R[tag]);
+        check(G.same(s1?.ledger?.stock, s0?.ledger?.stock) && G.same(s1?.ledger?.placed, s0?.ledger?.placed) && s1?.built === s0?.built,
+          `${tag}: a held crate funds nothing (and nothing is placed for free): over 6 s unpaused, stock ${json(s1?.ledger?.stock)} = ${json(s0?.ledger?.stock)}, placed ${sum(s1?.ledger?.placed)} = ${sum(s0?.ledger?.placed)}, cells built ${s1?.built} = ${s0?.built}`, R[tag]);
         await unhold();
         await wait(4000);
         const s2 = await siteState(site);
-        R[tag].s2 = { stock: s2?.ledger?.stock, placed: s2?.ledger?.placed };
-        check(sum(s2?.ledger?.placed) > sum(s0?.ledger?.placed), `${tag}: released, the site builds from it again (placed ${sum(s2?.ledger?.placed)})`, R[tag]);
+        R[tag].s2 = { built: s2?.built, stock: s2?.ledger?.stock, placed: s2?.ledger?.placed };
+        check(sum(s2?.ledger?.placed) > sum(s0?.ledger?.placed) || s2?.built > s1?.built, `${tag}: released, the site builds from it again (placed ${sum(s2?.ledger?.placed)})`, R[tag]);
         await call('dev.stockpile.pause', { site, paused: true }, 60_000).catch(() => null);
       }
     }
     if (want('MF2')) {
       const tag = 'MF2';
-      const owner = 'tcc-mf2';
+      const owner = 'tcc:mf2'; // a stockpile owner is <modid>:<thing>
       const g = await grouped(tag, 1, owner);
       if (g.sites.length) {
         const site = g.sites[0];
