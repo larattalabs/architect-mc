@@ -316,6 +316,41 @@ public final class RegionDev {
 				String region = Fields.of(req).nonBlank("region");
 				return ServerTasks.callOnServer(s -> RegionsImpl.devState(region));
 			});
+		// (8b D) the settlement data reads, as Steward reads them
+		DevBridge.register("dev.region.status", 10_000, "{region} - (8b BS) every lot's and part's BuildStatus: {region, state, lots: [{id, siteId, state, box, status}], "
+			+ "parts: [{part, lot, targets, status}], besideNote, land, removalStop, removalStopCause}", (req, mc) -> {
+				String region = Fields.of(req).nonBlank("region");
+				return ServerTasks.callOnServer(s -> {
+					JsonObject o = new JsonObject();
+					var v = dev.larattalabs.architect.api.ArchitectApi.get().regions().get(region).orElse(null);
+					if (v == null) {
+						o.addProperty("missing", true);
+						return o;
+					}
+					o.addProperty("region", v.id());
+					o.addProperty("state", v.state().name());
+					o.add("lots", GSON.toJsonTree(v.lots()));
+					o.add("parts", GSON.toJsonTree(v.build() == null ? java.util.List.of() : v.build().parts()));
+					o.add("besideNote", GSON.toJsonTree(v.besideNote()));
+					o.add("land", GSON.toJsonTree(v.land()));
+					o.addProperty("removalStop", v.removalStop().name());
+					o.addProperty("removalStopCause", v.removalStopCause() == null ? null : v.removalStopCause().name());
+					return o;
+				});
+			});
+		DevBridge.register("dev.region.layout", 10_000, "{region} - (8b LY) Regions.layout: {region, irSha, revision, parts: [{part, kind, stage, box, ends, revision, lot, "
+			+ "targets}]} or {missing}", (req, mc) -> {
+				String region = Fields.of(req).nonBlank("region");
+				return ServerTasks.callOnServer(s -> {
+					var lay = dev.larattalabs.architect.api.ArchitectApi.get().regions().layout(region).orElse(null);
+					if (lay == null) {
+						JsonObject o = new JsonObject();
+						o.addProperty("missing", true);
+						return o;
+					}
+					return json(lay);
+				});
+			});
 		DevBridge.register("dev.region.realised", 600_000, "{region, layer?: 0, tile?: \"stage|set|tx,tz\", cells?: false, verify?: false, world?: true} - (RP) "
 			+ "the region's realised record: per tile its status (committed|placing|pending|undone|stale), codes, extras, bytes and shas, "
 			+ "sites.json (roads, lots, bodies); tile: that one record (cells: its code and extra lists); verify: the record against the "

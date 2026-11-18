@@ -1199,3 +1199,9 @@ cost nothing.
 - **7c input:** Steward's concept card **program** (role, type, count, footprint, landmark, notes;
   steward-mc fixtures/real/*_program.json) is the input to the derived settlement brief. The planner builds on it rather than
   starting again.
+
+## Note after 8b (2026-11-18)
+
+Phase 8b gives Steward's settlement screens typed data instead of ext parsing: one `BuildStatus` per target, lot, part and item, the
+region's layout for its map, `SETTLEMENT_CHANGED` in place of the 2 s rebuild, the connector check with marking, and typed removal stops.
+The per-target bill (BL) waits for T2b's owed attribution. As built: docs/CONTRACT.md "Phase 8b".
