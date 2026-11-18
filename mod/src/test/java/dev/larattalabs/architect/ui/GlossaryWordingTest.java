@@ -30,7 +30,7 @@ class GlossaryWordingTest {
 	}
 
 	/** Developer-only lines: DevBridge hook descriptions, logs, dev exceptions. */
-	static final Pattern SKIP = Pattern.compile("DevBridge\\.register|LOGGER\\.|DevException|IllegalStateException|IllegalArgumentException|"
+	static final Pattern SKIP = Pattern.compile("DevBridge\\.register|LOGGER\\.|DevException|IllegalStateException|"
 		+ "addProperty\\(");
 
 	static List<Root> roots() {

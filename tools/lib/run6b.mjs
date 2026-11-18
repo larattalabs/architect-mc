@@ -344,6 +344,9 @@ export async function fresh(name, from) {
   if (baseSpec(from)) await ensureBase(from);
   copyWorld(from, name);
   await openWorld(name);
+  // (PR F1) gates answer the first-build tour's offer, so its modal never sits over another gate's screens or shots
+  // (the UI gallery shoots it in its own block); an older client without the hook just says no such method
+  await call('dev.pr.guide', { event: 'decline' }).catch(() => {});
 }
 /** The player as a spectator at (x, y, z). */
 export async function tp(x, y, z, yaw = 0, pitch = 30) {
