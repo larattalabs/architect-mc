@@ -222,6 +222,11 @@ public final class RegionFluids {
 	static final int CENSUS_EVERY = 5;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
+	/**
+	 * (8c, the review's P1-5) DevBridge {@code dev.fluid.beforeWave}: run once, right before an ordered region's next wave after its first
+	 * (a reach written after the reach it lands in settled) writes its sources.
+	 */
+	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeWave;
 	/** DevBridge {@code dev.fluid.beforeGate} (gate item 3): run once, at the next fluids gate, right before its containment check. */
 	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeCheck;
 	private static final Map<String, Regional> STATE = new HashMap<>();
@@ -1550,6 +1555,11 @@ public final class RegionFluids {
 			}
 		}
 		int forced = 0;
+		var waveHook = beforeWave;
+		if (waveHook != null && !due.isEmpty() && st.states.values().stream().anyMatch(x -> !"pending".equals(x.state) && !"drained".equals(x.state))) {
+			beforeWave = null; // (TEST, the review's P1-5) a later wave: a block set now stands in its predicted cells
+			waveHook.accept(level);
+		}
 		for (Body b : due) {
 			BodyState bs = st.states.get(b.id);
 			writeBody(level, b);
