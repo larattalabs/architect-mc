@@ -153,6 +153,22 @@ function framesOf(K, p, f) {
     if (!w?.site || !w.frame) return [];
     const F = frameOf(w.frame.O, w.frame.facing);
     const c = (w.spec.width - 1) >> 1;
+    if (w.site.lip === 'form') {
+      // ((8c RV-b) a fall off a form: the room in the form's rock behind the face, its doorway in the face behind the curtain and a
+      // passage 1 wide and 2 high back to it (a form's rim is thin: an island's rock thickens about 1 a cell in from its edge), at each
+      // passage length from 0 and each height from just under the pool's floor and its roof down; emitHidden keeps it outside the
+      // fall's watch set)
+      const out = [];
+      const top = w.site.L - 2 - ROOM.roof;
+      for (let k = 0; k <= FALL_PASSAGE; k++) for (let y0 = top; y0 >= Math.max(w.site.Lb + 2, top - 16); y0--) {
+        const [dx, dz] = F.col(0, c);
+        const door = [[dx, y0, dz], [dx, y0 + 1, dz]];
+        const passage = [];
+        for (let i = 1; i <= k; i++) { const [px, pz] = F.col(-i, c); passage.push([px, y0, pz], [px, y0 + 1, pz]); }
+        out.push({ o: F.col(-1 - k, c), y0, dir: [-F.f[0], -F.f[1]], lat: F.a, door, passage, open: [...door, ...passage], side: w.frame.facing, fall: h.id });
+      }
+      return out;
+    }
     // (the doorway one over the basin's rim: the pond's shell holds the cell over its surface at row 0)
     const y0 = w.site.Lb + 2;
     const [dx, dz] = F.col(0, c);
@@ -221,8 +237,9 @@ export function emitHidden(K, p, f) {
         fr = { ...fr0, y0, g, open, door: [[hx, g, hz]] };
       }
       const open = new Set([...(fr.open instanceof Set ? fr.open : (fr.open ?? []).map((c) => c.join(',')))]);
-      if (!fr.door.every(([x, y, z]) => solid(x, y, z))) continue;
-      if (fits(solid, fr, W, D, H, open)) { pick = { fr, size }; break; }
+      // ((8c RV-b) a fall's doorway in a form's thin rim may already stand open: its passage runs back into the rock)
+      if (!fr.fall && !fr.door.every(([x, y, z]) => solid(x, y, z))) continue;
+      if (fits(solid, fr, W, D, H, open) && (!fr.fall || outsideWatch(roomOf(fr, W, D, H).filter((c) => solid(...c)), fallSets(r, fr.fall)))) { pick = { fr, size }; break; }
     }
     if (pick) break;
   }
@@ -238,7 +255,7 @@ export function emitHidden(K, p, f) {
   const byCol = new Map();
   for (const [x, y, z] of cells) { const k = `${x},${z}`; const c = byCol.get(k) ?? [x, z, y, y]; c[2] = Math.min(c[2], y); c[3] = Math.max(c[3], y); byCol.set(k, c); }
   if (fr.hatch) { const k = `${fr.hatch[0]},${fr.hatch[1]}`; const c = byCol.get(k); c[3] = Math.max(c[3], fr.g - 1); }
-  if (f.entrance === 'waterfall') for (const [x, y, z] of fr.door) { const k = `${x},${z}`; const c = byCol.get(k) ?? [x, z, y, y]; c[2] = Math.min(c[2], y); c[3] = Math.max(c[3], y); byCol.set(k, c); }
+  if (f.entrance === 'waterfall') for (const [x, y, z] of [...fr.door, ...(fr.passage ?? [])]) { const k = `${x},${z}`; const c = byCol.get(k) ?? [x, z, y, y]; c[2] = Math.min(c[2], y); c[3] = Math.max(c[3], y); byCol.set(k, c); }
   for (const c of [...byCol.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0])) carve.push(c[0], c[1], c[2], c[3], 0);
   const lights = [];
   // (the middle of a side of at most lightEvery; else every lightEvery from half of it: no floor cell more than 3 from a light along a side)
@@ -294,6 +311,34 @@ export function emitHidden(K, p, f) {
     roomPart: room.id, doorPart: door?.id ?? null,
     secret: { part: p.id, host: f.host.id, entrance: { cell: [...cell], kind: f.entrance }, room: rb },
   };
+}
+
+/** (8c RV-b) A room's cells (its hollow and its doorway). */
+export function roomOf(fr, W, D, H) {
+  return [...roomCells(fr, W, D, H).cells, ...fr.door, ...(fr.passage ?? [])];
+}
+/** (8c RV-b) The longest passage from a fall's doorway back to its room. */
+export const FALL_PASSAGE = 8;
+
+/** (8c RV-b) A fall's bodies' sets (cells, shell, lining, spill, watch, predicted) as one set of "x,y,z", from the region's bodies so far. */
+export function fallSets(r, part) {
+  const out = new Set();
+  for (const b of r._fluidBodies ?? []) {
+    if (b.part !== part) continue;
+    for (const k of ['cells', 'shell', 'lining', 'spill', 'watch', 'predicted']) for (const c of b[k] ?? []) out.add(`${c[0]},${c[1]},${c[2]}`);
+  }
+  return out;
+}
+
+/**
+ * (8c RV-b, the coordinator's answer) Whether a room lies outside a fall's watch set (the cells its carve opens: emitHidden passes the
+ * solid ones, an open doorway cell in the face already being air): no room cell is one of the body's cells, shell,
+ * lining, spill, watch or predicted cells, nor face-adjacent to one of its cells or shell (a breach there would open into the room).
+ */
+export function outsideWatch(room, sets) {
+  const N = [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (const [x, y, z] of room) for (const [dx, dy, dz] of N) if (sets.has(`${x + dx},${y + dy},${z + dz}`)) return false;
+  return true;
 }
 
 /** A wooden trapdoor from the Style's roles (the first role whose block has one), else spruce's. */

@@ -134,9 +134,8 @@ export function emitBig(K, p, f, id) {
   const part = p.part, rect = f.rect;
   const stage = K.stageOf('forms');
   const groundAt = (x, z) => env.S.groundAt(x, z);
-  const seed = fnv64(ctx.seed ?? '', 'bigForm', p.id).hex;
   if (p.kind === 'hollow_mountain') {
-    const gen = hollowMountain({ rect, height: part.height, halls: part.halls, entrance: entranceOf(env, part, rect), seed, groundAt });
+    const gen = mountainGen(env, ctx, p, rect);
     r.form(id, gen, { stage });
     const m = (r.meta.parts[id] ??= {});
     // M5 (6b's cavern rule): no dark spawnable floor cell over the floor's row
@@ -158,8 +157,7 @@ export function emitBig(K, p, f, id) {
   }
   if (p.kind === 'crater') {
     const L = lakeOf(part);
-    const cp = craterParamsOf(part);
-    const gen = crater({ rect, depth: part.depth ?? cp.depth, rim: part.rim ?? cp.rim, lake: L.lake, lakeDepth: part.lakeDepth, seed, groundAt });
+    const gen = craterGen(env, ctx, p, rect);
     r.form(id, gen, { stage });
     const geometry = { centre: [gen.centre[0], gen.base, gen.centre[1]], radius: gen.R, floorY: gen.bottomAt(gen.centre[0], gen.centre[1]) + 1 };
     if (L.lake) {
@@ -176,6 +174,37 @@ export function emitBig(K, p, f, id) {
     return { geometry, notes: [] };
   }
   // floating_island: 6b's generator, natural only (no rail, no lamps), its anchor at the top centre
+  const { isl, notes, y } = islandGen(env, ctx, p, rect);
+  const anchor = `isl_${p.id}`.slice(0, 32);
+  r.form(id, isl, { stage });
+  r.anchor(anchor, isl.anchor);
+  r.floating([id], { anchor });
+  (r.meta.parts[id] ??= {}).island = { at: isl.params.at, r: isl.params.r, pads: isl.pads, anchor: isl.anchor };
+  // ((8c RV-b) the generator, for a fall off its rim (fluids/waterfall.mjs lip form): never in the answer)
+  return { geometry: { top: y, anchor: isl.anchor, pads: isl.pads.map((q) => [q.at[0], q.y, q.at[1], q.size[0], q.size[1]]) }, notes, gen: isl };
+}
+
+/** (8c RV-b) The hollow mountain's generator for a resolved part (emitBig's, pure: a fall off the form reads it at resolve). */
+export function mountainGen(env, ctx, p, rect) {
+  const seed = fnv64(ctx.seed ?? '', 'bigForm', p.id).hex;
+  return hollowMountain({ rect, height: p.part.height, halls: p.part.halls, entrance: entranceOf(env, p.part, rect), seed, groundAt: (x, z) => env.S.groundAt(x, z) });
+}
+
+/** (8c RV-b) The crater's generator for a resolved part (emitBig's, pure). */
+export function craterGen(env, ctx, p, rect) {
+  const part = p.part;
+  const seed = fnv64(ctx.seed ?? '', 'bigForm', p.id).hex;
+  const cp = craterParamsOf(part);
+  return crater({ rect, depth: part.depth ?? cp.depth, rim: part.rim ?? cp.rim, lake: lakeOf(part).lake, lakeDepth: part.lakeDepth, seed, groundAt: (x, z) => env.S.groundAt(x, z) });
+}
+
+/**
+ * (8c RV-b) The floating island's generator for a resolved part, as emitBig writes it (pure: a fall off its rim reads it at resolve):
+ * {isl (the rim op left out), notes, y (the top's level)}.
+ */
+export function islandGen(env, ctx, p, rect) {
+  const part = p.part;
+  const seed = fnv64(ctx.seed ?? '', 'bigForm', p.id).hex;
   const [w, d] = [rect.maxX - rect.minX + 1, rect.maxZ - rect.minZ + 1];
   const cx = (rect.minX + rect.maxX) >> 1, cz = (rect.minZ + rect.maxZ) >> 1;
   const R = Math.max(6, Math.floor((Math.min(w, d) - 1) / 2) - 5);
@@ -201,7 +230,6 @@ export function emitBig(K, p, f, id) {
     }
     if (pads.length < n) notes.push(`${n - pads.length} pad(s) left out: no room on the island's top`);
   }
-  const anchor = `isl_${p.id}`.slice(0, 32);
   // the island rule without its coal ore (not a free natural block in survival): the generator's own strata bands
   const rule = islandRule(seed, Math.floor((y - thickness - amp - 8) / 3));
   rule.rule = rule.rule.filter((c) => c.mat !== 'minecraft:coal_ore');
@@ -210,9 +238,5 @@ export function emitBig(K, p, f, id) {
   const rim = isl.ops.filter((o) => o.op === 'columns' && o.materials?.[0] === 'rail');
   isl.ops = isl.ops.filter((o) => !rim.includes(o));
   isl.params = { ...isl.params, top: { ...isl.params.top, edge: null } };
-  r.form(id, isl, { stage });
-  r.anchor(anchor, isl.anchor);
-  r.floating([id], { anchor });
-  (r.meta.parts[id] ??= {}).island = { at: isl.params.at, r: isl.params.r, pads: isl.pads, anchor: isl.anchor };
-  return { geometry: { top: y, anchor: isl.anchor, pads: isl.pads.map((q) => [q.at[0], q.y, q.at[1], q.size[0], q.size[1]]) }, notes };
+  return { isl, notes, y };
 }

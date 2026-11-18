@@ -1,0 +1,132 @@
+{
+ "about": "(8c RV-b, N-8c-3) at most 4 falls per region: four sculpted falls on the land (H's, never refused by the limit) and a fall off the island, the fifth: LIMIT {limit: falls, max: 4, value: 5}; rv-b.test drops one sculpted fall and the island's fits (4)",
+ "terrain": {
+  "W": 192,
+  "D": 192,
+  "x0": 4000,
+  "z0": 4000,
+  "y": 64
+ },
+ "anchors": {
+  "isle_at": [
+   4064,
+   65,
+   4064
+  ],
+  "f1": [
+   4140,
+   65,
+   4020
+  ],
+  "f2": [
+   4170,
+   65,
+   4020
+  ],
+  "f3": [
+   4140,
+   65,
+   4170
+  ],
+  "f4": [
+   4170,
+   65,
+   4170
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "fall",
+  "class": "refused"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rvb_c07",
+  "zones": [],
+  "forms": [
+   {
+    "id": "sculpt1",
+    "kind": "waterfall",
+    "required": false,
+    "label": "sculpted fall 1",
+    "lip": "sculpt",
+    "drop": 6,
+    "where": {
+     "near": {
+      "anchor": "f1",
+      "within": 6
+     }
+    }
+   },
+   {
+    "id": "sculpt2",
+    "kind": "waterfall",
+    "required": false,
+    "label": "sculpted fall 2",
+    "lip": "sculpt",
+    "drop": 6,
+    "where": {
+     "near": {
+      "anchor": "f2",
+      "within": 6
+     }
+    }
+   },
+   {
+    "id": "sculpt3",
+    "kind": "waterfall",
+    "required": false,
+    "label": "sculpted fall 3",
+    "lip": "sculpt",
+    "drop": 6,
+    "where": {
+     "near": {
+      "anchor": "f3",
+      "within": 6
+     }
+    }
+   },
+   {
+    "id": "sculpt4",
+    "kind": "waterfall",
+    "required": false,
+    "label": "sculpted fall 4",
+    "lip": "sculpt",
+    "drop": 6,
+    "where": {
+     "near": {
+      "anchor": "f4",
+      "within": 6
+     }
+    }
+   },
+   {
+    "id": "isle",
+    "kind": "floating_island",
+    "required": true,
+    "label": "The sky isle",
+    "where": {
+     "near": {
+      "anchor": "isle_at",
+      "within": 8
+     }
+    },
+    "size": {
+     "preset": "M"
+    }
+   },
+   {
+    "id": "fall",
+    "kind": "waterfall",
+    "required": true,
+    "label": "the isle's fall",
+    "lip": "form",
+    "on": {
+     "part": "isle"
+    }
+   }
+  ],
+  "connectors": [],
+  "rules": []
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "about": "(8c RV-b, the 8c contract §6) a fall off a floating island's rim (form.waterfall lip form, on the island): the header pool set in the island's top, the curtain clear of the island down to a basin on the ground 3 deep (the drop past 24), and a hidden room behind the curtain in the island's rock, outside the bodies' watch set",
+ "terrain": { "W": 128, "D": 128, "x0": 4000, "z0": 4000, "y": 64 },
+ "anchors": { "isle_at": [4064, 65, 4064] },
+ "volume": {},
+ "expect": { "part": "fall", "class": "fits" },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rvb_c05",
+  "zones": [],
+  "forms": [
+   { "id": "isle", "kind": "floating_island", "required": true, "label": "The sky isle", "where": { "near": { "anchor": "isle_at", "within": 8 } }, "size": { "preset": "M" } },
+   { "id": "fall", "kind": "waterfall", "required": true, "label": "the isle's fall", "lip": "form", "on": { "part": "isle" } },
+   { "id": "grotto", "kind": "hidden_room", "label": "the grotto behind the fall", "host": "fall", "size": { "preset": "S" } }
+  ],
+  "connectors": [],
+  "rules": []
+ }
+}
