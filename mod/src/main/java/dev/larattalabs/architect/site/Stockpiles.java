@@ -1415,11 +1415,23 @@ public final class Stockpiles {
 	 * books it once at the next start and no item entity can pay it twice. {@code fallback} is unused (kept for the callers). Returns what
 	 * was credited; empty (already) for a key credited before.
 	 */
+	/**
+	 * A credit of nothing (no block standing, no custody) under {@code key}: nothing books; its paid record (JR: nothing of it stood) and its
+	 * pending credit (J2: nothing to roll forward) dropped. A key credited already is left as it is. Shared by {@link #credit} and
+	 * {@link Builder#creditRefund} (fix/double-credit).
+	 */
+	static void creditOfNothing(Pile p, String key) {
+		if (p.ledger.credited(key)) {
+			return;
+		}
+		p.ledger.dropPaid(key);
+		p.ledger.dropPending(key);
+		changed(p);
+	}
+
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
-			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
-			p.ledger.dropPending(key); // (J2) nothing to roll forward
-			changed(p);
+			creditOfNothing(p, key);
 			return StockLedger.Credit.NONE;
 		}
 		StockLedger.Credit c = p.ledger.credit(key, items, capacity(srv, p), Stockpiles::maxStack);
@@ -1671,9 +1683,10 @@ public final class Stockpiles {
 					}
 					// (DR-S) through credit() itself: a credit of nothing standing (no custody either) books NONE and drops its paid record too,
 					// which Builder.creditRefund's early return kept (a PAID_ORPHAN after the settle)
-					credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
+					StockLedger.Credit c = credit(srv, p, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)));
 					p.ledger.dropPending(key);
-					what = "its removal settled: credited now";
+					// (Steward DR2-DOUBLE) an empty credit says so: nothing was credited
+					what = c.returned().isEmpty() ? "its removal settled: nothing to credit" : "its removal settled: credited now " + c.returned();
 				}
 				changed(p);
 				any = true;
@@ -3346,7 +3359,12 @@ public final class Stockpiles {
 			throw new IllegalStateException(off);
 		}
 		if (!loadFailed) {
-			saveWithWorld(srv);
+			// (v0.79.0 release review P1) T0's barrier: players, then chunks (a swallowed serialization failure is an owed save, not a
+			// durable write), then the ledger confirmed; anything short of OK refuses the repair before it releases anything
+			DurableBarrier.Result r = barrier(srv);
+			if (!r.ok()) {
+				throw new IllegalStateException("Stockpiles: the world was not saved: " + r.outcome() + " " + r.reason());
+			}
 			return;
 		}
 		if (testRefuseSave) {
@@ -3365,6 +3383,10 @@ public final class Stockpiles {
 		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
 		if (!undurable.isEmpty()) {
 			throw new IllegalStateException("Stockpiles: the world was not saved: chunk writes not durable " + undurable);
+		}
+		java.util.List<String> owed = DurableBarrier.owedSaves(); // (v0.79.0 review P1) a swallowed chunk or player save failure
+		if (!owed.isEmpty()) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: owed saves " + owed);
 		}
 	}
 
@@ -3737,6 +3759,34 @@ public final class Stockpiles {
 			return net.minecraft.util.Util.safeReplaceOrMoveFile(playerDir.resolve(id + ".dat"), tmp, playerDir.resolve(id + ".dat_old"), false);
 		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
+		forgetEarlyRuns(server);
+	}
+
+	/**
+	 * (LIFT-S-1 review P1) The runs made at this start before the stockpiles loaded (the Sites check makes and caches every construction
+	 * site's run in an earlier SERVER_STARTED listener) were made with no pile: {@link #attachPaid} gave them no paid cells, so a paid soil
+	 * cell vanilla changed since counted unbuilt (blocked for ever; after an unclean stop the reconcile gave it back as lost while it stood).
+	 * Every stockpile target's cached run is dropped here, so it is made again from the loaded stores before the reconcile, the waits, the
+	 * books or the feed read it; nothing but the Sites check's rescan has touched them yet. A site's is made again at once and rescanned with
+	 * its chunks loaded, as the Sites check did; a road's (made lazily) on its next use. Server thread.
+	 */
+	static void forgetEarlyRuns(MinecraftServer srv) {
+		for (Pile p : PILES.values()) {
+			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			for (Object t : bookTargets(p)) {
+				if (t instanceof Site s) {
+					Builder.forgetRun(s.id());
+					Builder.Run r = level == null || s.construction() == null ? null : Builder.run(srv, s);
+					if (r != null) {
+						r.rescan(level, true);
+						r.newlyCount = 0;
+						r.resend = false;
+					}
+				} else {
+					RoadBuilder.forgetRun(((Infra) t).id());
+				}
+			}
+		}
 	}
 
 	/** (PS) The registry from {@code <d>/stockpiles.json} (the world's architect dir); the save guard set when it can't be read. Tests call it. */

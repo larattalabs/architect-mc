@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.67.0";
+	String VERSION = "1.68.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -316,7 +316,7 @@ public interface ArchitectApi {
 	 * {@code nextNeeded}, and a removal or undo takes it back with no refund. It never reaches survival: a break of its declared container
 	 * destroys it, and a non-creative player, a hopper or the Fabric Transfer API can't take it from one (docs/CONTRACT.md "### FK-b
 	 * contract"). Refusals are checker findings of rule {@code fill}. No new method, record field or reason.
-	 * (8a, since NEXT) {@code "terrainConstruction"} is advertised when the helper's kit stages survival terrain (its
+	 * (8a, since 1.68.0) {@code "terrainConstruction"} is advertised when the helper's kit stages survival terrain (its
 	 * {@code region.terrainConstruction}): in a survival region every part a terrain kind writes (relief, pads' and terraces' cut and fill,
 	 * forms, scatter and stamps) is built over time as free construction targets, in support order and in runs, exactly as its INSTANT twin
 	 * writes it; it costs no items (docs/CONTRACT.md "Phase 8a"). Creative and INSTANT regions are unchanged. {@link PartBuild#terrainCells},

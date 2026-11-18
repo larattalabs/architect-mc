@@ -227,6 +227,12 @@ public final class RoadBuilder {
 			i.construction(), i.owner(), new JsonObject(), i.member(), false, Site.Versioning.NONE);
 	}
 
+	/** (LIFT-S-1 review P1) A road's or region target's run is made again on its next use ({@link Stockpiles#forgetEarlyRuns}). */
+	static void forgetRun(String id) {
+		RUNS.remove(id);
+		BEFORE.remove(id);
+	}
+
 	static Builder.@Nullable Run run(MinecraftServer srv, Infra i) {
 		if (i.construction() == null) {
 			return null;

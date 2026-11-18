@@ -55,14 +55,14 @@ public final class Packed {
 	public static final byte PAID = 2;
 	/**
 	 * (8aF, docs/CONTRACT.md "Phase 8a" §3) A staged terrain cell: a free cell of an op the IR marks {@code staged} (kit CLASS_STAGED). Until
-	 * slice ST it is written in the free pass exactly as {@link #FREE}. Since NEXT.
+	 * slice ST it is written in the free pass exactly as {@link #FREE}. Since 1.68.0.
 	 */
 	public static final byte STAGED = 3;
 
 	/**
 	 * (8a ST) Whether this mod builds staged terrain as construction targets (slice ST). On unless the JVM runs with
 	 * {@code -Darchitect.stagedTerrain=false} (a dev switch: the staged cells are then written in the free pass as before ST, and the
-	 * feature {@code terrainConstruction} is not advertised). Since NEXT.
+	 * feature {@code terrainConstruction} is not advertised). Since 1.68.0.
 	 */
 	public static final boolean STAGED_BUILD = !"false".equals(System.getProperty("architect.stagedTerrain"));
 

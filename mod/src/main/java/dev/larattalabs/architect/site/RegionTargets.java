@@ -2216,7 +2216,7 @@ public final class RegionTargets {
 	/**
 	 * (8a, docs/CONTRACT.md "Phase 8a" §3, §6; S-8a-3) The {@code kind} of a stage wait on a staged terrain target ({@code SITE_BUSY}, ext
 	 * {@code architect_mc:waitsFor {target, part, kind: "terrain", terrainCells, terrainBuilt, say}}). Steward words its line from this exact
-	 * string: keep it stable. Slice ST sets it. Since NEXT.
+	 * string: keep it stable. Slice ST sets it. Since 1.68.0.
 	 */
 	public static final String WAIT_KIND_TERRAIN = "terrain";
 

@@ -17,7 +17,7 @@ import net.minecraft.world.level.Level;
  * {@code capacityStacks}; until it fits again nothing new enters, except a delivery of an item the owner's active (unpaused) builds
  * still miss, up to what they miss, so an active build never deadlocks.
  *
- * <p>Since NEXT (slice T0): every give-back enters the stock, unkeyed ones too (a swap's old block, an empty bucket, a start reconcile's
+ * <p>Since 1.68.0 (slice T0): every give-back enters the stock, unkeyed ones too (a swap's old block, an empty bucket, a start reconcile's
  * refund), past capacity if need be; nothing drops at a crate. {@code refundOverflow} is a historical counter (give-backs that did not fit
  * before then): read and kept, it no longer grows.
  *
