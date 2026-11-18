@@ -2975,12 +2975,31 @@ public final class RegionsImpl implements Regions {
 		return save(l);
 	}
 
+	/** (slice DF round 3) A removal whose REMOVING save was refused: the record back as it was. */
+	static void removalRefused(Live l, RegionState stateWas, dev.larattalabs.architect.api.RemovalStop stopWas, @Nullable String stopReasonWas) {
+		l.rec().state = stateWas;
+		l.rec().removalStop = stopWas;
+		l.rec().removalStopReason = stopReasonWas;
+		if (stateWas != RegionState.REMOVING) {
+			BEFORE_REMOVAL.remove(l.rec().id);
+		}
+		OWED.remove(l.rec().id);
+	}
+
 	/** (slice DF round 2) Whether a region's record is owed (not known on disk). */
 	public static boolean owed(String id) {
 		return OWED.containsKey(id);
 	}
 
 	/** (slice DF round 2) The regions tick: each owed record tried again (one try a second); once OK, a publication it held is installed. */
+	/** (slice DF round 3, TEST seam) What the regions tick runs for a region whose held operation may go on ({@link Revisions#recoverOne}). */
+	static java.util.function.BiConsumer<MinecraftServer, Live> RECOVER = Revisions::recoverOne;
+
+	/** (slice DF round 3) A revision's publication answered IN_DOUBT: its install waits until the record is confirmed. */
+	static void publicationInDoubt(Live l) {
+		OWED.put(l.rec().id, System.nanoTime());
+	}
+
 	static void retryOwed(MinecraftServer s) {
 		for (String id : List.copyOf(OWED.keySet())) {
 			Live l = REGIONS.get(id);
@@ -2989,7 +3008,7 @@ public final class RegionsImpl implements Regions {
 				continue;
 			}
 			if (mayDrive(l)) {
-				Revisions.recoverOne(s, l); // (P1 8) a revision accepted in doubt installs now
+				RECOVER.accept(s, l); // (P1 8) a revision accepted in doubt installs now
 			}
 		}
 	}
@@ -3476,13 +3495,7 @@ public final class RegionsImpl implements Regions {
 			Architect.LOGGER.warn("Region {}: its REMOVING record is in doubt ({}): the removal waits until it is confirmed", l.rec().id, e.getMessage());
 		} catch (IOException e) {
 			// (P1 7) not on disk: nothing removed, the region stands as it was
-			l.rec().state = stateWas;
-			l.rec().removalStop = stopWas;
-			l.rec().removalStopReason = stopReasonWas;
-			if (stateWas != RegionState.REMOVING) {
-				BEFORE_REMOVAL.remove(l.rec().id);
-			}
-			OWED.remove(l.rec().id);
+			removalRefused(l, stateWas, stopWas, stopReasonWas);
 			String why = "the region record could not be saved (" + e.getMessage() + "): removal refused, nothing changed; try again once the disk takes writes";
 			Architect.LOGGER.warn("Region {}: {}", l.rec().id, why);
 			return CompletableFuture.completedFuture(new RemoveResult(false, List.of(why), Map.of()));

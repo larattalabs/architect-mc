@@ -1574,6 +1574,11 @@ public final class RegionFluids {
 
 		/** An Architect write of one cell ({@code Placed.set}). */
 		void set(BlockPos p, BlockState s, int flags);
+
+		/** (slice DF round 3) Whether a player placed what the cell holds (its {@code Placed} record). */
+		default boolean playerPlaced(BlockPos p) {
+			return false;
+		}
 	}
 
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
@@ -2033,6 +2038,7 @@ public final class RegionFluids {
 			changed = true;
 		}
 		if (changed) {
+			WorldJournal.kill("FL6d"); // (slice DF round 3) the lot's sources drained, lotDrained not saved yet
 			if (!save(l, st)) {
 				st.owedTriedAt = System.nanoTime();
 				return NOT_DURABLE; // (drained; the record of it owed: the site waits, the next try saves it)

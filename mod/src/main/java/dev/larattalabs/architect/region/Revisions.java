@@ -968,6 +968,7 @@ public final class Revisions {
 			// (slice DF round 2, P1 8) renamed, a force failed: the disk may hold the new head. Never refused: accepted and held, owed; the
 			// install waits until the record is confirmed (RegionsImpl.retryOwed, then recoverOne installs it, idempotent by item key)
 			Architect.LOGGER.warn("Region {}: revision {}'s publication is in doubt ({}): accepted, its install waits for the record", id, rid, e.getMessage());
+			RegionsImpl.publicationInDoubt(l);
 			SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
 			return id;
 		} catch (java.io.IOException e) {
