@@ -309,7 +309,7 @@ public interface SiteEvents {
 	 * reads (beside, land); one of the owner's sites placed, removed, versioned, its deviations or its updating changed;
 	 * {@link #STOCKPILE_CHANGED} of the owner; and (once owed ships) {@code OWED_CHANGED} of the owner. At least once, coalesced to at most
 	 * once per 20 ticks per (owner, region): an edge sooner is deferred, never dropped. Once per owner after a world load (edges while it
-	 * was down are lost). Server thread. Since NEXT.
+	 * was down are lost). Server thread. Since 1.69.0.
 	 */
 	Event<SettlementChanged> SETTLEMENT_CHANGED = EventFactory.createArrayBacked(SettlementChanged.class, ls -> (owner, region) -> {
 		for (SettlementChanged l : ls) {

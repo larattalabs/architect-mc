@@ -17,10 +17,10 @@ import java.util.List;
  *                     creative region. Its staged targets are among {@code targets}. Since 1.68.0.
  * @param terrainBuilt of them, built. While {@code state} is {@code building}, Steward's NPC avoids the part's box
  *                     (S-8a-1). Since 1.68.0.
- * @param status (8b BS, feature {@code "buildStatus"}; Since NEXT) its {@link BuildStatus}, never null: {@code built} when every target is
+ * @param status (8b BS, feature {@code "buildStatus"}; Since 1.69.0) its {@link BuildStatus}, never null: {@code built} when every target is
  *               built, else the winner by {@link BuildStatus#PRECEDENCE} of its targets' statuses and its items' waits (a terrain or stage
  *               wait, a bill cap), else {@code building}
- * @param lot (Since NEXT) the lot the part builds, or null
+ * @param lot (Since 1.69.0) the lot the part builds, or null
  */
 public record PartBuild(String part, String state, List<String> targets, long cells, long built, long freeCells, long terrainCells, long terrainBuilt,
 	BuildStatus status, @org.jspecify.annotations.Nullable String lot) {

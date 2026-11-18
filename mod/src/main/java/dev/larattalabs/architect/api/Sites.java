@@ -516,7 +516,7 @@ public interface Sites {
 	 * plan can't build answers {@code placed: false} with {@link Reason#NO_LINK} (the message starts with the kit's code, such as
 	 * {@code NO_GAP}); a bad request {@link Reason#FIELD_LIMIT}; the check's and the realise's typed refusals come back as refusals too.
 	 *
-	 * <p>(8b, feature {@code "connectorCheck"}; Since NEXT) The request's typed {@code owner}, {@code dimension} and {@code actor} win over the
+	 * <p>(8b, feature {@code "connectorCheck"}; Since 1.69.0) The request's typed {@code owner}, {@code dimension} and {@code actor} win over the
 	 * params keys. Its {@code maxBill}, {@code maxBillPerLot} and {@code ext} go to the realise as {@link ApprovedRealise}'s do: a survival
 	 * connector whose bill at put-down is past {@code maxBill} answers {@code placed: false} with {@link Reason#BILL_CAP} and writes nothing,
 	 * and a later draw past it holds the target ({@link SiteWait#BILL_CAP}). Any thread; the future completes on the server thread (a bad
@@ -579,17 +579,17 @@ public interface Sites {
 	 * same key and body reuses the check). Read-only, $0: nothing is written, reserved or consumed. A connector that does not fit answers
 	 * {@code fits: false} with its typed refusal ({@link Reason#NO_LINK} and the kit's code; {@link Reason#BILL_CAP} past the cap, or a lot cap,
 	 * which a connector cannot have; {@link Reason#FIELD_LIMIT}, {@link Reason#NOT_ALLOWED} for a bad request), never a throw. Any thread; the
-	 * future completes on the server thread (a bad request is answered with a future already complete). Since NEXT.
+	 * future completes on the server thread (a bad request is answered with a future already complete). Since 1.69.0.
 	 */
 	default CompletableFuture<ConnectorCheck> checkConnector(ConnectorRequest request) {
-		throw new UnsupportedOperationException("Sites.checkConnector needs Architect API NEXT (feature connectorCheck)");
+		throw new UnsupportedOperationException("Sites.checkConnector needs Architect API 1.69.0 (feature connectorCheck)");
 	}
 
 	/**
 	 * (8b BL, feature {@code "regionBill"}, Steward's review §2a) One construction target's bill (a site or a road, in a region or outside
-	 * one: a supplied batch build, an update). Empty for an unknown id or an instant site. Survival only. Server thread. Since NEXT.
+	 * one: a supplied batch build, an update). Empty for an unknown id or an instant site. Survival only. Server thread. Since 1.69.0.
 	 */
 	default Optional<TargetBill> targetBill(String targetId) {
-		throw new UnsupportedOperationException("Sites.targetBill needs Architect API NEXT (feature regionBill)");
+		throw new UnsupportedOperationException("Sites.targetBill needs Architect API 1.69.0 (feature regionBill)");
 	}
 }

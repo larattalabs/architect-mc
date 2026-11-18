@@ -3,7 +3,7 @@ package dev.larattalabs.architect.api;
 /**
  * (S-DRS-1, feature {@code "removalStopCause"}) Why a removal stopped, typed, beside its text ({@link RegionView#removalStopCause()},
  * {@link SiteGroup#removalStopCause()}): a caller tells the stops apart without parsing {@code removalStopReason} or the blockers. The text
- * is unchanged. Since NEXT.
+ * is unchanged. Since 1.69.0.
  * <ul>
  * <li>{@link #SAVE_REFUSED}: a survival removal's save before it changes anything (the world and the stockpile ledger) was refused (a
  * chunk write not durable), so it wrote nothing; a later removal tries again.</li>

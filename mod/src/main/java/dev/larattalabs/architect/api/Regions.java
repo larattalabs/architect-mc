@@ -467,25 +467,25 @@ public interface Regions {
 	/**
 	 * (8b LY, feature {@code "regionLayout"}) A region's geometry for a map: its lots (pads too) and parts, with kind, box and ends
 	 * ({@link RegionLayout}). Cached per IR sha and head revision; the same in creative and survival. Empty for an unknown region. Server
-	 * thread; loads no chunk, asks no sidecar. Since NEXT.
+	 * thread; loads no chunk, asks no sidecar. Since 1.69.0.
 	 */
 	default Optional<RegionLayout> layout(String regionId) {
-		throw new UnsupportedOperationException("Regions.layout needs Architect API NEXT (feature regionLayout)");
+		throw new UnsupportedOperationException("Regions.layout needs Architect API 1.69.0 (feature regionLayout)");
 	}
 
 	/**
 	 * (8b BL, feature {@code "regionBill"}) A survival region's bill, a page of its targets' bills ordered by target id: {@code offset} from
-	 * 0, {@code limit} 1 to {@link Limits#BILL_PAGE_MAX}. Empty for an unknown region; empty maps in creative. Server thread. Since NEXT.
+	 * 0, {@code limit} 1 to {@link Limits#BILL_PAGE_MAX}. Empty for an unknown region; empty maps in creative. Server thread. Since 1.69.0.
 	 */
 	default Optional<RegionBill> bill(String regionId, int offset, int limit) {
-		throw new UnsupportedOperationException("Regions.bill needs Architect API NEXT (feature regionBill)");
+		throw new UnsupportedOperationException("Regions.bill needs Architect API 1.69.0 (feature regionBill)");
 	}
 
 	/**
 	 * (8b BL, Steward's S-8b-3c) {@link #bill(String, int, int)} for these targets only (ids not the region's are left out), in target id
-	 * order: the building panel's read. Server thread. Since NEXT.
+	 * order: the building panel's read. Server thread. Since 1.69.0.
 	 */
 	default Optional<RegionBill> bill(String regionId, java.util.Set<String> targets) {
-		throw new UnsupportedOperationException("Regions.bill needs Architect API NEXT (feature regionBill)");
+		throw new UnsupportedOperationException("Regions.bill needs Architect API 1.69.0 (feature regionBill)");
 	}
 }

@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  * a site house's port to ground) (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1). Frozen by the 7c foundation; built by slice
  * CX (feature {@code "placeConnector"}). Since 1.55.0.
  *
- * <p>(8b, Steward's review, feature {@code "connectorCheck"}; Since NEXT) The typed trailing members, so a caller (Steward) can place a
+ * <p>(8b, Steward's review, feature {@code "connectorCheck"}; Since 1.69.0) The typed trailing members, so a caller (Steward) can place a
  * survival connector under the same rules as a realise ({@link ApprovedRealise}): {@code owner}, {@code dimension} and {@code actor} win
  * over the {@code params["architect_mc:owner"]} and {@code params["architect_mc:dimension"]} keys (which still work when the typed member
  * is null); {@code maxBill} and {@code maxBillPerLot} are {@link ApprovedRealise#maxBill}'s and {@link ApprovedRealise#maxBillPerLot}'s,
@@ -30,12 +30,12 @@ import org.jspecify.annotations.Nullable;
  * @param params the kind's own members, as its plan/0 def has them; null is empty
  * @param mode the placement mode
  * @param opKey the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}})
- * @param owner (Since NEXT) the owner whose stockpile feeds it in survival, or null (then {@code params["architect_mc:owner"]}, else none)
- * @param dimension (Since NEXT) its level, or null (then {@code params["architect_mc:dimension"]}, else the overworld)
- * @param actor (Since NEXT) the player it is placed for, or null; a {@link ServerPlayer}, as {@link ApprovedRealise#actor} is
- * @param maxBill (Since NEXT) the bound the caller approved (item id -> count), or null: no cap
- * @param maxBillPerLot (Since NEXT) per-lot caps, or null: none (a connector has no lots; see above)
- * @param ext (Since NEXT) the caller's ext, kept on the connector's region; null is empty
+ * @param owner (Since 1.69.0) the owner whose stockpile feeds it in survival, or null (then {@code params["architect_mc:owner"]}, else none)
+ * @param dimension (Since 1.69.0) its level, or null (then {@code params["architect_mc:dimension"]}, else the overworld)
+ * @param actor (Since 1.69.0) the player it is placed for, or null; a {@link ServerPlayer}, as {@link ApprovedRealise#actor} is
+ * @param maxBill (Since 1.69.0) the bound the caller approved (item id -> count), or null: no cap
+ * @param maxBillPerLot (Since 1.69.0) per-lot caps, or null: none (a connector has no lots; see above)
+ * @param ext (Since 1.69.0) the caller's ext, kept on the connector's region; null is empty
  */
 public record ConnectorRequest(String kind, BlockPos from, BlockPos to, @Nullable String styleId, JsonObject params, Mode mode, String opKey,
 	@Nullable String owner, @Nullable ResourceKey<Level> dimension, @Nullable ServerPlayer actor, @Nullable Map<String, Integer> maxBill,
@@ -57,17 +57,17 @@ public record ConnectorRequest(String kind, BlockPos from, BlockPos to, @Nullabl
 		this(kind, from, to, styleId, params, mode, opKey, null, null, null, null, null, null);
 	}
 
-	/** (Since NEXT) The same request for this owner, dimension and actor (each null: as before). */
+	/** (Since 1.69.0) The same request for this owner, dimension and actor (each null: as before). */
 	public ConnectorRequest withParty(@Nullable String owner, @Nullable ResourceKey<Level> dimension, @Nullable ServerPlayer actor) {
 		return new ConnectorRequest(kind, from, to, styleId, params, mode, opKey, owner, dimension, actor, maxBill, maxBillPerLot, ext);
 	}
 
-	/** (Since NEXT) The same request under these caps ({@link #maxBill}, {@link #maxBillPerLot}; null: none). */
+	/** (Since 1.69.0) The same request under these caps ({@link #maxBill}, {@link #maxBillPerLot}; null: none). */
 	public ConnectorRequest withMaxBill(@Nullable Map<String, Integer> maxBill, @Nullable Map<String, Map<String, Integer>> maxBillPerLot) {
 		return new ConnectorRequest(kind, from, to, styleId, params, mode, opKey, owner, dimension, actor, maxBill, maxBillPerLot, ext);
 	}
 
-	/** (Since NEXT) The same request with this ext (null: empty). */
+	/** (Since 1.69.0) The same request with this ext (null: empty). */
 	public ConnectorRequest withExt(@Nullable JsonObject ext) {
 		return new ConnectorRequest(kind, from, to, styleId, params, mode, opKey, owner, dimension, actor, maxBill, maxBillPerLot, ext);
 	}

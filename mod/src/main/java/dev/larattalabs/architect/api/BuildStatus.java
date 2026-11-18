@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * construction target and region piece: a building site, a road, a lot ({@link LotState#status}), a plan part ({@link PartBuild#status}),
  * a queued batch item ({@link ItemEvent#status}). It is derived only from what Architect already keeps ({@link SiteWait}, a target's pause,
  * the batch item's typed wait, the region's state); nothing new is stored. A caller reads {@code state}, {@code reason} and
- * {@code waitsOn}, never {@code say}: {@code say} is one English line for display only. Since NEXT.
+ * {@code waitsOn}, never {@code say}: {@code say} is one English line for display only. Since 1.69.0.
  *
  * @param state {@link #PLANNED}, {@link #PLACING}, {@link #BUILDING}, {@link #WAITING}, {@link #PAUSED}, {@link #BUILT}, {@link #REMOVING},
  *              {@link #REMOVED} or {@link #FAILED}; strings only ever appended

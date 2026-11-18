@@ -18,7 +18,7 @@ public final class Limits {
 	// ---- JobSpec (C33, 1.25.0)
 	/** {@code system} of a structured job (zod {@code JobSpec.system}; an agent job's is {@link #JOB_SYSTEM_AGENT_MAX}); UTF-16 units, not trimmed. */
 	public static final int JOB_SYSTEM_MAX = 120000;
-	/** (8b BL) The largest page of {@code Regions.bill}. Since NEXT. */
+	/** (8b BL) The largest page of {@code Regions.bill}. Since 1.69.0. */
 	public static final int BILL_PAGE_MAX = 256;
 	/** {@code system} of an agent job (the cap every job had before 1.25.0). */
 	public static final int JOB_SYSTEM_AGENT_MAX = 50000;

@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (8b BL, feature {@code "regionBill"}) A survival region's bill ({@link Regions#bill}): total, paid and outstanding over its target-fed
  * pieces, a page of its targets' bills, its whole charges as item maps, and the owed entries attributed to it. Creative: empty maps.
- * Read-only, $0. Since NEXT.
+ * Read-only, $0. Since 1.69.0.
  *
  * @param region the region id
  * @param owner its owner, or null

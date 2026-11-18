@@ -6,7 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * (8b BL, feature {@code "regionBill"}) One construction target's bill ({@link RegionBill#targets}, {@link Sites#targetBill}): what it
- * costs in all, what it has been paid and what it still needs. Survival only. Since NEXT.
+ * costs in all, what it has been paid and what it still needs. Survival only. Since 1.69.0.
  *
  * @param target the target id: equal to {@link SiteView#id} (a site or a road), the join to a building row
  * @param region its region, or null for a build outside any region

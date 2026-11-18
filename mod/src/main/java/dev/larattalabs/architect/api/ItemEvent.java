@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * item key and its merged ext (so a caller maps the item back to its lot), the site once there is one, and for a failure or a
  * wait the typed reason. Since 1.4.0.
  *
- * <p>(8b, Steward's S-8b-8; features {@code "buildStatus"}; Since NEXT) The typed homes of the ext keys a caller read: {@code region}
+ * <p>(8b, Steward's S-8b-8; features {@code "buildStatus"}; Since 1.69.0) The typed homes of the ext keys a caller read: {@code region}
  * (ext {@code architect_mc:region}), {@code part} (the part the item builds, or its wait's part), {@code lot} ({@code architect_mc:lot}),
  * {@code revision} ({@code architect_mc:revision.rid}; 0 the realised plan's), and {@code status}, the item's {@link BuildStatus}: a wait's
  * typed reason and subject (the home of {@code architect_mc:waitsFor}: {@code kind} terrain gives reason {@code terrain} with

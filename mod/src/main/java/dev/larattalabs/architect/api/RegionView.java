@@ -17,11 +17,11 @@ import org.jspecify.annotations.Nullable;
  * <p>Since 1.67.0 (feature {@code "removalStop"}): {@code removalStop}, how its last removal stopped ({@link RemovalStop}: NOT_STARTED, nothing
  * written, apart from PARTIAL, part taken down), and {@code removalStopReason}, that removal's blockers joined (null with NONE).
  *
- * <p>(S-DRS-1, feature {@code "removalStopCause"}; Since NEXT) {@code removalStopCause}: that stop's typed cause ({@link RemovalStopCause}:
+ * <p>(S-DRS-1, feature {@code "removalStopCause"}; Since 1.69.0) {@code removalStopCause}: that stop's typed cause ({@link RemovalStopCause}:
  * SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), so a caller tells a refused save apart without parsing
  * {@code removalStopReason} (whose text is unchanged); null with {@link RemovalStop#NONE}.
  *
- * <p>(8b, Steward's S-8b-8; Since NEXT) {@code besideNote}: the typed home of ext {@code architect_mc:beside} ({@link BesideNote}; null for a
+ * <p>(8b, Steward's S-8b-8; Since 1.69.0) {@code besideNote}: the typed home of ext {@code architect_mc:beside} ({@link BesideNote}; null for a
  * region not planned beside one); {@code land}: of ext {@code architect_mc:land} ({@link RegionLand}; null for a region that is not a
  * districts region). The ext keys stay.
  */

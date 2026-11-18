@@ -6,7 +6,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
 /**
- * (8b LY, feature {@code "regionLayout"}) One plan part's shape for a settlement map ({@link RegionLayout#parts}). Since NEXT.
+ * (8b LY, feature {@code "regionLayout"}) One plan part's shape for a settlement map ({@link RegionLayout#parts}). Since 1.69.0.
  *
  * @param part the plan part id: equal to {@link PartBuild#part} for a survival region's built part, so a shape takes its status colour
  * @param kind the plan/0 kind ({@code connector.rope_bridge}, {@code route}, {@code tile}, {@code lot}, {@code form.hollow_mountain},

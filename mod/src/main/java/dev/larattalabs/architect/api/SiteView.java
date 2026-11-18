@@ -29,12 +29,12 @@ import org.jspecify.annotations.Nullable;
  * @param region (1.8.0) the region it belongs to (a tile, road or lot of a realised region), or null
  * @param siteWait (1.15.0) a construction site's or road's waiting status ({@link SiteWait}); null for an instant site. (The
  *                 contract's name {@code wait} is not allowed for a record component: it clashes with {@code Object.wait()}.)
- * @param status (8b BS, feature {@code "buildStatus"}; Since NEXT) its {@link BuildStatus}, never null (an instant site {@code built} or
+ * @param status (8b BS, feature {@code "buildStatus"}; Since 1.69.0) its {@link BuildStatus}, never null (an instant site {@code built} or
  *               {@code placing}; a construction target {@code building}, {@code paused}, {@code waiting} with its reason, {@code removing}
  *               while its group's removal runs); {@code since} equals {@code siteWait.waitingSince}
- * @param part (Since NEXT) the plan part a region's target builds (the typed home of ext {@code architect_mc:part}), or null
- * @param lot (Since NEXT) the lot it stands on (ext {@code architect_mc:lot}), or null
- * @param revision (Since NEXT) the rid of the revision that put it down (ext {@code architect_mc:revision.rid}; 0: the realised plan's)
+ * @param part (Since 1.69.0) the plan part a region's target builds (the typed home of ext {@code architect_mc:part}), or null
+ * @param lot (Since 1.69.0) the lot it stands on (ext {@code architect_mc:lot}), or null
+ * @param revision (Since 1.69.0) the rid of the revision that put it down (ext {@code architect_mc:revision.rid}; 0: the realised plan's)
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
 	Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,

@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * (8b, Steward's S-8b-6/8) The typed home of a districts region's {@code architect_mc:land} ext ({@link RegionView#land}): the land it takes
- * outside its town's claim (the district's to own) and inside it, as column runs. Since NEXT.
+ * outside its town's claim (the district's to own) and inside it, as column runs. Since 1.69.0.
  *
  * @param version the land record's version (1; 2 once the region has had a revision)
  * @param outside the columns outside the town's claim
