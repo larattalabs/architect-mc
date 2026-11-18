@@ -18,10 +18,10 @@ public final class Keys {
 	/**
 	 * SAFETY: "Undo last placement" ({@code Z}): removes the newest site this player placed this session, after a second press
 	 * within 5 s. Z is free in vanilla 26.3 (its letter defaults are W A S D E F Q T O P L G C X), in Architect (B, J; R, H, L only
-	 * while placing) and in Steward (Y, I, U, and K for the jobs panel).
+	 * while placing) and in Steward (Y, I, U, and K for the jobs panel; N is Build a link since PR K1).
 	 */
 	public static KeyMapping undoLast;
-	/** (7c CX) Build a link: the plot marker's connector mode (K by default; from a site house's drop when one was just placed). */
+	/** (7c CX) Build a link: the plot marker's connector mode (N by default since PR K1, K before: K is the jobs panel; from a site house's drop when one was just placed). */
 	public static KeyMapping buildLink;
 	private static boolean registered;
 
@@ -39,13 +39,13 @@ public final class Keys {
 		} catch (IllegalArgumentException alreadyThere) {
 			cat = new KeyMapping.Category(Architect.id("architect"));
 		}
-		screen = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.screen", InputConstants.Type.KEYBOARD, InputConstants.KEY_B, cat,
+		screen = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.screen", InputConstants.Type.KEYBOARD, KeyDefaults.SCREEN, cat,
 			1));
-		siteHud = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.site_hud", InputConstants.Type.KEYBOARD, InputConstants.KEY_J, cat,
+		siteHud = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.site_hud", InputConstants.Type.KEYBOARD, KeyDefaults.SITE_HUD, cat,
 			2));
-		undoLast = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.undo_last", InputConstants.Type.KEYBOARD, InputConstants.KEY_Z,
+		undoLast = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.undo_last", InputConstants.Type.KEYBOARD, KeyDefaults.UNDO_LAST,
 			cat, 3));
-		buildLink = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.build_link", InputConstants.Type.KEYBOARD, InputConstants.KEY_K,
+		buildLink = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.build_link", InputConstants.Type.KEYBOARD, KeyDefaults.BUILD_LINK,
 			cat, 4));
 	}
 
