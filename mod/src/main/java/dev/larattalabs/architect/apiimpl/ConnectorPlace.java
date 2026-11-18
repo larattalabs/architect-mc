@@ -241,6 +241,7 @@ public final class ConnectorPlace {
 						notes.add("its bill: " + q.bom() + "; nothing placed");
 						return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), List.of(cc.refusal()), notes));
 					}
+					notes.add("its bill: " + q.bom() + " (within the request's maxBill)");
 					return realise(server, r, ck, survival, actor, notes);
 				});
 			}
