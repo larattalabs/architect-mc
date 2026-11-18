@@ -106,3 +106,19 @@ test('(R) an answer for exactly that step approves a further retry of the item',
   L.answers.push({ step: 'P2:brief:s3-3', yes: true });
   assert.equal(g(L, { item: 'P2', step: 'P2:brief:s3-3', capUsd: 0.5, retry: 'R-cf3' }).ok, true);
 });
+
+// (chore LT) the driver's port pair: --ports S:D, else the GATE6B_* env gate-run sets, else 8896:8897; --ports leaves args
+test('payPorts: --ports S:D taken out of args, else GATE6B_* env, else 8896:8897; bad pairs refused', async () => {
+  const { payPorts } = await import('../../tools/lib/pay-ledger.mjs');
+  const a = ['p0-compose', '--ports', '9064:9065', '--backend', 'sim'];
+  assert.deepEqual(payPorts(a, {}), { sidecar: 9064, dev: 9065, source: '--ports' });
+  assert.deepEqual(a, ['p0-compose', '--backend', 'sim']);
+  const b = ['--ports', '9064:9065', 'status'];
+  payPorts(b, { GATE6B_SIDECAR_PORT: '8904', GATE6B_DEV_PORT: '8905' });
+  assert.equal(b[0], 'status', 'the subcommand is args[0] again');
+  assert.deepEqual(payPorts(['status'], { GATE6B_SIDECAR_PORT: '8904', GATE6B_DEV_PORT: '8905' }), { sidecar: 8904, dev: 8905, source: 'env' });
+  assert.deepEqual(payPorts(['status'], {}), { sidecar: 8896, dev: 8897, source: 'default' });
+  for (const bad of [['--ports'], ['--ports', '--plan'], ['--ports', '9064'], ['--ports', '9064:9064'], ['--ports', 'a:b'], ['--ports', '9064:70000'], ['--ports', '1:2:3']]) {
+    assert.throws(() => payPorts([...bad], {}), /ports/, bad.join(' '));
+  }
+});

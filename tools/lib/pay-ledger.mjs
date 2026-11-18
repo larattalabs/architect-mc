@@ -194,3 +194,26 @@ export function withLedger(file, fn) {
     fs.rmSync(lock, { force: true });
   }
 }
+
+// ---- the driver's port pair (chore LT) ------------------------------------------------------------------------------------------------
+
+/**
+ * gate7cpay's sidecar:DevBridge pair, as the other gate drivers take theirs: `--ports S:D` (gate-run's spelling, one pair), else
+ * GATE6B_SIDECAR_PORT / GATE6B_DEV_PORT (what gate-run sets for a step's shard), else 8896:8897. `--ports` and its value are taken out of
+ * `args` (in place), so the subcommand and its positional arguments read as before. A malformed or duplicated pair throws.
+ */
+export function payPorts(args, env = process.env) {
+  const i = args.indexOf('--ports');
+  let s;
+  if (i >= 0) {
+    s = args[i + 1];
+    args.splice(i, s === undefined || s.startsWith('--') ? 1 : 2);
+    if (s === undefined || s.startsWith('--')) throw new Error('--ports S:D (the sidecar and DevBridge ports, e.g. --ports 8896:8897)');
+  }
+  const pair = s !== undefined ? s.split(/[:/]/) : [env.GATE6B_SIDECAR_PORT || '8896', env.GATE6B_DEV_PORT || '8897'];
+  const ok = (p) => /^\d+$/.test(String(p)) && Number(p) >= 1 && Number(p) <= 65535;
+  if (pair.length !== 2 || !pair.every(ok)) throw new Error(`ports: want S:D, two ports 1-65535 (got ${s ?? pair.join(':')})`);
+  const [sidecar, dev] = pair.map(Number);
+  if (sidecar === dev) throw new Error(`ports: the sidecar and DevBridge ports must differ (got ${sidecar}:${dev})`);
+  return { sidecar, dev, source: s !== undefined ? '--ports' : env.GATE6B_SIDECAR_PORT || env.GATE6B_DEV_PORT ? 'env' : 'default' };
+}

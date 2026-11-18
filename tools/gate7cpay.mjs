@@ -22,8 +22,8 @@
 //   node tools/gate7cpay.mjs restate                P2-P6's estimates from P1's measured unit costs (the table)
 //   node tools/gate7cpay.mjs answer --step <s> --yes|--no --text "<the coordinator's words>"
 //
-// Ports 8896 (helper / the client's sidecar) and 8897 (DevBridge), --shards 1 (the brief; 8930/8931 are QL-b's). The helper and the
-// client never run at once.
+// Ports: --ports S:D (helper / the client's sidecar, DevBridge), else GATE6B_SIDECAR_PORT / GATE6B_DEV_PORT, else 8896:8897 (chore LT);
+// --shards 1 (the brief; 8930/8931 are QL-b's). The helper and the client never run at once.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -38,10 +38,10 @@ const MAIN = path.resolve(root, '..', 'architect-mc');
 const ART = process.env.PAY_OUT ? path.resolve(process.env.PAY_OUT) : path.join(MAIN, 'artifacts', '7c');
 const LEDGER = path.join(ART, 'spend.json');
 const RUN = process.env.PAY_RUN ? path.resolve(process.env.PAY_RUN) : path.resolve(root, '..', 'architect-mc-PAY-run');
-const SIDECAR_PORT = 8896, DEV_PORT = 8897;
 const SEED = '2026100906';
 const REFS = path.resolve(root, '..', '..', 'references', '7c-N-7c-4');
 const args = process.argv.slice(2);
+const { sidecar: SIDECAR_PORT, dev: DEV_PORT } = P.payPorts(args); // (chore LT) takes --ports out of args
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i < 0 ? d : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const r6 = (n) => Math.round(n * 1e6) / 1e6;
@@ -104,7 +104,7 @@ function envCheck(step) {
 }
 
 class Helper {
-  /** Our own sidecar (this worktree's source) on 8896: `sim` or `claude` (the claude login), its dirs under `dir`. */
+  /** Our own sidecar (this worktree's source) on SIDECAR_PORT: `sim` or `claude` (the claude login), its dirs under `dir`. */
   static async start(dir, backend) {
     const h = new Helper();
     h.dir = dir;
@@ -889,7 +889,7 @@ try {
   if (args.includes('--plan')) await subs.plan();
   else if (opt('only')) await only(String(opt('only')));
   else if (subs[sub]) await subs[sub]();
-  else { console.error('usage: node tools/gate7cpay.mjs --plan | --only P0|P1 | status | p0-styles | p0-compose | p0-verdict | p1-style | p1-compose | restate | answer'); process.exitCode = 64; }
+  else { console.error('usage: node tools/gate7cpay.mjs [--ports S:D] --plan | --only P0|P1 | status | p0-styles | p0-compose | p0-verdict | p1-style | p1-compose | restate | answer'); process.exitCode = 64; }
 } catch (e) {
   log(`stopped: ${e.stack ?? e.message}`);
   process.exitCode = e.code ?? 1;
