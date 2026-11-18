@@ -87,7 +87,7 @@ export async function registerTCC(steps, h) {
   }
 
   /** A site's crate: paused, part of its bill in it ({@code build}: a first part placed first, so it has refunds). Its cell and the items. */
-  async function fill(tag, site, build = false) {
+  async function fill(tag, site, build = false, stock = true) {
     for (let i = 0; i < 120; i++) {
       if ((await siteState(site))?.state === 'building') break;
       await L.sleep(1000);
@@ -108,6 +108,7 @@ export async function registerTCC(steps, h) {
       await call('dev.stockpile.pause', { site, paused: true }, 60_000);
       await wait(1000);
     }
+    if (!stock) return null; // (a shared crate's earlier member: its first part placed; the stock goes in once, for the last)
     const ins = await call('dev.crate.insert', { site, items: give, exact: true }, 120_000);
     await wait(1500);
     const st1 = await siteState(site);
@@ -176,8 +177,8 @@ export async function registerTCC(steps, h) {
 
   /** One crash row: the baseline, {@code point} armed, {@code remove}, the halt, the world again, the recovery, the judgement. */
   async function crashRow(out, tag, W, sites, point, remove, group = null, build = false) {
-    const { cp, items } = await fill(tag, sites[0], build);
-    for (const s of sites.slice(1)) await fill(tag, s, build);
+    for (const s of sites.slice(0, -1)) await fill(tag, s, build, false);
+    const { cp, items } = await fill(tag, sites[sites.length - 1], build);
     await cmd('/save-all flush').catch(() => null);
     await wait(2000);
     const before = await parts(sites, cp, items);
@@ -418,17 +419,20 @@ export async function registerTCC(steps, h) {
         const site = g.sites[0];
         const { cp, items } = await fill(tag, site);
         const s0 = await siteState(site);
+        const c0 = (await cellOf(cp)).slots ?? {};
         await hold(tag, cp, items[0]);
         const sp = slot();
         const cr = await call('dev.stockpile.create', { owner, crates: [[sp[0], sp[1], sp[2]]] }, 120_000).catch((e) => ({ refused: String(e) }));
         const ad = await call('dev.stockpile.adopt', { owner }, 120_000).catch((e) => ({ refused: String(e) }));
         await wait(1500);
         const s1 = await siteState(site);
+        const c1 = (await cellOf(cp)).slots ?? {};
         const grp = await api(`sgroup ${g.group}`).catch(() => null);
-        R[tag] = { create: cr, adopt: ad, s0: s0?.crate, s1: s1?.crate, stock0: s0?.ledger?.stock, stock1: s1?.ledger?.stock, group: grp };
+        // the crate's own ledger (dev.txn.cells): the site's state reads its owner's pile once one exists
+        R[tag] = { create: cr, adopt: ad, s0: s0?.crate, s1: s1?.crate, crate0: c0, crate1: c1, group: grp };
         log(`  ${tag}: adopt with the crate held: ${json(ad).slice(0, 200)}; the site's crate ${json(s1?.crate)}`);
-        check(!!s1?.crate?.present && s1.crate.x === cp[0] && s1.crate.z === cp[2] && G.same(s1?.ledger?.stock, s0?.ledger?.stock),
-          `${tag}: an adoption that skips a held crate keeps its references: the site still builds from its crate at ${cp} (${json(s1?.crate)}), stock ${json(s1?.ledger?.stock)}`, R[tag]);
+        check(!!s1?.crate?.present && s1.crate.x === cp[0] && s1.crate.z === cp[2] && Object.keys(c0).length > 0 && json(c1) === json(c0),
+          `${tag}: an adoption that skips a held crate keeps its references: the site still builds from its crate at ${cp} (${json(s1?.crate)}), the crate's stock unchanged ${json(c1)}`, R[tag]);
         await unhold();
       }
     }
