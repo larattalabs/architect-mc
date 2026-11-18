@@ -1142,11 +1142,13 @@ public final class Stockpiles {
 			Construction.Crate c = e.getValue();
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			CrateBlockEntity be = level.getBlockEntity(cp) instanceof CrateBlockEntity rb && e.getKey().equals(rb.siteId()) ? rb : null;
-			if (crateFate(be != null, p.ledger.credited("adopt:" + e.getKey() + "@" + cp.asLong()), crateBlockAt(level, c)) == CrateFate.DEFER) {
+			// (DFG) the cell known: read on the server thread, its chunk loaded (getBlockEntity loads it there); else its state is unknown
+			boolean known = srv.isSameThread() && level.isLoaded(cp);
+			if (crateFate(be != null, p.ledger.credited("adopt:" + e.getKey() + "@" + cp.asLong()), crateBlockAt(level, c), known) == CrateFate.DEFER) {
 				deferred.add(e.getKey());
 				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted: {}; it stays as it is (its stock, its journal entry, its targets' references) "
-					+ "and a later adoptCrates retries", owner, e.getKey(), cp.toShortString(), crateBlockAt(level, c) ? "it does not read as its owner's crate"
-						: "no crate stands there and none of its own was credited");
+					+ "and a later adoptCrates retries", owner, e.getKey(), cp.toShortString(), known ? "it does not read as its owner's crate"
+						: "its cell could not be read (off the server thread, or its chunk not loaded)");
 				continue;
 			}
 			if (be != null) {
@@ -1297,23 +1299,33 @@ public final class Stockpiles {
 		/** Not read, its key credited and no crate block left at its cell: joined by an earlier adoptCrates; only its targets' references left. */
 		JOINED,
 		/**
-		 * Anything else (not read and not credited; or credited while a crate of another owner stands there): left exactly as it is (block,
-		 * stock, journal entry, its targets' references); the next adoptCrates retries it.
+		 * Its cell read and no crate block of any owner stands there, its key not credited: nothing to take (no crate, no stock). Main's path:
+		 * the cell restored, the journal kind released, its targets lose the reference and a building one joins the feed (else it waits for a
+		 * crate that does not exist, forever).
+		 */
+		GONE,
+		/**
+		 * A crate block stands there but does not read as its owner's (another tag, unreadable), or its cell could not be read (off the server
+		 * thread, its chunk not loaded): left exactly as it is (block, stock, journal entry, its targets' references); the next adoptCrates
+		 * retries it.
 		 */
 		DEFER
 	}
 
 	/**
 	 * (DFG, from ADP's classifier, the pure seam) A crate's fate in adoptCrates: {@code read}, its block entity is its owner's crate;
-	 * {@code credited}, its adoption key is in the ledger; {@code crateBlock}, any crate block entity stands at its cell. Its stock is taken
-	 * only when read. Before DFG an unread crate had its cell restored and its journal kind released anyway, and its targets lost their
-	 * reference: its stock was lost.
+	 * {@code credited}, its adoption key is in the ledger; {@code crateBlock}, any crate block entity stands at its cell; {@code known}, its
+	 * cell was read (server thread, chunk loaded). Its stock is taken only when read. Before DFG an unread crate had its cell restored and its
+	 * journal kind released anyway, and its targets lost their reference: a standing crate of another tag, or one not read, lost its stock.
 	 */
-	static CrateFate crateFate(boolean read, boolean credited, boolean crateBlock) {
+	static CrateFate crateFate(boolean read, boolean credited, boolean crateBlock, boolean known) {
 		if (read) {
 			return CrateFate.JOIN;
 		}
-		return credited && !crateBlock ? CrateFate.JOINED : CrateFate.DEFER;
+		if (!known || crateBlock) {
+			return CrateFate.DEFER;
+		}
+		return credited ? CrateFate.JOINED : CrateFate.GONE;
 	}
 
 	/** (DFG, from ADP) Whether any crate block entity (whatever its owner tag) stands at the crate's cell. Server thread (else nothing reads). */
