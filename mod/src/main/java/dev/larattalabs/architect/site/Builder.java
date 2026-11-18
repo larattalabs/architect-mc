@@ -2148,7 +2148,7 @@ public final class Builder {
 	 * Main restored it whenever the cell was loaded, so a foreign crate's stock went with its cell.
 	 */
 	static boolean restoresCrateCell(boolean hasCrate, boolean keepCrate, boolean foreign, boolean read, boolean loaded) {
-		return hasCrate && !keepCrate && (read || loaded); // main's rule (failing first)
+		return hasCrate && !keepCrate && !foreign && (read || loaded);
 	}
 
 	/** Every queued cell built: the site is built, the crate gives back its stock and goes, a toast and a chat note fire. */
