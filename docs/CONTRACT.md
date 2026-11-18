@@ -33440,6 +33440,23 @@ so two module lots that share items can't each be held to their own measured bou
 - **Ran:** Gradle full 1577 (0 failed); `gate-runs-T2/20261118-040044-change` txn-core 75/0, txn-crate 68/0, txn-holds 50/0;
   `gate-runs-T2/20261118-042733-change` txn-owed 71/0; `gate-runs-T2-fk/20261118-040716-change` fk-crash 73/0, fkb-crash 48/0.
 
+### Slice T2b part 2b as built (crates on the txn layer: crate.settle; $0; strict)
+
+- **Shape:** nothing is taken at prepare; `CrateSettle.stash` fixes the settle on the pending record or group queue, the undo leaves the
+  crate's CRATE entry out, and after the restore one keyed `crate.settle` txn takes the stock (B), owes it `crate_settle`/`group_refund`
+  (O, site + region) or credits the pile (L), restores the cell (W) and releases the entry (R). Held: retried, the crate keeps its stock.
+- **Callers:** `Sites.afterRestore` (+ resume from the record), Groups (per member, then the shared crate), Adopt, RoadBuilder, and
+  `Builder.complete` (must-fix: leftovers under `built:<creditKey>`, owed or credited; held: stays BUILDING). A refused prepare barrier
+  is a hold, not "the crate changed". `RemoveResult.owed()`. Merge v0.80.0: DFG's `deferred` set carries the held-crate skip.
+- **`txn-crash-crate`** (gatetxncc.mjs from CXD's cxd-crash; TEST: kill points R4, GM, `dev.txn.failBarrier`, `dev.txn.halt`): single +
+  group at K5/K6/R4 and the 12 traced `TX:crate.settle:*` points, bare and +save; P1-1..P1-4; MF1-MF4. Base b8f41be4 + local harness
+  (gate-runs-base 20261118-111415, -113408): 33 + 8 FAIL (loss or drops on every removal row, all P1 and MF rows; TX N/A). HEAD
+  (gate-runs-T2 20261118-104329 + -113159): green but for two harness bugs, fixed and rerun.
+- **Leftovers:** refunds tallied at prepare are lost in the K6 window (legacy too); a road removal settles before its undo commit (owed,
+  never lost); player blocks and `openCrate` (orphan right-click) still drop; a held settle retries every tick; ResultCache MAX 4096
+  bounds the replay; the group crate's R effect probes APPLIED, so `TX:crate.settle:apply:3` is unreachable there; P1-1's base row is
+  red only on no-drop (the bot never picked the drop up).
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is
