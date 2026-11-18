@@ -320,6 +320,7 @@ public final class ArchitectScreen extends Screen {
 	public ArchitectScreen(@Nullable Tab tab) {
 		super(Component.literal("Architect"));
 		this.tab = tab == null ? lastTab : tab;
+		dev.larattalabs.architect.client.help.ArchitectHelp.closeOverlays(); // (PR W1) a new screen starts without its ? overlay
 		dev.larattalabs.architect.client.help.GuideFeature.screenOpened(); // (PR F1) offer the tour in a world with none of the player's sites
 	}
 

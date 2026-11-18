@@ -67,6 +67,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	private StyleBrowserScreen(PickerSpec spec, Map<String, StyleCatalog.Card> cards, @Nullable Screen parent, Consumer<Bible> use) {
 		super(spec, parent);
+		dev.larattalabs.architect.client.help.ArchitectHelp.closeOverlays(); // (PR W1)
 		this.cards = cards;
 		this.use = use;
 		builtinList = ScrollList.text((Bible b) -> b.name()).filter(Bible::name, "Search built-ins…");

@@ -63,6 +63,11 @@ public final class ArchitectHelp {
 		return OVERLAYS.computeIfAbsent(id, k -> new KeysOverlay(title, rows, TERMS.getOrDefault(k, List.of())));
 	}
 
+	/** A screen opening starts with its "?" overlay closed (the overlays are kept per screen id). */
+	public static void closeOverlays() {
+		OVERLAYS.values().forEach(o -> o.open(false));
+	}
+
 	/** Status: "Show tips again". */
 	public static void showTipsAgain() {
 		UiPrefs.TIPS.showAll();

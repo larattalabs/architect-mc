@@ -63,6 +63,7 @@ abstract class U3Screen extends Screen {
 	protected U3Screen(String title, @Nullable Screen parent) {
 		super(Component.literal(title));
 		this.parent = parent;
+		dev.larattalabs.architect.client.help.ArchitectHelp.closeOverlays(); // (PR W1)
 	}
 
 	protected Field field(String id, TextModel m, @Nullable String placeholder, int lines) {
