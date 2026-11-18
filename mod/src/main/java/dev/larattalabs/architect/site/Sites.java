@@ -1588,8 +1588,8 @@ public final class Sites {
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
 		if (b.placing()) {
 			// Remove during placing cancels the job and restores the box (phase 4d): it was never placed
+			drainIrrigation(level, b); // (6c IRR, S-IRR-4) a farm lot's sources leave with it, drained first; (round 2) refused before the abort
 			Placement.abort(server, id, "removed while it was being placed");
-			drainIrrigation(level, b); // (6c IRR, S-IRR-4) a farm lot's sources leave with it, drained first
 			return rollbackNow(level, b);
 		}
 		// the sites covering it (phase 4e)
@@ -2265,19 +2265,25 @@ public final class Sites {
 	 * exactly ({@link dev.larattalabs.architect.region.RegionFluids#drainLot}); the masked cells stay the region's. A site with no
 	 * {@link LotMask} (every other site) is untouched. Server thread; idempotent.
 	 */
-	public static void drainIrrigation(ServerLevel level, @Nullable Site b) {
-		if (b == null || !(b.ext().get(LotMask.EXT) instanceof com.google.gson.JsonObject) || !(b.ext().get("architect_mc:lot") instanceof com.google.gson.JsonElement lot)) {
-			return;
+	public static void drainIrrigation(ServerLevel level, @Nullable Site b) throws SiteException {
+		if (!drainIrrigationDurable(level, b)) {
+			throw new SiteException(Reason.SITE_BUSY, b.id() + ": its lot's irrigation record could not be saved before its drain, so nothing was drained or "
+				+ "restored; try again once the disk takes writes");
 		}
-		dev.larattalabs.architect.region.RegionFluids.drainLot(level, b.group(), lot.getAsString());
 	}
 
-	/** {@link #drainIrrigation} with the site's own level (a stage undo). */
-	public static void drainIrrigation(MinecraftServer server, @Nullable Site b) {
-		ServerLevel level = b == null ? null : levelOf(server, b);
-		if (level != null) {
-			drainIrrigation(level, b);
+	/** (slice DF round 2, P1 3) {@link #drainIrrigation}, answering false (nothing to restore yet) when the fluids record is not durable. */
+	static boolean drainIrrigationDurable(ServerLevel level, @Nullable Site b) {
+		if (b == null || !(b.ext().get(LotMask.EXT) instanceof com.google.gson.JsonObject) || !(b.ext().get("architect_mc:lot") instanceof com.google.gson.JsonElement lot)) {
+			return true;
 		}
+		return dev.larattalabs.architect.region.RegionFluids.drainLot(level, b.group(), lot.getAsString()) != dev.larattalabs.architect.region.RegionFluids.NOT_DURABLE;
+	}
+
+	/** {@link #drainIrrigation} with the site's own level (a stage undo); (round 2) false when it must wait (the record not durable). */
+	public static boolean drainIrrigation(MinecraftServer server, @Nullable Site b) {
+		ServerLevel level = b == null ? null : levelOf(server, b);
+		return level == null || drainIrrigationDurable(level, b);
 	}
 
 	public static @Nullable ServerLevel levelOf(MinecraftServer server, Site b) {
