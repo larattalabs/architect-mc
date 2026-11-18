@@ -48,6 +48,12 @@ public final class TxnDev {
 			case "owedAdd" -> owedAdd(srv, player, req);
 			case "owedList" -> owedList(req);
 			case "owedCollect" -> answer(OwedTxn.collect(srv, req.get("recipient").getAsString(), req.get("key").getAsString(), player));
+			case "owedFailPlayerSave" -> {
+				OwedTxn.FAIL_PLAYER_SAVE.set(req.has("n") ? req.get("n").getAsInt() : 1);
+				JsonObject o = new JsonObject();
+				o.addProperty("failPlayerSave", OwedTxn.FAIL_PLAYER_SAVE.get());
+				yield o;
+			}
 			case "owedCredit" -> answer(OwedTxn.credit(srv, req.get("owner").getAsString(), req.get("key").getAsString()));
 			case "poke" -> poke(player, req);
 			default -> throw new IllegalArgumentException("unknown dev.txn op " + op);
@@ -111,7 +117,12 @@ public final class TxnDev {
 				c.addProperty("be", String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
 				c.addProperty("beId", System.identityHashCode(be));
 				c.addProperty("nbt", be.saveWithoutMetadata(level.registryAccess()).toString()); // (fix round) the persisted data, components included
-				if (be instanceof net.minecraft.world.Container k) {
+				if (be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr) {
+					JsonObject sl = new JsonObject();
+					cr.ledger().stock().forEach((k, v) -> sl.addProperty("stock:" + k, k + " x" + v));
+					c.add("slots", sl); // (T2b) a crate's slots are its ledger's stock
+				}
+				if (be instanceof net.minecraft.world.Container k && !(be instanceof dev.larattalabs.architect.survival.CrateBlockEntity)) {
 					JsonObject sl = new JsonObject();
 					for (int i = 0; i < k.getContainerSize(); i++) {
 						net.minecraft.world.item.ItemStack st = k.getItem(i);
@@ -216,6 +227,20 @@ public final class TxnDev {
 				}
 				o.addProperty("result", n);
 			}
+			case "crateFill" -> { // (slice T2b, TEST) a standalone crate's stock, as deliveries booked it
+				Map<String, Integer> it = new TreeMap<>();
+				req.getAsJsonObject("items").entrySet().forEach(x -> it.put(x.getKey(), x.getValue().getAsInt()));
+				if (be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr) {
+					cr.ledger().load(it, Map.of());
+					cr.ledgerChanged();
+				}
+				o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity);
+			}
+			case "crateTakeStock" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr ? cr.ledger().takeStock().toString() : "no crate");
+			case "crateConsume" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr && cr.ledger().consume(
+				req.has("item") ? req.get("item").getAsString() : "minecraft:oak_planks", 1));
+			case "crateInsert" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr ? cr.insert(new net.minecraft.world.item.ItemStack(
+				net.minecraft.world.item.Items.OAK_PLANKS, 4)) : -1);
 			case "swap" -> {
 				BlockPos q = pos(req.getAsJsonArray("with"));
 				if (be instanceof net.minecraft.world.level.block.entity.ChestBlockEntity a
@@ -237,6 +262,7 @@ public final class TxnDev {
 		req.getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
 		BlockPos at = req.has("at") ? pos(req.getAsJsonArray("at")) : player.blockPosition();
 		String recipient = req.has("recipient") ? req.get("recipient").getAsString() : player.getUUID().toString();
+		dev.larattalabs.architect.site.OwedLedger.TEST_UNMARKED = true; // TEST: a dev entry has no source txn
 		boolean ok = dev.larattalabs.architect.site.OwedLedger.owe(new dev.larattalabs.architect.site.OwedLedger.Entry(req.get("key").getAsString(), recipient,
 			player.level().dimension().identifier().toString(), at.getX(), at.getY(), at.getZ(), items, req.has("reason") ? req.get("reason").getAsString()
 				: dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE, srv.getTickCount(), System.currentTimeMillis(),

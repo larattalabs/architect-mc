@@ -17,7 +17,14 @@ import org.jspecify.annotations.Nullable;
  * id) that can't go back into a stock, instead of an item entity. They live in {@code stockpiles.json} beside the piles ({@code owed}), so an
  * entry and a pile's credit land in one ledger write, and they are published only as the ledger is (the barrier: players, chunks, then the
  * ledger). Keyed by the source's semantic key, stable for the entry's life; an ended key is remembered (bounded) so it is never owed again.
- * Every change carries its txn effect's key in {@code applied} (bounded): the L/O probe. Pure apart from the registry; server thread.
+ * Every change carries its txn effect's key in {@code applied} (bounded, pinned while its txn is open): the L/O probe. Pure apart from the
+ * registry; server thread.
+ *
+ * <p><b>Publication</b> (fix round, GPT P2-5, chosen and enforced): owed state changes only inside a txn effect that marks it ({@link #owe}
+ * and {@link #debit} refuse a change with no effect key, except the TEST hook's), so every ledger write that carries it, through any
+ * save path (the barrier, a save with the world, an autosave, {@code saveLedgerFirst}), is an atomic whole-file replace whose owed part
+ * recovery reads by its markers: an effect is redone exactly when its marker is not on disk, whatever reached the disk first (R-4b). What
+ * the barrier alone adds is the O-model force, and a txn retires only after a barrier OK, so nothing is acknowledged over an unforced write.
  */
 public final class OwedLedger {
 	private OwedLedger() {
@@ -117,6 +124,9 @@ public final class OwedLedger {
 	 * the key is owed or has ended before (a source never owes one key twice).
 	 */
 	public static synchronized boolean owe(Entry e, @Nullable String effectKey) {
+		if (effectKey == null && !TEST_UNMARKED) {
+			throw new IllegalStateException("an owed entry is created only by a txn effect (its marker): " + e.key());
+		}
 		if (ENTRIES.containsKey(e.key()) || ENDED.contains(e.key()) || e.items().isEmpty()) {
 			return false;
 		}
@@ -158,7 +168,26 @@ public final class OwedLedger {
 	private static void mark(@Nullable String effectKey) {
 		if (effectKey != null) {
 			APPLIED.add(effectKey);
-			trim(APPLIED);
+			trimApplied();
+		}
+	}
+
+	/**
+	 * (fix round, GPT P1-3) Whether an applied marker's txn is still open (its marker is its effect's only evidence): set by the txn layer
+	 * ({@code TxnServer}); such a marker is never evicted, however many unrelated effects follow.
+	 */
+	public static java.util.function.Predicate<String> PINNED = k -> false;
+
+	/** The oldest markers past the bound go, except the pinned ones (open txns'). */
+	static void trimApplied() {
+		if (APPLIED.size() <= BOUND) {
+			return;
+		}
+		var it = APPLIED.iterator();
+		while (APPLIED.size() > BOUND && it.hasNext()) {
+			if (!PINNED.test(it.next())) {
+				it.remove();
+			}
 		}
 	}
 
@@ -167,6 +196,9 @@ public final class OwedLedger {
 			s.remove(s.iterator().next());
 		}
 	}
+
+	/** (TEST, dev.owed.add) An entry owed with no txn marker. */
+	public static volatile boolean TEST_UNMARKED;
 
 	/** Every item owed (conservation's {@code owed} term), by id. */
 	public static synchronized Map<String, Integer> total() {

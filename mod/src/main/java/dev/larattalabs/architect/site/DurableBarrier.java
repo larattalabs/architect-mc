@@ -140,6 +140,15 @@ public final class DurableBarrier {
 		return r;
 	}
 
+	/**
+	 * (slice T2b fix round, GPT P1-1) The barrier's players step alone: every online player saved and acknowledged by its real replace result,
+	 * the files and playerdata forced. Null when it held, else why not. A payout to a player confirms its own save with this in the tick it
+	 * gives, before anything can move the items. Server thread.
+	 */
+	public static @Nullable String savePlayersConfirmed(MinecraftServer srv) {
+		return new ServerSteps(srv).players();
+	}
+
 	/** (slice T2) Run after the next barrier that returns OK (every store it covers durable): the custody write-backs' receipt pruning. */
 	static final java.util.List<Runnable> AFTER_OK = new java.util.ArrayList<>();
 

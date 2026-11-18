@@ -31,6 +31,7 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	public CrateBlockEntity(BlockPos pos, BlockState state) {
 		super(CrateBlocks.CRATE_ENTITY, pos, state);
+		ledger.guard(() -> dev.larattalabs.architect.txn.TxnServer.boxHeld(level, worldPosition)); // (slice T2b) a held crate's ledger is frozen
 	}
 
 	public String siteId() {
@@ -72,7 +73,8 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 
 	/** Whether one unit of {@code stack} would go in. Server side only (false on the client). */
 	public boolean wouldAccept(ItemStack stack) {
-		return !stack.isEmpty() && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
+		return !stack.isEmpty() && plain(stack) && level != null && !level.isClientSide() && !ledger.frozen()
+			&& Builder.accepts(siteId, this, itemId(stack), false) != null; // (T2b) a held crate takes no insert
 	}
 
 	/**
@@ -80,8 +82,8 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 	 * the units taken. Server thread.
 	 */
 	public int insert(ItemStack stack) {
-		if (stack.isEmpty() || !plain(stack) || level == null || level.isClientSide()) {
-			return 0; // (PS, N2) a stack with components is never booked
+		if (stack.isEmpty() || !plain(stack) || level == null || level.isClientSide() || ledger.frozen()) {
+			return 0; // (PS, N2) a stack with components is never booked; (T2b) nor anything while a txn holds the crate
 		}
 		String item = itemId(stack);
 		int n = 0;
