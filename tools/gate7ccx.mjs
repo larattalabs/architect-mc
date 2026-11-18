@@ -347,8 +347,13 @@ steps.survival = async () => {
     const g0 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
     out.farBefore = g0;
     check(g0.fits === false && g0.refusal?.reason === 'NOT_GENERATED', `(8b) far, never generated: checkConnector ${g0.refusal?.reason} (${g0.refusal?.message})`, g0);
+    // generate the claim and its survey margin fully (FULL status: what "generated" means to the check), by forceloading it, then let go
     const FP = await call('dev.cx.plan', { kind: 'rope_bridge', from: fa, to: fb }, 60_000);
-    await call('dev.region.checkPlan', { plan: FP.plan, claim: FP.claim, owner: G.OWNER, anchors: FP.anchors, load: 'generate' }, 1_800_000);
+    const [cx0, cz0, cx1, cz1] = FP.claim;
+    const fl = `${cx0 - 32} ${cz0 - 32} ${cx1 + 32} ${cz1 + 32}`;
+    await call('dev.command', { cmd: `forceload add ${fl}` }, 600_000);
+    await new Promise((res) => setTimeout(res, 15_000));
+    await call('dev.command', { cmd: `forceload remove ${fl}` }, 600_000);
     const g1 = await call('dev.cx.check', { kind: 'rope_bridge', from: fa, to: fb, owner: G.OWNER, opKey: 'gate.cx.far', typed: true }, 1_800_000);
     out.farAfter = g1;
     check(g1.refusal?.reason !== 'NOT_GENERATED', `(8b) the area generated: the same key checks afresh: fits ${g1.fits}${g1.refusal ? `, ${g1.refusal.reason} (${g1.refusal.message})` : ''}`, g1);
