@@ -421,6 +421,26 @@ export async function registerTXN(steps, h) {
     const cm = await cmd('/architect collect').catch((e) => ({ error: String(e) }));
     check((await inv()) === 5 && (await owedOf()) === 0, `/architect collect: the player's own entries collected (${json(cm?.messages ?? cm)})`, cm);
     await cmd('/clear @s');
+    // ---------------------------------------------------------------- (fix round, GPT P1-1) a player save that fails: nothing stays given
+    {
+      await cmd('/clear @s');
+      const e = await owe(7);
+      await call('dev.stockpile.barrier', { failPlayerReplace: 2 }, 60_000);
+      const r = await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000);
+      const ivHeld = await inv();
+      const st = await state();
+      out.failedSave = { r, inventory: ivHeld, open: st.openCount };
+      check(ivHeld === 0 && st.openCount >= 1, `failed player save: the give taken back in its tick (inventory ${ivHeld}), the collect held (open ${st.openCount}: ${r.status} ${r.detail ?? ''})`, out.failedSave);
+      let s2 = await state();
+      for (let i = 0; i < 60 && s2.openCount > 0; i++) {
+        await call('dev.wait', { ms: 1000 }, 30_000);
+        s2 = await state();
+      }
+      const iv2 = await inv();
+      check(s2.openCount === 0 && iv2 === 7, `failed player save: given once when a save works again (inventory ${iv2}, open ${s2.openCount})`, { iv2 });
+      await cmd('/clear @s');
+      await barrier();
+    }
     // ---------------------------------------------------------------- a kill point at each step, bare and +save
     for (const p of points) {
       for (const v of ['', '+save']) {
@@ -452,6 +472,17 @@ export async function registerTXN(steps, h) {
         check(st.openCount === 0 && iv + ow === before && (iv === 0 || iv === 12), `${point}: exactly once (open ${st.openCount}, inventory ${iv}, owed ${ow}: ${before} in all)`, k);
         check(c.verdict === 'match', `${point}: conservation against the baseline: ${c.verdict} ${json(c.diff)}`, k);
       }
+    }
+    // ---------------------------------------------------------------- (fix round, GPT P1-2) a dead player is never given anything
+    {
+      const e = await owe(9);
+      await cmd('/gamerule keep_inventory false').catch(() => null);
+      await cmd('/kill @s');
+      await call('dev.wait', { ms: 1000 }, 30_000);
+      const r = await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000);
+      const ow = await owedOf();
+      out.dead = { r, owed: ow };
+      check(r.status === 'REFUSED' && /player_dead/.test(r.why ?? '') && ow >= 9, `dead player: refused (${r.status} ${r.why ?? ''}), still owed ${ow}`, out.dead);
     }
     out.summary = { points: points.length, cases: out.cases.length, match: out.cases.filter((c) => c.verdict === 'match').length };
     log(`  txn-owed: ${json(out.summary)}`);

@@ -26,6 +26,8 @@ public final class TxnDevHooks {
 			+ "O effect writes it (published by the next ledger save)");
 		op("dev.owed.collect", "owedCollect", "{recipient, key} - (slice T2b) collectOwed to the client's player through the owed.collect txn -> "
 			+ "{status: DONE|HELD|REFUSED, given, stillOwed, why, detail}");
+		op("dev.owed.failPlayerSave", "owedFailPlayerSave", "{n?: 1} - (slice T2b fix round) TEST: the next n confirmed player saves of a collect's give fail "
+			+ "(the give is taken back in its tick, the txn held)");
 		op("dev.owed.credit", "owedCredit", "{owner, key} - (slice T2b) creditOwedToStock through the owed.credit txn -> {status, given, stillOwed, why}");
 		op("dev.txn.cells", "cells", "{cells: [[x,y,z], ..]} - (slice T2a) per cell: state, be (type), beId (identity: a replaced block entity changes it), "
 			+ "slots {slot: 'item xN'}, nbt (the saved data), drops (item entities within 2 blocks): what txn-holds compares before and after a writer");

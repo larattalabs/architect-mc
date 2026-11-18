@@ -48,6 +48,12 @@ public final class TxnDev {
 			case "owedAdd" -> owedAdd(srv, player, req);
 			case "owedList" -> owedList(req);
 			case "owedCollect" -> answer(OwedTxn.collect(srv, req.get("recipient").getAsString(), req.get("key").getAsString(), player));
+			case "owedFailPlayerSave" -> {
+				OwedTxn.FAIL_PLAYER_SAVE.set(req.has("n") ? req.get("n").getAsInt() : 1);
+				JsonObject o = new JsonObject();
+				o.addProperty("failPlayerSave", OwedTxn.FAIL_PLAYER_SAVE.get());
+				yield o;
+			}
 			case "owedCredit" -> answer(OwedTxn.credit(srv, req.get("owner").getAsString(), req.get("key").getAsString()));
 			case "poke" -> poke(player, req);
 			default -> throw new IllegalArgumentException("unknown dev.txn op " + op);
@@ -256,6 +262,7 @@ public final class TxnDev {
 		req.getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
 		BlockPos at = req.has("at") ? pos(req.getAsJsonArray("at")) : player.blockPosition();
 		String recipient = req.has("recipient") ? req.get("recipient").getAsString() : player.getUUID().toString();
+		dev.larattalabs.architect.site.OwedLedger.TEST_UNMARKED = true; // TEST: a dev entry has no source txn
 		boolean ok = dev.larattalabs.architect.site.OwedLedger.owe(new dev.larattalabs.architect.site.OwedLedger.Entry(req.get("key").getAsString(), recipient,
 			player.level().dimension().identifier().toString(), at.getX(), at.getY(), at.getZ(), items, req.has("reason") ? req.get("reason").getAsString()
 				: dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE, srv.getTickCount(), System.currentTimeMillis(),

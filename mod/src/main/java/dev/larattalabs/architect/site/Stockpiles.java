@@ -3799,6 +3799,8 @@ public final class Stockpiles {
 		dir = d;
 		PILES.clear();
 		OwedLedger.clear();
+		DURABLE_WB.clear();
+		DURABLE_WB_GEN = 0;
 		nextId = 1;
 		loadFailed = false;
 		loadFailedWhy = null;
@@ -3822,7 +3824,25 @@ public final class Stockpiles {
 			SaveGuards.failed(FILE, why);
 			return;
 		}
-		ledger(f); // its store id and generation read back, the generation confirmed (forced again) before it counts as written
+		DurableFile lf = ledger(f); // its store id and generation read back, the generation confirmed (forced again) before it counts as written
+		DURABLE_WB_GEN = lf.installedGen(); // (T2b fix round, GPT P1-4) the loaded generation: DURABLE_WB counts only once it is confirmed
+	}
+
+	/** (slice T2b fix round) The generation of the file DURABLE_WB was read from (0: none). */
+	static long DURABLE_WB_GEN;
+
+	/**
+	 * (slice T2b fix round, GPT P1-4) Whether the loaded ledger's write-back keys may prune receipts: only once the generation they came from is
+	 * confirmed (its re-force returned), never while it is in doubt (a power loss could still lose it).
+	 */
+	static boolean durableWbConfirmed() {
+		DurableFile l = ledgerFile;
+		return l != null && pruneConfirmed(l.writtenGen(), DURABLE_WB_GEN, l.inDoubt() > 0);
+	}
+
+	/** (pure) A loaded generation {@code loaded} is confirmed when the file's written (acknowledged) generation reached it, nothing in doubt. */
+	static boolean pruneConfirmed(long written, long loaded, boolean inDoubt) {
+		return loaded > 0 && written >= loaded && !inDoubt;
 	}
 
 	/** (PS) Loads the file into the registry; null when it loaded (then it is kept as {@code .bak}), else why not (the registry unchanged or partial). */
@@ -3845,7 +3865,7 @@ public final class Stockpiles {
 			return "a stockpile could not be read: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
 		}
 		LOADED = root.deepCopy();
-		DURABLE_WB.clear(); // (slice T2b, the receipt-leak P2) the write-back keys this durable file already credits
+		DURABLE_WB.clear(); // (slice T2b, the receipt-leak P2) the write-back keys this file credits (used once its generation is confirmed)
 		for (Pile p : PILES.values()) {
 			p.ledger.creditedKeys().stream().filter(k -> k.startsWith("wb:")).forEach(DURABLE_WB::add);
 		}

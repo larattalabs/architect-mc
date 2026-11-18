@@ -78,6 +78,11 @@ public final class TxnServer {
 		TestMove.init();
 		OwedTxn.init();
 		OwedCommands.init();
+		// (T2b fix round, GPT P1-3) an owed effect marker stays while its txn is open: only retired txns' markers are evicted
+		dev.larattalabs.architect.site.OwedLedger.PINNED = k -> {
+			int sl = k.indexOf('/');
+			return sl > 0 && core.get(k.substring(0, sl)) != null;
+		};
 		ServerLifecycleEvents.SERVER_STARTING.register(TxnServer::load);
 		ServerLifecycleEvents.SERVER_STARTED.addPhaseOrdering(PHASE, Event.DEFAULT_PHASE);
 		ServerLifecycleEvents.SERVER_STARTED.register(PHASE, TxnServer::recoverAtStart);
@@ -93,6 +98,11 @@ public final class TxnServer {
 			core = emptyCore("no world loaded");
 			DurableBarrier.clearAfterOk();
 		});
+	}
+
+	/** (slice T2b) Runs {@code r} at the start of the next server tick (an event owed by an effect: never inside SERVER_STARTED). */
+	public static void later(Runnable r) {
+		NEXT_TICK.add(r);
 	}
 
 	/** The core of the world loaded now. Server thread. */

@@ -53,8 +53,11 @@ public final class OwedTxn {
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
-			OwedLedger.debit(e.data().get("key").getAsString(), e.items(), e.key(t.id));
+			String key = e.data().get("key").getAsString();
+			OwedLedger.Entry was = OwedLedger.get(key);
+			OwedLedger.debit(key, e.items(), e.key(t.id));
 			Stockpiles.owedChanged();
+			changed(was);
 		}
 
 		@Override
@@ -87,6 +90,7 @@ public final class OwedTxn {
 			}
 			Stockpiles.creditOwed(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.items(), e.key(t.id));
 			Stockpiles.owedChanged();
+			TxnServer.later(() -> dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(e.data().get("owner").getAsString()));
 		}
 
 		@Override
@@ -114,8 +118,8 @@ public final class OwedTxn {
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
 			ServerPlayer p = player(e);
-			if (p == null) {
-				return Probe.UNKNOWN; // offline: its file is the evidence, read when it logs in
+			if (p == null || !alive(p)) {
+				return Probe.UNKNOWN; // offline (its file is the evidence, read when it logs in), or dead: held until it is alive in a world
 			}
 			List<String> r = p.getAttached(PLAYER_RECEIPTS);
 			return r != null && r.contains(e.key(t.id)) ? Probe.APPLIED : Probe.ABSENT;
@@ -127,16 +131,39 @@ public final class OwedTxn {
 			if (p == null) {
 				throw new IllegalStateException("the player is offline");
 			}
+			if (!alive(p)) {
+				// (fix round, GPT P1-2) a dead player's inventory goes at respawn (keepInventory off) while the receipt would stay: never given
+				throw new IllegalStateException("the player is dead or not in a world: held until alive");
+			}
 			if (!fits(p.getInventory(), e.items())) {
 				throw new IllegalStateException("no room in the player's inventory"); // held until there is room; nothing given in part
 			}
-			e.items().forEach((k, n) -> give(p.getInventory(), TestMove.item(k), n));
-			List<String> r = new ArrayList<>(p.getAttachedOrElse(PLAYER_RECEIPTS, List.of()));
+			Inventory inv = p.getInventory();
+			List<ItemStack> before = new ArrayList<>();
+			for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
+				before.add(inv.getItem(i).copy());
+			}
+			List<String> was = p.getAttachedOrElse(PLAYER_RECEIPTS, List.of());
+			e.items().forEach((k, n) -> give(inv, TestMove.item(k), n));
+			List<String> r = new ArrayList<>(was);
 			r.add(e.key(t.id));
 			while (r.size() > 256) {
 				r.remove(0); // stale once retired (§3.7): the oldest go
 			}
 			p.setAttached(PLAYER_RECEIPTS, List.copyOf(r));
+			// (fix round, GPT P1-1) the give and its receipt confirmed on disk in this same tick, before anything can move the items: a save that
+			// isn't acknowledged takes them back now (nothing moved in between) and the txn holds, to give again once a save works
+			MinecraftServer srv = TxnServer.server();
+			String why = srv == null ? "no server" : FAIL_PLAYER_SAVE.get() > 0 && FAIL_PLAYER_SAVE.getAndDecrement() > 0 ? "TEST: player save failed"
+				: dev.larattalabs.architect.site.DurableBarrier.savePlayersConfirmed(srv);
+			if (why != null) {
+				for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
+					inv.setItem(i, before.get(i));
+				}
+				p.setAttached(PLAYER_RECEIPTS, was);
+				p.inventoryMenu.broadcastChanges();
+				throw new IllegalStateException("the player's save is not confirmed (" + why + "): nothing given, held");
+			}
 			p.inventoryMenu.broadcastChanges();
 		}
 
@@ -164,6 +191,14 @@ public final class OwedTxn {
 			return "player " + (p == null ? e.data().get("player").getAsString() : p.getGameProfile().name());
 		}
 	};
+
+	/** (TEST, dev.owed.failPlayerSave) the next n confirmed player saves of a give fail. */
+	static final java.util.concurrent.atomic.AtomicInteger FAIL_PLAYER_SAVE = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** Alive in a world: not dead or dying, not removed, connected. */
+	static boolean alive(ServerPlayer p) {
+		return !p.isDeadOrDying() && !p.isRemoved() && !p.hasDisconnected();
+	}
 
 	static TxnKind kind(String name) {
 		return new TxnKind() {
@@ -201,6 +236,18 @@ public final class OwedTxn {
 
 	public static final TxnKind COLLECT_KIND = kind(COLLECT);
 	public static final TxnKind CREDIT_KIND = kind(CREDIT);
+
+	/**
+	 * (fix round, GPT P2-6) OWED_CHANGED from the effect that changed the entry, live or in recovery: queued for the next tick (never inside
+	 * SERVER_STARTED), so it fires at least once whenever the owed ledger changed; a crash before it fires leaves the effect to redo, or a
+	 * recipient whose entry changed on disk without the event (listeners re-read {@code owed()} at start, as for every state).
+	 */
+	static void changed(OwedLedger.@Nullable Entry e) {
+		if (e != null) {
+			String r = e.recipient();
+			TxnServer.later(() -> dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(r));
+		}
+	}
 
 	/** What a collect or credit answered. {@code status}: DONE / HELD / REFUSED; {@code why} for a refusal, {@code detail} for a hold. */
 	public record Answer(String status, Map<String, Integer> given, Map<String, Integer> stillOwed, boolean replayed, @Nullable String why,
@@ -269,8 +316,14 @@ public final class OwedTxn {
 		if (e == null || !e.recipient().equals(recipient)) {
 			return refused("owed_not_found: nothing is owed to " + recipient + " under " + key);
 		}
+		if (!alive(to)) {
+			return refused("player_dead: " + to.getGameProfile().name() + " is dead or not in a world; collect once respawned");
+		}
 		TxnCore c = TxnServer.core();
 		TxnCore.Started s = c.begin(COLLECT, null, List.of("owed:" + key, "player:" + to.getUUID()), to.getUUID().toString());
+		if (s.status() == TxnCore.Begin.UNAVAILABLE) {
+			return refused("journal_unavailable: " + s.detail()); // (fix round, GPT P2-7) no txn started: not "under way"
+		}
 		if (s.status() != TxnCore.Begin.NEW) {
 			return held(s.detail() != null ? s.detail() : s.status().name());
 		}
@@ -295,6 +348,9 @@ public final class OwedTxn {
 		}
 		TxnCore c = TxnServer.core();
 		TxnCore.Started s = c.begin(CREDIT, null, List.of("owed:" + key), owner);
+		if (s.status() == TxnCore.Begin.UNAVAILABLE) {
+			return refused("journal_unavailable: " + s.detail());
+		}
 		if (s.status() != TxnCore.Begin.NEW) {
 			return held(s.detail() != null ? s.detail() : "held");
 		}
@@ -311,7 +367,6 @@ public final class OwedTxn {
 		TxnCore.Status st = c.drive(t);
 		OwedLedger.Entry after = OwedLedger.get(key);
 		Map<String, Integer> left = after == null ? Map.of() : after.items();
-		dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(recipient);
 		if (st == TxnCore.Status.HELD || t.held() != null) {
 			return new Answer("HELD", planned, left, false, null, Holds.decided(t));
 		}

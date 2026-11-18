@@ -33424,6 +33424,22 @@ so two module lots that share items can't each be held to their own measured bou
   read again under a later key); an Architect placement over a held cell is refused cell by cell (not up front); player open/break of a held
   box is T1's mixins, not exercised in game.
 
+### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
+
+- **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is
+  guarded (`Ledger.guard`, set by `CrateBlockEntity`): `accept` books nothing, `consume` returns false, `takeStock` returns empty, inserts
+  (screen, hopper, dropper, dev) take 0, `wouldAccept` is false; `Stockpiles.adopt` skips a held crate (retried at the next adopt). The
+  holder's adapter writes through `Ledger.take` / `putBack` inside `TxnServer.asHolder`.
+- **Interface for T3b** (`txn/CrateTxn`, stable): `CrateTxn.resource(dim, pos)` (the hold), `CrateTxn.take(dim, pos, items)` (an
+  `Effect.Builder`: B, prepare, op `crate.take`, data `dim` + `pos`), `CrateTxn.ADAPTER` (a kind answers it for op `CrateTxn.TAKE`). Apply:
+  exactly `items` out of the stock (refused, nothing changed, if it holds less) + receipt `tx-n/i` in the chunk's `architect_mc:txn_receipts`;
+  compensate: put back + `tx-n/i!c`; probe: chunk receipts (UNKNOWN unloaded; recovery loads the chunk).
+- **DFG's item:** `Builder.complete` never restores the cell of a crate it can't read as its own (another tag, a deferred adoption) or one a
+  txn holds (`Builder.restoresCrateCell`); its stock stays in it and its journal entry is kept. `BuilderCrateCellT2Test` red at 4282e5c3
+  (main's rule), green at 6a08e6c6.
+- **Rows:** txn-holds gains crate_takeStock and crate_consume (red without the ledger guard), crate_setBlock and crate_destroyBlock (held on
+  the base by T2a's freeze); `txn-crate`: test.move from a crate through `crate.take`, a halt at every point, bare and +save.
+
 ### Slice T2b part 1 as built (owed collectibles; Noah approved the surface, Steward reviewed its shape; $0; strict)
 
 - **Store:** `site/OwedLedger` in `stockpiles.json` (`owed`: entries, ended keys, applied effect keys; bounded), per recipient (a player
