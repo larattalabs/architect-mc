@@ -142,6 +142,16 @@ final class StyleEditorScreen extends U3Screen {
 	}
 
 	@Override
+	protected String helpId() {
+		return "style_editor";
+	}
+
+	@Override
+	protected String ctrlEnterVerb() {
+		return "save";
+	}
+
+	@Override
 	protected String hint() {
 		return "Ctrl+Enter save · Esc back";
 	}

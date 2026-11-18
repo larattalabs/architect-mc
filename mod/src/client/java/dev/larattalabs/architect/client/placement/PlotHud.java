@@ -128,6 +128,11 @@ final class PlotHud implements HudZones.Element {
 		}
 		int hintW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 		int textW = hintW;
+		// (PR W1) what this HUD is, until the first plot is confirmed
+		var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.plot");
+		if (v != null && tip.shown()) {
+			lines.add(new String[] {tip.text(), Integer.toString(soft)});
+		}
 		for (String[] l : lines) {
 			textW = Math.max(textW, font.width(l[0]));
 		}

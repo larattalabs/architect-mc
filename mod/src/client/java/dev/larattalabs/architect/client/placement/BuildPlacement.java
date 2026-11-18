@@ -646,7 +646,10 @@ public final class BuildPlacement {
 			setStatus(r.message(), false);
 			// UI-2b: a short toast (the old one cut off the undo hint), the whole line with its links in chat
 			Toasts.push(Toasts.Level.INFO, moved ? "Moved" : construction ? "Construction site placed" : "Placed", refused.bp().name() + " (" + r.buildingId()
-				+ ")" + (moved ? "" : ". Undo: [Undo] in chat"));
+				+ ")" + (moved ? "" : ". Undo: " + undoKeyWords() + " or [Undo] in chat"));
+			if (!moved) {
+				dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement").hide(); // (PR W1) the HUD's tip has done its job
+			}
 			lastChat = placedChat(r, moved, construction);
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.gui != null && mc.gui.hud != null) {
@@ -689,6 +692,11 @@ public final class BuildPlacement {
 	 * construction site is taken down and its blocks refunded) and [Open in Library] ({@code /architect library <site>}). A move
 	 * has no [Undo] (moving it back is another move).
 	 */
+	/** (PR W1, contract 2.7) The undo key as the toast and chat say it: "Z twice" (the live binding). */
+	static String undoKeyWords() {
+		return dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice";
+	}
+
 	static net.minecraft.network.chat.Component placedChat(Result r, boolean moved, boolean construction) {
 		String id = r.buildingId();
 		net.minecraft.network.chat.MutableComponent m = net.minecraft.network.chat.Component.literal(r.message().replace(
@@ -697,6 +705,7 @@ public final class BuildPlacement {
 			// SAFETY: "undo" stays one click while it is the player's latest own placement (else it asks like remove)
 			m.append(link("[Undo]", "/architect remove " + id + " undo", construction ? "Take the construction site down (its blocks come back to you)"
 				: "Remove it: the ground comes back as it was")).append(" ");
+			m.append(net.minecraft.network.chat.Component.literal("(or " + undoKeyWords() + ") ").withStyle(net.minecraft.ChatFormatting.GRAY));
 		}
 		if (id != null) {
 			m.append(link("[Open in Library]", "/architect library " + id, "Show it in Library > Placed here"));

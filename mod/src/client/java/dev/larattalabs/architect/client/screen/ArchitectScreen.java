@@ -471,6 +471,10 @@ public final class ArchitectScreen extends Screen {
 	@Override
 	public boolean keyPressed(KeyEvent e) {
 		int k = e.key();
+		// (PR W1) the "?" overlay first: Shift+/ or F1 ("?" yields to a focused field or an open pop-up's search)
+		if (keysOverlay().keyPressed(e, focus != Focus.NONE || popup != null)) {
+			return true;
+		}
 		Popup pp = popup;
 		if (pp != null && !e.isEscape() && pp.list.keyPressed(e)) {
 			return true;
@@ -654,6 +658,10 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		if (keysOverlay().mouseClicked(e.x(), e.y()) || popup == null && dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).mouseClicked(e.x(), e
+			.y())) {
+			return true;
+		}
 		Popup pp = popup;
 		if (pp != null) {
 			if (pp.contains(e.x(), e.y())) {
@@ -1287,6 +1295,8 @@ public final class ArchitectScreen extends Screen {
 			tx += w + 3;
 		}
 		int top = ty + 22;
+		// (PR W1) the tab's "what's this" line under the tabs (× hides it; Status > Show tips again)
+		top += dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).draw(g, font, cx, top - 3, cw, mouseX, mouseY);
 		int footerY = bottom - 20;
 		switch (tab) {
 			case DESIGN -> drawDesign(g, cx, top, cw, footerY, mouseX, mouseY);
@@ -1305,6 +1315,13 @@ public final class ArchitectScreen extends Screen {
 			g.nextStratum();
 			tooltip.draw(g, font, mouseX, mouseY);
 		}
+		keysOverlay().draw(g, font, width, height);
+	}
+
+	/** (PR W1) This tab's "?" overlay: its keys (labels read live) and the terms it uses. */
+	dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay(tab.id(), tab.label(), () -> dev.larattalabs.architect.client.help.ArchitectHelp
+			.tabKeys(tab.id()));
 	}
 
 	private String badge(Tab t) {
@@ -2634,6 +2651,15 @@ public final class ArchitectScreen extends Screen {
 			statusHelp = true;
 			listScroll = 0;
 		});
+		// (PR W1) the "what's this" lines hidden with their ×
+		int hidden = dev.larattalabs.architect.client.design.UiPrefs.tipsHiddenCount();
+		if (hidden > 0) {
+			String again = "Show tips again (" + hidden + " hidden)";
+			int ax = lx + bw(help) + 8;
+			hits.add(new Hit("status:tips_again", again, ax, y + 4, Math.min(colW - bw(help) - 8, font.width(again)), 12, true, false,
+				dev.larattalabs.architect.client.help.ArchitectHelp::showTipsAgain));
+			g.text(font, TextUtil.ellipsize(font, again, colW - bw(help) - 8), ax, y + 6, UiStyle.link(), false);
+		}
 		y += 24;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
@@ -2772,7 +2798,7 @@ public final class ArchitectScreen extends Screen {
 		if (scrolls) {
 			scrollbar(g, x + w + 4, top0, viewH);
 		}
-		String[] hints = {"1-4", "tabs", "Esc", "close"};
+		String[] hints = {"1-4", "tabs", "?", "keys", "Esc", "close"};
 		UiBits.hints(g, font, x, footerY + 4, false, hints);
 	}
 

@@ -201,7 +201,7 @@ steps.ingame = async () => {
   const toasts = await call('dev.ui2b.toasts');
   out.toasts = toasts;
   const placedToast = JSON.stringify(toasts);
-  check(/Undo: \[Undo\] in chat/.test(placedToast) && !/Library > Placed > Remove, or/.test(placedToast), `the Placed toast is short and keeps the undo hint (${String(toasts.last).slice(0, 160)})`, toasts);
+  check(/Undo: .*\[Undo\] in chat/.test(placedToast) && !/Library > Placed > Remove, or/.test(placedToast), `the Placed toast is short and keeps the undo hint (${String(toasts.last).slice(0, 160)})`, toasts);
   out.shots.push(...await atScales('placed_toast_chat', null, [2]));
   await call('dev.screen', { open: 'chat' });
   await sleep(500);

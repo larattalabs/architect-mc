@@ -65,6 +65,7 @@ public final class CrateScreen extends Screen {
 	public CrateScreen(String siteId) {
 		super(Component.literal("Construction crate"));
 		this.siteId = siteId;
+		dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.site").hide(); // (PR W1) the site HUD's tip: the crate is found
 	}
 
 	@Override
@@ -222,6 +223,9 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("crate").mouseClicked(e.x(), e.y())) {
+			return true;
+		}
 		// confirms first: a click on one presses it, a click anywhere else disarms it (lab-ui Confirm)
 		boolean wasArmed = confirmDeconstruct();
 		if (decon.mouseClicked(e.x(), e.y(), e.button()) | deconOwned.mouseClicked(e.x(), e.y(), e.button())) {
@@ -249,6 +253,9 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		if (keysOverlay().keyPressed(e, false)) {
+			return true;
+		}
 		if (e.isEscape()) {
 			if (decon.escape() || deconOwned.escape()) {
 				flash("Not deconstructed", false);
@@ -305,6 +312,16 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		renderBody(g, mouseX, mouseY, a);
+		keysOverlay().draw(g, font, width, height); // (PR W1)
+	}
+
+	/** (PR W1) The crate's "?" overlay. */
+	static dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay("crate", "Construction crate", dev.larattalabs.architect.client.help.ArchitectHelp::crateKeys);
+	}
+
+	private void renderBody(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		hits.clear();
 		int pw = Math.min(MAX_W, width - 16);
 		int ph = Math.min(MAX_H, height - 16);
@@ -324,6 +341,8 @@ public final class CrateScreen extends Screen {
 		String name = s != null && s.has("name") ? s.get("name").getAsString() : siteId;
 		Panels.header(g, font, "Construction crate · " + name + " (" + siteId + ")", cx - 2, cy - 2, cw + 4);
 		int y = cy + 18;
+		// (PR W1) what this screen is
+		y += dev.larattalabs.architect.client.help.ArchitectHelp.tip("crate").draw(g, font, cx, y - 2, cw, mouseX, mouseY);
 		if (s == null) {
 			Panels.text(g, font, error != null ? error : "Reading the site…", cx, y, error != null ? UiBits.errorText() : UiBits.muted());
 			button(g, "close", "Close", cx + cw - 70, bottom - 20, 70, false, true, mouseX, mouseY, this::onClose);
@@ -440,6 +459,7 @@ public final class CrateScreen extends Screen {
 	private void renderPile(GuiGraphicsExtractor g, JsonObject s, int cx, int cy, int cw, int bottom, int mouseX, int mouseY) {
 		Panels.header(g, font, "Stockpile · " + str(s, "owner"), cx - 2, cy - 2, cw + 4);
 		int y = cy + 18;
+		y += dev.larattalabs.architect.client.help.ArchitectHelp.tip("crate").draw(g, font, cx, y - 2, cw, mouseX, mouseY);
 		int crates = s.has("crates") ? s.getAsJsonArray("crates").size() : 0;
 		int missingCrates = s.has("missingCrates") ? s.getAsJsonArray("missingCrates").size() : 0;
 		int targets = s.has("feedOrder") ? s.getAsJsonArray("feedOrder").size() : 0;

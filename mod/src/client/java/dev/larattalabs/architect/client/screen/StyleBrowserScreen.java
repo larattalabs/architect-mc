@@ -502,4 +502,15 @@ public final class StyleBrowserScreen extends PickerScreen {
 		Minecraft mc = Minecraft.getInstance();
 		mc.gui.setScreen(create(current, mc.gui.screen(), use));
 	}
+
+	// (PR W1) the "what's this" line and the "?" overlay (lab-ui PickerScreen draws and routes them)
+	@Override
+	protected dev.larattalabs.labui.client.help.WhatsThis whatsThis() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.tip("styles");
+	}
+
+	@Override
+	protected dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay("styles", "Styles", dev.larattalabs.architect.client.help.ArchitectHelp::styleKeys);
+	}
 }

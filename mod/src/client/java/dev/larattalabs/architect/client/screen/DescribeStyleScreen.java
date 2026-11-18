@@ -75,6 +75,16 @@ final class DescribeStyleScreen extends U3Screen {
 	}
 
 	@Override
+	protected String helpId() {
+		return "describe_style";
+	}
+
+	@Override
+	protected String ctrlEnterVerb() {
+		return "draft";
+	}
+
+	@Override
 	protected String hint() {
 		return "Ctrl+Enter draft · Esc back";
 	}

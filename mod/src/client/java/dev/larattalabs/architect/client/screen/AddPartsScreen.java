@@ -96,6 +96,16 @@ final class AddPartsScreen extends U3Screen {
 	}
 
 	@Override
+	protected String helpId() {
+		return "add_parts";
+	}
+
+	@Override
+	protected String ctrlEnterVerb() {
+		return "draft";
+	}
+
+	@Override
 	protected String hint() {
 		return "Ctrl+Enter draft · Esc back";
 	}

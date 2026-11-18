@@ -158,12 +158,26 @@ abstract class U3Screen extends Screen {
 		if (showHint) {
 			g.text(font, hint, ix + iw - 8 - hw, py + 9, UiStyle.withAlpha(UiStyle.titleText(), 190), false);
 		}
-		body(g, ix, py + 2 + TITLE_H, iw, py + ph - 2, mx, my);
+		// (PR W1) the screen's "what's this" line under the title bar
+		int tipH = dev.larattalabs.architect.client.help.ArchitectHelp.tip(helpId()).draw(g, font, ix + 8, py + 2 + TITLE_H + 3, iw - 16, mx, my);
+		body(g, ix, py + 2 + TITLE_H + (tipH > 0 ? tipH + 2 : 0), iw, py + ph - 2, mx, my);
 		g.nextStratum();
 		for (Control c : controls.values()) {
 			tooltip.offer(c, mx, my);
 		}
 		tooltip.draw(g, font, mx, my);
+		keysOverlay().draw(g, font, width, height);
+	}
+
+	/** (PR W1) This screen's help id (ArchitectHelp.TIPS). */
+	protected abstract String helpId();
+
+	/** (PR W1) The verb of this screen's Ctrl+Enter (its "?" overlay). */
+	protected abstract String ctrlEnterVerb();
+
+	dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay(helpId(), title(), () -> dev.larattalabs.architect.client.help.ArchitectHelp.u3Keys(
+			ctrlEnterVerb()));
 	}
 
 	/** The title bar's title. */
@@ -214,6 +228,9 @@ abstract class U3Screen extends Screen {
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
 		double mx = e.x();
 		double my = e.y();
+		if (keysOverlay().mouseClicked(mx, my) || dev.larattalabs.architect.client.help.ArchitectHelp.tip(helpId()).mouseClicked(mx, my)) {
+			return true;
+		}
 		for (ArchitectScreen.MouseTarget t : List.copyOf(targets)) {
 			if (t.click(mx, my, e.button())) {
 				focus(null);
@@ -269,6 +286,9 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		if (keysOverlay().keyPressed(e, focus != null)) {
+			return true;
+		}
 		if (e.isEscape()) {
 			if (focus != null) {
 				focus(null);

@@ -80,6 +80,11 @@ final class PlacementHud implements HudZones.Element {
 			String mv = BuildPlacement.moving();
 			String title = mv != null ? "Moving " + mv + " (" + v.bp().name() + ")" : (BuildPlacement.preview() ? "Preview: " : "Placing ") + v.bp().name();
 			add.accept(Row.text(TextUtil.ellipsize(font, title, inner), HudInk.text()), dev.larattalabs.architect.placement.HudFit.KEEP);
+			// (PR W1) what this HUD is, until the first placement (or Status hides it)
+			var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement");
+			if (!BuildPlacement.preview() && tip.shown()) {
+				add.accept(Row.text(TextUtil.ellipsize(font, tip.text(), inner), HudInk.soft()), 2);
+			}
 			add.accept(Row.chips(chips(v)), dev.larattalabs.architect.placement.HudFit.KEEP);
 			if (BuildPlacement.tooFar()) {
 				add.accept(Row.text(TextUtil.ellipsize(font, "▲ " + BuildPlacement.TOO_FAR, inner), HudInk.warn()), 9);
