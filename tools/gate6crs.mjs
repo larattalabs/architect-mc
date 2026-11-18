@@ -845,7 +845,12 @@ steps.df = async () => {
   const p1 = await C.point('refused');
   out.refused = { owed: fs1?.owed ?? null, phase: fs1?.phase, bodies: (fs1?.bodies ?? []).map((b) => [b.id, b.state]), charged: rs1.record?.charged ?? null, point: p1 };
   check(!!owed && fs1?.phase === 'gate' && (fs1?.bodies ?? []).every((b) => !['written', 'settled'].includes(b.state)) && sum(p1.fluid) === 0, `DF survival (${tag}): fluids.json refused at the fluids gate: the stage waits (${fs1?.owed}), phase ${fs1?.phase}, no body written, fluid standing ${json(p1.fluid)}`);
-  check(G.exact(p1) && sum(rs1.record?.charged) > 0, `DF survival (${tag}): the charge booked once (${json(rs1.record?.charged)}), conservation exact while refused (${json(p1.diff)})`);
+  // (the charge is booked in the ledger before the record's save, as on main; standing nothing yet, the audit's diff is that charge: the
+  // lava buckets and the grates' bars held under the key, an empty bucket back per lava source)
+  const charged = rs1.record?.charged ?? {};
+  const held = G.minus(G.plus({}, charged['minecraft:lava_bucket'] ? { 'minecraft:bucket': charged['minecraft:lava_bucket'] } : {}), charged);
+  out.refused.held = held;
+  check(sum(charged) > 0 && G.same(p1.diff, held) && p1.identity, `DF survival (${tag}): the charge booked once (${json(charged)}); conservation while refused: the diff ${json(p1.diff)} is exactly that charge held in the ledger (${json(held)}), nothing else moved`);
   // the halt at FL1r+save: the gate refuses again on its next try
   await L.call('dev.journal.killAt', { point: 'FL1r+save' }, 10_000);
   let down = false;
