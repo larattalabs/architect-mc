@@ -258,6 +258,15 @@ public final class Builder {
 		final int[] below;
 
 		Run(Site s, Cells t) {
+			this(s, t, server);
+		}
+
+		/**
+		 * (LIFT-S-1) With the server the caller holds: {@link Builder#run} passes its own, because the Sites check and RL's reconcile build
+		 * the first runs in SERVER_STARTED listeners that run before Builder's own sets {@link Builder#server} (a fill read then was left
+		 * out of the cached run for good).
+		 */
+		Run(Site s, Cells t, @Nullable MinecraftServer srv) {
 			Construction c = s.construction();
 			this.id = s.id();
 			this.placedAt = s.placedAt();
@@ -323,7 +332,7 @@ public final class Builder {
 			}
 			// (M5 FK) a fill entry: its lock cells built in their locked state (the template holds the unlocked one), and the fill's items in
 			// the outstanding until the fill is paid (the stockpile's accept rule takes them; STARVED while short)
-			Fills.Spec fill = server == null ? null : Fills.of(server, s);
+			Fills.Spec fill = srv == null ? null : Fills.of(srv, s);
 			String ph = Fills.phase(s);
 			if (fill != null && !Fills.UNLOCKED.equals(ph)) {
 				for (var e : Fills.lockCells(s, fill).entrySet()) {
@@ -825,7 +834,7 @@ public final class Builder {
 			Architect.LOGGER.warn("Construction site {}: its target (the journal entry's after) can't be read; it can only be removed", s.id());
 			return null;
 		}
-		r = new Run(s, target);
+		r = new Run(s, target, server);
 		dev.larattalabs.architect.journal.JournalStore.Meta main = SiteJournal.main(s.id());
 		driedFarmland(r, main == null ? null : SiteJournal.beforeOf(main.id(), s.restoreBox()));
 		Stockpiles.attachPaid(s, r); // (BC, S-M5-10) the book's paid cells: a soil cell vanilla changed since is still built

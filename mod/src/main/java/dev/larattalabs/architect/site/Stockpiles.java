@@ -3731,6 +3731,34 @@ public final class Stockpiles {
 			return net.minecraft.util.Util.safeReplaceOrMoveFile(playerDir.resolve(id + ".dat"), tmp, playerDir.resolve(id + ".dat_old"), false);
 		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
+		forgetEarlyRuns(server);
+	}
+
+	/**
+	 * (LIFT-S-1 review P1) The runs made at this start before the stockpiles loaded (the Sites check makes and caches every construction
+	 * site's run in an earlier SERVER_STARTED listener) were made with no pile: {@link #attachPaid} gave them no paid cells, so a paid soil
+	 * cell vanilla changed since counted unbuilt (blocked for ever; after an unclean stop the reconcile gave it back as lost while it stood).
+	 * Every stockpile target's cached run is dropped here, so it is made again from the loaded stores before the reconcile, the waits, the
+	 * books or the feed read it; nothing but the Sites check's rescan has touched them yet. A site's is made again at once and rescanned with
+	 * its chunks loaded, as the Sites check did; a road's (made lazily) on its next use. Server thread.
+	 */
+	static void forgetEarlyRuns(MinecraftServer srv) {
+		for (Pile p : PILES.values()) {
+			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			for (Object t : bookTargets(p)) {
+				if (t instanceof Site s) {
+					Builder.forgetRun(s.id());
+					Builder.Run r = level == null || s.construction() == null ? null : Builder.run(srv, s);
+					if (r != null) {
+						r.rescan(level, true);
+						r.newlyCount = 0;
+						r.resend = false;
+					}
+				} else {
+					RoadBuilder.forgetRun(((Infra) t).id());
+				}
+			}
+		}
 	}
 
 	/** (PS) The registry from {@code <d>/stockpiles.json} (the world's architect dir); the save guard set when it can't be read. Tests call it. */
