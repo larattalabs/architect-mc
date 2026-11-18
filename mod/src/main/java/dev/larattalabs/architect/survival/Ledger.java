@@ -16,6 +16,21 @@ import org.jspecify.annotations.Nullable;
 public final class Ledger {
 	private final Map<String, Integer> delivered = new TreeMap<>();
 	private final Map<String, Integer> placed = new TreeMap<>();
+	/**
+	 * (slice T2b, crate holds) True while an open txn holds this ledger's crate (for any writer but its own adapter): every mutation is
+	 * refused (an insert books nothing, the feed consumes nothing, a take takes nothing). The crate's cell itself is frozen by the T2a holds.
+	 */
+	private java.util.function.BooleanSupplier frozen = () -> false;
+
+	/** (slice T2b) The hold guard: its crate block entity's ({@code CrateBlockEntity}). */
+	public void guard(java.util.function.BooleanSupplier f) {
+		frozen = f;
+	}
+
+	/** (slice T2b) Whether an open txn holds this ledger now. */
+	public boolean frozen() {
+		return frozen.getAsBoolean();
+	}
 
 	/** What an insert of one unit did: {@code count} of {@code item} credited ({@code converted}: through an equivalent). */
 	public record Accepted(String item, int count, boolean converted) {
@@ -70,6 +85,9 @@ public final class Ledger {
 				}
 			}
 		}
+		if (a != null && commit && frozen()) {
+			return null; // (T2b) held: nothing booked
+		}
 		if (a != null && commit) {
 			delivered.merge(a.item(), a.count(), Integer::sum);
 		}
@@ -86,8 +104,8 @@ public final class Ledger {
 		if (n <= 0) {
 			return true;
 		}
-		if (stock(item) < n) {
-			return false;
+		if (stock(item) < n || frozen()) {
+			return false; // (T2b) held: the feed waits
 		}
 		placed.merge(item, n, Integer::sum);
 		return true;
@@ -95,9 +113,31 @@ public final class Ledger {
 
 	/** Takes the whole stock out (finish, deconstruct): what is returned as items. The ledger then holds nothing in stock. */
 	public Map<String, Integer> takeStock() {
+		if (frozen()) {
+			return new LinkedHashMap<>(); // (T2b) held: its stock stays in it (a finish, a deconstruct or a click takes nothing)
+		}
 		Map<String, Integer> s = stock();
 		s.forEach((k, v) -> delivered.merge(k, -v, Integer::sum));
 		return s;
+	}
+
+	/**
+	 * (slice T2b, {@code crate.take}) Takes exactly {@code items} out of the stock (a txn's B effect, run as the holder): false, nothing
+	 * changed, when the stock holds less. Not guarded: only the holder's adapter calls it.
+	 */
+	public boolean take(Map<String, Integer> items) {
+		for (var e : items.entrySet()) {
+			if (stock(e.getKey()) < e.getValue()) {
+				return false;
+			}
+		}
+		items.forEach((k, v) -> delivered.merge(k, -v, Integer::sum));
+		return true;
+	}
+
+	/** (slice T2b, {@code crate.take}'s compensation) Puts {@code items} back into the stock. Not guarded: the holder's adapter only. */
+	public void putBack(Map<String, Integer> items) {
+		items.forEach((k, v) -> delivered.merge(k, v, Integer::sum));
 	}
 
 	/** Restores a saved ledger. */

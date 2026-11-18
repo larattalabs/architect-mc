@@ -2142,6 +2142,15 @@ public final class Builder {
 		r.markBuilt(i, true);
 	}
 
+	/**
+	 * (slice T2b, DFG) Whether a completed site restores its crate's cell: it has a crate cell, the crate isn't kept for a sibling, the
+	 * crate there is its own and unheld ({@code foreign}: another tag, a deferred adoption, an open txn's hold), and it is read or loaded.
+	 * Main restored it whenever the cell was loaded, so a foreign crate's stock went with its cell.
+	 */
+	static boolean restoresCrateCell(boolean hasCrate, boolean keepCrate, boolean foreign, boolean read, boolean loaded) {
+		return hasCrate && !keepCrate && (read || loaded); // main's rule (failing first)
+	}
+
 	/** Every queued cell built: the site is built, the crate gives back its stock and goes, a toast and a chat note fire. */
 	private static void complete(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable CrateBlockEntity crate) {
 		// (7b SO) first: a stop before the BUILT record runs complete again, and this finds nothing left. (GI2, A32) A take-down that failed
@@ -2159,9 +2168,17 @@ public final class Builder {
 		// a group's shared crate stays while another of its sites still builds (R6)
 		boolean keepCrate = !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty();
 		keepDelivered(srv, s, crate, keepCrate);
-		Map<String, Integer> left = crate != null && !keepCrate ? crate.ledger().takeStock() : Map.of();
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
-		if (c.crate() != null && !keepCrate && (crate != null || level.isLoaded(at))) {
+		// (slice T2b, DFG/ADP) never over a crate this site can't read as its own (an adoption deferred it, another owner's tag) or one a txn
+		// holds: its stock is still in it, so its cell stays and its journal entry is kept
+		boolean foreign = c.crate() != null && level.isLoaded(at) && (crate == null && level.getBlockEntity(at) instanceof CrateBlockEntity
+			|| dev.larattalabs.architect.txn.TxnServer.boxHeld(level, at));
+		if (foreign) {
+			Architect.LOGGER.warn("Construction site {}: built, but the crate at {} does not read as its own or is held; it stays (its stock with it) and its "
+				+ "journal entry is kept", s.id(), at.toShortString());
+		}
+		Map<String, Integer> left = crate != null && !keepCrate && !foreign ? crate.ledger().takeStock() : Map.of();
+		if (restoresCrateCell(c.crate() != null, keepCrate, foreign, crate != null, level.isLoaded(at))) {
 			restoreCrateCell(level, c.crate());
 			SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // its cell is the ground again (phase 4e)
 		}

@@ -59,6 +59,9 @@ public final class TestMove {
 
 		@Override
 		public TxnKind.Adapter adapter(Effect e) {
+			if (CrateTxn.TAKE.equals(e.op())) {
+				return CrateTxn.ADAPTER; // (slice T2b) a crate source: the shared crate.take adapter
+			}
 			return "test.take".equals(e.op()) || "test.put".equals(e.op()) ? ADAPTER : null;
 		}
 
@@ -96,8 +99,9 @@ public final class TestMove {
 		TxnCore c = TxnServer.core();
 		// (T2a) a double chest's half is held with its partner: the combined container reaches this half's slots through the other
 		java.util.LinkedHashSet<String> res = new java.util.LinkedHashSet<>();
+		boolean crateFrom = level.getBlockEntity(from) instanceof dev.larattalabs.architect.survival.CrateBlockEntity;
 		for (BlockPos p : List.of(from, to)) {
-			res.add(box(dim, p));
+			res.add(p == from && crateFrom ? CrateTxn.resource(dim, p) : box(dim, p)); // (T2b) a crate source is held as a crate
 			BlockPos q = TestMoveCells.partner(p, level.getBlockState(p));
 			if (q != null) {
 				res.add(box(dim, q));
@@ -123,7 +127,7 @@ public final class TestMove {
 		BlockEntity sb = level.getBlockEntity(from);
 		BlockEntity db = level.getBlockEntity(to);
 		// (T2a) only the types whose every writer the holds refuse (§6.1); a double chest's partner must be a chest too
-		String cell = TestMoveCells.refusal(from, sb);
+		String cell = crateFrom ? null : TestMoveCells.refusal(from, sb); // (T2b) a crate source: its writers are held (CrateTxn)
 		if (cell == null) {
 			cell = TestMoveCells.refusal(to, db);
 		}
@@ -142,10 +146,10 @@ public final class TestMove {
 			o.addProperty("refused", "an Architect site or road covers a cell (the TEST kind stays clear of every legacy writer)");
 			return o;
 		}
-		Container src = (Container) sb;
 		Container dst = (Container) db;
 		for (var e : items.entrySet()) {
-			if (count(src, item(e.getKey())) < e.getValue()) {
+			int have = crateFrom ? ((dev.larattalabs.architect.survival.CrateBlockEntity) sb).ledger().stock(e.getKey()) : count((Container) sb, item(e.getKey()));
+			if (have < e.getValue()) {
 				o.addProperty("refused", "the source holds fewer than " + e.getValue() + " " + e.getKey());
 				return o;
 			}
@@ -155,7 +159,8 @@ public final class TestMove {
 			return o;
 		}
 		TxnEntry t = s.entry();
-		c.plan(t, Effect.of("test.take", EffectClass.B).prepare().items(items).move("container", Effect.TRANSIT).data("dim", dim).data("pos", pos(from)));
+		c.plan(t, crateFrom ? CrateTxn.take(dim, from, items)
+			: Effect.of("test.take", EffectClass.B).prepare().items(items).move("container", Effect.TRANSIT).data("dim", dim).data("pos", pos(from)));
 		c.plan(t, Effect.of("test.put", EffectClass.B).items(items).move(Effect.TRANSIT, "container").data("dim", dim).data("pos", pos(to)));
 		JsonObject payload = new JsonObject();
 		payload.addProperty("from", box(dim, from));

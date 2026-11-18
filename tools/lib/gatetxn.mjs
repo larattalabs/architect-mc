@@ -210,6 +210,10 @@ export async function registerTXN(steps, h) {
         act: async (X) => call('dev.txn.poke', { pos: X, how: 'swap', with: add(X, [0, 0, -2]) }, 30_000) },
       { id: 'brewing_active', block: 'brewing_stand', ticks: true, late: true, warmMs: 1500, // brewing when held
         slots: ['potion[potion_contents={potion:"minecraft:water"}] 1', 'potion[potion_contents={potion:"minecraft:water"}] 1', null, 'nether_wart 1', 'blaze_powder 1'] },
+      // (slice T2b) crate holds: the crate is the move's source (its take compensated under /save-off), its ledger then frozen
+      ...['crateTakeStock', 'crateConsume', 'setBlock', 'destroyBlock'].map((how) => ({ id: `crate_${how}`, block: 'architect_mc:construction_crate',
+        crate: { [P]: 6 }, act: async (X) => call('dev.txn.poke', { pos: X, how }, 30_000),
+        ...(how.startsWith('crate') ? {} : { base: 'green', why: "T2a's cell freeze (its index takes crate: resources)" }) })),
       // the double chest (item 1): a held half (its partner held with it), and a chest placed beside a held single one
       { id: 'double_partner', block: 'chest[facing=north,type=left]', slots: ['oak_planks 5'], base: 'green', why: 'both halves held (the partner is a txn resource): T1\'s hopper guard',
         setup: async (X) => { await cmd(`/setblock ${s(add(X, [1, 0, 0]))} minecraft:chest[facing=north,type=right]`); await cmd(`/setblock ${s(add(X, [1, -1, 0]))} minecraft:hopper`); },
@@ -252,8 +256,9 @@ export async function registerTXN(steps, h) {
       }
     };
     for (const r of rows) {
-      await cmd(`/setblock ${s(r.X)} minecraft:${r.block}`);
-      if (!r.late) await put(r.X, r.slots);
+      await cmd(`/setblock ${s(r.X)} ${r.block.includes(':') ? r.block : 'minecraft:' + r.block}`);
+      if (r.crate) await call('dev.txn.poke', { pos: r.X, how: 'crateFill', items: r.crate }, 30_000);
+      else if (!r.late) await put(r.X, r.slots ?? []);
       await cmd(`/setblock ${s(r.S)} minecraft:chest`);
       await cmd(`/item replace block ${s(r.S)} container.0 with ${P} 1`);
       if (r.setup) await r.setup(r.X);
@@ -274,13 +279,13 @@ export async function registerTXN(steps, h) {
         await put(r.X, r.slots);
         if (r.warmMs) await call('dev.wait', { ms: r.warmMs }, 30_000);
       }
-      r.run = await call('dev.txn.run', { from: r.S, to: r.X, items: { [P]: 1 } }, 120_000);
+      r.run = await call('dev.txn.run', r.crate ? { from: r.X, to: r.S, items: { [P]: 1 } } : { from: r.S, to: r.X, items: { [P]: 1 } }, 120_000);
     }
     const st0 = await call('dev.txn.state', {}, 30_000);
     const heldRes = new Set(st0.holds ?? []);
-    const key = (p) => `box:minecraft:overworld@${p.join(',')}`;
+    const key = (p, crate) => `${crate ? 'crate' : 'box'}:minecraft:overworld@${p.join(',')}`;
     for (const r of rows) {
-      r.heldOk = r.run.decision === 'abort' && !!r.run.held && heldRes.has(key(r.X)) && (!r.partner || heldRes.has(key(add(r.X, r.partner))));
+      r.heldOk = r.run.decision === 'abort' && !!r.run.held && heldRes.has(key(r.X, !!r.crate)) && (!r.partner || heldRes.has(key(add(r.X, r.partner))));
     }
     const bad = rows.filter((r) => !r.heldOk);
     check(bad.length === 0, `holds: ${rows.length - bad.length}/${rows.length} boxes held by an aborted test.move under /save-off (the take compensated, the barrier refused)${bad.length ? `; not held: ${bad.map((r) => `${r.id} ${json(r.run)}`).join('; ')}` : ''}`, bad.map((r) => r.run));
@@ -450,6 +455,83 @@ export async function registerTXN(steps, h) {
     }
     out.summary = { points: points.length, cases: out.cases.length, match: out.cases.filter((c) => c.verdict === 'match').length };
     log(`  txn-owed: ${json(out.summary)}`);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  // ------------------------------------------------------------------ (slice T2b) txn-crate: crate.take halted at every point
+  steps.txncrate = async () => {
+    await ensure();
+    const out = { cases: [] };
+    const name = 'G6B TXN crate';
+    await freshFlat(name);
+    const gy = await groundY();
+    const at = [CX + 80, gy + 3, CZ + 56];
+    const A = [CX + 70, gy + 1, CZ + 50]; // the crate
+    const B = [CX + 90, gy + 1, CZ + 50]; // a chest in another chunk
+    const P = 'minecraft:oak_planks';
+    const ITEMS = { [P]: 12 };
+    const box = { min: [CX + 60, gy - 2, CZ + 40], max: [CX + 100, gy + 4, CZ + 60] };
+    await cmd(`/setblock ${A.join(' ')} architect_mc:construction_crate`);
+    await cmd(`/setblock ${B.join(' ')} minecraft:chest`);
+    await call('dev.txn.poke', { pos: A, how: 'crateFill', items: ITEMS }, 30_000);
+    await L.tp(...at);
+    const report = async (baseline) => call('dev.txn.conservation', { min: box.min, max: box.max, ...(baseline ? { baseline } : {}) }, 60_000);
+    const units = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
+    const where = async () => {
+      const c = await call('dev.txn.cells', { cells: [A, B] }, 30_000);
+      const n = (k) => Object.values(c[k.join(',')]?.slots ?? {}).reduce((t, v) => t + Number(String(v).split(' x')[1] ?? 0), 0);
+      return { crate: n(A), chest: n(B) };
+    };
+    await cmd('/save-all flush').catch(() => null);
+    await call('dev.wait', { ms: 2000 }, 30_000);
+    const base = await report();
+    // the trace: a take from the crate into transit, then into the chest
+    await call('dev.txn.trace', { on: true }, 10_000);
+    const r0 = await call('dev.txn.run', { from: A, to: B, items: ITEMS }, 120_000);
+    const points = ((await call('dev.txn.trace', { on: false }, 10_000)).trace ?? []).filter((p) => p.startsWith('TX:test.move:'));
+    const w0 = await where();
+    const c0 = await report(base.total);
+    check(r0.status === 'DONE' && w0.crate === 0 && w0.chest === 12, `trace: crate.take moved the crate's stock (crate ${w0.crate}, chest ${w0.chest}): ${r0.status}`, r0);
+    check(c0.verdict === 'match', `trace: conservation (crateScan + containers) ${c0.verdict} ${json(c0.diff)}`, c0);
+    // put it back in the crate by hand (TEST), the baseline again
+    await cmd(`/item replace block ${B.join(' ')} container.0 with minecraft:air`);
+    await call('dev.txn.poke', { pos: A, how: 'crateFill', items: ITEMS }, 30_000);
+    for (const p of points) {
+      for (const v of ['', '+save']) {
+        const point = p + v;
+        await cmd('/save-all flush').catch(() => null);
+        const b = await report();
+        await call('dev.journal.killAt', { point }, 10_000);
+        call('dev.txn.run', { from: A, to: B, items: ITEMS }, 120_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${point}: halted`);
+        if (!down) {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+          continue;
+        }
+        await L.openWorld(name);
+        await L.tp(...at);
+        let st = await call('dev.txn.state', {}, 30_000);
+        for (let i = 0; i < 30 && (st.openCount > 0 || !st.recovered); i++) {
+          await call('dev.wait', { ms: 1000 }, 30_000);
+          st = await call('dev.txn.state', {}, 30_000);
+        }
+        const w = await where();
+        const c = await report(b.total);
+        out.cases.push({ point, open: st.openCount, ...w, verdict: c.verdict, diff: c.diff });
+        log(`  ${point}: open ${st.openCount}, crate ${w.crate}, chest ${w.chest}; conservation ${c.verdict}`);
+        check(st.openCount === 0 && (w.crate === 12 && w.chest === 0 || w.crate === 0 && w.chest === 12), `${point}: exactly once (crate ${w.crate}, chest ${w.chest})`, w);
+        check(c.verdict === 'match', `${point}: conservation ${c.verdict} ${json(c.diff)}`, c);
+        if (w.chest === 12) { // back to the crate for the next case
+          await cmd(`/item replace block ${B.join(' ')} container.0 with minecraft:air`);
+          await call('dev.txn.poke', { pos: A, how: 'crateFill', items: ITEMS }, 30_000);
+        }
+      }
+    }
+    out.summary = { points: points.length, cases: out.cases.length, match: out.cases.filter((c) => c.verdict === 'match').length };
+    log(`  txn-crate: ${json(out.summary)}`);
     await L.leaveWorld();
     spendZero();
     return out;

@@ -1139,6 +1139,11 @@ public final class Stockpiles {
 		for (var e : crates.entrySet()) {
 			Construction.Crate c = e.getValue();
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
+			if (dev.larattalabs.architect.txn.TxnServer.boxHeld(level, cp)) {
+				// (slice T2b) an open txn holds the crate: adopting it now would credit a stock its frozen ledger can't give up
+				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted now: an open transaction holds it", owner, e.getKey(), cp.toShortString());
+				continue;
+			}
 			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
 				Ledger l = be.ledger();
 				Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());

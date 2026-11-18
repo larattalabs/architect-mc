@@ -111,6 +111,11 @@ public final class TxnDev {
 				c.addProperty("be", String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
 				c.addProperty("beId", System.identityHashCode(be));
 				c.addProperty("nbt", be.saveWithoutMetadata(level.registryAccess()).toString()); // (fix round) the persisted data, components included
+				if (be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr) {
+					JsonObject sl = new JsonObject();
+					cr.ledger().stock().forEach((k, v) -> sl.addProperty("stock:" + k, k + " x" + v));
+					c.add("slots", sl); // (T2b) a crate's slots are its ledger's stock
+				}
 				if (be instanceof net.minecraft.world.Container k) {
 					JsonObject sl = new JsonObject();
 					for (int i = 0; i < k.getContainerSize(); i++) {
@@ -216,6 +221,20 @@ public final class TxnDev {
 				}
 				o.addProperty("result", n);
 			}
+			case "crateFill" -> { // (slice T2b, TEST) a standalone crate's stock, as deliveries booked it
+				Map<String, Integer> it = new TreeMap<>();
+				req.getAsJsonObject("items").entrySet().forEach(x -> it.put(x.getKey(), x.getValue().getAsInt()));
+				if (be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr) {
+					cr.ledger().load(it, Map.of());
+					cr.ledgerChanged();
+				}
+				o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity);
+			}
+			case "crateTakeStock" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr ? cr.ledger().takeStock().toString() : "no crate");
+			case "crateConsume" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr && cr.ledger().consume(
+				req.has("item") ? req.get("item").getAsString() : "minecraft:oak_planks", 1));
+			case "crateInsert" -> o.addProperty("result", be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr ? cr.insert(new net.minecraft.world.item.ItemStack(
+				net.minecraft.world.item.Items.OAK_PLANKS, 4)) : -1);
 			case "swap" -> {
 				BlockPos q = pos(req.getAsJsonArray("with"));
 				if (be instanceof net.minecraft.world.level.block.entity.ChestBlockEntity a
