@@ -33482,6 +33482,13 @@ so two module lots that share items can't each be held to their own measured bou
 - **P2-4** `stockpile_changed {owner}` is the txn's persisted payload, fired at EFFECTS_DONE and again after recovery; `TxnServer`'s emit
   delivers `SiteEvents.STOCKPILE_CHANGED`. The matrix checks it on every committed point before the emit.
 - Units: `PileAdoptFixT3bTest` (the P1 and P2-3 seams).
+- **Ran:** red at cbdbd72c (hooks and rows, no fix; `_work/architect-mc-T3b-runs-red2/20261118-074247-change`): legacy-finish-at-start RED (references
+  cleared, nothing held, an insert accepted), gone-save-refused RED (house_4 named the gone crate after the restart), the matrix's event check
+  RED at decided and barrier:effects+save. Green at 34bd3e3c (`_work/architect-mc-T3b-runs3/20261118-075029-change`, 9078:9079): txn-crash-adopt
+  204/1 (all rows GREEN, the matrix 17 points x 2 = 34 halts, 0 wrong, the event fired after each committed recovery; the one FAIL was
+  gone-save's check of the BUILT house_3, no candidate once its crate is gone, as on main: fixed in ef37072b and green alone,
+  `_work/architect-mc-T3b-runs4/20261118-085727-change` 9/0), txn-core 75/0, txn-owed 73/0, txn-crate 68/0, txn-holds 50/0, sad-unit 2/0, sad-survival 56/0,
+  sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1611 (0 failed); api-compat --baselines 8/8.
 
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
