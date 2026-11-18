@@ -217,10 +217,10 @@ export function reach(at, sources, fluid, { cap = null, wl = null, opened = null
  *   order: 'yxz'                       ticks due together run by (y descending, x, z), not in scheduling order (§2.3); a function
  *                                      permutes each batch in place (the property tests).
  *   onCap: 'result'                    past maxTicks rounds: `unsettled: {cells, rounds, sample}` in the result, never a throw.
- * (8c SE) maxTick (a cap in game ticks), init + wake (start from a settled state, ticking only the woken cells and their fluid
- * neighbours: a breach opened beside standing water).
+ * (8c SE, CL) maxTick (a cap in game ticks), init + wake (start from a settled state, ticking only the woken cells and their fluid
+ * neighbours: a breach opened beside standing water), kick (cells ticked at 0 that are not written: foreign wl sources).
  */
-export function steady(at0, sources, fluid, { maxTicks = 200000, maxTick = null, wl = null, level = null, order = null, onCap = 'throw', init = null, wake = null } = {}) {
+export function steady(at0, sources, fluid, { maxTicks = 200000, maxTick = null, wl = null, level = null, order = null, onCap = 'throw', init = null, wake = null, kick = null } = {}) {
   const drop = DROP[fluid], slopeFind = SLOPE[fluid], delay = DELAY[fluid];
   // the live state: written cells override the world. A cell holds {amount (1..8), falling, source}
   const live = new Map();
@@ -409,6 +409,8 @@ export function steady(at0, sources, fluid, { maxTicks = 200000, maxTick = null,
   if (init) {
     for (const [x, y, z] of sortCells((wake ?? []).map((c) => [c[0], c[1], c[2]]))) for (const [dx, dy, dz] of [[0, 0, 0], ...D6]) if (same(at(x + dx, y + dy, z + dz))) schedule(x + dx, y + dy, z + dz, 0);
   } else for (const [x, y, z] of sortCells(sources.map((c) => [...c]))) schedule(x, y, z, 0);
+  // ((8c CL) kick: cells ticked at 0 without being written: foreign wl sources (a waterlogged block spreads only once it ticks))
+  if (kick) for (const [x, y, z] of sortCells(kick.map((c) => [c[0], c[1], c[2]]))) if (same(at(x, y, z))) schedule(x, y, z, 0);
   const yxz = order === 'yxz';
   let now = 0, rounds = 0, unsettled = null;
   while (bh < buckets.length) {

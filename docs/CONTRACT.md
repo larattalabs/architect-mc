@@ -33500,3 +33500,22 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   and 840 cells); corpus-0..8 keep exactly their entries. Tests: `kit/test/se.test.mjs` (8).
 - **Seams:** plan.json's reason enum has no `UNSETTLED` and the reason has no `say` (8cF's shape, unschema'd: 8cG/SV). RV builds the
   wouldFit fragment (SE passes `opts.wouldFit` through) and keeps a river's path within PATH_CAP.
+
+## Slice CL, river classification (8c kit lane; branch `slice/8cK`; 2026-11-17; DEV MODE, light; versions NEXT; $0): as built
+
+- **Scope:** the 8c contract's §3 on the kit side (`kit/lint/water.mjs`): W5's attribution over a wm body's world and E-normal's new
+  `refed` class, with §3's five fixtures. No model change for any body: `steady` gains only `kick` (cells ticked at 0, never written).
+- **fedBy(at, own, foreign, fluid, wm)**: with `wm` ({wl, level}) both runs use the water model, and a foreign cell the world holds as a
+  block source (a wm body's `foreign` list: waterlogged blocks, kelp, seagrass) is kicked, never written, so its faces hold. Without
+  `wm` it is H's, byte for byte (`drain-cases.json` unchanged).
+- **flowClasses(at, own, foreign, watch, wm)**: inside the watch set `source`, `own`, `raised` (the drain takes these; raised down to the
+  foreign level), `joint`, `foreign`, `block` (kept, never written); outside it `refed` (natural flowing water whose frozen level is
+  not what foreign water alone holds, now at that level) or `eflat`. A volatile block (a rain-filled cauldron) is `volatile`: still
+  ours (StillOurs), never written.
+- **Fixtures:** `riverCases()` -> `kit/lint/fixtures/river-cases.json` (`node kit/lint/water.mjs --write`): `river/stream`,
+  `river/bucket`, `river/waterlogged`, `river/cauldron`, `river/converted` (conversions lifted into written sources until none is
+  left: RV's rule), each with its class, drain verdict, level now and level after the drain per cell. A separate file: the mod's
+  RegionFluidsLintTest reads `drain-cases.json` through `breachTake`, which has no `refed` yet.
+- **Tests:** `kit/lint/river.lint.mjs` (8; it runs in the water-lint step's glob).
+- **Seams:** WU drives the mod's drain and stray pass over `river-cases.json` (the Java half of CL's gate) and classifies `refed`
+  outside the watch sets; Steward's undo diff learns `refed` (its slice 7).
