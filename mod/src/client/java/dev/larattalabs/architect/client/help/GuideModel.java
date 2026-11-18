@@ -33,6 +33,8 @@ public final class GuideModel {
 	private Step step;
 	private boolean survival;
 	private boolean sawRefused;
+	/** "Not now": not offered again until the game restarts. */
+	private boolean snoozed;
 
 	public GuideModel(State state, Step step, boolean survival) {
 		this.state = state;
@@ -71,7 +73,7 @@ public final class GuideModel {
 		Step p0 = step;
 		switch (e) {
 			case SCREEN_OPENED_NO_SITES -> {
-				if (state == State.NEW) {
+				if (state == State.NEW && !snoozed) {
 					state = State.OFFERED;
 				}
 			}
@@ -83,7 +85,8 @@ public final class GuideModel {
 			}
 			case NOT_NOW -> {
 				if (state == State.OFFERED) {
-					state = State.NEW; // asked again next time
+					state = State.NEW; // asked again next session (stored as new), not on the next open of this one
+					snoozed = true;
 				}
 			}
 			case DECLINE -> {

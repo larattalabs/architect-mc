@@ -373,6 +373,8 @@ steps.gallery = async () => {
     await cmd(`/fill ${x0} ${ORIGIN[1] - 3} ${z0} ${x1} ${ORIGIN[1] - 1} ${z1} minecraft:dirt`);
   };
   await L.fresh('G6B UIG', FLAT);
+  // (PR F1) the first-build tour's offer would sit over every screen of a world without the player's sites: answered here, shot in its own block
+  await call('dev.pr.guide', { reset: true, event: 'decline' }).catch(() => null);
   await L.setRules('exact');
   await cmd('/time set 6000');
   await cmd('/weather clear');
@@ -861,7 +863,7 @@ steps.gallery = async () => {
       await G({ reset: true, survival: true }); await G({ event: 'start' }); await G({ event: 'placed' }); await call('dev.screen', { open: null }); await gcam();
     }, { scales: [2], closeScreen: false });
     await sec('ui', 'guide', 'paused', async () => { await G({ reset: true, survival: false }); await G({ event: 'start' }); await G({ event: 'esc' }); await openTab('status'); });
-    await G({ reset: true, survival: false }).catch(() => null);
+    await G({ reset: true, event: 'decline', survival: false }).catch(() => null);
     await call('dev.build.cancel').catch(() => null);
   }
   await call('dev.survival.set', { on: false }).catch(() => null);

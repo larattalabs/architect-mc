@@ -60,6 +60,20 @@ public final class SlicePrDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.pr.keys", 10_000, "{press?: bool} - (PR W1) the open screen's ? overlay: press F1 on the screen -> {screen, handled, "
+			+ "toggles}", (req, mc) -> {
+				boolean press = Fields.of(req).optBool("press", false);
+				return DevBridge.onClient(mc, () -> {
+					JsonObject o = new JsonObject();
+					var s = mc.gui.screen();
+					o.addProperty("screen", s == null ? null : s.getClass().getName());
+					o.addProperty("toggles", dev.larattalabs.labui.ui.HelpKeys.toggles(290, false, false));
+					if (press && s != null) {
+						o.addProperty("handled", s.keyPressed(new net.minecraft.client.input.KeyEvent(290, 0, 0)));
+					}
+					return o;
+				});
+			});
 		DevBridge.register("dev.pr.rebind", 10_000, "{action: <PlacingKeys id>, key?: <GLFW code> (absent: the default)} - (PR A4) rebind a placing key "
 			+ "as Controls does -> {action, label}", (req, mc) -> {
 				Fields f = Fields.of(req);

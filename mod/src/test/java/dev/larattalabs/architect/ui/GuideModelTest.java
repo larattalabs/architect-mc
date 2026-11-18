@@ -64,7 +64,10 @@ class GuideModelTest {
 		g.on(Event.SCREEN_OPENED_NO_SITES, null);
 		g.on(Event.NOT_NOW, null);
 		assertEquals(State.NEW, g.state());
+		assertFalse(g.on(Event.SCREEN_OPENED_NO_SITES, null), "not now: not again this session");
+		g = new GuideModel(State.NEW, null, false); // the next session (stored as new)
 		g.on(Event.SCREEN_OPENED_NO_SITES, null);
+		assertEquals(State.OFFERED, g.state());
 		g.on(Event.DECLINE, null);
 		assertEquals(State.DECLINED, g.state());
 		assertFalse(g.on(Event.SCREEN_OPENED_NO_SITES, null));

@@ -2649,6 +2649,21 @@ public final class ArchitectScreen extends Screen {
 		int lx = x;
 		int rx = x + colW + 14;
 		int y = top;
+		// (PR G1, W1) first, so it is in view at every GUI scale: the Help page (the glossary) and the hidden "what's this" lines
+		String help = "Help and terms…";
+		button(g, "status:help", help, lx, y, bw(help), false, true, mx, my, () -> {
+			statusHelp = true;
+			listScroll = 0;
+		});
+		int hidden = dev.larattalabs.architect.client.design.UiPrefs.tipsHiddenCount();
+		if (hidden > 0) {
+			String again = "Show tips again (" + hidden + " hidden)";
+			int ax = lx + bw(help) + 8;
+			hits.add(new Hit("status:tips_again", again, ax, y + 4, Math.min(colW - bw(help) - 8, font.width(again)), 12, true, false,
+				dev.larattalabs.architect.client.help.ArchitectHelp::showTipsAgain));
+			g.text(font, TextUtil.ellipsize(font, again, colW - bw(help) - 8), ax, y + 6, UiStyle.link(), false);
+		}
+		y += 26;
 		// left: the helper
 		g.text(font, "Design helper", lx, y, UiStyle.clayText(), false);
 		y += 12;
@@ -2731,30 +2746,13 @@ public final class ArchitectScreen extends Screen {
 			y += 10;
 		}
 		y += 4;
-		// (PR G1) the Help page: the glossary
-		String help = "Help and terms…";
-		button(g, "status:help", help, lx, y, bw(help), false, true, mx, my, () -> {
-			statusHelp = true;
-			listScroll = 0;
-		});
 		// (PR F1) the guided first build: start it again (or resume it)
-		y += 24;
 		var gm = dev.larattalabs.architect.client.help.GuideFeature.model();
 		String gl = gm.state() == dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? "Resume the first-build tour" : "Restart the first-build tour";
 		button(g, "status:guide", gl, lx, y, bw(gl), false, true, mx, my, () -> dev.larattalabs.architect.client.help.GuideFeature.on(gm.state()
 			== dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? dev.larattalabs.architect.client.help.GuideModel.Event.RESUME
 			: dev.larattalabs.architect.client.help.GuideModel.Event.RESTART, null));
-		y -= 24;
-		// (PR W1) the "what's this" lines hidden with their ×
-		int hidden = dev.larattalabs.architect.client.design.UiPrefs.tipsHiddenCount();
-		if (hidden > 0) {
-			String again = "Show tips again (" + hidden + " hidden)";
-			int ax = lx + bw(help) + 8;
-			hits.add(new Hit("status:tips_again", again, ax, y + 4, Math.min(colW - bw(help) - 8, font.width(again)), 12, true, false,
-				dev.larattalabs.architect.client.help.ArchitectHelp::showTipsAgain));
-			g.text(font, TextUtil.ellipsize(font, again, colW - bw(help) - 8), ax, y + 6, UiStyle.link(), false);
-		}
-		y += 48;
+		y += 24;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
 			int th = Math.min(footerY - 4 - y, tail.size() * 9 + 6);
