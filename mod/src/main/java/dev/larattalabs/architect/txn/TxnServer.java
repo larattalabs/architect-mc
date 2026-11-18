@@ -65,6 +65,33 @@ public final class TxnServer {
 		c.register(TestMove.KIND);
 		c.register(OwedTxn.COLLECT_KIND); // (slice T2b)
 		c.register(OwedTxn.CREDIT_KIND);
+		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
+	}
+
+	/** (slice T3b, TEST dev.txn.pauseAt) The kill point a live drive stops at (its txn held open), or null. */
+	private static volatile @Nullable String pauseAt;
+
+	/** (slice T3b, TEST) Arms ({@code point}) or clears (null) the pause; clearing retries a paused txn on the next tick. */
+	public static void pauseAt(@Nullable String point) {
+		pauseAt = point;
+		Architect.LOGGER.warn("Txn: pause point {} (dev.txn.pauseAt)", point);
+		if (point == null) {
+			heldBackoff = HELD_MIN;
+			heldWait = 0;
+		}
+	}
+
+	public static @Nullable String pausedAt() {
+		return pauseAt;
+	}
+
+	/**
+	 * (slice T3b) Whether every store a txn's effects read has loaded: the first server tick has run (the stockpiles, sites and the world
+	 * journal load in SERVER_STARTED's default phase, after the recovery slot). A probe of such a store answers UNKNOWN before (the txn holds
+	 * until the first tick), never ABSENT.
+	 */
+	public static boolean storesLoaded() {
+		return ticking && server != null;
 	}
 
 	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */
@@ -436,6 +463,12 @@ public final class TxnServer {
 		@Override
 		public void kill(String point) {
 			WorldJournal.kill(point);
+		}
+
+		@Override
+		public boolean pauseAt(String point) {
+			String p = pauseAt;
+			return p != null && p.equals(point);
 		}
 
 		@Override

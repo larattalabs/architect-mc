@@ -30,7 +30,12 @@ class AdoptPlanTest {
 
 	@Test
 	void everyDeferReasonHasItsStableWireValue() {
-		assertEquals(Defer.NOT_A_CRATE, AdoptPlan.classify(read("s1", 1, false, false, null, false), false).why());
+		// (T3b, DFG's fix round) "not a crate" is a cell not read; a read cell with no crate is GONE (nothing to take: its targets are freed)
+		assertEquals(Defer.NOT_A_CRATE, AdoptPlan.classify(new CrateRead("s1", "minecraft:overworld", 1, 64, 0, 1001L, false, false, null, false, false), false)
+			.why());
+		assertEquals(Fate.GONE, AdoptPlan.classify(read("s1", 1, false, false, null, false), false).fate());
+		assertEquals(Fate.DEFER, AdoptPlan.classify(new CrateRead("s1", "minecraft:overworld", 1, 64, 0, 1001L, false, false, null, false, false), true)
+			.fate(), "credited, the cell not read: deferred (DFG), never JOINED");
 		assertEquals(Defer.UNREADABLE, AdoptPlan.classify(read("s1", 1, true, false, null, false), false).why());
 		assertEquals(Defer.UNREADABLE, AdoptPlan.classify(read("s1", 1, true, true, "s1", false), false).why());
 		assertEquals(Defer.UNREADABLE, AdoptPlan.classify(read("s1", 1, true, true, null, true), false).why());

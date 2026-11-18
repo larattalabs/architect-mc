@@ -32,6 +32,14 @@ public interface TxnKind {
 		return null;
 	}
 
+	/**
+	 * (slice T3b) A legacy kill point the forward path also reaches at {@code step} (pile.adopt's SAC1 and SAC2, kept as aliases of its
+	 * traced points), or null. Live only; the alias halts as {@code dev.journal.killAt} names it ({@code SAC1}, {@code SAC1+save}).
+	 */
+	default @Nullable String alias(TxnEntry t, String step) {
+		return null;
+	}
+
 	/** The terminal result written at EFFECTS_DONE (the refund, removed, ...). */
 	default JsonObject result(TxnEntry t) {
 		return new JsonObject();

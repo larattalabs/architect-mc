@@ -655,6 +655,7 @@ public final class Stockpiles {
 	 * with nothing building ends the stockpile.
 	 */
 	public static CrateRemoval removeCrate(MinecraftServer srv, String owner, BlockPos at, boolean force) throws Sites.SiteException {
+		requirePileFree(owner);
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -736,6 +737,7 @@ public final class Stockpiles {
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
 		requireNoDebt();
+		requirePileFree(owner);
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -1099,123 +1101,49 @@ public final class Stockpiles {
 	}
 
 	/**
-	 * {@code adoptCrates} (§5): every legacy crate of the owner (a building site's own crate, a group's shared crate, a delta's
-	 * crate) joins the stockpile: its ledger is adopted (delivered and placed, so the stock grows by the crate's stock; what doesn't
-	 * fit drops at the first crate, booked as dropped), its cell is restored and its journal kind released, and its targets lose
-	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
+	 * {@code adoptCrates} (§5): every legacy crate of the owner (a building site's own crate, a group's shared crate, a delta's crate) joins
+	 * the stockpile. (slice T3b) One {@code pile.adopt} txn per call ({@link PileAdopt}): the crates' stock taken into transit before the
+	 * decision, then credited into the stock past capacity (nothing dropped), the cells restored, the journal kinds released and the records
+	 * cleared, each keyed and recovered from the intent. A crate it can't read is deferred, untouched. Server thread.
 	 */
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
-		Pile p = get(owner);
-		if (p == null) {
-			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile (createStockpile first)");
+		adoptResult(srv, owner);
+		return java.util.Objects.requireNonNull(get(owner));
+	}
+
+	/** (slice T3b) {@link #adopt} with what it did: the crates joined, those deferred (and why), the txn's id. */
+	public static PileAdopt.Result adoptResult(MinecraftServer srv, String owner) throws Sites.SiteException {
+		requireLoaded();
+		return PileAdopt.adopt(srv, owner);
+	}
+
+	/** (slice T3b) Refuses SITE_BUSY {@code held(other)} while an open txn holds the owner's pile (an adoption): dissolve, removeStockpileCrate. */
+	static void requirePileFree(String owner) throws Sites.SiteException {
+		String h = dev.larattalabs.architect.txn.TxnServer.heldWhy("pile:" + owner);
+		if (h != null) {
+			throw new Sites.SiteException(Reason.SITE_BUSY, owner + "'s stockpile: an open transaction holds it (" + h + ")", "held(other)");
 		}
-		ServerLevel level = Sites.levelOf(srv, p.dimension);
-		if (level == null) {
-			throw new Sites.SiteException(Reason.NOT_LOADED, p.dimension + " is not loaded");
+	}
+
+	/** (slice T3b, from DFG/ADP) Whether any crate block (its block or a crate block entity, whatever its owner tag) stands at the cell. */
+	static boolean crateBlockAt(@Nullable ServerLevel level, BlockPos p) {
+		return level != null && (level.getBlockEntity(p) instanceof CrateBlockEntity || level.getBlockState(p).is(dev.larattalabs.architect.survival.CrateBlocks.CRATE));
+	}
+
+	/**
+	 * (slice T3b, from DFG) For a guard: whether a site's crate reference may still name a standing crate. True unless its cell is read, on
+	 * the server thread (its chunk loaded if need be), and holds no crate block of any owner: an unknown cell counts as a standing crate,
+	 * never as gone. So a crate adoptCrates deferred (another tag) still stands for the guard.
+	 */
+	public static boolean crateMayStand(@Nullable ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (c == null || c.crate() == null) {
+			return false;
 		}
-		// the crates, by owner id in their block entity: a site's own id, or group:<id>
-		Map<String, Construction.Crate> crates = new LinkedHashMap<>();
-		List<Site> sites = new ArrayList<>();
-		for (Site s : Sites.all()) {
-			// (SAD) a BUILT site whose crate still stands (a shared crate another site of its group still builds from) joins too: the crate's
-			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped
-			if ((s.building() || crateStands(level, s) || joinedBefore(p, s)) && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension
-				.equals(s.dimension())) {
-				sites.add(s);
-				crates.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
-			}
+		if (level == null || !level.getServer().isSameThread()) {
+			return true;
 		}
-		List<Infra> roads = new ArrayList<>();
-		for (Infra i : Infras.all()) {
-			if (i.building() && owner.equals(i.owner()) && i.construction().crate() != null && p.dimension.equals(i.dimension())) {
-				roads.add(i);
-				if (i.group() != null) {
-					crates.putIfAbsent(SiteGroupRec.CRATE_PREFIX + i.group(), i.construction().crate());
-				}
-			}
-		}
-		Map<String, Integer> dropped = new TreeMap<>();
-		BlockPos drop = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		for (var e : crates.entrySet()) {
-			Construction.Crate c = e.getValue();
-			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
-			if (dev.larattalabs.architect.txn.TxnServer.boxHeld(level, cp)) {
-				// (slice T2b) an open txn holds the crate: adopting it now would credit a stock its frozen ledger can't give up
-				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted now: an open transaction holds it", owner, e.getKey(), cp.toShortString());
-				continue;
-			}
-			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
-				Ledger l = be.ledger();
-				Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());
-				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), byTarget, capacity(srv, p),
-					Stockpiles::maxStack);
-				Map<String, Integer> keyed = new TreeMap<>();
-				byTarget.values().forEach(m -> m.forEach((k, v) -> keyed.merge(k, v, Integer::sum)));
-				Map<String, Integer> unkeyed = new TreeMap<>();
-				l.placed().forEach((k, v) -> {
-					if (v - keyed.getOrDefault(k, 0) > 0) {
-						unkeyed.put(k, v - keyed.getOrDefault(k, 0));
-					}
-				});
-				if (!unkeyed.isEmpty()) {
-					Architect.LOGGER.info("Stockpile {}: adopted crate {}: placed {} keyed to no target (none of its targets stands on it; never refundable)", owner,
-						e.getKey(), unkeyed);
-				}
-				over.forEach((k, v) -> dropped.merge(k, v, Integer::sum));
-				l.takeStock(); // the crate's ledger now holds nothing (its block goes next)
-				be.ledgerChanged();
-			}
-			Builder.restoreCrateCell(level, c);
-			SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
-		}
-		// (SAD, SAC1) the ledger joined and the crate cells restored are saved together first (with the world: a crate's stock lives in its
-		// block entity), and only then do the records lose their crates (Sites' writes save architect-sites.json at once). Before, the records
-		// were saved first: a crash before the ledger's save left the crate standing in the reverted world with no record naming it, its stock
-		// and placed counts lost. A crash between the two saves (SAC2) is repaired by the next adoptCrates: its crate keys are credited, so a
-		// record that still names a gone crate is cleared without crediting the crate twice
-		Builder.dropItems(level, drop, dropped, null);
-		changed(p);
-		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
-		for (var e : crates.entrySet()) {
-			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX)) {
-				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
-				if (g != null) {
-					Sites.putGroup(srv, g.withCrate(null));
-				}
-			}
-		}
-		WorldJournal.kill("SAC2"); // (SAD, test) the ledger saved, the groups' crates cleared, the sites' crate references not yet
-		List<Object> joined = new ArrayList<>();
-		for (Site s : sites) {
-			Site cur = Sites.get(s.id());
-			if (cur != null && cur.construction() != null) {
-				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
-				Builder.forgetRun(s.id());
-				if (cur.building()) {
-					joined.add(Sites.get(s.id())); // (SAD) a BUILT one is fully paid: it joins no feed
-				}
-			}
-		}
-		for (Infra i : roads) {
-			Infra cur = Infras.get(i.id());
-			if (cur != null && cur.construction() != null) {
-				Infras.put(srv, cur.withConstruction(cur.construction().withCrate(null)));
-				joined.add(Infras.get(i.id()));
-			}
-		}
-		// they join the feed order at the end, in placement order
-		joined.sort(java.util.Comparator.comparingLong(Stockpiles::placedAt));
-		for (Object t : joined) {
-			if (t != null && !p.order.contains(idOf(t))) {
-				p.order.add(idOf(t));
-			}
-		}
-		changed(p);
-		saveWithWorld(srv); // the feed order
-		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
-			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
-		return p;
+		return crateBlockAt(level, new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()));
 	}
 
 	/**
@@ -1229,7 +1157,7 @@ public final class Stockpiles {
 		for (Pile p : List.copyOf(PILES.values())) {
 			List<Object> joined = new ArrayList<>();
 			for (Site s : Sites.all()) {
-				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s)) {
+				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s) && !Sites.txnHeld(s.id())) { // (T3b) an open txn's: its own
 					Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
 					Builder.forgetRun(s.id());
 					any = true;
@@ -1243,7 +1171,7 @@ public final class Stockpiles {
 			for (Infra i : Infras.all()) {
 				Construction c = i.construction();
 				if (c != null && c.crate() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && i.group() != null && namesJoined(
-					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z())) {
+					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z()) && !Sites.txnHeld(i.id())) {
 					Infras.put(srv, i.withConstruction(c.withCrate(null)));
 					any = true;
 					if (i.building()) {
@@ -1253,7 +1181,7 @@ public final class Stockpiles {
 			}
 			for (SiteGroupRec g : Sites.groups()) {
 				Construction.Crate c = g.crate();
-				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z())) {
+				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z()) && !Sites.txnHeld(g.id())) {
 					Sites.putGroup(srv, g.withCrate(null));
 					any = true;
 				}
@@ -1286,7 +1214,7 @@ public final class Stockpiles {
 	}
 
 	/** (SAD, SAC2) Whether a site's crate reference names a crate this stockpile's ledger already joined (its key credited, its block gone). */
-	private static boolean joinedBefore(Pile p, Site s) {
+	static boolean joinedBefore(Pile p, Site s) {
 		Construction c = s.construction();
 		if (c == null || c.crate() == null) {
 			return false;
@@ -1311,7 +1239,7 @@ public final class Stockpiles {
 	 * (JR-b, F3) An adopted crate's placed counts by the credit keys of the targets it fed, in placement order, for their paid records: a crate
 	 * of one target gives it all; a shared crate gives each what of its paid cost stands (capped by the crate in {@link StockLedger#adopt}).
 	 */
-	private static Map<String, Map<String, Integer>> adoptedPaid(MinecraftServer srv, ServerLevel level, String crateKey, List<Site> sites, List<Infra> roads,
+	static Map<String, Map<String, Integer>> adoptedPaid(MinecraftServer srv, ServerLevel level, String crateKey, List<Site> sites, List<Infra> roads,
 		Map<String, Integer> placed) {
 		List<Object> fed = new ArrayList<>();
 		for (Site s : sites) {
@@ -2097,7 +2025,7 @@ public final class Stockpiles {
 
 			@Override
 			public boolean paused(Object t) {
-				if (dev.larattalabs.architect.txn.TxnServer.held("site:" + idOf(t))) {
+				if (Sites.txnHeld(idOf(t))) { // (slice T3b) site:, road: or group: (pile.adopt holds a road as road:<id>)
 					return true; // (slice T1, §3.6 "Holds") a target an open txn holds is skipped: nothing consumed (SiteWait TXN_HELD)
 				}
 				return t instanceof Site s ? s.construction().paused() : ((Infra) t).construction().paused();
@@ -2532,7 +2460,26 @@ public final class Stockpiles {
 					}
 				}
 				case "withdraw" -> o.add("withdrawn", Builder.counts(withdraw(srv, owner, counts(req.getAsJsonObject("items")), player)));
-				case "adopt" -> adopt(srv, owner);
+				case "adopt" -> {
+					try {
+						PileAdopt.Result r = adoptResult(srv, owner);
+						JsonArray j = new JsonArray();
+						r.joined().forEach(j::add);
+						o.add("joined", j);
+						JsonObject d = new JsonObject();
+						r.deferred().forEach(d::addProperty);
+						o.add("deferred", d);
+						o.addProperty("txn", r.txnId());
+					} catch (Sites.SiteException e) {
+						if (!"held(decided)".equals(e.detail())) {
+							throw e;
+						}
+						// (slice T3b) decided, then held (a dev pause, a refused barrier): it finishes later; the client hook waits for it
+						var m = java.util.regex.Pattern.compile("tx-[0-9]+").matcher(String.valueOf(e.getMessage()));
+						o.addProperty("heldDecided", e.getMessage());
+						o.addProperty("pendingTxn", m.find() ? m.group() : null);
+					}
+				}
 				case "dissolve" -> {
 					JsonObject last = null;
 					o.add("out", Builder.counts(dissolve(srv, owner, req.has("toPlayer") && req.get("toPlayer").getAsBoolean() ? player : null)));

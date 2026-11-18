@@ -32,6 +32,14 @@ public interface TxnEnv {
 	void kill(String point);
 
 	/**
+	 * (slice T3b, TEST {@code dev.txn.pauseAt}) Whether a drive that reaches {@code point} stops there, its txn held open (its resources
+	 * held) until the pause is cleared. Never in production; the model never pauses.
+	 */
+	default boolean pauseAt(String point) {
+		return false;
+	}
+
+	/**
 	 * Fires one event at least once (§3.12.9); {@code replayed} for one fired again by recovery. True once it is delivered (called again for
 	 * the same event after a false, it answers whether that delivery happened, never firing twice in one session); false while it waits
 	 * for a later tick.

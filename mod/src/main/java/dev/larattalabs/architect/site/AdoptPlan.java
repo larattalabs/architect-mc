@@ -33,7 +33,13 @@ public final class AdoptPlan {
 		/** Legacy: the key is credited and the crate is gone (an adoption stopped between its saves). */
 		JOINED,
 		/** Legacy: the key is credited and a crate block still stands at the cell (an A-model save): held for ops. */
-		FINISH
+		FINISH,
+		/**
+		 * (slice T3b, DFG's fix round, GPT P1) Its cell read and no crate block of any owner stands there, its key not credited: nothing to
+		 * take (no crate, no stock). Main's path inside the txn: the cell restored, the journal kind released, its targets lose the reference
+		 * and a building one joins the feed (deferring it kept a building target waiting for a crate that does not exist, forever).
+		 */
+		GONE
 	}
 
 	/** Why a crate is deferred; {@link #wire} is the stable value {@code AdoptResult.deferred} carries. */
@@ -56,7 +62,13 @@ public final class AdoptPlan {
 	 * exists, the owner id the block entity carries, and whether its ledger read.
 	 */
 	public record CrateRead(String key, String dim, int x, int y, int z, long posKey, boolean crateBlock, boolean hasBe, @Nullable String beOwner,
-		boolean ledgerReadable) {
+		boolean ledgerReadable, boolean known) {
+		/** (T3a's shape) a cell that was read ({@code known}). */
+		public CrateRead(String key, String dim, int x, int y, int z, long posKey, boolean crateBlock, boolean hasBe, @Nullable String beOwner,
+			boolean ledgerReadable) {
+			this(key, dim, x, y, z, posKey, crateBlock, hasBe, beOwner, ledgerReadable, true);
+		}
+
 		/** The ledger key the adoption credits: {@code adopt:<crateOwner>@<pos>} (dedupe per crate, never per call). */
 		public String adoptKey() {
 			return AdoptPlan.adoptKey(key, posKey);
@@ -75,13 +87,17 @@ public final class AdoptPlan {
 		return "adopt:" + crateOwner + "@" + posKey;
 	}
 
-	/** The classifier: one candidate's fate from its read and whether its adoption key is credited. */
+	/**
+	 * The classifier: one candidate's fate from its read and whether its adoption key is credited. (T3b, DFG) A cell not read ({@code known}
+	 * false: off the server thread, its chunk not loaded) defers whatever it holds; a read cell with no crate block is JOINED (credited) or
+	 * GONE (not).
+	 */
 	public static Verdict classify(CrateRead r, boolean credited) {
 		if (credited) {
-			return new Verdict(r.crateBlock() ? Fate.FINISH : Fate.JOINED, null);
+			return r.crateBlock() ? new Verdict(Fate.FINISH, null) : r.known() ? new Verdict(Fate.JOINED, null) : new Verdict(Fate.DEFER, Defer.NOT_A_CRATE);
 		}
 		if (!r.crateBlock()) {
-			return new Verdict(Fate.DEFER, Defer.NOT_A_CRATE);
+			return r.known() ? new Verdict(Fate.GONE, null) : new Verdict(Fate.DEFER, Defer.NOT_A_CRATE);
 		}
 		if (!r.hasBe() || !r.ledgerReadable() || r.beOwner() == null) {
 			return new Verdict(Fate.DEFER, Defer.UNREADABLE);
@@ -122,7 +138,8 @@ public final class AdoptPlan {
 	}
 
 	/** The plan: the JOIN crates, the deferred ones with their reason, the legacy fates, the resources to take at begin, the chunks to load. */
-	public record Plan(List<CrateRead> join, Map<String, Defer> deferred, List<String> joined, List<String> finish, List<String> resources, List<Long> load) {
+	public record Plan(List<CrateRead> join, Map<String, Defer> deferred, List<String> joined, List<String> finish, List<String> resources, List<Long> load,
+		List<CrateRead> gone) {
 	}
 
 	/**
@@ -142,6 +159,7 @@ public final class AdoptPlan {
 		Map<String, Defer> deferred = new LinkedHashMap<>();
 		List<String> joined = new ArrayList<>();
 		List<String> finish = new ArrayList<>();
+		List<CrateRead> gone = new ArrayList<>();
 		for (CrateRead r : first.values()) {
 			Verdict v = classify(r, credited.test(r.adoptKey()));
 			switch (v.fate()) {
@@ -149,6 +167,7 @@ public final class AdoptPlan {
 				case DEFER -> deferred.put(r.key(), v.why());
 				case JOINED -> joined.add(r.key());
 				case FINISH -> finish.add(r.key());
+				case GONE -> gone.add(r);
 			}
 		}
 		Map<String, Iterable<Long>> needs = new LinkedHashMap<>();
@@ -168,9 +187,13 @@ public final class AdoptPlan {
 		Set<String> res = new LinkedHashSet<>();
 		res.add("pile:" + owner);
 		kept.forEach(r -> res.add(r.resource()));
+		gone.forEach(r -> res.add(r.resource())); // (T3b) its cell is restored inside the txn: held as a crate's
 		for (CrateRead r : kept) {
 			res.addAll(records.getOrDefault(r.key(), List.of()));
 		}
-		return new Plan(List.copyOf(kept), deferred, joined, finish, List.copyOf(res), ch.load());
+		for (CrateRead r : gone) {
+			res.addAll(records.getOrDefault(r.key(), List.of()));
+		}
+		return new Plan(List.copyOf(kept), deferred, joined, finish, List.copyOf(res), ch.load(), List.copyOf(gone));
 	}
 }

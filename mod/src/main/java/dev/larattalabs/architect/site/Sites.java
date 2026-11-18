@@ -140,9 +140,26 @@ public final class Sites {
 
 		/** (6c PT) A PLAYER_BUILD refusal with the builds in the way. */
 		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
+			this(reason, message, builds, "");
+		}
+
+		/** (slice T3b) With a stable sub-code ({@link #detail}): {@code ArchitectRefused.detail()}. */
+		public SiteException(Reason reason, String message, String detail) {
+			this(reason, message, List.of(), detail);
+		}
+
+		private SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
+			this.detail = detail == null ? "" : detail;
+		}
+
+		private final String detail;
+
+		/** (slice T3b) The refusal's stable sub-code, {@code ""} when it has none. */
+		public String detail() {
+			return detail;
 		}
 
 		/** (6c PT) The builds in the way (PLAYER_BUILD), else empty. */
@@ -181,13 +198,33 @@ public final class Sites {
 	 */
 	public static @Nullable String adoptBusy(@Nullable String id) {
 		if (id != null) {
-			String held = dev.larattalabs.architect.txn.TxnServer.heldWhy("site:" + id);
+			String held = txnHeldWhy(id);
 			if (held != null) {
 				return held;
 			}
 		}
 		var f = ADOPT_BUSY;
 		return f == null || id == null ? null : f.apply(id);
+	}
+
+	/**
+	 * (slice T3b) {@code held(other) tx-<n>: ..} when an open txn holds the target or group {@code id} under any of its record resources
+	 * ({@code site:<id>}, and pile.adopt's {@code road:<id>} and {@code group:<id>}), else null. O(1) with no txn open.
+	 */
+	public static @Nullable String txnHeldWhy(String id) {
+		String h = dev.larattalabs.architect.txn.TxnServer.heldWhy("site:" + id);
+		if (h == null) {
+			h = dev.larattalabs.architect.txn.TxnServer.heldWhy("road:" + id);
+		}
+		if (h == null) {
+			h = dev.larattalabs.architect.txn.TxnServer.heldWhy("group:" + id);
+		}
+		return h;
+	}
+
+	/** (slice T3b) Whether {@link #txnHeldWhy} names a hold. */
+	public static boolean txnHeld(String id) {
+		return txnHeldWhy(id) != null;
 	}
 
 	/**

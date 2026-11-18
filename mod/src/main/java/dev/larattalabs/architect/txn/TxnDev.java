@@ -43,6 +43,13 @@ public final class TxnDev {
 				o.add("state", TxnServer.state());
 				yield o;
 			}
+			case "pauseAt" -> {
+				// (slice T3b, TEST) a live drive that reaches the point stops there, its txn held open; null clears it (the txn goes on next tick)
+				TxnServer.pauseAt(req.has("point") && !req.get("point").isJsonNull() ? req.get("point").getAsString() : null);
+				JsonObject o = new JsonObject();
+				o.addProperty("pauseAt", TxnServer.pausedAt());
+				yield o;
+			}
 			case "conservation" -> conservation(srv, player, req);
 			case "cells" -> cells(player, req);
 			case "owedAdd" -> owedAdd(srv, player, req);
