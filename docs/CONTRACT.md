@@ -33772,3 +33772,27 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   0 items; FL3+save passed on both). P1-3 and P1-6 are units (`standingCharged`; the river cases' resulting levels).
 - Green at a452b37f: 8c-ingame 31/0, 8c-crash 47/0, h-ingame-smoke, h-crash, h-df, hy-ingame-smoke, hy-crash-smoke, irr-ingame-smoke,
   irr-crash, irr-holders, fl-ingame, fl-natural all PASS; gradle build, kit 1619+, water lint, sidecar 955/955, api-compat clean.
+
+### SV: the join slice, survival rows (strict; branch `slice/SV` off `slice/8cG`, 8cG 1b784f1d and DF 211e3866 merged; versions NEXT; $0)
+- **Gate** `8c-survival` (tools/gate8c.mjs `survival`, rows in tools/lib/gate8c-sv.mjs, on gate6crs's survival base): `isle` (c05: the island
+  staged, the fall's ops not; the fluids item waits SITE_BUSY `waitsFor {kind: terrain, part: isle}` while the island builds, no water till
+  it is BUILT, both bodies settle, census equal, the header's row `on: "isle"`; the grotto's opened rock outside the fall's watch set, the
+  room air and dry after a 30 s stand; Remove E-flat 0, refund = consumed, conservation exact), `wash` (river_demo's meadow: no flower or
+  water in the quote, ledger or stock, 0 item entities, conservation exact after build and Remove), `nowash` (recorded: WU's live wash
+  check holds the head, `why: wash`, 0 items), `town` (c03: lot pieces hold only their designs, the river's 1,775 paid banks and lining in
+  the region remainder, the road's T3 bridge, no water billed; rows, `fluidsWatch` writing/draining with a box, `fluidsRemoval
+  {draining, until, ticksLeft}`, null after; Remove refund = consumed, E-flat 0, conservation exact).
+- **Fix (failing-first in game):** the fluids barrier named `firstBuilding`'s target, the header's paid shell `c1` (part fall), untyped:
+  it waits for the island's staged target before it starts (red: run 20261118-095922); then the grotto's one-cell staged target (run
+  -101241). `RegionTargets.firstBuildingForFluids` names the building staged target with the most cells left (`stagedFirst`, pure;
+  `FluidsBarrierSVTest`). After the island is BUILT the bodies wait for the shell, untyped (recorded).
+- **Merge readings:** RegionFluids keeps 8cG's `ownStillOurs`/`flowStillOurs` for the drain and stray take and `scoopSurvival` for every
+  removal, with DF round 2's P1 4 (the charged items back when none stands) folded in; DF's `mayWrite` guards stay; one `barrierTriedAt`.
+- **Ran** (gate-runs in `_work/architect-mc-SV-out`): 20261118-102801 (2 shards): unit-mod 1601/0, 8c-ingame 31/0, 8c-crash 47/0, h-df,
+  rs-df, irr-df, rv-df, h-ingame-smoke, h-probe-smoke, h-crash, hy-ingame-smoke, hy-crash-smoke, hy-cold-smoke, irr-ingame-smoke,
+  irr-crash, fl-ingame PASS (no fl smoke or crash step exists); 8c-survival 30/0 after the gate's wait check (20261118-112516).
+  api-compat 8/8, gitleaks clean.
+- **Docs:** SETTLEMENTS §4.2 (flowing water outside E-normal only outside a body's watch set), DEVBRIDGE (no new hook).
+- **Leftovers:** the kit's shell check (pond.mjs `unwrittenShell`) refuses LEAK when the virtual world's subsurface (dirt) and the frozen
+  volume (grass under the terrain builder's grass) disagree at a shell cell: the gate fills dirt there (gate6chy-b's builder leaves the base's
+  grass top); a capped removal's `foreign` positions stay unit-only.
