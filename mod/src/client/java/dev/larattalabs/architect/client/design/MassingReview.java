@@ -495,26 +495,28 @@ public final class MassingReview {
 		if (mc.gui.screen() != null || BuildPlacement.active()) {
 			return false;
 		}
-		boolean ours = switch (e.key()) {
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER, InputConstants.KEY_R, InputConstants.KEY_BACKSPACE, InputConstants.KEY_DELETE,
-				InputConstants.KEY_ESCAPE -> true;
-			default -> false;
-		};
-		if (action != InputConstants.PRESS) {
-			return ours; // a held key repeats nothing
+		// (PR A4) rebindable (Controls > "Architect: while placing"): Confirm approves, Redirect (R) opens the note, Cancel (Backspace,
+		// Delete or Esc) cancels
+		dev.larattalabs.architect.client.hud.PlacingKeys.Action act = dev.larattalabs.architect.client.hud.PlacingKeys.resolve(
+			dev.larattalabs.architect.client.hud.PlacingKeys.Context.MASSING, e.key(), e.hasShiftDown(), dev.larattalabs.architect.client.hud.Keys::bound);
+		if (act == null) {
+			return false;
 		}
-		switch (e.key()) {
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
+		if (action != InputConstants.PRESS) {
+			return true; // a held key repeats nothing
+		}
+		switch (act) {
+			case CONFIRM -> {
 				if (!sending) {
 					approve();
 				}
 				return true;
 			}
-			case InputConstants.KEY_R -> {
+			case REDIRECT -> {
 				redirectDialog();
 				return true;
 			}
-			case InputConstants.KEY_BACKSPACE, InputConstants.KEY_DELETE, InputConstants.KEY_ESCAPE -> {
+			case CANCEL -> {
 				cancel();
 				return true;
 			}
@@ -554,7 +556,9 @@ public final class MassingReview {
 				lines.add(new String[] {TextUtil.ellipsize(font, detail, inner), Integer.toString(HudInk.soft())});
 				lines.add(new String[] {TextUtil.ellipsize(font, sending ? "Sending…" : "Approve to design the detail inside these masses, or redirect it.", inner),
 					Integer.toString(HudInk.ok())});
-				hints = new String[] {"Enter", "approve", "R", "redirect…", "Backspace", "cancel"};
+				hints = new String[] {dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "approve",
+					dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.REDIRECT), "redirect…",
+					dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL), "cancel"};
 			} else if (shownSet != null) {
 				JsonObject raw = Sidecar.state().group(shownSet);
 				Group gr = raw == null ? null : Wire4b.group(raw);

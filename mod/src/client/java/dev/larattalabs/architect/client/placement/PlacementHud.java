@@ -275,26 +275,31 @@ final class PlacementHud implements HudZones.Element {
 		if (!legend) {
 			List<String> k = new ArrayList<>(List.of("?", "keys"));
 			if (v.forceArmed()) {
-				k.addAll(List.of("Shift+Enter", "force"));
+				k.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "force"));
 			}
 			boolean armed = BuildPlacement.bigArmed();
-			k.addAll(List.of("Enter", armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
+			k.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
 			String[] a = k.toArray(String[]::new);
-			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {{"?", "keys", "Enter", "place"}};
+			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {{"?", "keys", dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "place"}};
 		}
-		List<String> all = new ArrayList<>(List.of("R", "rotate", "Shift+R", "back", "Arrows", "nudge", "PgUp/Dn", "raise", "L", v.locked() ? "unlock" : "lock",
-			"Enter", BuildPlacement.bigArmed() ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place"));
+		// (PR A4) the live bindings (Controls > "Architect: while placing"), so a rebound key shows here
+		List<String> all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "rotate", dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "back", dev.larattalabs.architect.client.hud.Keys.nudgeLabel(), "nudge",
+			dev.larattalabs.architect.client.hud.Keys.heightLabel(), "raise", dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LOCK), v.locked() ? "unlock" : "lock",
+			dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), BuildPlacement.bigArmed() ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place"));
 		if (v.forceArmed()) {
-			all.addAll(List.of("Shift+Enter", "force"));
+			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "force"));
 		}
 		all.addAll(List.of("Esc", BuildPlacement.bigArmed() ? "disarm" : "cancel"));
+		if (dev.larattalabs.architect.client.hud.Keys.bound(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL) != dev.larattalabs.architect.client.hud.PlacingKeys.ESCAPE) {
+			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL), "cancel too"));
+		}
 		// SAFETY: the undo key (outside placement) and the confirm threshold
 		if (dev.larattalabs.architect.client.hud.Keys.undoLast != null) {
 			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast), "undo last placement"));
 		}
 		// a real key in the keycap: "1,000+" drawn as one read as a key to press (UI polish 1)
 		all.addAll(List.of("Enter ×2", dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+ blocks"));
-		all.addAll(List.of("?", "hide"));
+		all.addAll(List.of("? or " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LEGEND), "hide"));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();
 		for (int i = 0; i < all.size(); i += 2) {

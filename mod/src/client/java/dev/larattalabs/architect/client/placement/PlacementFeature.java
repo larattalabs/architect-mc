@@ -7,6 +7,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.dev.DevBridge;
 import dev.larattalabs.architect.client.dev.Fields;
+import dev.larattalabs.architect.client.hud.Keys;
+import dev.larattalabs.architect.client.hud.PlacingKeys;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.BlueprintTransform;
@@ -133,46 +135,47 @@ public final class PlacementFeature {
 	 * Only while placing with no screen open; releases always pass.
 	 */
 	public static boolean onKey(int action, KeyEvent e) {
-		if (action == InputConstants.RELEASE || !BuildPlacement.active() && !PlotMarker.active() || BuildPlacement.preview()) {
-			return false; // an API preview has no keys
-		}
 		Minecraft mc = Minecraft.getInstance();
-		if (mc.gui.screen() != null) {
+		// (PR A4) only while placing or marking, with no screen open; an API preview has no keys. Otherwise every key passes (Esc pauses)
+		if (action == InputConstants.RELEASE || !PlacingKeys.listening(BuildPlacement.active(), PlotMarker.active(), mc.gui.screen() != null,
+			BuildPlacement.preview())) {
 			return false;
 		}
 		boolean repeat = action != InputConstants.PRESS;
 		if (PlotMarker.active()) {
 			return plotKey(e, repeat);
 		}
-		switch (e.key()) {
-			case InputConstants.KEY_R -> {
+		// (PR A4) rebindable actions (Controls > "Architect: while placing"); Shift stays a fixed modifier; Esc stays cancel
+		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLACE, e.key(), e.hasShiftDown(), Keys::bound);
+		if (act == null) {
+			return false;
+		}
+		switch (act) {
+			case ROTATE -> {
 				if (!repeat) {
 					BuildPlacement.rotate(e.hasShiftDown() ? -1 : 1);
 				}
 			}
-			case InputConstants.KEY_UP -> BuildPlacement.nudge(1, 0, 0);
-			case InputConstants.KEY_DOWN -> BuildPlacement.nudge(-1, 0, 0);
-			case InputConstants.KEY_LEFT -> BuildPlacement.nudge(0, -1, 0);
-			case InputConstants.KEY_RIGHT -> BuildPlacement.nudge(0, 1, 0);
-			case InputConstants.KEY_PAGEUP -> BuildPlacement.nudge(0, 0, 1);
-			case InputConstants.KEY_PAGEDOWN -> BuildPlacement.nudge(0, 0, -1);
-			case InputConstants.KEY_L -> {
+			case FORWARD -> BuildPlacement.nudge(1, 0, 0);
+			case BACK -> BuildPlacement.nudge(-1, 0, 0);
+			case LEFT_ -> BuildPlacement.nudge(0, -1, 0);
+			case RIGHT_ -> BuildPlacement.nudge(0, 1, 0);
+			case RAISE -> BuildPlacement.nudge(0, 0, 1);
+			case LOWER -> BuildPlacement.nudge(0, 0, -1);
+			case LOCK -> {
 				if (!repeat) {
 					BuildPlacement.setLocked(!BuildPlacement.locked());
 				}
 			}
 			// SAFETY: a big placement asks for Enter twice (BuildPlacement.enter); Esc first disarms that, then cancels
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> BuildPlacement.enter(e.hasShiftDown(), repeat);
-			case InputConstants.KEY_ESCAPE, InputConstants.KEY_BACKSPACE -> {
+			case CONFIRM -> BuildPlacement.enter(e.hasShiftDown(), repeat);
+			case CANCEL -> {
 				if (!repeat) {
 					BuildPlacement.escape();
 				}
 			}
-			// UI-2b: "?" (Shift+/ on a US layout; plain / still opens chat) or H shows / hides the key legend and the refusals' detail
-			case InputConstants.KEY_SLASH, InputConstants.KEY_H -> {
-				if (e.key() == InputConstants.KEY_SLASH && !e.hasShiftDown()) {
-					return false;
-				}
+			// UI-2b: "?" (Shift+/ on a US layout; plain / still opens chat) or the legend key (H) shows / hides the key legend and the refusals' detail
+			case LEGEND -> {
 				if (!repeat) {
 					BuildPlacement.setLegend(!BuildPlacement.legend());
 				}
@@ -184,29 +187,36 @@ public final class PlacementFeature {
 		return true;
 	}
 
-	/** Plot-marking keys: Enter corner, PgUp/PgDn height (Shift: 4), Backspace back a corner, Esc cancel; (7b ST) F the fit (Shift: back). */
+	/**
+	 * Plot-marking keys: Confirm (Enter) corner, Raise/Lower (PgUp/PgDn) height (Shift: 4), Cancel (Backspace) back a corner, Esc
+	 * cancel; (7b ST) Fit (F) the fit (Shift: back). (PR A4) Rebindable; Esc stays the fixed cancel.
+	 */
 	private static boolean plotKey(KeyEvent e, boolean repeat) {
-		switch (e.key()) {
-			case InputConstants.KEY_F -> {
+		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLOT, e.key(), e.hasShiftDown(), Keys::bound);
+		if (act == null) {
+			return false;
+		}
+		boolean esc = e.key() == InputConstants.KEY_ESCAPE;
+		switch (act) {
+			case FIT -> {
 				if (!repeat) {
 					PlotMarker.cycleFit(e.hasShiftDown() ? -1 : 1);
 				}
 			}
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
+			case CONFIRM -> {
 				if (!repeat) {
 					PlotMarker.confirm();
 				}
 			}
-			case InputConstants.KEY_PAGEUP -> PlotMarker.adjustHeight(e.hasShiftDown() ? 4 : 1);
-			case InputConstants.KEY_PAGEDOWN -> PlotMarker.adjustHeight(e.hasShiftDown() ? -4 : -1);
-			case InputConstants.KEY_BACKSPACE -> {
+			case RAISE -> PlotMarker.adjustHeight(e.hasShiftDown() ? 4 : 1);
+			case LOWER -> PlotMarker.adjustHeight(e.hasShiftDown() ? -4 : -1);
+			case CANCEL -> {
 				if (!repeat) {
-					PlotMarker.back();
-				}
-			}
-			case InputConstants.KEY_ESCAPE -> {
-				if (!repeat) {
-					PlotMarker.cancel();
+					if (esc) {
+						PlotMarker.cancel();
+					} else {
+						PlotMarker.back();
+					}
 				}
 			}
 			default -> {

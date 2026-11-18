@@ -24,6 +24,8 @@ public final class Keys {
 	/** (7c CX) Build a link: the plot marker's connector mode (N by default since PR K1, K before: K is the jobs panel; from a site house's drop when one was just placed). */
 	public static KeyMapping buildLink;
 	private static boolean registered;
+	/** (PR A4) The placing, plot and massing keys, by action (Controls > "Architect: while placing"). */
+	public static final java.util.EnumMap<PlacingKeys.Action, KeyMapping> placing = new java.util.EnumMap<>(PlacingKeys.Action.class);
 
 	private Keys() {
 	}
@@ -47,6 +49,18 @@ public final class Keys {
 			cat, 3));
 		buildLink = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.build_link", InputConstants.Type.KEYBOARD, KeyDefaults.BUILD_LINK,
 			cat, 4));
+		// (PR A4) the keys that act only while placing, marking a plot or reviewing a massing: their own category, today's keys by default
+		KeyMapping.Category placingCat;
+		try {
+			placingCat = KeyMapping.Category.register(Architect.id("architect_placing"));
+		} catch (IllegalArgumentException alreadyThere) {
+			placingCat = new KeyMapping.Category(Architect.id("architect_placing"));
+		}
+		int order = 10;
+		for (PlacingKeys.Action a : PlacingKeys.Action.values()) {
+			placing.put(a, KeyMappingHelper.registerKeyMapping(new KeyMapping(a.translationKey(), InputConstants.Type.KEYBOARD, a.defaultKey, placingCat,
+				order++)));
+		}
 	}
 
 	/**
@@ -74,6 +88,61 @@ public final class Keys {
 			default -> s;
 		};
 		return word.length() > 9 ? word.substring(0, 9) : word;
+	}
+
+	/** (PR A4) The key code an action is bound to now (-1 when unbound; its default before registration). */
+	public static int bound(PlacingKeys.Action a) {
+		KeyMapping k = placing.get(a);
+		if (k == null) {
+			return a.defaultKey;
+		}
+		if (k.isUnbound()) {
+			return -1;
+		}
+		InputConstants.Key key = KeyMappingHelper.getBoundKeyOf(k);
+		return key.getType() == InputConstants.Type.KEYBOARD ? key.getValue() : -1;
+	}
+
+	/** (PR A4) An action's keycap label ("R", "Enter"), read live; its default's name before registration. */
+	public static String label(PlacingKeys.Action a) {
+		KeyMapping k = placing.get(a);
+		if (k == null) {
+			return switch (a.defaultKey) {
+				case PlacingKeys.ENTER -> "Enter";
+				case PlacingKeys.BACKSPACE -> "Backspace";
+				case PlacingKeys.PAGE_UP -> "PgUp";
+				case PlacingKeys.PAGE_DOWN -> "PgDn";
+				case PlacingKeys.UP -> "Up";
+				case PlacingKeys.DOWN -> "Down";
+				case PlacingKeys.LEFT -> "Left";
+				case PlacingKeys.RIGHT -> "Right";
+				default -> String.valueOf((char) a.defaultKey);
+			};
+		}
+		return label(k);
+	}
+
+	/** (PR A4) "Shift+R": a Shift variant's label. */
+	public static String shift(PlacingKeys.Action a) {
+		return "Shift+" + label(a);
+	}
+
+	/**
+	 * (PR A4) The nudge keys as one keycap: "Arrows" while they are the four arrows, else the four labels. Likewise "PgUp/Dn".
+	 */
+	public static String nudgeLabel() {
+		if (bound(PlacingKeys.Action.FORWARD) == PlacingKeys.UP && bound(PlacingKeys.Action.BACK) == PlacingKeys.DOWN && bound(PlacingKeys.Action.LEFT_)
+			== PlacingKeys.LEFT && bound(PlacingKeys.Action.RIGHT_) == PlacingKeys.RIGHT) {
+			return "Arrows";
+		}
+		return label(PlacingKeys.Action.FORWARD) + label(PlacingKeys.Action.LEFT_) + label(PlacingKeys.Action.BACK) + label(PlacingKeys.Action.RIGHT_);
+	}
+
+	public static String heightLabel() {
+		if (bound(PlacingKeys.Action.RAISE) == PlacingKeys.PAGE_UP && bound(PlacingKeys.Action.LOWER) == PlacingKeys.PAGE_DOWN) {
+			return "PgUp/Dn";
+		}
+		return label(PlacingKeys.Action.RAISE) + "/" + label(PlacingKeys.Action.LOWER);
 	}
 
 	public static boolean matches(KeyMapping k, KeyEvent e) {
