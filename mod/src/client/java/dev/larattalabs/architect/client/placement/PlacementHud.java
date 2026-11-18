@@ -99,7 +99,7 @@ final class PlacementHud implements HudZones.Element {
 				dev.larattalabs.architect.placement.Approach.Plan ap = v.approach();
 				int[] feet = ap.feet();
 				int rise = feet[feet.length - 1] - feet[0];
-				add.accept(Row.segs(List.of(new Seg(GhostRenderer.PATH | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
+				add.accept(Row.segs(List.of(new Seg(GhostRenderer.path() | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
 					: rise > 0 ? ", up " + rise : ", down " + -rise) + (ap.fillCount() == 0 ? "" : " · " + ap.fillCount() + " filled") + (ap.clearCount() == 0
 					? "" : " · " + ap.clearCount() + " cut"), HudInk.soft()))), 3);
 			}
@@ -253,19 +253,19 @@ final class PlacementHud implements HudZones.Element {
 			s.add(new Seg(0, "nothing in the way", HudInk.soft()));
 		}
 		if (v.obstructedCount() > 0) {
-			s.add(new Seg(GhostRenderer.OBSTRUCTED | 0xFF000000, v.obstructedCount() + " block" + (v.obstructedCount() == 1 ? "" : "s") + " replaced", HudInk.warn()));
+			s.add(new Seg(GhostRenderer.obstructed() | 0xFF000000, v.obstructedCount() + " block" + (v.obstructedCount() == 1 ? "" : "s") + " replaced", HudInk.warn()));
 		}
 		if (v.blockedCount() > 0) {
-			s.add(new Seg(GhostRenderer.BLOCKED | 0xFF000000, v.blockedCount() + " block entit" + (v.blockedCount() == 1 ? "y" : "ies") + " (chests, signs…)",
+			s.add(new Seg(GhostRenderer.blocked() | 0xFF000000, v.blockedCount() + " block entit" + (v.blockedCount() == 1 ? "y" : "ies") + " (chests, signs…)",
 				HudInk.error()));
 		}
-		s.add(v.fillCount() == 0 ? new Seg(0, "no foundation needed", HudInk.soft()) : new Seg(GhostRenderer.FOUNDATION | 0xFF000000, v.fillCount()
+		s.add(v.fillCount() == 0 ? new Seg(0, "no foundation needed", HudInk.soft()) : new Seg(GhostRenderer.foundation() | 0xFF000000, v.fillCount()
 			+ " foundation", HudInk.soft()));
 		if (v.clearCount() > 0) {
-			s.add(new Seg(GhostRenderer.CLEARED | 0xFF000000, v.clearCount() + " terrain cleared", HudInk.soft()));
+			s.add(new Seg(GhostRenderer.cleared() | 0xFF000000, v.clearCount() + " terrain cleared", HudInk.soft()));
 		}
 		if (v.lavaCount() > 0) {
-			s.add(new Seg(GhostRenderer.LAVA | 0xFF000000, v.lavaCount() + " lava", HudInk.error()));
+			s.add(new Seg(GhostRenderer.lava() | 0xFF000000, v.lavaCount() + " lava", HudInk.error()));
 		}
 		return s;
 	}

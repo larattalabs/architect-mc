@@ -2763,6 +2763,21 @@ public final class ArchitectScreen extends Screen {
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
 		ry += 12;
+		// (PR A2) the ghost colours: standard or colour-blind safe (lab-ui's setting: Steward's ghosts follow it)
+		var pal = dev.larattalabs.labui.ui.GhostPalette.current();
+		String pl = "Ghost colours: " + pal.label() + " (click to change)";
+		hits.add(new Hit("ghost_palette", pl, rx, ry, Math.min(colW, font.width(pl)), 12, true, pal != dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD,
+			() -> dev.larattalabs.labui.client.prefs.LabUiPrefs.setGhostPalette(pal == dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD
+				? dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO : dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD)));
+		for (String line : TextUtil.wrapPlain(font, pl, colW)) {
+			g.text(font, line, rx, ry + 2, UiStyle.link(), false);
+			ry += 10;
+		}
+		for (String line : TextUtil.wrapPlain(font, "Outlines are dashed when a design can't go there, in both palettes.", colW)) {
+			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
+			ry += 10;
+		}
+		ry += 2;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.clayText(), false);

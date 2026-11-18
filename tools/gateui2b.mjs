@@ -561,6 +561,48 @@ steps.gallery = async () => {
   }, { once: true, closeScreen: false });
   await call('dev.build.cancel').catch(() => null);
 
+  // ================================================================ (PR A2) the ghost categories again in the Okabe-Ito palette, plus hazards
+  // (water in front of the door) in both; each also gets a deuteranopia-filtered copy in the review sheet
+  const hazardScene = async () => {
+    await start(); await waitVerdict();
+    const b = boxOf(await buildState());
+    await cmd(`/fill ${b.min[0] - 1} ${b.min[1]} ${b.max[2] + 1} ${b.max[0] + 1} ${b.min[1]} ${b.max[2] + 3} minecraft:water`);
+    await start(); await cam(6, 16, 34); await waitVerdict(); await sleep(500);
+  };
+  await sec('world', 'ghost', 'hazard', hazardScene, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
+  await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 22);
+  if (onlyWants('ghost_okabe', 'status_okabe')) {
+    await call('dev.pr.palette', { palette: 'okabe_ito' }).catch((e) => GAL.notes.push(`dev.pr.palette: ${errMsg(e)}`));
+    await sec('world', 'ghost_okabe', 'normal', async () => { await start(); await cam(6, 16, 34); await waitVerdict(); }, { once: true, closeScreen: false });
+    await sec('world', 'ghost_okabe', 'replaced', async () => {
+      await start(); await waitVerdict();
+      const b = boxOf(await buildState());
+      await cmd(`/fill ${b.min[0] + 2} ${b.min[1] + 1} ${b.min[2] + 2} ${b.max[0] - 2} ${b.min[1] + 4} ${b.max[2] - 2} minecraft:stone`);
+      await start(); await cam(6, 16, 34); await waitVerdict(); await sleep(500);
+    }, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 16);
+    await sec('world', 'ghost_okabe', 'block_entity', async () => {
+      await start(); await waitVerdict(); await chestAt(true);
+      await start(); await waitVerdict();
+      await call('dev.build.confirm', {}, 60_000).catch(() => null);
+      await sleep(300); await cam(6, 16, 34);
+    }, { once: true, closeScreen: false });
+    await chestAt(false).catch(() => null);
+    await sec('world', 'ghost_okabe', 'refused', async () => {
+      await call('dev.build.cancel').catch(() => null);
+      await call('dev.build.start', { blueprint: 'cabin', origin: [ORIGIN[0], -70, ORIGIN[2]], ground: false, turns: 0 });
+      await waitVerdict(); await cam(6, 16, 34, 6, 4, 6);
+    }, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await sec('world', 'ghost_okabe', 'hazard', hazardScene, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 22);
+    await sec('ui', 'status_okabe', 'tab', async () => openTab('status'));
+    await call('dev.pr.palette', { palette: 'standard' }).catch(() => null);
+  }
+
   // ================================================================ toasts, the paged chat list, Library > Placed
   const row = [];
   const place = async (o, scale) => {
@@ -667,6 +709,10 @@ steps.gallery = async () => {
     await sleep(6000);
     const rc = async () => call('dev.camera', { x: -40, y: 90, z: 20, yaw: 180, pitch: 35, mode: 'spectator', closePause: true }, 30_000).then(() => sleep(2500));
     await sec('world', 'region_ghost', 'plan', rc, { once: true, closeScreen: false });
+    // (PR A2) the region ghost in the Okabe-Ito palette (its cells are tinted when built: re-run the check)
+    await call('dev.pr.palette', { palette: 'okabe_ito' }).catch(() => null);
+    await sec('world', 'region_ghost', 'plan_okabe', rc, { once: true, closeScreen: false });
+    await call('dev.pr.palette', { palette: 'standard' }).catch(() => null);
     await call('dev.region.ghost', { off: true }, 30_000);
   } catch (e) { GAL.failed.push({ kind: 'world', screen: 'region_ghost', state: 'plan', scale: null, error: errMsg(e) }); }
   await call('dev.release', {}).catch(() => null);
@@ -752,6 +798,30 @@ steps.gallery = async () => {
     });
     await call('dev.screen', { open: null });
     await call('dev.site.deconstruct', { site: siteB, force: true }).catch(() => null);
+  }
+  // ================================================================ (PR) the player-ready pass: Help, the "?" overlays, the Controls page
+  if (onlyWants('status', 'design', 'library', 'designs', 'styles', 'keybinds')) {
+    await call('dev.screen', { open: null });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    await sec('ui', 'status', 'help', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); });
+    for (const tab of ['design', 'library', 'designs', 'status']) {
+      await sec('ui', tab, 'keys', async () => { await openTab(tab); await call('dev.key', { key: 'key.keyboard.f1' }); });
+    }
+    await sec('ui', 'styles', 'keys', async () => { await browser(); await call('dev.key', { key: 'key.keyboard.f1' }); });
+    await sec('ui', 'keybinds', 'architect', async () => { await call('dev.screen', { open: 'keybinds' }); await sleep(600); });
+    await sec('ui', 'library', 'tip_hidden', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('library'); });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    await sec('ui', 'status', 'tips_again', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('status'); });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    if (process.env.GATEUIG_TEXT150 === '1') {
+      // (PR A3) text at 150 % at GUI scale 4 on each screen
+      await call('dev.pr.textScale', { percent: 150 }).catch((e) => GAL.notes.push(`dev.pr.textScale: ${errMsg(e)}`));
+      for (const tab of ['design', 'library', 'designs', 'status']) await sec('ui', tab, 'text150', async () => openTab(tab), { scales: [4] });
+      await sec('ui', 'styles', 'text150', async () => browser(), { scales: [4] });
+      await sec('ui', 'status', 'help_text150', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); }, { scales: [4] });
+      await call('dev.pr.textScale', { percent: 100 }).catch(() => null);
+    }
+    await call('dev.screen', { open: null });
   }
   await call('dev.survival.set', { on: false }).catch(() => null);
   await call('dev.release', {}).catch(() => null);

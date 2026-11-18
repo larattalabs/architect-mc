@@ -1073,12 +1073,12 @@ public final class BuildPlacement {
 		String water = TerrainFit.waterWarning(plan);
 		if (water != null) {
 			notes.add(water);
-			noteInk.add(GhostRenderer.WATER);
+			noteInk.add(GhostRenderer.water());
 		}
 		String wet = Approach.waterWarning(approach);
 		if (wet != null) {
 			notes.add(wet);
-			noteInk.add(GhostRenderer.WATER);
+			noteInk.add(GhostRenderer.water());
 		}
 		String shortOf = Approach.shortWarning(approach);
 		if (shortOf != null) {
@@ -1089,7 +1089,7 @@ public final class BuildPlacement {
 		SiteWarnings.Result site = ground ? SiteWarnings.forBlueprint(b, turns, box, approach, world) : SiteWarnings.Result.NONE;
 		for (String w : site.warnings()) {
 			notes.add(w);
-			noteInk.add(GhostRenderer.HAZARD);
+			noteInk.add(GhostRenderer.hazard());
 		}
 		// (7b ST) the standalone ports that meet no standable ground ("the entrance opens onto a drop"), as the server's verdict notes them
 		if (onSite != null) {
@@ -1097,7 +1097,7 @@ public final class BuildPlacement {
 			int dsz = turns % 2 == 0 ? sz : sx;
 			for (String w : dev.larattalabs.architect.site.SiteFit.drops(onSite, dsx, dsz, world)) {
 				notes.add(w);
-				noteInk.add(GhostRenderer.HAZARD);
+				noteInk.add(GhostRenderer.hazard());
 			}
 			viewDrops = dev.larattalabs.architect.site.SiteFit.dropsOf(onSite, dsx, dsz, world); // (7c CX) the Build a link key's first end
 		} else {
