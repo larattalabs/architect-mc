@@ -183,11 +183,13 @@ public final class RegionsImpl implements Regions {
 			GENERATED.clear();
 			RegionFluids.forget(null);
 			OWED.clear();
+			PENDING_INSTALL.clear();
+			AFTER_SAVE.clear();
 			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
-			if (!OWED.isEmpty()) {
-				retryOwed(s); // (slice DF round 2) owed region records tried again
+			if (!OWED.isEmpty() || !PENDING_INSTALL.isEmpty()) {
+				retryOwed(s); // (slice DF round 2) owed region records tried again; (round 3) held installs retried until they run
 			}
 			if (reconcilePending) {
 				reconcilePending = false;
@@ -2983,12 +2985,14 @@ public final class RegionsImpl implements Regions {
 		if (stateWas != RegionState.REMOVING) {
 			BEFORE_REMOVAL.remove(l.rec().id);
 		}
-		OWED.remove(l.rec().id);
+		// (round 3, P1 4) the debt stays: only a confirmed save of the state that made it clears it (an earlier REMOVING in doubt included)
 	}
 
 	/** (TEST) A region's debt and held operations forgotten. */
 	static void clearOwed(String id) {
 		OWED.remove(id);
+		PENDING_INSTALL.remove(id);
+		AFTER_SAVE.remove(id);
 	}
 
 	/** (slice DF round 2) Whether a region's record is owed (not known on disk). */
@@ -3000,20 +3004,40 @@ public final class RegionsImpl implements Regions {
 	/** (slice DF round 3, TEST seam) What the regions tick runs for a region whose held operation may go on ({@link Revisions#recoverOne}). */
 	static java.util.function.BiConsumer<MinecraftServer, Live> RECOVER = Revisions::recoverOne;
 
-	/** (slice DF round 3) A revision's publication answered IN_DOUBT: its install waits until the record is confirmed. */
+	/**
+	 * (slice DF round 3, P1 3) The regions with a held operation of their own, apart from their record's debt: a revision accepted in doubt
+	 * whose install waits. Kept until the install ran (an unrelated OK save clears the debt, never this).
+	 */
+	private static final java.util.Set<String> PENDING_INSTALL = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	/** (slice DF round 3) What runs once a region's record is next saved OK (an undo's manifest cleanup after its finish save failed). */
+	private static final Map<String, List<Runnable>> AFTER_SAVE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (slice DF round 3) A revision's publication answered IN_DOUBT: its install waits until the record is confirmed (held explicitly). */
 	static void publicationInDoubt(Live l) {
 		OWED.put(l.rec().id, System.nanoTime());
+		PENDING_INSTALL.add(l.rec().id);
+	}
+
+	/** (slice DF round 3) {@code r} runs right after the region's record is next saved OK (on the saving thread). */
+	static void afterSave(Live l, Runnable r) {
+		AFTER_SAVE.computeIfAbsent(l.rec().id, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(r);
 	}
 
 	static void retryOwed(MinecraftServer s) {
-		for (String id : List.copyOf(OWED.keySet())) {
+		java.util.Set<String> ids = new java.util.TreeSet<>(OWED.keySet());
+		ids.addAll(PENDING_INSTALL);
+		for (String id : ids) {
 			Live l = REGIONS.get(id);
 			if (l == null) {
 				OWED.remove(id);
+				PENDING_INSTALL.remove(id);
 				continue;
 			}
 			if (mayDrive(l)) {
 				RECOVER.accept(s, l); // (P1 8) a revision accepted in doubt installs now
+				if (!Revisions.awaitingInstall(l)) {
+					PENDING_INSTALL.remove(id); // (installed, or nothing of it left to install)
+				}
 			}
 		}
 	}
@@ -3030,6 +3054,10 @@ public final class RegionsImpl implements Regions {
 			throw e;
 		}
 		OWED.remove(l.rec().id);
+		List<Runnable> after = AFTER_SAVE.remove(l.rec().id);
+		if (after != null) {
+			after.forEach(Runnable::run); // (round 3) what waited for this record on disk
+		}
 	}
 
 	static void writeRec(Path world, RegionRec rec) throws IOException {

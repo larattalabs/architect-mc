@@ -33427,11 +33427,11 @@ so two module lots that share items can't each be held to their own measured bou
 |---|---|---|---|
 | Revisions.realise :917/918/928 | op.json, effective | refused, nothing accepted | refused (orphans never read) |
 | Revisions publication (saveConfirmed) | region.json | rolled back, refused | accepted, held, installed on confirm |
-| Revisions.install :1178, its save | op.json "installed", region.json | warn; record owed, items wait (mayDrive) | the same |
+| Revisions.install :1178, its save | op.json "installed", region.json | op.json: warn only, not owed (advisory: recover ignores its state, installs are idempotent by item key); region.json: owed, items wait (mayDrive) | the same |
 | Revisions.end :1341, cancelEnded :1896 | op.json "done" | warn (advisory) | warn |
 | Revisions.writeUndo | op-<id>.json | throws (the step stops) | throws |
 | undo0 (RVU1) | region.json | rolled back, manifest deleted, refused | kept, owed, undo runs on confirm |
-| undoStep RVC2 / finishUndo | region.json | waits / manifest kept, owed | the same |
+| undoStep RVC2 / finishUndo | region.json | waits / (round 3) manifest kept and closed by the record's next OK save (RegionsImpl.afterSave) | the same |
 | RegionsImpl.removeGroup | region.json REMOVING | rolled back, RemoveResult(false) | kept, owed; removalGate waits |
 | RegionsImpl.realise0 :1899 / after the queue | region.json | refused, ir.json deleted / owed, items wait | refused, ir.json kept (orphan) / owed |
 | RegionsImpl.finishRemoval :3573 | removed.json, then delete region.json | no delete (still REMOVING) | no delete |
@@ -33451,6 +33451,20 @@ so two module lots that share items can't each be held to their own measured bou
   - The 24 steps are the 16 fluids gates, plus h-df, rs-df, irr-df, rv-df, rv-crash, rv-undo, rv-undo-crash, h-rmcrash, h-holders and rs-survival-smoke.
   - Full `./gradlew build`: 1572 tests, 0 failures.
 - **Leftovers:** a revision's lava scoop shares the region's ledger key (the first record's scoop wins; this predates DF). The bare FL3x row isn't failing-first.
+
+### Slice DF round 3 as built (the final check: 6 P1, 1 P2 left, three from round 2's fixes; one narrow round on Noah's delegation; recorded 2026-11-18)
+
+- **P1 1, the refund:** survival now records `chargedBodies` at the charge (and when a charge is settled from the ledger). The removal's scoop counts each cell once: standing (written and still there), or charged and never written (`neverWritten`: no sources, no wave, never written or settled). A source written and then taken is neither. This replaces round 2's per-kind max. A record without `chargedBodies` (one charged before round 3) gets main's rule, standing only.
+- **P1 2, lot drain:** T0's world barrier now runs before `lotDrained` is saved, throttled to once a second; a refused barrier leaves it false and the drain runs again. New kill point **FL6d** sits between the drain and the barrier.
+- **P1 3, held install:** `RegionsImpl.PENDING_INSTALL` is an explicit marker set by an in-doubt publication. The regions tick runs `recoverOne` until `Revisions.awaitingInstall` is false. An unrelated OK save clears the record's debt, never the marker.
+- **P1 4, refused removal:** `removalRefused` no longer clears OWED; only a confirmed save clears it.
+- **P1 5, re-drain:** a cell a player placed (its `Placed` record, via `DrainTarget.playerPlaced`) is never drained, so its record is never cleared. A body cell is taken only as a source (or a bubble column, ice, bars or decor). A watched cell is taken only at the level the body predicts there.
+- **P1 6, older done records:** `barrierDone` is saved with `done`. A loaded `done` without it is recovered as `drained`: drained again through the ownership checks, then the wait, then the barrier, then `done`.
+- **P2:** a refused lot save keeps the record owed and throttled across its rollback.
+- **The audit rows** for install and finishUndo are corrected above. finishUndo's manifest is closed by `afterSave` once the finished record is saved.
+- **Tests, failing first:** `RegionFluidsDFRound3Test` has 4 tests, covering P1 3, 4, 5 and 6. All 4 fail on the seams commit 7d94c438 and pass on the fix.
+- **In game:** rs-df gains a harvested row (P1 1); irr-df gains bare FL6 and FL6d rows (P1 2). Both rows were run on the tests commit 48cd9878 and then on the final SHA; the results are in the report.
+- Full `./gradlew build`: 1576 tests, 0 failures.
 
 ### Slice TXN (design)
 

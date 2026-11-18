@@ -818,3 +818,5 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   answers IN_DOUBT, as a folder force that failed after the rename; one write, or every write with `sticky`). `dev.journal.killAt` gains
   `FL3x` (a removal's `done` fluids record saved after T0's world barrier, the solids not restored yet), also with `+save`. New gate steps
   `irr-df` (gate6cirr `df`) and `rv-df` (gate6drv `df`).
+- **2026-11-18 (slice DF round 3):** `dev.journal.killAt` gains `FL6d` (a lot removal's sources drained, T0's barrier and the `lotDrained`
+  save not yet), also with `+save`.

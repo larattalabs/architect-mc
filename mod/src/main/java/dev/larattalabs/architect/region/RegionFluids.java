@@ -357,6 +357,8 @@ public final class RegionFluids {
 		long owedTriedAt;
 		/** (slice DF round 2) When the removal last tried T0's world barrier before its done record and was refused, 0 none. */
 		long barrierTriedAt;
+		/** (slice DF round 3, P1 6) The removal's done record was saved after T0's world barrier (a done without it is recovered first). */
+		boolean barrierDone;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -810,6 +812,9 @@ public final class RegionFluids {
 				return false;
 			}
 			if (!charge.isEmpty() && booked != null && settleBooked(l, booked.ledger(), level.getGameTime())) {
+				if (!l.rec().survival.has(CHARGED_BODIES)) {
+					l.rec().survival.add(CHARGED_BODIES, chargedBodiesOf(st)); // (round 3) the bodies the ledger's charge paid for (chargeOf's)
+				}
 				charge = Map.of(); // (fix b5b, review finding 3) booked before a crash lost the record: settled from the ledger, not charged again
 			}
 			if (!charge.isEmpty()) {
@@ -831,6 +836,7 @@ public final class RegionFluids {
 				charge.forEach(c::addProperty);
 				l.rec().survival.add("charged", c);
 				l.rec().survival.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, l.rid()); // (BC-c) counted against that rid's cap
+				l.rec().survival.add(CHARGED_BODIES, chargedBodiesOf(st)); // (round 3, P1 1) which bodies the charge paid for
 			}
 			if (!l.rec().survival.has("chargedAt")) {
 				l.rec().survival.addProperty("chargedAt", level.getGameTime());
@@ -851,6 +857,25 @@ public final class RegionFluids {
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/** (slice DF round 3) A body none of whose sources the stage wrote (not forced, no wave, never written or settled). */
+	static boolean neverWritten(BodyState bs) {
+		return bs.sources == 0 && bs.writtenAt < 0 && !"written".equals(bs.state) && !"settled".equals(bs.state);
+	}
+
+	/** (slice DF round 3) The record's member naming the bodies the region's fluids charge paid for. */
+	static final String CHARGED_BODIES = "chargedBodies";
+
+	/** (slice DF round 3) The bodies {@link #chargeOf} charges (pending, with lava or a grate), as ids. */
+	static JsonArray chargedBodiesOf(Regional st) {
+		JsonArray a = new JsonArray();
+		for (Body b : st.bodies) {
+			if ("pending".equals(st.states.get(b.id).state) && (b.lava && b.cells.length > 0 || b.grate.length > 0)) {
+				a.add(b.id);
+			}
+		}
+		return a;
 	}
 
 	/** (slice DF round 2) The record whose bodies the region's fluids charge was counted against ({@code survival.chargedRid}, else 0). */
@@ -1610,6 +1635,11 @@ public final class RegionFluids {
 			public void set(BlockPos p, BlockState s, int flags) {
 				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
 			}
+
+			@Override
+			public boolean playerPlaced(BlockPos p) {
+				return dev.larattalabs.architect.placed.Placed.record(level, p) != null;
+			}
 		}, level, st, b, bs, strays, others, held, removal);
 	}
 
@@ -1635,8 +1665,8 @@ public final class RegionFluids {
 				BlockState now = t.get(bp);
 				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not); (round 2, P1 5) only a state the body
 				// wrote: a player's waterlogged block in a drained body's cell keeps its block and its water
-				if (!bodyWrote(b, p, now, src, grate.contains(p))) {
-					continue;
+				if (!bodyWrote(b, p, now, src, grate.contains(p)) || t.playerPlaced(bp)) {
+					continue; // ((round 3, P1 5) a source a player placed there (its Placed record) is theirs)
 				}
 				if (held.test(p)) {
 					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
@@ -1654,8 +1684,9 @@ public final class RegionFluids {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
 				FluidState f = now.getFluidState();
-				if (f.isEmpty() || !ownFluid(now, src) || others.contains(p) || held.test(p)) {
-					continue; // ((round 2, P1 5) the body's fluid only: a waterlogged block or another fluid there is not its flow)
+				if (f.isEmpty() || !ownFluid(now, src) || others.contains(p) || held.test(p) || t.playerPlaced(bp) || !predictedLevel(b, p, now)) {
+					continue; // ((round 2, P1 5) the body's fluid only: a waterlogged block or another fluid there is not its flow; (round 3) nor
+					// a player's source, nor a level the body does not predict there)
 				}
 				String before = bs.before.get(p);
 				BlockState was = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
@@ -1674,7 +1705,7 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p)) {
+				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p) && !t.playerPlaced(bp)) {
 					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
 					// own drain, later in the removal, finds no fluid there any more
 					String was = beforeAny(st, p);
@@ -1697,8 +1728,8 @@ public final class RegionFluids {
 	 * waterlogged stair, a block put there since) is not the body's and a drain leaves it.
 	 */
 	static boolean bodyWrote(Body b, long p, BlockState now, Fluid src, boolean grateCell) {
-		if (ownFluid(now, src)) {
-			return true;
+		if (ownFluid(now, src) && (now.getFluidState().isSource() || now.is(Blocks.BUBBLE_COLUMN))) {
+			return true; // ((round 3) a source cell holds a source: flow there is the decay of the body's own, gone without it)
 		}
 		if ((now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)) && java.util.Arrays.stream(b.ice).anyMatch(x -> x == p)) {
 			return true;
@@ -1715,6 +1746,14 @@ public final class RegionFluids {
 		} catch (RuntimeException e) {
 			return false;
 		}
+	}
+
+	/** (slice DF round 3) A watched or spill cell's level is the one the body predicts there (any level where it predicts none). */
+	static boolean predictedLevel(Body b, long p, BlockState now) {
+		if (!b.predicted.containsKey(p) || !(now.getBlock() instanceof LiquidBlock)) {
+			return true;
+		}
+		return now.getValue(LiquidBlock.LEVEL) == b.predicted.get(p);
 	}
 
 	/** (slice DF round 2) A cell holding the body's own fluid: a liquid block of it, or (water) a bubble column. */
@@ -2012,13 +2051,13 @@ public final class RegionFluids {
 				List<long[]> at = (List<long[]>) w[3];
 				bs.at.addAll(at);
 			}
-			st.owed = false; // (the marks went back: what is on disk is the record as it stands in memory again)
-			st.owedWhy = null;
+			st.owedTriedAt = System.nanoTime(); // (round 3, P2) still owed, so the next try waits its second (mayWrite)
 			Architect.LOGGER.warn("Region {}: lot {}'s removal refused: its fluids record could not be saved first; nothing drained", l.rec().id, lotId);
 			return NOT_DURABLE;
 		}
 		int n = 0;
 		boolean changed = false;
+		List<BodyState> done = new ArrayList<>();
 		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
 		for (Body b : st.bodies) {
 			if (!ids.contains(b.id)) {
@@ -2034,11 +2073,24 @@ public final class RegionFluids {
 				}
 				n += drain(level, st, b, bs, true, st.othersOf(b), held, false); // ((6c F3-c) a lot removed: its decor water goes too)
 			}
-			bs.lotDrained = true;
+			done.add(bs);
 			changed = true;
 		}
 		if (changed) {
 			WorldJournal.kill("FL6d"); // (slice DF round 3) the lot's sources drained, lotDrained not saved yet
+			// (round 3, P1 2) the drain's writes durable before the record says drained (T0's world barrier), as the removal before done
+			long tb = System.nanoTime();
+			if (st.barrierTriedAt != 0 && tb - st.barrierTriedAt < RETRY_NANOS) {
+				return NOT_DURABLE;
+			}
+			st.barrierTriedAt = tb;
+			var barrier = dev.larattalabs.architect.site.Stockpiles.barrier(level.getServer());
+			if (!barrier.ok()) {
+				Architect.LOGGER.warn("Region {}: lot {}'s drain is not durable yet ({}: {}); its site waits", l.rec().id, lotId, barrier.outcome(), barrier.reason());
+				return NOT_DURABLE; // (lotDrained stays false: the next try drains again, idempotent)
+			}
+			st.barrierTriedAt = 0;
+			done.forEach(x -> x.lotDrained = true);
 			if (!save(l, st)) {
 				st.owedTriedAt = System.nanoTime();
 				return NOT_DURABLE; // (drained; the record of it owed: the site waits, the next try saves it)
@@ -2383,33 +2435,36 @@ public final class RegionFluids {
 			// (6c RS, §9.2) a survival region's standing lava sources are scooped into its owner's stockpile (a bucket from stock each) and
 			// its standing grates refunded, once (keyed), before the drain
 			if (l.rec().survival()) {
+				// (round 3, P1 1) per cell: what stands of a body (written and still there), else, for a body the charge paid for that was
+				// never written (its record's save refused, then removed), the charge back; a source written and then taken is neither
+				java.util.Set<String> paid = new java.util.HashSet<>();
+				if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
+					cb.forEach(x -> paid.add(x.getAsString()));
+				}
 				int lava = 0, grates = 0;
 				for (Body b : st.bodies) {
 					BodyState bs = st.states.get(b.id);
-					if (bs.before.isEmpty()) {
+					boolean ours = !bs.before.isEmpty();
+					boolean unwritten = paid.contains(b.id) && neverWritten(bs);
+					if (!ours && !unwritten) {
 						continue;
 					}
 					if (b.lava) {
 						for (long p : b.cells) {
 							FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
-							if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+							if (ours && f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+								lava++;
+							} else if (unwritten) {
 								lava++;
 							}
 						}
 					}
 					for (long p : b.grate) {
-						if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
+						if (ours && level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
+							grates++;
+						} else if (unwritten) {
 							grates++;
 						}
-					}
-				}
-				// (round 2, P1 4) what the record says was charged comes back even when nothing of it stands (bodies charged, never written:
-				// the record's save refused, then removed): per kind the larger of standing and charged
-				if (l.rid() == chargedRid(l)) {
-					JsonObject ch = l.rec().survival.get("charged") instanceof JsonObject c ? c : null;
-					if (ch != null) {
-						lava = Math.max(lava, ch.has("minecraft:lava_bucket") ? ch.get("minecraft:lava_bucket").getAsInt() : 0);
-						grates = Math.max(grates, ch.has("minecraft:iron_bars") ? ch.get("minecraft:iron_bars").getAsInt() : 0);
 					}
 				}
 				if (lava > 0 || grates > 0) {
@@ -2496,7 +2551,9 @@ public final class RegionFluids {
 		}
 		st.barrierTriedAt = 0;
 		st.removal = "done";
+		st.barrierDone = true;
 		if (!save(l, st)) {
+			st.barrierDone = false;
 			st.removal = "drained"; // (slice DF) the solids wait until the record says done on disk
 			st.owedTriedAt = System.nanoTime();
 			return false;
@@ -2622,6 +2679,9 @@ public final class RegionFluids {
 		o.addProperty("forcedAt", st.forcedAt);
 		if (st.removal != null) {
 			o.addProperty("removal", st.removal);
+		}
+		if (st.barrierDone) {
+			o.addProperty("barrierDone", true); // (round 3)
 		}
 		o.addProperty("until", st.until);
 		if (st.removalNote != null) {
@@ -2806,6 +2866,13 @@ public final class RegionFluids {
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;
 			st.until = o.has("until") ? o.get("until").getAsLong() : -1;
 			st.removalNote = o.get("removalNote") instanceof JsonElement rn && rn.isJsonPrimitive() ? rn.getAsString() : null;
+			st.barrierDone = o.has("barrierDone") && o.get("barrierDone").getAsBoolean();
+			if ("done".equals(st.removal) && !st.barrierDone) {
+				// (round 3, P1 6) a done written before the barrier (its drain's writes maybe lost): recovered as drained (drained again through the
+				// ownership check, the wait, the barrier, then done)
+				st.removal = "drained";
+				st.until = -1;
+			}
 			if (o.get("bodies") instanceof JsonObject bodies) {
 				for (var e : bodies.entrySet()) {
 					BodyState bs = st.states.get(e.getKey());

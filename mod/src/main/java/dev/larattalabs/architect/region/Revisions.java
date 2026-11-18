@@ -1952,8 +1952,18 @@ public final class Revisions {
 				Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, e.toString());
 			}
 		} else {
-			// (slice DF round 2, P1 7) the finished record owed: the manifest stays (a start before it is saved resumes the undo, idempotent)
+			// (slice DF round 2, P1 7) the finished record owed: the manifest stays (a start before it is saved resumes the undo, idempotent);
+			// (round 3) and is closed and deleted right after the record's next OK save, whichever save that is
 			Architect.LOGGER.warn("Region {}: undo {} finished; its record is owed, the manifest kept until it is saved", rec.id, opId);
+			RegionsImpl.afterSave(l, () -> {
+				op.addProperty("phase", "done");
+				try {
+					writeUndo(l, op);
+					Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
+				} catch (IOException | RuntimeException e) {
+					Architect.LOGGER.warn("Region {}: undo manifest {} not closed: {}", rec.id, opId, e.toString());
+				}
+			});
 		}
 		JsonObject agg = op.getAsJsonObject("result");
 		Map<String, Integer> hd = new LinkedHashMap<>();
@@ -2056,6 +2066,16 @@ public final class Revisions {
 	 * (slice DF round 2) {@link #recover}'s step for one region: a revision accepted (busy {@code revising}) and not installed is installed;
 	 * one whose batch is gone is ended. Also run once an owed record is confirmed (a publication in doubt). Idempotent.
 	 */
+	/** (slice DF round 3) Whether a revision of the region is accepted and not installed (busy revising, no batch of it). */
+	static boolean awaitingInstall(RegionsImpl.Live l) {
+		RegionRec rec = l.rec();
+		if (rec.busy == null || !rec.busy.startsWith("revising ")) {
+			return false;
+		}
+		Rev rv = rev(rec, Integer.parseInt(rec.busy.substring("revising ".length()).trim()));
+		return rv != null && (rv.batchId == null || Batches.get(rv.batchId) == null) && "ACCEPTED".equals(rv.state);
+	}
+
 	static void recoverOne(MinecraftServer s, RegionsImpl.Live l) {
 		{
 			RegionRec rec = l.rec();
