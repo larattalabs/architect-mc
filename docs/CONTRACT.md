@@ -33440,6 +33440,33 @@ so two module lots that share items can't each be held to their own measured bou
 - **Ran:** Gradle full 1577 (0 failed); `gate-runs-T2/20261118-040044-change` txn-core 75/0, txn-crate 68/0, txn-holds 50/0;
   `gate-runs-T2/20261118-042733-change` txn-owed 71/0; `gate-runs-T2-fk/20261118-040716-change` fk-crash 73/0, fkb-crash 48/0.
 
+### Slice T3b as built (branch `slice/T3b` off `slice/T3a` + `slice/T2` b8f41be4 + `slice/DFG` 26a2f746; adoption as the txn kind `pile.adopt`; versions NEXT; $0; strict)
+
+- **Kind** (`site/PileAdopt`, kv 1, decider txn, null key; one txn per `adoptCrates` call, decision 6): plan by `AdoptPlan` (JOIN, DEFER,
+  legacy JOINED/FINISH, plus DFG's **GONE**: a read cell with no crate and no credit frees its targets; `CrateRead.known` added, T3a's
+  constructor kept); resources `pile:`, `crate:` per JOIN/GONE cell, `site:`/`road:`/`group:` per record, taken before any amount is read;
+  a shared crate's paid-record chunks loaded under the holds up to `CHUNK_BOUND` 64, past it the crate deferred `chunks unloaded`.
+- **Effects:** `crate.take` (B, prepare) per crate with stock; then `ledger.adopt` (L, keyed `adopt:<crateOwner>@<pos>`: delivered, placed,
+  paid by target from the intent; stock past capacity, decision 1: nothing dropped, no owed), `ledger.order` (L, marker `txn:<tx-n>/<i>`
+  credited), `crate.restore` (W), `journal.release` (R, the journal commit confirmed), `record.clear` (R per group, site, road). Probes of
+  the ledger, records and journal answer UNKNOWN until the first tick (those stores load after the recovery slot). PREPARED_DONE rolls back.
+- **`crate.restore` (new in `CrateTxn`, for T2b part 2b to reuse):** `CrateTxn.restore(dim, pos, snapshotState, snapshotNbt)` (W) and
+  `CrateTxn.RESTORE_ADAPTER`: `Builder.restoreCrateCell` (now public) as the holder, receipt `tx-n/i@restored` in the chunk's
+  `architect_mc:txn_receipts`; probe: that receipt (UNKNOWN when the chunk can't be read).
+- **Legacy FINISH** (decision 3): `TxnCore.holdForOps` writes a quarantined entry (kind `pile.adopt.finish`) holding the crate and its records,
+  indefinitely; reported deferred `held for ops`. (Ops removal waits for `/architect txn resolve`, still deferred from T1.)
+- **Core (additive):** `TxnKind.alias` (SAC1 = the last take applied, or `prepared` with no take; SAC2 = the first record cleared; live only),
+  `TxnEnv.pauseAt` + `dev.txn.pauseAt {point|null}` (a live drive stops after that point, its txn held open; cleared, it goes on next tick).
+- **API (Since NEXT):** `Sites.adoptCratesResult(owner)` -> `AdoptCratesResult(stockpile, joined, deferred, txnId)` (**named apart from
+  PT2's `AdoptResult`; the design's `owed` list dropped by decision 1**); `adoptCrates` wraps it. `ArchitectRefused.detail()` stable:
+  `held(other)` (SITE_BUSY), `held(decided)` (SITE_BUSY), `txn_journal` (JOURNAL_UNAVAILABLE); `Sites.SiteException.detail` carries it.
+- **Holds honoured:** `pile:` refuses dissolve and removeStockpileCrate; `Builder.insertItems` (dev.crate.insert, Insert) refuses a held crate
+  SITE_BUSY; `Sites.adoptBusy`, the feed and SiteWaits read `site:`, `road:` and `group:`; `repairJoinedCrates` skips held records. RegionAdopt
+  reads `crateMayStand` (DFG). `Stockpiles.crateFate` is a DFG-named wrapper over `AdoptPlan.classify` (its test kept).
+- **Fixtures:** adopt-crate-held's stock check corrected (paused at `decided` the take has run: crate + in transit = the stock held);
+  `adopt-kill-matrix` added (every traced point bare and +save on the shared group crate, the world restored from a copy per halt).
+  `txn-crash-adopt` joins the `txn` chain; impact row "Slice T3b adoption on the txn layer".
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is
