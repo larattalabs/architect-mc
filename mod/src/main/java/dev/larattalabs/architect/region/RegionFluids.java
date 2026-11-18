@@ -2652,6 +2652,23 @@ public final class RegionFluids {
 			}
 			report(l, st);
 		}
+		if ("restoring".equals(st.removal) && !st.redrained) {
+			// (8c CR, FL9 bare) a start in the stray pass: the world's chunks may be older than the record (the sources standing again, flowing
+			// into cells the wash cleared): the sources are drained again and the flow waits to die before the stray pass goes on
+			st.redrained = true;
+			int n = drainSourcesAll(level, st, new Holders(l.rec().dimension, group, st), false);
+			if (n > 0) {
+				st.removal = "drained";
+				st.removalPhase = "draining";
+				st.until = level.getGameTime() + bound;
+				if (!save(l, st)) {
+					st.removal = "restoring";
+					return false;
+				}
+				Architect.LOGGER.info("Region {}: the resumed stray pass found {} source cell(s) standing again: drained, the flow waits again", l.rec().id, n);
+				return false;
+			}
+		}
 		if ("restoring".equals(st.removal)) {
 			Holders held = new Holders(l.rec().dimension, group, st);
 			int n = strayPass(level, st, held);
