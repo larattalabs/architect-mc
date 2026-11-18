@@ -425,12 +425,13 @@ export async function registerTXN(steps, h) {
     {
       await cmd('/clear @s');
       const e = await owe(7);
-      await call('dev.stockpile.barrier', { failPlayerReplace: 2 }, 60_000);
+      // the give's own confirmed save fails (TEST, after the decision; a failing barrier before it would abort the collect instead)
+      await call('dev.owed.failPlayerSave', { n: 2 }, 30_000);
       const r = await call('dev.owed.collect', { recipient: e.recipient, key: e.key }, 120_000);
       const ivHeld = await inv();
       const st = await state();
       out.failedSave = { r, inventory: ivHeld, open: st.openCount };
-      check(ivHeld === 0 && st.openCount >= 1, `failed player save: the give taken back in its tick (inventory ${ivHeld}), the collect held (open ${st.openCount}: ${r.status} ${r.detail ?? ''})`, out.failedSave);
+      check(ivHeld === 0 && st.openCount >= 1 && r.status === 'HELD', `failed player save: the give taken back in its tick (inventory ${ivHeld}), the collect held (open ${st.openCount}: ${r.status} ${r.detail ?? ''})`, out.failedSave);
       let s2 = await state();
       for (let i = 0; i < 60 && s2.openCount > 0; i++) {
         await call('dev.wait', { ms: 1000 }, 30_000);
