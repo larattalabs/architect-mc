@@ -33694,3 +33694,23 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - **Seams (8cG):** the in-game row "a fall off a staged island waits `terrain`, then settles" (c05 in survival: the island's ops staged,
   the header's `on`); the mapping moves `fall_island`'s basin and `river_demo`'s tail off wm; handriver's `on` is an IR part name that only
   matches the plan part id by chance; the `flowingWater` kinds; Steward's schema copy; a route buffer of 2 round a fall (the route pass).
+
+### 8cG review fix round (GPT NOT SAFE: 6 P1, 5 P2)
+- **One still-ours rule** (P1-1, 2, 6): every drain, restore and abort reads `ownStillOurs` (an own cell: its fluid as a liquid block,
+  ice, its grate's bars, its bubble column or decor block) and `flowStillOurs` (elsewhere: flowing water of its fluid in a liquid block,
+  never a source or a waterlogged block) before it writes; a write is followed by a fluid tick on its fluid neighbours. A flowing body's
+  abort (escaped, unsettled, upstream) judges the stray take first over the standing flow (`abortFlowing`), then drains its sources and
+  sets each taken cell to its foreign-only level (`foreignOnly`, a fixed point over the take) or its before state. RegionFluidsRiverLintTest
+  checks the resulting levels against CL's `after` in all five cases.
+- **P1-3:** `scoopSurvival` (lava sources, grates) runs before any drain in both removals (`standingCharged`, unit).
+- **P1-4:** `removal: done` is recorded only after the T0 barrier (`DurableBarrier.run`, retried once a second); FL3 bare and +save
+  join the river's crash matrix.
+- **P1-5:** the wash guard runs at every wave's emission (`dev.fluid.beforeWave`, row `wavetorch`) and in a restart's recheck.
+- **P2-7:** a forgotten record's flowing watch sets are kept (`REMOVED_WATCH`, 32); `refed` needs a feeder outside every watch set that
+  predicts the observed level (the cell falling under it, or one more amount beside it).
+- **P2-8:** every plan/0 system-ref render (job systemRefs, the composer) is off unless the request carries `flowingWater` (the mod sets it).
+- **P2-9:** the region.plan key's body carries `flowingWater`; IrStale answers a `flowingWater` IR stale while rivers are off.
+- **P2-10:** a version-4 guard compares levels.
+- **P2-11:** the stray pass runs `STRAY_BUDGET` (4,096) cells a tick over its chunk-sorted work; a river's census reads `CENSUS_BUDGET`
+  (32,768) cells a census tick and judges on a whole sweep; the removal's wait reads ticks every 5 ticks. Measured: the foreign-only
+  fixed point over 4,096 cells, 12 ms (unit); the census at the cap is not measured in game.

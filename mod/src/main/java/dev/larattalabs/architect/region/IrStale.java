@@ -122,7 +122,9 @@ public final class IrStale {
 			List<String> missing = new ArrayList<>();
 			for (JsonElement e : req) {
 				String k = e.isJsonPrimitive() ? e.getAsString() : e.toString();
-				if (!KINDS_FORMAT2.contains(k) || hello != null && !hello.irKinds().isEmpty() && !hello.irKinds().contains(k)) {
+				// ((8c, the review's P2-9) a river IR while this mod doesn't build rivers (-Darchitect.noFlowingWater): stale, never drained as H's)
+				if (!KINDS_FORMAT2.contains(k) || "flowingWater".equals(k) && !RegionFluids.flowingBuild() || hello != null && !hello.irKinds().isEmpty() && !hello.irKinds()
+					.contains(k)) {
 					missing.add(k);
 				}
 			}

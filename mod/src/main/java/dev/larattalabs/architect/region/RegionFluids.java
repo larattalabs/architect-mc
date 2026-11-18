@@ -170,7 +170,40 @@ public final class RegionFluids {
 				}
 			}
 		}
+		synchronized (REMOVED_WATCH) {
+			for (LongOpenHashSet w : REMOVED_WATCH.values()) {
+				if (w.contains(p)) {
+					return true; // ((8c fix round, P2-7) a removed river's watch set: E-flat, never refed)
+				}
+			}
+		}
 		return false;
+	}
+
+	/** (8c fix round, P2-7) The flowing watch sets of records forgotten this session (a removal's undo diff runs after), by key; at most 32. */
+	static final Map<String, LongOpenHashSet> REMOVED_WATCH = new LinkedHashMap<>() {
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, LongOpenHashSet> e) {
+			return size() > 32;
+		}
+	};
+
+	/** (8c fix round, P2-7) A record's flowing watch sets kept before it is forgotten. */
+	static void snapshotWatch(String key, @Nullable Regional st) {
+		if (st == null) {
+			return;
+		}
+		LongOpenHashSet w = new LongOpenHashSet();
+		for (Body b : st.bodies) {
+			if (b.flowing()) {
+				w.addAll(b.watchSet());
+			}
+		}
+		if (!w.isEmpty()) {
+			synchronized (REMOVED_WATCH) {
+				REMOVED_WATCH.put(key, w);
+			}
+		}
 	}
 
 	/** (8c WU) The items counted for a region's record (its id), kept after the region is removed. */
@@ -180,8 +213,12 @@ public final class RegionFluids {
 
 	/** (8cF) Whether this mod builds 8c's flowing water ({@link #FLOWING_BUILD}). */
 	public static boolean flowingBuild() {
-		return FLOWING_BUILD;
+		Boolean t = testFlowing;
+		return t != null ? t : FLOWING_BUILD;
 	}
+
+	/** (TEST, 8c fix round) Overrides {@link #flowingBuild} in the units (null: the build's). */
+	static volatile @Nullable Boolean testFlowing;
 	/** (the H batch) The capped removals' notes by region id, kept after the record is forgotten (DevBridge {@code dev.fluid.state}); at most 64. */
 	private static final Map<String, String> REMOVAL_NOTES = java.util.Collections.synchronizedMap(new LinkedHashMap<>() {
 		@Override
@@ -297,6 +334,17 @@ public final class RegionFluids {
 		long[] converted = new long[0];
 
 		@Nullable LongOpenHashSet ownSet;
+		@Nullable LongOpenHashSet iceSet;
+		/** (8c fix round, P2-11) The watch set sorted, for the census's slices. */
+		long @Nullable [] watchSorted;
+
+		/** (8c fix round) The ice cap's cells as a set. */
+		LongOpenHashSet iceSet() {
+			if (iceSet == null) {
+				iceSet = new LongOpenHashSet(ice);
+			}
+			return iceSet;
+		}
 
 		/** (8c WU) The body's own cells as a set. */
 		LongOpenHashSet ownSet() {
@@ -463,6 +511,9 @@ public final class RegionFluids {
 		final it.unimi.dsi.fastutil.longs.LongArrayList foreign = new it.unimi.dsi.fastutil.longs.LongArrayList();
 		/** (8cF) How many foreign cells the capped removal found (at most {@link #FOREIGN_NAMED} kept in {@link #foreign}). */
 		int foreignCount;
+		/** (8c fix round, P2-11) The census's slice cursor and the sweep's findings so far (transient). */
+		int censusAt;
+		@Nullable Census censusAcc;
 
 		boolean ended() {
 			return "settled".equals(state) || "drained".equals(state);
@@ -521,6 +572,12 @@ public final class RegionFluids {
 		long until = -1;
 		/** (the H batch) The removal went on without its settle (fluid still ticking 2 x the bound after the drain): why, else null. */
 		@Nullable String removalNote;
+		/** (8c fix round, P2-11) The stray pass's work (chunk-sorted [cell, order index, target level]) and its cursor; transient. */
+		long @Nullable [][] strayWork;
+		int strayAt;
+		int strayDone;
+		/** (8c fix round, P1-4) When the removal last tried the T0 barrier ({@link System#nanoTime}), 0 never; transient. */
+		long barrierTriedAt;
 		/** (8cF) The removal's phase as the view shows it ({@link dev.larattalabs.architect.api.FluidsRemoval#phase}); null: "draining". Saved. */
 		@Nullable String removalPhase;
 		long lastCensus;
@@ -576,7 +633,7 @@ public final class RegionFluids {
 		 */
 		/** (8c WU) Whether the record holds 8c's flowing water: its removal drains the sources first, then the stray pass ({@link #gateFlowing}). */
 		boolean flowingRegion() {
-			return FLOWING_BUILD && bodies.stream().anyMatch(Body::flowing);
+			return flowingBuild() && bodies.stream().anyMatch(Body::flowing);
 		}
 
 		LongOpenHashSet othersOf(Body b) {
@@ -859,6 +916,7 @@ public final class RegionFluids {
 	/** (6d RV) A revision's bodies' record is forgotten (an undo finished: its revision UNDONE; its file stays). */
 	public static void forgetRevision(String regionId, int rid) {
 		Regional st = STATE.remove(regionId + "#rv" + rid);
+		snapshotWatch(regionId + "#rv" + rid, st); // ((8c fix round, P2-7))
 		if (st != null) {
 			hold(null, st, false);
 		}
@@ -993,8 +1051,7 @@ public final class RegionFluids {
 					bs.state = "drained";
 					bs.uncontained = true;
 					bs.why = why[0];
-					bs.reason = ("bubble".equals(why[0]) ? "M25:bubble: " + w.size() + " predicted cell(s) over soul sand or magma" : "M25:wash: " + w.size()
-						+ " predicted cell(s) hold a block the flow would " + ("wash".equals(why[0]) ? "wash away" : "meet") + " (placed after approval?)");
+					bs.reason = washReason(why[0], w.size());
 					if (!"bubble".equals(why[0]) && !"wash".equals(why[0])) {
 						bs.why = "uncontained";
 					}
@@ -1245,13 +1302,21 @@ public final class RegionFluids {
 				continue;
 			}
 			List<long[]> bad = bypassCheck ? List.of() : check(level, l, body);
-			if (bad.isEmpty()) {
+			String[] why = new String[1];
+			// ((8c, the review's P1-5) a flowing body's predicted cells again too: a washable recovered from older chunks holds it)
+			List<long[]> wash = bad.isEmpty() && st.flowingRegion() && body.flowing() && !bypassCheck ? washCheck(level, body, why) : List.of();
+			if (bad.isEmpty() && wash.isEmpty()) {
 				continue;
 			}
 			drain(level, st, body, bs, false, st.othersOf(body));
 			bs.state = "drained";
 			bs.uncontained = true;
-			bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
+			if (!wash.isEmpty()) {
+				bad = wash;
+				bs.why = "bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained";
+			}
+			bs.reason = !wash.isEmpty() ? washReason(why[0], wash.size()) + " (checked again after a stop)" : "uncontained: " + bad.size()
+				+ "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
 			bs.at.clear();
 			bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
 			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
@@ -1276,6 +1341,11 @@ public final class RegionFluids {
 	 * washable block there (a torch, a plant, a rail: not fluid-stopping) is {@code wash}; any other block {@code meet}; soul sand or magma
 	 * under a predicted cell {@code bubble}. Returns the cells, {@code why[0]} the first kind found (wash before bubble before meet).
 	 */
+	static String washReason(@Nullable String why, int n) {
+		return "bubble".equals(why) ? "M25:bubble: " + n + " predicted cell(s) over soul sand or magma" : "M25:wash: " + n
+			+ " predicted cell(s) hold a block the flow would " + ("wash".equals(why) ? "wash away" : "meet") + " (placed after approval?)";
+	}
+
 	static List<long[]> washCheck(ServerLevel level, Body body, String[] why) {
 		List<long[]> wash = new ArrayList<>(), meet = new ArrayList<>(), bub = new ArrayList<>();
 		LongOpenHashSet own = body.ownSet();
@@ -1560,8 +1630,29 @@ public final class RegionFluids {
 			beforeWave = null; // (TEST, the review's P1-5) a later wave: a block set now stands in its predicted cells
 			waveHook.accept(level);
 		}
+		List<Body> held = new ArrayList<>();
 		for (Body b : due) {
 			BodyState bs = st.states.get(b.id);
+			if (!"pending".equals(bs.state)) {
+				continue; // (held by an earlier body's wash check this wave)
+			}
+			// ((8c, the review's P1-5) the wash guard at the source's emission: a washable set in its predicted cells since the gate holds it)
+			if (st.flowingRegion() && b.flowing() && !bypassCheck) {
+				String[] why = new String[1];
+				List<long[]> w = washCheck(level, b, why);
+				if (!w.isEmpty()) {
+					bs.state = "drained";
+					bs.uncontained = true;
+					bs.why = "bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained";
+					bs.reason = washReason(why[0], w.size()) + " (at its wave)";
+					bs.at.clear();
+					bs.at.addAll(w.subList(0, Math.min(NAMED, w.size())));
+					holdUpstream(l, st, b);
+					held.add(b);
+					Architect.LOGGER.info("Region {}: fluid body {} is not written at its wave ({}): {}", l.rec().id, b.id, bs.reason, cells(bs.at));
+					continue;
+				}
+			}
 			writeBody(level, b);
 			forced += forceBody(level, b);
 			bs.state = "written";
@@ -1571,6 +1662,9 @@ public final class RegionFluids {
 		}
 		if (due.isEmpty()) {
 			return;
+		}
+		if (!held.isEmpty()) {
+			report(l, st);
 		}
 		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state));
 		if (!more) {
@@ -1666,6 +1760,11 @@ public final class RegionFluids {
 	}
 
 	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others) {
+		return census(level, b, fluidBefore, others, null);
+	}
+
+	/** {@link #census} over {@code only} of the watch set's cells (all of them when null). */
+	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others, long @Nullable [] only) {
 		Fluid src = b.source();
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
@@ -1675,7 +1774,7 @@ public final class RegionFluids {
 		List<long[]> escaped = new ArrayList<>();
 		int fluidCells = 0;
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-		for (long p : b.watchSet()) {
+		for (long p : only != null ? only : b.watchSet().toLongArray()) {
 			m.set(p);
 			if (!level.isLoaded(m)) {
 				ticking = true; // not seen is not settled (the ticket loads it)
@@ -1726,6 +1825,55 @@ public final class RegionFluids {
 		return new Census(ticking, mismatch, escaped, fluidCells);
 	}
 
+	/** (8c fix round, P2-11) Whether any fluid tick is scheduled (or any cell unloaded) in a body's watch set: the removal wait's read, no census. */
+	static boolean tickingIn(ServerLevel level, Body b) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (long p : b.watchSet()) {
+			m.set(p);
+			if (!level.isLoaded(m) || level.getFluidTicks().hasScheduledTick(m, Fluids.WATER) || level.getFluidTicks().hasScheduledTick(m, Fluids.FLOWING_WATER) || level
+				.getFluidTicks().hasScheduledTick(m, Fluids.LAVA) || level.getFluidTicks().hasScheduledTick(m, Fluids.FLOWING_LAVA)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** (8c fix round, P2-11) Watched cells a river's census reads a census tick at most. */
+	static final int CENSUS_BUDGET = 32768;
+
+	/**
+	 * (8c fix round, P2-11) A flowing body's census in slices: at most {@link #CENSUS_BUDGET} watched cells per call (its watch set sorted),
+	 * the findings carried over; null until a whole sweep is done, then the sweep's census (a body is judged settled only on a whole
+	 * clean sweep). A body under the budget sweeps in one call, as {@link #census} does.
+	 */
+	static @Nullable Census censusStep(ServerLevel level, Body b, BodyState bs, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others) {
+		if (b.watchSorted == null) {
+			b.watchSorted = b.watchSet().toLongArray();
+			java.util.Arrays.sort(b.watchSorted);
+		}
+		long[] all = b.watchSorted;
+		if (all.length <= CENSUS_BUDGET) {
+			return census(level, b, fluidBefore, others);
+		}
+		int from = bs.censusAt, to = Math.min(all.length, from + CENSUS_BUDGET);
+		Census part = census(level, b, fluidBefore, others, java.util.Arrays.copyOfRange(all, from, to));
+		bs.censusAcc = bs.censusAcc == null ? part : new Census(bs.censusAcc.ticking() || part.ticking(), concat(bs.censusAcc.mismatch(), part.mismatch()), concat(bs.censusAcc
+			.escaped(), part.escaped()), bs.censusAcc.fluidCells() + part.fluidCells());
+		bs.censusAt = to >= all.length ? 0 : to;
+		if (to < all.length) {
+			return null;
+		}
+		Census whole = bs.censusAcc;
+		bs.censusAcc = null;
+		return whole;
+	}
+
+	private static List<long[]> concat(List<long[]> a, List<long[]> b) {
+		List<long[]> o = new ArrayList<>(a);
+		o.addAll(b);
+		return o;
+	}
+
 	static void settle(ServerLevel level, RegionsImpl.Live l, Regional st) {
 		boolean changed = false;
 		long now = level.getGameTime();
@@ -1734,7 +1882,10 @@ public final class RegionFluids {
 			if (!"written".equals(bs.state)) {
 				continue;
 			}
-			Census c = census(level, b, st.fluidBefore, st.othersOf(b));
+			Census c = b.flowing() && st.flowingRegion() ? censusStep(level, b, bs, st.fluidBefore, st.othersOf(b)) : census(level, b, st.fluidBefore, st.othersOf(b));
+			if (c == null) {
+				continue; // ((8c fix round, P2-11) a river's census spans census ticks: judged once a whole sweep is done)
+			}
 			long t0 = bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt;
 			if (!c.escaped().isEmpty()) {
 				escape(level, l, st, b, bs, "escaped", c.escaped());
@@ -1797,7 +1948,8 @@ public final class RegionFluids {
 			if ("drained".equals(us.state)) {
 				continue;
 			}
-			int un = us.before.isEmpty() ? 0 : drain(level, st, u, us, !"pending".equals(us.state), st.othersOf(u));
+			int un = us.before.isEmpty() ? 0 : st.flowingRegion() && u.flowing() && !"pending".equals(us.state) ? abortFlowing(level, st, u, us) : drain(level, st, u, us,
+				!"pending".equals(us.state), st.othersOf(u));
 			if ("pending".equals(us.state)) {
 				us.held = true;
 			}
@@ -1811,7 +1963,7 @@ public final class RegionFluids {
 				bs.escapedCells.add(BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]));
 			}
 		}
-		int n = drain(level, st, b, bs, true, st.othersOf(b));
+		int n = st.flowingRegion() && b.flowing() ? abortFlowing(level, st, b, bs) : drain(level, st, b, bs, true, st.othersOf(b)); // ((8c fix round, P1-2))
 		bs.state = "drained";
 		bs.escaped = "escaped".equals(why);
 		bs.reason = why + ": " + at.size() + " cell(s) " + ("escaped".equals(why) ? "outside the body's cells, spill and joins" : "not as predicted after 2 x "
@@ -1881,7 +2033,7 @@ public final class RegionFluids {
 		java.util.function.LongPredicate held, boolean removal) {
 		int n = 0;
 		Fluid src = b.source();
-		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
 		// ((6c IRR, the batch's fix) an irrigation source's breach flow is judged before anything is written: once the source is air, its
 		// flow has no feeder left to tell it from a pond's or a player's)
 		int[] lot = strays ? st.irrigation.get(b.id) : null;
@@ -1893,8 +2045,9 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
-				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
+				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not; (8c fix round) only a cell that still holds
+				// what the body wrote: a player's waterlogged chest there is never replaced)
+				if (!ownStillOurs(b, p, now)) {
 					continue;
 				}
 				if (held.test(p)) {
@@ -1904,6 +2057,7 @@ public final class RegionFluids {
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
 				if (now != to) {
 					t.set(bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
 					n++;
 				}
 			}
@@ -1912,8 +2066,8 @@ public final class RegionFluids {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				FluidState f = now.getFluidState();
-				if (f.isEmpty() || others.contains(p) || held.test(p)) {
+				// ((8c fix round) only the body's flow: a source (a player's bucket) or a waterlogged block in its spill or watch is kept)
+				if (!flowStillOurs(b, now) || others.contains(p) || held.test(p)) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -1922,6 +2076,7 @@ public final class RegionFluids {
 					continue; // as it was before (a natural cell, its level included): not the body's doing
 				}
 				t.set(bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written.add(p);
 				n++;
 			}
 		}
@@ -1933,12 +2088,13 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p)) {
+				if (flowStillOurs(b, now) && !held.test(p)) { // ((8c fix round) never a source: a player's bucket in the predicted flow stays
 					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
 					// own drain, later in the removal, finds no fluid there any more
 					String was = beforeAny(st, p);
 					t.set(bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
 						| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
 					n++;
 				}
 			}
@@ -1947,7 +2103,110 @@ public final class RegionFluids {
 				n += sweepBreach(level, st, b, bs, breach, held);
 			}
 		}
+		if (level != null && !written.isEmpty()) {
+			tickAround(level, written); // ((8c fix round) water that isn't the body's settles back to its own level)
+		}
 		return n;
+	}
+
+	/**
+	 * (8c fix round, the review's structural rule for P1-1, 2, 6) Whether one of a body's own cells (its sources, ice cap, grate, bubble and
+	 * decor cells) still holds what its record wrote: its fluid as a liquid block (a source, or flowing once its feeders went), ice on an ice
+	 * cell, the bars on a grate cell, the column on a bubble cell, the decor's block on a decor cell. Anything else (a player's waterlogged
+	 * chest, stair or slab, a placed block) is not the body's: no drain, restore or abort writes it. Pure.
+	 */
+	static boolean ownStillOurs(Body b, long p, BlockState now) {
+		boolean liquid = now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
+		if (b.ice.length > 0 && b.iceSet().contains(p)) {
+			return now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || liquid;
+		}
+		if (b.grate.length > 0 && b.gratePos(p)) {
+			return now.is(Blocks.IRON_BARS);
+		}
+		if (b.bubble.containsKey(p) && now.is(Blocks.BUBBLE_COLUMN)) {
+			return true;
+		}
+		String d = b.decorState.get(p);
+		if (d != null && now.getBlock() == parse(d).getBlock()) {
+			return true;
+		}
+		return liquid;
+	}
+
+	/**
+	 * (8c fix round, the structural rule) Whether a cell outside a body's own cells may hold the body's flow: flowing (or falling) water of
+	 * its fluid in a liquid block. A source there is never the body's (a player's bucket, a spring: a body writes sources only in its own
+	 * cells), nor a waterlogged block. Pure.
+	 */
+	static boolean flowStillOurs(Body b, BlockState now) {
+		return now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source()) && !now.getFluidState().isSource();
+	}
+
+	/**
+	 * (8c fix round) After a drain wrote cells without updates: a fluid tick on every fluid face neighbour of a written cell, so water that
+	 * isn't the body's (a lake, a player's source) settles back into its own level by vanilla's ticks (a raised cell goes to the foreign-only
+	 * level; an own-only cell stays dry).
+	 */
+	static void tickAround(ServerLevel level, it.unimi.dsi.fastutil.longs.LongArrayList written) {
+		LongOpenHashSet done = new LongOpenHashSet();
+		for (int i = 0; i < written.size(); i++) {
+			long p = written.getLong(i);
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				long q = BlockPos.offset(p, d);
+				if (!done.add(q)) {
+					continue;
+				}
+				BlockPos bp = BlockPos.of(q);
+				FluidState f = level.getBlockState(bp).getFluidState();
+				if (!f.isEmpty()) {
+					level.scheduleTick(bp, f.getType(), 1);
+				}
+			}
+		}
+	}
+
+	/**
+	 * (8c fix round, P1-6) The level each cell of a stray take holds from water that isn't the body's alone (the foreign-only level), by a
+	 * fixed point over the take: a cell under foreign (or foreign-lowered) water falls (amount 8); beside one, its amount less 1. Own cells
+	 * (the body's sources, gone after the drain) feed nothing. Returns the amount per taken cell (0: dry, the cell goes to its before
+	 * state). Pure over {@code at}.
+	 */
+	static Long2IntOpenHashMap foreignOnly(LongOpenHashSet take, LongOpenHashSet own, java.util.function.LongFunction<@Nullable Wet> at) {
+		Long2IntOpenHashMap amt = new Long2IntOpenHashMap();
+		java.util.function.LongToIntFunction of = (q) -> {
+			if (take.contains(q)) {
+				return amt.get(q);
+			}
+			if (own.contains(q)) {
+				return 0;
+			}
+			Wet w = at.apply(q);
+			return w == null ? 0 : w.amount();
+		};
+		for (int round = 0; round < 16; round++) {
+			boolean changed = false;
+			for (long c : take) {
+				int best = of.applyAsInt(BlockPos.offset(c, net.minecraft.core.Direction.UP)) > 0 ? 8 : 0;
+				for (net.minecraft.core.Direction d : new net.minecraft.core.Direction[] {net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH,
+					net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST}) {
+					best = Math.max(best, of.applyAsInt(BlockPos.offset(c, d)) - 1);
+				}
+				if (best != amt.get(c)) {
+					amt.put(c, best);
+					changed = true;
+				}
+			}
+			if (!changed) {
+				break;
+			}
+		}
+		return amt;
+	}
+
+	/** (8c fix round) A water (or lava) cell of an amount (1..8; 8 falling) as its liquid block state. */
+	static BlockState flowingState(Fluid src, int amount) {
+		Fluid fl = src.isSame(Fluids.LAVA) ? Fluids.FLOWING_LAVA : Fluids.FLOWING_WATER;
+		return ((net.minecraft.world.level.material.FlowingFluid) fl).getFlowing(Math.min(8, amount), amount >= 8).createLegacyBlock();
 	}
 
 	/**
@@ -2488,32 +2747,8 @@ public final class RegionFluids {
 			Holders held = new Holders(l.rec().dimension, group, st);
 			int n = 0;
 			// (6c RS, §9.2) a survival region's standing lava sources are scooped into its owner's stockpile (a bucket from stock each) and
-			// its standing grates refunded, once (keyed), before the drain
-			if (l.rec().survival()) {
-				int lava = 0, grates = 0;
-				for (Body b : st.bodies) {
-					BodyState bs = st.states.get(b.id);
-					if (bs.before.isEmpty()) {
-						continue;
-					}
-					if (b.lava) {
-						for (long p : b.cells) {
-							FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
-							if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
-								lava++;
-							}
-						}
-					}
-					for (long p : b.grate) {
-						if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
-							grates++;
-						}
-					}
-				}
-				if (lava > 0 || grates > 0) {
-					dev.larattalabs.architect.site.Stockpiles.scoop(s, l.rec().owner, "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids", lava, grates);
-				}
-			}
+			// its standing grates refunded, once (keyed), before the drain ((8c fix round, P1-3) the same step a river's removal takes)
+			scoopSurvival(s, level, l, st);
 			// (6c HY, §4.1) the exact reverse of the write order (an H region: reverse plan order), the head first
 			int drained = 0;
 			for (int i = st.order.size() - 1; i >= 0; i--) {
@@ -2621,6 +2856,7 @@ public final class RegionFluids {
 				WorldJournal.kill("FL3d");
 			}
 			Holders held = new Holders(l.rec().dimension, group, st);
+			scoopSurvival(s, level, l, st); // ((8c fix round, P1-3) a mixed region's lava sources and grates are scooped and refunded first, keyed)
 			int n = drainSourcesAll(level, st, held, true);
 			st.removal = "drained";
 			st.removalPhase = "draining";
@@ -2648,8 +2884,12 @@ public final class RegionFluids {
 			long now = level.getGameTime();
 			boolean ticking = false;
 			if (now >= st.until) {
+				if (now - st.lastCensus < CENSUS_EVERY) {
+					return false; // ((8c fix round, P2-11) the wait reads its watch sets every CENSUS_EVERY ticks, not every tick)
+				}
+				st.lastCensus = now;
 				for (Body b : st.bodies) {
-					if (census(level, b, st.fluidBefore).ticking()) {
+					if (tickingIn(level, b)) {
 						ticking = true;
 						break;
 					}
@@ -2700,7 +2940,22 @@ public final class RegionFluids {
 		}
 		if ("restoring".equals(st.removal)) {
 			Holders held = new Holders(l.rec().dimension, group, st);
-			int n = strayPass(level, st, held);
+			if (!strayStep(level, st, held)) {
+				return false; // ((8c fix round, P2-11) the pass goes on next tick)
+			}
+			int n = st.strayDone;
+			// ((8c fix round, P1-4) `done` is recorded only once the drain's chunks are durable: the T0 barrier (players, chunks forced, the
+			// ledger), tried at most once a second; a start before it finds `restoring` and drains and restores again)
+			long t = System.nanoTime();
+			if (st.barrierTriedAt != 0 && t - st.barrierTriedAt < RETRY_NANOS) {
+				return false;
+			}
+			st.barrierTriedAt = t;
+			dev.larattalabs.architect.site.DurableBarrier.Result br = barrier.apply(s);
+			if (!br.ok()) {
+				Architect.LOGGER.warn("Region {}: the river's drain waits for the world barrier ({}: {})", l.rec().id, br.outcome(), br.reason());
+				return false;
+			}
 			st.removal = "done";
 			if (!save(l, st)) {
 				st.removal = "restoring";
@@ -2714,6 +2969,49 @@ public final class RegionFluids {
 		}
 		return true;
 	}
+
+	/**
+	 * (6c RS, §9.2; 8c fix round, P1-3) A survival region's standing lava sources and grates, scooped into its owner's stockpile (a bucket
+	 * from stock per lava source, the grates' bars refunded), once (keyed), before any drain: H's removal and a river's alike, so a mixed
+	 * region's lava and grates are never drained without their refund.
+	 */
+	static void scoopSurvival(MinecraftServer s, ServerLevel level, RegionsImpl.Live l, Regional st) {
+		if (!l.rec().survival()) {
+			return;
+		}
+		int[] c = standingCharged(st, p -> level.getBlockState(BlockPos.of(p)));
+		if (c[0] > 0 || c[1] > 0) {
+			dev.larattalabs.architect.site.Stockpiles.scoop(s, l.rec().owner, "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids", c[0], c[1]);
+		}
+	}
+
+	/** (8c fix round, P1-3) The charged items standing in a record's written bodies: {lava sources, grate bars}, any body kind. Pure over {@code get}. */
+	static int[] standingCharged(Regional st, java.util.function.LongFunction<BlockState> get) {
+		int lava = 0, grates = 0;
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs.before.isEmpty()) {
+				continue;
+			}
+			if (b.lava) {
+				for (long p : b.cells) {
+					FluidState f = get.apply(p).getFluidState();
+					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+						lava++;
+					}
+				}
+			}
+			for (long p : b.grate) {
+				if (get.apply(p).is(Blocks.IRON_BARS)) {
+					grates++;
+				}
+			}
+		}
+		return new int[] {lava, grates};
+	}
+
+	/** (8c fix round, P1-4; TEST seam) The world barrier the river's removal waits for before it records done. */
+	static java.util.function.Function<MinecraftServer, dev.larattalabs.architect.site.DurableBarrier.Result> barrier = dev.larattalabs.architect.site.DurableBarrier::run;
 
 	/** (8c WU) Every written body's sources back, the head first (the reverse of the write order); FL5 after the head when {@code first}. */
 	static int drainSourcesAll(ServerLevel level, Regional st, java.util.function.LongPredicate held, boolean first) {
@@ -2738,7 +3036,6 @@ public final class RegionFluids {
 	 */
 	static int drainSources(ServerLevel level, Body b, BodyState bs, java.util.function.LongPredicate held) {
 		int n = 0;
-		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet own = b.ownSet();
 		LongOpenHashSet tick = new LongOpenHashSet();
 		for (long[] a : new long[][] {b.ice, b.cells}) {
@@ -2748,8 +3045,8 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
-				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
-					continue;
+				if (!ownStillOurs(b, p, now)) {
+					continue; // ((8c fix round, P1-1) a player's waterlogged chest in a source cell is never drained)
 				}
 				String before = bs.before.get(p);
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
@@ -2782,12 +3079,17 @@ public final class RegionFluids {
 	 * applies. Pure over {@code at}.
 	 */
 	static java.util.List<long[]> strayTake(Regional st, java.util.function.LongFunction<@Nullable Wet> at, java.util.function.LongPredicate loaded) {
+		return strayTake(st, at, loaded, null);
+	}
+
+	/** (8c fix round) {@link #strayTake} over one body only ({@code only}), or every written body (null). */
+	static java.util.List<long[]> strayTake(Regional st, java.util.function.LongFunction<@Nullable Wet> at, java.util.function.LongPredicate loaded, @Nullable Body only) {
 		java.util.List<long[]> out = new ArrayList<>();
 		LongOpenHashSet seen = new LongOpenHashSet();
 		for (int i = st.order.size() - 1; i >= 0; i--) {
 			Body b = st.order.get(i);
 			BodyState bs = st.states.get(b.id);
-			if (bs.before.isEmpty()) {
+			if (bs.before.isEmpty() || only != null && b != only) {
 				continue;
 			}
 			LongOpenHashSet foreign = new LongOpenHashSet(st.othersOf(b));
@@ -2810,45 +3112,123 @@ public final class RegionFluids {
 		return out;
 	}
 
-	/** (8c WU) The stray pass in game: {@link #strayTake}, then each cell to its before state, chunk by chunk (FL9 after the first chunk). */
-	static int strayPass(ServerLevel level, Regional st, java.util.function.LongPredicate held) {
+	/** (8c fix round, P2-11) Stray cells restored a tick at most (a cap-sized river's pass spans ticks). */
+	static final int STRAY_BUDGET = 4096;
+
+	/**
+	 * (8c fix round, P1-6) The stray pass's work for the take: each cell with its body's order index and its target (the foreign-only
+	 * amount, {@link #foreignOnly}; 0: its before state), sorted by chunk then position. Pure over {@code at}.
+	 */
+	static long[][] strayWork(Regional st, java.util.List<long[]> take, java.util.function.LongFunction<@Nullable Wet> at) {
+		LongOpenHashSet set = new LongOpenHashSet();
+		LongOpenHashSet own = new LongOpenHashSet();
+		for (long[] c : take) {
+			set.add(c[0]);
+		}
+		for (Body b : st.bodies) {
+			own.addAll(b.ownSet());
+		}
+		Long2IntOpenHashMap lv = foreignOnly(set, own, at);
+		long[][] out = new long[take.size()][];
+		for (int i = 0; i < take.size(); i++) {
+			out[i] = new long[] {take.get(i)[0], take.get(i)[1], lv.get(take.get(i)[0])};
+		}
+		return out;
+	}
+
+	/**
+	 * (8c fix round, P2-11, P1-6) One tick of the stray pass: its work computed once (the world as it stands), then at most
+	 * {@link #STRAY_BUDGET} cells written, chunk by chunk: a cell the foreign water alone reaches to its foreign-only level, any other to
+	 * its before state, only where the body's flow still stands ({@link #flowStillOurs}); then a fluid tick round them. FL9 once the first
+	 * chunk is done with more to come. Returns true when the pass is done.
+	 */
+	static boolean strayStep(ServerLevel level, Regional st, java.util.function.LongPredicate held) {
 		java.util.function.LongFunction<@Nullable Wet> at = k -> {
 			BlockState bs = level.getBlockState(BlockPos.of(k));
 			FluidState f = bs.getFluidState();
 			return f.isEmpty() || !f.getType().isSame(Fluids.WATER) ? null : new Wet(f.getAmount(), f.isSource(), bs.getBlock() instanceof LiquidBlock);
 		};
-		java.util.List<long[]> take = strayTake(st, at, p -> level.isLoaded(BlockPos.of(p)));
-		// the chunks the bodies watch, in order: FL9 after the first one's cells are restored, with another still to come
-		java.util.TreeSet<Long> chunks = new java.util.TreeSet<>();
-		for (Body b : st.bodies) {
-			for (long p : b.watchSet()) {
-				chunks.add(ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4));
-			}
+		if (st.strayWork == null) {
+			st.strayWork = strayWork(st, strayTake(st, at, p -> level.isLoaded(BlockPos.of(p))), at);
+			st.strayAt = 0;
 		}
-		int n = 0, done = 0;
-		for (long ck : chunks) {
-			for (long[] c : take) {
-				long p = c[0];
-				if (ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4) != ck || held.test(p)) {
-					continue;
+		long[][] w = st.strayWork;
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		int budget = STRAY_BUDGET;
+		long firstChunk = w.length == 0 ? 0 : ChunkPos.pack(BlockPos.getX(w[0][0]) >> 4, BlockPos.getZ(w[0][0]) >> 4);
+		while (st.strayAt < w.length && budget-- > 0) {
+			long[] c = w[st.strayAt++];
+			long p = c[0];
+			Body b = st.order.get((int) c[1]);
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			if (!held.test(p) && flowStillOurs(b, now)) {
+				BlockState to;
+				if (c[2] > 0) {
+					to = flowingState(b.source(), (int) c[2]); // (raised: the foreign water's own level)
+				} else {
+					String was = st.states.get(b.id).before.get(p);
+					if (was == null) {
+						was = beforeAny(st, p);
+					}
+					to = was == null ? Blocks.AIR.defaultBlockState() : parse(was);
 				}
-				BlockPos bp = BlockPos.of(p);
-				BlockState now = level.getBlockState(bp);
-				if (!(now.getBlock() instanceof LiquidBlock) || now.getFluidState().isSource()) {
-					continue;
+				if (now != to) {
+					dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
+					st.strayDone++;
 				}
-				String was = st.states.get(st.order.get((int) c[1]).id).before.get(p);
-				if (was == null) {
-					was = beforeAny(st, p);
-				}
-				dev.larattalabs.architect.placed.Placed.set(level, bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
-					| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
-				n++;
 			}
-			if (++done == 1 && chunks.size() > 1) {
+			boolean chunkEnds = st.strayAt < w.length && ChunkPos.pack(BlockPos.getX(w[st.strayAt][0]) >> 4, BlockPos.getZ(w[st.strayAt][0]) >> 4) != ChunkPos.pack(
+				BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
+			if (chunkEnds && ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4) == firstChunk) {
+				tickAround(level, written);
+				written.clear();
 				WorldJournal.kill("FL9"); // (8c CR) the stray pass half done: one chunk's cells restored, the next not
 			}
 		}
+		if (!written.isEmpty()) {
+			tickAround(level, written);
+		}
+		if (w.length <= 1 || st.strayAt >= w.length) {
+			if (w.length <= 1 && st.strayDone == 0) {
+				WorldJournal.kill("FL9"); // (a pass with nothing to split still reaches its kill point once)
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * (8c fix round, P1-2) A flowing body's abort (escaped, unsettled, upstream of one): the stray take judged first over the flow as it
+	 * stands (its sources still feeding), then the sources back ({@link #drainSources}: only what still holds the body's water), then
+	 * every taken cell to its foreign-only level or its before state, a tick round them. A player's source or waterlogged block is never
+	 * written. Returns the cells written.
+	 */
+	static int abortFlowing(ServerLevel level, Regional st, Body b, BodyState bs) {
+		java.util.function.LongFunction<@Nullable Wet> at = k -> {
+			BlockState s0 = level.getBlockState(BlockPos.of(k));
+			FluidState f = s0.getFluidState();
+			return f.isEmpty() || !f.getType().isSame(b.source()) ? null : new Wet(f.getAmount(), f.isSource(), s0.getBlock() instanceof LiquidBlock);
+		};
+		long[][] w = strayWork(st, strayTake(st, at, p -> level.isLoaded(BlockPos.of(p)), b), at);
+		int n = drainSources(level, b, bs, NOT_HELD);
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (long[] c : w) {
+			BlockPos bp = BlockPos.of(c[0]);
+			BlockState now = level.getBlockState(bp);
+			if (!flowStillOurs(b, now)) {
+				continue;
+			}
+			String was = bs.before.get(c[0]);
+			BlockState to = c[2] > 0 ? flowingState(b.source(), (int) c[2]) : was == null ? Blocks.AIR.defaultBlockState() : parse(was);
+			if (now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written.add(c[0]);
+				n++;
+			}
+		}
+		tickAround(level, written);
 		return n;
 	}
 
@@ -3497,6 +3877,7 @@ public final class RegionFluids {
 			STATE.clear();
 		} else {
 			Regional st = STATE.remove(regionId);
+			snapshotWatch(regionId, st); // ((8c fix round, P2-7))
 			if (st != null) {
 				hold(null, st, false);
 			}

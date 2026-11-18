@@ -943,6 +943,7 @@ export const JobSpec = z
       .max(JOB_SYSTEM_REFS_MAX)
       .optional()
       .describe('(C33, feature job.systemRefs) ids of schemas the sidecar expands into the system prompt, before `system` (jobs/systemrefs.ts)'),
+    flowingWater: z.boolean().optional().describe("(8c, the review's P2-8) the mod advertises flowingWater: plan/0's system refs offer flow \"current\" and lip \"form\"; absent or false: left out"),
     model: ModelId.optional().describe('default config jobModel ("claude-sonnet-5-5")'),
     effort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     schema: JsonSchema.optional().describe('structured: required, the answer must validate; agent: optional, asks for a final JSON answer'),

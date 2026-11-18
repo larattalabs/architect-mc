@@ -73,6 +73,7 @@ class RegionFluidsRiverLintTest {
 			StringBuilder pred = new StringBuilder("[");
 			List<Long> before = new ArrayList<>();
 			TreeSet<String> want = new TreeSet<>();
+			java.util.Map<Long, Integer> afterOf = new java.util.HashMap<>();
 			for (JsonElement xe : c.getAsJsonArray("cells")) {
 				JsonObject x = xe.getAsJsonObject();
 				long k = p(x.get("at"));
@@ -95,6 +96,7 @@ class RegionFluidsRiverLintTest {
 				}
 				if ("take".equals(x.get("drain").getAsString()) && !"source".equals(cls)) {
 					want.add(s(k));
+					afterOf.put(k, x.get("after") instanceof JsonElement af && af.isJsonPrimitive() ? Integer.valueOf(af.getAsInt()) : null);
 				}
 			}
 			for (long k : own) {
@@ -109,8 +111,19 @@ class RegionFluidsRiverLintTest {
 				st.fluidBefore.put(k, "minecraft:water");
 			}
 			TreeSet<String> got = new TreeSet<>();
-			for (long[] t : RegionFluids.strayTake(st, world::get, k -> true)) {
+			java.util.List<long[]> take = RegionFluids.strayTake(st, world::get, k -> true);
+			for (long[] t : take) {
 				got.add(s(t[0]));
+			}
+			// ((8c fix round, P1-6) the resulting states, not just the selection: an own-only cell dry (its before), a raised cell at the
+			// foreign-only level the kit's `after` names)
+			for (long[] w : RegionFluids.strayWork(st, take, world::get)) {
+				Integer after = afterOf.get(w[0]);
+				int lv = w[2] <= 0 ? -1 : w[2] >= 8 ? 8 : 8 - (int) w[2];
+				int exp = after == null ? -1 : after;
+				if (lv != exp) {
+					wrong.add(name + ": " + s(w[0]) + " restored to " + (lv < 0 ? "its before state" : "level " + lv) + ", the kit says " + (exp < 0 ? "dry" : "level " + exp));
+				}
 			}
 			if (!got.equals(want)) {
 				TreeSet<String> extra = new TreeSet<>(got);

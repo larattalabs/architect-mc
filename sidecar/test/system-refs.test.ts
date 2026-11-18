@@ -12,7 +12,8 @@ const spec = (o: Record<string, unknown>) => P.JobSpec.safeParse({ kind: 'struct
 
 describe('systemRefs: expansion from the kit', () => {
   it('plan/0 holds the schema (minus its embedded catalogue) and the kit\'s own live catalogue', async () => {
-    const t = await expandSystemRefs(KIT, ['plan/0']);
+    // ((8c, P2-8) with flowingWater on the catalogue is the kit's own, whole; off, the two flowing values are left out: compose-8c.test.ts)
+    const t = await expandSystemRefs(KIT, ['plan/0'], { flowingWater: true });
     expect(t.startsWith("## Architect's plan schema (plan/0)\n\n{")).toBe(true);
     expect(t).toContain('"$id":"architect:plan-0"');
     expect(t).toContain('"zone.standard"');
