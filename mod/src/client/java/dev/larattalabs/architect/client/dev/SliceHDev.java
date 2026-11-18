@@ -95,6 +95,19 @@ public final class SliceHDev {
 					return RegionFluids.stateJson(l);
 				});
 			});
+		DevBridge.register("dev.fluid.river", 120_000, "{region} - (8c WU) per body of the region's fluids: flow, predicted and flowing cells, the census now "
+			+ "(mismatch, escaped, ticking), a sample of predicted levels against the world's [x,y,z,predicted,level], and items: the item entities spawned "
+			+ "this session in a flowing body's own or predicted cells -> {phase, removal?, items, bodies}", (req, mc) -> ServerTasks.callAsPlayer((level, player) -> {
+				var l = dev.larattalabs.architect.region.RegionsImpl.live(req.get("region").getAsString());
+				if (l == null) {
+					JsonObject o = new JsonObject(); // (a removed region: its items counter only)
+					o.addProperty("removed", true);
+					o.addProperty("items", RegionFluids.itemsOf(req.get("region").getAsString()));
+					o.add("bodies", new JsonArray());
+					return o;
+				}
+				return RegionFluids.riverJson(level, l);
+			}));
 		DevBridge.register("dev.fluid.beforeGate", 10_000, "{protect?: [x0,z0,x1,z1], owner?, setblock?: [[x,y,z,state]]} - (6c H) TEST: at the next "
 			+ "fluids gate, right before its containment check, mark a protected area for the owner and/or set blocks -> {armed}", (req, mc) -> {
 				JsonArray pr = req.has("protect") ? req.getAsJsonArray("protect") : null;
