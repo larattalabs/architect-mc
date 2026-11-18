@@ -88,11 +88,16 @@ function step(script) {
   return { log, child, exited };
 }
 
-test('wiring: a real step that prints a FAIL and goes silent is killed by the log watch (its group, SIGTERM)', async () => {
-  const s = step("console.log('ok   one'); console.log('FAIL two: stuck'); setTimeout(() => {}, 60_000);");
+// The kill is awaited (the child's exit), never slept for. Its bound is only a backstop for a broken watch, so it is generous: on a
+// loaded machine (load 20) node's start, the 50 ms polls and the SIGTERM all slow, and a 15 s bound once ran out. The child itself
+// idles 180 s, so a real stall-watch miss still ends at the bound, not by the child exiting on its own.
+test('wiring: a real step that prints a FAIL and goes silent is killed by the log watch (its group, SIGTERM)', { timeout: 150_000 }, async () => {
+  const s = step("console.log('ok   one'); console.log('FAIL two: stuck'); setTimeout(() => {}, 180_000);");
   let stall = null;
   const w = watchLogFile({ logFile: s.log, watch: stallWatch({ idleMs: 400 }), pollMs: 50, onStall: (st) => { stall = st; process.kill(-s.child.pid, 'SIGTERM'); } });
-  const end = await Promise.race([s.exited, new Promise((r) => setTimeout(() => r('timeout'), 15_000))]);
+  let bound;
+  const end = await Promise.race([s.exited, new Promise((r) => { bound = setTimeout(() => r('timeout'), 120_000); })]);
+  clearTimeout(bound);
   w.stop();
   if (end === 'timeout') process.kill(-s.child.pid, 'SIGKILL');
   assert.notEqual(end, 'timeout', 'the watch ended the step');
