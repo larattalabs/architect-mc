@@ -3,7 +3,10 @@
 // sha is SHA-256 of the uncompressed bytes. (6c B) Version 2 adds the cells' block ids (a palette and per-column runs after the
 // owner table), so a `block` mask term reads the frozen world; version 1 is unchanged. (6c H) Version 3 is version 2 plus a per-cell
 // fluid layer (CONTRACT H §10): per column (x-major) runs bottom-up of (u8 fluid code, varint length), FLUID_CODES below; sampled only
-// when a request carries `fluids: true`, so every other volume stays version 1 or 2 byte for byte.
+// when a request carries `fluids: true`, so every other volume stays version 1 or 2 byte for byte. (8c WM) Version 4 is version 3 with
+// each fluid run carrying its LiquidBlock.LEVEL: per column (x-major) runs bottom-up of (u8 fluid code, u8 level, varint length), the
+// level 1..7 for a flowing cell, 8..15 for a falling one and 0 otherwise (FLUID_LEVELS); asked only with `levels: true` (river
+// bodies), so every other volume stays version 1, 2 or 3 byte for byte.
 import zlib from 'node:zlib';
 import { sha256Hex } from './pack.mjs';
 
@@ -12,6 +15,8 @@ export const VC = Object.freeze(Object.fromEntries(VOXEL_CLASSES.map((c, i) => [
 /** (6c H) ARVX version 3's fluid codes (index = code). */
 export const FLUID_CODES = Object.freeze(['none', 'water_source', 'water_flowing', 'water_falling', 'waterlogged', 'lava_source', 'lava_flowing']);
 export const FC = Object.freeze(Object.fromEntries(FLUID_CODES.map((c, i) => [c, i])));
+/** (8c WM) ARVX version 4: the levels each fluid code may carry ([min, max] of LiquidBlock.LEVEL; index = code). */
+export const FLUID_LEVELS = Object.freeze([[0, 0], [0, 0], [1, 7], [8, 15], [0, 0], [0, 0], [1, 7]]);
 
 /** The uncompressed ARVX bytes of a (possibly gzipped) file. */
 export function arvxBytes(file) {
@@ -27,7 +32,7 @@ export function arvxBytes(file) {
 export function decodeArvx(file) {
   const b = arvxBytes(file);
   if (b.length < 32 || b[0] !== 0x41 || b[1] !== 0x52 || b[2] !== 0x56 || b[3] !== 0x58) throw new Error('ARVX: bad magic');
-  if (b[4] !== 1 && b[4] !== 2 && b[4] !== 3) throw new Error(`ARVX: version ${b[4]} (this kit reads 1, 2 and 3)`);
+  if (b[4] < 1 || b[4] > 4) throw new Error(`ARVX: version ${b[4]} (this kit reads 1 to 4)`);
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const box = { minX: dv.getInt32(8, true), minY: dv.getInt32(12, true), minZ: dv.getInt32(16, true), maxX: dv.getInt32(20, true), maxY: dv.getInt32(24, true), maxZ: dv.getInt32(28, true) };
   const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
@@ -85,25 +90,35 @@ export function decodeArvx(file) {
       }
     }
   }
-  // (6c H) version 3: per column (x-major) runs bottom-up of (u8 fluid code, varint length)
-  let fluids = null;
-  if (b[4] === 3) {
+  // (6c H) version 3: per column (x-major) runs bottom-up of (u8 fluid code, varint length); (8c WM) version 4: (u8 fluid code, u8
+  // level, varint length)
+  let fluids = null, levels = null;
+  if (b[4] >= 3) {
     fluids = new Uint8Array(W * H * D);
+    if (b[4] === 4) levels = new Uint8Array(W * H * D);
     for (let col = 0; col < W * D; col++) {
       let y = 0;
       while (y < H) {
         if (o >= b.length) throw new Error('ARVX: truncated');
         const f = b[o++];
         if (f >= FLUID_CODES.length) throw new Error(`ARVX: fluid code ${f} out of range`);
+        let lv = 0;
+        if (levels) {
+          if (o >= b.length) throw new Error('ARVX: truncated');
+          lv = b[o++];
+          const [lo, hi] = FLUID_LEVELS[f];
+          if (lv < lo || lv > hi) throw new Error(`ARVX: level ${lv} for fluid code ${FLUID_CODES[f]} (${lo}..${hi})`);
+        }
         const len = varint();
         if (len < 1 || y + len > H) throw new Error(`ARVX: column ${col}'s fluids run past the box`);
         fluids.fill(f, col * H + y, col * H + y + len);
+        if (levels) levels.fill(lv, col * H + y, col * H + y + len);
         y += len;
       }
     }
   }
   if (o !== b.length) throw new Error(`ARVX: ${b.length - o} trailing bytes`);
-  return { sha: sha256Hex(b), version: b[4], box, width: W, height: H, depth: D, classes, owners, ownerOf, counts, blocks, blockPalette, fluids };
+  return { sha: sha256Hex(b), version: b[4], box, width: W, height: H, depth: D, classes, owners, ownerOf, counts, blocks, blockPalette, fluids, ...(levels ? { levels } : {}) };
 }
 
 /**
@@ -128,6 +143,25 @@ export function fluidAt(v, x, y, z) {
   return v.fluids[i];
 }
 
+/**
+ * (8c WM) The LiquidBlock.LEVEL at a world cell from a version-4 volume (0 source or none, 1..7 flowing, 8..15 falling), or null outside
+ * the box, in a MISSING column or for a volume without levels (version 3 keeps no level: its flowing cells read 1, its falling ones 8).
+ */
+export function levelAt(v, x, y, z) {
+  if (!v.levels || x < v.box.minX || x > v.box.maxX || y < v.box.minY || y > v.box.maxY || z < v.box.minZ || z > v.box.maxZ) return null;
+  const i = ((x - v.box.minX) * v.depth + (z - v.box.minZ)) * v.height + (y - v.box.minY);
+  if (v.classes[i] === 14) return null;
+  return v.levels[i];
+}
+
+/**
+ * (8c WM) A river body's frozen volume must keep levels (`VOLUME {why: 'levels'}` otherwise, 8c §2.1): null when `v` is a version-4
+ * volume, else the refusal's evidence {why: 'levels', version}. The seam slice RV's planner calls when a game hands it an older volume.
+ */
+export function levelsMissing(v) {
+  return v && v.levels ? null : { why: 'levels', version: v?.version ?? null };
+}
+
 /** The class at a world cell (MISSING outside the box). */
 export function classAt(v, x, y, z) {
   if (x < v.box.minX || x > v.box.maxX || y < v.box.minY || y > v.box.maxY || z < v.box.minZ || z > v.box.maxZ) return VC.MISSING;
@@ -138,13 +172,15 @@ export function classAt(v, x, y, z) {
  * Encode (tests and fixtures; the mod is the real writer): `classes` as decodeArvx returns them. Returns the raw bytes. (6c B)
  * `blocks` = {palette: [ids, 'minecraft:air' first], index: per cell palette index}: a version-2 volume.
  */
-export function encodeArvx(box, classes, owners = [], ownerOf = new Map(), blocks = null, fluids = null) {
+export function encodeArvx(box, classes, owners = [], ownerOf = new Map(), blocks = null, fluids = null, levels = null) {
   // (6c H) `fluids`: a per cell fluid code (FLUID_CODES); a version-3 volume, which needs `blocks` (version 3 is version 2 plus fluids)
   if (fluids && !blocks) throw new Error('ARVX: a version-3 volume (fluids) also carries blocks');
+  // (8c WM) `levels`: a per cell LiquidBlock.LEVEL (FLUID_LEVELS); a version-4 volume, which needs `fluids`
+  if (levels && !fluids) throw new Error('ARVX: a version-4 volume (levels) also carries fluids');
   const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
   const out = [];
   const head = new Uint8Array(32);
-  head.set([0x41, 0x52, 0x56, 0x58, fluids ? 3 : blocks ? 2 : 1, 0, 0, 0]);
+  head.set([0x41, 0x52, 0x56, 0x58, levels ? 4 : fluids ? 3 : blocks ? 2 : 1, 0, 0, 0]);
   const dv = new DataView(head.buffer);
   [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ].forEach((v, i) => dv.setInt32(8 + 4 * i, v, true));
   out.push(...head);
@@ -185,9 +221,12 @@ export function encodeArvx(box, classes, owners = [], ownerOf = new Map(), block
       let y = 0;
       while (y < H) {
         const f = fluids[col * H + y];
+        const lv = levels ? levels[col * H + y] : 0;
         let n = 1;
-        while (y + n < H && fluids[col * H + y + n] === f) n++;
-        out.push(f); varint(n);
+        while (y + n < H && fluids[col * H + y + n] === f && (!levels || levels[col * H + y + n] === lv)) n++;
+        out.push(f);
+        if (levels) out.push(lv);
+        varint(n);
         y += n;
       }
     }

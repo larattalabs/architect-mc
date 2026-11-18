@@ -3249,10 +3249,11 @@ public final class Sites {
 				if (b.building()) {
 					ServerLevel lv = levelOf(server, b);
 					Construction.Crate cr = b.construction().crate();
-					if (lv != null && (cr == null || !(lv.getBlockEntity(new BlockPos(cr.x(), cr.y(), cr.z())) instanceof
-						dev.larattalabs.architect.survival.CrateBlockEntity))) {
-						report(b.id(), true, "crate missing: " + b.id() + " can't take items; Deconstruct from the Library still works (refunds placed "
-							+ "cells only)");
+					// (chore LT) a crate-less site is judged after the stockpiles load (crateCheckAfterStockpiles): here they are not loaded
+					// yet, so a stockpile-fed site read as crate missing at every load
+					if (lv != null && cr != null && crateMissing(true, lv.getBlockEntity(new BlockPos(cr.x(), cr.y(), cr.z())) instanceof
+						dev.larattalabs.architect.survival.CrateBlockEntity, false)) {
+						report(b.id(), true, crateMissingMessage(b.id()));
 					}
 					report(b.id(), false, b.id() + " is a construction site: " + run.built.cardinality() + " of " + run.size() + " cells built");
 					continue;
@@ -3440,6 +3441,38 @@ public final class Sites {
 			save(server, state);
 		}
 		reports.values().forEach(r -> Architect.LOGGER.warn("Sites check: {}", r.message()));
+	}
+
+	/**
+	 * (chore LT) Whether a building construction site's world-start check reports "crate missing": a crate of its own whose block entity
+	 * is gone (a legacy crate site), or no crate and no stockpile feeding it (a dissolved owner, a stockpile in another dimension, a
+	 * stockpiles file that failed to load, or a 0.17.0-style world). A stockpile-fed site has no crate by design. Pure; tests call it.
+	 */
+	static boolean crateMissing(boolean hasCrate, boolean crateBlockThere, boolean stockpileFed) {
+		return hasCrate ? !crateBlockThere : !stockpileFed;
+	}
+
+	private static String crateMissingMessage(String id) {
+		return "crate missing: " + id + " can't take items; Deconstruct from the Library still works (refunds placed cells only)";
+	}
+
+	/**
+	 * (chore LT) The Sites check's crate test for crate-less building sites, run by {@code Stockpiles.load} once the stockpiles are
+	 * loaded (the Sites check's own SERVER_STARTED listener runs before them, so it would read every stockpile-fed site as crate missing).
+	 * Reported and logged as the Sites check does; the check's log line has already been written. Server thread.
+	 */
+	static void crateCheckAfterStockpiles(MinecraftServer server) {
+		for (Site b : all()) {
+			if (b.placing() || !b.building() || b.construction() == null || b.construction().crate() != null || levelOf(server, b) == null
+				|| Builder.run(server, b) == null) { // (as the check: a site with no plan is reported as that, not as crate missing)
+				continue;
+			}
+			if (crateMissing(false, false, Stockpiles.pileOf(b) != null)) {
+				String m = crateMissingMessage(b.id());
+				report(b.id(), true, m);
+				Architect.LOGGER.warn("Sites check: {}", m);
+			}
+		}
 	}
 
 	/** Legacy snapshot files (4d, or written by 0.7.0 after a downgrade) that no record names (kept, listed). */

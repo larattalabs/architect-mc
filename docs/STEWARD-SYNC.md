@@ -20,7 +20,8 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
-| v0.79.0 | 2026-11-17 | 1.68.0 | 0.72.0 | 26 | `terrainConstruction` | RC pending | ok |
+| v0.80.0 | 2026-11-18 | 1.68.0 | 0.73.0 | 26 |  | RC pending | ok |
+| v0.79.0 | 2026-11-17 | 1.68.0 | 0.72.0 | 26 | `terrainConstruction` | RC passed | ok |
 | v0.78.0 | 2026-11-17 | 1.67.0 | 0.71.0 | 26 | `diagnoseRepair`, `maxBillPerLot`, `removalStop`, `repairSuspects` | RC passed | ok |
 | v0.77.0 | 2026-11-17 | 1.66.0 | 0.71.0 | 26 |  | RC passed | ok |
 | v0.76.0 | 2026-11-17 | 1.65.0 | 0.71.0 | 26 |  | RC pending | ok |

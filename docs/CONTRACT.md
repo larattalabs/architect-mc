@@ -33550,3 +33550,25 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   3. CXD (T2), ADP (T3), group removals (T4), abandon (T5);
   4. deltas, fills, take-ups and repair (T6); leftovers and player moves (T7).
 - **Noah's decisions** (via the parent session, 2026-11-17) are in §8. No question is open.
+
+## Slice WM, the water model (8c kit lane; branch `slice/WM` off main 3d5acc41 / v0.79.0; 2026-11-17; DEV MODE, light; versions NEXT; $0): as built
+
+- **Scope:** the 8c contract's §2.1-2.4 model in `kit/lib/fluids/sim.mjs`, **opt-in per body** (`model: 'wm'`), so every H, HY and IRR body
+  is simulated exactly as before: the 138 water-lint corpus entries plan to byte-identical IRs and blobs with identical checker findings
+  (sha diff against main), `drain-cases.json` unchanged, the scenario goldens re-plan byte for byte (`release-version --check --lenient`).
+- **Rules** (26.3 bytecode cited in `kit/test/wm.test.mjs`): wl foreign sources (waterlogged blocks, kelp, seagrass; never entered, they
+  feed, convert and spread through the faces their collision shape leaves open), levels from the frozen volume, conversion simulated
+  (`converted`, M25:convert; never in `predicted`), M25:bubble (a lift's carried cells aside), the wash classifier (`wash` to clear,
+  M25:wash), a typed UNSETTLED. ARVX v4 (levels in the fluid runs) in the kit's decoder and encoder, `needVolume({levels})`, no new IR kind
+  (`flowingWater`/`volume:levels` need IrStale too: 8cF/VS). Lint W6 (conversion) and W7 (wash) run on every corpus body; only the broken `two_source_corner`
+  raises W6.
+- **Builder reading (tie order):** over 150 random scenes (conversions in many), the scheduling order, (due, y desc, x, z) and random
+  permutations of every batch gave the same fixed point: the order does not matter, conversions included. wm bodies use (due, y desc,
+  x, z). The scheduler is now one FIFO bucket per due tick (same order as before; a 4,900-cell stepped current plans in about 0.3 s, 0.49 s
+  before).
+- **Approximations for PB to calibrate:** face masks cover stairs, slabs and closed trapdoors only; a v4 volume's block ids carry no
+  properties, so a frozen stair's facing is unknown (its horizontal faces read open: conservative for the reach).
+- **Seams:** RV lifts `converted` into cells and emits the IF_NATURAL clears for `wash`, answers `levelsMissing`'s `VOLUME {why:
+  'levels'}`, and adds UNSETTLED to plan.json's codes (8cF; `unsettledRefusal` raises it today only for a wm body). SE sets `maxTicks`
+  (settleBound x 4), the caps and per-segment W3 (W3 still runs H's steady for a wm body). CL reads `foreign` for W5 and `refed`. VS
+  writes v4; 8cF/VS add both kinds to KINDS_FORMAT2 and IrStale together.

@@ -8,9 +8,10 @@ import { surveyApi } from '../lib/region/survey.mjs';
 /**
  * A synthetic frozen volume over `box` from `survey` (ARSV bytes or columns) and `claim`: `{box, bytes, sha, decoded}` (the shape
  * ctx.volumes holds). `fluids`: a version-3 volume (blocks and the fluid layer). `edits`: [{box: [x0, y0, z0, x1, y1, z1], class, block?,
- * fluid?}] applied in order (a cave, an owned cell, a pocket of flowing water).
+ * fluid?}] applied in order (a cave, an owned cell, a pocket of flowing water). (8c WM) `levels`: a version-4 volume (each edit's `level`,
+ * else 0).
  */
-export function synthVolume(box, survey, claim, { fluids = true, edits = [] } = {}) {
+export function synthVolume(box, survey, claim, { fluids = true, edits = [], levels = false } = {}) {
   const S = surveyApi(survey, claim);
   const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
   const n = W * H * D;
@@ -18,6 +19,7 @@ export function synthVolume(box, survey, claim, { fluids = true, edits = [] } = 
   const palette = ['minecraft:air', 'minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block', 'minecraft:water', 'minecraft:sand', 'minecraft:lava'];
   const index = new Uint16Array(n);
   const fl = new Uint8Array(n);
+  const lvl = levels ? new Uint8Array(n) : null;
   const blockOf = (b) => { let i = palette.indexOf(b); if (i < 0) { palette.push(b); i = palette.length - 1; } return i; };
   for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) {
     const inClaim = x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ;
@@ -31,11 +33,11 @@ export function synthVolume(box, survey, claim, { fluids = true, edits = [] } = 
       else if (y === g) { c = VC.SOIL; b = 3; }
       else if (y >= g - 3) { c = VC.SOIL; b = 2; }
       else { c = VC.ROCK; b = 1; }
-      for (const e of edits) if (x >= e.box[0] && x <= e.box[3] && y >= e.box[1] && y <= e.box[4] && z >= e.box[2] && z <= e.box[5]) { c = VC[e.class]; b = e.block ? blockOf(e.block) : c === VC.AIR ? 0 : b; if (e.fluid !== undefined) fc = FC[e.fluid]; }
+      for (const e of edits) if (x >= e.box[0] && x <= e.box[3] && y >= e.box[1] && y <= e.box[4] && z >= e.box[2] && z <= e.box[5]) { c = VC[e.class]; b = e.block ? blockOf(e.block) : c === VC.AIR ? 0 : b; if (e.fluid !== undefined) fc = FC[e.fluid]; if (lvl) lvl[i] = e.level ?? (fc === FC.water_falling ? 8 : fc === FC.water_flowing || fc === FC.lava_flowing ? 1 : 0); }
       classes[i] = c; index[i] = b; fl[i] = fc;
     }
   }
-  const bytes = fluids ? encodeArvx(box, classes, [], new Map(), { palette, index }, fl) : encodeArvx(box, classes);
+  const bytes = lvl ? encodeArvx(box, classes, [], new Map(), { palette, index }, fl, lvl) : fluids ? encodeArvx(box, classes, [], new Map(), { palette, index }, fl) : encodeArvx(box, classes);
   const decoded = decodeArvx(bytes);
   return { box: { ...box }, bytes, sha: decoded.sha, decoded };
 }
@@ -49,7 +51,7 @@ export async function planTwice(o, { edits = [] } = {}) {
   const first = await planRegion(o);
   const need = first.needVolumes ?? [];
   if (!need.length) return { ...first, first, volumes: [] };
-  const volumes = need.map((b) => synthVolume({ minX: b.minX, minY: b.minY, minZ: b.minZ, maxX: b.maxX, maxY: b.maxY, maxZ: b.maxZ }, o.survey, o.claim, { fluids: !!b.fluids || !!b.blocks, edits }));
+  const volumes = need.map((b) => synthVolume({ minX: b.minX, minY: b.minY, minZ: b.minZ, maxX: b.maxX, maxY: b.maxY, maxZ: b.maxZ }, o.survey, o.claim, { fluids: !!b.fluids || !!b.blocks, edits, levels: !!b.levels }));
   const second = await planRegion({ ...o, volumes });
   return { ...second, first, volumes };
 }

@@ -40,3 +40,24 @@ test('W3: predict_short (a spout\'s spill one cell short) breaches outside what 
   const u03 = await planEntry({ name: 'irr/u03_breach_out.json', kind: 'fixture', fx, dir: 'irr' });
   assert.ok(rules(lintPlanned(u03)).includes('W3:irr'));
 });
+
+test('W6/W7 (8c WM): a source conversion outside the body\'s cells and a plant in a predicted cell are flagged; clean as planned', async () => {
+  const { VC, classAt } = await import('../lib/region/volume.mjs');
+  const p = await planEntry({ name: 'demo/h_core_demo', kind: 'h_core' });
+  assert.ok(!rules(lintPlanned(p)).some((r) => /^W[67]/.test(r)), 'as planned');
+  // W6: two_source_corner's gap between two sources over stone converts (the checker's M25:convert names it too)
+  const tc = await planEntry({ name: 'demo/h_core_demo:two_source_corner', kind: 'h_core', variant: 'two_source_corner' });
+  assert.ok(rules(lintPlanned(tc)).includes('W6:convert'), rules(lintPlanned(tc)).join(' '));
+  // W7: short grass (natural, a PLANT cell of the frozen volume) in the spout's predicted cells: the flow would wash it away
+  const q = { ...p, volumes: p.volumes.map((v) => ({ ...v, classes: Uint8Array.from(v.classes), fluids: v.fluids ? Uint8Array.from(v.fluids) : v.fluids })) };
+  let planted = 0;
+  for (const o of fluidOps(q.ir)) for (const [x, y, z] of o.predicted ?? []) for (const v of q.volumes) {
+    if (classAt(v, x, y, z) !== VC.AIR) continue;
+    v.classes[((x - v.box.minX) * v.depth + (z - v.box.minZ)) * v.height + (y - v.box.minY)] = VC.PLANT;
+    planted++;
+  }
+  assert.ok(planted > 0);
+  const r = lintPlanned(q);
+  assert.ok(rules(r).includes('W7:wash'), rules(r).join(' '));
+  assert.match(r.findings.find((f) => f.rule === 'W7:wash').message, /short_grass/);
+});

@@ -1136,22 +1136,29 @@ public final class Stockpiles {
 		}
 		Map<String, Integer> dropped = new TreeMap<>();
 		BlockPos drop = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
-		// (T2b final check P1-2) a held crate skipped now keeps every group, site and road reference to it (as DFG's DEFER): the retry finds it
-		java.util.Set<String> skipped = new java.util.HashSet<>();
-		Map<String, String> ownerOf = new java.util.HashMap<>();
-		for (Site s : sites) {
-			ownerOf.put(s.id(), Builder.crateOwner(s));
-		}
+		// (DFG) the crates deferred: left exactly as they are (block, stock, journal entry, their targets' references); a later call retries
+		java.util.Set<String> deferred = new java.util.TreeSet<>();
 		for (var e : crates.entrySet()) {
 			Construction.Crate c = e.getValue();
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			if (dev.larattalabs.architect.txn.TxnServer.boxHeld(level, cp)) {
-				// (slice T2b) an open txn holds the crate: adopting it now would credit a stock its frozen ledger can't give up
+				// (slice T2b, final check P1-2) an open txn holds the crate: adopting it now would credit a stock its frozen ledger can't give up;
+				// deferred as DFG's DEFER, so it keeps every group, site and road reference to it and a later adoptCrates retries
 				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted now: an open transaction holds it", owner, e.getKey(), cp.toShortString());
-				skipped.add(e.getKey());
+				deferred.add(e.getKey());
 				continue;
 			}
-			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
+			CrateBlockEntity be = level.getBlockEntity(cp) instanceof CrateBlockEntity rb && e.getKey().equals(rb.siteId()) ? rb : null;
+			// (DFG) the cell known: read on the server thread, its chunk loaded (getBlockEntity loads it there); else its state is unknown
+			boolean known = srv.isSameThread() && level.isLoaded(cp);
+			if (crateFate(be != null, p.ledger.credited("adopt:" + e.getKey() + "@" + cp.asLong()), crateBlockAt(level, c), known) == CrateFate.DEFER) {
+				deferred.add(e.getKey());
+				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted: {}; it stays as it is (its stock, its journal entry, its targets' references) "
+					+ "and a later adoptCrates retries", owner, e.getKey(), cp.toShortString(), known ? "it does not read as its owner's crate"
+						: "its cell could not be read (off the server thread, or its chunk not loaded)");
+				continue;
+			}
+			if (be != null) {
 				Ledger l = be.ledger();
 				Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());
 				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), byTarget, capacity(srv, p),
@@ -1185,7 +1192,7 @@ public final class Stockpiles {
 		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		for (var e : crates.entrySet()) {
-			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX) && !skipped.contains(e.getKey())) {
+			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX) && !deferred.contains(e.getKey())) {
 				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
 				if (g != null) {
 					Sites.putGroup(srv, g.withCrate(null));
@@ -1196,10 +1203,7 @@ public final class Stockpiles {
 		List<Object> joined = new ArrayList<>();
 		for (Site s : sites) {
 			Site cur = Sites.get(s.id());
-			if (skipped.contains(ownerOf.get(s.id()))) {
-				continue; // (T2b final check P1-2) its crate was skipped (held): it keeps it
-			}
-			if (cur != null && cur.construction() != null) {
+			if (cur != null && cur.construction() != null && !deferred.contains(Builder.crateOwner(cur))) { // (DFG) a deferred crate keeps its targets
 				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				Builder.forgetRun(s.id());
 				if (cur.building()) {
@@ -1209,10 +1213,7 @@ public final class Stockpiles {
 		}
 		for (Infra i : roads) {
 			Infra cur = Infras.get(i.id());
-			if (i.group() != null && skipped.contains(SiteGroupRec.CRATE_PREFIX + i.group())) {
-				continue; // (T2b final check P1-2) its group's crate was skipped (held): it keeps it
-			}
-			if (cur != null && cur.construction() != null) {
+			if (cur != null && cur.construction() != null && !(cur.group() != null && deferred.contains(SiteGroupRec.CRATE_PREFIX + cur.group()))) {
 				Infras.put(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				joined.add(Infras.get(i.id()));
 			}
@@ -1226,8 +1227,8 @@ public final class Stockpiles {
 		}
 		changed(p);
 		saveWithWorld(srv); // the feed order
-		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
-			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
+		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}{}", owner, crates.size() - deferred.size(), sites.size(), roads
+			.size(), deferred.isEmpty() ? "" : "; deferred " + deferred, dropped.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
 	}
 
@@ -1296,6 +1297,63 @@ public final class Stockpiles {
 	static boolean namesJoined(java.util.function.Predicate<String> credited, String id, @Nullable String group, int x, int y, int z) {
 		String at = "@" + new BlockPos(x, y, z).asLong();
 		return credited.test("adopt:" + id + at) || group != null && credited.test("adopt:" + SiteGroupRec.CRATE_PREFIX + group + at);
+	}
+
+	/** (DFG, from ADP) What adoptCrates does with one crate: {@link #crateFate}. */
+	enum CrateFate {
+		/** Read as its owner's crate: its ledger adopted (once, by its key), its cell restored, its journal kind released. */
+		JOIN,
+		/** Not read, its key credited and no crate block left at its cell: joined by an earlier adoptCrates; only its targets' references left. */
+		JOINED,
+		/**
+		 * Its cell read and no crate block of any owner stands there, its key not credited: nothing to take (no crate, no stock). Main's path:
+		 * the cell restored, the journal kind released, its targets lose the reference and a building one joins the feed (else it waits for a
+		 * crate that does not exist, forever).
+		 */
+		GONE,
+		/**
+		 * A crate block stands there but does not read as its owner's (another tag, unreadable), or its cell could not be read (off the server
+		 * thread, its chunk not loaded): left exactly as it is (block, stock, journal entry, its targets' references); the next adoptCrates
+		 * retries it.
+		 */
+		DEFER
+	}
+
+	/**
+	 * (DFG, from ADP's classifier, the pure seam) A crate's fate in adoptCrates: {@code read}, its block entity is its owner's crate;
+	 * {@code credited}, its adoption key is in the ledger; {@code crateBlock}, any crate block entity stands at its cell; {@code known}, its
+	 * cell was read (server thread, chunk loaded). Its stock is taken only when read. Before DFG an unread crate had its cell restored and its
+	 * journal kind released anyway, and its targets lost their reference: a standing crate of another tag, or one not read, lost its stock.
+	 */
+	static CrateFate crateFate(boolean read, boolean credited, boolean crateBlock, boolean known) {
+		if (read) {
+			return CrateFate.JOIN;
+		}
+		if (!known || crateBlock) {
+			return CrateFate.DEFER;
+		}
+		return credited ? CrateFate.JOINED : CrateFate.GONE;
+	}
+
+	/** (DFG, from ADP) Whether any crate block entity (whatever its owner tag) stands at the crate's cell. Server thread (else nothing reads). */
+	private static boolean crateBlockAt(@Nullable ServerLevel level, Construction.Crate c) {
+		return level != null && level.getBlockEntity(new BlockPos(c.x(), c.y(), c.z())) instanceof CrateBlockEntity;
+	}
+
+	/**
+	 * (DFG, from ADP) For a guard: whether a site's crate reference may still name a standing crate. True unless its cell is read, on the
+	 * server thread (its chunk loaded if need be), and holds no crate block of any owner: an unknown cell counts as a standing crate, never
+	 * as gone. So a crate adoptCrates deferred (another tag) still stands for the guard.
+	 */
+	public static boolean crateMayStand(@Nullable ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (c == null || c.crate() == null) {
+			return false;
+		}
+		if (level == null || !level.getServer().isSameThread()) {
+			return true;
+		}
+		return crateBlockAt(level, c.crate());
 	}
 
 	/** (SAD, SAC2) Whether a site's crate reference names a crate this stockpile's ledger already joined (its key credited, its block gone). */
@@ -3779,6 +3837,7 @@ public final class Stockpiles {
 		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 		forgetEarlyRuns(server);
+		Sites.crateCheckAfterStockpiles(server); // (chore LT) the crate-less sites' crate check, now that it can see which a stockpile feeds
 	}
 
 	/**
