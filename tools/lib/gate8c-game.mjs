@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { boxAround, censusOf, diff, regionOf, snap, bodiesOf } from './gate6chy-core.mjs';
+import { boxAround, censusOf, diff, groundOf, regionOf, snap, bodiesOf } from './gate6chy-core.mjs';
 
 export const OWNER = 'test:8c';
 export const FLAT = 'G6B Flat Base';
@@ -21,11 +21,9 @@ async function layout(ctx) {
   return import(pathToFileURL(path.join(ctx.KIT, 'lib', 'fluids', 'handriver.mjs')).href);
 }
 
-/** The flat world's ground (superflat grass) read from the world: the top solid cell under the claim's corner. */
+/** The flat world's ground at the claim, read from the world's survey (as the kit's plan reads it: HY's groundOf). */
 async function ground(ctx) {
-  const c = await ctx.L.call('dev.fluid.census', { box: [CLAIM[0], -64, CLAIM[1], CLAIM[0], -64, CLAIM[1]] }, 60_000).catch(() => null);
-  void c;
-  return -61; // (the flat base: bedrock, 2 dirt, grass at -61; HY's groundOf reads the same)
+  return groundOf(ctx, CLAIM);
 }
 
 /** A fresh flat world, exact rules, the player over the claim. */
@@ -294,9 +292,14 @@ async function crashRow(ctx, point, during) {
     await L.waitRegion(region, 3_600_000);
     const r = await regionOf(ctx, region);
     out.realise = { state: r.view.state, rows: r.fluids.map((x) => [x.body, x.state, x.why ?? null]) };
-    check(r.view.state === 'PLACED' && r.fluids.every((x) => x.state === 'settled'), `${point}: the start resumes the realise to PLACED, both bodies settled (${r.view.state}; ${json(out.realise.rows)})`);
-    const cs = await censusAll(ctx, r, before);
-    check(cs.ok, `${point}: every census equals its prediction after the resume (${json(cs.sum)})`);
+    // (a bare halt before the gate's check may lose the earlier stages' unsaved chunks: the start's check then finds the shells gone, and
+    // no body is written (H §3.5: drained, uncontained, nothing of it stands); with +save, or once the check passed, the realise completes)
+    const lost = !point.includes('+save') && r.view.state === 'PARTIAL' && r.fluids.every((x) => x.state === 'drained' && x.why === 'uncontained');
+    check(r.view.state === 'PLACED' && r.fluids.every((x) => x.state === 'settled') || lost, `${point}: the start resumes the realise: ${r.view.state} (${json(out.realise.rows)})${lost ? ' (the halt lost the unsaved shells: nothing written, H §3.5)' : ''}`);
+    if (!lost) {
+      const cs = await censusAll(ctx, r, before);
+      check(cs.ok, `${point}: every census equals its prediction after the resume (${json(cs.sum)})`);
+    }
     const rm = await removeWatched(ctx, region);
     out.removal = rm.state;
   } else {
@@ -350,8 +353,7 @@ export async function probe(ctx) {
     await L.leaveWorld();
   }
   {
-    await fresh(ctx, 'G6B 8c Falls');
-    const g = -61;
+    const g = await fresh(ctx, 'G6B 8c Falls');
     const res = [];
     const t0 = Date.now();
     let x = CLAIM[0] + 6;
@@ -378,8 +380,7 @@ export async function probe(ctx) {
     // (world.mjs wlMask: stairs, slabs and closed trapdoors only); each block alone on a stone pad, its 4 sides and the cell under it open:
     // which faces does vanilla's water leave by, against the faces WM's mask leaves open? Recorded, not judged. (A v4 volume's block ids
     // carry no properties: the planner reads a waterlogged state only from the plan's own writes.)
-    await fresh(ctx, 'G6B 8c WL');
-    const g = -61;
+    const g = await fresh(ctx, 'G6B 8c WL');
     const W = await import(pathToFileURL(path.join(ctx.KIT, 'lib', 'fluids', 'world.mjs')).href);
     const states = ['minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]', 'minecraft:oak_stairs[facing=north,half=top,shape=straight,waterlogged=true]',
       'minecraft:oak_slab[type=bottom,waterlogged=true]', 'minecraft:oak_slab[type=top,waterlogged=true]', 'minecraft:oak_trapdoor[half=bottom,open=false,waterlogged=true]',
