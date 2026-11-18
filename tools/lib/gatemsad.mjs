@@ -845,7 +845,11 @@ export async function registerSAD(steps, h) {
         await cmd(`/setblock ${hop.join(' ')} minecraft:air`);
         out.writers = { insert: ins, inHopper, before, after };
         check(String(ins?.refused ?? '').includes('held') && sum(ins?.accepted ?? {}) === 0, `held: dev.crate.insert into the adopting crate refused held(..) (${json(ins?.refused ?? ins)})`, out.writers);
-        check(G.same(before, after) && G.same(before, s40.ledger?.stock), `held: neither the hopper nor the feed's draw changed the crate's stock (${sum(before)} -> ${sum(after)})`, out.writers);
+        // (T3b fixture correction) paused at TX:pile.adopt:decided the crate's take (the prepare effect) has run: its stock is in transit, so
+        // the crate reads empty; the writers must leave it as it is, and the crate plus transit must still be the stock it held
+        const transit = (await call('dev.txn.conservation', { owner: OWNER, min: at, max: at }, 60_000).catch(() => null))?.parts?.inTransit ?? {};
+        out.writers.transit = transit;
+        check(G.same(before ?? {}, after ?? {}) && G.same(G.plus(before ?? {}, transit), s40.ledger?.stock ?? {}), `held: neither the hopper nor the feed's draw changed the crate's stock (${sum(before)} -> ${sum(after)}); crate + in transit (${sum(transit)}) = the stock it held (${sum(s40.ledger?.stock)})`, out.writers);
         await call('dev.txn.pauseAt', { point: null }, 10_000).catch(() => null);
         const done = await ans;
         out.done = done;
@@ -855,6 +859,74 @@ export async function registerSAD(steps, h) {
         const moved = G.minus(stockOf(p.ledger), stockOf(F.p0.ledger));
         check(!done?.refused && G.same(moved, s40.ledger?.stock ?? {}), `held: released, the adoption finished once (${json(moved)})`, { done, moved });
         await conserve('held: adopted');
+        return out;
+      });
+
+      // (slice T3b) adopt-kill-matrix: every traced point of pile.adopt, bare and +save, on the Supplied town's shared group crate (house_3
+      // BUILT, house_4 building): the world copied once after its setup and restored before each halt; after the restart recovery runs once
+      // (open 0): before the decision rolled back (the crate stands with its stock, nothing credited), from it rolled forward (the crate gone,
+      // its whole stock in the stock, both references cleared, house_4 in the feed order); conservation against the setup's baseline
+      if (want('adopt-kill-matrix')) await rowOf('adopt-kill-matrix', rows, async () => {
+        const F = await t3Town('G6B T3 Kill');
+        const { out, W, ids, at, s40, conserve } = F;
+        const S = s40.ledger?.stock ?? {};
+        const base = `${W.dir}.t3base`;
+        const name = path.basename(W.dir);
+        await cmd('/save-all flush').catch(() => null);
+        await L.leaveWorld();
+        fs.rmSync(base, { recursive: true, force: true });
+        fs.cpSync(W.dir, base, { recursive: true });
+        const restore = () => { fs.rmSync(W.dir, { recursive: true, force: true }); fs.cpSync(base, W.dir, { recursive: true }); };
+        const open = async () => { await L.openWorld(name); await L.tp(CX + 80, 80, CZ + 48); await sleep(2000); };
+        await open();
+        await call('dev.txn.trace', { on: true }, 10_000);
+        const a0 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+        const points = ((await call('dev.txn.trace', { on: false }, 10_000)).trace ?? []).filter((p) => p.startsWith('TX:pile.adopt:'));
+        out.trace = { adopt: a0, points };
+        check(!a0.refused && points.length >= 10 && points.includes('TX:pile.adopt:decided'), `matrix: a traced adoption (${json(a0.joined ?? a0.refused)}): ${points.length} kill points: ${points.join(' ')}`, out.trace);
+        await L.leaveWorld();
+        const cases = [];
+        const only = (process.env.GATE_T3B_POINTS ?? '').split(',').filter(Boolean);
+        let decided = false;
+        for (const p of points) {
+          decided ||= p === 'TX:pile.adopt:decided';
+          for (const v of ['', '+save']) {
+            const point = p + v;
+            if (only.length && !only.includes(point)) continue;
+            restore();
+            await open();
+            await call('dev.journal.killAt', { point }, 10_000);
+            call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null); // the halt drops the call
+            const down = await haltWait();
+            check(down, `${point}: halted at the kill point`);
+            if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld().catch(() => null); continue; }
+            await open();
+            let st = await call('dev.txn.state', {}, 30_000);
+            for (let i = 0; i < 40 && (st.openCount > 0 || !st.recovered); i++) { await sleep(1000); st = await call('dev.txn.state', {}, 30_000); }
+            const stands = await isBlock(at, crateBlock);
+            const c = await siteState(ids.house_4);
+            const p1 = await pile();
+            const moved = G.minus(stockOf(p1.ledger), stockOf(F.p0.ledger));
+            for (const k of Object.keys(moved)) if (!moved[k]) delete moved[k];
+            const s3 = await siteState(ids.house_3);
+            const back = stands && G.same(c.ledger?.stock ?? {}, S) && sum(moved) === 0 && c.crate?.x === at[0] && s3.crate?.x === at[0];
+            const fwd = !stands && G.same(moved, S) && c.crate?.x === undefined && s3.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4);
+            const want = decided ? 'forward' : 'back';
+            const got = back ? 'back' : fwd ? 'forward' : 'torn';
+            const n = { point, open: st.openCount, held: st.heldCount, quarantined: (st.quarantined ?? []).length, got, want, stands, moved, crateStock: c.ledger?.stock };
+            cases.push(n);
+            log(`  ${point}: open ${n.open}, ${got} (want ${want})`);
+            check(st.openCount === 0 && got === want, `${point}: recovered exactly once (open ${st.openCount}): ${got}, want ${want} (stands ${stands}, moved ${json(moved)})`, n);
+            await conserve(point);
+            await L.leaveWorld();
+          }
+        }
+        out.cases = cases;
+        out.summary = { points: points.length, cases: cases.length, back: cases.filter((c) => c.got === 'back').length, forward: cases.filter((c) => c.got === 'forward').length,
+          wrong: cases.filter((c) => c.got !== c.want).length };
+        log(`  matrix: ${json(out.summary)}`);
+        fs.rmSync(base, { recursive: true, force: true });
+        await open();
         return out;
       });
 
