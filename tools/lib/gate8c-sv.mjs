@@ -129,6 +129,10 @@ async function isle(ctx) {
   const { L, G, core, check, json } = ctx;
   const fx = river(ctx, 'c05_island_fall.json');
   const s = await G.site(ctx, 'sv isle', fx);
+  // (the terrain builder lays its grass one over the base's own grass top, which stays grass under it: a natural world's subsurface is
+  // dirt there, and the kit's virtual world reads it so, while the frozen volume reads grass; the basin's shell cells at that layer then
+  // pick dirt, a no-op in the virtual world, and the check refuses LEAK "unwritable" (run 20261118-085041, recorded as a kit leftover))
+  if (s.W.off > 0) await L.cmd(`/fill ${s.W.claim[0] - 8} ${s.W.ground} ${s.W.claim[1] - 8} ${s.W.claim[2] + 8} ${s.W.ground} ${s.W.claim[3] + 8} minecraft:dirt replace minecraft:grass_block`);
   const box = [s.W.claim[0] - 8, s.W.minY - 8, s.W.claim[1] - 8, s.W.claim[2] + 8, s.W.maxY + 96, s.W.claim[3] + 8];
   const pre = await G.snap(ctx, box, 'sv-isle-pre');
   const ck = await G.check(ctx, 'sv-isle', s);
@@ -289,7 +293,7 @@ async function washRow(ctx, variant) {
   const pB = await C.point('built');
   out.build = { state: r.view.state, rows: r.fluids.map((x) => [x.body, x.state, x.why ?? null, x.washed ?? null]), fed: f.inserted, items, conservation: pB, ledger: ps0.ledger };
   if (variant === 'nowash') {
-    check(true, `nowash (recorded, the control): without the wash list the river in survival washes the meadow's ${M.meadow.length} flowers: ${items} item entit(ies) from the predicted cells, conservation ${json(pB.diff)} (the mint the wash rule stops); ${r.view.state}`);
+    check(true, `nowash (recorded, the control): river_demo without the wash list in survival over the meadow's ${M.meadow.length} flowers: ${r.view.state}, rows ${json(out.build.rows)}; ${items} item entit(ies) from the predicted cells, conservation ${json(pB.diff)} (WU's live wash check holds a head whose predicted cells hold a washable block, so no flower is washed: the mint is stopped at the gate)`);
     await G.remove(ctx, region).catch(() => {});
     return out;
   }

@@ -819,4 +819,5 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   against the world's `[x, y, z, predicted, level]`, the region's `items`: item entities spawned this session in a flowing body's own or
   predicted cells (a removed region answers `{removed, items}`), and `itemsNow`: item entities standing within a cell of them now. `dev.journal.killAt` gains `FL7` (a river's wash clears journaled, no source
   written), `FL8` (a removal's sources drained and the flow dying, before the stray pass) and `FL9` (the stray pass half done: one chunk's
-  cells restored, the next not), each also with `+save`. Driven by `tools/gate8c.mjs` (steps `8c-probe`, `8c-ingame`, `8c-crash`).
+  cells restored, the next not), each also with `+save`. Driven by `tools/gate8c.mjs` (steps `8c-probe`, `8c-ingame`, `8c-crash`; slice SV's `8c-survival` reads the same hooks with
+  `dev.region.terrain`'s waits, `dev.region.quote` and the stockpile's, no new hook).
