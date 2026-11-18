@@ -25,7 +25,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
   'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns',
-  'stagedTerrain']);
+  'stagedTerrain', 'flowingWater', 'volume:levels']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -51,6 +51,11 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
 // cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
 // before 8a would write them at once, so it refuses the plan PLAN_STALE.
+// (8cF, docs/CONTRACT.md "Phase 8c" slice 8cF) 'flowingWater': a fluid op with a `flow` member (open enum: "current", a river's long current
+// from few sources; "level") or `lip: "form"` (a fall off a plan form): 8c writes, census-checks, drains (sources first, then the stray
+// pass) and recovers it by its own rules. A mod or kit before 8c would drain it as H does, so it refuses the plan PLAN_STALE.
+// 'volume:levels': a frozen volume of ARVX version 4 (version 3 plus each cell's LiquidBlock level), asked with `levels: true`; a kit or
+// mod before 8c can't read the levels a river's census and attribution need.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -158,6 +163,8 @@ export function walkKinds(ir) {
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
   if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.staged === true))) k.add('stagedTerrain'); // (8aF)
+  if ((ir.parts ?? []).some((p) => (p.ops ?? []).some((o) => o.op === 'fluid' && (typeof o.flow === 'string' || o.lip === 'form')))) k.add('flowingWater'); // (8cF)
+  if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.levels === true)) k.add('volume:levels'); // (8cF)
   return [...k].sort();
 }
 

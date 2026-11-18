@@ -33451,3 +33451,68 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
   3. CXD (T2), ADP (T3), group removals (T4), abandon (T5);
   4. deltas, fills, take-ups and repair (T6); leftovers and player moves (T7).
 - **Noah's decisions** (via the parent session, 2026-11-17) are in §8. No question is open.
+
+## Phase 8c: the in-game lane (branch `slice/8cG` off main 3d5acc41 / v0.79.0; 2026-11-17; DEV MODE; versions NEXT; $0)
+
+The binding contract is the 8c draft with its "Decisions", "Steward review" and "Coordinator answers" sections (side notes
+`architect-8c-contract-draft.md`, `steward-8c-review.md`). This section freezes 8cF's shapes and records the in-game lane's as-builts
+(8cF, VS, PB, WU, CR). The kit lane (WM: the model and the kit's ARVX v4 decoder; SE; RV: the planner's `flow: "current"` and
+`lip: "form"` vocabulary) and DF (fluids.json on DurableFile) are separate slices.
+
+### 8cF: the frozen shapes (light)
+
+- **The fluid op's 8c members** (kit/lib/fluids/flowing.mjs; each only when given, so every H, HY and IRR op is byte for byte as before):
+  `flow` (open enum: `current`, `level`), `kind` (the body kind, open: siteplan's kinds plus `river`, `basin`, `header`), `lip: "form"`
+  with `on: {part}`, `wash` (runs: natural washable predicted cells an earlier stage clears IF_NATURAL, journaled) and `converted` (runs:
+  predicted conversions lifted into written sources, each one of `cells`). A `flow` or `lip: "form"` member makes the IR require
+  **`flowingWater`**; a frozen volume read with `levels: true` makes it require **`volume:levels`** (both appended after `stagedTerrain`
+  in realise.mjs and IrStale `KINDS_FORMAT2`). Body ids stay `<part>_r<k>`. A consumer notes an unknown enum value and never refuses it.
+- **UNSETTLED** (`unsettledAnswer`): `refused`, reason `{code: "UNSETTLED", message, say, evidence: {body, cap, limit, regionWide, cells,
+  rounds, sample}}`, plus `wouldFit` [{part, fragment, why: "shorter" | "source", cells}] when the kit found one. `cap` is one of
+  `rounds`, `cells` (4,096 per body), `chunks` (64 per body), `regionCells` (32,768), `regionBodies` (8); the region's two are
+  `regionWide`. `say`: "The river was too long to settle here; a shorter one fits" (with a wouldFit) or "...; it waits". Deterministic:
+  no consumer retries it.
+- **The rows** (`architect_mc:fluids`, additive): every row gains `why` (typed, absent when settled: `foreign_water`, `census_drift`,
+  `escaped`, `uncontained`, `upstream`, `lot_removed`, `wash`, `bubble`; derived from the flags for a record saved before 8c), `box` (the
+  watch set's [x0, y0, z0, x1, y1, z1]) and `settleTicks`; a flowing body's row also `kind`, `flow`, `lip`, `on`, `flowing` (predicted
+  flowing and falling cells), `converted`, `washed`; a capped removal's row `foreign` (at most 64 positions) and `foreignCount`. `part`
+  is the plan part id (the op's `part`), as before.
+- **`architect_mc:fluidsWatch`** (new ext key): `[{part, body, phase: "writing" | "draining", box, rid?}]`, every body while its water is
+  written and settling, or drained by a removal; absent otherwise. Steward clears the box grown by 2 meanwhile (S-8c-3); Architect never
+  holds a body on the steward.
+- **`RegionView.fluidsRemoval`** (new trailing component, the 1.67.0 constructor kept): `FluidsRemoval {phase, until, ticksLeft}`, null
+  unless a removal is draining the region's bodies. `phase` is open: `draining`, `restoring`, `capped`; `until` is game ticks,
+  `ticksLeft` ticks from now (20 a second), so Steward can say how long.
+- **The feature** `flowingWater` (helper `region.flowingWater`) is advertised only once `RegionFluids.flowingBuild()` is true (slice WU
+  turns it on): before that a flowing body is drained as H's.
+- **A flowing body's watch set** also holds its predicted cells (an H body's is unchanged: cells, shell, spill, watch, lining).
+- **Hand IRs** (kit/lib/fluids/handriver.mjs, dispatched on ext `architect_mc:unsafe.handRiver`; not in the catalogue, so no fixture
+  moves): `river_demo` (a head reach `river_r1` with `flow: "current"`, a 42-cell current of six 6-cell runs each ending in a 1-block
+  step, the last over a meadow's natural grass whose 4 flower cells are `wash`; banks as lining; a terminal pool `river_r2`, `flow:
+  "level"`; 126 predicted cells, settle bound 240) and `fall_island` (a header pool `fall_r1` with `lip: "form"` on the island part, a
+  4-cell lip run and a 13-high fall into a raised basin `fall_r2` 3 deep; 51 predicted cells). Variants: `nowash` (the mint case's
+  control), `short` (the head's spill one cell short). Today's `steady` predicts both (no conversion, no waterlogged block in a reach).
+- **ARVX version 4** (frozen here, written by VS): version 3 byte for byte (the version byte 4), then per column (x-major) runs bottom-up
+  of `(u8 level, varint length)`: each cell's raw `LiquidBlock.LEVEL` (0 a source or no liquid block, 1-7 flowing, 8-15 falling; 0 for
+  a waterlogged block and a MISSING column). Asked with `levels: true` on a volume request (it implies `fluids`); a guard with
+  `levels: true` is re-sampled with the levels. The cross-language fixture is `mod/src/test/resources/arvx/levels.{bin,json}`; the
+  kit's decoder is WM's.
+- **Not in 8cF:** the catalogue's `flow: "current"` and `lip: "form"` (RV's: they would move the catalogue goldens), the kit's v4
+  decoder and `needVolume(..., {levels})` (WM's).
+
+#### 8cF as built
+- Kit: flowing.mjs (shapes, UNSETTLED), body.mjs's op members, realise.mjs's kinds, handriver.mjs, regions river_demo and fall_island,
+  kit/test/flowing-8cf.test.mjs (5). Mod: the rows, fluidsWatch, `FluidsRemoval`, `RegionView.fluidsRemoval`, `flowingBuild()` (false),
+  the feature mapping, IrStale's kinds, RegionFluids8cFTest (7). Sidecar: `region.flowingWater` in FEATURES.
+- Units: scoped suites (tools/unit-scope.mjs --run), recorded in the slice report.
+
+### VS: the mod's ARVX v4 sampler (light)
+
+- `Arvx.VERSION_LEVELS` 4, `Encoder(box, blocks, fluids, levels)` and its 5-array column, `Decoded.levelAt` (-1 before version 4; a
+  new trailing component, the old constructors kept); `VolumeSurvey.start(..., levels)`, `encode(..., levels)`, `levelOf` (the raw
+  LEVEL); RegionsImpl's program volumes honour `levels: true`; PlanChecks' guard re-sample keys and samples with it.
+- Only a river body asks it, so every H, HY and IRR volume stays version 3 byte for byte (ArvxFluidsTest unchanged).
+
+#### VS as built
+- ArvxLevelsTest (4): the committed fixture (sha in levels.json), version 4 = version 3 plus the appended runs, the encoder's refusals and
+  a level over 15 refused, the sampler's raw level (falling 8 kept, a waterlogged slab 0).

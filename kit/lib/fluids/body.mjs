@@ -445,6 +445,15 @@ export function fluidBody(r, cellsIn, opts = {}) {
   // ((6c F3-c) the decor set, only when non-empty)
   const decorCells = corals.filter((c) => !c.other).flatMap((c) => c.gen.decor);
   if (decorCells.length) op.decor = decorRuns(decorCells);
+  // ((8cF, flowing.mjs) 8c's members, each only when given: every op before 8c is byte for byte as it was)
+  if (typeof opts.flow === 'string') { op.flow = opts.flow; op.kind = kind; }
+  if (opts.lip === 'form') { op.lip = 'form'; op.kind = kind; if (typeof opts.on === 'string') op.on = { part: opts.on }; }
+  if (Array.isArray(opts.wash) && opts.wash.length) op.wash = toRuns(cellsOf(opts.wash, 'wash', claim));
+  if (Array.isArray(opts.converted) && opts.converted.length) {
+    const conv = cellsOf(opts.converted, 'converted', claim);
+    for (const c of conv) if (!own.has(k3(...c))) throw new Error(`fluidBody ${id}: converted cell ${c.join(', ')} is not a cell of the body (a lifted conversion is a written source)`);
+    op.converted = toRuns(conv);
+  }
   fp._push(op);
   for (const c of corals.filter((q) => q.other && q.gen.decor.length)) writeOtherPart(r, c, own);
   // the approval guard (§10): the shell and its buffer (the cells within 2 behind it), the joins, as per-column y runs; realiseApproved

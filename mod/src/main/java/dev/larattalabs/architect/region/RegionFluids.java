@@ -113,6 +113,24 @@ public final class RegionFluids {
 	 * bound after the drain) and the solids were restored with fluid still ticking in a watch set (a river's flow, say). Absent otherwise.
 	 */
 	public static final String EXT_REMOVAL = "architect_mc:fluidsRemoval";
+	/**
+	 * (8cF, Steward's S-8c-3) RegionView ext key: {@code [{part, body, phase: "writing" | "draining", box: [x0, y0, z0, x1, y1, z1]}]}, every
+	 * body while its water is being written and settling, or drained by a removal (the box: its watch set's, cells, shell, spill, watch,
+	 * lining and (a flowing body) predicted cells grown by {@link #WATCH_GROW}). Absent when no body is in either phase.
+	 */
+	public static final String EXT_WATCH = "architect_mc:fluidsWatch";
+	/** (8cF) At most this many foreign cells are named on a capped removal's rows (with the count). */
+	static final int FOREIGN_NAMED = 64;
+	/**
+	 * (8cF) Whether this mod writes, drains and recovers flowing water by 8c's rules (slice WU): until then {@code flowingWater} is not
+	 * advertised (ApiRules), and a flowing body is drained as H's.
+	 */
+	static final boolean FLOWING_BUILD = false;
+
+	/** (8cF) Whether this mod builds 8c's flowing water ({@link #FLOWING_BUILD}). */
+	public static boolean flowingBuild() {
+		return FLOWING_BUILD;
+	}
 	/** (the H batch) The capped removals' notes by region id, kept after the record is forgotten (DevBridge {@code dev.fluid.state}); at most 64. */
 	private static final Map<String, String> REMOVAL_NOTES = java.util.Collections.synchronizedMap(new LinkedHashMap<>() {
 		@Override
@@ -206,6 +224,26 @@ public final class RegionFluids {
 		@Nullable LongOpenHashSet grateSet;
 		/** (7a LF) Body cells written as bubble columns, and each one's drag (true: down, over magma). */
 		final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap bubble = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
+		/**
+		 * (8cF) The op's {@code flow} (an open enum: "current", a river's long current from few sources; "level"), else null. With
+		 * {@link #lip} "form" it makes the body 8c's ({@link #flowing}). Unknown values are kept and noted, never refused.
+		 */
+		@Nullable String flow;
+		/** (8cF) The op's body {@code kind} (an open enum: "reach", "pool", "basin", "header", ...), else null. */
+		@Nullable String kind;
+		/** (8cF) The op's {@code lip} ("form": a fall off a plan form, its host the part {@link #on}), else null. */
+		@Nullable String lip;
+		/** (8cF) A {@code lip: "form"} fall's host form part, else null. */
+		@Nullable String on;
+		/** (8cF, §2.4) The wash clears: natural washable cells in the predicted flow an earlier stage cleared to air (journaled). */
+		long[] wash = new long[0];
+		/** (8cF, §2.2) The predicted conversions the planner lifted into written sources (each one of {@link #cells}). */
+		long[] converted = new long[0];
+
+		/** (8cF) Whether the body is 8c's flowing water: a {@code flow} member or {@code lip: "form"}. */
+		boolean flowing() {
+			return flow != null || "form".equals(lip);
+		}
 
 		/** (6c HY) Whether a cell is a grate cell. */
 		boolean gratePos(long p) {
@@ -240,6 +278,9 @@ public final class RegionFluids {
 						base.add(p);
 					}
 				}
+				if (flowing()) {
+					base.addAll(predicted.keySet()); // (8cF) a river's current is watched wherever the planner predicts it (its spill holds it too)
+				}
 				LongOpenHashSet out = new LongOpenHashSet();
 				for (long p : base) {
 					int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
@@ -254,6 +295,47 @@ public final class RegionFluids {
 				watchSet = out;
 			}
 			return watchSet;
+		}
+
+		/** (8cF) The watch set's box [x0, y0, z0, x1, y1, z1]: the cells it grows from, grown by {@link #WATCH_GROW}. */
+		int[] watchBox() {
+			int[] b = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+			java.util.function.LongConsumer add = p -> {
+				int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+				b[0] = Math.min(b[0], x);
+				b[1] = Math.min(b[1], y);
+				b[2] = Math.min(b[2], z);
+				b[3] = Math.max(b[3], x);
+				b[4] = Math.max(b[4], y);
+				b[5] = Math.max(b[5], z);
+			};
+			for (long[] a : new long[][] {cells, shell, spill, watch, lining}) {
+				for (long p : a) {
+					add.accept(p);
+				}
+			}
+			if (flowing()) {
+				predicted.keySet().forEach(add);
+			}
+			if (b[0] > b[3]) {
+				return new int[6];
+			}
+			for (int i = 0; i < 3; i++) {
+				b[i] -= WATCH_GROW;
+				b[i + 3] += WATCH_GROW;
+			}
+			return b;
+		}
+
+		/** (8cF) The predicted flowing cells (levels 1-7) and falling cells (8). */
+		int flowingCells() {
+			int n = 0;
+			for (int lv : predicted.values()) {
+				if (lv > 0) {
+					n++;
+				}
+			}
+			return n;
 		}
 
 		LongOpenHashSet declared() {
@@ -300,10 +382,56 @@ public final class RegionFluids {
 		final LongOpenHashSet escapedCells = new LongOpenHashSet();
 		/** (6c IRR, S-IRR-3) The cells of a breach's flow over its own field that a drain took back (counted, saved). */
 		int breached;
+		/**
+		 * (8cF, Steward's S-8c-2) The typed why beside {@link #reason} (an open enum, {@link #WHYS}), set where the reason is; null on a body
+		 * that settled, or one saved before 8c (then derived from the flags: {@link #whyOf}).
+		 */
+		@Nullable String why;
+		/** (8cF) A capped removal's foreign cells in this body's watch set: water not the region's that kept it ticking (saved). */
+		final it.unimi.dsi.fastutil.longs.LongArrayList foreign = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		/** (8cF) How many foreign cells the capped removal found (at most {@link #FOREIGN_NAMED} kept in {@link #foreign}). */
+		int foreignCount;
 
 		boolean ended() {
 			return "settled".equals(state) || "drained".equals(state);
 		}
+	}
+
+	/**
+	 * (8cF) The typed whys of the fluids rows (an open enum: a consumer notes an unknown one, never refuses it): {@code foreign_water}
+	 * (water not the region's in the watch set: a player's bucket, a spring; clear it, then Expand again), {@code census_drift} (the
+	 * world settled other than the model predicted), {@code escaped} (fluid outside the body's cells, spill and joins), {@code uncontained}
+	 * (a shell, lining or join cell didn't hold at the gate), {@code upstream} (drained or held with a body it lands in), {@code lot_removed}
+	 * (an irrigation source left with its lot), {@code wash} (a predicted cell held a block that isn't natural and writable: M25:wash),
+	 * {@code bubble} (soul sand or magma under a predicted cell: M25:bubble).
+	 */
+	static final List<String> WHYS = List.of("foreign_water", "census_drift", "escaped", "uncontained", "upstream", "lot_removed", "wash", "bubble");
+
+	/** (8cF) A body's typed why: the one recorded, else derived from its flags and reason (a record saved before 8c); null when it settled. */
+	static @Nullable String whyOf(BodyState bs) {
+		if (bs.why != null) {
+			return bs.why;
+		}
+		if (!"drained".equals(bs.state)) {
+			return null;
+		}
+		String r = bs.reason == null ? "" : bs.reason;
+		if (bs.lotRemoved) {
+			return "lot_removed";
+		}
+		if (bs.held || r.startsWith("upstream of")) {
+			return "upstream";
+		}
+		if (bs.uncontained) {
+			return "uncontained";
+		}
+		if (bs.escaped || r.startsWith("escaped")) {
+			return "escaped";
+		}
+		if (r.startsWith("unsettled")) {
+			return "census_drift";
+		}
+		return null;
 	}
 
 	/** A region's fluids: its bodies (from the IR) and its saved progress. */
@@ -321,6 +449,8 @@ public final class RegionFluids {
 		long until = -1;
 		/** (the H batch) The removal went on without its settle (fluid still ticking 2 x the bound after the drain): why, else null. */
 		@Nullable String removalNote;
+		/** (8cF) The removal's phase as the view shows it ({@link dev.larattalabs.architect.api.FluidsRemoval#phase}); null: "draining". Saved. */
+		@Nullable String removalPhase;
 		long lastCensus;
 		/** This session drained already (a removal resumed after a stop drains again first). */
 		boolean redrained;
@@ -435,10 +565,22 @@ public final class RegionFluids {
 					}
 				}
 				b.settleTicks = o.has("settleTicks") ? o.get("settleTicks").getAsInt() : 100;
+				// (8cF) 8c's members (open enums kept as given)
+				b.flow = strOrNull(o, "flow");
+				b.kind = strOrNull(o, "kind");
+				b.lip = strOrNull(o, "lip");
+				b.on = o.get("on") instanceof JsonObject on ? strOrNull(on, "part") : strOrNull(o, "on");
+				b.wash = runs(o.get("wash"));
+				b.converted = runs(o.get("converted"));
 				out.add(b);
 			}
 		}
 		return out;
+	}
+
+	/** (8cF) A string member, else null. */
+	static @Nullable String strOrNull(JsonObject o, String k) {
+		return o.get(k) instanceof JsonElement e && e.isJsonPrimitive() ? e.getAsString() : null;
 	}
 
 	/**
@@ -2255,10 +2397,23 @@ public final class RegionFluids {
 			}
 		}
 		l.rec().ext.add(EXT, a);
+		// (8cF) the bodies being written or drained, with their boxes
+		JsonArray w = new JsonArray();
+		for (RegionsImpl.Live x : all) {
+			Regional xs = x.rid() == l.rid() ? st : of(x);
+			if (xs != null) {
+				watchRows(w, x.rid(), xs);
+			}
+		}
+		if (w.isEmpty()) {
+			l.rec().ext.remove(EXT_WATCH);
+		} else {
+			l.rec().ext.add(EXT_WATCH, w);
+		}
 		RegionsImpl.save(l);
 	}
 
-	private static void rows(JsonArray a, int rid, Regional st) {
+	static void rows(JsonArray a, int rid, Regional st) {
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			if (!bs.ended()) {
@@ -2292,8 +2447,109 @@ public final class RegionFluids {
 			if (rid > 0) {
 				o.addProperty("rid", rid); // (6d RV) a revision's body
 			}
+			rowExtras(o, b, bs);
 			a.add(o);
 		}
+	}
+
+	/**
+	 * (8cF, Steward's S-8c-1, S-8c-2, S-8c-4) A row's 8c members: {@code why} (typed, {@link #WHYS}; absent when settled), {@code box} (the
+	 * watch set's), {@code settleTicks}; on a flowing body {@code kind}, {@code flow}, {@code lip} and {@code on} (as the op gave them),
+	 * {@code flowing} (predicted flowing and falling cells), {@code converted}, {@code washed}; on a capped removal {@code foreign} (at most
+	 * {@link #FOREIGN_NAMED} positions) and {@code foreignCount}. Additive: every member before 8c is as it was.
+	 */
+	static void rowExtras(JsonObject o, Body b, BodyState bs) {
+		String why = whyOf(bs);
+		if (why != null) {
+			o.addProperty("why", why);
+		}
+		o.add("box", ints(b.watchBox()));
+		o.addProperty("settleTicks", b.settleTicks);
+		if (b.flowing()) {
+			if (b.kind != null) {
+				o.addProperty("kind", b.kind);
+			}
+			if (b.flow != null) {
+				o.addProperty("flow", b.flow);
+			}
+			if (b.lip != null) {
+				o.addProperty("lip", b.lip);
+			}
+			if (b.on != null) {
+				o.addProperty("on", b.on);
+			}
+			o.addProperty("flowing", b.flowingCells());
+			o.addProperty("converted", b.converted.length);
+			o.addProperty("washed", b.wash.length);
+		}
+		if (bs.foreignCount > 0) {
+			JsonArray f = new JsonArray();
+			for (int i = 0; i < bs.foreign.size(); i++) {
+				long p = bs.foreign.getLong(i);
+				f.add(ints(new int[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)}));
+			}
+			o.add("foreign", f);
+			o.addProperty("foreignCount", bs.foreignCount);
+		}
+	}
+
+	static JsonArray ints(int[] v) {
+		JsonArray a = new JsonArray();
+		for (int x : v) {
+			a.add(x);
+		}
+		return a;
+	}
+
+	/**
+	 * (8cF, S-8c-3) The {@link #EXT_WATCH} rows of one record: every body whose water is being written ({@code writing}: the stage checked,
+	 * the body written or not yet, not ended) or drained by a removal ({@code draining}: the removal began and isn't done), with its box.
+	 */
+	static void watchRows(JsonArray a, int rid, Regional st) {
+		boolean removing = st.removal != null && !"done".equals(st.removal);
+		boolean writing = "writing".equals(st.phase) || "settling".equals(st.phase);
+		if (!removing && !writing) {
+			return;
+		}
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (removing ? bs.before.isEmpty() : bs.ended()) {
+				continue; // (nothing of it stands, or it ended)
+			}
+			JsonObject o = new JsonObject();
+			o.addProperty("part", b.part != null ? b.part : b.id);
+			o.addProperty("body", b.id);
+			o.addProperty("phase", removing ? "draining" : "writing");
+			o.add("box", ints(b.watchBox()));
+			if (rid > 0) {
+				o.addProperty("rid", rid);
+			}
+			a.add(o);
+		}
+	}
+
+	/**
+	 * (8cF, Steward's §2 drain timing) The removal's phase for {@link dev.larattalabs.architect.api.RegionView#fluidsRemoval}: while a
+	 * record's removal drained its bodies and waits ({@code removal: "drained"}, "draining" until the bound), else null. A revision's record
+	 * (6d RV) counts as the region's. Server thread.
+	 */
+	public static dev.larattalabs.architect.api.@Nullable FluidsRemoval removalPhase(RegionsImpl.Live base) {
+		List<RegionsImpl.Live> all;
+		try {
+			all = lives(base);
+		} catch (RuntimeException e) {
+			return null;
+		}
+		for (RegionsImpl.Live x : all) {
+			Regional st = STATE.get(key(x));
+			if (st == null || st.removal == null || "done".equals(st.removal)) {
+				continue;
+			}
+			long now = st.ticketLevel != null ? st.ticketLevel.getGameTime() : st.until;
+			String phase = st.removalPhase != null ? st.removalPhase : "draining";
+			return new dev.larattalabs.architect.api.FluidsRemoval(phase, st.until, st.until < 0 ? 0 : st.until - now);
+		}
+		return null;
 	}
 
 	/** The region's fluids record as JSON (DevBridge {@code dev.fluid.state}). */
@@ -2355,6 +2611,9 @@ public final class RegionFluids {
 		if (st.removalNote != null) {
 			o.addProperty("removalNote", st.removalNote);
 		}
+		if (st.removalPhase != null) {
+			o.addProperty("removalPhase", st.removalPhase); // (8cF)
+		}
 		JsonObject bodies = new JsonObject();
 		for (var e : st.states.entrySet()) {
 			BodyState bs = e.getValue();
@@ -2386,6 +2645,20 @@ public final class RegionFluids {
 			}
 			if (bs.writtenAt >= 0) {
 				b.addProperty("writtenAt", bs.writtenAt);
+			}
+			if (bs.why != null) {
+				b.addProperty("why", bs.why); // (8cF)
+			}
+			if (bs.foreignCount > 0) {
+				JsonArray fa = new JsonArray(); // (8cF) a capped removal's foreign cells
+				for (int i = 0; i < bs.foreign.size(); i++) {
+					long p = bs.foreign.getLong(i);
+					fa.add(BlockPos.getX(p));
+					fa.add(BlockPos.getY(p));
+					fa.add(BlockPos.getZ(p));
+				}
+				b.add("foreign", fa);
+				b.addProperty("foreignCount", bs.foreignCount);
 			}
 			b.add("before", packStates(bs.before));
 			if (!bs.escapedCells.isEmpty()) {
@@ -2454,6 +2727,7 @@ public final class RegionFluids {
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;
 			st.until = o.has("until") ? o.get("until").getAsLong() : -1;
 			st.removalNote = o.get("removalNote") instanceof JsonElement rn && rn.isJsonPrimitive() ? rn.getAsString() : null;
+			st.removalPhase = strOrNull(o, "removalPhase"); // (8cF)
 			if (o.get("bodies") instanceof JsonObject bodies) {
 				for (var e : bodies.entrySet()) {
 					BodyState bs = st.states.get(e.getKey());
@@ -2478,6 +2752,13 @@ public final class RegionFluids {
 					bs.lotRemoved = b.has("lotRemoved") && b.get("lotRemoved").getAsBoolean();
 					bs.breached = b.has("breached") ? b.get("breached").getAsInt() : 0;
 					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
+					bs.why = strOrNull(b, "why"); // (8cF)
+					if (b.get("foreign") instanceof JsonArray fa) {
+						for (int i = 0; i + 2 < fa.size(); i += 3) {
+							bs.foreign.add(BlockPos.asLong(fa.get(i).getAsInt(), fa.get(i + 1).getAsInt(), fa.get(i + 2).getAsInt()));
+						}
+					}
+					bs.foreignCount = b.has("foreignCount") ? b.get("foreignCount").getAsInt() : bs.foreign.size();
 					unpackStates(b.get("before"), bs.before);
 					if (b.get("escapedCells") instanceof JsonArray esc) {
 						for (int i = 0; i + 2 < esc.size(); i += 3) {

@@ -155,6 +155,7 @@ public final class ApiRules {
 					case "design.fill" -> "filledContainers"; // M5 FK: a given program's bp.fill (filled containers and lock cells; since 1.59.0)
 					case "design.fillProvided" -> "fillProvided"; // FK-b: a fill's provided: true items (Limits.FILL_PROVIDED_ITEMS; since 1.64.0)
 					case "region.terrainConstruction" -> "terrainConstruction"; // 8a: survival land built over time, free (staged terrain; since 1.68.0)
+					case "region.flowingWater" -> "flowingWater"; // 8c: rivers (a long current from few sources) and falls off forms (since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)
@@ -163,6 +164,9 @@ public final class ApiRules {
 			}
 			if (!dev.larattalabs.architect.region.Packed.stagedBuild()) {
 				out.remove("terrainConstruction"); // (8a ST) advertised only while this mod builds staged terrain as targets
+			}
+			if (!dev.larattalabs.architect.region.RegionFluids.flowingBuild()) {
+				out.remove("flowingWater"); // (8cF) advertised only once this mod writes, drains and recovers rivers (slice WU)
 			}
 			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
 				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved
