@@ -130,6 +130,47 @@ class StalledRemovalPSVLC3Test {
 		assertNotNull(findStalled("g1", null));
 	}
 
+	@Test
+	void aWholeGroupRemovalIsRefusedWhileAStageUndoOfTheGroupRuns() throws Exception {
+		// (fix round, GPT P1 3) ca946197 admitted it beside the running stage undo: both could record the same crate and, both stalled, block
+		// each other's retry for ever
+		groups(Map.of("g1", group("g1", Stage.State.PLACED)));
+		Groups.Removal st = new Groups.Removal("g1", "s1", null, true);
+		st.sites.add("a");
+		st.started = true;
+		JsonArray a = new JsonArray();
+		a.add(st.toJson());
+		Groups.load(a); // running, not stalled
+		CompletableFuture<Groups.Removed> f = Groups.removeGroup(null, "g1", null, true);
+		assertTrue(f.isDone() && !f.isCompletedExceptionally(), "refused at once (ca946197: it started)");
+		assertFalse(f.join().removed());
+		assertTrue(String.join(" ", f.join().blockers()).contains("stage s1"), String.valueOf(f.join().blockers()));
+		assertTrue(Groups.stageRemovalRunning("g1", "s1"));
+	}
+
+	@Test
+	void aChangedCrateRecordIsConfirmedBeforeR1GoesOnTakesOrNot() {
+		// (fix round, GPT P1 2) the crate emptied after its stock was recorded: the cleared record is saved and waited for, though nothing is
+		// taken (ca946197 went on at once)
+		assertEquals(Groups.CrateStep.SAVE, Groups.crateStep(false, true, 5, false, true));
+		assertEquals(Groups.CrateStep.WAIT, Groups.crateStep(false, false, 6, false, false), "the cleared record's write pending");
+		assertEquals(Groups.CrateStep.GO, Groups.crateStep(false, false, 6, false, true));
+		assertEquals(Groups.CrateStep.SAVE, Groups.crateStep(false, false, 6, true, false), "its write failed: saved again");
+		assertEquals(Groups.CrateStep.GO, Groups.crateStep(false, false, 0, false, false), "nothing recorded, nothing to take");
+		assertEquals(Groups.CrateStep.SAVE, Groups.crateStep(true, false, 0, false, false), "a take never saved this session");
+		assertEquals(Groups.CrateStep.WAIT, Groups.crateStep(true, false, 7, false, false));
+		assertEquals(Groups.CrateStep.GO, Groups.crateStep(true, false, 7, false, true));
+	}
+
+	@Test
+	void aContainersItemsWithTheirOwnDataAreNotCreditedById() {
+		// (fix round, GPT P1 4) a holder's contents are credited by item id; a stack with its own data (a name, an enchantment) would lose it
+		assertEquals(Map.of("minecraft:diamond", 5), Groups.cargoOf(List.of(new Groups.Stack("minecraft:diamond", 3, false), new Groups.Stack(
+			"minecraft:diamond", 2, false))));
+		assertNull(Groups.cargoOf(List.of(new Groups.Stack("minecraft:diamond", 3, false), new Groups.Stack("minecraft:diamond_sword", 1, true))),
+			"the removal ends instead, the holder as it is");
+	}
+
 	// ------------------------------------------------------------------ P1 3
 
 	@Test

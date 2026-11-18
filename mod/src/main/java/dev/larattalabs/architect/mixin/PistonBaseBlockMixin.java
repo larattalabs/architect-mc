@@ -35,7 +35,8 @@ public abstract class PistonBaseBlockMixin {
 	@Inject(method = "isPushable", at = @At("HEAD"), cancellable = true)
 	private static void architect$freeHolds(BlockState state, Level level, BlockPos pos, Direction direction, boolean allowDestroy, Direction pushDirection,
 		CallbackInfoReturnable<Boolean> cir) {
-		if (!state.isAir() && dev.larattalabs.architect.site.RegionFreeDrops.pistonHolds(level, pos)) {
+		if (!state.isAir() && (dev.larattalabs.architect.site.RegionFreeDrops.pistonHolds(level, pos)
+			|| dev.larattalabs.architect.site.RemovalSeal.refusesBlast(level, pos))) { // (PSVLC3) a sealed holder is never moved or destroyed
 			cir.setReturnValue(false);
 		}
 	}

@@ -556,7 +556,19 @@ public final class RemovalSeal {
 		return true;
 	}
 
-	static void tell(Player p) {
+	/**
+	 * (slice PSVLC3 fix round, GPT P1 5) Not a player: an explosion (TNT, a creeper, a bed or anchor) or a piston at a holder in a sealed box
+	 * leaves it standing (its contents would drop, and the restore or a restart brings them back), as a player's break is refused.
+	 */
+	public static boolean refusesBlast(Level level, BlockPos at) {
+		if (level.isClientSide() || !any() || !sealed(level, at) || !holder(level.getBlockEntity(at))) {
+			return false;
+		}
+		count("blast");
+		return true;
+	}
+
+		static void tell(Player p) {
 		p.sendOverlayMessage(Component.literal(MESSAGE));
 	}
 

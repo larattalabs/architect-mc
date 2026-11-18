@@ -26,6 +26,8 @@
 //           carried stock, the world's last save the crate with it), reopened: the loaded removal ends REMOVED and the crate's stock drops
 //           once (adef7f9b: the carried stock plus the stock taken again, twice)
 //     PSV6  the same halted at K5+save (the chunks saved first: the crate gone on disk): the carried stock drops once, none lost
+//     PSV7  (fix round, GPT P1 1) the same site's removal under /save-off: the take's barrier refused, the undo not committed (the group not
+//           REMOVED, the site still a record) for 15 s; /save-on: REMOVED, the crate's stock dropped once
 //
 // Evidence: artifacts/gate6d-gr/psvcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -210,8 +212,8 @@ export async function registerPSV(steps, h) {
     await L.leaveWorld();
   }
 
-  /** PSV5/PSV6: a legacy crate's stock across a crash at the removal's commit point: dropped exactly once. */
-  async function crateCrashCase(out, tag, point) {
+  /** PSV4's crate-fed construction site (paused, stock inserted, /save-all flush): its ids, stock and crate cell. */
+  async function crateSite(tag) {
     await G.survivalBase(ctx);
     const name = `G6B PSV ${tag}`;
     await L.fresh(name, G.SURV);
@@ -227,7 +229,7 @@ export async function registerPSV(steps, h) {
     for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site)) break; await L.sleep(1000); }
     const site = bv.items?.[0]?.site;
     check(!!site, `${tag}: an actorless construction rs_hut from the group's shared crate (${site}, group ${bv.group})`, bv);
-    if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
+    if (!site) return { bv };
     // paused once it is building (its placement's job done: before that the pause refuses it)
     let pz;
     for (let i = 0; i < 60; i++) { pz = await call('dev.stockpile.pause', { site, paused: true }, 60_000); if (!pz?.refused) break; await L.sleep(1000); }
@@ -244,6 +246,13 @@ export async function registerPSV(steps, h) {
     const placed = pos(s1.ledger?.placed);
     const crate = [s1.crate?.x, s1.crate?.y, s1.crate?.z];
     check(s1.crate?.present === true && sum(stock) > 0, `${tag}: the crate stands with stock ${sum(stock)} (placed ${sum(placed)})`, s1.crate);
+    return { name, gy, at, bv, site, stock, placed, crate };
+  }
+
+  /** PSV5/PSV6: a legacy crate's stock across a crash at the removal's commit point: dropped exactly once. */
+  async function crateCrashCase(out, tag, point) {
+    const { name, gy, at, bv, site, stock, placed, crate } = await crateSite(tag);
+    if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
     const near0 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
     await call('dev.journal.killAt', { point }, 10_000);
     api(`sgremove ${bv.group}`).catch(() => null);
@@ -268,6 +277,41 @@ export async function registerPSV(steps, h) {
     // the crate's stock drops once; a placed block's refund may come on top (at most what was placed); nothing beyond
     const bad = Object.keys(stock).filter((k) => (dropped[k] ?? 0) < stock[k] || (dropped[k] ?? 0) > stock[k] + (placed[k] ?? 0));
     check(bad.length === 0, `${tag}: the crate's stock dropped once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}${placed[k] ? ` +${placed[k]} placed` : ''}`).join(', ')}; twice is the double)`, { stock, placed, dropped });
+    log(`  ${tag}: ${json(n)}`);
+    out[tag] = n;
+    await L.leaveWorld();
+  }
+
+  /**
+   * PSV7 (slice PSVLC3 fix round, GPT P1 1): /save-off, the crate-fed site's removal: the take's barrier is refused, so the undo is never
+   * committed while the world can't be saved (ca946197: it committed and ended REMOVED); /save-on: it ends REMOVED, the stock dropped once.
+   */
+  async function saveOffCase(out, tag) {
+    const { bv, site, stock, placed, crate } = await crateSite(tag);
+    if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
+    const near0 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    await cmd('/save-off');
+    api(`sgremove ${bv.group}`).catch(() => null);
+    await call('dev.wait', { ms: 15_000 }, 60_000);
+    const g1 = await api(`sgroup ${bv.group}`).catch(() => null);
+    const s1 = await call('dev.site.state', { site }, 60_000).catch(() => null);
+    const n = { tag, site, group: bv.group, stock, placed, crate, whileOff: g1?.state ?? null, siteWhileOff: s1?.state ?? null };
+    check(!/^removed$/i.test(n.whileOff ?? '') && s1 && !s1.error, `${tag}: under /save-off the undo is not committed: the group ${n.whileOff}, the site still a record (${n.siteWhileOff})`, n);
+    await cmd('/save-on');
+    let g;
+    for (let i = 0; i < 150; i++) {
+      g = await api(`sgroup ${bv.group}`).catch(() => null);
+      if (/^removed$/i.test(g?.state ?? '')) break;
+      await call('dev.wait', { ms: 2000 }, 30_000);
+    }
+    n.groupAfter = g?.state ?? null;
+    check(/^removed$/i.test(n.groupAfter ?? ''), `${tag}: /save-on: the removal ends REMOVED (${n.groupAfter})`);
+    await call('dev.wait', { ms: 3000 }, 30_000);
+    const near1 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    const dropped = G.minus(near1.items ?? {}, near0.items ?? {});
+    n.dropped = dropped;
+    const bad = Object.keys(stock).filter((k) => (dropped[k] ?? 0) < stock[k] || (dropped[k] ?? 0) > stock[k] + (placed[k] ?? 0));
+    check(bad.length === 0, `${tag}: the crate's stock dropped once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}`).join(', ')})`, { stock, dropped });
     log(`  ${tag}: ${json(n)}`);
     out[tag] = n;
     await L.leaveWorld();
@@ -346,13 +390,14 @@ export async function registerPSV(steps, h) {
   steps.psvcrash = async () => {
     await ensure();
     const out = {};
-    const parts = (process.env.GATE_PSV_PARTS ?? 'PSV1,PSV2,PSV3,PSV4,PSV5,PSV6').split(',');
+    const parts = (process.env.GATE_PSV_PARTS ?? 'PSV1,PSV2,PSV3,PSV4,PSV5,PSV6,PSV7').split(',');
     for (const tag of parts) {
       try {
         if (tag === 'PSV3') await replanCase(out, tag);
         else if (tag === 'PSV4') await notSavedCase(out, tag);
         else if (tag === 'PSV5') await crateCrashCase(out, tag, 'K5');
         else if (tag === 'PSV6') await crateCrashCase(out, tag, 'K5+save');
+        else if (tag === 'PSV7') await saveOffCase(out, tag);
         else await oneCase(out, tag);
       } catch (e) {
         check(false, `${tag}: ${String(e?.message ?? e).slice(0, 300)}`);

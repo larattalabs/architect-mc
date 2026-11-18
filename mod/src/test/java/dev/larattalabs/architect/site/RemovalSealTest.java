@@ -1,6 +1,7 @@
 package dev.larattalabs.architect.site;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -297,11 +298,29 @@ class RemovalSealTest {
 	}
 
 	@Test
-	void regionTargetDropsAPlayersHolderWithItsContents() throws Exception {
+	void aPlayersHolderInARegionTargetIsCreditedNeverDropped() throws Exception {
+		// (slice PSVLC3 fix round, GPT P1 4) ca946197 read the contents, replaced the holder and dropped them as item entities (a player could
+		// pick them up and save them before the chunk, then a crash restored the stocked holder too)
 		String rt = read("java/dev/larattalabs/architect/site/RegionTargets.java");
-		int c = rt.indexOf("Builder.holderContents(level.getBlockEntity(p))");
-		int w = rt.indexOf("Placed.set(level, p, was != null ? was");
-		int d = rt.indexOf("Builder.dropStacksAtCell(level, p, contents)");
-		assertTrue(c > 0 && c < w && w < d, "the contents read before the write, dropped after it on top");
+		assertFalse(rt.contains("dropStacksAtCell("), "no item entities for a holder's contents");
+		String g = read("java/dev/larattalabs/architect/site/Groups.java");
+		int find = g.indexOf("findCargo(level, r, id, inf, pile, dropped)");
+		int hold = g.indexOf("p.ledger().holdPending(c.key(), c.items(), c.at()); // (fix round) the holder's contents");
+		int barrier = g.indexOf("the world barrier before a player's container is replaced");
+		int apply = g.indexOf("RegionTargets.dropPlayerBlocks(level, inf, true)");
+		assertTrue(find > 0 && hold > 0 && barrier > 0 && apply > barrier, "found, held pending, made durable, then the holder replaced");
+		assertTrue(g.indexOf("Stockpiles.credit(server, p, c.key(), c.items()") > 0, "booked once the replacement is durable");
+		assertEquals(Stockpiles.PendingAction.DROP, Stockpiles.cargoAction(false, true), "the holder kept its items: the pending credit goes");
+		assertEquals(Stockpiles.PendingAction.BOOK, Stockpiles.cargoAction(false, false), "the holder is gone: its contents booked");
+		assertEquals(Stockpiles.PendingAction.DROP, Stockpiles.cargoAction(true, false), "once");
 	}
+
+	@Test
+	void aSealedHolderIsNotBlownUpOrPushed() throws Exception {
+		// (fix round, GPT P1 5) ca946197 sealed only a player's break: an explosion at a stocked chest in a sealed box dropped its contents
+		String mx = "java/dev/larattalabs/architect/mixin/";
+		assertTrue(read(mx + "TxnHoldExplosionMixin.java").contains("RemovalSeal.refusesBlast(level, pos)"), "an explosion");
+		assertTrue(read(mx + "PistonBaseBlockMixin.java").contains("RemovalSeal.refusesBlast(level, pos)"), "a piston");
+	}
+
 }

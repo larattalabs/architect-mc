@@ -305,7 +305,7 @@ export async function registerLC3(steps, h) {
   // ------------------------------------------------------------------ lc3-undo
 
   /** A paused removal's first sealed box: a chest set inside it refuses the hand and a Transfer API insert. */
-  async function sealedChest(tag, only = null) {
+  async function sealedChest(tag, only = null, blastIt = false) {
     const st = await until(async () => { const s = await seal(); return (s.sealed ?? []).length && (s.jobs ?? []).some((j) => !only || j.site === only) ? s : null; }, 600, 500);
     check(!!st, `${tag}: the removal started and its boxes are sealed (${json(st?.sealed)}; jobs ${json(st?.jobs)})`, st);
     if (!st) return null;
@@ -317,7 +317,21 @@ export async function registerLC3(steps, h) {
     const u = await use(P, DIAMOND);
     const t = await call('dev.seal.transfer', { pos: P, item: DIAMOND, count: 2 }, 30_000).catch((x) => ({ error: String(x) }));
     check(refused(u, DIAMOND) && t.inserted === 0, `${tag}: a chest set at ${P.join(',')} in ${e.id}'s sealed box (the paused member ${first}) refuses the player's diamond (in the hand: ${json(u.hand)}) and a Transfer API insert (${t.inserted})`, { u, t, sealed: st.sealed.map((x) => x.id) });
-    return { sealed: st.sealed.map((x) => x.id), first, at: P, use: u, transfer: t };
+    let blast = null;
+    if (blastIt) {
+      // (slice PSVLC3, GPT P1 5) an explosion beside a stocked chest in the sealed box: the chest stands with its diamonds, none dropped
+      const Q = [P[0] + 1, P[1], P[2]];
+      await cmd(`/setblock ${Q.join(' ')} minecraft:chest{Items:[{Slot:0b,id:"${DIAMOND}",count:3}]}`);
+      const q0 = await holder(Q);
+      await cmd(`/summon minecraft:tnt ${Q[0] + 0.5} ${Q[1] + 1} ${Q[2] + 0.5} {fuse:0}`);
+      await call('dev.wait', { ms: 2000 }, 30_000);
+      const q1 = await holder(Q);
+      const near = await call('dev.items.near', { pos: Q, radius: 6 }, 30_000).catch(() => ({ items: {} }));
+      blast = { at: Q, before: q0, after: q1, dropped: near.items };
+      check(q0.sealed && q1.holder && q1.holds?.[DIAMOND] === 3 && !(near.items?.[DIAMOND] > 0),
+        `${tag}: TNT beside a sealed chest with 3 diamonds: the chest stands with them, none dropped (after ${json(q1)}; near ${json(near.items)})`, blast);
+    }
+    return { sealed: st.sealed.map((x) => x.id), first, at: P, use: u, transfer: t, blast };
   }
 
   steps.lc3undo = async () => {
@@ -337,7 +351,7 @@ export async function registerLC3(steps, h) {
     // a revision's undo of its own stage (Groups.undoStage, ownStage), paused in its first member's restore
     await call('dev.removal.pause', { site: hut, after: 0 }, 10_000);
     const fu = call('dev.removal.undoStage', { site: hut }, 3_600_000).catch((e) => ({ error: String(e) }));
-    out.revision = await sealedChest('revision undo', hut);
+    out.revision = await sealedChest('revision undo', hut, true);
     check(out.revision?.first === hut, `revision undo: rs_hut's own restore (${hut}) paused, its box sealed (${json(out.revision?.sealed)})`, out.revision);
     await call('dev.removal.pause', { site: hut, off: true }, 10_000);
     out.revision && (out.revision.answer = await fu);

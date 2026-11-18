@@ -1667,7 +1667,18 @@ public final class Stockpiles {
 		for (Pile p : List.copyOf(PILES.values())) {
 			for (String key : p.ledger.pendingKeys()) {
 				String what;
-				PendingAction a = pendingAction(key, p.ledger.credited(key), standingSite(key) != null, pendingSite(key));
+				PendingAction a;
+				if (key.startsWith(CARGO_PREFIX)) {
+					// (slice PSVLC3 fix round) a player holder's contents held before a group removal replaced it: the world decides
+					ServerLevel lv = Sites.levelOf(srv, p.dimension);
+					if (lv == null) {
+						continue;
+					}
+					boolean holds = !Builder.holderContents(lv.getBlockEntity(BlockPos.of(p.ledger.pendingAt(key)))).isEmpty();
+					a = cargoAction(p.ledger.credited(key), holds);
+				} else {
+					a = pendingAction(key, p.ledger.credited(key), standingSite(key) != null, pendingSite(key));
+				}
 				if (a == PendingAction.DROP && p.ledger.credited(key)) {
 					p.ledger.dropPending(key);
 					what = "already credited";
@@ -1727,6 +1738,17 @@ public final class Stockpiles {
 	 */
 	enum PendingAction {
 		DROP, LEAVE, BOOK
+	}
+
+	/** (slice PSVLC3 fix round, GPT P1 4) The key prefix of a player holder's contents a group removal credits ({@code Groups.cargoKey}). */
+	static final String CARGO_PREFIX = "cargo:";
+
+	/**
+	 * (pure; fix round) A pending cargo credit at the start: {@code DROP} when credited already or the holder still holds items (the stop came
+	 * before its replacement reached the disk: the holder keeps them), else {@code BOOK} (the holder is gone: its contents are only here).
+	 */
+	static PendingAction cargoAction(boolean credited, boolean holderHolds) {
+		return credited || holderHolds ? PendingAction.DROP : PendingAction.BOOK;
 	}
 
 	static PendingAction pendingAction(String key, boolean credited, boolean standing, boolean pending) {
