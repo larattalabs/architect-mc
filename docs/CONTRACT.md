@@ -33807,7 +33807,8 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - **Ran** (gate-runs in `_work/architect-mc-SV-out`): 20261118-102801 (2 shards): unit-mod 1601/0, 8c-ingame 31/0, 8c-crash 47/0, h-df,
   rs-df, irr-df, rv-df, h-ingame-smoke, h-probe-smoke, h-crash, hy-ingame-smoke, hy-crash-smoke, hy-cold-smoke, irr-ingame-smoke,
   irr-crash, fl-ingame PASS (no fl smoke or crash step exists); 8c-survival 30/0 after the gate's wait check (20261118-112516).
-  api-compat 8/8, gitleaks clean.
+  On 8cG round 2 (3c210117): 20261118-113714: unit-mod 1605/0, 8c-survival 30/0, 8c-ingame 34/0, 8c-crash 47/0, h-df, rs-df, irr-df,
+  rv-df PASS. api-compat 8/8, gitleaks clean.
 - **Docs:** SETTLEMENTS §4.2 (flowing water outside E-normal only outside a body's watch set), DEVBRIDGE (no new hook).
 - **Leftovers:** the kit's shell check (pond.mjs `unwrittenShell`) refuses LEAK when the virtual world's subsurface (dirt) and the frozen
   volume (grass under the terrain builder's grass) disagree at a shell cell: the gate fills dirt there (gate6chy-b's builder leaves the base's
