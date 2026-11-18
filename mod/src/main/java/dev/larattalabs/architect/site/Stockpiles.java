@@ -3732,6 +3732,7 @@ public final class Stockpiles {
 		});
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 		forgetEarlyRuns(server);
+		Sites.crateCheckAfterStockpiles(server); // (chore LT) the crate-less sites' crate check, now that it can see which a stockpile feeds
 	}
 
 	/**
