@@ -26,7 +26,7 @@
 import path from 'node:path';
 
 export async function registerTCC(steps, h) {
-  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, haltWait } = h;
+  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ } = h;
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pick = (m, items) => Object.fromEntries(items.filter((k) => m?.[k]).map((k) => [k, m[k]]));
@@ -46,6 +46,15 @@ export async function registerTCC(steps, h) {
     throw new Error(`no result for ${pd.pending}`);
   };
   const wait = (ms) => call('dev.wait', { ms }, 60_000);
+  // a halt waited at most 90 s (the shared haltWait's 6 min would trip the runner's 5 min stall guard on a point never reached)
+  const haltWait = async () => {
+    for (let i = 0; i < 45; i++) {
+      await L.sleep(2000);
+      const st = await call('dev.state', {}, 10_000).catch(() => null);
+      if (st && st.inWorld === false) return true;
+    }
+    return false;
+  };
   const siteState = async (site) => call('dev.site.state', { site }, 60_000).catch(() => null);
   const owedAll = async () => (await call('dev.stockpile.owed', {}, 30_000).catch(() => null)) ?? { owed: [], total: {} };
   const txn = async () => call('dev.txn.state', {}, 30_000).catch(() => ({ openCount: -1 }));
@@ -177,8 +186,11 @@ export async function registerTCC(steps, h) {
     const down = await haltWait();
     check(down, `${tag}: halted at ${point} (${json(m).slice(0, 160)})`);
     if (!down) {
+      // never reached: the removal ran past it (judged as it stands, no restart), so the row still says where the stock went
       await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
-      out[tag] = { tag, point, before, removal: m, halted: false };
+      const r0 = await settleWait(sites, cp, group);
+      const pts = await call('dev.txn.points', { kind: 'crate.settle' }, 10_000).catch(() => null);
+      judge(out, tag, { tag, point, sites, group, crate: cp, removal: m, txn: r0.txn, groupEnd: r0.group, halted: false, reached: pts }, before, await parts(sites, cp, items));
       return;
     }
     await L.openWorld(path.basename(W.dir));
