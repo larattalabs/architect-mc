@@ -1665,12 +1665,17 @@ public final class Sites {
 		// commit: a crash anywhere after it rolls the credit forward at the next start (Stockpiles.settlePendingCredits) or, if the removal
 		// never settled, drops it (the site stands: its custody goes back)
 		boolean pendingHeld = Stockpiles.holdPendingCredits(decs.values());
-		if (custody || pendingHeld) {
+		// (T2b fix round P1-c) each crate-fed site's settle with its refunds, saved with the ledger (confirmed) before the undo commits
+		Map<String, JsonObject> stashes = new LinkedHashMap<>();
+		decs.forEach((k, d) -> stashes.put(k, d == null ? null : d.settle()));
+		boolean stashHeld = CrateSettle.holdDurable(stashes);
+		if (custody || pendingHeld || stashHeld) {
 			try {
 				Stockpiles.saveWithWorld(server);
 			} catch (IllegalStateException e) {
 				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
 				Stockpiles.dropPendingCredits(decs.values());
+				stashes.keySet().forEach(CrateSettle::forgetDurable);
 				for (Site y : all) {
 					if (y.construction() != null && Fills.phase(y) != null) {
 						Fills.writeBack(level, y);
@@ -1948,7 +1953,9 @@ public final class Sites {
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; its journal entries are kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
 		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : dec.reported());
-		settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum));
+		if (settled.owed().isEmpty()) {
+			settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
+		}
 		Removed r = new Removed(b, Map.copyOf(returned), stats.restored(), stats.changed(), handed, cascaded, notes, List.copyOf(settled.owed()));
 		if (event) {
 			ApiEvents.removed(server, r);
@@ -2570,6 +2577,7 @@ public final class Sites {
 
 	/** (T2b part 2b) {@code id}'s crate.settle is done: its pending entries keep no stash (a restart never settles it again). */
 	static void settled(MinecraftServer server, String id) {
+		CrateSettle.forgetDurable(id); // (T2b fix round P1-c)
 		State s = state;
 		boolean any = false;
 		List<Site.Pending> pending = new ArrayList<>();
@@ -3222,11 +3230,14 @@ public final class Sites {
 			if (at != Long.MIN_VALUE) {
 				map.remove(b.id());
 				// (T2b part 2b) the crate its undo left out settles from the record (its stock; the refunds tallied at prepare are not known here)
+				// (T2b fix round P1-c) the refunds tallied at prepare from the durable stash, saved before the undo committed
+				// (the stockpiles load after this check: the settle reads the durable stash on its tick, CrateSettle.resumeNow)
 				JsonObject st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
 				pending.add(new Site.Pending(b, at, "removed", st));
 				if (st != null) {
 					pendingSettles.add(b.id());
 				}
+				CrateSettle.resumeLater(server, b.id()); // (T2b fix round P1-c) a durable stash (refunds alone too) settles on its tick
 				pendingIds.add(b.id());
 				changed = true;
 				Architect.LOGGER.info("Sites check: {}'s removal was committed to the journal before its record went pending; it is settled now", b.id());

@@ -373,8 +373,16 @@ public final class OwedTxn {
 		TxnCore.Status st = c.drive(t);
 		OwedLedger.Entry after = OwedLedger.get(key);
 		Map<String, Integer> left = after == null ? Map.of() : after.items();
+		boolean aborted = t.decision != null && t.decision.isAbort();
 		if (st == TxnCore.Status.HELD || t.held() != null) {
-			return new Answer("HELD", planned, left, false, null, Holds.decided(t));
+			return new Answer("HELD", aborted ? Map.of() : planned, left, false, null, Holds.decided(t));
+		}
+		if (aborted) {
+			// (T2b fix round P2-a) aborted (a prepare barrier refused): nothing was given, the entry still owes it all
+			com.google.gson.JsonElement why = t.result.get("refused");
+			String r = why == null || why.isJsonNull() ? "?" : why.isJsonPrimitive() ? why.getAsString() : why.toString();
+			// a refused barrier is a save that did not go through: JOURNAL_UNAVAILABLE at the API, "Could not collect" at the command
+			return new Answer("REFUSED", Map.of(), left, false, (r.startsWith("barrier") ? "journal_unavailable: aborted, " : "aborted: ") + r, null);
 		}
 		return new Answer("DONE", planned, left, false, null, null);
 	}

@@ -81,6 +81,8 @@ final class RestoreJob implements Placement.Job {
 	 * into the stockpile once per key when the restore is written; never when it breaks. Saved with the job.
 	 */
 	Groups.@Nullable Credit credit;
+	/** (T2b fix round P1-b) a crate-fed road's crate.settle stash (its refunds; the group's crate when it is the last), run after the restore. */
+	com.google.gson.@Nullable JsonObject settle;
 
 	RestoreJob(String siteId, String purpose, @Nullable String batchId, @Nullable String itemKey) {
 		this.siteId = siteId;
@@ -504,7 +506,22 @@ final class RestoreJob implements Placement.Job {
 				Stockpiles.saveCredit(server);
 			}
 		}
-		result = new Sites.Removed(null, returned, st.restored(), st.changed(), handed, List.of(), List.of());
+		List<String> owedKeys = List.of();
+		if (settle != null) {
+			// (T2b fix round P1-b) the restore is written (after the undo's durable commit): the refunds and the crate settle now, keyed (a
+			// resumed job replays it); held: this job waits, the crate keeps its stock
+			CrateSettle.Settled ss = CrateSettle.settle(level, settle);
+			if (!ss.done()) {
+				return false;
+			}
+			owedKeys = ss.owed();
+			if (ss.owed().isEmpty() && !ss.given().isEmpty()) {
+				Map<String, Integer> m = new java.util.TreeMap<>(returned);
+				ss.given().forEach((k, v) -> m.merge(k, v, Integer::sum));
+				returned = m;
+			}
+		}
+		result = new Sites.Removed(null, returned, st.restored(), st.changed(), handed, List.of(), List.of(), owedKeys);
 		if (!ROLLBACK.equals(purpose)) {
 			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(server, inf, st.restored());
 		}
@@ -571,6 +588,9 @@ final class RestoreJob implements Placement.Job {
 		if (credit != null) {
 			o.add("credit", credit.toJson());
 		}
+		if (settle != null) {
+			o.add("settle", settle.deepCopy());
+		}
 		return o;
 	}
 
@@ -604,6 +624,9 @@ final class RestoreJob implements Placement.Job {
 		}
 		if (o.has("credit")) {
 			j.credit = Groups.Credit.fromJson(o.getAsJsonObject("credit"));
+		}
+		if (o.has("settle")) {
+			j.settle = o.getAsJsonObject("settle");
 		}
 		return j;
 	}

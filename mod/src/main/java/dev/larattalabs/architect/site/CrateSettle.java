@@ -125,6 +125,15 @@ public final class CrateSettle {
 			.dimension()), road.id(), regionOf(g), refund, owner, cc, road.group());
 	}
 
+	/** (T2b fix round P1-b) A road's refunds alone (its group's crate kept: another still builds from it, or none), owed or credited at {@code at}. */
+	static JsonObject roadRefundStash(Infra road, BlockPos at, Map<String, Integer> refund) {
+		String recipient = road.owner() != null ? road.owner() : road.construction() != null && road.construction().owner() != null ? road.construction()
+			.owner() : "architect:unowned";
+		SiteGroupRec g = road.group() == null ? null : Sites.group(road.group());
+		return stashOf("crate-refund:" + RoadBuilder.creditKey(road), road.dimension(), at, recipient, pileOf(recipient, road.dimension()), road.id(),
+			regionOf(g), refund, null, null, null);
+	}
+
 	private static JsonObject stashOf(String key, String dim, BlockPos pos, String recipient, @Nullable String pile, @Nullable String site,
 		@Nullable String region, Map<String, Integer> refund, @Nullable String crateOwner, Construction.@Nullable Crate cell, @Nullable String sharedGroup) {
 		JsonObject o = new JsonObject();
@@ -153,6 +162,60 @@ public final class CrateSettle {
 			}
 		}
 		return o;
+	}
+
+	// ------------------------------------------------------------------ (T2b fix round P1-c) the stashes, durable before the undo commits
+
+	/** Site id -> its removal's stash (with the refunds tallied at prepare), saved in stockpiles.json (DurableFile) before the undo commits. */
+	private static final Map<String, JsonObject> DURABLE = new TreeMap<>();
+
+	static boolean durableEmpty() {
+		return DURABLE.isEmpty();
+	}
+
+	static JsonObject durableJson() {
+		JsonObject o = new JsonObject();
+		DURABLE.forEach((k, v) -> o.add(k, v.deepCopy()));
+		return o;
+	}
+
+	static void durableRead(com.google.gson.@Nullable JsonElement e) {
+		DURABLE.clear();
+		if (e != null && e.isJsonObject()) {
+			e.getAsJsonObject().entrySet().forEach(x -> DURABLE.put(x.getKey(), x.getValue().getAsJsonObject()));
+		}
+	}
+
+	/**
+	 * Records the stashes of {@code bySite} that carry refunds (in memory; the caller's ledger save publishes them). True when one was
+	 * recorded: the removal then saves the ledger, confirmed, before its undo commits, so a crash between the commit and the pending
+	 * record still settles the refunds ({@link #durable}). Server thread.
+	 */
+	static boolean holdDurable(Map<String, JsonObject> bySite) {
+		boolean any = false;
+		for (var e : bySite.entrySet()) {
+			if (e.getValue() != null && !refundOf(e.getValue()).isEmpty()) {
+				DURABLE.put(e.getKey(), e.getValue().deepCopy());
+				any = true;
+			}
+		}
+		if (any) {
+			Stockpiles.owedChanged();
+		}
+		return any;
+	}
+
+	/** The durable stash of {@code siteId}'s removal, or null. */
+	static @Nullable JsonObject durable(String siteId) {
+		JsonObject o = DURABLE.get(siteId);
+		return o == null ? null : o.deepCopy();
+	}
+
+	/** Forgets {@code siteId}'s durable stash (its settle done, or its removal never committed). */
+	static void forgetDurable(String siteId) {
+		if (DURABLE.remove(siteId) != null) {
+			Stockpiles.owedChanged();
+		}
 	}
 
 	/** Whether {@code stash} settles a crate (its stock, its cell, its journal entry), not refunds alone. */
@@ -277,19 +340,23 @@ public final class CrateSettle {
 
 	private static void resumeNow(MinecraftServer srv, String siteId) {
 		Site.Pending p = Sites.pendingOf(siteId);
-		if (p == null || p.settle() == null) {
+		JsonObject st = durable(siteId); // (T2b fix round P1-c) the stash with its refunds, saved before the undo committed
+		if (st == null && p != null) {
+			st = p.settle();
+		}
+		if (st == null) {
 			return;
 		}
-		ServerLevel level = Sites.levelOf(srv, p.site());
+		ServerLevel level = p != null ? Sites.levelOf(srv, p.site()) : Sites.levelOf(srv, st.get("dim").getAsString());
 		if (level == null) {
 			return;
 		}
-		Settled s = settle(level, p.settle());
+		Settled s = settle(level, st);
 		if (!s.done()) {
 			resumeLater(srv, siteId); // held: next tick (the crate keeps its stock)
 			return;
 		}
-		Sites.settled(srv, siteId);
+		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)
 		Architect.LOGGER.info("crate.settle of removed {} at a restart: owed {}, given {}", siteId, s.owed(), s.given());
 	}
 

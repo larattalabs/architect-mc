@@ -153,7 +153,12 @@ public final class CrateTxn {
 		}
 		TxnCore.Status st = c.drive(t);
 		if (t.decision != null && t.decision.isAbort()) {
-			return new Answer(List.of(), Map.of(), null, "aborted: " + t.result.get("refused"), false); // e0 refused: the stock stayed in the crate
+			// e0 or its barrier refused: the stock stays in (or goes back to) the crate. (T2b fix round P1-a) the reason as a plain string, never
+			// a quoted JSON element (it never matched "aborted: barrier"); an abort whose compensation is held (its barrier refused too) is
+			// held: the crate stays under the hold, retried
+			com.google.gson.JsonElement why = t.result.get("refused");
+			String reason = why == null || why.isJsonNull() ? "?" : why.isJsonPrimitive() ? why.getAsString() : why.toString();
+			return new Answer(List.of(), Map.of(), st == TxnCore.Status.HELD || t.held() != null ? "abort held: " + Holds.decided(t) : null, "aborted: " + reason, false);
 		}
 		Map<String, Integer> given = new java.util.TreeMap<>(in.stock());
 		in.refund().forEach((k, v) -> given.merge(k, v, Integer::sum));

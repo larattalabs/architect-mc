@@ -2682,7 +2682,7 @@ public final class Stockpiles {
 					saveWithWorld(srv);
 					Path f = d.resolve(FILE);
 					boolean written = saves > before;
-					if (!written && !(PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f))) {
+					if (!written && !(PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f))) {
 						throw new IllegalStateException("dev.stockpile.save: " + f + " was not written (the log says why)");
 					}
 					o.addProperty("written", written);
@@ -2953,6 +2953,9 @@ public final class Stockpiles {
 		root.add("stockpiles", a);
 		if (!OwedLedger.isEmpty()) {
 			root.add("owed", OwedLedger.toJson()); // (slice T2b) owed collectibles: in this file, published only as the ledger is
+		}
+		if (!CrateSettle.durableEmpty()) {
+			root.add("crateSettles", CrateSettle.durableJson()); // (T2b fix round P1-c) a removal's settle, its refunds, durable before its undo commits
 		}
 		return root;
 	}
@@ -3712,7 +3715,7 @@ public final class Stockpiles {
 		}
 		Path f = d.resolve(FILE);
 		try {
-			if (PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f)) {
+			if (PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f)) {
 				return true; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
@@ -3802,7 +3805,7 @@ public final class Stockpiles {
 			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
 		}
 		Path f = d.resolve(FILE);
-		if (PILES.isEmpty() && OwedLedger.isEmpty() && !Files.exists(f)) {
+		if (PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f)) {
 			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
 		}
 		try {
@@ -3873,6 +3876,7 @@ public final class Stockpiles {
 		PILES.clear();
 		OwedLedger.clear();
 		DURABLE_WB.clear();
+		CrateSettle.durableRead(null);
 		DURABLE_WB_GEN = 0;
 		nextId = 1;
 		loadFailed = false;
@@ -3986,6 +3990,7 @@ public final class Stockpiles {
 	static void readInto(JsonObject root) {
 		PILES.clear();
 		OwedLedger.readInto(root.get("owed"));
+		CrateSettle.durableRead(root.get("crateSettles"));
 		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 		if (root.has("stockpiles")) {
 			for (JsonElement e : root.getAsJsonArray("stockpiles")) {

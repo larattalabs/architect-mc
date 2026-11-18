@@ -615,10 +615,15 @@ public final class RoadBuilder {
 	 * Before a construction road's undo: refunds for the paid cells standing as built drop at the crate's cell, and when nothing
 	 * else of the group builds from the shared crate its stock drops and the crate goes. The undo restores the ground exactly.
 	 */
-	static Groups.@Nullable Credit beforeRemove(ServerLevel level, Infra road) {
+	/** What a road's removal settles after its restore: a stockpile's credit (C29) or a crate.settle stash (T2b fix round P1-b). */
+	record Removing(Groups.@Nullable Credit credit, @Nullable JsonObject settle) {
+		static final Removing NONE = new Removing(null, null);
+	}
+
+	static Removing beforeRemove(ServerLevel level, Infra road) {
 		Construction c = road.construction();
 		if (c == null) {
-			return null;
+			return Removing.NONE;
 		}
 		MinecraftServer srv = level.getServer();
 		Stockpiles.Pile pile = Stockpiles.pileOf(road);
@@ -636,7 +641,7 @@ public final class RoadBuilder {
 			PROGRESS.remove(road.id());
 			RegionTargets.forget(road.id());
 			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
-			return new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong());
+			return new Removing(new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong()), null);
 		}
 		Map<String, Integer> refund = new LinkedHashMap<>();
 		BlockPos at = c.crate() == null ? new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ()
@@ -649,19 +654,13 @@ public final class RoadBuilder {
 				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
 			}
 		}
-		CrateSettle.Settled settled = null;
-		if (c.building() && c.crate() != null && road.group() != null && !Builder.anyBuildingShared(road.group()) && building(road.group()).stream()
-			.allMatch(x -> x.id().equals(road.id()))) {
-			CrateBlockEntity crate = Builder.crate(level, probe(road), true);
-			// (T2b final check P1-4) a crate a txn holds keeps its stock, its cell and its journal entry (an orphan crate: no loss)
-			if (crate != null && !dev.larattalabs.architect.txn.TxnServer.boxHeld(level, crate.getBlockPos())) {
-				// (T2b part 2b) the crate's stock and the road's refunds in one keyed crate.settle (owed or credited, never dropped)
-				settled = CrateSettle.settle(level, CrateSettle.roadStash(road, c.crate(), refund, "road-removed"));
-				if (settled.refused() != null && settled.held() != null) {
-					settled = null; // not begun: nothing of it happens; the refunds drop as before, the crate keeps its stock (an orphan: no loss)
-				}
-			}
-		}
+		// (T2b fix round P1-b) nothing is settled here, before the removal's commit: the road's refunds (and, when nothing else of the group
+		// builds from it, the crate's stock and cell) settle in one keyed crate.settle the restore job runs once the road's restore is
+		// written (RestoreJob.settle). Held or shared: the same, later or refunds alone; never dropped
+		boolean last = c.building() && c.crate() != null && road.group() != null && !Builder.anyBuildingShared(road.group()) && building(road.group())
+			.stream().allMatch(x -> x.id().equals(road.id()));
+		JsonObject settle = last ? CrateSettle.roadStash(road, c.crate(), refund, "road-removed")
+			: refund.isEmpty() ? null : CrateSettle.roadRefundStash(road, at, refund);
 		if (r != null) {
 			Builder.sendClear(srv, r, false);
 		}
@@ -669,12 +668,9 @@ public final class RoadBuilder {
 		BEFORE.remove(road.id());
 		PROGRESS.remove(road.id());
 		SiteWaits.ended(srv, road.id());
-		if (settled == null) {
-			Builder.dropItems(level, at, refund, null);
-		}
-		Architect.LOGGER.info("Construction road {} removed: refunds {} at {}{}", road.id(), refund, at.toShortString(), settled == null ? "" : " (crate.settle: owed "
-			+ settled.owed() + ", given " + settled.given() + ")");
-		return null;
+		Architect.LOGGER.info("Construction road {} removing: refunds {}{} settle once its restore is written", road.id(), refund, last ? " and its group's crate"
+			: "");
+		return new Removing(null, settle);
 	}
 
 	/** 6c Y: the credit key of a road's removal (this placement of the road). */

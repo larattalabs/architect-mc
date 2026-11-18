@@ -864,7 +864,9 @@ public final class Groups {
 			if (!st.done()) {
 				return;
 			}
-			st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			if (st.owed().isEmpty()) {
+				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
+			}
 			r.crateSettle = null;
 			Placement.save(server, false);
 		}
@@ -933,7 +935,9 @@ public final class Groups {
 				}
 				return false;
 			}
-			st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			if (st.owed().isEmpty()) {
+				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
+			}
 			it.remove();
 			changed = true;
 		}
