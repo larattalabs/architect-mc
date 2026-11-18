@@ -24,9 +24,14 @@ public final class OwedLedger {
 	}
 
 	/** One entry. Items by id, as the pile ledger keeps them. */
-	public record Entry(String key, String recipient, String dimension, int x, int y, int z, Map<String, Integer> items, String reason, long tick, long wall) {
+	public record Entry(String key, String recipient, String dimension, int x, int y, int z, Map<String, Integer> items, String reason, long tick, long wall,
+		@Nullable String site, @Nullable String region) {
 		public Entry {
 			items = Collections.unmodifiableMap(new TreeMap<>(items));
+		}
+
+		Entry with(Map<String, Integer> left) {
+			return new Entry(key, recipient, dimension, x, y, z, left, reason, tick, wall, site, region);
 		}
 
 		JsonObject toJson() {
@@ -45,6 +50,12 @@ public final class OwedLedger {
 			o.addProperty("reason", reason);
 			o.addProperty("tick", tick);
 			o.addProperty("wall", wall);
+			if (site != null) {
+				o.addProperty("site", site);
+			}
+			if (region != null) {
+				o.addProperty("region", region);
+			}
 			return o;
 		}
 
@@ -53,7 +64,8 @@ public final class OwedLedger {
 			Map<String, Integer> it = new TreeMap<>();
 			o.getAsJsonObject("items").entrySet().forEach(e -> it.put(e.getKey(), e.getValue().getAsInt()));
 			return new Entry(o.get("key").getAsString(), o.get("recipient").getAsString(), o.get("dimension").getAsString(), at.get(0).getAsInt(),
-				at.get(1).getAsInt(), at.get(2).getAsInt(), it, o.get("reason").getAsString(), o.get("tick").getAsLong(), o.get("wall").getAsLong());
+				at.get(1).getAsInt(), at.get(2).getAsInt(), it, o.get("reason").getAsString(), o.get("tick").getAsLong(), o.get("wall").getAsLong(),
+				o.has("site") ? o.get("site").getAsString() : null, o.has("region") ? o.get("region").getAsString() : null);
 		}
 	}
 
@@ -131,7 +143,7 @@ public final class OwedLedger {
 		}
 		items.forEach((k, v) -> left.merge(k, -v, Integer::sum));
 		left.values().removeIf(v -> v <= 0);
-		Entry after = new Entry(e.key(), e.recipient(), e.dimension(), e.x(), e.y(), e.z(), left, e.reason(), e.tick(), e.wall());
+		Entry after = e.with(left);
 		if (left.isEmpty()) {
 			ENTRIES.remove(key);
 			ENDED.add(key);

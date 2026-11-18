@@ -33424,6 +33424,29 @@ so two module lots that share items can't each be held to their own measured bou
   read again under a later key); an Architect placement over a held cell is refused cell by cell (not up front); player open/break of a held
   box is T1's mixins, not exercised in game.
 
+### Slice T2b part 1 as built (owed collectibles; Noah approved the surface, Steward reviewed its shape; $0; strict)
+
+- **Store:** `site/OwedLedger` in `stockpiles.json` (`owed`: entries, ended keys, applied effect keys; bounded), per recipient (a player
+  UUID or an owner id), keyed by the source's semantic key, published only as the ledger is (the barrier).
+- **Kinds** (`txn/OwedTxn`): `owed.collect` = L (the entry's debit, marked) then P (the give, its receipt in the player attachment
+  `architect_mc:txn_player_receipts`); only what fits, planned in the apply's call; offline at recovery the P probe is UNKNOWN (held).
+  `owed.credit` = one L change: the entry's debit and the pile's keyed credit `owed:<effect key>`, past capacity. Resources
+  `owed:<key>` (+ `player:<uuid>`) only: a running build of the recipient never makes them SITE_BUSY.
+- **API (Since NEXT, feature `owed`):** `Owed` (with nullable `site` and `region`, the 8-argument constructor kept), `Collected`, `Sites.owed` (by createdTick), `collectOwed`, `creditOwedToStock`,
+  `SiteEvents.OWED_CHANGED`; refusals `NOT_ALLOWED` (`owed_not_found`, `no_stockpile`), `SITE_BUSY`, `JOURNAL_UNAVAILABLE`. api-compat 8/8.
+- **Command:** `/architect collect [key [player]]` (own entries; ops for any, to a named player, logged). Dev: `dev.stockpile.owed`,
+  `dev.owed.add/collect/credit`; `dev.txn.conservation` counts `owed`.
+- **Receipt-leak P2:** a write-back drops receipts of wb keys the loaded (durable) ledger credits (`Stockpiles.DURABLE_WB`).
+- **Failing first:** `TxnOwedModelTest`: the legacy collect (player first, ledger later) mints, the legacy credit (two writes) loses; as
+  built clean (57 and 48 schedules). In game `txn-owed` 68/0 (`gate-runs-T2/20261118-014126-change`): every collect point, bare and +save.
+  Its first run caught a real bug: the player receipts' attachment shared the chunk receipts' id, so chunk receipts read back absent
+  (txn-core red at `TX:test.move:apply:0+save`); fixed with its own id.
+- **Not yet (part 2, crates):** the sources (crate settle, put-back, group refunds), `RemoveResult.owed()`, crate holds, CXD's P1s.
+  `creditOwedToStock` has no in-game case (a stockpile needs a survival world): units only.
+- **Ran** after merging origin/main (v0.79.0, 3d5acc41): Gradle full 1572; `gate-runs-T2/20261118-015615-change` txn-core 75/0, txn-owed
+  68/0, txn-holds 46/0; `gate-runs-T2-fk/20261118-015816-change` dr-survival 94/0, hf-crash 56/0, ps-crash 81/0, fk-crash 73/0,
+  fkb-crash 48/0. Then `Owed.site`/`region` (the coordinator's addition for 8b).
+
 ### Slice T2a fix round (GPT NOT SAFE: 5 P1, 3 P2; one round)
 
 - **P1-1** write-back: every cell's receipt is deducted before any new write is planned (a later cell's receipt, after an earlier free

@@ -968,7 +968,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	static dev.larattalabs.architect.api.Owed owedView(dev.larattalabs.architect.site.OwedLedger.Entry e) {
 		return new dev.larattalabs.architect.api.Owed(e.key(), e.recipient(), net.minecraft.resources.ResourceKey.create(
 			net.minecraft.core.registries.Registries.DIMENSION, net.minecraft.resources.Identifier.parse(e.dimension())),
-			new net.minecraft.core.BlockPos(e.x(), e.y(), e.z()), Views.items(e.items()), e.reason(), e.tick(), e.wall());
+			new net.minecraft.core.BlockPos(e.x(), e.y(), e.z()), Views.items(e.items()), e.reason(), e.tick(), e.wall(), e.site(), e.region());
 	}
 
 	@Override

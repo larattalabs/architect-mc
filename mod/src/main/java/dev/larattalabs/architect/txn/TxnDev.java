@@ -239,7 +239,8 @@ public final class TxnDev {
 		String recipient = req.has("recipient") ? req.get("recipient").getAsString() : player.getUUID().toString();
 		boolean ok = dev.larattalabs.architect.site.OwedLedger.owe(new dev.larattalabs.architect.site.OwedLedger.Entry(req.get("key").getAsString(), recipient,
 			player.level().dimension().identifier().toString(), at.getX(), at.getY(), at.getZ(), items, req.has("reason") ? req.get("reason").getAsString()
-				: dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE, srv.getTickCount(), System.currentTimeMillis()), null);
+				: dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE, srv.getTickCount(), System.currentTimeMillis(),
+			req.has("site") ? req.get("site").getAsString() : null, req.has("region") ? req.get("region").getAsString() : null), null);
 		Stockpiles.owedChanged();
 		dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(recipient);
 		JsonObject o = owedList(req.has("recipient") ? req : new JsonObject());
@@ -267,6 +268,8 @@ public final class TxnDev {
 			x.add("items", it);
 			x.addProperty("reason", e.reason());
 			x.addProperty("createdTick", e.tick());
+			x.addProperty("site", e.site());
+			x.addProperty("region", e.region());
 			a.add(x);
 		}
 		o.add("owed", a);

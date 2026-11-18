@@ -18,10 +18,18 @@ import net.minecraft.world.level.Level;
  * @param reason {@code "crate_settle"}, {@code "crate_putback"} or {@code "group_refund"} (later kinds appended); stable API values
  * @param createdTick the server's tick count when it was owed ({@link Sites#owed} orders by it)
  * @param createdWall the wall clock (epoch ms) then
+ * @param site the target (site or road) id the entry came from, or null when none is known
+ * @param region that target's region id, or null
  */
 public record Owed(String key, String recipient, ResourceKey<Level> dimension, BlockPos at, Map<Item, Integer> items, String reason, long createdTick,
-	long createdWall) {
+	long createdWall, @org.jspecify.annotations.Nullable String site, @org.jspecify.annotations.Nullable String region) {
 	public Owed {
 		items = Map.copyOf(items);
+	}
+
+	/** Without {@code site} and {@code region} (both null). */
+	public Owed(String key, String recipient, ResourceKey<Level> dimension, BlockPos at, Map<Item, Integer> items, String reason, long createdTick,
+		long createdWall) {
+		this(key, recipient, dimension, at, items, reason, createdTick, createdWall, null, null);
 	}
 }
