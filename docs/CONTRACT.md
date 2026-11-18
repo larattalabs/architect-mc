@@ -33471,6 +33471,16 @@ so two module lots that share items can't each be held to their own measured bou
   txn-holds 50/0; `_work/architect-mc-T3b-runs2/20261118-055313-change` sad-unit, sad-survival 56/0 (its SAC2 row now judged on the recovered
   ledger), sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1607 (0 failed); api-compat --baselines 8/8.
 
+### Slice T3b final check (no P1; three P2s fixed, no further GPT round)
+
+- **P2-1** a record clear probes APPLIED only when memory and disk name no crate AND the sites file is acknowledged durable (`Sites.confirmed`:
+  an ordinary save or a load un-acknowledges it; the probe runs `saveConfirmed` first). **P2-2** the txn's `stockpile_changed` marks the pile
+  for Stockpiles' 20-tick limiter (`Stockpiles.txnChanged`, `eventDue`): at least once, never doubled. **P2-3** `PENDING_RELEASE` entries carry
+  their journal instance (`pendingFor`: another world's is stale) and are cleared at server stop (`PileAdopt.worldClosed`).
+- Units `PileAdoptFinalT3bTest` (3). Ran at 23cfe9e5: Gradle full 1614 (0 failed); `_work/architect-mc-T3b-runs5/20261118-092904-change`
+  (9078:9079, `--no-cache`): txn-crash-adopt 205/0 (all 7 rows GREEN, matrix 34 halts, 0 wrong), txn-core 75/0, sad-unit 2/0, sad-survival
+  56/0, sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0.
+
 ### Slice T3b fix round (GPT NOT SAFE: 1 P1, 3 P2; one round; origin/main v0.80.0 merged, DFG already in it)
 
 - **P1** the start's repair (`repairJoinedCrates`) clears a credited reference only when its crate no longer stands (`startRepairs`); a
