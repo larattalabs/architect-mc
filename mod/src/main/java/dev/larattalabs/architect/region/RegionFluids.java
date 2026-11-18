@@ -9,6 +9,7 @@ import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.site.Batches;
+import dev.larattalabs.architect.site.DurableFile;
 import dev.larattalabs.architect.site.RegionItems;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -83,6 +84,11 @@ import org.jspecify.annotations.Nullable;
  * every body whose spill lands in it, transitively, drains in the same tick, upstream first, reported {@code drained} with
  * {@code reason: "upstream of <body>"} (one not yet written is never written). Downstream bodies stand.</li>
  * <li><b>The removal</b> drains in the exact reverse of the write order (the head first), kill point {@code FL5} after the first body.</li>
+ * <li>(slice DF, CONTRACT 8c §4.4, rule 3) <b>The record is durable first</b>: {@code fluids.json} is written through T0's
+ * {@link DurableFile} (temp, force, rename, the folder chain forced: OK, REFUSED or IN_DOUBT). A save that is not OK leaves the record
+ * {@link Regional#owed owed}: at the gate the stage waits SITE_BUSY and writes no source (kill point {@code FL1r}); past it no forced tick,
+ * wave, census or hand-down to the solids happens and the batch does not end until a fresh forced write is OK. A removal's
+ * {@code draining} phase is durable before its first write (kill point {@code FL3d}); a start that reads it drains again.</li>
  * </ul>
  * An H-only region has none of these members: its bodies are written by the tiles and forced together, in plan order, as before.
  * <p>
@@ -336,6 +342,17 @@ public final class RegionFluids {
 		final List<Body> order;
 		/** (6c HY) This session cleared the bodies not yet due (after a stop, again: idempotent). */
 		boolean cleared;
+		/** (slice DF) The record's durable file (T0's DurableFile, created at the first load or save). */
+		@Nullable DurableFile durable;
+		/**
+		 * (slice DF, rule 3) The record is not known on disk: the last save was REFUSED or IN_DOUBT, or the loaded file is unconfirmed. While
+		 * owed nothing goes on: no source, no forced tick, no hand-down to the solids; each try writes a fresh forced snapshot.
+		 */
+		boolean owed;
+		/** (slice DF) Why the record is owed (the outcome and its reason), else null. */
+		@Nullable String owedWhy;
+		/** (slice DF) When an owed record was last tried again ({@link System#nanoTime}), 0 never. */
+		long owedTriedAt;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -614,6 +631,7 @@ public final class RegionFluids {
 		st.irrigation.putAll(irrigationLots(l.ir().json()));
 		if (!st.bodies.isEmpty()) {
 			load(l, st);
+			opened(l, st);
 		}
 		STATE.put(key, st);
 		return st.bodies.isEmpty() ? null : st;
@@ -673,6 +691,11 @@ public final class RegionFluids {
 		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
 		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, stage); // (6d RV) a revision's bodies
 		Regional st = l == null ? null : of(l);
+		// (slice DF, rule 3) past its gate the stage goes on only while its record is durably on disk: an owed record is written again first
+		if (st != null && !"gate".equals(st.phase) && !durable(l, st)) {
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+			return false;
+		}
 		if (st != null && st.recheck) {
 			ServerLevel level = l.level(s);
 			if (level == null) {
@@ -806,7 +829,13 @@ public final class RegionFluids {
 			RegionsImpl.saveRec(l);
 		}
 		st.phase = "writing";
-		save(l, st);
+		if (!save(l, st)) {
+			// (slice DF, rule 3) the before states are not durable: no source is written; the stage waits and the gate runs again
+			st.phase = "gate";
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused or in doubt, no source written
+			return false;
+		}
 		report(l, st);
 		WorldJournal.kill("FL1"); // the check and the before states saved, no source written
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
@@ -1164,6 +1193,9 @@ public final class RegionFluids {
 				continue;
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
+			if (st.owed && !durable(l, st)) {
+				continue; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
+			}
 			if ("writing".equals(st.phase) && stageWritten(l)) {
 				if (st.ordered) {
 					writeWaves(level, l, st); // (6c HY) one wave of bodies whose landings have settled
@@ -1823,7 +1855,7 @@ public final class RegionFluids {
 			l = Revisions.liveFor(l, Revisions.stageName(rv.get("rid").getAsInt(), STAGE)); // (6d RV) a revision's batch holds for its own bodies
 		}
 		Regional st = l == null ? null : of(l);
-		return st != null && ("writing".equals(st.phase) || "settling".equals(st.phase)) && stageWritten(l);
+		return st != null && (st.owed || ("writing".equals(st.phase) || "settling".equals(st.phase)) && stageWritten(l)); // (slice DF) or its record owed
 	}
 
 	/** Whether a body of the region was not written or was drained (the region ends PARTIAL, §2.4, §3.4). */
@@ -2135,7 +2167,20 @@ public final class RegionFluids {
 		if (level == null) {
 			return true;
 		}
-		if (st.removal == null) {
+		if (st.removal != null && st.owed && !durable(l, st)) {
+			return false; // (slice DF) the removal's record is not on disk: the drain's next step waits for it
+		}
+		if (st.removal == null || "draining".equals(st.removal)) {
+			if (st.removal == null) {
+				// (slice DF, CONTRACT 8c §4.4) the removal's draining phase durable before its first write (scoop or drain); a start that finds
+				// it drains again from the start (idempotent: a drained cell is at its before state, the scoop is keyed)
+				st.removal = "draining";
+				if (!save(l, st)) {
+					st.removal = null;
+					return false;
+				}
+				WorldJournal.kill("FL3d"); // (slice DF) the removal's draining record saved, nothing drained yet
+			}
 			// (fix/drain-holders) the cells a later entry outside the group holds on top: never drained (the undo hands them down)
 			Holders held = new Holders(l.rec().dimension, group, st);
 			int n = 0;
@@ -2233,8 +2278,11 @@ public final class RegionFluids {
 			Architect.LOGGER.warn("Region {}: removal: {}", l.rec().id, st.removalNote);
 		}
 		st.removal = "done";
+		if (!save(l, st)) {
+			st.removal = "drained"; // (slice DF) the solids wait until the record says done on disk
+			return false;
+		}
 		hold(level, st, false);
-		save(l, st);
 		Architect.LOGGER.info("Region {}: fluids drained and settled; the solids are restored next", l.rec().id);
 		return true;
 	}
@@ -2307,6 +2355,9 @@ public final class RegionFluids {
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
 		o.addProperty("ordered", st.ordered); // (6c HY)
+		if (st.owed) {
+			o.addProperty("owed", st.owedWhy == null ? "owed" : st.owedWhy); // (slice DF) the record not on disk
+		}
 		JsonArray order = new JsonArray();
 		st.order.forEach(b -> order.add(b.id));
 		o.add("order", order);
@@ -2344,7 +2395,8 @@ public final class RegionFluids {
 		return RegionStore.region(l.world(), l.rec().id).resolve(l.rid() == 0 ? "fluids.json" : "fluids-rv" + l.rid() + ".json");
 	}
 
-	static void save(RegionsImpl.Live l, Regional st) {
+	/** Saves the record (slice DF: on DurableFile); true only when it is durably on disk (OK). */
+	static boolean save(RegionsImpl.Live l, Regional st) {
 		JsonObject o = new JsonObject();
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
@@ -2403,14 +2455,81 @@ public final class RegionFluids {
 		}
 		o.add("bodies", bodies);
 		o.add("fluidBefore", packStates(st.fluidBefore));
-		try {
-			RegionStore.writeJson(file(l), o);
-		} catch (IOException e) {
-			Architect.LOGGER.warn("Region {}: fluids.json could not be saved: {}", l.rec().id, e.toString());
+		DurableFile.Result r = persist(file(l), st, o);
+		boolean was = st.owed;
+		st.owed = !r.ok();
+		st.owedWhy = r.ok() ? null : r.outcome() + ": " + r.reason();
+		if (!r.ok()) {
+			if (!was) {
+				Architect.LOGGER.warn("Region {}: {} not saved ({}): the fluids stage holds until it is", l.rec().id, file(l).getFileName(), st.owedWhy);
+			}
+			return false;
+		}
+		if (was) {
+			Architect.LOGGER.info("Region {}: {} saved; the fluids stage goes on", l.rec().id, file(l).getFileName());
 		}
 		if (st.removal == null) {
 			Realised.bodies(l.world(), l.rec().id, l.rid(), realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't); (6d RV) a revision's at its layer
 		}
+		return true;
+	}
+
+	/** (slice DF) The durable file's type label in {@code _durable}. */
+	static final String STORE = "fluids";
+
+	/**
+	 * (slice DF, rule 3) One snapshot of the record written through its {@link DurableFile} (temp, force, rename, the folder chain forced):
+	 * OK, REFUSED (the old file stays) or IN_DOUBT (renamed, a force failed: never read as saved). {@code dev.region.failNextSave} on the
+	 * file's name refuses it.
+	 */
+	static DurableFile.Result persist(Path f, Regional st, JsonObject o) {
+		IOException injected = RegionStore.injected(f);
+		if (injected != null) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, injected.getMessage());
+		}
+		DurableFile df = st.durable;
+		if (df == null || !df.file().equals(f)) {
+			st.durable = df = new DurableFile(STORE, f);
+		}
+		return df.write(o, df.request());
+	}
+
+	/**
+	 * (slice DF) A loaded record's durable file: a file on disk not confirmed (written before DF, or its loaded generation's re-force failed)
+	 * is owed, so it is written again, forced, before the stage goes on.
+	 */
+	static void opened(RegionsImpl.Live l, Regional st) {
+		Path f = file(l);
+		if (!Files.isRegularFile(f)) {
+			return;
+		}
+		DurableFile df = new DurableFile(STORE, f);
+		st.durable = df;
+		if (df.writtenGen() == 0 || df.inDoubt() > 0 || df.installedGen() > df.writtenGen()) {
+			st.owed = true;
+			st.owedWhy = df.writtenGen() == 0 ? "loaded, not confirmed (no generation)" : "loaded, its re-force in doubt";
+		}
+	}
+
+	/** (slice DF) Whether the record is durably on disk: an owed one is written again (a fresh forced snapshot covers an IN_DOUBT one). */
+	static boolean durable(RegionsImpl.Live l, Regional st) {
+		if (!st.owed) {
+			return true;
+		}
+		long now = System.nanoTime();
+		if (st.owedTriedAt != 0 && now - st.owedTriedAt < RETRY_NANOS) {
+			return false; // (a failing disk: one try a second, not one per caller per tick)
+		}
+		st.owedTriedAt = now;
+		return save(l, st);
+	}
+
+	/** (slice DF) How often an owed record is tried again. */
+	static final long RETRY_NANOS = 1_000_000_000L;
+
+	/** (slice DF) The stage's wait while its record is owed. */
+	static String notDurable(Regional st) {
+		return "the fluids record is not durable (" + (st.owedWhy == null ? "owed" : st.owedWhy) + "): nothing is written until it is saved";
 	}
 
 	/** (RP) Each body that left {@code pending}: its part, state and the flags that decided it (the realised record's rows). Pure. */

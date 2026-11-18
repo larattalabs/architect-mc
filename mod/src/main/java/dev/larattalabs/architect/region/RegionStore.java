@@ -4,13 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.larattalabs.architect.site.DurableFile;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import org.jspecify.annotations.Nullable;
 
@@ -23,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * &lt;world&gt;/architect-regions/&lt;regionId&gt;/ir.json         the IR (the sidecar may have lost its plan dir)
  * &lt;world&gt;/architect-regions/&lt;regionId&gt;/heights/&lt;tx&gt;.&lt;tz&gt;.bin   frozen heights, ARSV per tile (H0)
  * </pre>
- * Every write is write, fsync, atomic rename; heights shards are also read back and compared.
+ * Every write is write, fsync, atomic rename, folder fsync (slice DF: T0's DurableFile path); heights shards are also read back and compared.
  */
 public final class RegionStore {
 	public static final String DIR = "architect-regions";
@@ -84,19 +82,20 @@ public final class RegionStore {
 		return new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
 	}
 
-	/** Write, fsync, atomic rename (and the directory exists). */
+	/**
+	 * (slice DF, rule 3) Write, fsync, atomic rename, then the folder forced, on T0's durable path ({@link DurableFile#writeBytes}: every
+	 * folder entry up to the world folder confirmed, a new folder's too). Throws on REFUSED (the old file stays) and on IN_DOUBT (renamed, the
+	 * folder's force failed): a caller never reads an unconfirmed write as saved.
+	 */
 	public static void write(Path f, byte[] data) throws IOException {
 		IOException fail = injected(f);
 		if (fail != null) {
 			throw fail;
 		}
-		Files.createDirectories(f.getParent());
-		Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
-		try (FileChannel ch = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-			ch.write(java.nio.ByteBuffer.wrap(data));
-			ch.force(true);
+		DurableFile.Result r = DurableFile.writeBytes(f, data);
+		if (!r.ok()) {
+			throw new IOException(f.getFileName() + " " + r.outcome() + ": " + r.reason());
 		}
-		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 	}
 
 	/** {@link #write}, then read back and compared (heights shards: H0). */
