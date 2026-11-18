@@ -18,6 +18,7 @@
 //     holders   (irr-holders)          fix/drain-holders: a separate site's waterlogged stair layered over one of f2's sources; f2's site
 //                                      removed alone (drainLot) and then the region: the stair stands, E-flat 0 outside it, 0 after it goes
 //     crash     (irr-crash)            item 6: FL1+save and FL2+save on v62's realise, FL6+save on a lot removal's drain
+//     df        (irr-df)               slice DF round 2: a lot removal with fluids.json refused drains and restores nothing
 //     look      (irr-look)             a client, recorded: camera shots of v62's irrigated farms (Noah's look, the gallery)
 //     report                            REPORT.md over the step JSONs
 //
@@ -157,6 +158,14 @@ steps.holders = async () => {
 steps.crash = async () => {
   await ensure();
   const out = await G.crash(ctx);
+  spendZero();
+  return out;
+};
+
+// (slice DF round 2) a lot removal with its fluids record refused
+steps.df = async () => {
+  await ensure();
+  const out = await G.dfLot(ctx);
   spendZero();
   return out;
 };

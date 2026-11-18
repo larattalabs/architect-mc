@@ -70,16 +70,43 @@ public final class RegionStore {
 	/** (slice DF, TEST: {@code dev.region.failNextSave {sticky: true}}) {@link #failNext} stays armed (every write of that file fails) until off. */
 	public static volatile boolean failSticky;
 
-	/** (slice DF) The injected failure of a write of {@code f} ({@link #failNext}), spent unless sticky; null when none is armed for it. */
-	public static @Nullable IOException injected(Path f) {
+	/**
+	 * (slice DF round 2, TEST: {@code dev.region.failNextSave {inDoubt: true}}) {@link #failNext}'s write is renamed into place and then
+	 * answers IN_DOUBT, as a folder force that failed after the rename: the new file is on disk, its durability unknown.
+	 */
+	public static volatile boolean failInDoubt;
+
+	/** (slice DF round 2) A write that renamed its file into place and then failed a force: the new bytes may or may not survive a power loss. */
+	public static final class InDoubt extends IOException {
+		public InDoubt(String msg) {
+			super(msg);
+		}
+	}
+
+	/** (slice DF round 2) An injected outcome of a write ({@link #failNext}). */
+	public enum Injection {
+		NONE, REFUSED, IN_DOUBT
+	}
+
+	/** (slice DF round 2) The injected outcome of a write of {@code f} ({@link #failNext}), spent unless sticky. */
+	public static Injection injection(Path f) {
 		String fail = failNext;
 		if (fail == null || !fail.equals(f.getFileName().toString())) {
-			return null;
+			return Injection.NONE;
 		}
+		boolean doubt = failInDoubt;
 		if (!failSticky) {
 			failNext = null;
+			failInDoubt = false;
 		}
-		return new IOException("injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+		return doubt ? Injection.IN_DOUBT : Injection.REFUSED;
+	}
+
+	/** (slice DF) The injected REFUSED failure of a write of {@code f}, or null (none armed, or an IN_DOUBT one: see {@link #injection}). */
+	public static @Nullable IOException injected(Path f) {
+		Injection i = injection(f);
+		return i == Injection.NONE ? null : i == Injection.REFUSED ? new IOException("injected write failure of " + f.getFileName()
+			+ " (dev.region.failNextSave)") : new InDoubt("injected in-doubt write of " + f.getFileName() + " (dev.region.failNextSave inDoubt)");
 	}
 
 	/**
@@ -89,10 +116,16 @@ public final class RegionStore {
 	 */
 	public static void write(Path f, byte[] data) throws IOException {
 		IOException fail = injected(f);
-		if (fail != null) {
+		if (fail != null && !(fail instanceof InDoubt)) {
 			throw fail;
 		}
 		DurableFile.Result r = DurableFile.writeBytes(f, data);
+		if (fail != null && r.ok()) {
+			throw fail; // (TEST) written and renamed, then in doubt
+		}
+		if (r.outcome() == DurableFile.Outcome.IN_DOUBT) {
+			throw new InDoubt(f.getFileName() + " IN_DOUBT: " + r.reason());
+		}
 		if (!r.ok()) {
 			throw new IOException(f.getFileName() + " " + r.outcome() + ": " + r.reason());
 		}

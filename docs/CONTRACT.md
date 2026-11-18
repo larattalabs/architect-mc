@@ -33400,6 +33400,58 @@ so two module lots that share items can't each be held to their own measured bou
 - **Dimension P2:** `dev.txn.run`'s `dimension` must be a JSON string and a canonical key (`overworld` is refused: it keyed a box the
   hold mixins never look up); the box and effect data use the level's own key; `Adapter.invalid` quarantines a non-canonical `dim`.
 - **T2 entry criterion** written in TXN-DESIGN §6.1. Units: `TestMoveCellsTest` (5); `FillsFKBTest` now expects both Transfer API injectors (T1's insert guard had left it red); full mod suite 1436 green.
+### Slice DF as built (branch `slice/DF` off origin/main 3d5acc41; 8c's first strict row, CONTRACT 8c §4.4; no API change; $0; strict; recorded 2026-11-18)
+
+- **Bug (rule 3):** `RegionFluids.save` swallowed the IOException and the gate went on to FL1 and the sources; `RegionStore.write` forced the file, not its folder.
+- **DurableFile.writeBytes** (T0's path for raw bytes, no `_durable` member): folder chain confirmed up to the world (new folders included), temp forced, rename, folder forced; OK / REFUSED / IN_DOUBT. `RegionStore.write` uses it and throws on REFUSED and IN_DOUBT (the bytes of region.json, ir.json and the shards are unchanged).
+- **fluids.json** goes through one `DurableFile("fluids")` per record; `save` answers OK. Not OK leaves the record **owed**: the gate puts phase back to `gate`, waits SITE_BUSY ("the fluids record is not durable") and writes no source (kill **FL1r**); past the gate there is no forced tick, wave, census or hand-down to the solids, and the batch does not end (`holding`) until a fresh forced write is OK (one try a second). A loaded file that is not confirmed (written before DF, or its re-force in doubt) is owed and written again. A removal's `draining` phase is durable before its scoop and drain (kill **FL3d**); a start that reads it drains again (idempotent). `Realised.bodies` is written only after an OK save.
+- **Hooks:** `dev.region.failNextSave {sticky}`, `dev.fluid.state` `owed`, `dev.journal.killAt` FL1r / FL3d (DEVBRIDGE).
+- **Tests, failing first:** `RegionStoreDurableDFTest` (3; 2 fail on main by assertion: no folder force, IN_DOUBT not thrown); `RegionFluidsDurableDFTest` (3: REFUSED and IN_DOUBT owed until OK, a legacy file owed, `draining` read back; new API, so it doesn't compile on main). Full `./gradlew build`: 1564 tests, 0 failures.
+- **In game:** `h-df` (new): on f4003a35 (main's code plus the driver) the refused save let the stage write 84 sources, with no fluids.json on disk (FAIL); on the fix the stage waits with 0 sources and no record, then once the failure is lifted it settles, the census is equal and the undo is E-flat 0; FL1r+save (with the removal halted at FL3d+save) and bare FL1r resume from the gate. `rs-df` (new, survival rs03_water): while refused, the conservation diff is exactly the charge the ledger holds; FL1r+save resumed to PLACED, charged once, conservation exact, 0 item entities; Remove E-flat 0, exact.
+- **Gates** (`20261118-030813-change`, 9070:9071, --no-cache): rs-df, h-crash, fl-unit/ingame/natural, hy-unit/ingame/crash/natural/cold, irr-unit/ingame/crash/holders, water-lint: 15 PASS; h-df PASS 10/0 at 07d20e8a. fl-look and irr-look are client looks and weren't run.
+- **Leftovers:** (fixed in the fix round: fluids.json compact) fluids.json was pretty-printed by DurableFile, about 3.4x larger (rs03: 78 KB against 23 KB compact). `drainLot`'s owed record doesn't stop the lot site's restore (`Sites.drainIrrigation` is void). RegionStore's 44 callers see IN_DOUBT as an IOException and weren't audited for swallowed ones. The charge is still booked before the record's save, as on main (settled from the ledger on a start).
+
+### Slice DF fix round as built (the GPT review's NOT SAFE: 8 P1, 2 P2; one round; recorded 2026-11-18)
+
+- **One guard** `RegionFluids.mayWrite` (a throttled retry, one try a second, in every phase; P2 10) before every write on a fluids record's behalf and after every save: the gate's entry; a PLACING fluids stage (`Batches` → `stageMayRun` for every stage state, P1 1); a resumed fluids tile's InfraJob write (`itemMayWrite`, P1 1); the tick after a force or wave whose save failed (`tickRecord`, P1 6); the gate after a recheck (`afterRecheck`, P1 6); every removal record, a loaded `done` included (`removalReady`, P1 2). The region record has the same rule: `RegionsImpl.mayDrive` (owed after a save that isn't OK, retried each tick) guards the batch's items, `removalGate`, `undoTick` and `recoverOne`.
+- **Removal:** a refused `draining` save stays draining and owed. T0's world barrier runs before the `done` record (kill point **FL3x**), so the drain's writes are on disk before the solids are restored (P1 2).
+- **Lot removal (P1 3):** the lot's bodies are recorded `lotRemoved` and saved, then drained, then `lotDrained` is saved (older files read `lotDrained` = `lotRemoved`). `NOT_DURABLE` makes `Sites.drainIrrigation` throw SITE_BUSY (the placing path drains before its abort) and stops Groups' stage undo.
+- **Charge (P1 4):** the removal's scoop takes, for each kind, the larger of what is standing and what the record charged, so bodies that were charged and never written are refunded.
+- **Drain (P1 5):** a cell is taken only when it holds what the body wrote: its fluid, a bubble column for water, ice in ice cells, bars in grate cells, or its exact decor state. A spill or watch cell is taken only when it holds the body's fluid.
+- **Region record (P1 7):** `save` answers OK. removeGroup's REMOVING save and undo0's commit point refuse (nothing changed) on REFUSED and hold on IN_DOUBT. RVC2 waits. finishUndo keeps its manifest until the record is saved.
+- **Publication IN_DOUBT (P1 8):** typed `RegionStore.InDoubt`. The revision is accepted and held, then installed by `recoverOne` once the record is confirmed; it is never refused while the disk holds the new head. realise0 in doubt refuses and keeps ir.json (the record says unqueued, so RG2a treats it as an orphan).
+- **P2 9:** RegionBlobs and `VolumeSurvey.freeze` confirm a file whose hash matches (`DurableFile.confirmBytes`) instead of trusting it. fluids.json is compact (`DurableFile.compact`); reads take either form.
+- **RegionStore callers on the removal, revision, undo and adoption paths, on failure:**
+
+| Site | Writes | REFUSED | IN_DOUBT |
+|---|---|---|---|
+| Revisions.realise :917/918/928 | op.json, effective | refused, nothing accepted | refused (orphans never read) |
+| Revisions publication (saveConfirmed) | region.json | rolled back, refused | accepted, held, installed on confirm |
+| Revisions.install :1178, its save | op.json "installed", region.json | warn; record owed, items wait (mayDrive) | the same |
+| Revisions.end :1341, cancelEnded :1896 | op.json "done" | warn (advisory) | warn |
+| Revisions.writeUndo | op-<id>.json | throws (the step stops) | throws |
+| undo0 (RVU1) | region.json | rolled back, manifest deleted, refused | kept, owed, undo runs on confirm |
+| undoStep RVC2 / finishUndo | region.json | waits / manifest kept, owed | the same |
+| RegionsImpl.removeGroup | region.json REMOVING | rolled back, RemoveResult(false) | kept, owed; removalGate waits |
+| RegionsImpl.realise0 :1899 / after the queue | region.json | refused, ir.json deleted / owed, items wait | refused, ir.json kept (orphan) / owed |
+| RegionsImpl.finishRemoval :3573 | removed.json, then delete region.json | no delete (still REMOVING) | no delete |
+| other RegionsImpl.save callers (drift, batchDone, progress) | region.json | owed, retried 1/s, drivers wait | the same |
+| RegionAdopt commit/finish/unadopt :435-921 | intent, ir, region, artifact | inside try: the adoption stops and recovers | the same |
+| RegionFluids (every save) | fluids.json | owed (mayWrite) | owed |
+
+- **Tests, failing first:** `RegionFluidsDFRound2Test` has 8 tests. 7 fail by assertion on the seams commit 9c2df02f; the 8th (typed InDoubt) checks the seam itself. All 8 pass on the fix.
+- **In game, failing first** on bca39d14 + a36d50d2 (the tests commit plus the rv-df read fix):
+  - irr-df: the lot drained and its site removed, with fluids.json refused.
+  - rs-df: removed before any source was written, the charge not returned.
+  - rv-df: the publication in doubt refused while region.json held revision 1; the undo changed 172 cells; the removal changed 309 cells.
+  - h-df's FL3x bare row passed on the old code too, so it isn't a failing-first case: the journaled sources are undone with the solids.
+- **Gates after:** run `20261118-060741-change` (df663add, 9070:9071, one shard, --no-cache): 22 PASS of 24. The two that failed were re-run:
+  - rs-df's FL1r+save never halted, because the batch's stage check refuses before the gate fires FL1r. Fixed in e8e5a277 and 0f9efb27; at 0f9efb27, `20261118-100303-change` gives rs-df 7/0 and h-df 11/0.
+  - hy-crash hit a host-restart race ("still starting"); at e8e5a277, `20261118-090937-change` gives hy-crash 10/0.
+  - The 24 steps are the 16 fluids gates, plus h-df, rs-df, irr-df, rv-df, rv-crash, rv-undo, rv-undo-crash, h-rmcrash, h-holders and rs-survival-smoke.
+  - Full `./gradlew build`: 1572 tests, 0 failures.
+- **Leftovers:** a revision's lava scoop shares the region's ledger key (the first record's scoop wins; this predates DF). The bare FL3x row isn't failing-first.
+
 ### Slice TXN (design)
 
 Branch `slice/TXN` off origin/main 02b43fc1 (v0.75.0). Design only, $0, strict. The full design is docs/TXN-DESIGN.md, and it serves

@@ -734,7 +734,9 @@ public final class Groups {
 		if (r.undo == null && r.stage != null) {
 			// (6c IRR, S-IRR-4) a stage undo that takes an irrigated farm lot takes its sources first (idempotent)
 			for (String sid : r.sites) {
-				Sites.drainIrrigation(server, Sites.get(sid));
+				if (!Sites.drainIrrigation(server, Sites.get(sid))) {
+					return; // (slice DF round 2, P1 3) its lot's fluids record not durable: the stage undo waits (nothing restored)
+				}
 			}
 		}
 		if (r.undo == null) {

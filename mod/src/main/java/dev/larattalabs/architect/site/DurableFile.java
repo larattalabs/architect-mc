@@ -94,6 +94,10 @@ public final class DurableFile {
 	static volatile boolean dirOpenBestEffort = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create(); // as Stockpiles writes it
+	/** (slice DF round 2) One line, no indentation: a {@link #compact} file (the fluids records; reads take either form). */
+	private static final Gson COMPACT = new GsonBuilder().disableHtmlEscaping().create();
+	/** (slice DF round 2) Written as one line ({@link #compact()}); the ledger and txn files stay pretty-printed. */
+	private volatile boolean compact;
 	private static volatile boolean dirUnsupportedLogged;
 
 	private final String store;
@@ -126,6 +130,12 @@ public final class DurableFile {
 					store, m.gen, r.reason());
 			}
 		}
+	}
+
+	/** (slice DF round 2) This file is written compact (one line) from now on; returns this. */
+	public DurableFile compact() {
+		compact = true;
+		return this;
 	}
 
 	/** The type label this file was made with ({@code "stockpiles"}). */
@@ -275,7 +285,7 @@ public final class DurableFile {
 		d.addProperty("type", store);
 		d.addProperty("gen", gen);
 		out.add(MEMBER, d);
-		byte[] bytes = GSON.toJson(out).getBytes(StandardCharsets.UTF_8);
+		byte[] bytes = (compact ? COMPACT : GSON).toJson(out).getBytes(StandardCharsets.UTF_8);
 		Path dir = file.toAbsolutePath().getParent();
 		Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
 		if (FAIL_BEFORE_RENAME.get() > 0 && FAIL_BEFORE_RENAME.getAndDecrement() > 0) {
@@ -329,6 +339,26 @@ public final class DurableFile {
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.error("Durable file {}: renamed but its folder's force failed ({}): in doubt", file, e.toString());
 			return new Result(Outcome.IN_DOUBT, 0, "directory force: " + e);
+		}
+		return new Result(Outcome.OK, 0, null);
+	}
+
+	/**
+	 * (slice DF round 2, P2) An existing file's bytes confirmed on disk: the file forced, its folder forced, every folder entry up to the
+	 * world confirmed. A retry that finds the bytes it wanted already there (a hash match after an IN_DOUBT write) confirms them through
+	 * this instead of trusting the page cache. OK, or IN_DOUBT (the file is there, a force failed), or REFUSED (no file).
+	 */
+	public static Result confirmBytes(Path file) {
+		if (!Files.isRegularFile(file)) {
+			return new Result(Outcome.REFUSED, 0, "no file");
+		}
+		Path dir = file.toAbsolutePath().getParent();
+		try (FileChannel ch = FileChannel.open(file, StandardOpenOption.READ)) {
+			FORCER.file(ch);
+			FORCER.dir(dir);
+			confirmTo(dir);
+		} catch (IOException | RuntimeException e) {
+			return new Result(Outcome.IN_DOUBT, 0, "confirm: " + e);
 		}
 		return new Result(Outcome.OK, 0, null);
 	}

@@ -70,7 +70,10 @@ public final class RegionBlobs {
 				}
 				Path f = dir.resolve(sha + ".bin");
 				if (verify(f, sha)) {
-					return CompletableFuture.completedFuture(null);
+					// (slice DF round 2, P2) a copy already there is confirmed on disk (forced again), not trusted: an earlier write may have been
+					// renamed and then failed its folder's force
+					var c = dev.larattalabs.architect.site.DurableFile.confirmBytes(f);
+					return CompletableFuture.completedFuture(c.ok() ? null : missing(sha, "its copy is there but not confirmed on disk (" + c.reason() + ")"));
 				}
 				String id = blobIds.get(sha);
 				if (id == null) {

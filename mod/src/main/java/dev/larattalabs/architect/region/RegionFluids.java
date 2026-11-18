@@ -491,6 +491,8 @@ public final class RegionFluids {
 		boolean held;
 		/** (6c IRR, S-IRR-4) Drained because its lot's site was removed (the sources belong to the farm): never written again. Saved. */
 		boolean lotRemoved;
+		/** (slice DF round 2, P1 3) A removed lot's drain ran (its record saved first, lotRemoved, then this): a start drains the others again. */
+		boolean lotDrained;
 		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
 		long writtenAt = -1;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
@@ -576,8 +578,6 @@ public final class RegionFluids {
 		long @Nullable [][] strayWork;
 		int strayAt;
 		int strayDone;
-		/** (8c fix round, P1-4) When the removal last tried the T0 barrier ({@link System#nanoTime}), 0 never; transient. */
-		long barrierTriedAt;
 		/** (8cF) The removal's phase as the view shows it ({@link dev.larattalabs.architect.api.FluidsRemoval#phase}); null: "draining". Saved. */
 		@Nullable String removalPhase;
 		long lastCensus;
@@ -606,6 +606,8 @@ public final class RegionFluids {
 		@Nullable String owedWhy;
 		/** (slice DF) When an owed record was last tried again ({@link System#nanoTime}), 0 never. */
 		long owedTriedAt;
+		/** (slice DF round 2) When the removal last tried T0's world barrier before its done record and was refused, 0 none. */
+		long barrierTriedAt;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -963,9 +965,10 @@ public final class RegionFluids {
 		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
 		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, stage); // (6d RV) a revision's bodies
 		Regional st = l == null ? null : of(l);
-		// (slice DF, rule 3) past its gate the stage goes on only while its record is durably on disk: an owed record is written again first
-		if (st != null && !"gate".equals(st.phase) && !durable(l, st)) {
-			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+		// (slice DF, rule 3) the stage goes on only while its record is durably on disk: an owed record is written again first (one try a
+		// second, in every phase: round 2, P2 10)
+		if (st != null && !mayWrite(l, st)) {
+			waitNotDurable(b, stage, st);
 			return false;
 		}
 		if (st != null && st.recheck) {
@@ -974,6 +977,10 @@ public final class RegionFluids {
 				return false;
 			}
 			recheck(level, l, st);
+			if (!afterRecheck(l, st)) {
+				RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+				return false;
+			}
 		}
 		if (st == null || !"gate".equals(st.phase)) {
 			return true;
@@ -1123,8 +1130,9 @@ public final class RegionFluids {
 		}
 		st.phase = "writing";
 		if (!save(l, st)) {
-			// (slice DF, rule 3) the before states are not durable: no source is written; the stage waits and the gate runs again
+			// (slice DF, rule 3) the before states are not durable: no source is written; the stage waits and the gate runs again (throttled)
 			st.phase = "gate";
+			st.owedTriedAt = System.nanoTime();
 			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
 			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused or in doubt, no source written
 			return false;
@@ -1134,6 +1142,12 @@ public final class RegionFluids {
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/** (slice DF round 2) The record whose bodies the region's fluids charge was counted against ({@code survival.chargedRid}, else 0). */
+	static int chargedRid(RegionsImpl.Live l) {
+		JsonElement e = l.rec().survival.get(dev.larattalabs.architect.site.BillCaps.CHARGED_RID);
+		return e != null && e.isJsonPrimitive() ? e.getAsInt() : 0;
 	}
 
 	/** (fix b5b) The ledger key of a survival region's fluids charge (once per region: {@code survival.chargedAt} is never cleared). */
@@ -1528,21 +1542,40 @@ public final class RegionFluids {
 				continue;
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
-			if (st.owed && !durable(l, st)) {
-				continue; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
-			}
-			if ("writing".equals(st.phase) && stageWritten(l)) {
-				if (st.ordered) {
-					writeWaves(level, l, st); // (6c HY) one wave of bodies whose landings have settled
+			final RegionsImpl.Live fl = l;
+			final Regional fst = st;
+			tickRecord(l, st, () -> "writing".equals(fst.phase) && stageWritten(fl), () -> {
+				if (fst.ordered) {
+					writeWaves(level, fl, fst); // (6c HY) one wave of bodies whose landings have settled
 				} else {
-					force(level, l, st);
+					force(level, fl, fst);
 				}
+			}, () -> ("settling".equals(fst.phase) || fst.ordered && "writing".equals(fst.phase) && fst.forcedAt >= 0) && level.getGameTime() - fst.lastCensus
+				>= CENSUS_EVERY, () -> {
+				fst.lastCensus = level.getGameTime();
+				settle(level, fl, fst);
+			});
 			}
-			if (("settling".equals(st.phase) || st.ordered && "writing".equals(st.phase) && st.forcedAt >= 0) && level.getGameTime() - st.lastCensus >= CENSUS_EVERY) {
-				st.lastCensus = level.getGameTime();
-				settle(level, l, st);
+		}
+	}
+
+	/**
+	 * (slice DF round 2) One record's tick: its write step (the forced ticks, or a course's next wave) when due, then its census when due.
+	 * Nothing runs while the record is owed and its retry fails.
+	 */
+	static void tickRecord(RegionsImpl.Live l, Regional st, java.util.function.BooleanSupplier writeDue, Runnable write, java.util.function.BooleanSupplier settleDue,
+		Runnable settle) {
+		if (st.owed && !durable(l, st)) {
+			return; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
+		}
+		if (writeDue.getAsBoolean()) {
+			write.run();
+			if (st.owed) {
+				return; // (round 2, P1 6) the write step's save failed: no census or escape drain on an undurable record this tick
 			}
-			}
+		}
+		if (settleDue.getAsBoolean()) {
+			settle.run();
 		}
 	}
 
@@ -2033,6 +2066,7 @@ public final class RegionFluids {
 		java.util.function.LongPredicate held, boolean removal) {
 		int n = 0;
 		Fluid src = b.source();
+		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
 		// ((6c IRR, the batch's fix) an irrigation source's breach flow is judged before anything is written: once the source is air, its
 		// flow has no feeder left to tell it from a pond's or a player's)
@@ -2046,8 +2080,8 @@ public final class RegionFluids {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
 				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not; (8c fix round) only a cell that still holds
-				// what the body wrote: a player's waterlogged chest there is never replaced)
-				if (!ownStillOurs(b, p, now)) {
+				// what the body wrote, by both readings (8c's still-ours and DF round 2's exact state): a player's waterlogged chest is never replaced)
+				if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, grate.contains(p))) {
 					continue;
 				}
 				if (held.test(p)) {
@@ -2066,8 +2100,8 @@ public final class RegionFluids {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				// ((8c fix round) only the body's flow: a source (a player's bucket) or a waterlogged block in its spill or watch is kept)
-				if (!flowStillOurs(b, now) || others.contains(p) || held.test(p)) {
+				// ((8c fix round; DF round 2, P1 5) only the body's flow: a source (a player's bucket), a waterlogged block or another fluid is kept)
+				if (!flowStillOurs(b, now) || !ownFluid(now, src) || others.contains(p) || held.test(p)) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -2207,6 +2241,40 @@ public final class RegionFluids {
 	static BlockState flowingState(Fluid src, int amount) {
 		Fluid fl = src.isSame(Fluids.LAVA) ? Fluids.FLOWING_LAVA : Fluids.FLOWING_WATER;
 		return ((net.minecraft.world.level.material.FlowingFluid) fl).getFlowing(Math.min(8, amount), amount >= 8).createLegacyBlock();
+	}
+
+	/**
+	 * (slice DF round 2, P1 5) Whether a body cell holds what the body wrote there: its fluid (a source or flow of it, a bubble column for
+	 * water: a lift's), ice in an ice cell, iron bars in a grate cell, exactly its decor state in a decor cell. Anything else (a player's
+	 * waterlogged stair, a block put there since) is not the body's and a drain leaves it.
+	 */
+	static boolean bodyWrote(Body b, long p, BlockState now, Fluid src, boolean grateCell) {
+		if (ownFluid(now, src)) {
+			return true;
+		}
+		if ((now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)) && java.util.Arrays.stream(b.ice).anyMatch(x -> x == p)) {
+			return true;
+		}
+		if (grateCell && now.is(Blocks.IRON_BARS)) {
+			return true;
+		}
+		String d = b.decor.length > 0 ? b.decorState.get(p) : null;
+		if (d == null || now.getFluidState().isEmpty()) {
+			return false;
+		}
+		try {
+			return now == parse(d);
+		} catch (RuntimeException e) {
+			return false;
+		}
+	}
+
+	/** (slice DF round 2) A cell holding the body's own fluid: a liquid block of it, or (water) a bubble column. */
+	static boolean ownFluid(BlockState now, Fluid src) {
+		if (now.getBlock() instanceof LiquidBlock) {
+			return now.getFluidState().getType().isSame(src);
+		}
+		return src.isSame(Fluids.WATER) && now.is(Blocks.BUBBLE_COLUMN);
 	}
 
 	/**
@@ -2434,6 +2502,9 @@ public final class RegionFluids {
 	 * written yet is marked the same, so the fluids stage never writes it. The shells stay the region's until the region is removed.
 	 * Idempotent. Returns the cells written, or -1 when the group is no region or the lot has no irrigation.
 	 */
+	/** (slice DF round 2) {@link #drainLot}'s answer when its record could not be saved: the lot's site must not be restored now. */
+	public static final int NOT_DURABLE = -2;
+
 	public static int drainLot(ServerLevel level, @Nullable String group, @Nullable String lotId) {
 		if (group == null || lotId == null) {
 			return -1;
@@ -2459,6 +2530,45 @@ public final class RegionFluids {
 		if (st == null) {
 			return -1;
 		}
+		if (!mayWrite(l, st)) {
+			return NOT_DURABLE; // (round 2, P1 3) the record not on disk: nothing drained, the site not restored
+		}
+		// (round 2, P1 3) record before mutate: the lot's bodies marked removed (never written again) and saved, then drained, then marked
+		// drained and saved. A refused first save changes nothing (the marks go back); a start after the first save drains them again
+		List<Object[]> was = new ArrayList<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (!ids.contains(b.id) || bs.lotRemoved) {
+				continue;
+			}
+			was.add(new Object[] {bs, bs.state, bs.reason, new ArrayList<>(bs.at)});
+			bs.state = "drained";
+			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
+			bs.lotRemoved = true;
+			bs.lotDrained = false;
+			bs.at.clear();
+		}
+		if (!was.isEmpty() && !save(l, st)) {
+			if (st.owedWhy != null && st.owedWhy.startsWith("IN_DOUBT")) {
+				// (round 2, P1 8's rule) the marks may be on disk: kept, owed; nothing drained until a save confirms them
+				st.owedTriedAt = System.nanoTime();
+				return NOT_DURABLE;
+			}
+			for (Object[] w : was) {
+				BodyState bs = (BodyState) w[0];
+				bs.state = (String) w[1];
+				bs.reason = (String) w[2];
+				bs.lotRemoved = false;
+				bs.at.clear();
+				@SuppressWarnings("unchecked")
+				List<long[]> at = (List<long[]>) w[3];
+				bs.at.addAll(at);
+			}
+			st.owed = false; // (the marks went back: what is on disk is the record as it stands in memory again)
+			st.owedWhy = null;
+			Architect.LOGGER.warn("Region {}: lot {}'s removal refused: its fluids record could not be saved first; nothing drained", l.rec().id, lotId);
+			return NOT_DURABLE;
+		}
 		int n = 0;
 		boolean changed = false;
 		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
@@ -2467,7 +2577,7 @@ public final class RegionFluids {
 				continue;
 			}
 			BodyState bs = st.states.get(b.id);
-			if (bs.lotRemoved) {
+			if (!bs.lotRemoved || bs.lotDrained) {
 				continue;
 			}
 			if (!bs.before.isEmpty()) {
@@ -2476,14 +2586,14 @@ public final class RegionFluids {
 				}
 				n += drain(level, st, b, bs, true, st.othersOf(b), held, false); // ((6c F3-c) a lot removed: its decor water goes too)
 			}
-			bs.state = "drained";
-			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
-			bs.lotRemoved = true;
-			bs.at.clear();
+			bs.lotDrained = true;
 			changed = true;
 		}
 		if (changed) {
-			save(l, st);
+			if (!save(l, st)) {
+				st.owedTriedAt = System.nanoTime();
+				return NOT_DURABLE; // (drained; the record of it owed: the site waits, the next try saves it)
+			}
 			report(l, st);
 			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written){}", l.rec().id, lotId, n, held == null || held
 				.kept().isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept: " + cells(held.keptCells()));
@@ -2690,14 +2800,91 @@ public final class RegionFluids {
 		if (l0 == null) {
 			return true;
 		}
+		if (!RegionsImpl.mayDrive(l0)) {
+			return false; // (slice DF round 2, P1 7) the region's record (REMOVING) not on disk: nothing drained or restored yet
+		}
 		// (6d RV, §6) the standing revisions' bodies first (top first), then the region's own: every body drains before any solid goes
 		for (RegionsImpl.Live x : lives(l0)) {
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, group)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, group))) {
 				return false;
 			}
 		}
 		return true;
+	}
+
+	/** (slice DF round 2) Whether one record's removal drain is done, running its next step ({@code gateOne}) when it is not. */
+	static boolean removalReady(RegionsImpl.Live x, Regional st, java.util.function.BooleanSupplier gateOne) {
+		// (round 2, P1 2) a loaded done record is confirmed too: the solids are restored only on a record known on disk
+		return mayWrite(x, st) && ("done".equals(st.removal) || gateOne.getAsBoolean());
+	}
+
+	/**
+	 * (slice DF round 2) Whether a region batch's running stage may start an item now: the fluids stage's gate while it is approved; any
+	 * other state or stage goes on.
+	 */
+	public static boolean stageMayRun(MinecraftServer s, QBatch b, @Nullable String stage, boolean approvedState) {
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		if (l0 != null && stage != null && !RegionsImpl.mayDrive(l0)) {
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the region record is not durable: nothing is written until it is saved");
+			return false; // (round 2, P1 7) the region's record not on disk: no item of its batch starts
+		}
+		RegionsImpl.Live l = l0 == null || stage == null ? null : Revisions.liveFor(l0, stage);
+		if (l != null && stage != null && STAGE.equals(Revisions.plainStage(stage))) {
+			Regional st = of(l);
+			if (st != null && !mayWrite(l, st)) {
+				waitNotDurable(b, stage, st);
+				return false;
+			}
+		}
+		return stageMayRun(l, stage, approvedState, () -> gate(s, b, stage));
+	}
+
+	/** {@link #stageMayRun(MinecraftServer, QBatch, String, boolean)}'s rule over a record ({@code l}: null when none resolves). */
+	static boolean stageMayRun(RegionsImpl.@Nullable Live l, @Nullable String stage, boolean approvedState, java.util.function.BooleanSupplier gate) {
+		// (round 2, P1 1) a PLACING fluids stage too (its gate ran before a stop): no item starts while its record is owed
+		if (l != null && stage != null && STAGE.equals(Revisions.plainStage(stage))) {
+			Regional st = of(l);
+			if (st != null && !mayWrite(l, st)) {
+				return false;
+			}
+		}
+		return !approvedState || gate.getAsBoolean();
+	}
+
+	/**
+	 * (slice DF round 2) The one check before a write to the world on this record's behalf, and after any save: true when the record is
+	 * known on disk; an owed one is written again first (one try a second).
+	 */
+	static boolean mayWrite(RegionsImpl.Live l, Regional st) {
+		return durable(l, st);
+	}
+
+	/**
+	 * (slice DF round 2) Whether a running job of a region batch's item ({@code batchId}, {@code itemKey}) may write its cells now: a fluids
+	 * stage tile waits while its record is not durable. Any other job goes on.
+	 */
+	public static boolean itemMayWrite(@Nullable String batchId, @Nullable String itemKey) {
+		QBatch b = batchId == null ? null : Batches.get(batchId);
+		if (b == null || itemKey == null || !RegionItems.isRegion(b)) {
+			return true;
+		}
+		QItem it = b.items.stream().filter(i -> itemKey.equals(i.key)).findFirst().orElse(null);
+		if (it == null || it.stage == null || !STAGE.equals(Revisions.plainStage(it.stage))) {
+			return true;
+		}
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		if (l0 == null) {
+			return true;
+		}
+		RegionsImpl.Live l = Revisions.liveFor(l0, it.stage);
+		Regional st = of(l);
+		return st == null || mayWrite(l, st); // (round 2, P1 1) a resumed fluids tile writes nothing while its record is owed
+	}
+
+	/** (slice DF round 2) After a recheck (which may have saved): whether the gate goes on. */
+	static boolean afterRecheck(RegionsImpl.Live l, Regional st) {
+		return mayWrite(l, st); // (round 2, P1 6) a recheck whose save failed stops the gate
 	}
 
 	/**
@@ -2713,7 +2900,7 @@ public final class RegionFluids {
 				continue;
 			}
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, l.rec().groupId)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, l.rec().groupId))) {
 				return false;
 			}
 		}
@@ -2738,7 +2925,8 @@ public final class RegionFluids {
 				// it drains again from the start (idempotent: a drained cell is at its before state, the scoop is keyed)
 				st.removal = "draining";
 				if (!save(l, st)) {
-					st.removal = null;
+					// (round 2, P2 10) kept draining in memory, owed: nothing is written yet; the throttled retry saves it before the first write
+					st.owedTriedAt = System.nanoTime();
 					return false;
 				}
 				WorldJournal.kill("FL3d"); // (slice DF) the removal's draining record saved, nothing drained yet
@@ -2815,12 +3003,27 @@ public final class RegionFluids {
 			REMOVAL_NOTES.put(l.rec().id, st.removalNote);
 			Architect.LOGGER.warn("Region {}: removal: {}", l.rec().id, st.removalNote);
 		}
+		// (round 2, P1 2) the drain's writes durable before the record says done (T0's world barrier: players, a flushed chunk save, the
+		// ledger): a crash after done can never lose them and restore the solids round surviving sources. Refused: stays drained, again later
+		long tb = System.nanoTime();
+		if (st.barrierTriedAt != 0 && tb - st.barrierTriedAt < RETRY_NANOS) {
+			return false; // (a refused barrier: one try a second)
+		}
+		st.barrierTriedAt = tb;
+		var barrier = dev.larattalabs.architect.site.Stockpiles.barrier(s);
+		if (!barrier.ok()) {
+			Architect.LOGGER.warn("Region {}: the drain's writes are not durable yet ({}: {}); the solids wait", l.rec().id, barrier.outcome(), barrier.reason());
+			return false;
+		}
+		st.barrierTriedAt = 0;
 		st.removal = "done";
 		if (!save(l, st)) {
 			st.removal = "drained"; // (slice DF) the solids wait until the record says done on disk
+			st.owedTriedAt = System.nanoTime();
 			return false;
 		}
 		hold(level, st, false);
+		WorldJournal.kill("FL3x"); // (slice DF round 2) the removal's done record saved, the solids not restored yet
 		Architect.LOGGER.info("Region {}: fluids drained and settled; the solids are restored next", l.rec().id);
 		return true;
 	}
@@ -2965,6 +3168,7 @@ public final class RegionFluids {
 			report(l, st);
 			Architect.LOGGER.info("Region {}: the stray pass restored {} watched cell(s); the solids are restored next", l.rec().id, n);
 			WorldJournal.kill("FL3"); // the fluids drained and restored, before the solids
+			WorldJournal.kill("FL3x"); // (DF round 2's point, a river's too) done saved after the world barrier, the solids not restored yet
 			return true;
 		}
 		return true;
@@ -2980,6 +3184,14 @@ public final class RegionFluids {
 			return;
 		}
 		int[] c = standingCharged(st, p -> level.getBlockState(BlockPos.of(p)));
+		// ((DF round 2, P1 4) what the record says was charged comes back even when nothing of it stands: per kind the larger)
+		if (l.rid() == chargedRid(l)) {
+			JsonObject ch = l.rec().survival.get("charged") instanceof JsonObject cj ? cj : null;
+			if (ch != null) {
+				c[0] = Math.max(c[0], ch.has("minecraft:lava_bucket") ? ch.get("minecraft:lava_bucket").getAsInt() : 0);
+				c[1] = Math.max(c[1], ch.has("minecraft:iron_bars") ? ch.get("minecraft:iron_bars").getAsInt() : 0);
+			}
+		}
 		if (c[0] > 0 || c[1] > 0) {
 			dev.larattalabs.architect.site.Stockpiles.scoop(s, l.rec().owner, "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids", c[0], c[1]);
 		}
@@ -3011,7 +3223,7 @@ public final class RegionFluids {
 	}
 
 	/** (8c fix round, P1-4; TEST seam) The world barrier the river's removal waits for before it records done. */
-	static java.util.function.Function<MinecraftServer, dev.larattalabs.architect.site.DurableBarrier.Result> barrier = dev.larattalabs.architect.site.DurableBarrier::run;
+	static java.util.function.Function<MinecraftServer, dev.larattalabs.architect.site.DurableBarrier.Result> barrier = dev.larattalabs.architect.site.Stockpiles::barrier;
 
 	/** (8c WU) Every written body's sources back, the head first (the reverse of the write order); FL5 after the head when {@code first}. */
 	static int drainSourcesAll(ServerLevel level, Regional st, java.util.function.LongPredicate held, boolean first) {
@@ -3602,6 +3814,7 @@ public final class RegionFluids {
 			}
 			if (bs.lotRemoved) {
 				b.addProperty("lotRemoved", true);
+				b.addProperty("lotDrained", bs.lotDrained); // (round 2)
 			}
 			if (bs.breached > 0) {
 				b.addProperty("breached", bs.breached);
@@ -3667,15 +3880,19 @@ public final class RegionFluids {
 	 * file's name refuses it.
 	 */
 	static DurableFile.Result persist(Path f, Regional st, JsonObject o) {
-		IOException injected = RegionStore.injected(f);
-		if (injected != null) {
-			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, injected.getMessage());
+		RegionStore.Injection inj = RegionStore.injection(f);
+		if (inj == RegionStore.Injection.REFUSED) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
 		}
 		DurableFile df = st.durable;
 		if (df == null || !df.file().equals(f)) {
-			st.durable = df = new DurableFile(STORE, f);
+			st.durable = df = new DurableFile(STORE, f).compact(); // (round 2) one line: a river's record stays small
 		}
-		return df.write(o, df.request());
+		DurableFile.Result r = df.write(o, df.request());
+		if (inj == RegionStore.Injection.IN_DOUBT && r.ok()) {
+			return new DurableFile.Result(DurableFile.Outcome.IN_DOUBT, r.gen(), "injected in-doubt write of " + f.getFileName() + " (dev.region.failNextSave inDoubt)");
+		}
+		return r;
 	}
 
 	/**
@@ -3687,7 +3904,7 @@ public final class RegionFluids {
 		if (!Files.isRegularFile(f)) {
 			return;
 		}
-		DurableFile df = new DurableFile(STORE, f);
+		DurableFile df = new DurableFile(STORE, f).compact();
 		st.durable = df;
 		if (df.writtenGen() == 0 || df.inDoubt() > 0 || df.installedGen() > df.writtenGen()) {
 			st.owed = true;
@@ -3710,6 +3927,14 @@ public final class RegionFluids {
 
 	/** (slice DF) How often an owed record is tried again. */
 	static final long RETRY_NANOS = 1_000_000_000L;
+
+	/** (slice DF) The fluids stage waits SITE_BUSY on its owed record; at its gate (nothing written yet) that is kill point FL1r. */
+	static void waitNotDurable(QBatch b, String stage, Regional st) {
+		RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+		if ("gate".equals(st.phase)) {
+			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused (again) at its gate, no source written
+		}
+	}
 
 	/** (slice DF) The stage's wait while its record is owed. */
 	static String notDurable(Regional st) {
@@ -3780,6 +4005,8 @@ public final class RegionFluids {
 					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
 					bs.held = b.has("held") && b.get("held").getAsBoolean();
 					bs.lotRemoved = b.has("lotRemoved") && b.get("lotRemoved").getAsBoolean();
+					// (round 2) a record from before round 2 saved lotRemoved after its drain
+					bs.lotDrained = b.has("lotDrained") ? b.get("lotDrained").getAsBoolean() : bs.lotRemoved;
 					bs.breached = b.has("breached") ? b.get("breached").getAsInt() : 0;
 					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
 					bs.why = strOrNull(b, "why"); // (8cF)

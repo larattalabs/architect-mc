@@ -23,6 +23,25 @@ public final class DurableHooksDF {
 		};
 	}
 
+	/** Only the force of the folder {@code only} itself fails: a write's post-rename force (IN_DOUBT), not its folder chain's (REFUSED). */
+	public static void failFolderForcesOf(Path only) {
+		Path o = only.toAbsolutePath().normalize();
+		DurableFile.FORCER = new DurableFile.Forcer() {
+			@Override
+			public void file(FileChannel ch) throws IOException {
+				ch.force(true);
+			}
+
+			@Override
+			public void dir(Path dir) throws IOException {
+				if (dir.toAbsolutePath().normalize().equals(o)) {
+					throw new IOException("injected folder force failure of " + o + " (TEST)");
+				}
+				DurableFile.forceDir(dir);
+			}
+		};
+	}
+
 	public static void reset() {
 		DurableFile.FORCER = DurableFile.REAL;
 		DurableFile.worldChanged(null);
