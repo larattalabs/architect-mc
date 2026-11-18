@@ -25,7 +25,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
   'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns',
-  'stagedTerrain']);
+  'stagedTerrain', 'flowingWater', 'volume:levels']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -51,6 +51,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (8aF, docs/CONTRACT.md "Phase 8a" §6) 'stagedTerrain': a survival IR with an op marked `staged` (a terrain kind's write: relief, pads'
 // cut and fill, forms, scatter and stamps): its free cells are ARTL class 3 (CLASS_STAGED), which phase 8a builds over time. A mod or kit
 // before 8a would write them at once, so it refuses the plan PLAN_STALE.
+// (8c WM, the 8c contract §8) 'flowingWater': a fluid op with `model: 'wm'` (a river body, simulated by the water model: lib/fluids/sim.mjs);
+// 'volume:levels': a frozen volume with each flowing cell's level (ARVX version 4, `volumes[name].levels`). This kit evaluates both (a wm
+// body's sources are written as any body's); a mod before 8c's WU and VS refuses the plan PLAN_STALE (IrStale does not list them yet).
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -148,12 +151,14 @@ export function walkKinds(ir) {
     if (o.op === 'fluid' && (['after', 'lining', 'grate'].some((m) => Array.isArray(o[m]) && o[m].length > 0) || (Array.isArray(o.joins) && o.joins.some((j) => j && !Array.isArray(j))))) k.add('courses');
     if (o.op === 'fluid' && Array.isArray(o.decor) && o.decor.length > 0) k.add('coralDecor'); // (6c F3-c)
     if (o.op === 'fluid' && Array.isArray(o.bubble) && o.bubble.length > 0) k.add('bubbleColumns'); // (7a LF)
+    if (o.op === 'fluid' && o.model === 'wm') k.add('flowingWater'); // (8c WM: sim.mjs WM_MODEL, inlined: this module may not import sim.mjs)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
   if (ir.volumes && Object.keys(ir.volumes).length) k.add('volumes');
   if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.blocks === true)) k.add('volume:blocks'); // (6c B)
   if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.fluids === true)) k.add('volume:fluids'); // (6c H)
+  if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.levels === true)) k.add('volume:levels'); // (8c WM)
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   if (ir.survival && typeof ir.survival === 'object') k.add('survival'); // (6c RS)
