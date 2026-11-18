@@ -14,8 +14,8 @@
 //                   two-member group's refunds are keyed effects, never queue amounts (halted at GM, bare and +save: the first member written and settled, the second not); (4) a
 //                   removal ended before its commit (dev.journal.failNextCommit) never touched the crate (the builder then consumes)
 //     MF1, MF2, MF4 the coordinator's must-fix rows: a held crate never funds a placement; an adoption that skips a held crate keeps every
-//                   reference to it; the last road over a held crate stays BUILDING. A crate is held by a test.move out of it under
-//                   /save-off (its barrier refused: the move aborts, its take compensated, the hold kept until a save works)
+//                   reference to it; the last road over a held crate stays BUILDING. A crate is held by a test.move out of it with
+//                   every txn barrier refused (dev.txn.failBarrier: the move aborts, its take compensated, the hold kept until one works)
 //     MF3           a completed site's crate leftovers (dev.site.finish over a stocked crate) go through crate.settle: owed, never dropped
 //   judged: the units (crate stock + placed + owed + ground + inventory) after = before, item for item; no item entity near the crate
 //   (rule R-5: nothing dropped); txn open 0; a gone site's crate cell restored and its owed entry naming the site. On the base (main's
@@ -374,7 +374,8 @@ export async function registerTCC(steps, h) {
     const hold = async (tag, cp, item) => {
       const chest = [cp[0], cp[1] + 4, cp[2]];
       await cmd(`/setblock ${chest.join(' ')} minecraft:chest`);
-      await cmd('/save-off');
+      // every txn barrier refused (dev.txn.failBarrier), not /save-off: an adoption's own ledger save must still work under the hold
+      await call('dev.txn.failBarrier', { n: 1_000_000 }, 10_000);
       const r = await call('dev.txn.run', { from: cp, to: chest, items: { [item]: 1 } }, 120_000).catch((e) => ({ error: String(e) }));
       const t = await txn();
       log(`  ${tag}: the crate held: ${json(r).slice(0, 160)}; txn open ${t.openCount}, held ${t.heldCount}`);
@@ -382,8 +383,7 @@ export async function registerTCC(steps, h) {
       return chest;
     };
     const unhold = async () => {
-      await cmd('/save-on');
-      await cmd('/save-all').catch(() => null);
+      await call('dev.txn.failBarrier', { n: 0 }, 10_000);
       for (let i = 0; i < 60 && (await txn()).openCount > 0; i++) await L.sleep(1000);
     };
     if (want('MF1')) {
