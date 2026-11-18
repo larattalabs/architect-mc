@@ -204,7 +204,7 @@ export async function registerTCC(steps, h) {
     judge(out, tag, { tag, point, sites, group, crate: cp, removal: m, txn: r.txn, groupEnd: r.group }, before, after);
   }
 
-  const P = (process.env.GATE_TCC_PARTS ?? 'S,G,P1,MF').split(',');
+  const P = (process.env.GATE_TCC_PARTS ?? 'S,G,P1,MF,FR').split(',');
   const want = (tag) => P.includes(tag) || P.includes(tag.split('-')[0]) || P.includes(tag.replace(/[0-9-].*$/, ''));
 
   steps.txncrashcrate = async () => {
@@ -490,6 +490,209 @@ export async function registerTCC(steps, h) {
         log(`  ${tag}: finished ${json(fin)}: ${st?.state}; leftovers ${json(left)}, owed new ${json(owedNow)}, ground ${json(after.ground)}, crate ${after.crate ? 'stands' : 'restored'}`);
         check(st?.state === 'built' || st?.state === 'BUILT', `${tag}: the site is built (${st?.state})`, st);
         check(sum(after.ground) === 0 && G.same(owedNow, left) && !after.crate, `${tag}: the crate's leftovers ${json(left)} owed (new ${json(owedNow)}), none dropped (${json(after.ground)}), its cell restored`, R[tag]);
+      }
+    }
+    // ================================================================ (fix round) FR rows: each red on 2c4c59aa, green after
+    const noBarriers = (n) => call('dev.txn.failBarrier', { n }, 10_000);
+    const roadGroup = async (tag) => {
+      // a hut and a paid construction road (stone under it: a gravel surface) from one shared crate
+      const at = slot();
+      k += 2;
+      const y = gy + 1, X = at[0], Z = at[2] + 20;
+      await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 30} ${y - 1} ${Z + 3} minecraft:stone`);
+      W.at = [X + 10, y + 1, Z + 6];
+      await L.tp(...W.at);
+      const road = { points: [[X, y, Z], [X + 26, y, Z]], width: 1, mode: 'AUTO' };
+      const bid = await later(`bqueue ${json({ id: `tcc${tag.toLowerCase().replace(/[^a-z0-9]/g, '')}${Date.now() % 100000}`, proximity: false, sharedCrate: true,
+        autoApprove: true, crateAt: [X + 10, y, Z - 8], items: [{ key: 'h1', bp: 'rs_hut', at: [X, y, Z - 24], rot: 0, mode: 'CONSTRUCTION' }, { key: 'r1', road }] })}`, 120_000);
+      let bv;
+      for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
+      const it = Object.fromEntries((bv?.items ?? []).map((x) => [x.key, x]));
+      check(!!it.r1?.site && !!it.h1?.site, `${tag}: a hut and a construction road from one shared crate (${it.h1?.site}, ${it.r1?.site})`, bv);
+      return { hut: it.h1?.site, road: it.r1?.site, group: bv?.group };
+    };
+    const roadState = async (id) => (await api('sites')).all.find((x) => x.id === id) ?? null;
+    /** The crate's own stock (dev.txn.cells: its ledger), item -> units. */
+    const crateItems = async (cp) => {
+      const out = {};
+      for (const v of Object.values((await cellOf(cp)).slots ?? {})) {
+        const m = /^(\S+) x(\d+)$/.exec(String(v));
+        if (m) out[m[1]] = (out[m[1]] ?? 0) + Number(m[2]);
+      }
+      return out;
+    };
+    /** A road's units: the crate's stock, the owed total, the ground near the crate and near the road, the inventory; whether it stands. */
+    const roadParts = async (roadId, cp, items, mid) => {
+      const ow = await owedAll();
+      const near = await call('dev.items.near', { pos: cp, radius: 8 }, 30_000);
+      const nearR = await call('dev.items.near', { pos: mid, radius: 16 }, 30_000);
+      const rv = await roadState(roadId);
+      return { stands: !!rv, state: rv?.state ?? null, crate: isCrate(await cellOf(cp)), stock: pick(await crateItems(cp), items), owed: pick(ow.total, items),
+        ground: pick(G.plus(near.items ?? {}, nearR.items ?? {}), items), inventory: pick(near.inventory ?? {}, items) };
+    };
+    /** The road paid for some cells (part of its bill inserted and built, then paused) and more stock in the crate: what was paid, what is stock. */
+    const payRoad = async (tag, g) => {
+      await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+      const bill = (await api(`stock ${g.group}`)).outstandingBySite?.[g.road] ?? {};
+      const half = {};
+      for (const [kk, v] of Object.entries(bill)) half[kk] = Math.max(1, Math.floor(v / 2));
+      const a1 = (await call('dev.crate.insert', { site: g.road, items: half, exact: true }, 120_000)).accepted ?? {};
+      await call('dev.stockpile.pause', { site: g.road, paused: false }, 60_000);
+      const cpos = (await api(`stock ${g.group}`)).crate;
+      const cp = typeof cpos === 'string' ? cpos.split(',').map(Number) : Array.isArray(cpos) ? cpos : [cpos?.x, cpos?.y, cpos?.z];
+      for (let i = 0; i < 60; i++) { if (sum(await crateItems(cp)) === 0) break; await L.sleep(500); }
+      await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000);
+      const left = await crateItems(cp);
+      const a2 = (await call('dev.crate.insert', { site: g.road, items: half, exact: true }, 120_000)).accepted ?? {};
+      await wait(1500);
+      const items = Object.keys(bill);
+      const paid = G.plus(pick(a1, items), Object.fromEntries(Object.entries(pick(left, items)).map(([x, v]) => [x, -v])));
+      check(sum(paid) > 0 && sum(await crateItems(cp)) > 0, `${tag}: ${g.road} paid for ${json(paid)} (built from the crate), the crate at ${cp} holds ${json(await crateItems(cp))}`, { a1, a2, left });
+      return { cp, items, paid };
+    };
+    const roadMid = (g) => W.at;
+    // ---------------------------------------------------------------- FR-a1 (P1-a): a completing site, both barriers refused
+    if (want('FR-a1')) {
+      const tag = 'FR-a1';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await fill(tag, site);
+        const before = await parts([site], cp, items);
+        await noBarriers(1_000_000); // the settle's prepare barrier and its compensation's barrier: every barrier refused
+        const fin = await call('dev.site.finish', { site }, 60_000).catch((e) => ({ error: String(e) }));
+        await wait(3000);
+        const st = await siteState(site);
+        const mid = await parts([site], cp, items);
+        R[tag] = { finish: fin, state: st?.state, before, mid };
+        check(st?.state === 'building' && mid.crate && G.same(mid.total, before.total) && sum(mid.ground) === 0,
+          `${tag}: a completing site whose settle's barriers are refused stays BUILDING (${st?.state}), its crate kept (${mid.crate ? 'stands' : 'gone'}), nothing lost: ${json(mid.total)} = ${json(before.total)}`, R[tag]);
+        await noBarriers(0);
+        let s2;
+        for (let i = 0; i < 30; i++) { s2 = await siteState(site); if (s2?.state === 'built') break; await L.sleep(1000); }
+        const after = await parts([site], cp, items);
+        R[tag].after = after;
+        check(s2?.state === 'built' && !after.crate && G.same(after.total, before.total) && sum(after.ground) === 0,
+          `${tag}: barriers working again, it completes once: ${s2?.state}, leftovers owed (${json(after.owed)}), ${json(after.total)} = ${json(before.total)}`, R[tag]);
+      }
+    }
+    // ---------------------------------------------------------------- FR-a2 (P1-a): the last road over a crate, both barriers refused
+    if (want('FR-a2')) {
+      const tag = 'FR-a2';
+      const g = await roadGroup(tag);
+      if (g.road) {
+        await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+        const { cp, items } = await fill(tag, g.hut);
+        await call('dev.site.finish', { site: g.hut }, 60_000);
+        await wait(1500);
+        const b0 = await roadParts(g.road, cp, items, roadMid(g));
+        await noBarriers(1_000_000);
+        const fin = await call('dev.site.finish', { site: g.road }, 60_000).catch((e) => ({ error: String(e) }));
+        await wait(3000);
+        const m0 = await roadParts(g.road, cp, items, roadMid(g));
+        R[tag] = { finish: fin, before: b0, mid: m0 };
+        check(m0.state === 'BUILDING' && m0.crate && G.same(m0.stock, b0.stock) && G.same(m0.owed, b0.owed) && sum(m0.ground) === 0,
+          `${tag}: the last road over a crate whose settle's barriers are refused stays BUILDING (${m0.state}), the crate kept with its stock ${json(m0.stock)} (${m0.crate ? 'stands' : 'gone'}), nothing owed or dropped`, R[tag]);
+        await noBarriers(0);
+        let done;
+        for (let i = 0; i < 30; i++) { done = await roadState(g.road); if (done?.state === 'BUILT') break; await L.sleep(1000); }
+        const a0 = await roadParts(g.road, cp, items, roadMid(g));
+        check(done?.state === 'BUILT' && !a0.crate && G.same(G.plus(a0.owed, a0.stock), G.plus(b0.owed, b0.stock)), `${tag}: barriers working again, the road completes and its crate's stock is owed once (${done?.state}, owed ${json(a0.owed)})`, a0);
+      }
+    }
+    // ---------------------------------------------------------------- FR-b (P1-b): a paid road removal halted at decided; a shared crate's road
+    for (const v of ['', '+save']) {
+      const tag = `FR-b1${v ? 's' : ''}`;
+      if (!want(tag)) continue;
+      const g = await roadGroup(tag);
+      if (!g.road) continue;
+      await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+      await fill(tag, g.hut);
+      await call('dev.site.finish', { site: g.hut }, 60_000); // the hut built: the road is the last to build from the crate
+      await wait(1500);
+      const { cp, items, paid } = await payRoad(tag, g);
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await roadParts(g.road, cp, items, roadMid(g));
+      await call('dev.journal.killAt', { point: 'TX:crate.settle:decided' + v }, 10_000);
+      const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+      const down = await haltWait();
+      check(down, `${tag}: halted at TX:crate.settle:decided${v} in the paid road's removal (${json(m).slice(0, 120)})`);
+      if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+      await L.openWorld(name);
+      await L.tp(...W.at);
+      await settleWait([], cp, null, 30_000);
+      for (let i = 0; i < 40 && (await roadState(g.road)); i++) await L.sleep(1000); // the removal job resumes
+      await wait(2000);
+      const after = await roadParts(g.road, cp, items, roadMid(g));
+      const owedNew = G.plus(after.owed, Object.fromEntries(Object.entries(before.owed).map(([x, n]) => [x, -n])));
+      const want2 = G.plus(before.stock, paid); // the crate's stock and the paid cells' refunds, once
+      R[tag] = { before, after, paid, owedNew };
+      log(`  ${tag}: after the restart: road ${after.stands ? after.state : 'gone'}, owed new ${json(owedNew)} (stock ${json(before.stock)} + paid ${json(paid)}), ground ${json(after.ground)}`);
+      check(after.stands ? sum(owedNew) === 0 || G.same(owedNew, before.stock) : G.same(owedNew, want2),
+        `${tag}: paid once: ${after.stands ? 'the road stands, so its refunds are not owed' : 'the road is gone'} (owed new ${json(owedNew)}; stock ${json(before.stock)}, paid cells ${json(paid)})`, R[tag]);
+      check(sum(after.ground) === 0, `${tag}: nothing dropped (${json(after.ground)})`, R[tag]);
+    }
+    if (want('FR-b2')) {
+      const tag = 'FR-b2';
+      const g = await roadGroup(tag);
+      if (g.road) {
+        await call('dev.stockpile.pause', { site: g.hut, paused: true }, 60_000).catch(() => null); // the hut still builds: the crate is shared
+        const { cp, items, paid } = await payRoad(tag, g);
+        const before = await roadParts(g.road, cp, items, roadMid(g));
+        const m = await later(`remove ${g.road} - noforce`, 120_000).catch((e) => ({ error: String(e) }));
+        for (let i = 0; i < 30 && (await roadState(g.road)); i++) await L.sleep(1000);
+        await wait(2000);
+        const after = await roadParts(g.road, cp, items, roadMid(g));
+        const owedNew = G.plus(after.owed, Object.fromEntries(Object.entries(before.owed).map(([x, n]) => [x, -n])));
+        R[tag] = { removal: m, before, after, paid, owedNew };
+        log(`  ${tag}: a shared crate's road removed: ${json(m).slice(0, 160)}; ground ${json(after.ground)}, owed new ${json(owedNew)}`);
+        check(!after.stands && G.same(owedNew, paid) && sum(after.ground) === 0 && after.crate && G.same(after.stock, before.stock),
+          `${tag}: a shared crate's road removed: its refunds ${json(paid)} owed (${json(owedNew)}), none dropped (${json(after.ground)}); the crate stays for the hut with its stock`, R[tag]);
+      }
+    }
+    // ---------------------------------------------------------------- FR-c (P1-c): paid cells' refunds across K6 (commit durable, record not)
+    for (const v of ['', '+save']) {
+      const tag = `FR-c${v ? 's' : ''}`;
+      if (!want(tag)) continue;
+      const site = await single(tag);
+      if (site) await crashRow(R, tag, W, [site], 'K6' + v, () => call('dev.site.deconstruct', { site }, 60_000), null, true);
+    }
+    // ---------------------------------------------------------------- FR-d (P2-a): an aborted collect gives nothing and says so
+    if (want('FR-d')) {
+      const tag = 'FR-d';
+      await cmd('/clear @s');
+      const key = `test:owed/fr-d-${Date.now() % 100000}`;
+      const P0 = 'minecraft:oak_planks';
+      const ad = await call('dev.owed.add', { key, items: { [P0]: 6 }, at: W.at }, 30_000);
+      for (let i = 0; i < 5; i++) { const b = await call('dev.stockpile.barrier', { run: true }, 120_000).catch(() => null); if (b?.last?.outcome === 'OK') break; await wait(1000); }
+      await noBarriers(1); // the collect's first barrier refused: it aborts (nothing given); its abort's barrier works
+      const r = await call('dev.owed.collect', { recipient: ad.recipient, key }, 120_000).catch((e) => ({ error: String(e) }));
+      const inv = ((await call('dev.items.near', { pos: W.at, radius: 2 }, 30_000)).inventory ?? {})[P0] ?? 0;
+      const ow = ((await owedAll()).owed ?? []).find((e) => e.key === key);
+      await noBarriers(1);
+      const c = await cmd(`/architect collect ${key}`).catch((e) => ({ messages: [String(e)] }));
+      const said = (c.messages ?? []).join(' ');
+      const inv2 = ((await call('dev.items.near', { pos: W.at, radius: 2 }, 30_000)).inventory ?? {})[P0] ?? 0;
+      R[tag] = { r, inv, owed: ow?.items, said, inv2 };
+      check(sum(r.given) === 0 && inv === 0 && (ow?.items?.[P0] ?? 0) === 6, `${tag}: an aborted collect reports nothing given (${json(r.given)}, ${r.status} ${r.why ?? ''}); inventory ${inv}, still owed ${ow?.items?.[P0]}`, R[tag]);
+      check(!/Collected [1-9]/.test(said) && inv2 === 0, `${tag}: /architect collect, aborted, does not say it collected: "${said.slice(0, 160)}" (inventory ${inv2})`, R[tag]);
+      await noBarriers(0);
+      await cmd('/clear @s');
+    }
+    // ---------------------------------------------------------------- FR-e (P2-b): owed amounts never in the refund totals
+    if (want('FR-e')) {
+      const tag = 'FR-e';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await fill(tag, site);
+        const before = await parts([site], cp, items);
+        const rm = await later(`remove ${site} - noforce`, 120_000).catch((e) => ({ error: String(e) }));
+        await wait(2000);
+        const after = await parts([site], cp, items);
+        const owedNew = sum(after.owed) - sum(before.owed);
+        R[tag] = { removal: rm, owedNew };
+        check(rm.removed === true && owedNew > 0 && (rm.refundTotal ?? -1) === 0,
+          `${tag}: a crate-fed removal with nothing credited: refund total ${rm.refundTotal} (owed ${owedNew} listed apart, never in it)`, R[tag]);
       }
     }
     await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
