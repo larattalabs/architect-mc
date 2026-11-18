@@ -2811,6 +2811,28 @@ public final class Builder {
 		return d;
 	}
 
+	/** (slice PSVLC3) Whether {@code s}'s legacy crate (its own or its group's shared one) stands at its cell. Read only; loads the chunk. */
+	static boolean crateStands(ServerLevel level, Site s) {
+		return crate(level, s, true) != null;
+	}
+
+	/**
+	 * (slice PSVLC3) What {@link #prepareDeconstruct} would take from {@code s}'s legacy crate now (its stock), or null when it would take
+	 * nothing (a stockpile's target, no crate, or a shared crate other sites still build from). Read only: the caller records it durably
+	 * before the take.
+	 */
+	static @Nullable Map<String, Integer> crateTake(ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (c == null || c.crate() == null || Stockpiles.pileOf(s) != null) {
+			return null;
+		}
+		CrateBlockEntity crate = crate(level, s, true);
+		if (crate == null || !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty()) {
+			return null;
+		}
+		return crate.ledger().stock();
+	}
+
 	/**
 	 * One cell of a deconstruct ({@link #prepareDeconstruct}), booked in {@code tally}: {@code now} the block standing, {@code was} the
 	 * site's before there, {@code qi} the cell's queue position (-1: not queued), {@code adopted} the PT2 rule (an adopted site's removal

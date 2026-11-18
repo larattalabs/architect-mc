@@ -25,7 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 class QueueWritePSVFixTest {
 	@AfterEach
 	void reset() {
-		Placement.DIR_SYNC = Placement::forceDir;
+		DurableFile.FORCER = DurableFile.REAL;
 		Placement.FAIL_WRITES.set(0);
 		Placement.FAIL_AT_PRESAVE.set(0);
 	}
@@ -41,19 +41,38 @@ class QueueWritePSVFixTest {
 		return g;
 	}
 
+	/** A forcer that records each folder force (with the files' state then) and then forces it for real. */
+	private static DurableFile.Forcer watching(List<String> seen, Path f, Path dir, long gen) {
+		return new DurableFile.Forcer() {
+			@Override
+			public void file(java.nio.channels.FileChannel ch) throws IOException {
+				DurableFile.REAL.file(ch);
+			}
+
+			@Override
+			public void dir(Path d) throws IOException {
+				if (d.equals(dir.toAbsolutePath())) {
+					seen.add("file=" + Files.exists(f) + " tmp=" + Files.exists(dir.resolve(Placement.FILE + ".tmp")) + " written=" + Placement.written(gen));
+				}
+				DurableFile.REAL.dir(d);
+			}
+		};
+	}
+
 	@Test
 	void theFolderIsForcedAfterTheRenameAndBeforeTheGenerationCounts(@TempDir Path dir) {
 		clean(dir);
 		Path f = dir.resolve(Placement.FILE);
 		long gen = nextGen();
 		List<String> seen = new ArrayList<>();
-		Placement.DIR_SYNC = d -> seen.add(d + " file=" + Files.exists(f) + " tmp=" + Files.exists(dir.resolve(Placement.FILE + ".tmp")) + " written="
-			+ Placement.written(gen));
+		DurableFile.FORCER = watching(seen, f, dir, gen);
 		JsonObject root = new JsonObject();
 		root.addProperty("version", 1);
 		assertTrue(Placement.writeSave(root, f, gen));
-		assertEquals(List.of(dir.toAbsolutePath() + " file=true tmp=false written=false"), seen,
-			"the folder synced once, after the rename, before the generation is acknowledged (bb95ec19: never synced)");
+		// (slice PSVLC3: T0's DurableFile writes it) the queue file's folder is forced after the rename, before the generation is acknowledged
+		assertFalse(seen.isEmpty());
+		assertEquals("file=true tmp=false written=false", seen.get(seen.size() - 1),
+			"the folder synced after the rename, before the generation is acknowledged (bb95ec19: never synced): " + seen);
 		assertTrue(Placement.written(gen));
 	}
 
@@ -62,14 +81,22 @@ class QueueWritePSVFixTest {
 		clean(dir);
 		Path f = dir.resolve(Placement.FILE);
 		long gen = nextGen();
-		Placement.DIR_SYNC = d -> {
-			throw new IOException("injected directory fsync failure (TEST)");
+		DurableFile.FORCER = new DurableFile.Forcer() {
+			@Override
+			public void file(java.nio.channels.FileChannel ch) throws IOException {
+				DurableFile.REAL.file(ch);
+			}
+
+			@Override
+			public void dir(Path d) throws IOException {
+				throw new IOException("injected directory fsync failure (TEST)");
+			}
 		};
-		assertFalse(Placement.writeSave(new JsonObject(), f, gen), "the rename is not durable: not written");
+		assertFalse(Placement.writeSave(new JsonObject(), f, gen), "the folder force failed (refused or in doubt): not written");
 		assertFalse(Placement.written(gen));
 		assertTrue(Placement.writeFailing(), "a retry is due");
 		assertTrue(Placement.failed(gen));
-		Placement.DIR_SYNC = Placement::forceDir;
+		DurableFile.FORCER = DurableFile.REAL;
 		assertTrue(Placement.writeSave(new JsonObject(), f, gen + 1), "the retry, the real folder sync on this platform");
 		assertTrue(Placement.written(gen));
 		assertFalse(Placement.writeFailing());

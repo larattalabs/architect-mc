@@ -488,7 +488,8 @@ public final class Placement {
 		root.add("jobs", jobs);
 		root.add("removals", Groups.toJson());
 		Path f = file(srv);
-		long gen = ++requestedGen; // (slice PSV) this save's generation: the state as it is now
+		long gen = durable(f).request(); // (slice PSV) this save's generation: the state as it is now (slice PSVLC3: T0's DurableFile numbers it)
+		requestedGen = gen;
 		saveWanted = false; // (LC3 fix 2)
 		// phase 4e: the file holds the queued cell sites' cells (a 256x256 pad is megabytes of JSON): it is written off the
 		// server thread, the latest state winning; a clean stop waits for it and writes at once
@@ -533,33 +534,26 @@ public final class Placement {
 	 */
 	static final java.util.concurrent.atomic.AtomicInteger FAIL_AT_PRESAVE = new java.util.concurrent.atomic.AtomicInteger();
 
-	/** (PSV fix round, TEST) The directory sync after the rename ({@link #forceDir}); the units swap it to watch or fail it. */
-	interface DirSync {
-		void force(Path dir) throws IOException;
-	}
-
-	static volatile DirSync DIR_SYNC = Placement::forceDir;
-	private static volatile boolean dirSyncUnsupportedLogged;
-
 	/**
-	 * (PSV fix round, GPT P1 1) The rename made durable: the parent directory forced to disk (a file's fsync does not persist its directory
-	 * entry; Linux fsync(2)). A directory that can't be opened for reading (Windows: an AccessDeniedException) is best effort: logged once, the
-	 * file's own force stands. A directory that opens and fails its force is a failed write.
+	 * (slice PSVLC3) The queue file's durable writer: T0's {@link DurableFile} (temp file forced, atomic rename, the folder forced; generations
+	 * persisted in the file), which lifted PSV's own writer out. One per queue file path, made fresh when a world loads. IN_DOUBT (the rename
+	 * done, a later force failed) is not written here: no commit and no unseal waits on it, and the retry writes again.
 	 */
-	static void forceDir(Path dir) throws IOException {
-		java.nio.channels.FileChannel ch;
-		try {
-			ch = java.nio.channels.FileChannel.open(dir, java.nio.file.StandardOpenOption.READ);
-		} catch (IOException | UnsupportedOperationException e) {
-			if (!dirSyncUnsupportedLogged) {
-				dirSyncUnsupportedLogged = true;
-				Architect.LOGGER.warn("Placement: the queue file's folder {} can't be synced on this platform ({}); the rename is best effort", dir, e.toString());
+	private static volatile @Nullable DurableFile queueFile;
+	private static final Object QUEUE_FILE_LOCK = new Object();
+
+	static DurableFile durable(Path f) {
+		DurableFile d = queueFile;
+		if (d == null || !d.file().equals(f)) {
+			synchronized (QUEUE_FILE_LOCK) {
+				d = queueFile;
+				if (d == null || !d.file().equals(f)) {
+					d = new DurableFile("queue", f);
+					queueFile = d;
+				}
 			}
-			return;
 		}
-		try (ch) {
-			ch.force(true);
-		}
+		return d;
 	}
 
 	/**
@@ -716,25 +710,16 @@ public final class Placement {
 	 * its fix round: the generation counts as written only once all three are done). Answers whether it was written.
 	 */
 	static synchronized boolean writeSave(JsonObject root, Path f, long gen) {
-		try {
-			if (FAIL_WRITES.get() > 0 && FAIL_WRITES.getAndDecrement() > 0) {
-				throw new IOException("injected queue write failure (TEST)");
-			}
-			Path tmp = f.resolveSibling(FILE + ".tmp");
-			try (var ch = java.nio.channels.FileChannel.open(tmp, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
-				java.nio.file.StandardOpenOption.WRITE)) {
-				java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(GSON.toJson(root).getBytes(StandardCharsets.UTF_8));
-				while (b.hasRemaining()) {
-					ch.write(b);
-				}
-				ch.force(true);
-			}
-			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-			// (PSV fix round, GPT P1 1) the rename durable before the generation counts: the directory entry forced too
-			DIR_SYNC.force(f.toAbsolutePath().getParent());
-		} catch (IOException | RuntimeException e) {
+		if (FAIL_WRITES.get() > 0 && FAIL_WRITES.getAndDecrement() > 0) {
 			failedGen = Math.max(failedGen, gen);
-			Architect.LOGGER.warn("Could not save {} (generation {})", f, gen, e);
+			Architect.LOGGER.warn("Could not save {} (generation {}): injected queue write failure (TEST)", f, gen);
+			return false;
+		}
+		DurableFile.Result r = durable(f).write(root, gen);
+		if (!r.ok()) {
+			// REFUSED (the file on disk is the previous one) or IN_DOUBT (it may or may not survive a power loss): neither counts as written
+			failedGen = Math.max(failedGen, gen);
+			Architect.LOGGER.warn("Could not save {} (generation {}): {} {}", f, gen, r.outcome(), r.reason());
 			return false;
 		}
 		WRITTEN_GEN.accumulateAndGet(gen, Math::max);
@@ -747,9 +732,16 @@ public final class Placement {
 		loadFailed = false;
 		refusedLogged = false;
 		saveWanted = false; // (LC3 fix 2) a new world: no retry carried over
-		failedGen = Math.min(failedGen, WRITTEN_GEN.get()); // (PSV) a new world: no retry carried over (the generations only grow)
+		failedGen = 0; // (PSV) a new world: no retry carried over
 		failLogged = false;
 		retryAt = 0;
+		{
+			// (slice PSVLC3) the world's queue file numbers its generations on from the one it carries (DurableFile, confirmed at load)
+			DurableFile d = new DurableFile("queue", file(srv));
+			queueFile = d;
+			requestedGen = d.writtenGen();
+			WRITTEN_GEN.set(d.writtenGen());
+		}
 		Path f = file(srv);
 		JsonObject root = null;
 		if (Files.exists(f)) {

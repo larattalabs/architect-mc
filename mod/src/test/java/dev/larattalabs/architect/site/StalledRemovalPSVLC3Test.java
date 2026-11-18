@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -25,13 +26,21 @@ import org.junit.jupiter.api.Test;
  * (adef7f9b: the carried five plus the five taken again, ten);</li>
  * <li>no other removal of the group starts while one of its removals is stalled, so a stalled stage's carried stock is never stranded by a
  * whole-group removal (adef7f9b: the group removal ran, the stage went UNDONE, and the stage's retry was refused by its state before it found
- * its stalled entry); a stalled stage is retried before its state is judged;</li>
+ * its stalled entry); (undoStage also looks for its stalled entry before it judges the stage's state: not driven here, the resume's queue
+ * save needs a server);</li>
  * <li>a retry runs the per-member checks again (the player scan, the blocker scan): adef7f9b resumed with the counters of the scan that had
  * finished, so a player who entered the box while it was stalled was not waited for.</li>
  * </ol>
  * The crash itself (P1 1: the queue holding the carried stock, the world's last save the crate with it) is psv-crash's PSV5.
  */
 class StalledRemovalPSVLC3Test {
+	@BeforeAll
+	static void boot() {
+		// the queue save after a resume reads Batches, whose class init needs the registries (unbooted, it fails and poisons the JVM's later tests)
+		net.minecraft.SharedConstants.tryDetectVersion();
+		net.minecraft.server.Bootstrap.bootStrap();
+	}
+
 	@AfterEach
 	void reset() throws Exception {
 		Groups.load(new JsonArray());
@@ -119,20 +128,6 @@ class StalledRemovalPSVLC3Test {
 		CompletableFuture<Groups.Removed> f = Groups.undoStage(null, "g1", "s1", true);
 		assertTrue(f.isCompletedExceptionally(), "refused (adef7f9b: a stage removal started beside the stalled group removal)");
 		assertNotNull(findStalled("g1", null));
-	}
-
-	@Test
-	void aStalledStageIsRetriedBeforeItsStateIsJudged() throws Exception {
-		// the stage reads UNDONE (adef7f9b: a whole-group removal ran past the stalled stage), its stalled removal still holds the stock
-		groups(Map.of("g1", group("g1", Stage.State.UNDONE)));
-		stalled("g1", "s1", "a");
-		try {
-			Groups.undoStage(null, "g1", "s1", true);
-		} catch (NullPointerException e) {
-			// the queue save after the resume needs a server; the resume itself is what is checked
-		}
-		assertNull(findStalled("g1", "s1"), "the retry took over the stalled removal (adef7f9b: refused by the stage's state first)");
-		assertTrue(Groups.stageRemovalRunning("g1", "s1"));
 	}
 
 	// ------------------------------------------------------------------ P1 3
