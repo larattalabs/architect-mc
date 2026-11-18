@@ -480,8 +480,10 @@ public final class RoadBuilder {
 				r.blockedSince.putIfAbsent(i, Builder.ticksNow());
 				continue;
 			}
+			if (!purse.pay(r.cost.get(i))) {
+				continue; // (T2b final check P1-1) not paid (a held crate): nothing placed, the cell waits
+			}
 			r.paidAgain(i, now);
-			purse.pay(r.cost.get(i));
 			if (regionRoad && !now.isAir()) {
 				// (XR) a region's road writing over a block another writer of the region (a target, a road, a lot) owns and paid for: its
 				// items go back as it is taken up (as a target's write, XL)
@@ -516,6 +518,10 @@ public final class RoadBuilder {
 		String group = road.group();
 		boolean keepCrate = group != null && (Builder.anyBuildingShared(group) || building(group).stream().anyMatch(x -> !x.id().equals(road.id())));
 		Map<String, Integer> left = Map.of();
+		if (!keepCrate && c.crate() != null && dev.larattalabs.architect.txn.TxnServer.boxHeld(level, new BlockPos(c.crate().x(), c.crate().y(), c.crate()
+			.z()))) {
+			return; // (T2b final check P1-4) a txn holds the crate: its restore would be refused, so nothing is released or marked BUILT; next tick
+		}
 		if (!keepCrate && crate != null && c.crate() != null) {
 			SiteGroupRec g = Sites.group(group);
 			if (g != null) {
@@ -650,7 +656,8 @@ public final class RoadBuilder {
 		if (c.building() && c.crate() != null && road.group() != null && !Builder.anyBuildingShared(road.group()) && building(road.group()).stream()
 			.allMatch(x -> x.id().equals(road.id()))) {
 			CrateBlockEntity crate = Builder.crate(level, probe(road), true);
-			if (crate != null) {
+			// (T2b final check P1-4) a crate a txn holds keeps its stock, its cell and its journal entry (an orphan crate: no loss)
+			if (crate != null && !dev.larattalabs.architect.txn.TxnServer.boxHeld(level, crate.getBlockPos())) {
 				SiteGroupRec g = Sites.group(road.group());
 				if (g != null) {
 					Sites.putGroup(srv, g.withDelivered(crate.ledger().delivered()));

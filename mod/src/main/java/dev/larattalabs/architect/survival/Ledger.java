@@ -44,7 +44,16 @@ public final class Ledger {
 		return placed.getOrDefault(item, 0);
 	}
 
+	/**
+	 * What {@code item} the builder may use now: 0 while a txn holds the crate (T2b final check P1-1: held stock is invisible to every
+	 * affordability check, so nothing places against it). {@link #heldStock(String)} is the raw count (the holder's adapter, dev reads).
+	 */
 	public int stock(String item) {
+		return frozen() ? 0 : heldStock(item);
+	}
+
+	/** (slice T2b) The stock of {@code item} whether or not a txn holds the crate: the holder's adapter, conservation and dev reads only. */
+	public int heldStock(String item) {
 		return delivered(item) - placed(item);
 	}
 
@@ -56,11 +65,16 @@ public final class Ledger {
 		return Map.copyOf(placed);
 	}
 
-	/** Every item with stock > 0 (stock includes credit). */
+	/** Every item with stock > 0 (stock includes credit); empty while a txn holds the crate ({@link #stock(String)}). */
 	public Map<String, Integer> stock() {
+		return frozen() ? new LinkedHashMap<>() : heldStock();
+	}
+
+	/** (slice T2b) {@link #stock()} whether or not a txn holds the crate: the holder's adapter, conservation and dev reads only. */
+	public Map<String, Integer> heldStock() {
 		Map<String, Integer> out = new LinkedHashMap<>();
 		for (String k : delivered.keySet()) {
-			int s = stock(k);
+			int s = heldStock(k);
 			if (s > 0) {
 				out.put(k, s);
 			}
@@ -127,7 +141,7 @@ public final class Ledger {
 	 */
 	public boolean take(Map<String, Integer> items) {
 		for (var e : items.entrySet()) {
-			if (stock(e.getKey()) < e.getValue()) {
+			if (heldStock(e.getKey()) < e.getValue()) {
 				return false;
 			}
 		}

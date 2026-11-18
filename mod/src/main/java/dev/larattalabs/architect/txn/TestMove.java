@@ -148,7 +148,7 @@ public final class TestMove {
 		}
 		Container dst = (Container) db;
 		for (var e : items.entrySet()) {
-			int have = crateFrom ? ((dev.larattalabs.architect.survival.CrateBlockEntity) sb).ledger().stock(e.getKey()) : count((Container) sb, item(e.getKey()));
+			int have = crateFrom ? ((dev.larattalabs.architect.survival.CrateBlockEntity) sb).ledger().heldStock(e.getKey()) : count((Container) sb, item(e.getKey()));
 			if (have < e.getValue()) {
 				o.addProperty("refused", "the source holds fewer than " + e.getValue() + " " + e.getKey());
 				return o;

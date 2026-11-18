@@ -162,6 +162,21 @@ public final class TxnServer {
 			Architect.LOGGER.info("Txn: recovering {} open txn(s) in the recovery slot (before the legacy reconciles)", core.open().size());
 			core.recover();
 		}
+		owedAtLoad();
+	}
+
+	/**
+	 * (T2b final check P2-5) OWED_CHANGED at least once across a crash after retirement: on every load, once per recipient with owed entries,
+	 * on the first tick (listeners re-read {@code owed()}; a spurious one is harmless, a missed one is not).
+	 */
+	static void owedAtLoad() {
+		later(() -> {
+			java.util.LinkedHashSet<String> rs = new java.util.LinkedHashSet<>();
+			dev.larattalabs.architect.site.OwedLedger.all().forEach(e -> rs.add(e.recipient())); // read on the tick: every store loaded
+			for (String r : rs) {
+				dev.larattalabs.architect.api.SiteEvents.OWED_CHANGED.invoker().onChanged(r);
+			}
+		});
 	}
 
 	static void tick(MinecraftServer srv) {
@@ -183,6 +198,7 @@ public final class TxnServer {
 			if (core.anyOpen()) {
 				core.recover();
 			}
+			owedAtLoad();
 		}
 		closeHeldMenus(srv); // (T2a fix round) menus open over a box when its hold began, or reopened since: closed every tick
 		if (core.open().isEmpty() && !core.unsynced()) {

@@ -144,27 +144,33 @@ public final class OwedTxn {
 				before.add(inv.getItem(i).copy());
 			}
 			List<String> was = p.getAttachedOrElse(PLAYER_RECEIPTS, List.of());
-			e.items().forEach((k, n) -> give(inv, TestMove.item(k), n));
-			List<String> r = new ArrayList<>(was);
-			r.add(e.key(t.id));
-			while (r.size() > 256) {
-				r.remove(0); // stale once retired (§3.7): the oldest go
-			}
-			p.setAttached(PLAYER_RECEIPTS, List.copyOf(r));
 			// (fix round, GPT P1-1) the give and its receipt confirmed on disk in this same tick, before anything can move the items: a save that
-			// isn't acknowledged takes them back now (nothing moved in between) and the txn holds, to give again once a save works
-			MinecraftServer srv = TxnServer.server();
-			String why = srv == null ? "no server" : FAIL_PLAYER_SAVE.get() > 0 && FAIL_PLAYER_SAVE.getAndDecrement() > 0 ? "TEST: player save failed"
-				: dev.larattalabs.architect.site.DurableBarrier.savePlayersConfirmed(srv);
-			if (why != null) {
-				for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
-					inv.setItem(i, before.get(i));
+			// isn't acknowledged takes them back now (nothing moved in between) and the txn holds, to give again once a save works.
+			// (T2b final check P1-3) in a finally: an exception out of the give or the save path takes them back too
+			String why = "the give or the player's save threw";
+			try {
+				e.items().forEach((k, n) -> give(inv, TestMove.item(k), n));
+				List<String> r = new ArrayList<>(was);
+				r.add(e.key(t.id));
+				while (r.size() > 256) {
+					r.remove(0); // stale once retired (§3.7): the oldest go
 				}
-				p.setAttached(PLAYER_RECEIPTS, was);
+				p.setAttached(PLAYER_RECEIPTS, List.copyOf(r));
+				MinecraftServer srv = TxnServer.server();
+				why = srv == null ? "no server" : FAIL_PLAYER_SAVE.get() > 0 && FAIL_PLAYER_SAVE.getAndDecrement() > 0 ? "TEST: player save failed"
+					: dev.larattalabs.architect.site.DurableBarrier.savePlayersConfirmed(srv);
+			} finally {
+				if (why != null) {
+					for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
+						inv.setItem(i, before.get(i));
+					}
+					p.setAttached(PLAYER_RECEIPTS, was);
+				}
 				p.inventoryMenu.broadcastChanges();
+			}
+			if (why != null) {
 				throw new IllegalStateException("the player's save is not confirmed (" + why + "): nothing given, held");
 			}
-			p.inventoryMenu.broadcastChanges();
 		}
 
 		@Override

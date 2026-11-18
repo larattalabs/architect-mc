@@ -54,6 +54,12 @@ public final class TxnDev {
 				o.addProperty("failPlayerSave", OwedTxn.FAIL_PLAYER_SAVE.get());
 				yield o;
 			}
+			case "owedThrowPlayerSave" -> {
+				dev.larattalabs.architect.site.DurableBarrier.THROW_PLAYER_SAVE.set(req.has("n") ? req.get("n").getAsInt() : 1);
+				JsonObject o = new JsonObject();
+				o.addProperty("throwPlayerSave", dev.larattalabs.architect.site.DurableBarrier.THROW_PLAYER_SAVE.get());
+				yield o;
+			}
 			case "owedCredit" -> answer(OwedTxn.credit(srv, req.get("owner").getAsString(), req.get("key").getAsString()));
 			case "poke" -> poke(player, req);
 			default -> throw new IllegalArgumentException("unknown dev.txn op " + op);
@@ -119,7 +125,7 @@ public final class TxnDev {
 				c.addProperty("nbt", be.saveWithoutMetadata(level.registryAccess()).toString()); // (fix round) the persisted data, components included
 				if (be instanceof dev.larattalabs.architect.survival.CrateBlockEntity cr) {
 					JsonObject sl = new JsonObject();
-					cr.ledger().stock().forEach((k, v) -> sl.addProperty("stock:" + k, k + " x" + v));
+					cr.ledger().heldStock().forEach((k, v) -> sl.addProperty("stock:" + k, k + " x" + v));
 					c.add("slots", sl); // (T2b) a crate's slots are its ledger's stock
 				}
 				if (be instanceof net.minecraft.world.Container k && !(be instanceof dev.larattalabs.architect.survival.CrateBlockEntity)) {
@@ -412,7 +418,7 @@ public final class TxnDev {
 					for (BlockEntity be : level.getChunk(cx, cz).getBlockEntities().values()) {
 						BlockPos p = be.getBlockPos();
 						if (be instanceof CrateBlockEntity crate && inside(p, lo, hi)) {
-							crate.ledger().stock().forEach((k, v) -> crates.merge(k, v, Integer::sum));
+							crate.ledger().heldStock().forEach((k, v) -> crates.merge(k, v, Integer::sum));
 						}
 					}
 				}

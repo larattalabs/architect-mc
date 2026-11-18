@@ -1136,12 +1136,19 @@ public final class Stockpiles {
 		}
 		Map<String, Integer> dropped = new TreeMap<>();
 		BlockPos drop = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		// (T2b final check P1-2) a held crate skipped now keeps every group, site and road reference to it (as DFG's DEFER): the retry finds it
+		java.util.Set<String> skipped = new java.util.HashSet<>();
+		Map<String, String> ownerOf = new java.util.HashMap<>();
+		for (Site s : sites) {
+			ownerOf.put(s.id(), Builder.crateOwner(s));
+		}
 		for (var e : crates.entrySet()) {
 			Construction.Crate c = e.getValue();
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			if (dev.larattalabs.architect.txn.TxnServer.boxHeld(level, cp)) {
 				// (slice T2b) an open txn holds the crate: adopting it now would credit a stock its frozen ledger can't give up
 				Architect.LOGGER.warn("Stockpile {}: crate {} at {} not adopted now: an open transaction holds it", owner, e.getKey(), cp.toShortString());
+				skipped.add(e.getKey());
 				continue;
 			}
 			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
@@ -1178,7 +1185,7 @@ public final class Stockpiles {
 		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		for (var e : crates.entrySet()) {
-			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX)) {
+			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX) && !skipped.contains(e.getKey())) {
 				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
 				if (g != null) {
 					Sites.putGroup(srv, g.withCrate(null));
@@ -1189,6 +1196,9 @@ public final class Stockpiles {
 		List<Object> joined = new ArrayList<>();
 		for (Site s : sites) {
 			Site cur = Sites.get(s.id());
+			if (skipped.contains(ownerOf.get(s.id()))) {
+				continue; // (T2b final check P1-2) its crate was skipped (held): it keeps it
+			}
 			if (cur != null && cur.construction() != null) {
 				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				Builder.forgetRun(s.id());
@@ -1199,6 +1209,9 @@ public final class Stockpiles {
 		}
 		for (Infra i : roads) {
 			Infra cur = Infras.get(i.id());
+			if (i.group() != null && skipped.contains(SiteGroupRec.CRATE_PREFIX + i.group())) {
+				continue; // (T2b final check P1-2) its group's crate was skipped (held): it keeps it
+			}
 			if (cur != null && cur.construction() != null) {
 				Infras.put(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				joined.add(Infras.get(i.id()));
@@ -2128,8 +2141,9 @@ public final class Stockpiles {
 					}
 
 					@Override
-					public void pay(List<SurvivalItems.Cost> costs) {
+					public boolean pay(List<SurvivalItems.Cost> costs) {
 						feedPay(srv, p, keyOf(t), costs, cap, drawn, lotDrawn, fallback);
+						return true; // a stockpile target's stock is checked by its feed (stock - reserved) before the cell
 					}
 
 					@Override
@@ -2747,7 +2761,7 @@ public final class Stockpiles {
 			}
 			CrateBlockEntity be = Builder.crate(level, s, false);
 			if (be != null && crates.add(be.getBlockPos())) {
-				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+				be.ledger().heldStock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
 		}
 		List<Infra> infs = new ArrayList<>(Infras.all());
@@ -2787,7 +2801,7 @@ public final class Stockpiles {
 			}
 			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), false);
 			if (be != null && crates.add(be.getBlockPos())) {
-				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+				be.ledger().heldStock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
 		}
 		// (6c RS) a survival region's standing lava sources (a lava bucket less its bucket each) and grates: what its bodies took
