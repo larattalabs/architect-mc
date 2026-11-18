@@ -1125,6 +1125,29 @@ public final class Stockpiles {
 		}
 	}
 
+	/** (DFG) A crate's fate in adoptCrates, DFG's names for {@link AdoptPlan.Fate} (FINISH, legacy, reads as JOIN here as in DFG). */
+	enum CrateFate {
+		JOIN, JOINED, GONE, DEFER
+	}
+
+	/**
+	 * (DFG's pure seam, kept for its test; slice T3b) {@link AdoptPlan#classify} under DFG's four inputs: {@code read}, its block entity is
+	 * its owner's crate; {@code credited}, its adoption key is in the ledger; {@code crateBlock}, any crate block stands at its cell;
+	 * {@code known}, its cell was read.
+	 */
+	static CrateFate crateFate(boolean read, boolean credited, boolean crateBlock, boolean known) {
+		if (read) {
+			return CrateFate.JOIN; // (T3b: a credited one is FINISH, held for ops; never taken twice)
+		}
+		AdoptPlan.Verdict v = AdoptPlan.classify(new AdoptPlan.CrateRead("k", "minecraft:overworld", 0, 0, 0, 0L, crateBlock, crateBlock, crateBlock ? "other"
+			: null, crateBlock, known), credited);
+		return switch (v.fate()) {
+			case JOINED -> CrateFate.JOINED;
+			case GONE -> CrateFate.GONE;
+			default -> CrateFate.DEFER; // DEFER, and FINISH under another tag (a crate stands there: never released)
+		};
+	}
+
 	/** (slice T3b, from DFG/ADP) Whether any crate block (its block or a crate block entity, whatever its owner tag) stands at the cell. */
 	static boolean crateBlockAt(@Nullable ServerLevel level, BlockPos p) {
 		return level != null && (level.getBlockEntity(p) instanceof CrateBlockEntity || level.getBlockState(p).is(dev.larattalabs.architect.survival.CrateBlocks.CRATE));

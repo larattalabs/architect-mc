@@ -18,6 +18,8 @@
 //                                                       back) and at AD4 (the sites file moved: rolled forward); memberships agree; stock,
 //                                                       paid records and returned equal the saved ledger's; the building lot then builds
 //                                                       from the stockpile; Regions.remove exact
+//   node tools/gate6dgr.mjs dfgdefer     (dfg-defer)     slice DFG: adoptCrates defers a crate it cannot read (the DFG block at the end)
+//   node tools/gate6dgr.mjs dfgmissing   (dfg-missing)   slice DFG: a building target whose crate is gone (nothing credited) is fed
 //   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
@@ -862,4 +864,136 @@ export async function registerSAD(steps, h) {
       return out;
     };
   }
+  // ------------------------------------------------------------------ (slice DFG) adoptCrates defers a crate it cannot read
+  // dfg-defer  A: the shared crate of a Supplied town unreadable (its owner tag changed): adoptCrates defers it, halted at SAC1 and SAC2
+  //            (with nothing saved after) and live: it stands, the ledger unchanged, both references kept, the feed order unchanged; its tag
+  //            back, its stock and placed counts as before. Then adopted once (stock moved once, cell restored, references cleared, house_4
+  //            in the feed order, the BUILT house_3 keyed); C a third call adds nothing. Conservation (rule 18) after every case: the audit's
+  //            standing parts over the fixture's box equal what they were before it. Red on main: the crate restored, its stock lost.
+  const DFG_BOX = (gy) => ({ min: [CX - 45, gy - 12, CZ - 45], max: [CX + 175, gy + 40, CZ + 110] });
+  const crateBlock = 'architect_mc:construction_crate';
+  const audit = (area) => call('dev.stockpile.audit', { owner: OWNER, min: area.min, max: area.max }, 120_000);
+  const standing = (a) => {
+    let t = {};
+    for (const m of [a.inventory, a.containers, a.entities, a.stock, a.paidStanding, a.legacyCrateStock]) t = G.plus(t, m ?? {});
+    for (const k of Object.keys(t)) if (!t[k]) delete t[k];
+    return t;
+  };
+  const tagOf = async (at) => json((await cmd(`/data get block ${at.join(' ')} Site`).catch((e) => ({ messages: [String(e)] }))).messages ?? []);
+  const retag = (at, t) => cmd(`/data merge block ${at.join(' ')} {Site:"${t}"}`).catch(() => null);
+  const ledgerSame = (a, b) => G.same(a?.delivered, b?.delivered) && G.same(a?.dropped ?? {}, b?.dropped ?? {}) && json(a?.paid ?? {}) === json(b?.paid ?? {}) && G.same(stockOf(a), stockOf(b));
+
+  steps.dfgdefer = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B DFG Defer');
+    const { ids, b2 } = await suppliedTown('DFG', W);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `DFG: a stockpile of 4 crates for ${OWNER}`);
+    const s40 = await siteState(ids.house_4);
+    const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
+    const tag = `group:${b2.group}`;
+    const tag0 = await tagOf(at);
+    out.tag = { at, tag, got: tag0 };
+    check(s40.crate?.present === true && tag0.includes(tag) && sum(s40.ledger?.stock) > 0,
+      `DFG: the shared crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items (placed ${sum(s40.ledger?.placed)})`, out.tag);
+    const area = DFG_BOX(W.gy);
+    const H0 = standing(await audit(area));
+    const conserve = async (label) => {
+      const a = await audit(area);
+      const hh = standing(a);
+      const d = G.minus(hh, H0);
+      for (const k of Object.keys(d)) if (!d[k]) delete d[k];
+      out.conserve = { ...(out.conserve ?? {}), [label]: { diff: d, identity: a.identity } };
+      check(Object.keys(d).length === 0 && a.identity !== false, `${label}: conservation: what stands (stock, paid cells standing, crate stock, item entities, containers, inventory: ${sum(hh)}) equals what stood before (${sum(H0)}): ${json(d)}`, out.conserve[label]);
+    };
+    const p0 = await pile();
+    // A: the crate unreadable (its owner tag is not its group's)
+    const mA = await cmd(`/data merge block ${at.join(' ')} {Site:"dfg:other"}`);
+    check(mA?.success !== false, `DFG A: the crate's owner tag changed to dfg:other (${json(mA?.messages ?? [])})`);
+    for (const [kp, savedByOp] of [['SAC1', false], ['SAC2', true]]) {
+      const b = await baseline(`DFG A ${kp}`);
+      await call('dev.journal.killAt', { point: kp }, 10_000);
+      const Ld = await halt(`DFG A ${kp}`, W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp });
+      if (!Ld) continue;
+      const stands = await isBlock(at, crateBlock);
+      const r3 = await siteState(ids.house_3);
+      const r4 = await siteState(ids.house_4);
+      out[`A${kp}`] = { stands, refs: [r3.crate, r4.crate], same: ledgerSame(Ld, b.ledger) };
+      check(stands && ledgerSame(Ld, b.ledger) && r3.crate?.x === at[0] && r4.crate?.x === at[0], `DFG A ${kp}: after the unclean restart the unreadable crate stands, the saved ledger as before, both references kept`, out[`A${kp}`]);
+      await retag(at, tag);
+      await conserve(`DFG A ${kp}`);
+      await retag(at, 'dfg:other');
+    }
+    const aA = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const pA = await pile();
+    const standsA = await isBlock(at, crateBlock);
+    const s3A = await siteState(ids.house_3);
+    const s4A = await siteState(ids.house_4);
+    out.A = { refused: aA.refused ?? null, stands: standsA, refs: [s3A.crate, s4A.crate], order: pA.feedOrder, same: ledgerSame(pA.ledger, p0.ledger) };
+    check(!aA.refused && standsA && ledgerSame(pA.ledger, p0.ledger), `DFG A: adoptCrates with the crate unreadable left it standing (${standsA}) and the stockpile's ledger unchanged (base: its cell restored, its stock lost)`, out.A);
+    check(s3A.crate?.x === at[0] && s4A.crate?.x === at[0] && json(pA.feedOrder ?? []) === json(p0.feedOrder ?? []), `DFG A: both sites keep their crate reference; the feed order unchanged (${json(pA.feedOrder ?? [])})`, out.A);
+    await retag(at, tag);
+    const s4B = await siteState(ids.house_4);
+    check(s4B.crate?.present === true && G.same(s4B.ledger?.stock, s40.ledger?.stock) && G.same(s4B.ledger?.placed, s40.ledger?.placed),
+      `DFG A: with its tag back the crate reads again, its stock (${sum(s4B.ledger?.stock)}) and placed counts as before`, { stock: s4B.ledger?.stock });
+    await conserve('DFG A');
+    // B: readable again: adopted once
+    const aB = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    check(!aB.refused, `DFG B: adoptCrates with the crate readable (${json(aB.refused ?? 'adopted')})`);
+    const pB = await pile();
+    const moved = G.plus(G.minus(stockOf(pB.ledger), stockOf(p0.ledger)), G.minus(pB.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
+    const s3 = await siteState(ids.house_3);
+    const s4 = await siteState(ids.house_4);
+    const stands = await isBlock(at, crateBlock);
+    const rec3 = Object.entries(pB.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
+    out.B = { moved, crateStock: s40.ledger?.stock, refs: [s3.crate, s4.crate], order: pB.feedOrder, stands, rec3: rec3 ? sum(rec3[1]) : 0 };
+    check(G.same(moved, s40.ledger?.stock ?? {}) && !stands, `DFG B: the crate's stock moved exactly once (${json(moved)}; it held ${json(s40.ledger?.stock)}), its cell restored`, out.B);
+    check(s4.crate?.x === undefined && (pB.feedOrder ?? []).includes(ids.house_4) && !(pB.feedOrder ?? []).includes(ids.house_3) && out.B.rec3 > 0,
+      `DFG B: the references cleared; house_4 in the feed order, the BUILT house_3 not, and keyed (${out.B.rec3} units paid)`, out.B);
+    await conserve('DFG B');
+    // C: again: nothing more
+    const aC = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const pC = await pile();
+    out.C = { refused: aC.refused ?? null };
+    check(!aC.refused && ledgerSame(pC.ledger, pB.ledger) && json(pC.feedOrder) === json(pB.feedOrder), 'DFG C: adoptCrates a third time adds nothing (delivered, dropped, paid records, stock, feed order)', out.C);
+    await conserve('DFG C');
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  // dfg-missing (DFG fix round, GPT P1): house_4's shared crate gone (its cell air, nothing credited): adoptCrates has nothing to take, so
+  //            main's path: the references cleared, house_4 joins the feed order and is fed to BUILT from the stockpile. Red on 8290b06b
+  //            (deferred: the reference kept, house_4 waiting for a crate that does not exist)
+  steps.dfgmissing = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B DFG Missing');
+    const { ids } = await suppliedTown('DFG missing', W);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `DFG missing: a stockpile of 4 crates for ${OWNER}`);
+    const s40 = await siteState(ids.house_4);
+    const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
+    await cmd(`/setblock ${at.join(' ')} minecraft:air`);
+    const gone = !(await isBlock(at, crateBlock));
+    const s41 = await siteState(ids.house_4);
+    out.gone = { at, gone, crate: s41.crate };
+    check(gone && s41.crate?.x === at[0] && !['BUILT', 'built'].includes(s41.state), `DFG missing: the shared crate's cell is air; house_4 (${s41.state}, ${s41.built}/${s41.queue}) still names it`, out.gone);
+    const p0 = await pile();
+    const a = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    const p1 = await pile();
+    const s4 = await siteState(ids.house_4);
+    out.adopt = { refused: a.refused ?? null, crate: s4.crate, order: p1.feedOrder, same: ledgerSame(p1.ledger, p0.ledger) };
+    check(!a.refused && s4.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4) && ledgerSame(p1.ledger, p0.ledger),
+      `DFG missing: adoptCrates cleared house_4's reference to the missing crate and put it in the feed order (${json(p1.feedOrder ?? [])}); nothing credited (no crate, no stock)`, out.adopt);
+    await pause(ids.house_4, false);
+    const ok = await feedPile(async () => ['BUILT', 'built'].includes((await siteState(ids.house_4)).state));
+    const s4b = await siteState(ids.house_4);
+    out.fed = { ok, state: s4b.state, built: s4b.built, queue: s4b.queue };
+    check(ok && ['BUILT', 'built'].includes(s4b.state), `DFG missing: house_4 fed from the stockpile to ${s4b.state} (${s4b.built}/${s4b.queue}), not waiting for a crate`, out.fed);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
 }
