@@ -187,11 +187,15 @@ async function isle(ctx) {
   check(targets.some((t) => t[1] === 'isle') && !targets.some((t) => t[1] === 'fall') && targets.every((t) => t[3] === t[2]),
     `isle: the island's land is staged (${targets.filter((t) => t[1] === 'isle').length} target(s) of part isle), no staged cell of the fall, all built (${json(targets)})`);
   // the typed terrain wait: the fall's fluids stage waits for the island, SITE_BUSY with waitsFor {kind terrain, part isle}
-  const fallWaits = samples.flatMap((x) => x.waits.filter((w) => w.status === 'WAITING' && /fall/.test(`${w.waitsFor?.waiter ?? ''}`) && /^t:fluids:/.test(w.key)));
+  // (while the island's staged target builds the bodies wait for it, typed; once it is BUILT they wait for the paid shell targets that
+  // waited for it, untyped, as before)
+  const isleBuilding = (x) => x.targets.some((t) => t[1] === 'isle' && t[2]);
+  const fallWaits = samples.filter(isleBuilding).flatMap((x) => x.waits.filter((w) => w.status === 'WAITING' && /fall/.test(`${w.waitsFor?.waiter ?? ''}`) && /^t:fluids:/.test(w.key)));
+  const afterIsle = samples.filter((x) => !isleBuilding(x)).flatMap((x) => x.waits.filter((w) => /^t:fluids:/.test(w.key)).map((w) => [w.waitsFor?.target, w.waitsFor?.part, w.waitsFor?.kind ?? null]));
   const w0 = fallWaits[0] ?? null;
-  out.wait = { n: fallWaits.length, first: w0, keys: [...new Set(samples.flatMap((x) => x.waits.map((w) => `${w.key}<-${w.waitsFor?.waiter ?? ''}`)))].slice(0, 12) };
+  out.wait = { n: fallWaits.length, first: w0, afterIsle: [...new Set(afterIsle.map((x) => JSON.stringify(x)))], keys: [...new Set(samples.flatMap((x) => x.waits.map((w) => `${w.key}<-${w.waitsFor?.waiter ?? ''}`)))].slice(0, 12) };
   check(!!w0 && fallWaits.every((w) => w.waitsFor.kind === 'terrain' && w.waitsFor.part === 'isle') && w0.reason === 'SITE_BUSY' && w0.waitsFor.terrainCells > 0 && Number.isInteger(w0.waitsFor.terrainBuilt),
-    `isle: the fall's fluids stage waits for the island (every sample of its wait typed terrain, part isle): ${w0?.key} ${w0?.status} ${w0?.reason} with waitsFor ${json(w0?.waitsFor)} (${fallWaits.length} sample(s))`, out.wait);
+    `isle: the fall's fluids stage waits for the island (every sample of its wait while the island builds typed terrain, part isle; after it: ${json(out.wait.afterIsle)}): ${w0?.key} ${w0?.status} ${w0?.reason} with waitsFor ${json(w0?.waitsFor)} (${fallWaits.length} sample(s))`, out.wait);
   const viewTyped = samples.find((x) => x.viewWaitsFor?.kind === 'terrain');
   out.viewWait = viewTyped ? { waiting: viewTyped.waiting, waitsFor: viewTyped.viewWaitsFor } : null;
   check(true, `isle (recorded): RegionView.waiting with its typed payload on the view's ext while the island built: ${json(out.viewWait)}`);
