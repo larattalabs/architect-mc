@@ -262,14 +262,27 @@ public final class SiteWaits {
 					its.add(new ItemCount(item, e.getValue()));
 				}
 			}
-			return new SiteWait(id, true, since > 0 ? since : CAP_SINCE.getOrDefault(id, 0L), its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id)); // (LCAP-Q1)
+			return new SiteWait(id, true, sinceOf(since, CAP_SINCE.getOrDefault(id, 0L)), its, more, SiteWait.BILL_CAP, List.of(), CAP_SCOPE.get(id)); // (LCAP-Q1)
 		}
 		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
 		if (held != null) {
 			// (M5 FK) a declared container not empty at the fill: a typed wait, not for materials
-			return new SiteWait(id, true, since > 0 ? since : FILL_SINCE.getOrDefault(id, 0L), items(needs), needs.moreUnits(), SiteWait.FILL_BLOCKED, held);
+			return new SiteWait(id, true, sinceOf(since, FILL_SINCE.getOrDefault(id, 0L)), items(needs), needs.moreUnits(), SiteWait.FILL_BLOCKED, held);
 		}
 		return new SiteWait(id, waiting, since, items(needs), needs.moreUnits());
+	}
+
+	/**
+	 * (8b BS, S-8b-1) A typed wait's {@code waitingSince}: the earlier of the materials latch's start and the typed wait's own start (each 0
+	 * when absent). The latch starts 100 ticks after a cap or a fill began to hold, so preferring it would move {@code waitingSince} on the
+	 * same wait; the earlier keeps it stable while the wait changes kind (materials to bill_cap: the latch's; bill_cap, then the latch: the
+	 * cap's). Pure.
+	 */
+	static long sinceOf(long latch, long typed) {
+		if (latch <= 0) {
+			return Math.max(0L, typed);
+		}
+		return typed <= 0 ? latch : Math.min(latch, typed);
 	}
 
 	/** The {@code nextNeeded} walk over a run's unbuilt cells in build order. */

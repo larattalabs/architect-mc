@@ -29,16 +29,32 @@ import org.jspecify.annotations.Nullable;
  * @param region (1.8.0) the region it belongs to (a tile, road or lot of a realised region), or null
  * @param siteWait (1.15.0) a construction site's or road's waiting status ({@link SiteWait}); null for an instant site. (The
  *                 contract's name {@code wait} is not allowed for a record component: it clashes with {@code Object.wait()}.)
+ * @param status (8b BS, feature {@code "buildStatus"}; Since NEXT) its {@link BuildStatus}, never null (an instant site {@code built} or
+ *               {@code placing}; a construction target {@code building}, {@code paused}, {@code waiting} with its reason, {@code removing}
+ *               while its group's removal runs); {@code since} equals {@code siteWait.waitingSince}
+ * @param part (Since NEXT) the plan part a region's target builds (the typed home of ext {@code architect_mc:part}), or null
+ * @param lot (Since NEXT) the lot it stands on (ext {@code architect_mc:lot}), or null
+ * @param revision (Since NEXT) the rid of the revision that put it down (ext {@code architect_mc:revision.rid}; 0: the realised plan's)
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
 	Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
 	@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
-	boolean updating, @Nullable String region, @Nullable SiteWait siteWait) {
+	boolean updating, @Nullable String region, @Nullable SiteWait siteWait, BuildStatus status, @Nullable String part, @Nullable String lot, int revision) {
 	public SiteView {
 		kind = kind == null ? "building" : kind;
 		policy = policy == null ? Policy.BOX : policy;
 		covers = covers == null ? List.of() : List.copyOf(covers);
 		coveredBy = coveredBy == null ? List.of() : List.copyOf(coveredBy);
+		status = status == null ? BuildStatus.ofTarget(id, state, siteWait, false, false, revision) : status;
+	}
+
+	/** The 1.15.0 constructor: the status from {@code state} and {@code siteWait} alone; no part, lot or revision. */
+	public SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
+		Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
+		@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
+		boolean updating, @Nullable String region, @Nullable SiteWait siteWait) {
+		this(id, blueprintId, owner, ext, box, restoreBox, rotation, dimension, state, built, queued, group, batchId, itemKey, kind, policy, covers,
+			coveredBy, version, headVersion, deviations, updating, region, siteWait, null, null, null, 0);
 	}
 
 	/** The 1.8.0 constructor (no waiting status: null). */

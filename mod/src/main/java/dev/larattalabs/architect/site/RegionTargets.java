@@ -2537,6 +2537,15 @@ public final class RegionTargets {
 			long terrainBuilt;
 			boolean anyBuilt;
 			boolean allDone = true;
+			// (8b BS) the winning status of its targets that are not built, and the lot it builds
+			dev.larattalabs.architect.api.@Nullable BuildStatus st;
+			@Nullable String lot;
+
+			void see(dev.larattalabs.architect.api.@Nullable BuildStatus b) {
+				if (b != null && !dev.larattalabs.architect.api.BuildStatus.BUILT.equals(b.state())) {
+					st = st == null ? b : dev.larattalabs.architect.api.BuildStatus.winner(st, b);
+				}
+			}
 		}
 		Map<String, Acc> parts = new LinkedHashMap<>();
 		Map<String, Integer> outstanding = new TreeMap<>();
@@ -2557,6 +2566,9 @@ public final class RegionTargets {
 			}
 			a.anyBuilt |= c.built() > 0 || c.startedAny();
 			a.allDone &= c.done();
+			if (!c.done()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, c.id()));
+			}
 			paid += c.paid();
 			paidBuilt += c.paidBuilt();
 			anyBuilding |= !c.done();
@@ -2575,6 +2587,12 @@ public final class RegionTargets {
 			Acc a = parts.computeIfAbsent(lotId == null ? "lots" : lotPart.getOrDefault(lotId, "lots"), k -> new Acc());
 			int[] pr = Builder.progress(srv, s);
 			a.targets.add(s.id());
+			if (lotId != null && lotPart.containsKey(lotId)) {
+				a.lot = lotId;
+			}
+			if (s.building()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, s.id()));
+			}
 			a.cells += pr[1];
 			a.built += pr[0];
 			a.anyBuilt |= pr[0] > 0;
@@ -2605,6 +2623,9 @@ public final class RegionTargets {
 			Acc a = parts.computeIfAbsent(roadPart == null ? "roads" : roadPart, k -> new Acc());
 			int[] pr = RoadBuilder.progress(srv, i);
 			a.targets.add(i.id());
+			if (i.building()) {
+				a.see(dev.larattalabs.architect.apiimpl.Views.targetStatus(srv, i.id()));
+			}
 			a.cells += pr[1];
 			a.built += pr[0];
 			a.anyBuilt |= pr[0] > 0;
@@ -2626,8 +2647,16 @@ public final class RegionTargets {
 		}
 		JsonObject freeCells = rec.survival.get("freeCells") instanceof JsonObject o ? o : new JsonObject();
 		List<dev.larattalabs.architect.api.PartBuild> out = new ArrayList<>();
-		parts.forEach((part, a) -> out.add(new dev.larattalabs.architect.api.PartBuild(part, a.allDone ? "built" : a.anyBuilt ? "building" : "waiting", a.targets,
-			a.cells, a.built, freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L, a.terrainCells, a.terrainBuilt)));
+		boolean removingRegion = rec.state == dev.larattalabs.architect.api.RegionState.REMOVING;
+		parts.forEach((part, a) -> {
+			// (8b BS) built when every target is; else its targets' winner (a wait, a pause), else building; removing with its region
+			dev.larattalabs.architect.api.BuildStatus status = removingRegion ? dev.larattalabs.architect.api.BuildStatus.of(
+				dev.larattalabs.architect.api.BuildStatus.REMOVING, 0) : a.allDone ? dev.larattalabs.architect.api.BuildStatus.of(
+					dev.larattalabs.architect.api.BuildStatus.BUILT, 0) : a.st != null ? a.st : dev.larattalabs.architect.api.BuildStatus.of(
+						dev.larattalabs.architect.api.BuildStatus.BUILDING, 0);
+			out.add(new dev.larattalabs.architect.api.PartBuild(part, a.allDone ? "built" : a.anyBuilt ? "building" : "waiting", a.targets, a.cells, a.built,
+				freeCells.has(part) ? freeCells.get(part).getAsLong() : 0L, a.terrainCells, a.terrainBuilt, status, a.lot));
+		});
 		// parts with only free cells (nothing to build) are not listed; their free cells are in the record
 		var b = Batches.get(rec.batchId);
 		boolean itemsDown = b == null || b.items.stream().allMatch(x -> x.status.terminal());

@@ -2993,8 +2993,7 @@ public final class RegionsImpl implements Regions {
 			SiteGroupRec.StageRec sr = g == null ? null : g.stage(name);
 			st.add(new StageProgress(name, sr == null ? Stage.State.PLANNED : sr.state(), s.tilesDone, s.tilesTotal, s.cells));
 		});
-		List<LotState> lots = new ArrayList<>();
-		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state, Revisions.lotRevision(ls))));
+		List<LotState> lots = LotViews.lots(l, server);
 		Refusal waiting = null;
 		for (var e : r.drift.entrySet()) {
 			if (e.getValue().startsWith("held:")) {
@@ -3050,14 +3049,17 @@ public final class RegionsImpl implements Regions {
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
 			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason, r.removalStop == dev.larattalabs.architect.api.RemovalStop.NONE ? null
-				: r.removalStopCause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : r.removalStopCause);
+				: r.removalStopCause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : r.removalStopCause,
+			dev.larattalabs.architect.apiimpl.StatusViews.beside(r.ext), dev.larattalabs.architect.apiimpl.StatusViews.land(r.ext));
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
 	static RegionView tombView(RegionRec r) {
 		int[] c = r.claim;
 		List<LotState> lots = new ArrayList<>();
-		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
+		// (8b BS) a removed region's lots read removed
+		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state, Revisions.lotRevision(ls), null, dev.larattalabs.architect.api.BuildStatus.of(
+			dev.larattalabs.architect.api.BuildStatus.REMOVED, Revisions.lotRevision(ls)))));
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
 			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r), r.buildHitList(), r.beside);
 	}
