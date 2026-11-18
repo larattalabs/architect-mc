@@ -33544,3 +33544,29 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
   'levels'}`, and adds UNSETTLED to plan.json's codes (8cF; `unsettledRefusal` raises it today only for a wm body). SE sets `maxTicks`
   (settleBound x 4), the caps and per-segment W3 (W3 still runs H's steady for a wm body). CL reads `foreign` for W5 and `refed`. VS
   writes v4; 8cF/VS add both kinds to KINDS_FORMAT2 and IrStale together.
+
+### PB: the calibration run (probe, $0; recorded in kit/lint/water-calibration.json `flowing`)
+- river_demo (WM's model): census == prediction cell for cell (river_r1 36 sources, 126 flowing; river_r2 48), settles 214 of 240
+  (river_r1) and 5 of 30 (river_r2).
+- Fall damage landing in water: 0 at drops 24, 32 and 48 into basins 2 and 3 deep (villagers). N-8c-3's "3 deep past 24" holds with
+  margin; 2 deep would do to 48 (recorded, the rule unchanged).
+- WM's waterlogged faces (the coordinator's item): stairs, slabs and closed trapdoors agree with vanilla face for face; fences, walls,
+  panes, bars and lanterns agree (all faces open). An open trapdoor and a ladder also close their back face in vanilla, which WM leaves
+  open (conservative: its reach a superset, its census may over-predict there). A version-4 volume's block id alone (no properties)
+  gives no waterlogged mask: only the fluid code says the cell is waterlogged.
+
+### WU: write order, drain-order undo, stray pass, W5 in the drain (strict)
+- `FLOWING_BUILD` on (`-Darchitect.noFlowingWater=true` falls back to H's drain and stops advertising `flowingWater`). A region with any
+  flowing body removes by `gateFlowing`: `draining` saved (DF), every body's sources back head first with a fluid tick on their face
+  neighbours (FL5 after the head), `drained` saved and the wait (FL8); done at the bound with no tick in any watch set, capped at 2 x
+  (the rows name the foreign cells); `restoring` saved, the stray pass per chunk (FL9 after the first; W5 via `breachTake`: own stale
+  flowing water only); `done` saved (FL3), then the solids. A start in `restoring` drains the sources again and waits again if any stood.
+- The gate re-checks a flowing body's predicted cells live before any source: a washable block holds the body (not written, `why: wash`,
+  reason `M25:wash`), soul sand or magma `why: bubble`, any other block `uncontained`. Unsettled bodies say `foreign_water` or
+  `census_drift`. Builder reading: the census is per body, every 5 ticks (no per-chunk round robin needed at these sizes).
+- Item entities: `dev.fluid.river` counts items standing within a cell of a flowing body's own or predicted cells (`itemsNow`); the
+  spawn counter (ENTITY_LOAD, age 0) saw none in game and stays a secondary count.
+- Remove while draining: Groups' removal already joins (a second `Regions.remove` answers `removed: true`, never SITE_BUSY), live and
+  after a restart (CR's rows).
+- W3 breach cells feed KC keep-out: handriver checks every body's cells, shell, spill and breach reach (`watch`) with
+  `reachMeetsKeep` (LEAK); the KC registry keeps the watch (kit test: a 1 x 1 module lot past a breach cell is met).
