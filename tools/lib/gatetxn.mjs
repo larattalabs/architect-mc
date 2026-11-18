@@ -167,8 +167,9 @@ export async function registerTXN(steps, h) {
     // the rows: [id, block, slots, extra setup, action, opts]; each row gets its own column (6 apart) and line (9 apart)
     const P = 'minecraft:oak_planks';
     const rows = [
-      { id: 'menu_crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 2'], pre: async (X) => call('dev.txn.poke', { pos: X, how: 'menu' }, 30_000),
-        act: async (X) => call('dev.txn.poke', { pos: X, how: 'menuMove', slot: 0 }, 30_000) },
+      { id: 'menu_crafter', block: 'crafter[orientation=north_up]', slots: ['oak_log 2'],
+        pre: async (X) => { await cmd('/gamemode creative'); return call('dev.txn.poke', { pos: X, how: 'menu' }, 30_000); }, // a spectator's clicks never reach a menu
+        act: async (X) => { const a = await call('dev.txn.poke', { pos: X, how: 'menuMove', slot: 0 }, 30_000); await cmd('/gamemode spectator'); return a; } },
       // per-type writers (§6.1 item 2)
       { id: 'furnace', block: 'furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true, late: true },
       { id: 'blast_furnace', block: 'blast_furnace', slots: ['raw_iron 4', 'coal 2'], ticks: true, late: true },
