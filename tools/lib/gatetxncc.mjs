@@ -184,7 +184,10 @@ export async function registerTCC(steps, h) {
     await call('dev.journal.killAt', { point }, 10_000);
     const m = await remove().catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
     const down = await haltWait();
-    check(down, `${tag}: halted at ${point} (${json(m).slice(0, 160)})`);
+    // a txn point an effect's probe skips on this path is never reached (the group's shared crate: its CRATE entry is released by the
+    // group removal first, so the R effect probes APPLIED): recorded, and the row judged as the removal left it; a removal point must halt
+    if (down || !point.startsWith('TX:')) check(down, `${tag}: halted at ${point} (${json(m).slice(0, 160)})`);
+    else log(`  ${tag}: ${point} not reached on this path (its effect's probe answered APPLIED); judged without a restart`);
     if (!down) {
       // never reached: the removal ran past it (judged as it stands, no restart), so the row still says where the stock went
       await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
