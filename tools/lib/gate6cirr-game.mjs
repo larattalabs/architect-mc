@@ -963,5 +963,29 @@ export async function dfLot(ctx) {
   o.r = r;
   out.removal = await removeRegion(ctx, o, 'DF lot: the region afterwards');
   await L.leaveWorld();
+  // (slice DF round 3, the final check's P1 2) a lot removal halted bare at FL6 (lotDrained saved) and at FL6d (drained, lotDrained not
+  // saved): the drain's writes are durable before lotDrained is (T0's barrier), so the removal asked again leaves 0 water in the lot's box
+  for (const point of ['FL6', 'FL6d']) {
+    const tag = `dflot-${point.toLowerCase()}`;
+    const ob = await realiseIrr(ctx, tag, fx, { entries: E62, fields: F });
+    if (!ob.sha || !ob.r) { check(false, `DF lot ${point}: v62 not realised`); await L.leaveWorld(); continue; }
+    const sb = await lotSites(ctx, ob.r.view);
+    const lb = ob.r.ir.lots.find((x) => x.id === 'f2').box;
+    const fy = ob.r.ir.lots.find((x) => x.id === 'f2').floorY;
+    const boxB = [lb.minX - 1, fy - 2, lb.minZ - 1, lb.maxX + 1, fy + 2, lb.maxZ + 1];
+    await L.call('dev.journal.killAt', { point }, 10_000);
+    L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch(() => null);
+    await waitDown(ctx, point);
+    await L.openWorld(`G6B IRR ${tag}`);
+    await L.tp((ob.W.claim[0] + ob.W.claim[2]) / 2, 120, (ob.W.claim[1] + ob.W.claim[3]) / 2);
+    const again = await L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    await L.settle(5000);
+    const water = (await fluidsIn(ctx, boxB)).size;
+    out[point] = { again: again.error ?? again.removed ?? 'ok', water };
+    check(water === 0, `DF lot (${point} bare: the lot's drain then a halt without a save): the removal asked again (${json(out[point].again)}) leaves ${water} water in the lot's box (0 wanted)`);
+    ob.r = await core.regionOf(ctx, ob.r.region);
+    out[point].removal = await removeRegion(ctx, ob, `DF lot ${point}: the region afterwards`, { judged: false });
+    await L.leaveWorld();
+  }
   return out;
 }

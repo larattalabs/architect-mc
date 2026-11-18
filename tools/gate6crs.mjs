@@ -907,6 +907,28 @@ steps.df = async () => {
     out.neverWritten = { charged: rsA.record?.charged ?? null, refused: pA, removed: pB, eflat: ef2.length };
     check(sum(rsA.record?.charged) > 0 && G.exact(pB) && ef2.length === 0, `DF survival (${tag2}): charged (${json(rsA.record?.charged)}), the record refused, removed before any source was written: the charge returned, conservation exact (${json(pB.diff)}), E-flat ${ef2.length}`, ef2.slice(0, 8));
   }
+  // (slice DF round 3, the final check's P1 1) charged and written, one lava source then taken (a player's bucket: the driver clears it),
+  // then removed: the scoop returns what stands and the never-written charge only, never the taken source again
+  {
+    const tag3 = 'rs03dfh';
+    const s3 = await G.site(ctx, tag3, fx);
+    const ck3 = await G.check(ctx, tag3, s3);
+    await G.pile(ctx, s3, 4);
+    const region3 = await G.realise(ctx, ck3.check.artifactSha, entries);
+    const f3 = await G.feed(ctx, region3, { fraction: 1, timeoutMs: 2_400_000 });
+    const box3 = G.boxOf(s3.W);
+    const c3 = await L.call('dev.fluid.census', { box: box3 }, 600_000);
+    const lava = c3.fluids.filter(([, , , st]) => st === 'minecraft:lava' || st === 'minecraft:lava[level=0]');
+    const taken = lava[0];
+    if (taken) await cmd(`/setblock ${taken[0]} ${taken[1]} ${taken[2]} minecraft:air`);
+    const standing = lava.length - (taken ? 1 : 0);
+    const ps0 = await G.pileState(ctx);
+    await G.remove(ctx, region3);
+    const ps1 = await G.pileState(ctx);
+    const got = (ps1.stock?.['minecraft:lava_bucket'] ?? 0) - (ps0.stock?.['minecraft:lava_bucket'] ?? 0);
+    out.harvested = { placed: f3.last.st.view.state, lavaSources: lava.length, standing, refundedLava: got };
+    check(f3.last.st.view.state === 'PLACED' && lava.length > 0 && got === standing, `DF survival (${tag3}): ${lava.length} lava source(s) written, one taken, removed: the scoop returns ${got} lava bucket(s), the ${standing} standing (never the taken one again)`);
+  }
   return out;
 };
 

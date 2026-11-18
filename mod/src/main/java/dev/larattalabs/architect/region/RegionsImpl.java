@@ -2986,6 +2986,11 @@ public final class RegionsImpl implements Regions {
 		OWED.remove(l.rec().id);
 	}
 
+	/** (TEST) A region's debt and held operations forgotten. */
+	static void clearOwed(String id) {
+		OWED.remove(id);
+	}
+
 	/** (slice DF round 2) Whether a region's record is owed (not known on disk). */
 	public static boolean owed(String id) {
 		return OWED.containsKey(id);
