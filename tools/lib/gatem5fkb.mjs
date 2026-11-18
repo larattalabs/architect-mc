@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { gameTime } from './sprint.mjs';
 
 const SLAB = 'minecraft:petrified_oak_slab';
 const FLINT = 'minecraft:flint';
@@ -172,10 +173,43 @@ export async function registerFKB(steps, h) {
     check(!pr.refused, `${tag}: ${site} paused for the swap`);
     const fed = await deliver({ fill: true });
     const r0 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
+    // dev.fk.swap answers {retry} (and does nothing: no swap, no resume) in the one tick of 20 whose step rescans first. The tries
+    // came back to back, so all of them could land between the same two ticks and every one answer retry (v0.79.0 verifier, twice):
+    // the site stayed paused and the step went silent. After a retry, wait until the game time has moved (a tick has run), then try.
+    if (process.env.GATE_FKB_SWAP_IN_WINDOW === '1') {
+      // (TEST of the driver) start the swap in the refused tick: a probe swap of air for air 40 above the hopper with no site (it
+      // answers retry in that tick, else an error and nothing changed), back to back until one answers retry (at most 5 s); then a burst of 30
+      // probes counts how many back-to-back tries one refused tick answers retry (the old loop gave up after 20)
+      const probe = () => call('dev.fk.swap', { pos: [P(at)[0], P(at)[1] + 40, P(at)[2]], block: 'minecraft:air', site: 'gate-fkb-no-site' }, 30_000);
+      const inWindow = async () => { for (const end = Date.now() + 5_000; Date.now() < end;) if ((await probe())?.retry) return true; return false; };
+      let burst = 0;
+      const tb = Date.now();
+      if (await inWindow()) for (let i = 0; i < 30 && (await probe())?.retry; i++) burst++;
+      log(`  ${tag} swap window probe: ${burst} more back-to-back retries in one refused tick (${Date.now() - tb} ms)`);
+      check(await inWindow(), `${tag}: the swap starts in the refused tick (GATE_FKB_SWAP_IN_WINDOW)`);
+    }
     let sw = null;
+    let tries = 0;
+    const t0w = Date.now();
     for (let i = 0; i < 20 && !sw?.swapped; i++) {
+      if (sw?.retry) {
+        const g0 = await gameTime(cmd);
+        for (const end = Date.now() + 10_000; Date.now() < end;) {
+          const g = await gameTime(cmd);
+          if (g0 === null || g === null || g > g0) break;
+          await L.sleep(10);
+        }
+      }
+      tries++;
       sw = await call('dev.fk.swap', { pos: P(at), block: 'minecraft:dropper', site }, 30_000);
       if (sw?.error) break;
+    }
+    log(`  ${tag} swap: ${tries} attempt(s) in ${Date.now() - t0w} ms (${json(sw)})`);
+    if (!sw?.swapped) {
+      // never leave the site paused: the swap hook resumes it only when it swaps
+      await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
+      check(false, `${tag}: dev.fk.swap never swapped in ${tries} attempt(s) (${json(sw)}): the driver's swap failed (the site resumed), not the fill`, sw);
+      return fed;
     }
     await L.sleep(3000);
     const r1 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
