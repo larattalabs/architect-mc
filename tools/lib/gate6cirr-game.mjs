@@ -953,12 +953,19 @@ export async function dfLot(ctx) {
   await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
   const out = { refused: { answer: r1.error ?? r1.removed ?? null, water: [water0, water1], siteStands: stands } };
   check(water0 > 0 && water1 === water0 && stands, `DF lot (fluids.json refused): f2's removal drains nothing and restores nothing: water in its box ${water0} -> ${water1}, its site stands: ${stands} (answer ${json(out.refused.answer)})`);
-  const r2 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  // (round 3, P2) the refused record retries once a second: a removal asked within that second answers SITE_BUSY ("try again"); asked
+  // again until it runs (at most 20 s)
+  let r2 = null, tries = 0;
+  for (; tries < 20; tries++) {
+    r2 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    if (r2.removed !== false || !/irrigation record could not be saved/.test(r2.message ?? '')) break;
+    await sleep(1000);
+  }
   await L.settle(5000);
   const water2 = (await fluidsIn(ctx, lotBox)).size;
   const r = await core.regionOf(ctx, o.r.region);
   const rows = r.fluids.filter((x) => /^f2_irr_/.test(x.body));
-  out.lifted = { answer: r2.error ?? r2.removed ?? 'ok', water: water2, rows: rows.map((x) => [x.body, x.state, x.reason ?? null]) };
+  out.lifted = { answer: r2.error ?? r2.removed ?? 'ok', message: r2.message ?? null, tries: tries + 1, water: water2, rows: rows.map((x) => [x.body, x.state, x.reason ?? null]) };
   check(water2 === 0 && rows.length > 0 && rows.every((x) => x.state === 'drained' && /lot removed/.test(x.reason ?? '')), `DF lot (lifted): the removal drains and restores: 0 water in the lot's box (${water2}), rows ${json(out.lifted.rows)}`);
   o.r = r;
   out.removal = await removeRegion(ctx, o, 'DF lot: the region afterwards');
