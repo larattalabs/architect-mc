@@ -49,12 +49,19 @@ class BuildStatusTest {
 			"player_in_box", "not_loaded", "removed", "placing", "building", "planned", "built"), BuildStatus.PRECEDENCE, "the documented order");
 		List<BuildStatus> t = table();
 		for (int i = 0; i < t.size(); i++) {
-			assertEquals(i, t.get(i).rank(), t.get(i).toString());
+			assertEquals(2 * i, t.get(i).rank(), t.get(i).toString());
 			for (int j = i + 1; j < t.size(); j++) {
 				assertEquals(t.get(i), BuildStatus.winner(t.get(i), t.get(j)), t.get(i).rank() + " over " + t.get(j).rank());
 				assertEquals(t.get(i), BuildStatus.winner(t.get(j), t.get(i)));
 			}
 		}
+	}
+
+	@Test
+	void anUntypedWaitRanksJustAboveBuilt() {
+		BuildStatus u = new BuildStatus(BuildStatus.WAITING, null, null, null, 0, 0, "", 0, null);
+		assertEquals(u, BuildStatus.winner(BuildStatus.of(BuildStatus.BUILT, 0), u));
+		assertEquals(BuildStatus.of(BuildStatus.PLANNED, 0), BuildStatus.winner(u, BuildStatus.of(BuildStatus.PLANNED, 0)));
 	}
 
 	@Test

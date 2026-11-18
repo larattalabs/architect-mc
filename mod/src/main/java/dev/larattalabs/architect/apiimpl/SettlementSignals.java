@@ -142,6 +142,7 @@ public final class SettlementSignals {
 			dev.larattalabs.architect.site.Sites.all().forEach(s -> owners.add(s.owner()));
 			dev.larattalabs.architect.site.Infras.all().forEach(i -> owners.add(i.owner()));
 			dev.larattalabs.architect.api.ArchitectApi.get().regions().list(null).forEach(v -> owners.add(v.owner()));
+			dev.larattalabs.architect.site.Stockpiles.all().forEach(p -> owners.add(p.owner()));
 			owners.forEach(o -> mark(o, null));
 		} catch (RuntimeException e) {
 			Architect.LOGGER.warn("SETTLEMENT_CHANGED at load: {}", e.toString());

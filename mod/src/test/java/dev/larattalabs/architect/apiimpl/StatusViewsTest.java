@@ -54,6 +54,12 @@ class StatusViewsTest {
 		assertEquals(BuildStatus.PLAYER_IN_BOX, StatusViews.item("lot:a", "WAITING", "PLAYER_IN_BOX", null, new JsonObject()).reason());
 		assertEquals(BuildStatus.OCCUPIED, StatusViews.item("lot:a", "WAITING", "OCCUPIED", null, new JsonObject()).reason());
 		assertEquals(BuildStatus.NOT_LOADED, StatusViews.item("lot:a", "WAITING", "NOT_LOADED", null, new JsonObject()).reason());
+		assertEquals(BuildStatus.APPROVAL, StatusViews.item("lot:a", "WAITING", "DRIFTED", null, new JsonObject()).reason(), "a drift-held stage waits for approval");
+		BuildStatus stale = StatusViews.item("lot:a", "WAITING", "PLAN_STALE", null, new JsonObject());
+		assertEquals(BuildStatus.WAITING, stale.state());
+		assertEquals(null, stale.reason(), "an untyped wait is never guessed");
+		assertEquals("lot:a,region", StatusViews.item("mech:g", "WAITING", "SITE_BUSY", null, j("{\"architect_mc:waitsFor\":{\"kind\":\"bill_cap\",\"cap\":"
+			+ "\"lot:a,region\",\"missing\":{}}}")).capScope(), "the cap that holds it");
 		assertEquals(BuildStatus.PLANNED, StatusViews.item("lot:a", "QUEUED", null, null, null).state());
 		assertEquals(BuildStatus.BUILT, StatusViews.item("lot:a", "PLACED", null, "s9", null).state());
 		assertEquals("failed:NO_ROOM", StatusViews.item("lot:a", "FAILED", "NO_ROOM", null, null).reason());

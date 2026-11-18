@@ -88,10 +88,12 @@ public final class StatusViews {
 			on = str(w, "target");
 		} else {
 			why = switch (reason == null ? "" : reason) {
+				case "OCCUPIED" -> BuildStatus.OCCUPIED;
 				case "PLAYER_IN_BOX" -> BuildStatus.PLAYER_IN_BOX;
 				case "NOT_LOADED" -> BuildStatus.NOT_LOADED;
 				case "BILL_CAP" -> BuildStatus.BILL_CAP;
-				default -> BuildStatus.OCCUPIED; // OCCUPIED, and any other temporary blocker of a queued item's box
+				case "DRIFTED" -> BuildStatus.APPROVAL; // a drift-held stage waits for its approval again (APPROVE_STAGE)
+				default -> null; // PLAN_STALE, JOURNAL_UNAVAILABLE, a bare SITE_BUSY, ...: a wait with no typed reason (never guessed)
 			};
 			on = BuildStatus.BILL_CAP.equals(why) ? self : null;
 		}
@@ -108,8 +110,8 @@ public final class StatusViews {
 			}
 			needs = its;
 		}
-		return new BuildStatus(BuildStatus.WAITING, why, on, needs, more, 0L, BuildStatus.sayOf(BuildStatus.WAITING, why), rev, BuildStatus.BILL_CAP.equals(why)
-			? "region" : null);
+		String scope = BuildStatus.BILL_CAP.equals(why) ? (str(w, "cap") != null ? str(w, "cap") : "region") : null;
+		return new BuildStatus(BuildStatus.WAITING, why, on, needs, more, 0L, BuildStatus.sayOf(BuildStatus.WAITING, why), rev, scope);
 	}
 
 	/** The typed {@code architect_mc:beside} note, or null. */

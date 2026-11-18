@@ -418,6 +418,19 @@ public final class SiteWaits {
 		}
 	}
 
+	/**
+	 * (8b BS) {@link #view} for a status read: a target that is not waiting (no latch, no typed hold) answers not waiting without the
+	 * needs walk over its unbuilt cells (which a never-starved target would redo uncached on every read). Server thread.
+	 */
+	public static @Nullable SiteWait statusView(MinecraftServer srv, String id) {
+		State st = STATES.get(id);
+		boolean waiting = st != null ? st.latch.waiting() : RESTORED.containsKey(id);
+		if (!waiting && !BILL_CAPPED.containsKey(id) && !FILL_BLOCKED.containsKey(id) && !dev.larattalabs.architect.txn.TxnServer.held("site:" + id)) {
+			return new SiteWait(id, false, 0L, List.of(), 0);
+		}
+		return view(srv, id);
+	}
+
 	/** {@code Sites.waiting}: empty when the id is not a construction target. */
 	public static Optional<SiteWait> waiting(MinecraftServer srv, String id) {
 		return Optional.ofNullable(view(srv, id));

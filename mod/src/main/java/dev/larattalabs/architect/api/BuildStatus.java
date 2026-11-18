@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param state {@link #PLANNED}, {@link #PLACING}, {@link #BUILDING}, {@link #WAITING}, {@link #PAUSED}, {@link #BUILT}, {@link #REMOVING},
  *              {@link #REMOVED} or {@link #FAILED}; strings only ever appended
- * @param reason null unless {@code state} is {@link #WAITING} or {@link #FAILED}: {@link #MATERIALS}, {@link #BILL_CAP},
+ * @param reason null unless {@code state} is {@link #WAITING} or {@link #FAILED} (a batch item's wait with no typed cause, such as
+ *               {@code PLAN_STALE} or {@code JOURNAL_UNAVAILABLE}, is {@code waiting} with a null reason: never guessed): {@link #MATERIALS}, {@link #BILL_CAP},
  *               {@link #FILL_BLOCKED}, {@link #TXN_HELD}, {@link #TERRAIN}, {@link #STAGE}, {@link #APPROVAL}, {@link #NOT_LOADED},
  *               {@link #OCCUPIED}, {@link #PLAYER_IN_BOX}, or (state failed) {@code failed:<Reason>}; appended only
  * @param waitsOn always a typed id, never text: for {@link #TERRAIN} the part whose staged terrain it waits on; for {@link #STAGE} the
@@ -54,9 +55,10 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 	public static final String PLAYER_IN_BOX = "player_in_box";
 
 	/**
-	 * The precedence when several hold, highest first (documented and pinned by a table test): a removal, a failure, a pause, a txn hold,
-	 * an approval, a stage or terrain wait (equal: the first found), a bill cap, a blocked fill, materials, a batch item's occupied or
-	 * player_in_box wait (equal), not loaded; then placing, building, planned and built (a piece's own progress). {@link #rank} reads it.
+	 * The precedence when several hold, highest first, a strict order (documented and pinned by a table test): a removal, a failure, a
+	 * pause, a txn hold, an approval, a stage wait, a terrain wait, a bill cap, a blocked fill, materials, a batch item's occupied, then
+	 * player_in_box wait, not loaded; then removed, placing, building, planned and built (a piece's own progress). An untyped wait ranks
+	 * just above built. {@link #rank} reads it.
 	 */
 	public static final List<String> PRECEDENCE = List.of(REMOVING, FAILED, PAUSED, TXN_HELD, APPROVAL, STAGE, TERRAIN, BILL_CAP, FILL_BLOCKED, MATERIALS,
 		OCCUPIED, PLAYER_IN_BOX, NOT_LOADED, REMOVED, PLACING, BUILDING, PLANNED, BUILT);
@@ -73,13 +75,14 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 	}
 
 	/**
-	 * The rank of a status by {@link #PRECEDENCE}: lower wins. A wait or a failure ranks by its reason ({@code failed:<Reason>} as
-	 * {@link #FAILED}), anything else by its state; an unknown string ranks last but one.
+	 * The rank of a status by {@link #PRECEDENCE}: lower wins (twice the index). A wait or a failure ranks by its reason
+	 * ({@code failed:<Reason>} as {@link #FAILED}), anything else by its state; an untyped wait or an unknown string ranks just above
+	 * {@link #BUILT}.
 	 */
 	public int rank() {
 		String k = FAILED.equals(state) ? FAILED : WAITING.equals(state) && reason != null ? reason : state;
 		int i = PRECEDENCE.indexOf(k);
-		return i < 0 ? PRECEDENCE.size() - 1 : i;
+		return i < 0 ? 2 * PRECEDENCE.indexOf(BUILT) - 1 : 2 * i;
 	}
 
 	/** Whichever of the two wins by {@link #PRECEDENCE} ({@code a} on a tie). */

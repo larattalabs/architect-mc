@@ -545,6 +545,8 @@ public final class Groups {
 		REMOVALS.add(r);
 		Placement.save(server, false);
 		Architect.LOGGER.info("Removing group {} ({} site(s))", groupId, g.sites().size());
+		// (8b EV) its sites read removing from now: a status edge
+		dev.larattalabs.architect.apiimpl.SettlementSignals.mark(g.owner(), dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(groupId));
 		return f;
 	}
 

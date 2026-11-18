@@ -83,7 +83,7 @@ public final class Views {
 		Site s = dev.larattalabs.architect.site.Sites.get(id);
 		if (s != null) {
 			State st = s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT;
-			var sw = s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.view(server, id);
+			var sw = s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.statusView(server, id);
 			return dev.larattalabs.architect.api.BuildStatus.ofTarget(id, st, sw, s.construction() != null && s.construction().paused(), removing(s.member()),
 				StatusViews.rid(s.ext()));
 		}
@@ -92,7 +92,7 @@ public final class Views {
 			return null;
 		}
 		State st = i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT;
-		var sw = i.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.view(server, id);
+		var sw = i.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.statusView(server, id);
 		return dev.larattalabs.architect.api.BuildStatus.ofTarget(id, st, sw, i.construction() != null && i.construction().paused(), removing(i.member()),
 			StatusViews.rid(i.ext()));
 	}

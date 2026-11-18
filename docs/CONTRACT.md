@@ -33471,9 +33471,10 @@ Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N
   txn_held, terrain, stage, approval, not_loaded, occupied, player_in_box, `failed:<Reason>`. `waitsOn` is always a typed id (terrain: the
   part; stage: the target waited for; bill_cap and the target waits: the target). A maxBill hold is `bill_cap` with the over-cap items in
   `needs` and its `revision`. `since == SiteWait.waitingSince`, which now stays put across a change of kind. `say` is display only.
-  Precedence: `BuildStatus.PRECEDENCE` (removing > failed > paused > txn_held > approval > stage = terrain > bill_cap > fill_blocked >
-  materials > occupied = player_in_box > not_loaded > removed > placing > building > planned > built). `approval` is in the vocabulary
-  but not derived (Steward's inbox owns approvals).
+  Precedence: `BuildStatus.PRECEDENCE`, a strict order (removing > failed > paused > txn_held > approval > stage > terrain > bill_cap >
+  fill_blocked > materials > occupied > player_in_box > not_loaded > removed > placing > building > planned > built). `approval` is
+  derived only for a batch item held by drift (APPROVE_STAGE); a batch item's wait with no typed cause (PLAN_STALE,
+  JOURNAL_UNAVAILABLE, a bare SITE_BUSY) is `waiting` with a null reason, never guessed, ranked just above built.
 - Typed ext homes (S-8b-8): `SiteView.part/lot/revision`, `ItemEvent.region/part/lot/revision/status` (the home of `waitsFor`),
   `RegionView.besideNote` (`beside`) and `RegionView.land` (`land`'s outside/inside runs). The ext keys stay.
 - `regionLayout`: `Regions.layout(region)` -> `RegionLayout(region, irSha, revision, parts)`; `PartShape.part == PartBuild.part`, with
