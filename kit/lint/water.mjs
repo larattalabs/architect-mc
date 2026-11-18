@@ -24,7 +24,7 @@ import { buildVirtual } from '../lib/region/vworld.mjs';
 import { fillMissing } from '../lib/region/plan.mjs';
 import { asColumns } from '../lib/region/pack.mjs';
 import { bodiesOf } from '../lib/region/checkFluids.mjs';
-import { kindOf } from '../lib/fluids/world.mjs';
+import { kindOf, wmKinds } from '../lib/fluids/world.mjs';
 import { irFields } from '../lib/fluids/irrfield.mjs';
 import { reach, settleBound, simulate, steady, WATCH_GROW, mapWorld } from '../lib/fluids/sim.mjs';
 
@@ -116,14 +116,16 @@ export function fluidWorld(ir, vw) {
     fields,
     at: fields.length ? (x, y, z) => (fieldAt(x, y, z) ? 'stop' : kindOf(P, vw.get(x, y, z))) : (x, y, z) => kindOf(P, vw.get(x, y, z)),
     solid: fields.length ? (x, y, z) => fieldAt(x, y, z) || P.solid[vw.get(x, y, z)] : (x, y, z) => P.solid[vw.get(x, y, z)],
+    // ((8c WM) the water model's world facts, read only for a wm body (the checker's: after the wash clears)
+    ...wmKinds(vw, { cleared: true }),
   };
 }
 
 /** The bodies as simulate() takes them (a course's lining with its shell, its plan joins declared), as fluidRules passes them. */
 export function simBodies(bodies) {
   return bodies.map((b) => (b.course
-    ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
-    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins }));
+    ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0, ...(b.model ? { model: b.model } : {}) }
+    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins, ...(b.model ? { model: b.model } : {}) }));
 }
 
 /** The calibration the release-tier probe recorded (kit/lint/water-calibration.json): in-game settle ticks per probed body. */
@@ -151,7 +153,8 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
   if (!bodies.length) return out;
   const W = fluidWorld(p.ir, vw);
   const sb = simBodies(bodies);
-  const sim = simulate({ at: W.at, solid: W.solid }, sb);
+  const sim = simulate({ at: W.at, solid: W.solid, wl: W.wl, level: W.level, bubbler: W.bubbler, wash: W.wash }, sb);
+  const P = vw.pal;
   const add = (rule, body, message) => out.findings.push({ rule, body, message });
   const cal = calibration();
   const fluidOf = new Map();
@@ -168,11 +171,22 @@ export function lintPlanned(p, { full = false, maxBreach = 400 } = {}) {
     const outside = [...now.keys()].filter((k) => !reached.has(k));
     if (outside.length) add('W2:model', b.id, `${outside.length} predicted cell(s) outside the conservative reach`);
     if (b.settleTicks !== settleBound(b.fluid, s.path)) add('W2:settle', b.id, `settleTicks ${b.settleTicks} is not settleBound(${b.fluid}, path ${s.path}) = ${settleBound(b.fluid, s.path)}`);
+    // W6 (8c WM): no source conversion outside the body's cells (a permanent source the plan never wrote can't be drained exactly): the
+    // steady state recomputed converts no cell (a wm body's converted, any other body's level-0 prediction), and the IR records none
+    const conv = [...(s.converted ?? []).map(kc), ...s.predicted.filter((q) => q[3] === 0).map(kc), ...(b.predicted ?? []).filter((q) => q[3] === 0).map(kc)];
+    if (conv.length) add('W6:convert', b.id, `${new Set(conv).size} cell(s) outside the body's cells become sources (${[...new Set(conv)].slice(0, 4).join(' ')}): the planner must lift them into its cells`);
+    // W7 (8c WM, the mint guard): no predicted cell holds a block the flow would wash away (a plant, torch, rail or carpet: its drop, then
+    // the undo's restore, mints it); the planner clears a natural one first, refuses any other
+    const washed = [...s.predicted, ...(s.converted ?? [])].filter((q) => { const i = vw.get(q[0], q[1], q[2]); return !P.air[i] && kindOf(P, i) === 'open'; }).map(kc);
+    if (washed.length) add('W7:wash', b.id, `${washed.length} predicted cell(s) hold a block the flow would wash away (${washed.slice(0, 4).map((k) => `${k} ${P.states[vw.get(...un3(k))]}`).join('; ')})`);
     // the steady state's own settle (its last scheduled tick), from the body's sources alone, never beyond the bound
     const own = new Set(b.cells.map(kc));
     const others = new Map([...fluidOf].filter(([k]) => !own.has(k)));
     const at = (x, y, z) => { const k = k3(x, y, z); if (own.has(k)) return b.fluid; const o = others.get(k); return o ?? W.at(x, y, z); };
-    const st = steady(at, b.cells, b.fluid);
+    // ((8c WM) a wm body's own settle under its model; SE sizes the bounds and caps, and runs W3 per bank segment)
+    const wmo = b.model === 'wm' ? { wl: (x, y, z) => (at(x, y, z) === 'stop' ? W.wl(x, y, z) : null), level: W.level, order: 'yxz', onCap: 'result' } : {};
+    const st = steady(at, b.cells, b.fluid, wmo);
+    if (st.unsettled) add('W2:settle', b.id, `the steady state did not settle in ${st.unsettled.rounds - 1} tick rounds`);
     if (st.ticks > b.settleTicks) add('W2:settle', b.id, `vanilla's steady state settles at tick ${st.ticks}, past the bound ${b.settleTicks}`);
     const measured = cal.settles?.[`${p.name ?? ''}#${b.id}`];
     if (measured !== undefined && measured > b.settleTicks) add('W2:settle', b.id, `the probe measured a settle of ${measured} ticks in game, past the bound ${b.settleTicks}`);
