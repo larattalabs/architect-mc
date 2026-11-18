@@ -33529,7 +33529,10 @@ round 3, with the third GPT pass and Steward's round 2 (§12).
 - **Profile** (`profile.mjs currentProfile`): few source reaches joined by currents, runs of at most 6 cells (with the overhang, levels
   1..7), each ending in a 1-block step. Greedy from the head: a reach holds while the router allows, its current starts one run before
   the ground drops and runs on while the path is straight, under the router's level (else it ends in a fall of at most `drop`), within
-  `cut`, and less than 2 (`CURRENT_SLACK`) under the router's level at each new run. A path it cannot lay is the pools profile.
+  `cut`, and less than 2 (`CURRENT_SLACK`) under the router's level at each new run; a reach the ground leaves within minReach + 2
+  cells is sunk to the lowest level allowed there. A path it cannot lay is the pools profile (`why`: room, short, drop, cut).
+- **Property tests:** 400 random falling profiles (each pools or every rule kept), 60 random classification scenes (CL), the KC record
+  of a river holding its watch, spill and predicted cells.
 - **Bodies** (`course.mjs layCourse`): a reach whose step is a current is a wm body with 8cF's members (`flow: "current"`, `kind:
   "river"`; the coordinator's mapping, flow -> model wm, is in body.mjs as on 8cG); the other reaches are plain HY reaches, so only the
   currents count against the region's 8 river bodies. Routes, light and KC read a `river` reach as a course's (moat.mjs, light.mjs).

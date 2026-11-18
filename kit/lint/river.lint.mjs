@@ -82,3 +82,41 @@ test('CL: fedBy under the water model ticks a foreign waterlogged block without 
   assert.equal(fl.get('1,64,0').class, 'raised');
   assert.equal(fl.get('8,64,0').class, 'joint');
 });
+
+/** A seeded LCG (no clock, no Math.random). */
+function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+
+test('CL property: over random scenes, one class per cell; the drain takes exactly source, own and raised; raised goes to the foreign level; refed only outside the watch set', async () => {
+  const { simulate, WATCH_GROW } = await import('../lib/fluids/sim.mjs');
+  let n = 0, seen = new Set();
+  for (let seed = 1; seed <= 60; seed++) {
+    const rnd = lcg(seed);
+    const extra = new Map(), wls = new Map(), levels = new Map();
+    for (let i = 0; i < 10; i++) extra.set(`${Math.floor(rnd() * 25) - 12},64,${Math.floor(rnd() * 25) - 12}`, 'stop');
+    for (let i = 0; i < 2; i++) { const k = `${Math.floor(rnd() * 25) - 12},64,${Math.floor(rnd() * 25) - 12}`; extra.set(k, 'stop'); if (rnd() < 0.6) wls.set(k, rnd() < 0.5 ? 0 : FACE.down); }
+    for (let i = 0; i < 3; i++) { const k = `${Math.floor(rnd() * 25) - 12},64,${Math.floor(rnd() * 25) - 12}`; if (!extra.has(k)) { extra.set(k, 'flowing_water'); levels.set(k, 1 + Math.floor(rnd() * 7)); } }
+    const at = (x, y, z) => extra.get(`${x},${y},${z}`) ?? (y <= 63 || Math.abs(x) > 14 || Math.abs(z) > 14 ? 'stop' : 'open');
+    const own = [[0, 64, 0], [1, 64, 0]].filter((c) => at(...c) === 'open');
+    if (!own.length) continue;
+    const foreign = [];
+    for (let i = 0; i < Math.floor(rnd() * 3); i++) { const c = [Math.floor(rnd() * 25) - 12, 64, Math.floor(rnd() * 25) - 12]; if (at(...c) === 'open' && !own.some((o) => o.join() === c.join())) foreign.push(c); }
+    const wm = { wl: (x, y, z) => wls.get(`${x},${y},${z}`) ?? null, level: (x, y, z) => levels.get(`${x},${y},${z}`) ?? null };
+    const body = simulate({ at, wl: wm.wl, level: wm.level }, [{ id: 'b', fluid: 'water', level: 64, cells: own, model: 'wm' }]).bodies[0];
+    const watch = new Set();
+    for (const c of [...body.reached, ...own]) for (let dx = -WATCH_GROW; dx <= WATCH_GROW; dx++) for (let dy = -WATCH_GROW; dy <= WATCH_GROW; dy++) for (let dz = -WATCH_GROW; dz <= WATCH_GROW; dz++) watch.add(`${c[0] + dx},${c[1] + dy},${c[2] + dz}`);
+    const all = [...foreign, ...body.foreign];
+    const fl = flowClasses(at, own, all, watch, wm);
+    const f = fedBy(at, own, all, 'water', wm);
+    for (const [k, v] of fl) {
+      n++;
+      seen.add(v.class);
+      assert.equal(v.drain === 'take', ['source', 'own', 'raised'].includes(v.class), `seed ${seed} ${k}: ${v.class} ${v.drain}`);
+      if (v.class === 'raised') assert.equal(v.after, f.foreignOnly.get(k), `seed ${seed} ${k}`);
+      if (v.class === 'refed' || v.class === 'eflat') assert.ok(!watch.has(k), `seed ${seed} ${k}: ${v.class} inside the watch set`);
+      else assert.ok(watch.has(k), `seed ${seed} ${k}: ${v.class} outside the watch set`);
+      if (v.class === 'source' || v.class === 'own') { const [x, y, z] = k.split(',').map(Number); assert.equal(v.after, at(x, y, z) === 'flowing_water' ? levels.get(k) : null, `seed ${seed} ${k}: back to its before`); }
+    }
+  }
+  assert.ok(n > 1000, `${n} cells`);
+  for (const c of ['source', 'own', 'joint', 'raised', 'foreign']) assert.ok(seen.has(c), `class ${c} seen`);
+});

@@ -125,17 +125,17 @@ export function profileOf(cols, opts = {}) {
 /**
  * (8c RV) A river's profile (flow 'current'): reaches of sources joined by currents, each current runs of CURRENT_RUN cells stepping
  * down 1 at each run's end (a riffle uncapped). Greedy from the head: a reach holds its level while the router's level allows it (at
- * least minReach cells); where the ground drops under it, its current starts one run before the drop and runs on, a level lower every
+ * least minReach cells, sunk to the lowest level the router allows over them); where the ground drops under it, its current starts one run before the drop and runs on, a level lower every
  * run, while the path stays straight, the water stays under the router's level (else the current ends in a fall), a new run would stand
  * less than CURRENT_SLACK under it, its trench stays within `cut`, and a reach of minReach is left for the tail; the next reach stands 1 under the current's last run (or at the router's level when
  * the ground fell further: a fall of at most `drop`). So a river spends few sources on a long current, and its trench may run deeper than
  * the sunk 1 where the current outpaces the ground. A path the greedy cannot lay (a drop past `drop`, a short reach, the cut) is the pools
- * profile (`fallback: 'pools'`). Returns profileOf's shape; a current step is {kind: 'current', k, i0, i1, drop, seg, levels}.
+ * profile (`fallback: 'pools'`, `why`: room | short | drop | cut). Returns profileOf's shape; a current step is {kind: 'current', k, i0, i1, drop, seg, levels}.
  */
 export function currentProfile(cols, opts = {}) {
   const minReach = opts.minReach ?? PROFILE.minReach, maxDrop = opts.drop ?? PROFILE.drop, cutMax = opts.cut ?? PROFILE.cut;
   const n = cols.length;
-  const pools = () => ({ ...profileOf(cols, { ...opts, flow: 'pools' }), fallback: 'pools' });
+  const pools = (why) => ({ ...profileOf(cols, { ...opts, flow: 'pools' }), fallback: 'pools', why });
   if (!n) return profileOf(cols, { ...opts, flow: 'pools' });
   const L0 = cols.map((c) => c.level);
   for (let i = 1; i < n; i++) if (L0[i] > L0[i - 1]) return profileOf(cols, { ...opts, flow: 'pools' });
@@ -144,6 +144,13 @@ export function currentProfile(cols, opts = {}) {
   let rs = 0, lv = L0[0], k = 1;
   const straight = (t) => cols[t].straight && (t === 0 || cols[t - 1].straight) && (t + 1 >= n || cols[t + 1].straight);
   for (let guard = 0; guard <= n; guard++) {
+    // (a reach holds at least minReach cells and a 2-cell run's room: where the ground drops sooner, it stands at the lowest level the router allows over them,
+    // sunk deeper (pools' merge); the current before it then falls the more, at most `drop`)
+    const need = Math.min(...L0.slice(rs, Math.min(n, rs + minReach + 2)));
+    if (need < lv) {
+      if (steps.length) { const prev = steps[steps.length - 1]; if (prev.levels[prev.levels.length - 1] - need > maxDrop) return pools('drop'); prev.drop = reaches[reaches.length - 1].level - need; }
+      lv = need;
+    }
     let j = rs;
     while (j < n && L0[j] >= lv) j++;
     if (j >= n) { for (let i = rs; i < n; i++) { levels[i] = lv; water[i] = lv; } reaches.push({ k, i0: rs, i1: n - 1, level: lv }); break; }
@@ -157,19 +164,19 @@ export function currentProfile(cols, opts = {}) {
       if (t > s0 && (t - s0) % CURRENT_RUN === 0 && L0[t] - Lt >= CURRENT_SLACK) break;
       e = t;
     }
-    if (e < s0 + 1 || j - rs < 1) return pools();
+    if (e < s0 + 1 || j - rs < 1) return pools(e < s0 + 1 ? 'room' : 'short');
     const Le = lv - Math.floor((e - s0) / CURRENT_RUN);
     let lo = Math.min(Le - 1, L0[e + 1]);
-    if (Le - lo > maxDrop || cols[e + 1].top - 1 - lo > cutMax) return pools();
+    if (Le - lo > maxDrop || cols[e + 1].top - 1 - lo > cutMax) return pools(Le - lo > maxDrop ? 'drop' : 'cut');
     const lv2 = [];
     for (let i = rs; i <= e; i++) { levels[i] = lv; water[i] = i >= s0 ? lv - Math.floor((i - s0) / CURRENT_RUN) : lv; if (i >= s0) lv2.push(water[i]); }
     reaches.push({ k, i0: rs, i1: e, level: lv });
     steps.push({ kind: 'current', k, i0: s0, i1: e, drop: lv - lo, seg: CURRENT_RUN, levels: lv2 });
     k++; rs = e + 1; lv = lo;
   }
-  if (reaches.some((r) => r.i1 - r.i0 + 1 < minReach && r.k !== reaches.length)) return pools();
+  if (reaches.some((r) => r.i1 - r.i0 + 1 < minReach && r.k !== reaches.length)) return pools('short');
   let cut = 0;
   for (let i = 0; i < n; i++) cut = Math.max(cut, cols[i].top - 1 - water[i]);
-  if (cut > cutMax) return pools();
+  if (cut > cutMax) return pools('cut');
   return { levels, reaches, steps, cut };
 }

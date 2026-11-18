@@ -205,3 +205,66 @@ test('RV catalogue: channel.course lists flow current (plan.json flow enum, site
   const S = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'schemas', 'siteplan-1.json'), 'utf8'));
   assert.match(JSON.stringify(S), /"flow":\{"enum":\["level","pools","riffles","current"\]\}/);
 });
+
+// ------------------------------------------------------------------ property tests
+
+/** A seeded LCG (no clock, no Math.random). */
+function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+
+test('RV property: over random falling ground, currentProfile is pools or keeps every rule (runs <= 6, 1-block steps, under the router, minReach, cut)', () => {
+  let laid = 0, fell = 0;
+  for (let seed = 1; seed <= 400; seed++) {
+    const rnd = lcg(seed);
+    const n = 40 + Math.floor(rnd() * 160);
+    let g = 70 + Math.floor(rnd() * 10);
+    const cols = [];
+    for (let i = 0; i < n; i++) {
+      const u = rnd();
+      if (i > 0) g -= u < 0.88 ? 0 : u < 0.99 ? 1 : 2 + Math.floor(rnd() * 7);
+      const top = g + (rnd() < 0.2 ? 1 : 0);
+      cols.push({ g, top, level: Math.min(g - 1, i ? cols[i - 1].level : Infinity), straight: rnd() < 0.985 });
+    }
+    const pr = currentProfile(cols, { minReach: 4, drop: 6, cut: 6 });
+    if (pr.fallback === 'pools' || pr.refused) { fell++; continue; }
+    laid++;
+    assert.ok(pr.cut <= 6, `seed ${seed}: cut ${pr.cut}`);
+    const byK = new Map(pr.reaches.map((r) => [r.k, r]));
+    for (let k = 1; k < pr.reaches.length; k++) assert.ok(pr.reaches[k].level < pr.reaches[k - 1].level, `seed ${seed}: reaches fall`);
+    for (const st of pr.steps) {
+      assert.equal(st.kind, 'current');
+      const up = byK.get(st.k), lo = byK.get(st.k + 1);
+      assert.ok(st.i0 - up.i0 >= 4, `seed ${seed}: the upper reach keeps 4 sources`);
+      assert.equal(st.i1, up.i1);
+      assert.equal(lo.i0, st.i1 + 1);
+      assert.equal(st.drop, up.level - lo.level);
+      assert.ok(st.drop >= 1 && st.drop <= 6 + Math.ceil(st.levels.length / CURRENT_RUN), `seed ${seed}: drop ${st.drop}`);
+      const count = new Map();
+      for (let j = 0; j < st.levels.length; j++) {
+        const l = st.levels[j];
+        count.set(l, (count.get(l) ?? 0) + 1);
+        if (j) assert.ok(l === st.levels[j - 1] || l === st.levels[j - 1] - 1, `seed ${seed}: 1-block steps`);
+        assert.ok(l <= cols[st.i0 + j].level, `seed ${seed}: index ${st.i0 + j} over the router's level`);
+        assert.ok(cols[st.i0 + j].straight, `seed ${seed}: straight`);
+      }
+      assert.equal(st.levels[0], up.level);
+      assert.ok([...count.values()].every((c) => c <= CURRENT_RUN), `seed ${seed}: runs of at most ${CURRENT_RUN}`);
+      assert.ok(st.levels.at(-1) - lo.level >= 1, `seed ${seed}: the last run steps down into the next reach`);
+    }
+    for (const r of pr.reaches.slice(0, -1)) assert.ok(r.i1 - r.i0 + 1 >= 4);
+  }
+  assert.ok(laid > 150 && fell > 10, `${laid} laid, ${fell} pools`);
+});
+
+test('RV KC: a river body\'s watch (the W3 breach per bank segment) is in its KC record, so every later part keeps off it', async () => {
+  const { registerBody, keptBy } = await import('../lib/fluids/keep.mjs');
+  const { p } = await plan('c01_river.json');
+  const store = [];
+  for (const o of fluidOps(p.ir)) registerBody(store, { id: o.id, part: o.part, cells: fromRuns(o.cells), ice: fromRuns(o.ice), shell: fromRuns(o.shell), lining: fromRuns(o.lining ?? []), spill: fromRuns(o.spill), watch: fromRuns(o.watch), joins: o.joins });
+  const wm = fluidOps(p.ir).filter((o) => o.model === 'wm');
+  let watched = 0;
+  for (const o of wm) {
+    for (const q of [...fromRuns(o.watch), ...fromRuns(o.spill)]) { const k = keptBy(store, q[0], q[1], q[2]); assert.ok(k, `${o.id} ${q}`); watched++; }
+    for (const q of o.predicted) assert.ok(keptBy(store, q[0], q[1], q[2]), `${o.id}: predicted ${q} kept`);
+  }
+  assert.ok(watched > 100);
+});
