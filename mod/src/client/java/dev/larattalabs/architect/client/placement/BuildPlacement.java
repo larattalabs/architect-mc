@@ -273,6 +273,7 @@ public final class BuildPlacement {
 		setStatus(null, false);
 		update(mc, true);
 		Architect.LOGGER.info("Placement: {} ({} cells, {} visible)", b.id(), c.count(), model(0).visibleCount());
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.PLACING, b.id()); // (PR F1)
 	}
 
 	/**
@@ -368,6 +369,7 @@ public final class BuildPlacement {
 			return;
 		}
 		userTurns = Math.floorMod(userTurns + quarterTurns, 4);
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.ROTATED, null); // (PR F1)
 		forceArmed = false;
 		layerArmed = false;
 		BIG.cancel();
@@ -649,6 +651,7 @@ public final class BuildPlacement {
 				+ ")" + (moved ? "" : ". Undo: " + undoKeyWords() + " or [Undo] in chat"));
 			if (!moved) {
 				dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement").hide(); // (PR W1) the HUD's tip has done its job
+				dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.PLACED, null); // (PR F1)
 			}
 			lastChat = placedChat(r, moved, construction);
 			Minecraft mc = Minecraft.getInstance();
@@ -812,6 +815,16 @@ public final class BuildPlacement {
 	 * The server's verdict for the ghost's current site, or null while none arrived for it (the HUD says "Checking").
 	 * Client thread.
 	 */
+	/** (PR F1) The guide's view of the verdict: null while there is none yet, else whether the ghost fits (client and server). */
+	public static @Nullable Boolean fitsNow() {
+		View v = view();
+		Sites.Verdict sv = serverVerdict();
+		if (v == null || sv == null) {
+			return null;
+		}
+		return v.refusals().isEmpty() && sv.ok();
+	}
+
 	static Sites.@Nullable Verdict serverVerdict() {
 		View v = view();
 		return v != null && verdict != null && verdictKey(v, forceArmed).equals(verdictKey) ? verdict : null;

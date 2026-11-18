@@ -66,6 +66,7 @@ public final class CrateScreen extends Screen {
 		super(Component.literal("Construction crate"));
 		this.siteId = siteId;
 		dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.site").hide(); // (PR W1) the site HUD's tip: the crate is found
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.CRATE_OPENED, null); // (PR F1)
 	}
 
 	@Override

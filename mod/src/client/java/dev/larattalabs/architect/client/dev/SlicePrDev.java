@@ -84,5 +84,41 @@ public final class SlicePrDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.pr.guide", 10_000, "{event?: <GuideModel.Event>, arg?, press?: <card button id>, reset?: bool} - (PR F1) the "
+			+ "first-build tour -> {state, step, number, card}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String ev = f.optStr("event", null);
+				String arg = f.optStr("arg", null);
+				String press = f.optStr("press", null);
+				boolean reset = f.optBool("reset", false);
+				Boolean survival = f.optBool("survival");
+				return DevBridge.onClient(mc, () -> {
+					if (survival != null) {
+						dev.larattalabs.architect.client.help.GuideFeature.model().survival(survival);
+					}
+					if (reset) {
+						dev.larattalabs.architect.client.design.UiPrefs.setGuide("new", 0);
+						dev.larattalabs.architect.client.help.GuideFeature.resetForDev();
+					}
+					if (ev != null) {
+						dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.valueOf(ev
+							.toUpperCase(java.util.Locale.ROOT)), arg);
+					}
+					if (press != null) {
+						dev.larattalabs.architect.client.help.GuideFeature.press(press);
+					}
+					var m = dev.larattalabs.architect.client.help.GuideFeature.model();
+					JsonObject o = new JsonObject();
+					o.addProperty("state", m.state().name());
+					o.addProperty("step", m.step().name());
+					o.addProperty("number", m.number());
+					var c = dev.larattalabs.architect.client.help.GuideFeature.card();
+					if (c != null) {
+						o.addProperty("title", c.title());
+						o.addProperty("body", c.body());
+					}
+					return o;
+				});
+			});
 	}
 }

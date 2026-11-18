@@ -320,6 +320,73 @@ public final class ArchitectScreen extends Screen {
 	public ArchitectScreen(@Nullable Tab tab) {
 		super(Component.literal("Architect"));
 		this.tab = tab == null ? lastTab : tab;
+		dev.larattalabs.architect.client.help.GuideFeature.screenOpened(); // (PR F1) offer the tour in a world with none of the player's sites
+	}
+
+	/** (PR F1) The guide card's buttons this frame (checked before the screen's own controls). */
+	private final List<Hit> guideHits = new ArrayList<>();
+
+	/** (PR F1) The guide's card inside the screen: the offer, a paused tour, the in-screen steps, the closing card. */
+	private void drawGuide(GuiGraphicsExtractor g, int mx, int my) {
+		guideHits.clear();
+		var m = dev.larattalabs.architect.client.help.GuideFeature.model();
+		var c = dev.larattalabs.architect.client.help.GuideFeature.card();
+		if (c == null) {
+			return;
+		}
+		boolean offer = m.state() == dev.larattalabs.architect.client.help.GuideModel.State.OFFERED;
+		int w = Math.min(300, width - 24);
+		Kit.Padding pad = Kit.padding("panel_paper");
+		int inner = w - pad.left() - pad.right();
+		List<String> body = TextUtil.wrapPlain(font, c.body(), inner);
+		List<String[]> buttons = new ArrayList<>(c.buttons());
+		String pal = null;
+		if (offer) {
+			// (N-PR-4) the colour-blind safe ghost colours are offered here
+			pal = "Colour-blind safe ghost colours: " + (dev.larattalabs.labui.ui.GhostPalette.current() == dev.larattalabs.labui.ui.GhostPalette.Palette
+				.OKABE_ITO ? "on" : "off") + " (click)";
+		}
+		int h = pad.top() + 16 + body.size() * 10 + (pal != null ? 14 : 0) + (buttons.isEmpty() ? 0 : 26) + pad.bottom();
+		int x = width - w - 10;
+		int y = height - h - 30;
+		g.nextStratum();
+		Panels.panel(g, x, y, w, h);
+		int cx = x + pad.left();
+		int cy = y + pad.top();
+		g.text(font, TextUtil.ellipsize(font, c.title(), inner), cx, cy, UiStyle.clayText(), false);
+		cy += 14;
+		for (String l : body) {
+			g.text(font, l, cx, cy, UiBits.ink(), false);
+			cy += 10;
+		}
+		if (pal != null) {
+			cy += 2;
+			Hit ph = new Hit("guide:okabe", pal, cx, cy, Math.min(inner, font.width(pal)), 12, true, false, () -> dev.larattalabs.architect.client.help
+				.GuideFeature.press("guide:okabe"));
+			guideHits.add(ph);
+			g.text(font, TextUtil.ellipsize(font, pal, inner), cx, cy + 2, UiStyle.link(), false);
+			cy += 12;
+		}
+		if (!buttons.isEmpty()) {
+			cy += 4;
+			int bx = cx;
+			int before = hits.size();
+			for (int i = 0; i < buttons.size(); i++) {
+				String[] b = buttons.get(i);
+				String id = b[0];
+				button(g, id, b[1], bx, cy, bw(b[1]), i == 0, true, mx, my, () -> {
+					dev.larattalabs.architect.client.help.GuideFeature.press(id);
+					if (id.equals("guide:design")) {
+						setTab(Tab.DESIGN);
+					}
+				});
+				bx += bw(b[1]) + 4;
+			}
+			// the card's buttons sit over the screen: they take clicks first
+			while (hits.size() > before) {
+				guideHits.add(hits.remove(hits.size() - 1));
+			}
+		}
 	}
 
 	/** Opens the screen (B, /architect, after plot marking) at {@code tab} (null = the last one). */
@@ -664,6 +731,12 @@ public final class ArchitectScreen extends Screen {
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || popup == null && dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).mouseClicked(e.x(), e
 			.y())) {
 			return true;
+		}
+		for (Hit h : List.copyOf(guideHits)) { // (PR F1) the guide card's buttons
+			if (h.enabled() && h.contains(e.x(), e.y())) {
+				h.action().run();
+				return true;
+			}
 		}
 		Popup pp = popup;
 		if (pp != null) {
@@ -1327,6 +1400,7 @@ public final class ArchitectScreen extends Screen {
 			g.nextStratum();
 			tooltip.draw(g, font, mouseX, mouseY);
 		}
+		drawGuide(g, mouseX, mouseY); // (PR F1)
 		keysOverlay().draw(g, font, width, height);
 	}
 
@@ -2663,6 +2737,14 @@ public final class ArchitectScreen extends Screen {
 			statusHelp = true;
 			listScroll = 0;
 		});
+		// (PR F1) the guided first build: start it again (or resume it)
+		y += 24;
+		var gm = dev.larattalabs.architect.client.help.GuideFeature.model();
+		String gl = gm.state() == dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? "Resume the first-build tour" : "Restart the first-build tour";
+		button(g, "status:guide", gl, lx, y, bw(gl), false, true, mx, my, () -> dev.larattalabs.architect.client.help.GuideFeature.on(gm.state()
+			== dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? dev.larattalabs.architect.client.help.GuideModel.Event.RESUME
+			: dev.larattalabs.architect.client.help.GuideModel.Event.RESTART, null));
+		y -= 24;
 		// (PR W1) the "what's this" lines hidden with their ×
 		int hidden = dev.larattalabs.architect.client.design.UiPrefs.tipsHiddenCount();
 		if (hidden > 0) {
@@ -2672,7 +2754,7 @@ public final class ArchitectScreen extends Screen {
 				dev.larattalabs.architect.client.help.ArchitectHelp::showTipsAgain));
 			g.text(font, TextUtil.ellipsize(font, again, colW - bw(help) - 8), ax, y + 6, UiStyle.link(), false);
 		}
-		y += 24;
+		y += 48;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
 			int th = Math.min(footerY - 4 - y, tail.size() * 9 + 6);
