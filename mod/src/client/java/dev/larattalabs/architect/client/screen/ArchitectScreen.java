@@ -345,29 +345,29 @@ public final class ArchitectScreen extends Screen {
 		if (c == null || m.state() != dev.larattalabs.architect.client.help.GuideModel.State.RUNNING) {
 			return 0;
 		}
+		// one line, the height of the "what's this" line it replaces, so no tab's layout moves
 		String keep = c.buttons().isEmpty() ? null : c.buttons().get(0)[1];
-		int bwid = keep == null ? 0 : bw(keep) + 6;
-		List<String> body = TextUtil.wrapPlain(font, c.body(), w - 12 - bwid).stream().limit(2).toList();
-		int h = 4 + 10 + body.size() * 10 + 4;
-		h = Math.max(h, keep == null ? 0 : 26);
-		dev.larattalabs.labui.client.widget.Paint.box(g, x, y - 2, w, h, UiStyle.withAlpha(UiStyle.PAPER, 255), UiStyle.selectedEdge());
+		int kw = keep == null ? 0 : font.width(keep) + 12;
+		int h = dev.larattalabs.labui.client.help.WhatsThis.H;
 		g.fill(x, y - 2, x + 2, y - 2 + h, UiStyle.BRASS);
-		g.text(font, c.title() + " · first build (Esc in the world pauses)", x + 6, y + 2, UiStyle.clayText(), false);
-		int ly = y + 12;
-		for (String l : body) {
-			g.text(font, l, x + 6, ly, UiBits.ink(), false);
-			ly += 10;
+		String step = c.title().replace("Step ", "").replace(" of ", "/") + " · ";
+		int sw = font.width(step);
+		g.text(font, step, x + 6, y, UiStyle.clayText(), false);
+		String line = TextUtil.ellipsize(font, c.body(), w - 6 - sw - kw - 4);
+		g.text(font, line, x + 6 + sw, y, UiBits.ink(), false);
+		if (!line.equals(c.body())) {
+			int lx = x + 6 + sw;
+			if (mx >= lx && mx < lx + font.width(line) && my >= y - 2 && my < y + h) {
+				tooltip.offer("guide:band", c.body());
+			}
 		}
 		if (keep != null) {
 			String id = c.buttons().get(0)[0];
-			int before = hits.size();
-			button(g, id, keep, x + w - bwid, y + (h - 20) / 2 - 2, bwid - 6, false, true, mx, my, () -> dev.larattalabs.architect.client.help.GuideFeature
-				.press(id));
-			while (hits.size() > before) {
-				guideHits.add(hits.remove(hits.size() - 1));
-			}
+			int kx = x + w - kw + 6;
+			guideHits.add(new Hit(id, keep, kx - 3, y - 2, kw, h, true, false, () -> dev.larattalabs.architect.client.help.GuideFeature.press(id)));
+			g.text(font, keep, kx, y, UiStyle.link(), false);
 		}
-		return h + 2;
+		return h;
 	}
 
 	/** (PR F1) The tour's offer, pause and closing cards: modal, centred over a dimmed screen. */

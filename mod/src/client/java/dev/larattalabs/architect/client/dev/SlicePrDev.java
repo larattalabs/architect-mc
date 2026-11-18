@@ -107,12 +107,12 @@ public final class SlicePrDev {
 				boolean reset = f.optBool("reset", false);
 				Boolean survival = f.optBool("survival");
 				return DevBridge.onClient(mc, () -> {
-					if (survival != null) {
-						dev.larattalabs.architect.client.help.GuideFeature.model().survival(survival);
-					}
 					if (reset) {
 						dev.larattalabs.architect.client.design.UiPrefs.setGuide("new", 0);
 						dev.larattalabs.architect.client.help.GuideFeature.resetForDev();
+					}
+					if (survival != null) {
+						dev.larattalabs.architect.client.help.GuideFeature.model().survival(survival);
 					}
 					if (ev != null) {
 						dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.valueOf(ev
