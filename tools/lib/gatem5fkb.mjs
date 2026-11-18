@@ -178,10 +178,10 @@ export async function registerFKB(steps, h) {
     // the site stayed paused and the step went silent. After a retry, wait until the game time has moved (a tick has run), then try.
     if (process.env.GATE_FKB_SWAP_IN_WINDOW === '1') {
       // (TEST of the driver) start the swap in the refused tick: a probe swap of air for air 40 above the hopper with no site (it
-      // answers retry in that tick, else an error and nothing changed), back to back until one answers retry; then a burst of 30
+      // answers retry in that tick, else an error and nothing changed), back to back until one answers retry (at most 5 s); then a burst of 30
       // probes counts how many back-to-back tries one refused tick answers retry (the old loop gave up after 20)
       const probe = () => call('dev.fk.swap', { pos: [P(at)[0], P(at)[1] + 40, P(at)[2]], block: 'minecraft:air', site: 'gate-fkb-no-site' }, 30_000);
-      const inWindow = async () => { for (let i = 0; i < 400; i++) if ((await probe())?.retry) return true; return false; };
+      const inWindow = async () => { for (const end = Date.now() + 5_000; Date.now() < end;) if ((await probe())?.retry) return true; return false; };
       let burst = 0;
       const tb = Date.now();
       if (await inWindow()) for (let i = 0; i < 30 && (await probe())?.retry; i++) burst++;
