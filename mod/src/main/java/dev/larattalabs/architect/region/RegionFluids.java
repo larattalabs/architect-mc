@@ -702,6 +702,10 @@ public final class RegionFluids {
 				return false;
 			}
 			recheck(level, l, st);
+			if (!afterRecheck(l, st)) {
+				RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+				return false;
+			}
 		}
 		if (st == null || !"gate".equals(st.phase)) {
 			return true;
@@ -1193,21 +1197,37 @@ public final class RegionFluids {
 				continue;
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
-			if (st.owed && !durable(l, st)) {
-				continue; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
-			}
-			if ("writing".equals(st.phase) && stageWritten(l)) {
-				if (st.ordered) {
-					writeWaves(level, l, st); // (6c HY) one wave of bodies whose landings have settled
+			final RegionsImpl.Live fl = l;
+			final Regional fst = st;
+			tickRecord(l, st, () -> "writing".equals(fst.phase) && stageWritten(fl), () -> {
+				if (fst.ordered) {
+					writeWaves(level, fl, fst); // (6c HY) one wave of bodies whose landings have settled
 				} else {
-					force(level, l, st);
+					force(level, fl, fst);
 				}
+			}, () -> ("settling".equals(fst.phase) || fst.ordered && "writing".equals(fst.phase) && fst.forcedAt >= 0) && level.getGameTime() - fst.lastCensus
+				>= CENSUS_EVERY, () -> {
+				fst.lastCensus = level.getGameTime();
+				settle(level, fl, fst);
+			});
 			}
-			if (("settling".equals(st.phase) || st.ordered && "writing".equals(st.phase) && st.forcedAt >= 0) && level.getGameTime() - st.lastCensus >= CENSUS_EVERY) {
-				st.lastCensus = level.getGameTime();
-				settle(level, l, st);
-			}
-			}
+		}
+	}
+
+	/**
+	 * (slice DF round 2) One record's tick: its write step (the forced ticks, or a course's next wave) when due, then its census when due.
+	 * Nothing runs while the record is owed and its retry fails.
+	 */
+	static void tickRecord(RegionsImpl.Live l, Regional st, java.util.function.BooleanSupplier writeDue, Runnable write, java.util.function.BooleanSupplier settleDue,
+		Runnable settle) {
+		if (st.owed && !durable(l, st)) {
+			return; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
+		}
+		if (writeDue.getAsBoolean()) {
+			write.run();
+		}
+		if (settleDue.getAsBoolean()) {
+			settle.run();
 		}
 	}
 
@@ -2134,10 +2154,41 @@ public final class RegionFluids {
 		// (6d RV, §6) the standing revisions' bodies first (top first), then the region's own: every body drains before any solid goes
 		for (RegionsImpl.Live x : lives(l0)) {
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, group)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, group))) {
 				return false;
 			}
 		}
+		return true;
+	}
+
+	/** (slice DF round 2) Whether one record's removal drain is done, running its next step ({@code gateOne}) when it is not. */
+	static boolean removalReady(RegionsImpl.Live x, Regional st, java.util.function.BooleanSupplier gateOne) {
+		return "done".equals(st.removal) || gateOne.getAsBoolean();
+	}
+
+	/**
+	 * (slice DF round 2) Whether a region batch's running stage may start an item now: the fluids stage's gate while it is approved; any
+	 * other state or stage goes on.
+	 */
+	public static boolean stageMayRun(MinecraftServer s, QBatch b, @Nullable String stage, boolean approvedState) {
+		return stageMayRun(null, stage, approvedState, () -> gate(s, b, stage));
+	}
+
+	/** {@link #stageMayRun(MinecraftServer, QBatch, String, boolean)}'s rule over a record ({@code l}: null when none resolves). */
+	static boolean stageMayRun(RegionsImpl.@Nullable Live l, @Nullable String stage, boolean approvedState, java.util.function.BooleanSupplier gate) {
+		return !approvedState || gate.getAsBoolean();
+	}
+
+	/**
+	 * (slice DF round 2) Whether a running job of a region batch's item ({@code batchId}, {@code itemKey}) may write its cells now: a fluids
+	 * stage tile waits while its record is not durable. Any other job goes on.
+	 */
+	public static boolean itemMayWrite(@Nullable String batchId, @Nullable String itemKey) {
+		return true;
+	}
+
+	/** (slice DF round 2) After a recheck (which may have saved): whether the gate goes on. */
+	static boolean afterRecheck(RegionsImpl.Live l, Regional st) {
 		return true;
 	}
 
@@ -2154,7 +2205,7 @@ public final class RegionFluids {
 				continue;
 			}
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, l.rec().groupId)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, l.rec().groupId))) {
 				return false;
 			}
 		}
@@ -2283,6 +2334,7 @@ public final class RegionFluids {
 			return false;
 		}
 		hold(level, st, false);
+		WorldJournal.kill("FL3x"); // (slice DF round 2) the removal's done record saved, the solids not restored yet
 		Architect.LOGGER.info("Region {}: fluids drained and settled; the solids are restored next", l.rec().id);
 		return true;
 	}
@@ -2483,15 +2535,19 @@ public final class RegionFluids {
 	 * file's name refuses it.
 	 */
 	static DurableFile.Result persist(Path f, Regional st, JsonObject o) {
-		IOException injected = RegionStore.injected(f);
-		if (injected != null) {
-			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, injected.getMessage());
+		RegionStore.Injection inj = RegionStore.injection(f);
+		if (inj == RegionStore.Injection.REFUSED) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
 		}
 		DurableFile df = st.durable;
 		if (df == null || !df.file().equals(f)) {
 			st.durable = df = new DurableFile(STORE, f);
 		}
-		return df.write(o, df.request());
+		DurableFile.Result r = df.write(o, df.request());
+		if (inj == RegionStore.Injection.IN_DOUBT && r.ok()) {
+			return new DurableFile.Result(DurableFile.Outcome.IN_DOUBT, r.gen(), "injected in-doubt write of " + f.getFileName() + " (dev.region.failNextSave inDoubt)");
+		}
+		return r;
 	}
 
 	/**

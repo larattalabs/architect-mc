@@ -2927,17 +2927,25 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
-	/** (6c RS) Saves a region's record (RegionFluids' charge). */
-	public static void saveRec(Live l) {
-		save(l);
+	/** (6c RS) Saves a region's record (RegionFluids' charge); (slice DF round 2) true only when it is durably on disk. */
+	public static boolean saveRec(Live l) {
+		return save(l);
 	}
 
-	static void save(Live l) {
+	/** Saves a region's record; (slice DF round 2) true only when it is durably on disk (OK). */
+	static boolean save(Live l) {
 		try {
 			saveConfirmed(l);
+			return true;
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {} could not be saved: {}", l.rec().id, e.toString());
+			return false;
 		}
+	}
+
+	/** (slice DF round 2) Whether the drivers of a region (its batch, removal, revisions and undo) may go on: its record known on disk. */
+	public static boolean mayDrive(Live l) {
+		return true;
 	}
 
 	/**

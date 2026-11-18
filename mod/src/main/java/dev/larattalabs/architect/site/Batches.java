@@ -878,8 +878,8 @@ public final class Batches {
 		if (rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !RegionsImpl.stageGate(server, b, running)) {
 			approved = false; // phase 6a: the stage's drift check runs, or the stage holds (land changed since planning)
 		}
-		if (approved && rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !dev.larattalabs.architect.region.RegionFluids.gate(server, b, running)) {
-			approved = false; // (6c H) the fluids stage's gate: an entity in a body's box, then the containment check
+		if (approved && RegionItems.isRegion(b) && !dev.larattalabs.architect.region.RegionFluids.stageMayRun(server, b, running, rs == Stage.State.APPROVED)) {
+			approved = false; // (6c H) the fluids stage's gate: an entity in a body's box, then the containment check; (slice DF) its record durable
 		}
 		if (RegionItems.isRegion(b) && approved) {
 			t0 = System.nanoTime();
