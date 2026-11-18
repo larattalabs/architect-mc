@@ -534,8 +534,10 @@ export async function registerTXN(steps, h) {
         const point = p + v;
         await cmd('/save-all flush').catch(() => null);
         const b = await report();
+        const w0 = await where();
+        log(`  ${point}: before: crate ${w0.crate}, chest ${w0.chest}; baseline ${json(b.total)}`);
         await call('dev.journal.killAt', { point }, 10_000);
-        call('dev.txn.run', { from: A, to: B, items: ITEMS }, 120_000).catch(() => null);
+        call('dev.txn.run', { from: A, to: B, items: ITEMS }, 120_000).then((r) => log(`  ${point}: run ${json(r)}`)).catch(() => null);
         const down = await haltWait();
         check(down, `${point}: halted`);
         if (!down) {
