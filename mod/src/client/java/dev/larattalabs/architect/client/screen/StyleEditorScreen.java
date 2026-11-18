@@ -257,7 +257,7 @@ final class StyleEditorScreen extends U3Screen {
 		y += Chip.H + 6;
 		// the four main rows
 		g.text(font, "Main materials", x, y + 2, UiStyle.clayText(), false);
-		y += 13;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(13);
 		StyleForm m = draft.materials();
 		for (String field : StyleRoles.MAIN_FIELDS) {
 			String cur = m.main() == null ? null : m.main().get(field);
@@ -274,7 +274,7 @@ final class StyleEditorScreen extends U3Screen {
 			y += Chip.H + 1;
 			String drives = "drives " + StyleDraft.DRIVES.get(field);
 			g.text(font, TextUtil.ellipsize(font, drives, w - labelW), x + labelW, y + 1, UiStyle.mutedText(), false);
-			y += 12;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 			if (used < 0) {
 				break;
 			}
@@ -307,13 +307,13 @@ final class StyleEditorScreen extends U3Screen {
 			int sx = x + CollapsibleSection.INDENT;
 			if (sl.isEmpty()) {
 				g.text(font, TextUtil.ellipsize(font, "This Style sets no water, wall, pattern or tier slots.", w - 12), sx, y + 3, UiStyle.mutedText(), false);
-				y += 13;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(13);
 			}
 			for (StyleDraft.Slot s : sl) {
 				String line = s.field() + "." + s.key() + ": " + s.text();
 				g.text(font, "🔒", sx, y + 3, UiStyle.mutedText(), false);
 				g.text(font, TextUtil.ellipsize(font, line, w - 26), sx + 12, y + 3, UiBits.ink(), false);
-				y += 12;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 			}
 		}
 		return y + 6;
@@ -345,7 +345,7 @@ final class StyleEditorScreen extends U3Screen {
 		StylePaint.sheet(g, draft.roles(), x + 1, y + 1, w - 2, sh - 2);
 		y += sh + 4;
 		g.text(font, TextUtil.ellipsize(font, basedOn, w), x, y, UiStyle.mutedText(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		// the test-house check
 		String line;
 		int fill;
@@ -382,13 +382,13 @@ final class StyleEditorScreen extends U3Screen {
 		int ly = y + 4;
 		for (String l : lines) {
 			g.text(font, l, x + 4, ly, ink, false);
-			ly += 10;
+			ly += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		y += bh + 6;
 		// suggested features
 		g.text(font, "Suggested features", x, y, UiStyle.clayText(), false);
 		g.text(font, "(max " + StyleForm.MAX_FEATURES + ")", x + font.width("Suggested features") + 4, y, UiStyle.mutedText(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		int fx = x;
 		for (DesignSpec.Choice c : DesignSpec.FEATURES) {
 			boolean on = draft.features().contains(c.id());
@@ -417,10 +417,10 @@ final class StyleEditorScreen extends U3Screen {
 		// (U5b) the Style's own parts
 		if (y + 10 < bottom) {
 			g.text(font, "Parts", x, y, UiStyle.clayText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 			g.text(font, TextUtil.ellipsize(font, partsLine(), w), x, y, source.hasParts() && draft.mode() == StyleDraft.Mode.EDIT ? UiBits.ink() : UiStyle
 				.mutedText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 			if (draft.mode() == StyleDraft.Mode.EDIT && y + Button.H < bottom) {
 				addParts.label(source.hasParts() ? "Redraft parts…" : "Add parts…");
 				int bw = addParts.width(font);
@@ -433,7 +433,7 @@ final class StyleEditorScreen extends U3Screen {
 		List<String> hints = draft.shapeHints();
 		if (y + 10 < bottom) {
 			g.text(font, "Shape hints", x, y, UiStyle.clayText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		if (hints.isEmpty() && y + 10 < bottom) {
 			g.text(font, TextUtil.ellipsize(font, "none: the designer chooses the shape", w), x, y, UiStyle.mutedText(), false);
@@ -444,7 +444,7 @@ final class StyleEditorScreen extends U3Screen {
 					return;
 				}
 				g.text(font, l, x, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 	}

@@ -224,7 +224,6 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
-		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("crate").mouseClicked(e.x(), e.y())) {
 			return true;
 		}
@@ -249,8 +248,6 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double sx, double sy) {
-		x = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", x); // (PR A3)
-		y = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", y);
 		scroll = Math.max(0, scroll - (int) Math.signum(sy));
 		return true;
 	}
@@ -366,9 +363,9 @@ public final class CrateScreen extends Screen {
 		Panels.text(g, font, line, cx, y, UiBits.ink());
 		String bom = num(s, "bomTotal") + " items in all";
 		Panels.text(g, font, bom, cx + cw - font.width(bom), y, UiBits.muted());
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		Panels.progress(g, cx, y, cw, frac, paused ? "brass" : "sage");
-		y += 10;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		// notes
 		List<String> notes = new ArrayList<>();
 		if (s.has("notes")) {
@@ -390,7 +387,7 @@ public final class CrateScreen extends Screen {
 		for (String n : notes) {
 			for (String l : TextUtil.wrapPlain(font, n, cw)) {
 				Panels.text(g, font, l, cx, y, n.startsWith("crate missing") || n.startsWith("blocked") ? UiBits.errorText() : UiBits.muted());
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		y += 2;
@@ -477,10 +474,10 @@ public final class CrateScreen extends Screen {
 		String line = dev.larattalabs.architect.site.Stockpiles.capacityLabel(num(s, "usedStacks"), num(s, "capacityStacks")) + " · " + crates + " crate(s)"
 			+ (missingCrates > 0 ? " (" + missingCrates + " missing)" : "") + " · " + targets + " building" + (over ? " (only what active builds still need goes in)" : "");
 		Panels.text(g, font, line, cx, y, missingCrates > 0 || over ? UiBits.errorText() : UiBits.ink());
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		int cap = Math.max(1, num(s, "capacityStacks"));
 		Panels.progress(g, cx, y, cw, Math.min(1.0, (double) num(s, "usedStacks") / cap), num(s, "usedStacks") > cap ? "brass" : "sage");
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		int colItem = cx + 2;
 		int colStock = cx + cw - 200;
 		int colNeed = cx + cw - 150;

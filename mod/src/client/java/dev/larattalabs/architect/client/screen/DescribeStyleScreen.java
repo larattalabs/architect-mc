@@ -95,18 +95,18 @@ final class DescribeStyleScreen extends U3Screen {
 		int cx = x + (w - cw) / 2;
 		int y = top + 10;
 		g.text(font, "Name", cx, y, UiStyle.clayText(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		y += drawField(g, nameField, cx, y, cw) + 6;
 		g.text(font, "What should it look like?", cx, y, UiStyle.clayText(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		y += drawField(g, promptField, cx, y, cw) + 6;
 		for (String l : TextUtil.wrapPlain(font, costLine(), cw)) {
 			g.text(font, l, cx, y, UiStyle.color("palette.ui.teal_text", 0xFF1E7472), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		for (String l : TextUtil.wrapPlain(font, "When it is done it is yours, under Made by Claude: use it, duplicate it or edit it. The Designs tab shows the job.", cw)) {
 			g.text(font, l, cx, y, UiStyle.mutedText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		int by = Math.min(bottom - 8 - Button.H, y + 10);
 		String why = !Sidecar.connected() ? "The design helper is not running (Status tab)." : !SetFeature.has("bibles")

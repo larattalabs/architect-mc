@@ -698,7 +698,7 @@ final class LibraryTab {
 			s.chip(g, "edit:save", "Save", x + w - okW, ty + 1, true, true, mx, my, this::commitEdit);
 			ty += 18;
 			g.text(font, TextUtil.ellipsize(font, "Enter saves · Esc cancels", w), x, ty, UiBits.muted(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		} else {
 			String star = c.favorite() ? "★ " : "";
 			int nx = x;
@@ -707,12 +707,12 @@ final class LibraryTab {
 				nx += font.width(star);
 			}
 			g.text(font, TextUtil.ellipsize(font, c.name(), w - (nx - x)), nx, ty, UiBits.ink(), false);
-			ty += 11;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		String facts = c.type() + " · " + c.sizeX() + " × " + c.sizeY() + " × " + c.sizeZ() + (b == null ? "" : " · entrance " + b.front())
 			+ (c.createdAt() > 0 ? " · " + date(c.createdAt()) : "") + versionFacts(c.id());
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
-		ty += 10;
+		ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
 		if (c.pinned()) {
 			prov = "pinned to its site (" + c.pinnedFit().replace('_', ' ') + ") · " + prov; // (7b ST, N-7b-6)
@@ -723,15 +723,15 @@ final class LibraryTab {
 				+ c.bible()) + " v" + c.bibleVersion() + " · " + prov;
 		}
 		g.text(font, TextUtil.ellipsize(font, prov, w), x, ty, UiStyle.clayText(), false);
-		ty += 10;
+		ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		if (!c.userTags().isEmpty()) {
 			g.text(font, TextUtil.ellipsize(font, "#" + String.join("  #", c.userTags()), w), x, ty, UiStyle.color("palette.ui.teal_text", 0xFF1E7472),
 				false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		for (String line : desc.stream().limit(2).toList()) {
 			g.text(font, line, x, ty, UiBits.ink(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (mats) {
 			List<String> matNames = new ArrayList<>();
@@ -739,7 +739,7 @@ final class LibraryTab {
 				matNames.add(m.replace("minecraft:", "").replace('_', ' '));
 			}
 			g.text(font, TextUtil.ellipsize(font, "uses " + String.join(", ", matNames), w), x, ty, UiBits.muted(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (critique.isPresent()) {
 			var cr = critique.get();
@@ -749,16 +749,16 @@ final class LibraryTab {
 				+ cr.openIssues().size() + " open issue" + (cr.openIssues().size() == 1 ? "" : "s") + (cr.stale() ? " · stale: the design changed since"
 					: "");
 			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : UiStyle.clayText(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			if (!cr.scores().isEmpty()) {
 				g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(cr.scores()), w), x, ty, cr.stale()
 					? UiBits.muted() : UiBits.ink(), false);
-				ty += 10;
+				ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(cr.openIssues());
 			for (String line : issues.stream().limit(2).toList()) {
 				g.text(font, TextUtil.ellipsize(font, "· " + line, w), x, ty, UiBits.muted(), false);
-				ty += 10;
+				ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		if (survival) {
@@ -1168,11 +1168,11 @@ final class LibraryTab {
 		Font font = font();
 		int y = top - 3;
 		g.text(font, "Import a structure (.nbt)", x, y + 1, UiStyle.clayText(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		for (String line : TextUtil.wrapPlain(font, "From architect/imports/ and this world's structure-block saves (generated/<namespace>/structure/). "
 			+ "It becomes a custom entry, checked by the helper; imports have no source, so no variants.", w).stream().limit(2).toList()) {
 			g.text(font, line, x, y, UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		y += 3;
 		// (U3) a search over the files (name and path)
@@ -1225,7 +1225,7 @@ final class LibraryTab {
 			for (String line : TextUtil.wrapPlain(font, "No .nbt or .schem files yet. Put structure files or Sponge schematics in " + Exchange.importsDir(Blueprints.gameDataDir())
 				+ ", or save one with a structure block in this world, then Refresh.", w - 12)) {
 				g.text(font, line, x + 6, y + 6, UiBits.muted(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		// footer

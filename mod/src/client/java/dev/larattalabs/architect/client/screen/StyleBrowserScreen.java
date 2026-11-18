@@ -276,10 +276,12 @@ public final class StyleBrowserScreen extends PickerScreen {
 		int paneH = height - 8 - gg[2];
 		// (slice UI, UI-AUDIT 14 "the Style browser's detail drops its body" at GUI 4) the thumbnail height comes from lab-ui 0.5.0, a fifth of a short pane
 		int thumb = dev.larattalabs.labui.client.picker.PickerScreen.detailThumbH(paneH);
-		int first = gg[2] + 6 + (thumb > 0 ? thumb + 5 : 0) + 10 + 10 + 2;
+		// (PR A3) the pane's lines are TextUtil.lh(10) apart at the text size: snap to that grid, so no line is cut in half
+		int line = dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+		int first = gg[2] + 6 + (thumb > 0 ? thumb + 5 : 0) + line + line + 2;
 		int band = top - 3;
 		if (band > first) {
-			band = first + (band - first) / 10 * 10;
+			band = first + (band - first) / line * line;
 		}
 		g.fill(d[0] - 6, band, d[0] - 6 + d[3] - 1, d[2] - 1, UiStyle.CREAM);
 		if (c != null) {
@@ -382,8 +384,8 @@ public final class StyleBrowserScreen extends PickerScreen {
 			return super.mouseClicked(e, doubleClick); // the overlay takes the click (PickerScreen closes it)
 		}
 		// (PR A3) the subclass's own controls are laid out in the scaled coordinates; super maps e itself
-		double mx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e.x());
-		double my = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e.y());
+		double mx = e.x();
+		double my = e.y();
 		if (menu != null) {
 			boolean inside = mx >= menuRect[0] && mx < menuRect[0] + menuRect[2] && my >= menuRect[1] && my < menuRect[1] + menuRect[3];
 			if (inside) {
@@ -434,8 +436,8 @@ public final class StyleBrowserScreen extends PickerScreen {
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double sx, double sy) {
-		double smx = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", mx);
-		double smy = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", my);
+		double smx = mx;
+		double smy = my;
 		if (menu == Menu.BUILTIN && builtinList.mouseScrolled(smx, smy, sy) || menu == Menu.TAGS && tagList.mouseScrolled(smx, smy, sy)) {
 			return true;
 		}

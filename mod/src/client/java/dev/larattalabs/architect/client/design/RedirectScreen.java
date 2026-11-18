@@ -123,7 +123,6 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
-		e = dev.larattalabs.labui.client.prefs.TextScaleHost.map(this, "architect_mc", e); // (PR A3)
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("redirect").mouseClicked(e.x(), e.y())) {
 			return true;
 		}
@@ -181,7 +180,7 @@ public final class RedirectScreen extends Screen {
 		cy += tip.draw(g, font, cx, cy - 2, inner, mouseX, mouseY); // (PR W1)
 		for (String line : TextUtil.wrapPlain(font, what, inner).stream().limit(2).toList()) {
 			g.text(font, line, cx, cy, UiBits.muted(), false);
-			cy += 10;
+			cy += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		cy = y + pad.top() + 14 + 22 + tipH;
 		fieldRect = new int[] {cx, cy, inner};
@@ -189,7 +188,7 @@ public final class RedirectScreen extends Screen {
 		cy += fieldH + 8;
 		if (error != null) {
 			g.text(font, TextUtil.ellipsize(font, error, inner), cx, cy - 4, UiBits.errorText(), false);
-			cy += 11;
+			cy += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		String go = "Redirect";
 		int gw = UiBits.buttonWidth(font, go, 0);
