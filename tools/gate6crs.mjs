@@ -1230,6 +1230,7 @@ steps.t9up = async () => {
     const srcIn = async (b) => { const c = await L.call('dev.fluid.census', { box: w.box }, 600_000); const own = new Set(b.cells.map(k)); return c.fluids.filter(([x, y, z, st]) => own.has(`${x},${y},${z}`) && /water(\[level=0\])?$/.test(st)).length; };
     const up0 = up ? await srcIn(up) : 0;
     await L.call('dev.stockpile.save', {}, 300_000); // the tiles' water of both reaches on disk
+    await cmd('/save-off'); // (no later chunk save: the wave's clear of the upstream reach stays off disk, as a crash finds it)
     await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
     let fs1 = null;
     for (let i = 0; i < 120; i++) { fs1 = await L.call('dev.fluid.state', { region: w.region }, 10_000).catch(() => null); if ((fs1?.bodies ?? []).find((b) => b.id === 'brook_r2')?.state === 'written') break; await sleep(1000); }

@@ -1068,6 +1068,7 @@ export async function t9rc(ctx) {
     L.call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
     await waitDownH(ctx, 'halt');
     await L.openWorld(world);
+    await L.cmd('/save-off'); // (no chunk save after the recheck's drain: the halt finds what a crash finds)
     let drained = false;
     for (let i = 0; i < 600 && !drained; i++) {
       const fs0 = await L.call('dev.fluid.state', { region }, 5_000).catch(() => null);

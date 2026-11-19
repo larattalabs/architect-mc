@@ -1082,7 +1082,7 @@ export async function t9ll(ctx) {
   if (!w) { check(false, 'LL: v62 not realised'); await L.leaveWorld(); return {}; }
   const water0 = (await fluidsIn(ctx, w.box)).size;
   await L.call('dev.stockpile.save', {}, 300_000);
-  const regionDir = path.join(L.SAVES, w.world, 'region');
+  const regionDir = path.join(L.SAVES, w.world, 'dimensions', 'minecraft', 'overworld', 'region');
   const keep = path.join(ctx.OUT, 't9ll-region');
   fs.rmSync(keep, { recursive: true, force: true });
   fs.cpSync(regionDir, keep, { recursive: true });
@@ -1127,20 +1127,31 @@ export async function t9lb(ctx) {
   const w = await irrLot(ctx, 't9lb');
   if (!w) { check(false, 'LB: v62 not realised'); await L.leaveWorld(); return {}; }
   const out = {};
+  const rec = path.join(L.SAVES, w.world, 'architect-regions', w.o.r.region, 'fluids.json');
   try {
-    await L.call('dev.stockpile.barrier', { run: false, failPlayerReplace: 200 }, 60_000);
+    // the lot txn decided and held at its drain; then every barrier refused and the drain released: W and R land, the effects' barrier
+    // is refused, the txn stays open
+    await L.call('dev.fluid.hold', { drain: true }, 10_000);
     const a1 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
-    await L.settle(1500);
+    await L.call('dev.stockpile.barrier', { run: false, failPlayerReplace: 500 }, 60_000);
+    await L.call('dev.fluid.hold', { drain: false }, 10_000);
+    let flags = 0;
+    for (let i = 0; i < 40 && !flags; i++) {
+      await sleep(1000);
+      const j = fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, 'utf8')) : {};
+      flags = Object.entries(j.bodies ?? {}).filter(([id, b]) => /^f2_/.test(id) && b.lotRemoved && b.drainTxn).length;
+    }
     const a2 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
     await L.settle(1500);
     const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false;
     const tx = await L.call('dev.txn.state', {}, 30_000).catch(() => ({}));
     const open = (tx.open ?? []).filter((x) => x.kind === 'fluid.drain');
-    Object.assign(out, { a1: a1.error ?? a1.removed ?? 'ok', a2: a2.error ?? a2.removed ?? 'ok', stands, open: open.map((x) => [x.id, x.phase, x.held]) });
+    Object.assign(out, { a1: a1.error ?? a1.removed ?? 'ok', flags, a2: a2.error ?? a2.message ?? a2.removed ?? 'ok', stands, open: open.map((x) => [x.id, x.phase, String(x.held).slice(0, 60)]) });
     log(`  LB: ${json(out)}`);
-    check(open.length > 0, `LB: the precondition: the lot's drain txn is still open, its barrier refused (${json(out.open)})`);
+    check(flags > 0 && open.length > 0, `LB: the precondition: the lot's R landed (${flags} body record(s) lotRemoved with a drain txn) and its txn is still open, its barrier refused (${json(out.open)})`);
     check(stands, `LB: asked again while the lot's txn waits for its barrier, f2's site stands (${json(out.a2).slice(0, 200)})`);
   } finally {
+    await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
     await L.call('dev.stockpile.barrier', { run: false, failPlayerReplace: 0, forgive: true }, 60_000).catch(() => null);
   }
   let r3 = null;
