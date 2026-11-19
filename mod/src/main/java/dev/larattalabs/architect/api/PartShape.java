@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (8b LY, feature {@code "regionLayout"}) One plan part's shape for a settlement map ({@link RegionLayout#parts}). Since 1.69.0.
  *
- * <p>(LYW, feature {@code "layoutWalls"}; Since NEXT) {@code width}, {@code height}, {@code wall} and {@code wallAt}: a walled town's wall
+ * <p>(LYW, feature {@code "layoutWalls"}; Since 1.70.0) {@code width}, {@code height}, {@code wall} and {@code wallAt}: a walled town's wall
  * and what stands on it. A wall ({@code connector.wall}) is one shape: its {@code ends} its line, each consecutive pair one straight run (a
  * closed wall's last point is its first again), {@code width} its thickness, {@code height} its height. Each gate opening is a shape of kind
  * {@code connector.gate} (a named gate part's id, else the wall's own gate id; a gatehouse's passage is {@code <lot>_passage}, its ends the
@@ -27,11 +27,11 @@ import org.jspecify.annotations.Nullable;
  * @param revision the rid of the revision that added it (0: the realised plan's)
  * @param lot the lot it is ({@code kind} {@code lot}) or belongs to, or null
  * @param targets its construction targets (site and road ids, {@link PartBuild#targets}); empty in creative or before put-down
- * @param width (Since NEXT) a route's width, a wall's thickness, a gate's opening width; 0 when it has none
- * @param height (Since NEXT) a wall's height, a gate's opening height, a corner tower's; 0 when it has none
- * @param wall (Since NEXT) the wall it is ({@code connector.wall}) or stands on (a gate, a corner tower, a tower or gatehouse lot); null
+ * @param width (Since 1.70.0) a route's width, a wall's thickness, a gate's opening width; 0 when it has none
+ * @param height (Since 1.70.0) a wall's height, a gate's opening height, a corner tower's; 0 when it has none
+ * @param wall (Since 1.70.0) the wall it is ({@code connector.wall}) or stands on (a gate, a corner tower, a tower or gatehouse lot); null
  *             otherwise
- * @param wallAt (Since NEXT) where on its wall: {@code corner}, {@code gate} or {@code run} (a lot as the wall sited it; a gate is
+ * @param wallAt (Since 1.70.0) where on its wall: {@code corner}, {@code gate} or {@code run} (a lot as the wall sited it; a gate is
  *               {@code gate}, a corner tower {@code corner}); null when {@code wall} is null or for the wall itself
  */
 public record PartShape(String part, String kind, @Nullable String stage, BoundingBox box, List<BlockPos> ends, int revision, @Nullable String lot,
