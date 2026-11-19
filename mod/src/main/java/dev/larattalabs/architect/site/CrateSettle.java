@@ -264,6 +264,11 @@ public final class CrateSettle {
 		}
 	}
 
+	/** Whether {@code stash} carries refunds (paid cells). */
+	static boolean hasRefunds(@Nullable JsonObject stash) {
+		return stash != null && !refundOf(stash).isEmpty();
+	}
+
 	/** Whether {@code stash} settles a crate (its stock, its cell, its journal entry), not refunds alone. */
 	static boolean hasCrate(@Nullable JsonObject stash) {
 		return stash != null && stash.has("crateOwner");

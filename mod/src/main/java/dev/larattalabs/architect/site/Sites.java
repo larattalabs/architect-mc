@@ -3344,6 +3344,23 @@ public final class Sites {
 					+ " of its standing blocks after its removal: it stays pending (its stored refund holds them: never paid twice)");
 				action = Reconcile.Action.KEEP;
 			}
+			if (action == Reconcile.Action.RELEASE && gone.construction() != null && (CrateSettle.hasRefunds(p.settle())
+				|| CrateSettle.hasRefunds(CrateSettle.durable(gone.id())))) {
+				// (T2b last round P1 2) a construction site whose committed undo reads "restored" because most of its cells were never built
+				// (its paid cells still stand): its restore is written now, before its entries go, so the refunds its settle pays are for blocks
+				// that are gone. A write that fails keeps it pending, unsettled
+				ServerLevel lv = levelOf(server, gone);
+				try {
+					if (lv == null) {
+						throw new SiteException("its dimension is not loaded");
+					}
+					SiteJournal.writeNow(lv, gone.id(), group);
+					Architect.LOGGER.info("Sites check: removed {}: its committed restore written now (its paid cells stood), then settled", gone.id());
+				} catch (SiteException | RuntimeException e) {
+					report(gone.id(), true, "removed " + gone.id() + ": its restore could not be written (" + e.getMessage() + "); it stays pending, unsettled");
+					continue;
+				}
+			}
 			switch (action) {
 				case RELEASE -> {
 					releaseAfter.addAll(groupIds);
