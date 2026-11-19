@@ -178,9 +178,10 @@ public final class RegionAdopt {
 				throw no(Reason.NOT_ALLOWED, "lot " + e.getKey() + ": no standing site " + id);
 			}
 			var bx = b.box();
-			// (SAD §3) a BUILT site's crate reference counts only while its crate still stands (a shared crate another site builds from)
+			// (SAD §3) a BUILT site's crate reference counts only while its crate still stands (a shared crate another site builds from).
+			// (DFG) read where it stands: any crate block at its cell (one adoptCrates deferred), or a cell that can't be read, counts as standing
 			boolean crateLive = b.construction() != null && b.construction().crate() != null && (b.building() || dev.larattalabs.architect.site.Stockpiles
-				.crateStands(Sites.levelOf(s, b.dimension()), b));
+				.crateMayStand(Sites.levelOf(s, b.dimension()), b));
 			siteRules(id, b.owner(), b.dimension(), bx.minX(), bx.minZ(), bx.maxX(), bx.maxZ(), b.placing(), b.construction(), b.building(), crateLive,
 				b.member() == null ? null : b.member().group(), r.owner(), dim, claim, s);
 			if (bx.minY() < claim[1] || bx.maxY() > claim[4]) {

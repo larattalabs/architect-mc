@@ -1,0 +1,162 @@
+{
+ "about": "(8c RV, \u00a72.6) three rivers down one stepped meadow: three currents each, so the third river's last current would be the region's ninth river body: refused UNSETTLED {cap: regionBodies} with its say and the pools course as its wouldFit",
+ "terrain": {
+  "W": 240,
+  "D": 128,
+  "x0": 980,
+  "z0": 1972,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1029,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 74
+   },
+   {
+    "x0": 1030,
+    "x1": 1039,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 73
+   },
+   {
+    "x0": 1040,
+    "x1": 1049,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 72
+   },
+   {
+    "x0": 1050,
+    "x1": 1059,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 71
+   },
+   {
+    "x0": 1060,
+    "x1": 1069,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 70
+   },
+   {
+    "x0": 1070,
+    "x1": 1079,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 69
+   },
+   {
+    "x0": 1080,
+    "x1": 1089,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 68
+   },
+   {
+    "x0": 1090,
+    "x1": 1099,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 67
+   },
+   {
+    "x0": 1100,
+    "x1": 1109,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 66
+   },
+   {
+    "x0": 1110,
+    "x1": 1119,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 65
+   }
+  ]
+ },
+ "anchors": {
+  "s1": [
+   1010,
+   75,
+   1990
+  ],
+  "d1": [
+   1150,
+   65,
+   1990
+  ],
+  "s2": [
+   1010,
+   75,
+   2030
+  ],
+  "d2": [
+   1150,
+   65,
+   2030
+  ],
+  "s3": [
+   1010,
+   75,
+   2070
+  ],
+  "d3": [
+   1150,
+   65,
+   2070
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "river3",
+  "class": "refused",
+  "code": "UNSETTLED"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rv_c04",
+  "connectors": [
+   {
+    "id": "river1",
+    "kind": "channel",
+    "flow": "current",
+    "width": 3,
+    "from": {
+     "anchor": "s1"
+    },
+    "to": {
+     "anchor": "d1"
+    }
+   },
+   {
+    "id": "river2",
+    "kind": "channel",
+    "flow": "current",
+    "width": 3,
+    "from": {
+     "anchor": "s2"
+    },
+    "to": {
+     "anchor": "d2"
+    }
+   },
+   {
+    "id": "river3",
+    "kind": "channel",
+    "flow": "current",
+    "width": 3,
+    "from": {
+     "anchor": "s3"
+    },
+    "to": {
+     "anchor": "d3"
+    }
+   }
+  ]
+ }
+}

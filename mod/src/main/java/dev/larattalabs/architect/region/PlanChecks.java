@@ -239,6 +239,10 @@ public final class PlanChecks {
 		if (r.level() != null && RegionSurvival.on(r.level().getServer())) {
 			o.addProperty("survival", true);
 		}
+		// (8c) a check with flowing water on answers otherwise (a river is supported): its key says so (a mod without it keeps its hash)
+		if (RegionFluids.flowingBuild()) {
+			o.addProperty("flowingWater", true);
+		}
 		// (7c HR) the secrets asked (PlanRequest ext architect_mc:secrets) answer otherwise (the preview carries them): only when asked, so
 		// every other key keeps its hash
 		if (secretsAsked(r)) {
@@ -1666,6 +1670,8 @@ public final class PlanChecks {
 		// (6c H §10) a fluid guard (a body's shell, buffer and joins, or a wet column) names its body, compares the fluid layer too, and is
 		// sampled again with it (ARVX version 3)
 		boolean fluids = g.get("fluids") instanceof JsonElement fe && fe.isJsonPrimitive() && fe.getAsBoolean();
+		// (8c VS) a guard over a version-4 volume (levels: true) is sampled again with the levels, so it diffs like against like
+		boolean levels = fluids && g.get("levels") instanceof JsonElement le && le.isJsonPrimitive() && le.getAsBoolean();
 		String part = fluids ? RegionsImpl.str(g, "kind", "body") + " " + RegionsImpl.str(g, "body", "?") + " of " + RegionsImpl.str(g, "part", "?")
 			: RegionsImpl.str(g, "part", "?");
 		JsonObject v = g.getAsJsonObject("volume");
@@ -1673,7 +1679,7 @@ public final class PlanChecks {
 		JsonArray bx = v.getAsJsonArray("box");
 		BoundingBox bb = new BoundingBox(bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx.get(4).getAsInt(), bx.get(5)
 			.getAsInt());
-		String key = sha + " " + bx + " " + fluids;
+		String key = sha + " " + bx + " " + fluids + (levels ? " levels" : "");
 		CompletableFuture<GuardSample> sample = samples.get(key);
 		if (sample == null) {
 			dev.larattalabs.architect.region.volume.Arvx.Decoded before;
@@ -1685,7 +1691,7 @@ public final class PlanChecks {
 					+ " it was checked against is gone (" + e.getMessage() + "): check again");
 			}
 			int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
-			sample = dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids).thenApply(res -> {
+			sample = dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb, LoadPolicy.GENERATED_ONLY(chunks + 8), null, fluids, fluids, levels).thenApply(res -> {
 				try {
 					return new GuardSample(before, dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(res.gz())));
 				} catch (IOException e) {
@@ -1771,12 +1777,14 @@ public final class PlanChecks {
 				}
 				int w = was == plant ? air : was, k = is == plant ? air : is;
 				int fw = before.fluidAt(x, y, z), fk = now.fluidAt(x, y, z);
-				boolean fluidChanged = fw >= 0 && fk >= 0 && fw != fk;
+				// ((8c, the review's P2-10) a version-4 guard compares each cell's level too: flowing water at level 1 then 7 is a changed prediction)
+				int lw = before.levelAt(x, y, z), lk = now.levelAt(x, y, z);
+				boolean fluidChanged = fw >= 0 && fk >= 0 && fw != fk || lw >= 0 && lk >= 0 && lw != lk;
 				if (w != k || fluidChanged) {
 					n++;
 					if (named.size() < ROCK_CELLS_NAMED) {
-						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + (fw > 0 ? "/" + codes.get(fw) : "") + "->" + classes[is] + (fk > 0 ? "/" + codes
-							.get(fk) : ""));
+						named.add("(" + x + ", " + y + ", " + z + ") " + classes[was] + (fw > 0 ? "/" + codes.get(fw) : "") + (lw > 0 ? "@" + lw : "") + "->" + classes[is]
+							+ (fk > 0 ? "/" + codes.get(fk) : "") + (lk > 0 ? "@" + lk : ""));
 					}
 				}
 			}

@@ -9,5 +9,293 @@
  "recorded": {
   "head": "a661c2aa2471c4c58232a4d83b1e4cf8dbdadc2d",
   "at": "2026-10-21"
+ },
+ "flowing": {
+  "about": "(8c PB, tools/gate8c.mjs probe, slice 8cG at e3bf6d15) recorded, not judged: river_demo's in-game settles and census against its prediction (WM's model); fall damage landing in water by basin depth and drop (villagers); each waterlogged block's open faces in vanilla against WM's wlMask, and what a version-4 volume's block id alone (no properties) gives",
+  "river": {
+   "state": "PLACED",
+   "settles": {
+    "river_r2": 5,
+    "river_r1": 214
+   },
+   "bounds": {
+    "river_r2": 30,
+    "river_r1": 240
+   },
+   "census": {
+    "river_r2": [
+     48,
+     0,
+     0,
+     0,
+     0
+    ],
+    "river_r1": [
+     36,
+     126,
+     0,
+     0,
+     0
+    ]
+   },
+   "mismatch": {
+    "river_r2": [],
+    "river_r1": []
+   }
+  },
+  "falls": [
+   {
+    "depth": 2,
+    "drop": 24,
+    "fall": 0
+   },
+   {
+    "depth": 2,
+    "drop": 32,
+    "fall": 0
+   },
+   {
+    "depth": 2,
+    "drop": 48,
+    "fall": 0
+   },
+   {
+    "depth": 3,
+    "drop": 24,
+    "fall": 0
+   },
+   {
+    "depth": 3,
+    "drop": 32,
+    "fall": 0
+   },
+   {
+    "depth": 3,
+    "drop": 48,
+    "fall": 0
+   }
+  ],
+  "recorded": {
+   "head": "e3bf6d15",
+   "at": "2026-11-18"
+  },
+  "waterlogged": [
+   {
+    "state": "minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_stairs[facing=north,half=top,shape=straight,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_slab[type=bottom,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_slab[type=top,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_trapdoor[half=bottom,open=false,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_trapdoor[facing=north,half=bottom,open=true,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": false,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:oak_fence[waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:cobblestone_wall[waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:glass_pane[waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:iron_bars[waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:lantern[waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": true,
+    "fromIdAlone": null
+   },
+   {
+    "state": "minecraft:ladder[facing=north,waterlogged=true]",
+    "vanilla": [
+     "east",
+     "west",
+     "north",
+     "down"
+    ],
+    "wm": [
+     "east",
+     "west",
+     "south",
+     "north",
+     "down"
+    ],
+    "agree": false,
+    "fromIdAlone": null
+   }
+  ]
  }
 }

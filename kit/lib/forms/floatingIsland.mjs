@@ -134,6 +134,7 @@ export function floatingIsland(params) {
 
   // hanging roots: one capsuleChain cluster per op, starting deep inside the unwarped cone (margin > amp * sqrt 3)
   const rr = rng(seed, 'roots');
+  const rootBoxes = [];
   for (let k = 0; k < p.underside.roots; k++) {
     const d = compassDir((360 * k) / Math.max(1, p.underside.roots) + rr.int(0, 30));
     const t = 0.35 + 0.15 * rr();                 // depth fraction under the top
@@ -150,6 +151,8 @@ export function floatingIsland(params) {
       radii.push(Math.max(1, 1.8 - (0.8 * i) / n));
     }
     ops.push({ op: 'shape', shape: { kind: 'capsuleChain', points: pts, radii }, material: 'minecraft:rooted_dirt', cond: 2, walk: false });
+    // ((8c RV-b) each root's box (its points grown by 2, as the bounds are): what a fall off the rim keeps its curtain and basin clear of)
+    rootBoxes.push({ minX: Math.min(...pts.map((q) => q[0])) - 2, maxX: Math.max(...pts.map((q) => q[0])) + 2, minY: Math.min(...pts.map((q) => q[1])) - 2, maxY: Math.max(...pts.map((q) => q[1])) + 2, minZ: Math.min(...pts.map((q) => q[2])) - 2, maxZ: Math.max(...pts.map((q) => q[2])) + 2 });
     for (const q of pts) {
       if (q[1] - 2 < by0) by0 = q[1] - 2;
       if (q[0] - 2 < bx0) bx0 = q[0] - 2; if (q[0] + 2 > bx1) bx1 = q[0] + 2;
@@ -214,6 +217,9 @@ export function floatingIsland(params) {
   return {
     generator: GENERATOR, version: VERSION, params: { at: p.at, r: p.r, thickness: p.thickness, top: { relief, pads: p.top.pads, edge: p.top.edge, lights: p.top.lights }, underside: p.underside, materials: typeof p.materials === 'string' ? p.materials : 'rule' },
     seed, ops, bounds, anchor: [ax, ty + 1, az], pads: padsOut, top: topY, amp,
+    // ((8c RV-b, additive: no op changes) the body's own cells (the warped body, its fragments trimmed) and the roots' boxes, for a fall
+    // off the rim (fluids/waterfall.mjs lip form); functions and plain boxes only, so r.form never reads them)
+    solid: (a, b, c) => keep.has(key(a, b, c)), rootBoxes,
   };
 }
 

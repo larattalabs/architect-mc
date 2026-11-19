@@ -374,6 +374,8 @@ export function bodyBom(bodies) {
 /** The answer of a body whose volume the plan could not give it (§10): incomplete VOLUME (past the cap, or not read), else null. */
 export function volumeAnswer(r, bodies) {
   for (const b of bodies) {
+    // ((8c RV) a river body read over a volume without levels (ARVX version 3): refused VOLUME {why: 'levels'})
+    if (b.volumeState === 'levels') return { class: 'refused', reasons: [{ code: 'VOLUME', message: `body ${b.id}'s frozen volume holds no water levels (ARVX version ${b.levelsWhy?.version ?? '?'}): a river needs version 4 (a mod with the levels sampler)`, evidence: { body: b.id, why: 'levels', version: b.levelsWhy?.version ?? null } }] };
     if (b.volumeState === 'cap') return { class: 'incomplete', reasons: [{ code: 'VOLUME', message: `body ${b.id}'s frozen volume is ${b.volumeCells} cells, past the per-part cap (4,000,000)`, evidence: { body: b.id, cells: b.volumeCells, cap: 'partCells', limit: 4000000 } }] };
     if (b.volumeState === 'asked' && (r.ctx.volumes ?? []).length) return { class: 'incomplete', reasons: [{ code: 'VOLUME', message: `body ${b.id}'s frozen volume was not read (its chunks are not loaded or not generated): prepare (or check with load: "generate"), then check again`, evidence: { body: b.id, missing: true } }] };
   }

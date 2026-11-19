@@ -27,6 +27,37 @@
 //
 // Pure, no clock, no random numbers. Lava's random spread delay (vanilla quadruples it at random) changes only when a cell settles, not
 // where: the steady state is the same, so `predicted` holds for lava too.
+//
+// (8c WM) The water model for flowing rivers (8c contract §2), opt-in per body: a body with `model: 'wm'` (WM_MODEL) is simulated with
+// the rules below; every other body exactly as before (H, HY and IRR's IRs byte-identical). The world may also answer, for wm bodies:
+//   world.wl(x, y, z) -> null | face mask (FACE): a cell `at` calls 'stop' that holds a water source as a block: a waterlogged block,
+//            kelp, seagrass. Flow never enters it (canMaybePassThrough: a source of this type), but it is a FOREIGN SOURCE: it counts
+//            toward conversion, feeds its neighbours and spreads when a change beside it schedules its tick. The mask's faces are the
+//            ones its collision shape covers fully (canPassThroughWall refuses them: 26.3 FlowingFluid.canPassThroughWall, getNewLiquid
+//            bytecode 85-97 and 231-244).
+//   world.level(x, y, z) -> null | 1..15: a natural flowing cell's LiquidBlock.LEVEL (ARVX v4); null: unknown (amount 7, as before).
+//   world.bubbler(x, y, z) -> bool: soul sand or a magma block (M25:bubble under a source or predicted cell, a lift's carried cells aside).
+//   world.wash(x, y, z, body) -> null | 'clear' | reason: an `open` cell that is not air (a plant, torch, rail, carpet): 'clear' a natural
+//            one the planner clears first (an IF_NATURAL air write, journaled: no drop), a reason one it may not (M25:wash).
+// A wm body's result also carries converted (simulated source conversions outside its cells: M25:convert; never in `predicted`),
+// foreign (the wl sources its flow touched: W5's attribution names them), wash (the cells to clear) and unsettled ({cells, rounds,
+// sample} when the steady state did not settle: the finding UNSETTLED, never a throw). Its ticks run in the order (due, y descending, x,
+// z) instead of the scheduling order.
+//
+// (8c SE) The settle step's bounds and caps (8c contract §2.5, §2.6; flowing.mjs LIMITS, its UNSETTLED shape), for wm bodies only:
+//   rounds   the steady state runs until game tick wmMaxTick(fluid, reach) = settleBound(fluid, min(PATH_CAP, the conservative reach's
+//            cell count)) x 4 (ticks, not rounds: every due is a multiple of the delay; the predicted path never exceeds the reach's cells,
+//            nor a plannable river PATH_CAP); past it the body is unsettled {cap: 'rounds'}
+//   cells    more than 4,096 predicted flowing cells (converted cells aside): {cap: 'cells'}
+//   chunks   its watch set (cells, shell, spill, predicted and breach cells, grown by WATCH_GROW) meets more than 64 chunks: {cap: 'chunks'}
+//   breach   per bank segment: the shell cells at or under the surface in (x, z, y) order, 32 at a time (BANK_SEGMENT), each segment
+//            opened at once in one conservative reach (a superset of each of its single breaches: an opened cell under a flow never
+//            stops that flow's sideways spread), each against BREACH_CAP. The work is segments x reach, not shell cells x reach
+// The region's two caps (32,768 flowing cells, 8 river bodies) span bodies: fluidBody (body.mjs) counts them over the region's wm bodies.
+// A wm body's `unsettled` is {cap, limit, cells, rounds, sample}; the result also carries `chunks` (the watch set's chunk count) and
+// `segments` (the bank segments its breach ran). Every other body is simulated exactly as before.
+
+import { LIMITS } from './flowing.mjs';
 
 export const DELAY = Object.freeze({ water: 5, lava: 30 });
 /** Horizontal spread from a source, in cells (vanilla's drop-off: 1 for water, 2 for lava in the Overworld). */
@@ -41,7 +72,39 @@ export const WATCH_GROW = 2;
 /** M25:trap and M25:exit (§2.1): a fluid cell needs a surface cell within 4; a surface cell an exit within 8 (Manhattan). */
 export const TRAP_REACH = 4, EXIT_REACH = 8;
 
+/** (8c WM) The opt-in model of a body (`model` on simulate's body, `model` on the IR's fluid op). */
+export const WM_MODEL = 'wm';
+/** (8c WM) Face bits of a wl cell's mask: the faces its collision shape covers fully. */
+export const FACE = Object.freeze({ east: 1, west: 2, south: 4, north: 8, up: 16, down: 32 });
+const faceBit = (dx, dy, dz) => (dx === 1 ? 1 : dx === -1 ? 2 : dz === 1 ? 4 : dz === -1 ? 8 : dy === 1 ? 16 : 32);
+const OPP = { 1: 2, 2: 1, 4: 8, 8: 4, 16: 32, 32: 16 };
+
+/** (8c SE) The longest river path the planner builds (7 x the claim's usable height range, at most HY's course length). */
+export const PATH_CAP = 512;
+/** (8c SE) A bank segment: the shell cells one breach reach (and one W3 run) opens at once, against BREACH_CAP. */
+export const BANK_SEGMENT = 32;
+/** (8c SE) The game tick past which a wm body's steady state is unsettled (cap 'rounds'): settleBound(min(PATH_CAP, reach)) x 4. */
+export function wmMaxTick(fluid, reachCells) {
+  return settleBound(fluid, Math.min(PATH_CAP, Math.max(0, reachCells))) * LIMITS.roundsFactor;
+}
+/** (8c SE) The chunks a watch set meets: the cells grown by WATCH_GROW, distinct (x >> 4, z >> 4). */
+export function watchChunks(cellLists) {
+  const out = new Set();
+  for (const list of cellLists) for (const c of list ?? []) {
+    for (const dx of [-WATCH_GROW, WATCH_GROW]) for (const dz of [-WATCH_GROW, WATCH_GROW]) out.add(`${(c[0] + dx) >> 4},${(c[2] + dz) >> 4}`);
+  }
+  return out.size;
+}
+/** (8c SE) A wm body's shell cells at or under its surface as bank segments: (x, z, y) order, BANK_SEGMENT at a time. */
+export function bankSegments(shell, level) {
+  const cells = shell.filter((c) => c[1] <= level).map((c) => [c[0], c[1], c[2]]).sort((p, q) => p[0] - q[0] || p[2] - q[2] || p[1] - q[1]);
+  const out = [];
+  for (let i = 0; i < cells.length; i += BANK_SEGMENT) out.push(cells.slice(i, i + BANK_SEGMENT));
+  return out;
+}
+
 const H4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const D6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 const k3 = (x, y, z) => `${x},${y},${z}`;
 const un3 = (k) => k.split(',').map(Number);
 const sortCells = (a) => a.sort((p, q) => p[1] - q[1] || p[0] - q[0] || p[2] - q[2]);
@@ -67,7 +130,7 @@ function bodyWorld(world, own, fluid, others, opened = null) {
   return (x, y, z) => {
     const k = k3(x, y, z);
     if (own.has(k)) return fluid;
-    if (opened !== null && opened === k) return 'open';
+    if (opened !== null && (typeof opened === 'string' ? opened === k : opened.has(k))) return 'open';
     const o = others.get(k);
     if (o) return o;
     return world.at(x, y, z);
@@ -81,8 +144,10 @@ const otherFluid = (f) => (f === 'water' ? 'lava' : 'water');
  * The conservative reach of one fluid from its sources: a map "x,y,z" -> the most fluid any feeding neighbour can give it (8: a source or
  * a falling cell, 1..7 flowing). Falling into every cell below that holds no source of the fluid; spreading sideways from a cell that
  * cannot fall (or a source with 3 source neighbours), to SPREAD cells. `cap`: stop past that many cells (null: unbounded).
+ * (8c WM) `wl(x, y, z)` -> null | mask: a 'stop' cell holding a water source as a block (the header). Each one beside a reached cell
+ * joins the reach as a source (all its faces: conservative), but is never itself reached: `foreign` lists them.
  */
-export function reach(at, sources, fluid, { cap = null } = {}) {
+export function reach(at, sources, fluid, { cap = null, wl = null, opened = null } = {}) {
   const amt = new Map();
   const queue = [];
   let head = 0;
@@ -97,82 +162,140 @@ export function reach(at, sources, fluid, { cap = null } = {}) {
   // a cell a flow can enter: empty (canHoldAnyFluid, nothing in it), or a natural flowing cell of the same fluid (it re-levels on its
   // tick and carries the flow on: counted as reached, conservatively)
   const takes = (w) => w === 'open' || w === `flowing_${fluid}`;
+  // ((8c WM) the foreign sources a flow wakes: seeded as sources, taken out of the result)
+  const wlOn = typeof wl === 'function' && fluid === 'water';
+  const seeded = wlOn ? new Set() : null;
+  const wlAt = (x, y, z) => wlOn && at(x, y, z) === 'stop' && wl(x, y, z) != null;
+  const isSourceW = (x, y, z) => { const w = at(x, y, z); return w === fluid || (wlOn && w === 'stop' && wl(x, y, z) != null); };
   let n = 0;
+  const done = (capped) => {
+    if (wlOn) for (const k of seeded) amt.delete(k);
+    return wlOn ? { amt, capped, foreign: sortCells([...seeded].map(un3)) } : { amt, capped };
+  };
   while (head < queue.length) {
     const [x, y, z, a] = queue[head++];
     if (amt.get(k3(x, y, z)) !== a) continue;
-    if (cap !== null && ++n > cap) return { amt, capped: true };
+    if (cap !== null && ++n > cap) return done(true);
+    if (wlOn) {
+      for (const [dx, dy, dz] of D6) {
+        const k = k3(x + dx, y + dy, z + dz);
+        if (seeded.has(k) || !wlAt(x + dx, y + dy, z + dz)) continue;
+        seeded.add(k);
+        src.add(k);
+        put(x + dx, y + dy, z + dz, 8);
+      }
+    }
     const isSrc = src.has(k3(x, y, z));
     const below = at(x, y - 1, z);
     if (takes(below)) {
       // falling first; a source with 3 source neighbours also spreads sideways (vanilla's spread)
       put(x, y - 1, z, 8);
-      if (!isSrc) continue;
-      let srcN = 0;
-      for (const [dx, dz] of H4) if (at(x + dx, y, z + dz) === fluid) srcN++;
-      if (srcN < 3) continue;
+      // ((8c SE) a bank segment's opened cell under a flow: it falls in and spreads sideways as well (the single breach of every other
+      // cell of the segment leaves that cell shut), so the segment's reach holds each of its single breaches)
+      if (!(opened !== null && opened.has(k3(x, y - 1, z)))) {
+        if (!isSrc) continue;
+        let srcN = 0;
+        for (const [dx, dz] of H4) if (wlOn ? isSourceW(x + dx, y, z + dz) : at(x + dx, y, z + dz) === fluid) srcN++;
+        if (srcN < 3) continue;
+      }
     } else if (!isSrc && isFluid(below, fluid)) continue; // a flowing or falling cell over its own fluid (a hole): no sideways spread
     // sideways: a source gives 8 - drop, a falling cell that landed 7, a flowing cell its amount - drop (every direction: conservative)
     const s = isSrc ? 8 - DROP[fluid] : a === 8 ? 7 : a - DROP[fluid];
     if (s <= 0) continue;
     for (const [dx, dz] of H4) if (takes(at(x + dx, y, z + dz))) put(x + dx, y, z + dz, s);
   }
-  return { amt, capped: false };
+  return done(false);
 }
 
 /**
  * Vanilla's steady state of one fluid from its sources (FlowingFluid replayed): returns {cells: Map "x,y,z" -> block level (0 source, 1..7
  * flowing, 8 falling), steps: the number of tick rounds until no tick was left}. Sources are written first, with no update (the realise's
  * writes skip them), then one fluid tick is forced on every source; everything after is vanilla's own ticks.
+ * (8c WM) Options, each off by default (the result is then exactly H's):
+ *   wl(x, y, z) -> null | FACE mask   a 'stop' cell holding a water source as a block (the header); `foreign` lists those that ticked.
+ *   level(x, y, z) -> null | 1..15    a natural flowing cell's LiquidBlock.LEVEL (1..7 amount 8 - level, 8..15 falling, amount 8).
+ *   order: 'yxz'                       ticks due together run by (y descending, x, z), not in scheduling order (§2.3); a function
+ *                                      permutes each batch in place (the property tests).
+ *   onCap: 'result'                    past maxTicks rounds: `unsettled: {cells, rounds, sample}` in the result, never a throw.
+ * (8c SE, CL) maxTick (a cap in game ticks), init + wake (start from a settled state, ticking only the woken cells and their fluid
+ * neighbours: a breach opened beside standing water), kick (cells ticked at 0 that are not written: foreign wl sources).
  */
-export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
+export function steady(at0, sources, fluid, { maxTicks = 200000, maxTick = null, wl = null, level = null, order = null, onCap = 'throw', init = null, wake = null, kick = null } = {}) {
   const drop = DROP[fluid], slopeFind = SLOPE[fluid], delay = DELAY[fluid];
   // the live state: written cells override the world. A cell holds {amount (1..8), falling, source}
   const live = new Map();
+  // ((8c SE) init: a settled state to start from (Map "x,y,z" -> level: 0 source, 1..7 flowing, 8 falling), e.g. a breach opened in it)
+  if (init) for (const [k, lv] of init) live.set(k, lv === 0 ? { amount: 8, falling: false, source: true } : lv >= 8 ? { amount: 8, falling: true, source: false } : { amount: 8 - lv, falling: false, source: false });
   for (const [x, y, z] of sources) live.set(k3(x, y, z), { amount: 8, falling: false, source: true });
+  // ((8c WM) a wl cell: a world 'stop' with a source fluid state; its mask is cached (-1: not one)
+  const wlOn = typeof wl === 'function' && fluid === 'water';
+  const masks = wlOn ? new Map() : null;
+  const maskOf = (x, y, z) => {
+    if (!wlOn) return -1;
+    const k = k3(x, y, z);
+    let m = masks.get(k);
+    if (m === undefined) { m = live.has(k) || at0(x, y, z) !== 'stop' ? -1 : wl(x, y, z) ?? -1; masks.set(k, m); }
+    return m;
+  };
+  // canPassThroughWall between a cell and its neighbour (dx, dy, dz): neither covers its face fully (only a wl cell has a mask here)
+  const pass = (x, y, z, dx, dy, dz) => {
+    if (!wlOn) return true;
+    const f = faceBit(dx, dy, dz);
+    const a = maskOf(x, y, z), b = maskOf(x + dx, y + dy, z + dz);
+    return !(a > 0 && (a & f)) && !(b > 0 && (b & OPP[f]));
+  };
   const at = (x, y, z) => {
     const v = live.get(k3(x, y, z));
-    if (v === undefined) return at0(x, y, z);
+    if (v === undefined) {
+      const w = at0(x, y, z);
+      return wlOn && w === 'stop' && maskOf(x, y, z) >= 0 ? 'wl' : w;
+    }
     if (v === null) return 'open';
     return v.source ? fluid : `flowing_${fluid}`;
   };
+  const levelled = typeof level === 'function';
   const stateOf = (x, y, z) => {
     const v = live.get(k3(x, y, z));
     if (v !== undefined) return v;
-    const w = at0(x, y, z);
-    if (w === fluid) return { amount: 8, falling: false, source: true };
-    if (w === `flowing_${fluid}`) return { amount: 7, falling: false, source: false }; // a natural flowing cell: its level is unknown here
+    const w = wlOn ? at(x, y, z) : at0(x, y, z);
+    if (w === fluid || w === 'wl') return { amount: 8, falling: false, source: true };
+    if (w === `flowing_${fluid}`) {
+      // a natural flowing cell: its level from the world (ARVX v4), else unknown here (amount 7)
+      const lv = levelled ? level(x, y, z) : null;
+      if (Number.isInteger(lv) && lv >= 1 && lv <= 15) return lv >= 8 ? { amount: 8, falling: true, source: false } : { amount: 8 - lv, falling: false, source: false };
+      return { amount: 7, falling: false, source: false };
+    }
     return null;
   };
-  const holdsAny = (w) => w !== 'stop'; // canHoldAnyFluid: everything but a fluid-stopping block
-  const isSource = (x, y, z) => at(x, y, z) === fluid;
-  const same = (w) => isFluid(w, fluid);
+  const holdsAny = (w) => w !== 'stop' && w !== 'wl'; // canHoldAnyFluid: everything but a fluid-stopping block
+  const isSource = (x, y, z) => { const w = at(x, y, z); return w === fluid || w === 'wl'; };
+  const same = (w) => isFluid(w, fluid) || w === 'wl';
   const sourceN = (x, y, z) => { let c = 0; for (const [dx, dz] of H4) if (isSource(x + dx, y, z + dz)) c++; return c; };
-  const solid = (x, y, z) => at(x, y, z) === 'stop';
   // getNewLiquid
   const newLiquid = (x, y, z) => {
     let hi = 0, srcs = 0;
     for (const [dx, dz] of H4) {
       const s = stateOf(x + dx, y, z + dz);
       if (!s) continue;
+      if (!pass(x, y, z, dx, 0, dz)) continue;
       if (s.source) srcs++;
       hi = Math.max(hi, s.amount);
     }
     if (fluid === 'water' && srcs >= 2) {
       const b = at(x, y - 1, z);
-      if (b === 'stop' || b === fluid) return { amount: 8, falling: false, source: true };
+      if (b === 'stop' || b === fluid || b === 'wl') return { amount: 8, falling: false, source: true };
     }
-    if (same(at(x, y + 1, z))) return { amount: 8, falling: true, source: false };
+    if (same(at(x, y + 1, z)) && pass(x, y, z, 0, 1, 0)) return { amount: 8, falling: true, source: false };
     const a = hi - drop;
     return a <= 0 ? null : { amount: a, falling: false, source: false };
   };
   const eq = (a, b) => (a === null && b === null) || (!!a && !!b && a.amount === b.amount && a.falling === b.falling && a.source === b.source);
   // isWaterHole(top, bottom): the bottom holds this fluid, or can hold the flowing fluid
-  const isHole = (x, y, z) => { const b = at(x, y - 1, z); return same(b) || b === 'open'; };
+  const isHole = (x, y, z) => { const b = at(x, y - 1, z); return (same(b) && pass(x, y, z, 0, -1, 0)) || b === 'open'; };
   // canMaybePassThrough: not a source of this type, can hold a fluid
   const maybePass = (w) => w !== fluid && holdsAny(w) && w !== otherFluid(fluid) && w !== `flowing_${otherFluid(fluid)}`;
   // canPassThrough(flowing): maybePass and can hold the flowing fluid (a waterloggable block can't: it is 'stop' here)
-  const slopeDistance = (x, y, z, pass, fromDx, fromDz, holeCache) => {
+  const slopeDistance = (x, y, z, pass1, fromDx, fromDz, holeCache) => {
     let lowest = 1000;
     for (const [dx, dz] of H4) {
       if (dx === fromDx && dz === fromDz) continue;
@@ -181,9 +304,9 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
       const hk = k3(tx, y, tz);
       let hole = holeCache.get(hk);
       if (hole === undefined) { hole = isHole(tx, y, tz); holeCache.set(hk, hole); }
-      if (hole) return pass;
-      if (pass < slopeFind) {
-        const d = slopeDistance(tx, y, tz, pass + 1, -dx, -dz, holeCache);
+      if (hole) return pass1;
+      if (pass1 < slopeFind) {
+        const d = slopeDistance(tx, y, tz, pass1 + 1, -dx, -dz, holeCache);
         if (d < lowest) lowest = d;
       }
     }
@@ -197,6 +320,7 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
       const tx = x + dx, tz = z + dz;
       const tw = at(tx, y, tz);
       if (!maybePass(tw)) continue;
+      if (!pass(x, y, z, dx, 0, dz)) continue; // ((8c WM) a wl cell spreads only through its open faces)
       const nf = newLiquid(tx, y, tz);
       // canHoldSpecificFluid: always true here (waterloggables are 'stop'); canBeReplacedWith: only an empty cell takes a spread
       let d;
@@ -213,20 +337,28 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
     }
     return out;
   };
-  // the scheduler: ticks by (time, insertion order); a position holds at most one scheduled tick
-  const sched = new Map(); // key -> due
-  const order = []; // [due, seq, x, y, z]
-  let seq = 0;
+  // the scheduler: ticks by (time, scheduling order); a position holds at most one scheduled tick. Every tick is due `delay` after the
+  // change that scheduled it (or at 0, the forced ticks), so dues are scheduled in non-decreasing order: one FIFO bucket per due tick
+  // gives the (due, scheduling order) order exactly
+  const sched = new Set();
+  const buckets = []; // [[due, [[x, y, z], ...]]]
+  let bh = 0;
   const schedule = (x, y, z, t) => {
     const k = k3(x, y, z);
     if (sched.has(k)) return;
-    sched.set(k, t);
-    order.push([t, seq++, x, y, z]);
+    sched.add(k);
+    let last = buckets[buckets.length - 1];
+    if (!last || last[0] !== t) {
+      if (last && last[0] > t) throw new Error(`steady: a tick scheduled at ${t} before ${last[0]}`);
+      last = [t, []];
+      buckets.push(last);
+    }
+    last[1].push([x, y, z]);
   };
   // a block change: its own tick (onPlace) and every fluid neighbour's (neighborChanged), all after `delay`
   const changed = (x, y, z, now) => {
     if (same(at(x, y, z))) schedule(x, y, z, now + delay);
-    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) if (same(at(x + dx, y + dy, z + dz))) schedule(x + dx, y + dy, z + dz, now + delay);
+    for (const [dx, dy, dz] of D6) if (same(at(x + dx, y + dy, z + dz))) schedule(x + dx, y + dy, z + dz, now + delay);
   };
   const set = (x, y, z, v, now) => {
     live.set(k3(x, y, z), v);
@@ -241,7 +373,7 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
   const spread = (x, y, z, s, now) => {
     if (!s) return;
     const bw = at(x, y - 1, z);
-    if (maybePass(bw)) {
+    if (maybePass(bw) && pass(x, y, z, 0, -1, 0)) {
       const nf = newLiquid(x, y - 1, z);
       if (bw === 'open' && nf) {
         set(x, y - 1, z, nf, now);
@@ -251,9 +383,12 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
     }
     if (s.source || !isHole(x, y, z)) spreadToSides(x, y, z, s, now);
   };
+  const woke = wlOn ? new Set() : null;
   const tick = (x, y, z, now) => {
     let s = stateOf(x, y, z);
-    if (!s || !same(at(x, y, z))) return;
+    const w = at(x, y, z);
+    if (!s || !same(w)) return;
+    if (w === 'wl') woke.add(k3(x, y, z));
     if (!s.source) {
       const nf = newLiquid(x, y, z);
       if (nf === null) {
@@ -269,27 +404,41 @@ export function steady(at0, sources, fluid, { maxTicks = 200000 } = {}) {
     }
     spread(x, y, z, s, now);
   };
-  // the forced tick on every source (§3.2), in the write order (y, x, z)
-  for (const [x, y, z] of sortCells(sources.map((c) => [...c]))) schedule(x, y, z, 0);
-  let now = 0, rounds = 0;
-  while (order.length) {
-    order.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    const t = order[0][0];
+  // the forced tick on every source (§3.2), in the write order (y, x, z); ((8c SE) from a settled state: only the woken cells and their
+  // fluid neighbours tick, as a block broken beside settled water schedules them)
+  if (init) {
+    for (const [x, y, z] of sortCells((wake ?? []).map((c) => [c[0], c[1], c[2]]))) for (const [dx, dy, dz] of [[0, 0, 0], ...D6]) if (same(at(x + dx, y + dy, z + dz))) schedule(x + dx, y + dy, z + dz, 0);
+  } else for (const [x, y, z] of sortCells(sources.map((c) => [...c]))) schedule(x, y, z, 0);
+  // ((8c CL) kick: cells ticked at 0 without being written: foreign wl sources (a waterlogged block spreads only once it ticks))
+  if (kick) for (const [x, y, z] of sortCells(kick.map((c) => [c[0], c[1], c[2]]))) if (same(at(x, y, z))) schedule(x, y, z, 0);
+  const yxz = order === 'yxz';
+  let now = 0, rounds = 0, unsettled = null;
+  while (bh < buckets.length) {
+    const [t, batch] = buckets[bh];
+    buckets[bh++] = null;
     now = t;
-    const batch = [];
-    while (order.length && order[0][0] === t) batch.push(order.shift());
-    for (const [, , x, y, z] of batch) {
+    if (yxz) batch.sort((a, b) => b[1] - a[1] || a[0] - b[0] || a[2] - b[2]);
+    else if (typeof order === 'function') order(batch); // (a test hook: any permutation of the batch)
+    for (const [x, y, z] of batch) {
       sched.delete(k3(x, y, z));
       tick(x, y, z, now);
     }
-    if (++rounds > maxTicks) throw new Error(`M25: the steady state did not settle in ${maxTicks} tick rounds`);
+    // ((8c SE) maxTick: a cap in game ticks (a wm body's wmMaxTick); a tick due past it is not run)
+    const pastTick = maxTick !== null && bh < buckets.length && buckets[bh][0] > maxTick;
+    if (++rounds > maxTicks || pastTick) {
+      if (onCap !== 'result') throw new Error(`M25: the steady state did not settle in ${maxTicks} tick rounds`);
+      let flowing = 0;
+      for (const v of live.values()) if (v && !v.source) flowing++;
+      unsettled = { cap: 'rounds', limit: pastTick ? maxTick : maxTicks, cells: flowing, rounds, sample: sortCells([...sched].map(un3)).slice(0, 16) };
+      break;
+    }
   }
   const cells = new Map();
   for (const [k, v] of live) {
     if (!v) continue;
     cells.set(k, v.source ? 0 : v.falling ? 8 : 8 - v.amount);
   }
-  return { cells, steps: rounds, ticks: now };
+  return { cells, steps: rounds, ticks: now, ...(wlOn ? { foreign: sortCells([...woke].map(un3)) } : {}), ...(unsettled ? { unsettled } : {}) };
 }
 
 /** The longest flow path (cells, falls counted) from the sources through the predicted cells. */
@@ -313,15 +462,26 @@ function longestPath(sources, predicted) {
 }
 
 /** The single breach (§2.5): each shell cell at or under the surface opened in turn; the union of what the flow then reaches. */
-function breachReach(world, own, fluid, others, body, shell) {
+function breachReach(world, own, fluid, others, body, shell, ropts = {}) {
   const out = new Set();
   let capped = null;
   const level = body.level;
+  // ((8c SE) a wm body: per bank segment, each opened at once in one reach, against BREACH_CAP)
+  if (body.model === WM_MODEL) {
+    const segs = bankSegments(shell, level);
+    for (const seg of segs) {
+      const opened = new Set(seg.map((c) => k3(...c)));
+      const r = reach(bodyWorld(world, own, fluid, others, opened), body.cells, fluid, { cap: BREACH_CAP, ...ropts, opened });
+      if (r.capped && !capped) capped = seg[0];
+      for (const k of r.amt.keys()) out.add(k);
+    }
+    return { cells: out, capped, segments: segs.length };
+  }
   // (H-a, a shortcut that changes no result) a body whose flow stays in its own cells (no spill: every reached cell is a source) and a
   // shell cell with no neighbour a flow could enter (open, or flowing of this fluid): opening it lets the fluid into that one cell and
   // no further, and changes no other cell's amount (a source's sideways spread only ever meets body and shell cells), so the reach is
   // the body's cells plus the opened cell. Every other breach runs the full reach as before. (A moat's thousands of shell cells.)
-  const base = reach(bodyWorld(world, own, fluid, others), body.cells, fluid, { cap: BREACH_CAP });
+  const base = reach(bodyWorld(world, own, fluid, others), body.cells, fluid, { cap: BREACH_CAP, ...ropts });
   const noSpill = !base.capped && base.amt.size === own.size && [...base.amt.keys()].every((k) => own.has(k));
   const D6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   for (const [x, y, z] of shell) {
@@ -336,7 +496,7 @@ function breachReach(world, own, fluid, others, body, shell) {
       continue;
     }
     // the opened cell is reached from a body cell beside it: start the flow from the sources as before
-    const r = reach(at, body.cells, fluid, { cap: BREACH_CAP });
+    const r = reach(at, body.cells, fluid, { cap: BREACH_CAP, ...ropts });
     if (r.capped && !capped) capped = [x, y, z];
     for (const k of r.amt.keys()) out.add(k);
   }
@@ -359,16 +519,28 @@ export function simulate(world, bodies, { breach = false } = {}) {
     const others = new Map();
     for (const [k, f] of fluidOf) if (!own.has(k)) others.set(k, f);
     const at = bodyWorld(world, own, fluid, others);
-    const r = reach(at, b.cells, fluid);
+    // ((8c WM) the opt-in model: foreign wl sources, the world's levels, the (due, y desc, x, z) order, a typed unsettled result)
+    const wm = b.model === WM_MODEL;
+    const wlFn = wm && typeof world.wl === 'function' ? (x, y, z) => (at(x, y, z) === 'stop' ? world.wl(x, y, z) : null) : null;
+    const ropts = wlFn ? { wl: wlFn } : {};
+    const carried = Array.isArray(b.carried) && b.carried.length ? new Set(b.carried.map((c) => k3(c[0], c[1], c[2]))) : null;
+    const r = reach(at, b.cells, fluid, ropts);
     const reached = [...r.amt.keys()].map(un3);
     const spillSet = new Set([...r.amt.keys()].filter((k) => !own.has(k)));
     const declared = new Set([...own, ...(b.spill ?? []).map((c) => k3(...c)), ...(b.joins ?? []).map((c) => k3(...c))]);
     // a reached cell that is a join (a natural source the spill lands in) is no leak; the declared spill bounds the rest
     const leak = b.spill ? [...spillSet].filter((k) => !declared.has(k)).map(un3) : [];
     add('leak', b, leak, `${leak.length} reached cell(s) outside the body's cells, spill and joins`);
-    const st = steady(at, b.cells, fluid);
-    const pred = new Map([...st.cells].filter(([k]) => !own.has(k)));
+    const st = steady(at, b.cells, fluid, wm ? { ...ropts, level: typeof world.level === 'function' ? world.level : null, order: 'yxz', onCap: 'result', maxTick: wmMaxTick(fluid, r.amt.size) } : {});
+    let pred = new Map([...st.cells].filter(([k]) => !own.has(k)));
     const notReached = [...pred.keys()].filter((k) => !r.amt.has(k)).map(un3);
+    // ((8c WM) a simulated conversion (a level-0 cell the flow made) is no prediction: listed as converted, an M25:convert finding unless
+    // the planner lifts it into the body's cells (then it is a written source)
+    let converted = [];
+    if (wm) {
+      converted = [...pred].filter(([, lv]) => lv === 0).map(([k]) => un3(k));
+      pred = new Map([...pred].filter(([, lv]) => lv !== 0));
+    }
     add('model', b, notReached, `${notReached.length} predicted cell(s) outside the conservative reach (the model disagrees with itself)`);
     // source conversion (water only): a reached non-body cell with 2 horizontal sources beside it and a solid or a source under it
     if (fluid === 'water') {
@@ -381,6 +553,7 @@ export function simulate(world, bodies, { breach = false } = {}) {
         const below = at(x, y - 1, z);
         if (below === 'stop' || below === 'water' || (world.solid && world.solid(x, y - 1, z))) conv.push([x, y, z]);
       }
+      if (wm) { const seen = new Set(conv.map((c) => k3(...c))); for (const c of converted) if (!seen.has(k3(...c))) conv.push(c); }
       add('convert', b, conv, `${conv.length} spill cell(s) source conversion would turn into sources (2 sources beside, a solid or source under)`);
     }
     // lava and water: within 2 (Chebyshev, 3D) of the other fluid, or the reach touching it
@@ -410,9 +583,10 @@ export function simulate(world, bodies, { breach = false } = {}) {
       for (const c of b.shell) { const w = world.shell(c[0], c[1], c[2], b); if (w) { bad.push(c); why.set(w, (why.get(w) ?? 0) + 1); } }
       add('shell', b, bad, `${bad.length} shell cell(s) not a written, fluid-stopping, non-gravity block of the body's own part (${[...why].map(([w, n]) => `${w} ${n}`).join(', ')})`);
     }
-    let breachCells;
+    let breachCells, segments = 0;
     if (breach && b.shell) {
-      const br = breachReach(world, own, fluid, others, b, b.shell);
+      const br = breachReach(world, own, fluid, others, b, b.shell, ropts);
+      segments = br.segments ?? 0;
       breachCells = [...br.cells].filter((k) => !own.has(k) && !spillSet.has(k)).map(un3);
       if (br.capped) add('keep', b, [br.capped], `the single breach at ${br.capped.join(', ')} reaches more than ${BREACH_CAP} cells`);
     }
@@ -460,7 +634,6 @@ export function simulate(world, bodies, { breach = false } = {}) {
         }
       }
       // ((7a LF) a bubble column's cells carry a mover (up to the surface, or down to its airlock): never trapped)
-      const carried = Array.isArray(b.carried) && b.carried.length ? new Set(b.carried.map((c) => k3(c[0], c[1], c[2]))) : null;
       const trap = fluidCells.filter((c) => !dist.has(k3(...c)) && !(carried && carried.has(k3(...c))));
       add('trap', b, trap, `${trap.length} fluid cell(s) under a ceiling with no open surface within ${TRAP_REACH}`);
       if (world.exit && b.exits !== false) {
@@ -482,9 +655,39 @@ export function simulate(world, bodies, { breach = false } = {}) {
         add('exit', b, far, `${far.length} surface cell(s) more than ${EXIT_REACH} from a bank a villager can climb out on`);
       }
     }
+    // ((8c WM) bubble columns: soul sand or magma under a source or a predicted cell (a lift's carried cells aside); the wash rule: a
+    // predicted cell holding a plant, torch, rail or carpet is cleared first (natural) or refused (M25:wash); UNSETTLED, typed
+    let wm8 = null;
+    if (wm) {
+      const wet = [...new Set([...own, ...st.cells.keys()])].map(un3);
+      const bubble = typeof world.bubbler === 'function' ? wet.filter(([x, y, z]) => !(carried && carried.has(k3(x, y, z))) && world.bubbler(x, y - 1, z)) : [];
+      add('bubble', b, bubble, `${bubble.length} source or predicted cell(s) over soul sand or a magma block (a bubble column the plan never wrote)`);
+      const wash = [], refused = [], why = new Map();
+      if (typeof world.wash === 'function') {
+        for (const k of st.cells.keys()) {
+          if (own.has(k)) continue;
+          const [x, y, z] = un3(k);
+          const w = world.wash(x, y, z, b);
+          if (w === 'clear') wash.push([x, y, z]);
+          else if (w) { refused.push([x, y, z]); why.set(w, (why.get(w) ?? 0) + 1); }
+        }
+      }
+      add('wash', b, refused, `${refused.length} predicted cell(s) hold a block the flow would wash away and the plan may not clear (${[...why].map(([w, n]) => `${w} ${n}`).join(', ')})`);
+      // ((8c SE) the per-body caps after the rounds: the predicted flowing cells, then the watch set's chunks)
+      const chunks = watchChunks([b.cells, b.shell, [...spillSet].map(un3), [...pred.keys()].map(un3), breachCells]);
+      let unsettled = st.unsettled ?? null;
+      if (!unsettled && pred.size > LIMITS.cellsPerBody) unsettled = { cap: 'cells', limit: LIMITS.cellsPerBody, cells: pred.size, rounds: st.steps, sample: sortCells([...pred.keys()].map(un3)).slice(0, 16) };
+      if (!unsettled && chunks > LIMITS.chunksPerBody) unsettled = { cap: 'chunks', limit: LIMITS.chunksPerBody, cells: pred.size, rounds: st.steps, sample: sortCells([...pred.keys()].map(un3)).slice(0, 16), chunks };
+      if (unsettled) {
+        const what = unsettled.cap === 'rounds' ? `the steady state did not settle by tick ${unsettled.limit} (${unsettled.rounds - 1} tick rounds)` : unsettled.cap === 'cells' ? `${unsettled.cells} predicted flowing cells (at most ${unsettled.limit} per body)` : `the watch set meets ${chunks} chunks (at most ${unsettled.limit} per body)`;
+        findings.push({ rule: 'UNSETTLED', body: b.id, part: b.part ?? null, cap: unsettled.cap, count: unsettled.cells, sample: unsettled.sample, message: `${what} (${unsettled.cells} flowing cell(s))` });
+      }
+      const foreign = new Map([...(r.foreign ?? []), ...(st.foreign ?? [])].map((c) => [k3(...c), c]));
+      wm8 = { model: WM_MODEL, converted: sortCells(converted), foreign: sortCells([...foreign.values()].map((c) => [...c])), wash: sortCells(wash), chunks, segments, ...(unsettled ? { unsettled } : {}) };
+    }
     const predicted = sortCells([...pred].map(([k, lv]) => [...un3(k), lv]));
     const path = longestPath(b.cells, pred);
-    out.push({ id: b.id, reached: sortCells(reached), spill: sortCells([...spillSet].map(un3)), predicted, path, settleTicks: settleBound(fluid, path), ...(breachCells ? { breach: sortCells(breachCells) } : {}) });
+    out.push({ id: b.id, reached: sortCells(reached), spill: sortCells([...spillSet].map(un3)), predicted, path, settleTicks: settleBound(fluid, path), ...(breachCells ? { breach: sortCells(breachCells) } : {}), ...(wm8 ?? {}) });
   }
   return { bodies: out, reached: out.map((o) => o.reached), predicted: out.map((o) => o.predicted), findings };
 }

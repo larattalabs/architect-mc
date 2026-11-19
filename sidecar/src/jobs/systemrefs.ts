@@ -185,7 +185,7 @@ export function compactCatalogueText(cat: Record<string, Json>): string {
 }
 
 /** One ref's block (the schema file is read and rendered each time: about a millisecond; the catalogue module is imported once per sidecar process, the kit being fixed for it). */
-async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
+async function renderBlock(kitDir: string, p: ParsedRef, o: { flowingWater?: boolean } = {}): Promise<string> {
   const file = path.join(kitDir, 'schemas', p.doc.file);
   let text: string;
   try {
@@ -207,6 +207,12 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
     } catch {
       throw refuse('system_ref_unavailable', `systemRefs: "${p.ref}" needs the kit's capability catalogue (lib/plan/catalogue.mjs), which this helper's kit lacks`);
     }
+    // ((8c, the review's P2-8) every render of plan/0 is gated on the flowingWater flag, as the composer's: off, no flow "current" or lip "form")
+    if (o.flowingWater !== true && p.doc.id === 'plan/0') {
+      const x = schema['x-catalogue'];
+      catalogue = JSON.parse(JSON.stringify(catalogue)) as Record<string, Json>;
+      dropFlowingWater(schema, [...(isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : []), ...(Array.isArray(catalogue.entries) ? catalogue.entries.filter(isObj) : [])]);
+    }
     delete schema['x-catalogue']; // rendered once, below, from the kit's own catalogue
   }
   if (p.doc.forms) {
@@ -226,7 +232,26 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
  * schema (the same object renderBlock renders, x-catalogue removed) and the compact catalogue text. `planCompactBlock(parts)` with
  * nothing omitted is plan/0#compact's block byte for byte (a unit says so).
  */
-export async function planCompactParts(kitDir: string): Promise<{ schema: Record<string, Json>; catalogueText: string; entries: Array<Record<string, Json>> }> {
+/**
+ * (8c, the v0.81.0 review's P1) plan/0 and its catalogue without 8c's flowing water: connector.channel's flow "current", form.waterfall's
+ * lip "form" and its `on`, channel.course's limits.flows "current" and form.waterfall's limits.form. In place (on a fresh copy).
+ */
+export function dropFlowingWater(schema: Record<string, Json>, entries: Array<Record<string, Json>>): void {
+  const defs = isObj(schema.$defs) ? (schema.$defs as Record<string, Json>) : {};
+  const props = (d: string): Record<string, Json> | null => (isObj(defs[d]) && isObj((defs[d] as Record<string, Json>).properties) ? ((defs[d] as Record<string, Json>).properties as Record<string, Json>) : null);
+  const cut = (o: Json | undefined, v: string) => { if (isObj(o) && Array.isArray(o.enum)) o.enum = o.enum.filter((x) => x !== v); };
+  cut(props('connector.channel')?.flow, 'current');
+  const wf = props('form.waterfall');
+  if (wf) { cut(wf.lip, 'form'); delete wf.on; }
+  for (const e of entries) {
+    const lim = isObj(e.limits) ? (e.limits as Record<string, Json>) : null;
+    if (!lim) continue;
+    if (e.id === 'channel.course' && Array.isArray(lim.flows)) lim.flows = lim.flows.filter((x) => x !== 'current');
+    if (e.id === 'form.waterfall') delete lim.form;
+  }
+}
+
+export async function planCompactParts(kitDir: string, o: { flowingWater?: boolean } = {}): Promise<{ schema: Record<string, Json>; catalogueText: string; entries: Array<Record<string, Json>> }> {
   const p = parseSystemRefs(['plan/0#compact'])[0]!;
   let schema: Record<string, Json>;
   try {
@@ -244,6 +269,10 @@ export async function planCompactParts(kitDir: string): Promise<{ schema: Record
   const x = schema['x-catalogue'];
   const entries = isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : [];
   delete schema['x-catalogue'];
+  if (o.flowingWater !== true) { // ((8c, P2-8) off unless the mod advertises flowingWater)
+    catalogue = JSON.parse(JSON.stringify(catalogue)) as Record<string, Json>;
+    dropFlowingWater(schema, [...entries, ...(Array.isArray(catalogue.entries) ? catalogue.entries.filter(isObj) : [])]);
+  }
   return { schema: inlineTrivialRefs(dropKindDescriptions(schema, kinds)), catalogueText: compactCatalogueText(catalogue), entries };
 }
 
@@ -255,17 +284,17 @@ export function planCompactBlock(parts: { schema: Record<string, Json>; catalogu
 }
 
 /** The ref blocks, joined; '' for no refs. Throws RefusedError (FIELD_LIMIT) for a bad ref. */
-export async function expandSystemRefs(kitDir: string, refs: readonly string[] | undefined): Promise<string> {
+export async function expandSystemRefs(kitDir: string, refs: readonly string[] | undefined, o: { flowingWater?: boolean } = {}): Promise<string> {
   if (!refs?.length) return '';
   const parsed = parseSystemRefs(refs);
   const out: string[] = [];
-  for (const p of parsed) out.push(await renderBlock(kitDir, p));
+  for (const p of parsed) out.push(await renderBlock(kitDir, p, o));
   return out.join('\n\n');
 }
 
 /** The system prompt of a job: the ref blocks first, then the caller's `system` (or the job kind's default). */
-export async function composeSystem(kitDir: string, refs: readonly string[] | undefined, system: string): Promise<string> {
-  const head = await expandSystemRefs(kitDir, refs);
+export async function composeSystem(kitDir: string, refs: readonly string[] | undefined, system: string, o: { flowingWater?: boolean } = {}): Promise<string> {
+  const head = await expandSystemRefs(kitDir, refs, o);
   return head ? `${head}\n\n${system}` : system;
 }
 

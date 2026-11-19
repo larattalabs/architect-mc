@@ -159,7 +159,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean; revision?: boolean; authored?: boolean; authorCheck?: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean; revision?: boolean; authored?: boolean; authorCheck?: boolean; noFlowingWater?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -325,6 +325,7 @@ export class Regions {
       biomes: /['"]?biomes['"]?\s*:\s*1/.test(tool), // (6c D2) the claim's biome grid (--biomes)
       lotBlocks: tool.includes("'lot-blocks'"), // (6c VOC-c) the bound lots' block histograms (--lot-blocks)
       survival: tool.includes("survival: 'flag'"), // (6c RS) a plan in survival (--survival: the world's mode)
+      noFlowingWater: tool.includes("'no-flowing-water': 'flag'"), // (8c, the review's P1) rivers and falls off forms gated by the mod's feature
       besideReach: tool.includes("'beside-reach'"), // (6c D3) the reach inputs beside a standing region (--beside-reach)
       authored: tool.includes('authored: 1'), // (7c AU) the plan's authored programs (--authored <dir>)
       authorCheck: tool.includes("'author-check'"), // (7c AU) one authoring round's checker
@@ -419,6 +420,8 @@ export class Regions {
     const lotBlocks = info.caps.lotBlocks && msg.lotBlocks && Object.keys(msg.lotBlocks).length ? msg.lotBlocks : null;
     // (6c RS) the world's mode: a survival plan (an older kit has no --survival and plans in creative: the mod refuses its IR at realise)
     const survival = !!info.caps.survival && msg.survival === true;
+    // (8c, the v0.81.0 review's P1) a mod that does not advertise flowingWater: the kit answers flow "current" and lip "form" unsupported
+    const noFlowingWater = !!info.caps.noFlowingWater && msg.flowingWater !== true;
     // (6c D3) the reach inputs (an older kit has no --beside-reach: its plan fails NO_JOIN as D1's did); each survey blob read now
     const reachIn = info.caps.besideReach && msg.besideReach ? msg.besideReach : null;
     const reachOne = (q: { surveyBlobId: string }) => this.host.blobs.read(q.surveyBlobId);
@@ -499,7 +502,7 @@ export class Regions {
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, authored: !!authored, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb, ...(msg.planImages === true ? { planImages: true } : {}) }))
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, noFlowingWater, authored: !!authored, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb, ...(msg.planImages === true ? { planImages: true } : {}) }))
       .finally(() => {
         this.planning.delete(planId);
         // (6c D3, §7.1) a dry plan keeps nothing: its directory goes, success or failure
@@ -607,7 +610,7 @@ export class Regions {
     return keys.length;
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string; authored?: boolean }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; noFlowingWater?: boolean; planCache?: string; authored?: boolean }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -630,6 +633,7 @@ export class Regions {
       ...(o.biomes ? ['--biomes', path.join(dir, 'biomes.json')] : []),
       ...(o.lotBlocks ? ['--lot-blocks', path.join(dir, 'lotblocks.json')] : []),
       ...(o.survival ? ['--survival'] : []),
+      ...(o.noFlowingWater ? ['--no-flowing-water'] : []),
       ...(o.authored ? ['--authored', path.join(dir, 'authored')] : []),
       ...(this.stampsDir() ? ['--stamps', this.stampsDir()!] : []),
       ...(o.planCache && caps.planCache ? ['--plan-cache', o.planCache] : []),
@@ -702,7 +706,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; authored?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number; planImages?: boolean },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; noFlowingWater?: boolean; authored?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number; planImages?: boolean },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {

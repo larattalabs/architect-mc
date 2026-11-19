@@ -1,0 +1,177 @@
+{
+ "about": "(8c RV-b, the coordinator's answer: KC keep-out exercised) c03's river with the hamlet's three lots set right on its straight line (c03's river runs there, c03's lots keep 40 off): the river is routed round the lots, every one of its cells, shell, spill, watch (W3 per bank segment) and predicted cells off each lot's box and apron, the nearest at most 4 off",
+ "terrain": {
+  "W": 240,
+  "D": 128,
+  "x0": 980,
+  "z0": 1972,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 980,
+    "x1": 1029,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 74
+   },
+   {
+    "x0": 1030,
+    "x1": 1039,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 73
+   },
+   {
+    "x0": 1040,
+    "x1": 1049,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 72
+   },
+   {
+    "x0": 1050,
+    "x1": 1059,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 71
+   },
+   {
+    "x0": 1060,
+    "x1": 1069,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 70
+   },
+   {
+    "x0": 1070,
+    "x1": 1079,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 69
+   },
+   {
+    "x0": 1080,
+    "x1": 1089,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 68
+   },
+   {
+    "x0": 1090,
+    "x1": 1099,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 67
+   },
+   {
+    "x0": 1100,
+    "x1": 1109,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 66
+   },
+   {
+    "x0": 1110,
+    "x1": 1119,
+    "z0": 1972,
+    "z1": 2099,
+    "y": 65
+   }
+  ]
+ },
+ "anchors": {
+  "src": [
+   986,
+   75,
+   2030
+  ],
+  "dst": [
+   1212,
+   65,
+   2030
+  ],
+  "hamlet_at": [
+   1150,
+   65,
+   2030
+  ],
+  "north": [
+   1150,
+   65,
+   1985
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "river",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rvb_c09",
+  "zones": [
+   {
+    "id": "hamlet",
+    "kind": "standard",
+    "required": true,
+    "label": "River Hamlet",
+    "purpose": "farming",
+    "where": {
+     "near": {
+      "anchor": "hamlet_at",
+      "within": 2
+     }
+    },
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "mill_1",
+        "type": "shop",
+        "role": "water_mill",
+        "label": "mill",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "cottage_1",
+        "type": "cottage",
+        "label": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "cottage_2",
+        "type": "cottage",
+        "label": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "river",
+    "kind": "channel",
+    "flow": "current",
+    "width": 3,
+    "from": {
+     "anchor": "src"
+    },
+    "to": {
+     "anchor": "dst"
+    }
+   }
+  ]
+ }
+}

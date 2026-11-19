@@ -956,28 +956,31 @@ export class Region {
    * (6c B) `{blocks: true}`: a volume that also records each cell's block id (ARVX version 2), for a mask's `block` term; a
    * version-1 volume of the same box does not answer it (null: the game samples one with blocks).
    */
-  needVolume(box, { blocks = false, fluids = false } = {}) {
+  needVolume(box, { blocks = false, fluids = false, levels = false } = {}) {
+    // ((8c WM) {levels: true}: the fluid layer with each flowing cell's level (ARVX version 4), for a river body; implies fluids)
+    if (levels) fluids = true;
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
     if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
     // (6c F1) asking again for the same box gives the same volume (keepNatural and the program may both read it)
     const same = (x) => x.minX === b.minX && x.minY === b.minY && x.minZ === b.minZ && x.maxX === b.maxX && x.maxY === b.maxY && x.maxZ === b.maxZ;
     // (6c H) {fluids: true}: a volume that also records each cell's fluid (ARVX version 3's fluid layer, CONTRACT H §10); a volume
     // without it does not answer such a request (the game samples one with fluids)
-    const has = (d) => (!blocks || d?.blocks) && (!fluids || d?.fluids);
-    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box) && (!blocks || u.blocks) && (!fluids || u.fluids));
+    const has = (d) => (!blocks || d?.blocks) && (!fluids || d?.fluids) && (!levels || d?.levels);
+    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box) && (!blocks || u.blocks) && (!fluids || u.fluids) && (!levels || u.levels));
     if (had) return this._volumeDecoded?.get(had[0]) ?? null;
     const asked = this.needVolumes.find(same);
     if (asked) {
       if (blocks && !asked.blocks) asked.blocks = true;
       if (fluids && !asked.fluids) asked.fluids = true;
+      if (levels && !asked.levels) asked.levels = true;
       return null;
     }
-    this.needVolumes.push({ ...b, ...(blocks ? { blocks: true } : {}), ...(fluids ? { fluids: true } : {}) });
+    this.needVolumes.push({ ...b, ...(blocks ? { blocks: true } : {}), ...(fluids ? { fluids: true } : {}), ...(levels ? { levels: true } : {}) });
     const v = this.ctx.volumes?.find((x) => same(x.box) && has(x.decoded));
     if (!v) return null;
     const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
     this._sideBlob(name, 'volume', v.bytes);
-    this.volumesUsed[name] = { blob: name, ...(v.decoded?.blocks ? { blocks: true } : {}), box: b, ...(v.decoded?.fluids ? { fluids: true } : {}), sha: v.sha };
+    this.volumesUsed[name] = { blob: name, ...(v.decoded?.blocks ? { blocks: true } : {}), box: b, ...(v.decoded?.fluids ? { fluids: true } : {}), ...(v.decoded?.levels ? { levels: true } : {}), sha: v.sha };
     (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
   }

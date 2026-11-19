@@ -29,6 +29,11 @@ public final class RegionKeys {
 		if (r.beside() == null) {
 			o.remove("beside");
 		}
+		// ((8c, the review's P2-9) a mod that builds rivers plans otherwise: a key made with it isn't adopted without it, nor the reverse;
+		// a key made before 8c keeps its body when rivers are off)
+		if (RegionFluids.flowingBuild()) {
+			o.addProperty("flowingWater", true);
+		}
 		return o;
 	}
 

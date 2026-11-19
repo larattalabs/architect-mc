@@ -55,12 +55,12 @@ export function stewardAnchors(claim) {
  * Check a plan in process: plan_v0 over `survey` (bytes) and `claim`, then finish. Options: anchors {name: [x, y, z]}, protected
  * [{id, rect}], regions [{id, rect}], budget, bible, fingerprint, keepOut [[x0, z0, x1, z1]], planCache (key -> entry | null).
  */
-export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [], style = null, lotBlocks = null, survival = false, besideReach = null, links = null, authored = null } = {}) {
+export async function checkPlanLocal(plan, { survey, claim, anchors = {}, protected: prot = [], regions = [], builds = [], standing = null, biomes = null, budget = {}, bible = null, fingerprint = null, keepOut = [], planCache = null, volumes = [], style = null, lotBlocks = null, survival = false, besideReach = null, links = null, authored = null, flowingWater = undefined } = {}) {
   const params = { plan, anchors: { anchors }, protected: { areas: prot }, regions: { regions }, builds: { builds }, ...(standing ? { standing: { standing } } : {}), budget, bible, fingerprint: fingerprint ? { sha: fingerprint } : null };
   // (6c VOC) `style`: a bible.json's members as the sidecar passes them to the plan CLI (roles, patterns, connectors, fluids, rarity)
   const sty = style ? { roles: { ...(style.roles ?? {}) }, ...(style.patterns ? { patterns: style.patterns } : {}), ...(style.connectors ? { connectors: style.connectors } : {}), ...(Number.isInteger(style.format) ? { format: style.format } : {}), ...(style.fluids ? { fluids: style.fluids } : {}), ...(style.rarity ? { rarity: style.rarity } : {}) } : { roles: {} };
   // ((6c D3) `besideReach`: the reach inputs of the standing regions endpoint.region names, {regionId: {survey, held, standing}})
-  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, ...sty, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(survival ? { survival: true } : {}), ...(besideReach ? { besideReach } : {}), ...(links ? { links } : {}), ...(authored ? { authored } : {}) });
+  const res = await planRegion({ programFile: PLAN_V0, params, survey, claim, ...sty, keepOut, planCache, ...(biomes ? { biomes } : {}), ...(volumes.length ? { volumes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(survival ? { survival: true } : {}), ...(besideReach ? { besideReach } : {}), ...(links ? { links } : {}), ...(authored ? { authored } : {}), ...(flowingWater === false ? { flowingWater: false } : {}) });
   const cols = fillMissing(asColumns(survey)).columns;
   const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
   return { ...f, res };
@@ -100,7 +100,8 @@ export async function fixtureVolume(box, spec, survey, claim) {
   if (box.fluids) {
     const { synthVolume } = await import('./h-helpers.mjs');
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
-    return synthVolume(b, survey, claim, { fluids: true, edits: spec?.edits ?? [] });
+    // ((8c RV) a box asked with levels: version 4, unless the fixture's volume says levels: false (a mod before VS: version 3))
+    return synthVolume(b, survey, claim, { fluids: true, edits: spec?.edits ?? [], levels: !!box.levels && spec?.levels !== false });
   }
   const { encodeArvx, decodeArvx, VC } = await import('../lib/region/volume.mjs');
   const { surveyApi } = await import('../lib/region/survey.mjs');

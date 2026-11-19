@@ -94,6 +94,9 @@ public final class VolumeSurvey {
 		/** (6c H) With the fluid layer (ARVX version 3): per cell its fluid code ({@link Arvx#FLUID_CODES}), same index as {@link #cells}. */
 		final byte @Nullable [] fluids;
 		final IdentityHashMap<BlockState, Byte> fluidMemo = new IdentityHashMap<>();
+		/** (8c VS) With the level layer (ARVX version 4): per cell its LiquidBlock level ({@link #levelOf}), same index as {@link #cells}. */
+		final byte @Nullable [] levels;
+		final IdentityHashMap<BlockState, Byte> levelMemo = new IdentityHashMap<>();
 		int next;
 		int loaded;
 		boolean queried;
@@ -107,6 +110,10 @@ public final class VolumeSurvey {
 		}
 
 		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir, boolean withBlocks, boolean withFluids) {
+			this(level, box, load, dir, withBlocks, withFluids, false);
+		}
+
+		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir, boolean withBlocks, boolean withFluids, boolean withLevels) {
 			this.level = level;
 			this.box = box;
 			this.load = load;
@@ -115,8 +122,9 @@ public final class VolumeSurvey {
 			d = box[5] - box[2] + 1;
 			h = box[4] - box[1] + 1;
 			cells = new byte[Math.toIntExact((long) w * d * h)];
-			blocks = withBlocks || withFluids ? new int[cells.length] : null;
-			fluids = withFluids ? new byte[cells.length] : null;
+			blocks = withBlocks || withFluids || withLevels ? new int[cells.length] : null;
+			fluids = withFluids || withLevels ? new byte[cells.length] : null;
+			levels = withLevels ? new byte[cells.length] : null;
 			missingCol = new boolean[w * d];
 			for (int cx = box[0] >> 4; cx <= box[3] >> 4; cx++) {
 				for (int cz = box[2] >> 4; cz <= box[5] >> 4; cz++) {
@@ -169,6 +177,13 @@ public final class VolumeSurvey {
 
 	/** (6c H) {@code fluids}: also each cell's fluid (ARVX version 3, which carries the block ids too). */
 	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir, boolean blocks, boolean fluids) {
+		return start(level, box, load, dir, blocks, fluids, false);
+	}
+
+	/** (8c VS) {@code levels}: also each cell's LiquidBlock level (ARVX version 4, which carries the block ids and fluid codes too). */
+	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir, boolean blocks, boolean fluids,
+		boolean levels) {
+		fluids = fluids || levels;
 		blocks = blocks || fluids;
 		if (blocks && cells(box) > MAX_BLOCK_CELLS) {
 			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.RegionRefused(Reason.REGION_LIMIT, "the volume with block ids is "
@@ -181,7 +196,7 @@ public final class VolumeSurvey {
 		MinecraftServer s = level.getServer();
 		Path out = dir != null ? dir : s.getWorldPath(LevelResource.ROOT).resolve(STANDALONE_DIR);
 		Task t = new Task(level, new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()}, load == null ? LoadPolicy.LOADED_ONLY
-			: load, out, blocks, fluids);
+			: load, out, blocks, fluids, levels);
 		Runnable add = () -> TASKS.add(t);
 		if (s.isSameThread()) {
 			add.run();
@@ -312,6 +327,14 @@ public final class VolumeSurvey {
 								t.fluidMemo.put(bs, f);
 							}
 							t.fluids[base + (y - ya)] = f;
+							if (t.levels != null) {
+								Byte lv = t.levelMemo.get(bs);
+								if (lv == null) {
+									lv = levelOf(bs);
+									t.levelMemo.put(bs, lv);
+								}
+								t.levels[base + (y - ya)] = lv; // (8c VS)
+							}
 						}
 					}
 				}
@@ -455,7 +478,7 @@ public final class VolumeSurvey {
 	}
 
 	private static Result encodeAndFreeze(Task t) throws IOException {
-		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol, t.blocks, t.palette, t.fluids);
+		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol, t.blocks, t.palette, t.fluids, t.levels);
 		byte[] gz = Arvx.gzip(enc.raw);
 		Path file = t.dir.resolve(enc.sha + ".bin");
 		freeze(file, gz, enc.sha);
@@ -568,14 +591,42 @@ public final class VolumeSurvey {
 		return (byte) (f.isSource() ? 1 : f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING) ? 3 : 2);
 	}
 
+	/**
+	 * (8c VS) The LiquidBlock level of a block state (ARVX version 4): a liquid block's {@code LiquidBlock.LEVEL} as it stands (0 a source,
+	 * 1-7 flowing by distance, 8-15 falling), kept in its fluid code's range; 0 for any other block (a waterlogged block holds a source).
+	 */
+	public static byte levelOf(BlockState s) {
+		if (!(s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock)) {
+			return 0;
+		}
+		int lv = s.getValue(net.minecraft.world.level.block.LiquidBlock.LEVEL);
+		// the version-4 ranges by fluid code (Arvx.FLUID_LEVELS): a source 0; flowing water 1-7, falling 8-15; lava, flowing or falling (one
+		// code), 1-7 (a falling lava cell's distance, at least 1)
+		net.minecraft.world.level.material.FluidState f = s.getFluidState();
+		if (f.isEmpty() || f.isSource()) {
+			return 0;
+		}
+		if (f.getType().isSame(net.minecraft.world.level.material.Fluids.LAVA)) {
+			return (byte) Math.max(1, lv >= 8 ? lv - 8 : lv);
+		}
+		return (byte) (f.getValue(net.minecraft.world.level.material.FlowingFluid.FALLING) ? Math.max(8, lv) : Math.max(1, Math.min(7, lv)));
+	}
+
 	/** (6c H) With {@code fluids} (per cell a fluid code): ARVX version 3 (blocks must be given too). Pure. */
 	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol, int @Nullable [] blocks, List<String> palette,
 		byte @Nullable [] fluids) {
+		return encode(box, cells, owners, missingCol, blocks, palette, fluids, null);
+	}
+
+	/** (8c VS) With {@code levels} (per cell a LiquidBlock level): ARVX version 4 (blocks and fluids must be given too). Pure. */
+	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol, int @Nullable [] blocks, List<String> palette,
+		byte @Nullable [] fluids, byte @Nullable [] levels) {
 		int w = box[3] - box[0] + 1;
 		int d = box[5] - box[2] + 1;
 		int h = box[4] - box[1] + 1;
-		Arvx.Encoder e = new Arvx.Encoder(box, blocks != null, fluids != null);
+		Arvx.Encoder e = new Arvx.Encoder(box, blocks != null, fluids != null, levels != null);
 		byte[] fcol = fluids == null ? null : new byte[h];
+		byte[] lcol = levels == null ? null : new byte[h];
 		if (blocks != null) {
 			for (String id : palette) {
 				e.block(id); // the encoder's indexes = the palette's (air first)
@@ -604,7 +655,12 @@ public final class VolumeSurvey {
 				if (fcol != null) {
 					System.arraycopy(blocks, c * h, bcol, 0, h);
 					System.arraycopy(fluids, c * h, fcol, 0, h);
-					e.column(col, anyOwned ? own : null, bcol, fcol);
+					if (lcol != null) {
+						System.arraycopy(levels, c * h, lcol, 0, h);
+						e.column(col, anyOwned ? own : null, bcol, fcol, lcol);
+					} else {
+						e.column(col, anyOwned ? own : null, bcol, fcol);
+					}
 				} else if (bcol != null) {
 					System.arraycopy(blocks, c * h, bcol, 0, h);
 					e.column(col, anyOwned ? own : null, bcol);

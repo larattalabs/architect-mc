@@ -25,6 +25,7 @@ import * as race from './race.mjs';
 import * as ditch from './ditch.mjs';
 import * as handcourse from './handcourse.mjs';
 import * as handgate from './handgate.mjs';
+import * as handriver from './handriver.mjs';
 import * as irrigate from './irrigate.mjs';
 import { isBodyPart, isHPart } from './kinds.mjs';
 import { channelBlock, planLotIds } from '../plan/schema.mjs';
@@ -57,6 +58,8 @@ function moduleOf(p, X = null) {
     if (p.part?.ext?.[UNSAFE_EXT]?.handCourse) return handcourse;
     // ((6c HY-c, additive) HY-c's hand-laid water gate: a still reach across a planned wall, its gate fixture)
     if (p.part?.ext?.[UNSAFE_EXT]?.handGate) return handgate;
+    // ((8cF, additive) 8c's hand-built river and fall off an island: the in-game lane's fixtures)
+    if (p.part?.ext?.[UNSAFE_EXT]?.handRiver) return handriver;
     const m = BY_CHANNEL[channelBlockOf(X, p)];
     if (m) return m;
   }

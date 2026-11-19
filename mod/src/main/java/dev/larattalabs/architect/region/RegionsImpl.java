@@ -975,6 +975,10 @@ public final class RegionsImpl implements Regions {
 		if (RegionSurvival.on(r.level().getServer())) {
 			m.addProperty("survival", true);
 		}
+		// (8c, the v0.81.0 review's P1) the kit plans rivers and falls off forms only for a mod that writes, drains and recovers them
+		if (RegionFluids.flowingBuild()) {
+			m.addProperty("flowingWater", true);
+		}
 		m.add("params", r.params().deepCopy());
 		if (r.seed() != null) {
 			m.addProperty("seed", Long.toUnsignedString(r.seed()));
@@ -1100,6 +1104,7 @@ public final class RegionsImpl implements Regions {
 			List<BoundingBox> boxes = new ArrayList<>();
 			java.util.Set<BoundingBox> withBlocks = new java.util.HashSet<>();
 			java.util.Set<BoundingBox> withFluids = new java.util.HashSet<>();
+			java.util.Set<BoundingBox> withLevels = new java.util.HashSet<>();
 			for (JsonElement e : need) {
 				JsonObject b = e.getAsJsonObject();
 				BoundingBox bb = new BoundingBox(b.get("minX").getAsInt(), b.get("minY").getAsInt(), b.get("minZ").getAsInt(), b.get("maxX").getAsInt(), b.get(
@@ -1110,6 +1115,9 @@ public final class RegionsImpl implements Regions {
 				}
 				if (b.get("fluids") instanceof JsonElement fl && fl.isJsonPrimitive() && fl.getAsBoolean()) {
 					withFluids.add(bb); // (6c H) r.needVolume(box, {fluids: true}): ARVX version 3
+				}
+				if (b.get("levels") instanceof JsonElement lv && lv.isJsonPrimitive() && lv.getAsBoolean()) {
+					withLevels.add(bb); // (8c VS) r.needVolume(box, {fluids: true, levels: true}): ARVX version 4 (a river body's)
 				}
 				cells += dev.larattalabs.architect.region.volume.VolumeSurvey.cells(bb);
 			}
@@ -1137,7 +1145,7 @@ public final class RegionsImpl implements Regions {
 				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
 				for (BoundingBox bb : boxes) {
 					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
-						policy, null, withBlocks.contains(bb), withFluids.contains(bb)).thenCompose(
+						policy, null, withBlocks.contains(bb), withFluids.contains(bb), withLevels.contains(bb)).thenCompose(
 							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
 								JsonObject o = new JsonObject();
 								o.addProperty("sha", vol.sha());
@@ -3161,7 +3169,7 @@ public final class RegionsImpl implements Regions {
 		}
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
-			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason);
+			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason, RegionFluids.removalPhase(l)); // ((8cF) the fluids removal's phase)
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */

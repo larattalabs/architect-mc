@@ -1093,6 +1093,17 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     if (p.verdict === 'malformed') ans(p, { class: 'malformed', reasons: [p.reason] });
     else if (p.verdict === 'unsupported') ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: p.reason.message, block: p.block, until: p.reason.until ?? undefined, path: p.reason.path }].map(clean) });
   }
+  // ---- (8c, the v0.81.0 review's P1) flowing water is gated by the mod's feature: a check the helper ran for a mod that does not advertise
+  // `flowingWater` (ctx.flowingWater === false: the sidecar's --no-flowing-water) answers a river's `flow: "current"` and a fall's
+  // `lip: "form"` unsupported (the mod would sample version-3 volumes and refuse VOLUME {why: "levels"}); every other plan as before
+  if (ctx.flowingWater === false) {
+    for (const p of V.parts) {
+      if (answers.has(p.id) || !p.part || typeof p.part !== 'object') continue;
+      const flow = p.part.flow ?? p.part.params?.flow, lip = p.part.lip ?? p.part.params?.lip;
+      const what = flow === 'current' ? 'flow: "current" (a river)' : lip === 'form' ? 'lip: "form" (a fall off a form)' : null;
+      if (what) ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: `${what} needs the mod's flowingWater feature (this world's Architect does not advertise it)`, evidence: { feature: 'flowingWater', member: flow === 'current' ? 'flow' : 'lip' } }] });
+    }
+  }
   const byId = V.byId;
   // ---- (6d RV, §9.2) a revision plan's parts against the parent's: kept and refilled parts stand (no IR part), grown and changed ones
   // answer unsupported (GR, RV2), added ones compile below as any part. Only with a revision input: every other check is unchanged.
@@ -1861,7 +1872,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       releaseKeep(keep, p.id); // ((6c KC) and frees its footprint)
       const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
       // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
-      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
+      // ((8c SE) an UNSETTLED river carries the player's line, `say`, beside its message: flowing.mjs unsettledAnswer)
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(typeof e.say === 'string' ? { say: e.say } : {}), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
       geom.delete(p.id);
     }
   }

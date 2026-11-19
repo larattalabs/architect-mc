@@ -292,6 +292,8 @@ function refsOf(family, part) {
   }
   // ((7c HR) a hidden room's host is a dependency (R3): a part of this plan or one of its lots (a host outside the plan is refused at compile)
   if (family === 'form' && part.kind === 'hidden_room' && typeof part.host === 'string' && !part.host.includes('#')) parts.push({ id: part.host, path: '$.host', as: 'host' });
+  // ((8c RV-b) a fall off a form (lip form): its host form is a dependency (R3))
+  if (family === 'form' && part.kind === 'waterfall' && typeof part.on?.part === 'string' && !part.on.part.includes('#')) parts.push({ id: part.on.part, path: '$.on.part', as: 'host' });
   if (family === 'form' && Array.isArray(part.around)) part.around.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.around[${i}]`, as: 'around' }); });
   if (family === 'rule' && Array.isArray(part.scope)) part.scope.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.scope[${i}]`, as: 'scope' }); });
   return { parts, anchors };

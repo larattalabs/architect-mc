@@ -77,6 +77,8 @@ class PlanChecksSecretsTest {
 		JsonObject asked = PlanChecks.body(req(ask), b);
 		assertFalse(plain.has("secrets"));
 		assertTrue(asked.get("secrets").getAsBoolean());
-		assertEquals(List.of("plan", "claim", "anchors", "budget"), List.copyOf(plain.keySet()));
+		// ((8c) a mod that builds rivers says so in the key: a river is supported there)
+		assertEquals(RegionFluids.flowingBuild() ? List.of("plan", "claim", "anchors", "budget", "flowingWater") : List.of("plan", "claim", "anchors", "budget"), List.copyOf(plain
+			.keySet()));
 	}
 }
