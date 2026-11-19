@@ -136,6 +136,9 @@ public final class Placement {
 		if (srv.getTickCount() < START_GRACE_TICKS) {
 			return;
 		}
+		if (!SaveHold.admits(srv)) {
+			return; // (slice SOFF) every job (placements, removals, restores, batches, groups) parks between steps while saving is off
+		}
 		long start = System.nanoTime();
 		long cpu0 = cpuNow();
 		deadline = start + budgetNanos();

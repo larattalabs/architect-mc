@@ -139,7 +139,8 @@ public final class Builder {
 		SiteWaits.init(); // 6c Y2 (C25): waiting status
 		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
-		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
+		// (slice RL) after the above: the cells against the saved ledger; (slice SOFF) deferred while saving is off (another mod's), to the hold's release
+		ServerLifecycleEvents.SERVER_STARTED.register(s -> SaveHold.whenAdmitted(s, "the start's stockpile reconcile", () -> Stockpiles.reconcileAtStart(s)));
 		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
 		// first server tick ({@link #fillsAtStart})
 		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);
@@ -1049,6 +1050,9 @@ public final class Builder {
 		if (srv == null || siteId == null || siteId.isEmpty()) {
 			return null;
 		}
+		if (!SaveHold.admits(srv)) {
+			return null; // (slice SOFF) every crate's ingress held while saving is off (a hopper keeps its items)
+		}
 		if (siteId.startsWith(Stockpiles.PREFIX)) {
 			return Stockpiles.accept(srv, siteId, item, commit); // 6c Y: the owner's stockpile, pooled over its building targets
 		}
@@ -1724,7 +1728,7 @@ public final class Builder {
 
 	/** (M5 FK; FK-b fix) {@link Fills#atStart} once, at the start of the first server tick: before any level (a hopper) ticks. */
 	static void fillsAtStart(MinecraftServer srv) {
-		if (fkAtStart) {
+		if (fkAtStart && SaveHold.admits(srv)) { // (slice SOFF) held while saving is off: the next tick after the release runs it
 			fkAtStart = false;
 			try {
 				Fills.atStart(srv);
@@ -1748,6 +1752,9 @@ public final class Builder {
 		fillsAtStart(srv); // a no-op after the first tick's START listener ran it
 		server = srv;
 		ticks++;
+		if (!SaveHold.admits(srv)) {
+			return; // (slice SOFF) feeding, fills and refunds held while saving is off: each site parks where it is
+		}
 		for (Site s : Sites.all()) {
 			if (s.construction() == null || !s.building() || Stockpiles.fed(s)) {
 				continue; // 6c Y: a stockpile's targets are fed by its owner loop (Stockpiles.tick), in feed order
@@ -3350,6 +3357,7 @@ public final class Builder {
 	 */
 	public static SiteDeltas.Result applyConstructionDelta(ServerLevel level, SiteDeltas.Request r, @org.jspecify.annotations.Nullable ServerPlayer actor)
 		throws Sites.SiteException {
+		SaveHold.require(level.getServer()); // (slice SOFF) held while saving is off: refused before the construction or its refund changes
 		SiteDeltas.Check c = checkConstructionDelta(level, r);
 		if (!c.ok()) {
 			SiteDeltas.Refusal f = c.refusals().get(0);

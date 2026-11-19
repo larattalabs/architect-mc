@@ -225,6 +225,8 @@ public final class Stockpiles {
 	}
 
 	static void init() {
+		SaveEvidence.init(); // (slice SOFF) first: its BEFORE_SAVE starts each save's record
+		SaveHold.init(); // (slice SOFF) its START_SERVER_TICK before Builder's fillsAtStart
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
@@ -290,14 +292,22 @@ public final class Stockpiles {
 			}
 			boolean timed = SaveTiming.on();
 			long w0 = timed ? SaveTiming.started() : System.nanoTime();
-			// (slice SOFF) a level with saving off (/save-off) was skipped unless the save is forced (/save-all is; the stop turns saving on
-			// first): no ledger over chunks not on disk; it stays pending, logged once per change
-			if (savingOffCheck(server, force, flush ? "the world save" : "the autosave") != null) {
+			// (slice SOFF, review findings 4 and 5) only over a save that wrote every level and saved the players with it, as recorded while it
+			// ran (SaveEvidence; never the noSave flags read afterwards): an autosave, /save-all and the stop qualify; a save that skipped a
+			// level (saving off) or another mod's chunk save alone (force, no players) does not. The ledger stays pending
+			String incoherent = SaveEvidence.worldSaveRefusal(server);
+			if (incoherent != null) {
+				savingOffRefusals++;
+				if (!incoherent.equals(lastIncoherent)) {
+					lastIncoherent = incoherent;
+					SaveEvidence.log(flush ? "the world save" : "the autosave", incoherent);
+				}
 				if (timed) {
 					SaveTiming.stop();
 				}
 				return;
 			}
+			lastIncoherent = null;
 			boolean ioFailed = false;
 			if (!flush) {
 				long t0 = System.nanoTime();
@@ -333,11 +343,11 @@ public final class Stockpiles {
 				}
 				return;
 			}
-			forcedWorldSave = force; // (SOFF) a forced save wrote the levels with saving off too: save()'s check lets it through
+			evidencedSave = true; // (SOFF) this save wrote every level (its evidence): save()'s flag check lets it through
 			try {
 				save();
 			} finally {
-				forcedWorldSave = false;
+				evidencedSave = false;
 			}
 			if (timed) {
 				logTiming(flush ? "world save (flush)" : "autosave", w0, SaveTiming.stop());
@@ -535,6 +545,7 @@ public final class Stockpiles {
 
 	/** {@code createStockpile}: idempotent per owner; adds the named crates that aren't crates of it yet. Server thread. */
 	public static Pile create(MinecraftServer srv, String owner, String dimension, List<BlockPos> crates) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		requireOwner(owner);
 		requireLoaded();
 		if (!SurvivalWorld.on()) {
@@ -582,6 +593,7 @@ public final class Stockpiles {
 
 	/** {@code addStockpileCrate}. */
 	public static Pile addCrate(MinecraftServer srv, String owner, String dimension, BlockPos at) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		requireLoaded();
 		Pile p = get(owner);
 		if (p == null) {
@@ -669,6 +681,7 @@ public final class Stockpiles {
 	 * with nothing building ends the stockpile.
 	 */
 	public static CrateRemoval removeCrate(MinecraftServer srv, String owner, BlockPos at, boolean force) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -749,6 +762,7 @@ public final class Stockpiles {
 	 * inventory) or dropped. Returns what went out per item.
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
@@ -880,6 +894,7 @@ public final class Stockpiles {
 	}
 
 	public static List<String> setFeedOrder(MinecraftServer srv, String owner, List<String> ids) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
@@ -950,6 +965,7 @@ public final class Stockpiles {
 
 	/** {@code withdraw}: credit only, into the player's inventory (what doesn't fit drops at the player). Returns what came out. */
 	public static Map<String, Integer> withdraw(MinecraftServer srv, String owner, Map<String, Integer> items, ServerPlayer to) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		requireNoDebt();
 		Pile p = get(owner);
 		if (p == null) {
@@ -1086,13 +1102,7 @@ public final class Stockpiles {
 	 * left nothing owed and the ledger durably saved; else it is refused before anything moves. Package-private for the units.
 	 */
 	static void payoutPreSave(Runnable preSave) throws Sites.SiteException {
-		MinecraftServer sv = SERVER;
-		List<String> off = sv == null ? List.of() : levelsSavingOff(sv);
-		if (!off.isEmpty()) {
-			// (slice SOFF) its ledger save would be refused (and the restored ledger's write with it): refused before anything moves
-			throw new Sites.SiteException(Reason.NOT_ALLOWED, savingOffRefusal(off, false, "nothing was paid out (its ledger save would be ahead of the"
-				+ " world's chunks)", "try again"));
-		}
+		SaveHold.require(SERVER); // (slice SOFF) held while saving is off: refused before anything moves
 		requireNoDebt();
 		if (unsaved) {
 			preSave.run();
@@ -1126,6 +1136,7 @@ public final class Stockpiles {
 	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
 	 */
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile (createStockpile first)");
@@ -1445,6 +1456,9 @@ public final class Stockpiles {
 	 * targets, pooled, still miss) and whether it fits; booked when {@code commit}. Null when nothing needs it or it doesn't fit.
 	 */
 	public static Ledger.@Nullable Accepted accept(MinecraftServer srv, String crateOwner, String item, boolean commit) {
+		if (!SaveHold.admits(srv)) {
+			return null; // (slice SOFF) held while saving is off: the crate takes nothing (a hopper keeps its items)
+		}
 		Pile p = byId(crateOwner.substring(PREFIX.length()));
 		if (p == null) {
 			return null;
@@ -1584,6 +1598,9 @@ public final class Stockpiles {
 	 * record from {@link StockLedger#charged}).
 	 */
 	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items, @Nullable String key, int rid) {
+		if (!SaveHold.admits(srv)) {
+			return false; // (slice SOFF) held while saving is off: the stage waits, nothing charged
+		}
 		Pile p = get(owner);
 		if (p == null) {
 			return items.values().stream().allMatch(n -> n <= 0);
@@ -2081,6 +2098,9 @@ public final class Stockpiles {
 	/** One server tick: every stockpile feeds its targets in feed order, with reservations (§3). */
 	static void tick(MinecraftServer srv) {
 		ticks++;
+		if (!SaveHold.admits(srv)) {
+			return; // (slice SOFF) feeding held while saving is off (nothing pending to save: the saves are refused)
+		}
 		for (Pile p : List.copyOf(PILES.values())) {
 			ServerLevel level = Sites.levelOf(srv, p.dimension);
 			if (level == null) {
@@ -2667,6 +2687,8 @@ public final class Stockpiles {
 					o.addProperty("regionOwedRetried", RegionDurability.RETRIED.get());
 					o.addProperty("durabilityRefusals", durabilityRefusals);
 					o.addProperty("savingOffRefusals", savingOffRefusals); // (SOFF)
+					o.add("hold", SaveHold.json()); // (SOFF)
+					o.add("lastSave", SaveEvidence.json());
 					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -3458,6 +3480,10 @@ public final class Stockpiles {
 			explicitSave = false;
 			SaveTiming.explicit = wasTiming;
 		}
+		String skipped = SaveEvidence.chunksRefusal(srv); // (SOFF) its own save wrote every level
+		if (skipped != null) {
+			throw new IllegalStateException("Stockpiles: the world was not saved: " + skipped);
+		}
 		RegionDurability.retryOwed();
 		java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
 		if (!undurable.isEmpty()) {
@@ -3506,8 +3532,10 @@ public final class Stockpiles {
 
 	/** (slice SOFF) The levels the last logged saving-off refusal named; null while saving is on. Server thread. */
 	private static @Nullable String savingOffLast;
-	/** (slice SOFF) Scopes save()'s check to a forced world save (AFTER_SAVE with force: the levels with saving off were written too). */
-	private static boolean forcedWorldSave;
+	/** (slice SOFF) Scopes save()'s flag check to a world save whose evidence showed every level written (a forced /save-all included). */
+	private static boolean evidencedSave;
+	/** (slice SOFF) The last incoherent world save's reason logged (once per change). */
+	private static @Nullable String lastIncoherent;
 	/** (slice SOFF, dev) ledger saves refused because a level had saving off. */
 	static volatile int savingOffRefusals;
 
@@ -3528,7 +3556,6 @@ public final class Stockpiles {
 			return null;
 		}
 		savingOffRefusals++;
-		unsaved = true;
 		String levels = String.join(", ", off);
 		if (savingOffLogs(savingOffLast, levels)) {
 			savingOffLast = levels;
@@ -3594,6 +3621,19 @@ public final class Stockpiles {
 			} finally {
 				explicitSave(wasExplicit); // (slice T0 review P2-10) restored, never reset: a nested save keeps the outer one's scope
 				SaveTiming.explicit = wasTiming;
+			}
+			// (slice SOFF, review finding 4) its own save wrote every level (recorded while it ran): else nothing is published
+			String skipped = SaveEvidence.chunksRefusal(srv);
+			if (skipped != null) {
+				savingOffRefusals++;
+				SaveEvidence.log(quiet ? "the periodic save" : "a save with the world", skipped);
+				if (timed) {
+					SaveTiming.stop();
+				}
+				if (quiet) {
+					return;
+				}
+				throw new IllegalStateException("Stockpiles: the ledger was not saved: " + skipped);
 			}
 			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
 			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
@@ -3720,6 +3760,11 @@ public final class Stockpiles {
 			explicitSave(wasExplicit); // restored, never reset
 			SaveTiming.explicit = wasTiming;
 		}
+		String skipped = SaveEvidence.chunksRefusal(srv);
+		if (skipped != null) {
+			// (SOFF) payouts are held while saving is off (SaveHold); a level turned off inside this save is reported, the debit is on disk
+			Architect.LOGGER.error("Stockpiles: a payout's world save after its ledger: {}", skipped);
+		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
 		lastLedgerFirstMs = ms;
@@ -3760,7 +3805,7 @@ public final class Stockpiles {
 			return false;
 		}
 		MinecraftServer sv = SERVER;
-		if (sv != null && savingOffCheck(sv, forcedWorldSave, "a ledger save") != null) {
+		if (sv != null && savingOffCheck(sv, evidencedSave, "a ledger save") != null) {
 			return false; // (slice SOFF) saveLedgerFirst's and compensate's write too: never over a level with saving off (unless forced)
 		}
 		if (sv != null && sv.isSameThread()) {

@@ -185,21 +185,27 @@ public final class RegionsImpl implements Regions {
 			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
-			if (reconcilePending) {
+			// (slice SOFF) what can change the ledger or move paid items is held while saving is off (the read-only stages run on)
+			boolean admits = dev.larattalabs.architect.site.SaveHold.admits(s);
+			if (admits && reconcilePending) {
 				reconcilePending = false;
 				reconcileRemovals();
 			}
-			if (revisionsPending) {
+			if (admits && revisionsPending) {
 				revisionsPending = false;
 				Revisions.recover(s); // (6d RV, §4.3) revisions accepted before a stop: installed or ended
 			}
-			Revisions.undoTick(s); // (6d RV, §4.4) running undos take their next step
+			if (admits) {
+				Revisions.undoTick(s); // (6d RV, §4.4) running undos take their next step
+			}
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
 			RegionHash.tick(s);
 			LandCheck.tick(s); // (6d LC) land checks take their next sections
 			generatedDuringRealise(s);
-			actionsTick(s);
+			if (admits) {
+				actionsTick(s);
+			}
 			Brushes.tick(s);
 			RegionFluids.tick(s); // (6c H) the fluids stage: forced ticks, settle and census, the escape guard
 			PlanRetention.replaySidecar(s, false); // (6c close-out A) discarded plans' helper dirs, once per helper link

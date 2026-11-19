@@ -362,6 +362,9 @@ public final class RoadBuilder {
 
 	static void tick(MinecraftServer srv) {
 		ticks++;
+		if (!SaveHold.admits(srv)) {
+			return; // (slice SOFF) held while saving is off
+		}
 		for (Infra i : Infras.all()) {
 			if (!i.building() || i.placing() || Stockpiles.fed(i) || RegionTargets.is(i) && !RegionTargets.isTerrain(i)) {
 				continue; // 6c Y: a stockpile's roads are fed by its owner loop; (6c RS) a region's targets only by it
