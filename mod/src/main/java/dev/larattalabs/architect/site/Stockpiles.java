@@ -227,6 +227,7 @@ public final class Stockpiles {
 	static void init() {
 		SaveEvidence.init(); // (slice SOFF) first: its BEFORE_SAVE starts each save's record
 		SaveHold.init(); // (slice SOFF) its START_SERVER_TICK before Builder's fillsAtStart
+		SaveTestHooks.init(); // (slice SOFF2, TEST) the soff-crash rows' hooks: nothing unarmed
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
@@ -1734,6 +1735,11 @@ public final class Stockpiles {
 	/** (J2, TEST kill point CS1) inside {@link #saveCredit}'s save: the players and the chunks on disk, the ledger not. */
 	private static boolean inCreditSave;
 
+	/** (SOFF2, TEST) inside {@link #saveCredit}'s save. */
+	static boolean inCreditSave() {
+		return inCreditSave;
+	}
+
 	/**
 	 * (J2, FK's durability leftover) A single-site removal's stockpile deconstructs: each credit held pending in its pile's ledger, saved with
 	 * the world before the removal's commit (Sites.removeDetailed). Returns whether any was held.
@@ -2689,6 +2695,7 @@ public final class Stockpiles {
 					o.addProperty("savingOffRefusals", savingOffRefusals); // (SOFF)
 					o.add("hold", SaveHold.json()); // (SOFF)
 					o.add("lastSave", SaveEvidence.json());
+					o.add("testHooks", SaveTestHooks.json()); // (SOFF2, TEST)
 					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -2789,6 +2796,7 @@ public final class Stockpiles {
 							}
 						}
 					}
+					SaveTestHooks.arm(srv, player, req); // (SOFF2, TEST) before the autosave below: a hook armed for it fires inside it
 					if (req.has("rawForceSave") && req.get("rawForceSave").getAsBoolean()) {
 						srv.saveAllChunks(true, true, true); // (SOFF, TEST) another mod's forced chunk save: no players
 					}
@@ -3838,6 +3846,10 @@ public final class Stockpiles {
 			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
 			// forced like the barrier's write: an unforced replacement could leave a torn file over an acknowledged generation. Cost: one file
 			// and one folder force per ordinary save (the barrier's ledger step measured p50 8 ms on this machine)
+			if (SaveTestHooks.failLedgerWrite()) {
+				unsaved = true; // (SOFF2, TEST failLedgerWrites) as a write that failed: not saved, pending
+				throw new IOException("the ledger's write failed [TEST: dev.stockpile.ps failLedgerWrites]");
+			}
 			DurableFile df = ledger(f);
 			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
@@ -3928,6 +3940,9 @@ public final class Stockpiles {
 			refreshBooks(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		if (SaveTestHooks.failLedgerWrite()) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger's write failed [TEST: dev.stockpile.ps failLedgerWrites]");
 		}
 		DurableFile df = ledger(f);
 		DurableFile.Result r = df.write(toJson(), df.request());

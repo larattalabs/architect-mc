@@ -27,6 +27,7 @@
 		"SaveEpochMixin",
 		"SaveEvidenceLevelMixin",
 		"SaveEvidenceServerMixin",
+		"SaveTestPlayerListMixin",
 		"SaveTimingLevelMixin",
 		"SaveTimingMixin",
 		"SaveTimingServerMixin",

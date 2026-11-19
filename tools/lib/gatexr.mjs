@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0 } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, creditSaveOff = false } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -83,6 +83,28 @@ export async function registerXr(steps, h) {
       region = rr.region;
     } else region = await G.realise(ctx, c.sha, entries);
     out.region = region;
+    let watch = null;
+    if (creditSaveOff) {
+      // (slice SOFF2, TEST noSaveInCreditSave) the Nether's saving turned off from BEFORE_SAVE inside the first take-up's credit save (after
+      // its refund is credited in memory): the save is refused; the job must park (held), never roll back keeping the refund. Saving is
+      // then turned on again; after the release the build goes on
+      await call('dev.stockpile.ps', { noSaveInCreditSave: 'minecraft:the_nether' }, 30_000);
+      out.creditSaveOff = { fired: 0 };
+      watch = (async () => {
+        for (let i = 0; i < 1800; i++) {
+          const sv = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
+          if ((sv?.testHooks?.creditSavesTurnedOff ?? 0) >= 1) {
+            out.creditSaveOff = { fired: sv.testHooks.creditSavesTurnedOff, hold: sv.hold?.state };
+            await L.sleep(4000);
+            const sv2 = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
+            out.creditSaveOff.heldAfter = sv2?.hold?.state;
+            await call('dev.stockpile.ps', { noSave: { 'minecraft:the_nether': false } }, 30_000);
+            return;
+          }
+          await L.sleep(2000);
+        }
+      })();
+    }
     if (midRemove) {
       // fed until the first retake (or the build), then removed mid-build: the refund of what stands, nothing given back twice
       // one feed wave at a time, the audit read before each: the removal starts as soon as `stopWhen` holds, before the next wave
@@ -103,8 +125,12 @@ export async function registerXr(steps, h) {
       const rs = await G.rsState(ctx, region);
       out.mid = { retaken: back, state: st?.view?.state, done: rs.build?.done ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
-      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
+      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: creditSaveOff ? 900_000 : 3_600_000 });
       out.state = f.last.st.view.state;
+    }
+    if (watch) {
+      await call('dev.stockpile.ps', { noSaveInCreditSave: null, noSave: { 'minecraft:the_nether': false } }, 30_000).catch(() => null);
+      await Promise.race([watch, L.sleep(5000)]);
     }
     out.built = await cons.point(midRemove ? 'mid-build' : 'built');
     const aud = await cons.parts();
@@ -168,6 +194,17 @@ export async function registerXr(steps, h) {
       check(r.removedOk && G.exact(r.removed), `${n}: Regions.remove, conservation exact after the removal, every item: ${json(r.removed.diff)}`);
       check(r.eflat === 0, `${n}: E-flat ${r.eflat} after the removal (the crates aside)`, r.eflatList);
       check(!r.items, `${n}: no item dropped (${r.items})`);
+    }
+    // (slice SOFF2) xr_demo again, a level's saving turned off inside its first take-up's credit save: parked, then built exactly
+    if (process.env.GATE_XR_SOFF !== 'none') {
+      const r = await one('prog:xr_demo', { creditSaveOff: true });
+      out.soff = { ...r, owRows: r.owRows?.slice(0, 40) };
+      const want = expectedBack(r.owRows);
+      check((r.creditSaveOff?.fired ?? 0) >= 1 && r.creditSaveOff?.heldAfter === 'HELD', `xr_demo (a level's saving off inside a take-up's credit save): the hook fired (${r.creditSaveOff?.fired}); held after it (${r.creditSaveOff?.heldAfter})`, r.creditSaveOff);
+      check(r.state === 'PLACED', `xr_demo (saving off inside a credit save): parked, then built after the release (${r.state}; never rolled back)`);
+      check(G.exact(r.built), `xr_demo (saving off inside a credit save): conservation exact after the build, every item: ${json(r.built.diff)} (identity ${r.built.identity})`);
+      check(G.same(r.retaken, want), `xr_demo (saving off inside a credit save): retaken = the overwritten paid cells' items: ${json(r.retaken)} vs ${json(want)}`);
+      check(r.removedOk && G.exact(r.removed), `xr_demo (saving off inside a credit save): removed, conservation exact: ${json(r.removed.diff)}`);
     }
     // mid-build removals on xr_demo: after its first take-up (a target over a target, the street stage), and after its lots were put
     // down (their placement's take-ups credited, the pavement's 81 + 47 + 3 stone bricks back), the lots starved, not built

@@ -188,12 +188,15 @@ public final class SaveHold {
 			return;
 		}
 		savingOffBarriers++;
+		SaveTestHooks.inSavingOffBarrier = true; // (SOFF2, TEST) the depositInSavingOffBarrier hook's window
 		try {
 			Stockpiles.durableBarrier(srv);
 			Architect.LOGGER.info("Architect: /save-off: the stockpile ledger's pending changes saved with the players and the chunks first");
 		} catch (RuntimeException e) {
 			savingOffBarrierFailures++;
 			Architect.LOGGER.error("Architect: /save-off: the pending stockpile changes could not be saved first ({}); they stay pending", e.getMessage());
+		} finally {
+			SaveTestHooks.inSavingOffBarrier = false;
 		}
 	}
 
