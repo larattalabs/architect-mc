@@ -567,8 +567,8 @@ It sends no notification of any kind; the coordinator reads the summary. It neve
 - SIGTERM to the nightly stops only its own runner.
 
 **Pinned dev.larattalabs dependencies, and setup aborts.** Every slot builds `--offline` with its own `.gradle-home`, cloned from main
-only when the slot has none. Before each such build (`tools/lib/pinned-deps.mjs`, called from the frozen-source build, the build
-artifact, the server host and the nomod server) the runner checks that the `lab_ui_version` pinned in `mod/gradle.properties` is in
+only when the slot has none. Before each such build (`tools/lib/pinned-deps.mjs`, called once per slot in gate-run's setup, before any
+step, and again from the frozen-source build, the build artifact, the server host and the nomod server) the runner checks that the `lab_ui_version` pinned in `mod/gradle.properties` is in
 that home's cache and, when it is not, does ONE online resolve with that home (`GITHUB_ACTOR`/`GITHUB_TOKEN`, else `gh auth token`).
 A bump of `lab_ui_version` is therefore resolved per slot automatically; a failed resolve aborts with the slot, the version and the
 command to run by hand. Another pinned dev.larattalabs dependency is one row in `PINS`. A run that aborts in setup runs no step: the
