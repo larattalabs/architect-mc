@@ -256,12 +256,14 @@ public final class RegionOverwrites {
 		// (J1, N1's shape) one save per put-down's take-ups, before the job that read the befores can end. (slice SOFF2, the review's XR
 		// finding) confirmed: a refused save (a level turned off inside it) throws Stockpiles.SaveRefused, and the job that called this parks
 		// (PlaceJob, InfraJob: AFTER_COMMIT kept, retried) instead of failing into a rollback that would keep this refund
-		Stockpiles.saveCreditConfirmed(srv);
+		// (SOFF2) the audit's retaken counted with the credit (once per key), before its save: a retry after a refused save finds the key
+		// credited and counts nothing again
+		byOwner.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
+			.merge(k, v, Integer::sum)));
 		if (Builder.TRACE_REFUNDS) {
 			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", by, key, all);
 		}
-		byOwner.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
-			.merge(k, v, Integer::sum)));
+		Stockpiles.saveCreditConfirmed(srv);
 		return all;
 	}
 

@@ -271,6 +271,9 @@ export async function registerPS(steps, h) {
       log(`  ${tag}: refund live ${json(refund)}; after the restart vs before the halt ${json(d)} (lost ${n1.lossUnits}, minted ${n1.mintUnits})`);
       if (noCreditSave) {
         check(n1.mintUnits === 0 && (n1.lossUnits > 0 || n1.ledgerSaves > 0), `${tag}: before J1 the refund was lost on the crash: lost ${n1.lossUnits} of ${n1.refundUnits}, minted ${n1.mintUnits} (ledger saves since the baseline: ${n1.ledgerSaves})`, n1);
+      } else if (mode === 'creditSaveOff') {
+        // (SOFF2) its credit's own save was refused; the hold's release barrier wrote the ledger (a confirmed barrier, not a save with the world)
+        check(n1.lossUnits === 0 && n1.mintUnits === 0 && a2.identity !== false, `${tag}: the refund kept through the refused save and the release: the stock after the restart equals the stock before the halt (lost ${n1.lossUnits}, minted ${n1.mintUnits}; identity ${a2.identity})`, n1);
       } else {
         check(n1.creditSaves >= 1 && n1.worldSaves >= 1, `${tag}: the credit saved the ledger with the world (${n1.creditSaves} credit save(s); last ${Number(n1.lastWorldSaveMs).toFixed(1)} ms, max ${Number(n1.maxWorldSaveMs).toFixed(1)} ms)`, n1);
         check(n1.lossUnits === 0 && n1.mintUnits === 0 && a2.identity !== false, `${tag}: the refund kept: the stock after the restart equals the stock before the halt (lost ${n1.lossUnits}, minted ${n1.mintUnits}; identity ${a2.identity})`, n1);
