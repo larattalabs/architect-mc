@@ -3344,8 +3344,9 @@ public final class Sites {
 					+ " of its standing blocks after its removal: it stays pending (its stored refund holds them: never paid twice)");
 				action = Reconcile.Action.KEEP;
 			}
-			if (action == Reconcile.Action.RELEASE && gone.construction() != null && (CrateSettle.hasRefunds(p.settle())
-				|| CrateSettle.hasRefunds(CrateSettle.durable(gone.id())))) {
+			if (action == Reconcile.Action.RELEASE && gone.construction() != null && p.settle() != null) {
+				// (the stockpiles, and so the durable stash with its refunds, load after this check: every construction removal that still owes
+				// its settle writes its committed restore; on cells already restored the write changes nothing)
 				// (T2b last round P1 2) a construction site whose committed undo reads "restored" because most of its cells were never built
 				// (its paid cells still stand): its restore is written now, before its entries go, so the refunds its settle pays are for blocks
 				// that are gone. A write that fails keeps it pending, unsettled
