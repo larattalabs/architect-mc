@@ -935,68 +935,9 @@ export async function registerTCC(steps, h) {
         await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true } });
       }
     }
-    // T4-road (finding 3a): a crate-fed road (no pile) with about half of its 100+ cells paid, K7+save after the first 64 cells of its restore.
-    // The review's precondition (the queue file failing, so the job is lost) can't arise since the PSVLC3 merge: PSV's preflight confirms the
-    // job's queue write before it plans. The job resumes; the row checks it is paid once. The majority rule itself is the model unit's
-    // (TxnRemovalModelT4Test 3a), and the sweep's absence rule is T4-corrupt's
-    if (want('T4-road')) {
-      const tag = 'T4-road';
-      const y = gy + 1, X = CX - 200, Z = CZ + 420;
-      await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 70} ${y - 1} ${Z + 3} minecraft:stone`);
-      await cmd(`/fill ${X + 71} ${y - 1} ${Z - 3} ${X + 140} ${y - 1} ${Z + 3} minecraft:stone`);
-      W.at = [X + 60, y + 1, Z + 6];
-      await L.tp(...W.at);
-      const road = { points: [[X, y, Z], [X + 130, y, Z]], width: 1, mode: 'AUTO' };
-      const bid = await later(`bqueue ${json({ id: `tcct4road${Date.now() % 100000}`, proximity: false, sharedCrate: true, autoApprove: true,
-        crateAt: [X + 10, y, Z - 8], items: [{ key: 'h1', bp: 'rs_hut', at: [X, y, Z - 24], rot: 0, mode: 'CONSTRUCTION' }, { key: 'r1', road }] })}`, 120_000);
-      let bv;
-      for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
-      const it = Object.fromEntries((bv?.items ?? []).map((x) => [x.key, x]));
-      const g = { hut: it.h1?.site, road: it.r1?.site, group: bv?.group };
-      check(!!g.road && !!g.hut, `${tag}: a hut and a 130-cell construction road from one shared crate (${g.hut}, ${g.road})`, bv);
-      if (g.road && g.hut) {
-        // a 130-cell road is still being placed when its batch item answers: wait for its record to be placed
-        let rs0 = null;
-        for (let i = 0; i < 120; i++) { rs0 = await roadState(g.road).catch(() => null); if (rs0 && !/plac/i.test(String(rs0.state))) break; await L.sleep(1000); }
-        log(`  ${tag}: ${g.road} ${rs0?.state ?? 'not listed'}`);
-        await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
-        await fill(tag, g.hut);
-        await call('dev.site.finish', { site: g.hut }, 60_000);
-        await wait(1500);
-        const { cp, items, paid } = await payRoad(tag, g);
-        const rbox = [X - 1, y - 1, Z - 2, X + 131, y + 1, Z + 2];
-        const standingRoad = async () => {
-          const out = {};
-          for (const st of (await cellsOf(rbox)).values()) {
-            const id = String(st).replace(/\[.*$/, '');
-            const full = id.includes(':') ? id : `minecraft:${id}`;
-            if (items.includes(full)) out[full] = (out[full] ?? 0) + 1;
-          }
-          return out;
-        };
-        await cmd('/save-all flush').catch(() => null);
-        await wait(2000);
-        const b0 = await roadParts(g.road, cp, items, W.at);
-        const sb = await standingRoad();
-        const before = { ...b0, placed: sb, total: [b0.stock, sb, b0.owed, b0.ground, b0.inventory].reduce((a, c) => G.plus(a, c), {}) };
-        await call('dev.journal.killAt', { point: 'K7+save' }, 10_000);
-        const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
-        const down = await haltWait();
-        check(down, `${tag}: halted at K7+save (the first 64 cells of the road's restore written and saved) (${json(m).slice(0, 120)})`);
-        if (down) {
-          await L.openWorld(name);
-          await L.tp(...W.at);
-          await settleWait([], cp, null, 30_000);
-          await wait(4000);
-          const a0 = await roadParts(g.road, cp, items, W.at);
-          const sa = await standingRoad();
-          const after = { ...a0, placed: sa, states: { [g.road]: a0.state }, total: [a0.stock, sa, a0.owed, a0.ground, a0.inventory].reduce((a, c) => G.plus(a, c), {}) };
-          judgeT4(tag, { tag, point: 'K7+save', removal: m, paid, txn: await txn() }, before, after);
-        } else {
-          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
-        }
-      }
-    }
+    // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the
+    // PSVLC3 merge, whose preflight confirms the job's queue write before it plans; LR-3/LR-3s cover the road's resumed job. The majority
+    // rule is TxnRemovalModelT4Test's 3a; the sweep's absence rule is T4-corrupt's.)
     // T4-corrupt (finding 3b; last: it leaves the world's sites file broken): K6 on a 40% site, its sites file unreadable at the start: the
     // sweep reads the empty registry as "gone" and pays the durable stash
     if (want('T4-corrupt')) {
