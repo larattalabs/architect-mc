@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0 } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000 } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -76,6 +76,10 @@ export async function registerXr(steps, h) {
     await killMobs();
     const cons = new G.Conservation(ctx, c.box);
     await cons.start();
+    if (refuseCredit) {
+      // (slice T4a, finding 4) the next take-up credit saves refused (a lot's or a road's): the put-down must wait, never roll back past it
+      out.refuseArmed = await call('dev.stockpile.ps', { refuseCreditSaves: refuseCredit }, 10_000);
+    }
     let region;
     if (planId) {
       const rr = await call('dev.region.realise', { planId, ...(Object.keys(entries).length ? { lots: entries } : {}) }, 300_000);
@@ -103,8 +107,10 @@ export async function registerXr(steps, h) {
       const rs = await G.rsState(ctx, region);
       out.mid = { retaken: back, state: st?.view?.state, done: rs.build?.done ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
-      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
-      out.state = f.last.st.view.state;
+      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: feedMs }).catch((e) => ({ error: String(e?.message ?? e), last: { st: { view: { state: 'NOT_BUILT' } } } }));
+      out.state = f.last?.st?.view?.state;
+      if (f.error) out.feedError = f.error.slice(0, 300);
+      if (refuseCredit) out.refuseLeft = (await call('dev.stockpile.ps', {}, 10_000).catch(() => ({}))).refuseCreditSaves;
     }
     out.built = await cons.point(midRemove ? 'mid-build' : 'built');
     const aud = await cons.parts();
@@ -148,6 +154,26 @@ export async function registerXr(steps, h) {
         await L.leaveWorld().catch(() => null);
       }
     }
+    return out;
+  };
+
+  // (slice T4a, finding 4) xrefuse (t4-xr): prog:xr_demo built with its first take-up credit save refused (dev.stockpile.ps
+  // refuseCreditSaves): the put-down waits and saves again; nothing rolls back past a credit, so the build is exact, the retaken items are
+  // the overwritten paid cells' once, and the removal is exact. Red on T4a's base: the refused save threw through the credit (a lot rolled
+  // back with its credit kept; a road reported placed half converted).
+  steps.xrefuse = async () => {
+    await ensure();
+    await L.leaveWorld().catch(() => null);
+    const n = process.env.GATE_XR_REFUSE ?? 'prog:xr_demo';
+    const r = await one(n, { refuseCredit: Number(process.env.GATE_XR_REFUSE_N ?? 1), feedMs: 1_500_000 });
+    const want = expectedBack(r.owRows);
+    const out = { [n]: { ...r, owRows: r.owRows?.slice(0, 40), want } };
+    check(r.refuseLeft === 0, `${n}: the armed credit save was refused (refuseCreditSaves left ${r.refuseLeft})`, r.refuseArmed);
+    check(r.state === 'PLACED', `${n}: built in survival past the refused save (${r.state}${r.feedError ? '; ' + r.feedError : ''})`);
+    check(G.exact(r.built), `${n}: conservation exact after the build, every item: ${json(r.built?.diff)} (identity ${r.built?.identity})`);
+    check(G.same(r.retaken, want), `${n}: the take-ups credited once: retaken ${json(r.retaken)} = the overwritten paid cells' items ${json(want)}`);
+    check(r.removedOk && G.exact(r.removed), `${n}: Regions.remove, conservation exact after the removal: ${json(r.removed?.diff)}`);
+    check(!r.items, `${n}: no item dropped (${r.items})`);
     return out;
   };
 
