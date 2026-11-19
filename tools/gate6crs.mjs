@@ -1103,8 +1103,11 @@ steps.t8ca = async () => {
   let armed = false, unpaid = null;
   await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000, until: (st) => ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
     extra: async () => {
+      // the lava buckets held back until the fluids gate waits for them; then the next barriers' chunk writes refused (3: a periodic save may
+      // take one) and the lava fed: the charge's prepare barrier is refused
       const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
-      if (!armed && x && x.phase === 'gate') { await L.call('dev.stockpile.barrier', { run: false, failChunkWrite: 1 }, 60_000).catch(() => null); armed = true; }
+      if (!armed && x && x.phase === 'gate') { await L.call('dev.stockpile.barrier', { run: false, failChunkWrite: 3 }, 60_000).catch(() => null); armed = true; }
+      if (!armed) { const ps = await G.pileState(ctx); const n = ps.outstanding?.['minecraft:lava_bucket'] ?? 0; return n > 0 ? { 'minecraft:lava_bucket': -n } : {}; }
       if (armed && !unpaid) {
         const rs = await G.rsState(ctx, region);
         const c = await L.call('dev.fluid.census', { box }, 600_000).catch(() => null);
