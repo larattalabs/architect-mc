@@ -125,7 +125,11 @@ public final class Repairs {
 		ServerTickEvents.END_SERVER_TICK.register(Repairs::tick);
 		ServerLifecycleEvents.BEFORE_SAVE.register((srv, flush, force) -> saveStartedAt = System.currentTimeMillis());
 		// registered after Stockpiles' AFTER_SAVE (which joins the chunk IO): the save's start time is the conservative bound
-		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> recordSave(srv));
+		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> {
+			if (marksSave(Stockpiles.levelsSavingOff(srv), force)) {
+				recordSave(srv);
+			}
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(srv -> running = false);
 		ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
 			running = false;
@@ -192,6 +196,14 @@ public final class Repairs {
 		} catch (IOException | RuntimeException e) {
 			prevSavedAt = 0; // unreadable: every entry
 		}
+	}
+
+	/**
+	 * (slice SOFF, pure) Whether a world save advances the running marker's {@code saved=}: not over a level with saving off ({@code /save-off}:
+	 * saveAllChunks skipped it unless forced), or a crash after it would take entries committed before it as on disk (never LAGGING).
+	 */
+	static boolean marksSave(List<String> levelsSavingOff, boolean forced) {
+		return forced || levelsSavingOff.isEmpty();
 	}
 
 	/** After a completed save while the world runs: the marker records the save's start and the jobs running then (atomic). */

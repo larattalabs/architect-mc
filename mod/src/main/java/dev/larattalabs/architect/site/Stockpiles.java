@@ -290,6 +290,14 @@ public final class Stockpiles {
 			}
 			boolean timed = SaveTiming.on();
 			long w0 = timed ? SaveTiming.started() : System.nanoTime();
+			// (slice SOFF) a level with saving off (/save-off) was skipped unless the save is forced (/save-all is; the stop turns saving on
+			// first): no ledger over chunks not on disk; it stays pending, logged once per change
+			if (savingOffCheck(server, force, flush ? "the world save" : "the autosave") != null) {
+				if (timed) {
+					SaveTiming.stop();
+				}
+				return;
+			}
 			boolean ioFailed = false;
 			if (!flush) {
 				long t0 = System.nanoTime();
@@ -325,7 +333,12 @@ public final class Stockpiles {
 				}
 				return;
 			}
-			save();
+			forcedWorldSave = force; // (SOFF) a forced save wrote the levels with saving off too: save()'s check lets it through
+			try {
+				save();
+			} finally {
+				forcedWorldSave = false;
+			}
 			if (timed) {
 				logTiming(flush ? "world save (flush)" : "autosave", w0, SaveTiming.stop());
 			}
@@ -333,7 +346,7 @@ public final class Stockpiles {
 		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
 		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> server.execute(() -> {
-			if (unsaved && server.isRunning()) {
+			if (unsaved && server.isRunning() && savingOffCheck(server, false, "a logout's save") == null) { // (SOFF) quiet under /save-off
 				saveWithWorld(server);
 			}
 		}));
@@ -356,6 +369,7 @@ public final class Stockpiles {
 			dir = null;
 			ledgerFile = null; // (slice T0) the next world reads its own
 			ledgerDebt = null;
+			savingOffLast = null; // (SOFF)
 			ticks = 0;
 			lastSaveTick = 0;
 		});
@@ -1072,6 +1086,13 @@ public final class Stockpiles {
 	 * left nothing owed and the ledger durably saved; else it is refused before anything moves. Package-private for the units.
 	 */
 	static void payoutPreSave(Runnable preSave) throws Sites.SiteException {
+		MinecraftServer sv = SERVER;
+		List<String> off = sv == null ? List.of() : levelsSavingOff(sv);
+		if (!off.isEmpty()) {
+			// (slice SOFF) its ledger save would be refused (and the restored ledger's write with it): refused before anything moves
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, savingOffRefusal(off, false, "nothing was paid out (its ledger save would be ahead of the"
+				+ " world's chunks)", "try again"));
+		}
 		requireNoDebt();
 		if (unsaved) {
 			preSave.run();
@@ -2645,6 +2666,7 @@ public final class Stockpiles {
 					o.addProperty("regionBarriers", RegionDurability.BARRIERS.get());
 					o.addProperty("regionOwedRetried", RegionDurability.RETRIED.get());
 					o.addProperty("durabilityRefusals", durabilityRefusals);
+					o.addProperty("savingOffRefusals", savingOffRefusals); // (SOFF)
 					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -3439,13 +3461,67 @@ public final class Stockpiles {
 	 * nothing of that level, yet reports no undurable write.
 	 */
 	static @Nullable String savingOff(MinecraftServer srv) {
+		return savingOffMessage(levelsSavingOff(srv));
+	}
+
+	/** (slice SOFF) The levels with saving off ({@code /save-off}, {@code noSave}), by dimension id. */
+	static List<String> levelsSavingOff(MinecraftServer srv) {
 		List<String> off = new ArrayList<>();
 		for (ServerLevel l : srv.getAllLevels()) {
 			if (l.noSave()) {
 				off.add(l.dimension().identifier().toString());
 			}
 		}
-		return savingOffMessage(off);
+		return off;
+	}
+
+	/**
+	 * (slice SOFF, pure) A save's refusal over the levels with saving off, or null: none off, or the save {@code forced} (saveAllChunks then
+	 * writes them too: /save-all). Names the dimensions and says /save-on.
+	 */
+	static @Nullable String savingOffRefusal(List<String> levelsOff, boolean forced, String what, String then) {
+		if (forced || levelsOff.isEmpty()) {
+			return null;
+		}
+		return "saving is off (/save-off) in " + String.join(", ", levelsOff) + ": " + what + "; /save-on, then " + then;
+	}
+
+	/** (slice SOFF, pure) Whether a refusal is logged: the first over a set of levels, and again only when the set changes. */
+	static boolean savingOffLogs(@Nullable String lastLogged, String levelsNow) {
+		return !levelsNow.equals(lastLogged);
+	}
+
+	/** (slice SOFF) The levels the last logged saving-off refusal named; null while saving is on. Server thread. */
+	private static @Nullable String savingOffLast;
+	/** (slice SOFF) Scopes save()'s check to a forced world save (AFTER_SAVE with force: the levels with saving off were written too). */
+	private static boolean forcedWorldSave;
+	/** (slice SOFF, dev) ledger saves refused because a level had saving off. */
+	static volatile int savingOffRefusals;
+
+	/**
+	 * (slice SOFF) The ledger save {@code what}'s refusal while a level has saving off (unless {@code forced}): the ledger stays pending
+	 * (unsaved) and the refusal is logged once per change of the levels off, never per periodic save. Null when it may save (then a
+	 * refusal logged earlier is closed with one line).
+	 */
+	static @Nullable String savingOffCheck(MinecraftServer srv, boolean forced, String what) {
+		List<String> off = levelsSavingOff(srv);
+		String msg = savingOffRefusal(off, forced, what + " did not write the stockpile ledger (the world's chunks are not being saved, so it would be"
+			+ " ahead of them)", "it is saved with the world");
+		if (msg == null) {
+			if (off.isEmpty() && savingOffLast != null) {
+				Architect.LOGGER.info("Stockpiles: saving is on again (it was off in {}); the ledger is saved with the world", savingOffLast);
+				savingOffLast = null;
+			}
+			return null;
+		}
+		savingOffRefusals++;
+		unsaved = true;
+		String levels = String.join(", ", off);
+		if (savingOffLogs(savingOffLast, levels)) {
+			savingOffLast = levels;
+			Architect.LOGGER.warn("Stockpiles: {} (logged once until saving is on)", msg);
+		}
+		return msg;
 	}
 
 	/** (pure) {@link #savingOff}'s message over the levels with saving off. */
@@ -3464,6 +3540,18 @@ public final class Stockpiles {
 		if (loadFailed) {
 			refusedSave();
 			return; // (PS, F6) nothing of the stockpiles is written this session
+		}
+		if (srv != null) {
+			// (slice SOFF) saveAllChunks skips a level with saving off (/save-off) and RegionDurability sees no write for it, so the ledger would
+			// be published over chunks not on disk: refused before anything is written (the players too), as an undurable write is; the
+			// periodic save quietly, an explicit one by throwing (its caller keeps its intent: the ledger stays pending)
+			String off = savingOffCheck(srv, false, quiet ? "the periodic save" : "a save with the world");
+			if (off != null) {
+				if (quiet) {
+					return;
+				}
+				throw new IllegalStateException("Stockpiles: " + off);
+			}
 		}
 		long t0 = System.nanoTime();
 		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
@@ -3659,6 +3747,9 @@ public final class Stockpiles {
 			return false;
 		}
 		MinecraftServer sv = SERVER;
+		if (sv != null && savingOffCheck(sv, forcedWorldSave, "a ledger save") != null) {
+			return false; // (slice SOFF) saveLedgerFirst's and compensate's write too: never over a level with saving off (unless forced)
+		}
 		if (sv != null && sv.isSameThread()) {
 			try {
 				long t0 = System.nanoTime();
