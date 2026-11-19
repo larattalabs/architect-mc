@@ -969,3 +969,37 @@ export async function t8rd(ctx) {
   }
   return out;
 }
+
+/**
+ * (8cTc, Steward's S3 write row) h_core_demo realised and halted at the write txn's `TX:fluid.write:place`, +save (the bodies written,
+ * their receipts not) and bare: the start replays the write from the txn: PLACED, every body settled, every census equal, 0 fluid
+ * outside; Regions.remove E-flat 0 (conservation).
+ */
+export async function t8wr(ctx) {
+  const { L, check, json } = ctx;
+  const out = {};
+  for (const point of ['TX:fluid.write:place+save', 'TX:fluid.write:place']) {
+    const tag = point.endsWith('+save') ? 'save' : 'bare';
+    const world = `G6B H T8WR ${tag}`;
+    await freshFlat(ctx, world, 'exact');
+    const d = await planDemo(ctx, { lava: true });
+    const box = demoBox(d.bodies);
+    const file = await snap(ctx, box, `h-t8wr-${tag}`);
+    let r = null;
+    await crashAt(ctx, world, point, async () => { r = await L.realise(d.p.planId); });
+    r ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
+    const st = await L.waitRegion(r, 3_600_000);
+    const fl = st.view.ext?.['architect_mc:fluids'] ?? [];
+    let mism = 0, outside = 0;
+    for (const b of d.bodies) { const c = await censusOf(ctx, b, null, d.bodies); mism += c.mismatch.length; outside += c.outsideCount; }
+    const rm = await removeWait(ctx, r).catch((e) => ({ state: `error ${e.message}` }));
+    await sleep(3000);
+    const dx = await diff(ctx, box, file);
+    out[tag] = { state: st.view.state, fluids: fl.map((x) => [x.body, x.state]), mism, outside, removal: rm.state, mismatches: dx.mismatches };
+    const bare = tag === 'bare';
+    check((bare || st.view.state === 'PLACED') && fl.length === 4 && fl.every((x) => x.state === 'settled' || (bare && x.state === 'drained')) && mism === 0 && outside === 0, `WR (${point}): the start replays the write txn: ${st.view.state}, bodies ${json(out[tag].fluids)}, census mismatches ${mism}, fluid outside ${outside}`);
+    check(rm.state === 'REMOVED' && (bare || dx.mismatches === 0), `WR (${point}) conservation: Regions.remove: ${rm.state}, E-flat ${dx.mismatches}${bare ? ' (recorded: a bare halt may lose the earlier stages chunks)' : ''}`, dx.sample);
+    await L.leaveWorld();
+  }
+  return out;
+}

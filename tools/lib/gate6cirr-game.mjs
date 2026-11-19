@@ -1025,6 +1025,17 @@ export async function t8d(ctx) {
   const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
   let stripped = 0;
   for (const b of Object.values(j.bodies ?? {})) if (b.lotRemoved && 'lotDrained' in b) { delete b.lotDrained; stripped++; }
+  if (stripped === 0) {
+    // (8cTc) the lot drain is a txn: FL6d leaves its intent open and the record unmarked. A DF-era world is made by hand: f2's bodies
+    // recorded lotRemoved (no lotDrained, no drain txn) and the open lot txn gone from txn.json, the sources on disk
+    for (const [id, b] of Object.entries(j.bodies ?? {})) if (/^f2_/.test(id)) { b.lotRemoved = true; b.state = 'drained'; delete b.lotDrained; delete b.drainTxn; stripped++; }
+    const tj = path.join(L.SAVES, world, 'architect', 'txn.json');
+    if (fs.existsSync(tj)) {
+      const t = JSON.parse(fs.readFileSync(tj, 'utf8'));
+      t.open = (t.open ?? []).filter((x) => !(x.kind === 'fluid.drain' && /\/lot:/.test(x.key ?? '')));
+      fs.writeFileSync(tj, JSON.stringify(t));
+    }
+  }
   fs.writeFileSync(rec, JSON.stringify(j));
   await L.openWorld(world);
   await L.tp((ob.W.claim[0] + ob.W.claim[2]) / 2, 120, (ob.W.claim[1] + ob.W.claim[3]) / 2);

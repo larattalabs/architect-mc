@@ -975,7 +975,13 @@ steps.t8a = async () => {
     await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000, until: (st) => !!writing || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
       extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.phase === 'writing') writing = x; return {}; } });
     check(!!writing, `A (${tag}): the fluids gate passed (phase writing, charged), the forced tick held`);
-    // the tiles' sources: the lava standing in the box, stable for 3 polls 5 s apart (at most 10 min)
+    // (8cTc) the tiles are markers: no lava stands while the write is held. Then the write txn writes it (the census held instead), and
+    // the row takes a source the txn wrote; on the red base the tiles wrote it under the held write
+    await sleep(30_000);
+    const c0 = await L.call('dev.fluid.census', { box }, 600_000);
+    out.markers = c0.fluids.filter(([, , , st]) => LAVA(st)).length === 0;
+    if (out.markers) await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
+    // the sources: the lava standing in the box, stable for 3 polls 5 s apart (at most 10 min)
     let lava = [], last = -1, stable = 0;
     for (let i = 0; i < 120 && stable < 3; i++) {
       const c = await L.call('dev.fluid.census', { box }, 600_000);
@@ -990,7 +996,7 @@ steps.t8a = async () => {
     const chargedLava = charged['minecraft:lava_bucket'] ?? 0;
     out.before = { phase: fs1.phase, bodies: (fs1.bodies ?? []).map((b) => [b.id, b.state, b.writtenAt]), charged, chargedBodies: rs1.record?.chargedBodies ?? null, lavaSources: lava.length };
     log(`  A: ${json(out.before)}`);
-    check(fs1.phase === 'writing' && (fs1.bodies ?? []).every((b) => b.state !== 'written' && b.state !== 'settled') && chargedLava > 0 && lava.length === chargedLava, `A (${tag}): the precondition: every lava source written by the tiles (${lava.length} of ${chargedLava} charged), no body forced (${json(out.before.bodies)})`);
+    check((out.markers ? (fs1.bodies ?? []).every((b) => b.state !== 'settled') : fs1.phase === 'writing' && (fs1.bodies ?? []).every((b) => b.state !== 'written' && b.state !== 'settled')) && chargedLava > 0 && lava.length === chargedLava, `A (${tag}): the precondition: every lava source written (${out.markers ? 'by the write txn, the census held' : 'by the tiles, no body forced'}: ${lava.length} of ${chargedLava} charged), none settled (${json(out.before.bodies)})`);
     // the player's bucket: one written source taken
     const taken = lava[0];
     if (taken) await cmd(`/setblock ${taken[0]} ${taken[1]} ${taken[2]} minecraft:air`);
@@ -1004,7 +1010,7 @@ steps.t8a = async () => {
     log(`  A: ${json({ standing, got, chargedLava })}`);
     check(got === standing && got + (taken ? 1 : 0) === chargedLava, `A (${tag}) conservation: lava buckets refunded ${got} + taken by the player ${taken ? 1 : 0} == charged ${chargedLava} (refund wanted: the ${standing} standing; ${got > standing ? `minted ${got - standing}` : 'no mint'})`);
   } finally {
-    await L.call('dev.fluid.hold', { write: false }, 10_000).catch(() => null);
+    await L.call('dev.fluid.hold', { write: false, settle: false }, 10_000).catch(() => null);
   }
   return out;
 };

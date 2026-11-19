@@ -499,6 +499,10 @@ public final class RegionFluids {
 		boolean lotDrained;
 		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
 		long writtenAt = -1;
+		/** (8cTc) The {@code fluid.write} txn that wrote this body (its R effect), else null. Saved. */
+		@Nullable String writeTxn;
+		/** (8cTc) The {@code fluid.drain} txn (escape, unsettled, upstream or lot) whose R effect recorded this body drained, else null. Saved. */
+		@Nullable String drainTxn;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
 		final Long2ObjectOpenHashMap<String> before = new Long2ObjectOpenHashMap<>();
 		/**
@@ -629,6 +633,8 @@ public final class RegionFluids {
 		@Nullable String drainTxnOnDisk;
 		/** (8cTb, Steward's ask) While the removal's drain txn is held: its where ({@code chunk x,z}), for the view's {@code heldAt}. */
 		@Nullable String drainHeldAt;
+		/** (8cTc) The cells the last lot drain wrote (its log line); transient. */
+		int lastLotCells;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -1562,16 +1568,22 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			// not contained (or held, HY): never written; (6c IRR) nor a source whose lot was removed
-			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty())) {
-				for (long p : b.cells) {
-					drop.add(p);
-				}
-				for (long p : b.ice) {
-					drop.add(p);
-				}
-				// ((6c F3-c) and its decor: no live coral on a bed that holds no water)
-				for (long p : b.decor) {
+			// (8cTc, N1) the tiles are markers: every body's cells, ice cap and grate, and its decor in its own cells, are the write txn's
+			// (FluidTxns.write); (6c F3-c) a bed's decor stays the tile's. A body never written (not contained, held, its lot removed) drops its
+			// bed decor too (no live coral on a bed that holds no water)
+			boolean never = "drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty());
+			LongOpenHashSet own = new LongOpenHashSet(b.cells);
+			for (long p : b.cells) {
+				drop.add(p);
+			}
+			for (long p : b.ice) {
+				drop.add(p);
+			}
+			for (long p : b.grate) {
+				drop.add(p);
+			}
+			for (long p : b.decor) {
+				if (never || own.contains(p)) {
 					drop.add(p);
 				}
 			}
@@ -1689,9 +1701,19 @@ public final class RegionFluids {
 		return !items.isEmpty() && items.stream().allMatch(i -> i.status.terminal());
 	}
 
+	/** (8cTc) A body state's id in its record. */
+	static String idOf(Regional st, BodyState bs) {
+		for (var e : st.states.entrySet()) {
+			if (e.getValue() == bs) {
+				return e.getKey();
+			}
+		}
+		return "";
+	}
+
 	/** §3.2: one fluid tick on every source and every face neighbour of one that is no body cell. */
 	static void force(ServerLevel level, RegionsImpl.Live l, Regional st) {
-		int n = 0;
+		List<String> due = new ArrayList<>();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			if (!"pending".equals(bs.state)) {
@@ -1706,16 +1728,27 @@ public final class RegionFluids {
 					continue;
 				}
 			}
-			n += forceBody(level, b);
-			bs.state = "written";
-			bs.sources = b.cells.length;
-			bs.spill = b.spill.length;
+			due.add(b.id);
 		}
-		st.phase = "settling";
-		st.forcedAt = level.getGameTime();
-		save(l, st);
+		// (8cTc, N1) the tiles are markers: the write txn writes every due body's cells and forces it (W, receipts per chunk), then records
+		// them written and the phase settling (R), the barrier; a start replays it
+		if (!due.isEmpty()) {
+			FluidTxns.Step g = FluidTxns.write(l, st, due, true);
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				if (g.detail() != null) {
+					Architect.LOGGER.warn("Region {}: the fluids write waits: {}", l.rec().id, g.detail());
+				}
+				return;
+			}
+		} else {
+			st.phase = "settling";
+			save(l, st);
+		}
+		if (st.forcedAt < 0) {
+			st.forcedAt = level.getGameTime();
+		}
 		WorldJournal.kill("FL2"); // the sources written and ticked, settling
-		Architect.LOGGER.info("Region {}: fluids written; {} forced fluid tick(s), settling", l.rec().id, n);
+		Architect.LOGGER.info("Region {}: fluids written; {} bod{} forced, settling", l.rec().id, due.size(), due.size() == 1 ? "y" : "ies");
 	}
 
 	/**
@@ -1770,6 +1803,7 @@ public final class RegionFluids {
 			waveHook.accept(level);
 		}
 		List<Body> held = new ArrayList<>();
+		List<String> wave = new ArrayList<>();
 		for (Body b : due) {
 			BodyState bs = st.states.get(b.id);
 			if (!"pending".equals(bs.state)) {
@@ -1786,12 +1820,7 @@ public final class RegionFluids {
 					continue;
 				}
 			}
-			writeBody(level, b);
-			forced += forceBody(level, b);
-			bs.state = "written";
-			bs.writtenAt = now;
-			bs.sources = b.cells.length;
-			bs.spill = b.spill.length;
+			wave.add(b.id);
 		}
 		if (due.isEmpty()) {
 			return;
@@ -1799,11 +1828,23 @@ public final class RegionFluids {
 		if (!held.isEmpty()) {
 			report(l, st);
 		}
-		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state));
-		if (!more) {
-			st.phase = "settling";
+		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state) && !wave.contains(x == null ? "" : idOf(st, x)));
+		if (!wave.isEmpty()) {
+			// (8cTc, N1) the wave's write as a txn (W: the bodies written and forced, receipts; R: written, settling with the last wave)
+			FluidTxns.Step g = FluidTxns.write(l, st, wave, !more);
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				if (g.detail() != null) {
+					Architect.LOGGER.warn("Region {}: the fluids wave waits: {}", l.rec().id, g.detail());
+				}
+				return;
+			}
+			forced = wave.size();
+		} else {
+			if (!more) {
+				st.phase = "settling";
+			}
+			save(l, st);
 		}
-		save(l, st);
 		Architect.LOGGER.info("Region {}: fluids wave {}: {} forced fluid tick(s){}", l.rec().id, due.stream().map(b -> b.id).toList(), forced, more ? "" : "; every body written, settling");
 		WorldJournal.kill(more ? "FL4" : "FL2"); // (6c HY) between two reaches: the downstream written, the upstream not
 	}
@@ -2011,7 +2052,6 @@ public final class RegionFluids {
 
 	static void settle(ServerLevel level, RegionsImpl.Live l, Regional st) {
 		boolean changed = false;
-		boolean escaped = false; // (8cTa) for the TEST kill point FLe only
 		long now = level.getGameTime();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
@@ -2024,10 +2064,12 @@ public final class RegionFluids {
 			}
 			long t0 = bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt;
 			if (!c.escaped().isEmpty()) {
-				escape(level, l, st, b, bs, "escaped", c.escaped());
-				bs.why = "escaped";
+				// (8cTc, E) the escape drain is a txn: drained (W), the record saved (R; FLe), the barrier; a start replays it
+				FluidTxns.Step g = FluidTxns.escape(l, st, b, "escaped", "escaped", c.escaped());
 				changed = true;
-				escaped = true;
+				if (g.kind() != FluidTxns.Step.Kind.DONE) {
+					break; // (one drain txn at a time; the census goes on once it is done)
+				}
 			} else if (!c.ticking() && c.mismatch().isEmpty()) {
 				bs.state = "settled";
 				bs.settledAt = now - t0;
@@ -2035,10 +2077,12 @@ public final class RegionFluids {
 				Architect.LOGGER.info("Region {}: fluid body {} settled in {} ticks (bound {})", l.rec().id, b.id, bs.settledAt, b.settleTicks);
 			} else if (now - t0 > 2L * b.settleTicks) {
 				boolean foreign = b.flowing() && foreignIn(level, b, st);
-				escape(level, l, st, b, bs, "unsettled", c.mismatch());
-				bs.why = foreign ? "foreign_water" : "census_drift"; // (8c WU, Steward's S-8c-2) a typed why: water not ours in the watch set, else the model drifted
+				// (8c WU, Steward's S-8c-2) a typed why: water not ours in the watch set, else the model drifted; (8cTc, E) drained in a txn
+				FluidTxns.Step g = FluidTxns.escape(l, st, b, "unsettled", foreign ? "foreign_water" : "census_drift", c.mismatch());
 				changed = true;
-				escaped = true;
+				if (g.kind() != FluidTxns.Step.Kind.DONE) {
+					break;
+				}
 			}
 		}
 		if (st.states.values().stream().allMatch(BodyState::ended)) {
@@ -2048,9 +2092,6 @@ public final class RegionFluids {
 		if (changed) {
 			save(l, st);
 			report(l, st);
-		}
-		if (escaped) {
-			WorldJournal.kill("FLe"); // (8cTa) TEST: an escape drain's record saved, its world writes not (no barrier)
 		}
 	}
 
@@ -2192,8 +2233,9 @@ public final class RegionFluids {
 		LongOpenHashSet breach = lot == null ? null : breachFlow(level, st, b, lot, others);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
-				if (removal && drainSkips(b, p)) {
-					continue; // ((6c F3-c) a decor cell: the group undo restores it after the drain, as the bed)
+				if (removal && drainSkips(b, p) && bs.writeTxn == null) {
+					continue; // ((6c F3-c) a decor cell the tiles wrote (a record from before 8cTc): the group undo restores it after the drain, as the
+					// bed; (8cTc) a body the write txn wrote has no journal entry there: its drain takes it)
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
@@ -2676,86 +2718,54 @@ public final class RegionFluids {
 		if (!mayWrite(l, st)) {
 			return NOT_DURABLE; // (round 2, P1 3) the record not on disk: nothing drained, the site not restored
 		}
-		// (round 2, P1 3) record before mutate: the lot's bodies marked removed (never written again) and saved, then drained, then marked
-		// drained and saved. A refused first save changes nothing (the marks go back); a start after the first save drains them again
-		List<Object[]> was = new ArrayList<>();
+		// (8cTc, D) the lot's drain is a txn: its bodies drained (W, receipts; FL6d after the writes), then lotRemoved, lotDrained and the
+		// drain txn saved (R), the barrier. A body lotRemoved without a drain txn (DF's or main's record, its drain maybe lost to a crash) is
+		// drained again: the legacy lot conversion
+		List<String> need = new ArrayList<>();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			if (!ids.contains(b.id) || bs.lotRemoved) {
-				continue;
+			if (ids.contains(b.id) && !(bs.lotRemoved && bs.drainTxn != null)) {
+				need.add(b.id);
 			}
-			was.add(new Object[] {bs, bs.state, bs.reason, new ArrayList<>(bs.at)});
-			bs.state = "drained";
-			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
-			bs.lotRemoved = true;
-			bs.lotDrained = false;
-			bs.at.clear();
 		}
-		if (!was.isEmpty() && !save(l, st)) {
-			if (st.owedWhy != null && st.owedWhy.startsWith("IN_DOUBT")) {
-				// (round 2, P1 8's rule) the marks may be on disk: kept, owed; nothing drained until a save confirms them
-				st.owedTriedAt = System.nanoTime();
-				return NOT_DURABLE;
-			}
-			for (Object[] w : was) {
-				BodyState bs = (BodyState) w[0];
-				bs.state = (String) w[1];
-				bs.reason = (String) w[2];
-				bs.lotRemoved = false;
-				bs.at.clear();
-				@SuppressWarnings("unchecked")
-				List<long[]> at = (List<long[]>) w[3];
-				bs.at.addAll(at);
-			}
-			st.owedTriedAt = System.nanoTime(); // (round 3, P2) still owed, so the next try waits its second (mayWrite)
-			Architect.LOGGER.warn("Region {}: lot {}'s removal refused: its fluids record could not be saved first; nothing drained", l.rec().id, lotId);
+		if (need.isEmpty()) {
+			return 0;
+		}
+		FluidTxns.Step g = FluidTxns.lot(l, st, lotId, need);
+		if (g.kind() != FluidTxns.Step.Kind.DONE) {
+			Architect.LOGGER.warn("Region {}: lot {}'s drain is not durable yet{}; its site waits", l.rec().id, lotId, g.detail() == null ? "" : " (" + g.detail()
+				+ ")");
 			return NOT_DURABLE;
 		}
+		report(l, st);
+		int n = st.lastLotCells;
+		Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
+		WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
+		return n;
+	}
+
+	/** (8cTc, D) The lot drain txn's writes: each of {@code ids} marked removed (never written again) and drained (its decor water too). */
+	static int lotDrainWrites(ServerLevel level, RegionsImpl.Live l, Regional st, String lotId, List<String> ids) {
 		int n = 0;
-		boolean changed = false;
-		List<BodyState> done = new ArrayList<>();
-		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
-		for (Body b : st.bodies) {
-			if (!ids.contains(b.id)) {
+		Holders held = null;
+		for (String id : ids) {
+			Body b = st.body(id);
+			BodyState bs = st.states.get(id);
+			if (b == null || bs == null) {
 				continue;
 			}
-			BodyState bs = st.states.get(b.id);
-			if (!bs.lotRemoved || bs.lotDrained) {
-				continue;
-			}
+			bs.state = "drained";
+			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
+			bs.lotRemoved = true; // in memory: the stage never writes it again; the R effect saves it
+			bs.at.clear();
 			if (!bs.before.isEmpty()) {
 				if (held == null) {
 					held = new Holders(l.rec().dimension, l.rec().groupId, st);
 				}
 				n += drain(level, st, b, bs, true, st.othersOf(b), held, false); // ((6c F3-c) a lot removed: its decor water goes too)
 			}
-			done.add(bs);
-			changed = true;
 		}
-		if (changed) {
-			WorldJournal.kill("FL6d"); // (slice DF round 3) the lot's sources drained, lotDrained not saved yet
-			// (round 3, P1 2) the drain's writes durable before the record says drained (T0's world barrier), as the removal before done
-			long tb = System.nanoTime();
-			if (st.barrierTriedAt != 0 && tb - st.barrierTriedAt < RETRY_NANOS) {
-				return NOT_DURABLE;
-			}
-			st.barrierTriedAt = tb;
-			var barrier = dev.larattalabs.architect.site.Stockpiles.barrier(level.getServer());
-			if (!barrier.ok()) {
-				Architect.LOGGER.warn("Region {}: lot {}'s drain is not durable yet ({}: {}); its site waits", l.rec().id, lotId, barrier.outcome(), barrier.reason());
-				return NOT_DURABLE; // (lotDrained stays false: the next try drains again, idempotent)
-			}
-			st.barrierTriedAt = 0;
-			done.forEach(x -> x.lotDrained = true);
-			if (!save(l, st)) {
-				st.owedTriedAt = System.nanoTime();
-				return NOT_DURABLE; // (drained; the record of it owed: the site waits, the next try saves it)
-			}
-			report(l, st);
-			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written){}", l.rec().id, lotId, n, held == null || held
-				.kept().isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept: " + cells(held.keptCells()));
-			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
-		}
+		st.lastLotCells = n;
 		return n;
 	}
 
@@ -3204,7 +3214,7 @@ public final class RegionFluids {
 					FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
 						lava += ours || charged ? 1 : 0;
-					} else if (charged && !jw.wrote(p, Blocks.LAVA)) {
+					} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.LAVA)) { // (8cTc) a body its write txn wrote is written
 						lava++;
 					}
 				}
@@ -3212,7 +3222,7 @@ public final class RegionFluids {
 			for (long p : b.grate) {
 				if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
 					grates++;
-				} else if (charged && !jw.wrote(p, Blocks.IRON_BARS)) {
+				} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.IRON_BARS)) {
 					grates++;
 				}
 			}
@@ -4127,6 +4137,12 @@ public final class RegionFluids {
 				b.addProperty("lotRemoved", true);
 				b.addProperty("lotDrained", bs.lotDrained); // (round 2)
 			}
+			if (bs.writeTxn != null) {
+				b.addProperty("writeTxn", bs.writeTxn); // (8cTc)
+			}
+			if (bs.drainTxn != null) {
+				b.addProperty("drainTxn", bs.drainTxn); // (8cTc)
+			}
 			if (bs.breached > 0) {
 				b.addProperty("breached", bs.breached);
 			}
@@ -4333,6 +4349,8 @@ public final class RegionFluids {
 					bs.lotRemoved = b.has("lotRemoved") && b.get("lotRemoved").getAsBoolean();
 					// (round 2) a record from before round 2 saved lotRemoved after its drain
 					bs.lotDrained = b.has("lotDrained") ? b.get("lotDrained").getAsBoolean() : bs.lotRemoved;
+					bs.writeTxn = strOrNull(b, "writeTxn"); // (8cTc)
+					bs.drainTxn = strOrNull(b, "drainTxn"); // (8cTc) a lot's or an escape's drain txn; a lotRemoved without one is drained again (D)
 					bs.breached = b.has("breached") ? b.get("breached").getAsInt() : 0;
 					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
 					bs.why = strOrNull(b, "why"); // (8cF)

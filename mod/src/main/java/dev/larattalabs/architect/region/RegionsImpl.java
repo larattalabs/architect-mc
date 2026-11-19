@@ -3422,6 +3422,12 @@ public final class RegionsImpl implements Regions {
 		if (RegionAdopt.adopting(l.rec()) || RegionAdopt.BUSY.containsValue(regionId)) {
 			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
+		String heldWrite = FluidTxns.heldAny(regionId, FluidTxns.WRITE);
+		if (heldWrite != null) {
+			// (8cTc, Steward's ask) an open fluids write that is itself held (a chunk unreadable, a save in doubt): answered at once, never waited
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, heldWrite + " (the region's water is"
+				+ " being written; it finishes by itself)", "held(other)"));
+		}
 		return onServer(s, () -> {
 			ServerLevel lv = l.level(s);
 			if (lv != null && l.rec().survival()) {

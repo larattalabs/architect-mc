@@ -537,6 +537,11 @@ public final class Revisions {
 			if (l == null) {
 				throw RegionsImpl.refusal(Reason.OTHER, "no region " + regionId);
 			}
+			String held = FluidTxns.heldAny(regionId, null);
+			if (held != null) {
+				// (8cTc, Steward's ask) a new revision blocked by a held fluid txn (a drain or write that finishes later): held(other), never decided
+				throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, held + " (the region's water finishes first)", "held(other)");
+			}
 			// (6d GR §9) a growth: the region's own program with params {grow}, or revise with {grow} or {spec: {grow}}: revise's spec.grow
 			JsonObject params = growParams(req);
 			if (params == null) {

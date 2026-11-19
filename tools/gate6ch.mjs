@@ -24,6 +24,7 @@
 //                                      settles and undoes exactly; the halt at FL1r bare and +save resumes from the gate
 //     t8c, t8e, t8f (8ct-c, 8ct-e, 8ct-f) slice 8cTa rows C (a dispensed source in predicted flow survives the removal), E (FLe bare:
 //                                      the escape drain replayed), F (a done without barrierDone waits a fresh bound)
+//     t8wr      (8ct-wr)               slice 8cTc: a realise halted at TX:fluid.write:place, +save and bare: replayed, settled, E-flat 0
 //     t8rd      (8ct-rd)               slice 8cTb: a removal halted at TX:fluid.drain:drain, bare and +save: replayed, E-flat 0
 //     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
 //                                      file not saved), K7+save (mid-R4)
@@ -197,7 +198,7 @@ steps.df = async () => {
   return await (await import('./lib/gate6ch-core.mjs')).df(ctx);
 };
 // (slice 8cTa, failing first) the DF final review's C, E and F
-for (const k of ['t8c', 't8e', 't8f', 't8rd']) steps[k] = async () => { await ensure(); return await (await import('./lib/gate6ch-core.mjs'))[k](ctx); };
+for (const k of ['t8c', 't8e', 't8f', 't8rd', 't8wr']) steps[k] = async () => { await ensure(); return await (await import('./lib/gate6ch-core.mjs'))[k](ctx); };
 // (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
 steps.holders = async () => {
   await ensure();

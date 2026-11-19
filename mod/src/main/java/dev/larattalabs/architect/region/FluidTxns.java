@@ -39,11 +39,13 @@ public final class FluidTxns {
 
 	public static final String CHARGE = "region.charge";
 	public static final String DRAIN = "fluid.drain";
+	public static final String WRITE = "fluid.write";
 
 	/** Registers both kinds (TxnServer, at load). */
 	public static void register(TxnCore c) {
 		c.register(CHARGE_KIND);
 		c.register(DRAIN_KIND);
+		c.register(WRITE_KIND);
 	}
 
 	/** The resource a fluids record's txns hold: {@code fluid:<region>#rv<rid>} (never shown: a hold's where is its chunk). */
@@ -136,13 +138,39 @@ public final class FluidTxns {
 
 	/** The outcome of an attempt that began (or found) an entry: done once it retired, else held with its where, else waiting. */
 	static Step after(TxnEntry t) {
-		if (!TxnServer.core().open().contains(t)) {
-			return Step.done();
+		if (!TxnServer.core().open().contains(t) || t.phase() == dev.larattalabs.architect.txn.Phase.EFFECTS_DONE || t.phase()
+			== dev.larattalabs.architect.txn.Phase.RETIRING && t.decision() != null && !t.decision().isAbort()) {
+			return Step.done(); // (8cTc) every effect applied and the barrier covered them: its retirement only waits for the stores' acknowledgements
 		}
 		if (t.held() != null) {
-			return new Step(Step.Kind.HELD, "held(decided) " + t.id + ": " + (t.heldAt() != null ? t.heldAt() : t.held()));
+			return new Step(Step.Kind.HELD, "held(decided) " + t.id + ": " + where(t));
 		}
 		return Step.waiting();
+	}
+
+	/** (Steward's ask) A hold's where in words: {@code chunk x,z}, else "the region's water record"; never the raw {@code fluid:} resource. */
+	static String where(TxnEntry t) {
+		String w = t.heldAt();
+		if (w != null && w.startsWith("chunk ")) {
+			return w;
+		}
+		return "the region's water record";
+	}
+
+	/** (Steward's ask) A begin's {@code held(other) tx-<n>: <resource>} with the resource worded. */
+	static @Nullable String worded(@Nullable String detail) {
+		return detail == null ? null : detail.replaceAll("fluid:[^ ;,)]+", "the region's water record").replaceAll("charge:[^ ;,)]+", "the region's charge");
+	}
+
+	/** (8cTc, Steward's ask) An open fluid txn of the region (any record) that is held, as {@code held(other) tx-<n>: <where>}, else null. */
+	public static @Nullable String heldAny(String regionId, @Nullable String kind) {
+		String pre = "fluid:" + regionId + "#rv";
+		for (TxnEntry t : TxnServer.core().open()) {
+			if ((kind == null ? t.kind.startsWith("fluid.") : kind.equals(t.kind)) && t.held() != null && t.resources.stream().anyMatch(r -> r.startsWith(pre))) {
+				return "held(other) " + t.id + ": " + where(t);
+			}
+		}
+		return null;
 	}
 
 	// ------------------------------------------------------------------ region.charge
@@ -164,7 +192,7 @@ public final class FluidTxns {
 				return Step.done();
 			}
 			case HELD -> {
-				return new Step(Step.Kind.HELD, st.detail());
+				return new Step(Step.Kind.HELD, worded(st.detail()));
 			}
 			case UNAVAILABLE -> {
 				return new Step(Step.Kind.REFUSED, "txn_journal: " + st.detail());
@@ -303,7 +331,7 @@ public final class FluidTxns {
 				return Step.done();
 			}
 			case HELD -> {
-				return new Step(Step.Kind.HELD, started.detail());
+				return new Step(Step.Kind.HELD, worded(started.detail()));
 			}
 			case UNAVAILABLE -> {
 				return new Step(Step.Kind.REFUSED, "txn_journal: " + started.detail());
@@ -515,9 +543,385 @@ public final class FluidTxns {
 				case "pile.scoop" -> PILE_SCOOP;
 				case "fluid.drain" -> FLUID_DRAIN;
 				case "fluid.drained" -> FLUID_DRAINED;
+				case "fluid.escape" -> FLUID_ESCAPE;
+				case "fluid.escaped" -> FLUID_ESCAPED;
+				case "fluid.lotdrain" -> FLUID_LOTDRAIN;
+				case "fluid.lotdrained" -> FLUID_LOTDRAINED;
 				default -> null;
 			};
 		}
 	};
+
+
+	// ------------------------------------------------------------------ (8cTc) generic W and R adapters over a record
+
+	/** A W effect's world writes on a record (loaded, its chunks loaded); returns the cells written. */
+	interface WRun {
+		int run(TxnEntry t, Effect e, ServerLevel level, RegionsImpl.Live l, RegionFluids.Regional st);
+	}
+
+	/** An R effect over a record: whether it is on the record now, and its write (durable, or it throws and leaves memory as it was). */
+	interface RRun {
+		boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st);
+
+		void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st);
+	}
+
+	/** The chunks every write of the record may touch, for an effect's data. */
+	static JsonArray chunksJson(RegionFluids.Regional st) {
+		JsonArray chunks = new JsonArray();
+		for (long ck : RegionFluids.drainChunks(st)) {
+			JsonArray a = new JsonArray();
+			a.add((int) (ck >> 32));
+			a.add((int) ck);
+			chunks.add(a);
+		}
+		return chunks;
+	}
+
+	/** A W adapter: probe = this effect's receipt in every chunk; apply = the writes, the kill point {@code step}, then the receipts. */
+	static TxnKind.Adapter w(String stepName, WRun run) {
+		return new TxnKind.Adapter() {
+			@Override
+			public Probe probe(TxnEntry t, Effect e) {
+				return FLUID_DRAIN.probe(t, e);
+			}
+
+			@Override
+			public void apply(TxnEntry t, Effect e) {
+				ServerLevel level = level(e);
+				RegionsImpl.Live l = live(region(e), rid(e));
+				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
+				if (level == null || l == null || st == null) {
+					throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
+				}
+				List<LevelChunk> chunks = new ArrayList<>();
+				for (long[] c : chunksOf(e)) {
+					chunks.add(level.getChunk((int) c[0], (int) c[1]));
+				}
+				run.run(t, e, level, l, st);
+				step(t, stepName);
+				String k = e.key(t.id);
+				for (LevelChunk ch : chunks) {
+					if (!TestMove.receiptsOf(ch).contains(k)) {
+						TestMove.addReceiptTo(ch, k);
+					}
+				}
+			}
+
+			@Override
+			public void compensate(TxnEntry t, Effect e) {
+				throw new IllegalStateException("never compensated");
+			}
+
+			@Override
+			public String where(TxnEntry t, Effect e) {
+				return FLUID_DRAIN.where(t, e);
+			}
+		};
+	}
+
+	static TxnKind.Adapter r(RRun run) {
+		return new TxnKind.Adapter() {
+			@Override
+			public Probe probe(TxnEntry t, Effect e) {
+				RegionsImpl.Live l = live(region(e), rid(e));
+				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
+				return st == null ? Probe.UNKNOWN : run.applied(t, e, st) ? Probe.APPLIED : Probe.ABSENT;
+			}
+
+			@Override
+			public void apply(TxnEntry t, Effect e) {
+				RegionsImpl.Live l = live(region(e), rid(e));
+				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
+				if (st == null) {
+					throw new IllegalStateException("region " + region(e) + " is not loaded");
+				}
+				run.run(t, e, l, st);
+			}
+
+			@Override
+			public void compensate(TxnEntry t, Effect e) {
+				throw new IllegalStateException("never compensated");
+			}
+
+			@Override
+			public String where(TxnEntry t, Effect e) {
+				return "the region's water record";
+			}
+		};
+	}
+
+	static List<String> ids(Effect e) {
+		List<String> out = new ArrayList<>();
+		e.data().getAsJsonArray("bodies").forEach(x -> out.add(x.getAsString()));
+		return out;
+	}
+
+	static JsonArray idsJson(List<String> ids) {
+		JsonArray a = new JsonArray();
+		ids.forEach(a::add);
+		return a;
+	}
+
+	/** Begins (or finds) one record txn: plans {@code w} then {@code r} over the record's chunks; persists; drives. */
+	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, Effect.Builder w, Effect.Builder r,
+		java.util.function.Consumer<TxnEntry> attached) {
+		TxnCore c = TxnServer.core();
+		TxnCore.Started started = c.begin(kind, key, List.of(resource(l)), null);
+		switch (started.status()) {
+			case ATTACHED -> {
+				attached.accept(started.entry());
+				return after(started.entry());
+			}
+			case REPLAYED -> {
+				return Step.done();
+			}
+			case HELD -> {
+				return new Step(Step.Kind.HELD, worded(started.detail()));
+			}
+			case UNAVAILABLE -> {
+				return new Step(Step.Kind.REFUSED, "txn_journal: " + started.detail());
+			}
+			default -> {
+			}
+		}
+		TxnEntry t = started.entry();
+		c.plan(t, w.data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", chunksJson(st)));
+		c.plan(t, r.data("region", l.rec().id).data("rid", l.rid()));
+		DurableFile.Outcome p = c.persist(t);
+		if (p == DurableFile.Outcome.REFUSED) {
+			return new Step(Step.Kind.REFUSED, "txn_journal: the intent could not be written");
+		}
+		if (p == DurableFile.Outcome.OK) {
+			c.drive(t);
+		}
+		return after(t);
+	}
+
+	// ------------------------------------------------------------------ fluid.write (N1: the tiles are markers; the txn writes the cells)
+
+	/**
+	 * (8cTc) One wave's write as a txn: the bodies due now (an H region: every pending one) written by {@link RegionFluids#writeBody}
+	 * (only into air or what the body wrote) and forced (W, a receipt in every chunk; kill point {@code TX:fluid.write:place}, after the writes
+	 * and before the receipts), then the bodies {@code written} with {@code writeTxn} and, the last wave, the phase {@code settling} (R), the
+	 * barrier. A start replays it from the entry; its receipts are the per-cell evidence the scoop reads (A's write side).
+	 */
+	static Step write(RegionsImpl.Live l, RegionFluids.Regional st, List<String> due, boolean last) {
+		String key = "fluid-write:" + recKey(l) + "/" + String.join(",", due);
+		return record(WRITE, key, l, st, Effect.of("fluid.place", EffectClass.W).data("bodies", idsJson(due)), Effect.of("fluid.written", EffectClass.R).data(
+			"bodies", idsJson(due)).data("last", last ? 1 : 0), t -> {
+			});
+	}
+
+	static final TxnKind.Adapter FLUID_PLACE = w("place", (t, e, level, l, st) -> {
+		int n = 0;
+		for (String id : ids(e)) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				RegionFluids.writeBody(level, b);
+				n += RegionFluids.forceBody(level, b);
+			}
+		}
+		st.forcedAt = st.forcedAt < 0 ? level.getGameTime() : st.forcedAt;
+		return n;
+	});
+
+	static final TxnKind.Adapter FLUID_WRITTEN = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			for (String id : ids(e)) {
+				RegionFluids.BodyState bs = st.states.get(id);
+				if (bs != null && !t.id.equals(bs.writeTxn)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			ServerLevel level = l.level(TxnServer.server());
+			long now = level == null ? 0L : level.getGameTime();
+			Map<String, Object[]> was = new java.util.HashMap<>();
+			for (String id : ids(e)) {
+				RegionFluids.BodyState bs = st.states.get(id);
+				RegionFluids.Body b = st.body(id);
+				if (bs == null || b == null) {
+					continue;
+				}
+				was.put(id, new Object[] {bs.state, bs.writtenAt, bs.sources, bs.spill, bs.writeTxn});
+				if ("pending".equals(bs.state)) {
+					bs.state = "written";
+				}
+				bs.writtenAt = bs.writtenAt < 0 ? now : bs.writtenAt;
+				bs.sources = b.cells.length;
+				bs.spill = b.spill.length;
+				bs.writeTxn = t.id;
+			}
+			String phase = st.phase;
+			if (e.data().get("last").getAsInt() == 1) {
+				st.phase = "settling";
+			}
+			if (!RegionFluids.save(l, st)) {
+				st.phase = phase;
+				was.forEach((id, w) -> {
+					RegionFluids.BodyState bs = st.states.get(id);
+					bs.state = (String) w[0];
+					bs.writtenAt = (Long) w[1];
+					bs.sources = (Integer) w[2];
+					bs.spill = (Integer) w[3];
+					bs.writeTxn = (String) w[4];
+				});
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+		}
+	});
+
+	static final TxnKind WRITE_KIND = new TxnKind() {
+		@Override
+		public String name() {
+			return WRITE;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public TxnKind.@Nullable Adapter adapter(Effect e) {
+			return switch (e.op()) {
+				case "fluid.place" -> FLUID_PLACE;
+				case "fluid.written" -> FLUID_WRITTEN;
+				default -> null;
+			};
+		}
+	};
+
+	// ------------------------------------------------------------------ fluid.drain: escape, unsettled (and their upstream closure)
+
+	/**
+	 * (8cTc, E) A census tick's escape or unsettled drain as a txn: the body (and its upstream closure, upstream first) drained (W, kill point
+	 * {@code TX:fluid.drain:drain}), then the record saved with them drained and {@code drainTxn} (R; FLe after it), the barrier. A start
+	 * finds it open and drains again: the record never says drained over sources a crash brought back.
+	 */
+	static Step escape(RegionsImpl.Live l, RegionFluids.Regional st, RegionFluids.Body b, String why, String typed, List<long[]> at) {
+		JsonArray cells = new JsonArray();
+		for (long[] c : at) {
+			JsonArray a = new JsonArray();
+			a.add(c[0]);
+			a.add(c[1]);
+			a.add(c[2]);
+			cells.add(a);
+		}
+		String key = "fluid-drain:" + recKey(l) + "/" + why + ":" + b.id;
+		return record(DRAIN, key, l, st, Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), Effect.of(
+			"fluid.escaped", EffectClass.R).data("body", b.id), t -> {
+			});
+	}
+
+	static final TxnKind.Adapter FLUID_ESCAPE = w("drain", (t, e, level, l, st) -> {
+		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+		if (b == null) {
+			return 0;
+		}
+		List<long[]> at = new ArrayList<>();
+		for (JsonElement x : e.data().getAsJsonArray("at")) {
+			JsonArray a = x.getAsJsonArray();
+			at.add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+		}
+		RegionFluids.BodyState bs = st.states.get(b.id);
+		RegionFluids.escape(level, l, st, b, bs, e.data().get("why").getAsString(), at);
+		bs.why = e.data().get("typed").getAsString();
+		return at.size();
+	});
+
+	static final TxnKind.Adapter FLUID_ESCAPED = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
+			return bs != null && t.id.equals(bs.drainTxn);
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
+			String was = bs.drainTxn;
+			bs.drainTxn = t.id;
+			if (st.states.values().stream().allMatch(RegionFluids.BodyState::ended)) {
+				st.phase = "done";
+			}
+			if (!RegionFluids.save(l, st)) {
+				bs.drainTxn = was;
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+			RegionFluids.report(l, st);
+			WorldJournal.kill("FLe"); // (8cTa's point) the escape drain's record saved, its writes not yet covered by the barrier
+		}
+	});
+
+	// ------------------------------------------------------------------ fluid.drain: a lot's irrigation sources (IRR, D)
+
+	/**
+	 * (8cTc, D) A lot removal's drain as a txn: the lot's bodies marked removed and drained (W, kill point {@code TX:fluid.drain:drain};
+	 * FL6d after the writes), then {@code lotRemoved}, {@code lotDrained} and {@code drainTxn} saved (R), the barrier. A body recorded
+	 * {@code lotRemoved} without a drain txn (DF's and main's records) is drained again: the legacy lot conversion.
+	 */
+	static Step lot(RegionsImpl.Live l, RegionFluids.Regional st, String lotId, List<String> bodies) {
+		String key = "fluid-drain:" + recKey(l) + "/lot:" + lotId;
+		return record(DRAIN, key, l, st, Effect.of("fluid.lotdrain", EffectClass.W).data("lot", lotId).data("group", String.valueOf(l.rec().groupId)).data(
+			"bodies", idsJson(bodies)), Effect.of("fluid.lotdrained", EffectClass.R).data("lot", lotId).data("bodies", idsJson(bodies)), t -> {
+			});
+	}
+
+	static final TxnKind.Adapter FLUID_LOTDRAIN = w("drain", (t, e, level, l, st) -> {
+		int n = RegionFluids.lotDrainWrites(level, l, st, e.data().get("lot").getAsString(), ids(e));
+		WorldJournal.kill("FL6d"); // (DF round 3's point, an alias) the lot's sources drained, the record not saved yet
+		return n;
+	});
+
+	static final TxnKind.Adapter FLUID_LOTDRAINED = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			for (String id : ids(e)) {
+				RegionFluids.BodyState bs = st.states.get(id);
+				if (bs != null && !(t.id.equals(bs.drainTxn) && bs.lotRemoved)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			String lotId = e.data().get("lot").getAsString();
+			Map<String, Object[]> was = new java.util.HashMap<>();
+			for (String id : ids(e)) {
+				RegionFluids.BodyState bs = st.states.get(id);
+				if (bs == null) {
+					continue;
+				}
+				was.put(id, new Object[] {bs.state, bs.reason, bs.lotRemoved, bs.lotDrained, bs.drainTxn});
+				bs.state = "drained";
+				bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
+				bs.lotRemoved = true;
+				bs.lotDrained = true;
+				bs.drainTxn = t.id;
+				bs.at.clear();
+			}
+			if (!RegionFluids.save(l, st)) {
+				was.forEach((id, w) -> {
+					RegionFluids.BodyState bs = st.states.get(id);
+					bs.state = (String) w[0];
+					bs.reason = (String) w[1];
+					bs.lotRemoved = (Boolean) w[2];
+					bs.lotDrained = (Boolean) w[3];
+					bs.drainTxn = (String) w[4];
+				});
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+		}
+	});
 
 }
