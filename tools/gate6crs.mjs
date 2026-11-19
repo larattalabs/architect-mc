@@ -854,6 +854,9 @@ steps.item11 = async () => {
     const totSave = C.total(atSave);
     const injAtSave = { ...C.injected };
     const builtAtSave = (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
+    // (slice SOFF) Architect holds every ledger change while saving is off; this case measures a kill's drift over a build that ran on
+    // with no save, so the hold is off for it (TEST: dev.stockpile.ps saveHold false); soff-crash covers the hold itself
+    await L.call('dev.stockpile.ps', { saveHold: false }, 30_000);
     await cmd('/save-off'); // (no autosave after this one: what is built from here is lost with the kill)
     await C.insert(`stockpile:${G.OWNER}`, half);
     await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.targets ?? []).reduce((a, t) => a + t.built, 0) > builtAtSave + 200 });

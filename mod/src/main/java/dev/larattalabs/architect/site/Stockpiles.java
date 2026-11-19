@@ -2776,6 +2776,9 @@ public final class Stockpiles {
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
+					if (req.has("saveHold")) {
+						SaveHold.testOff = !req.get("saveHold").getAsBoolean(); // (SOFF, TEST) the saving-off hold off: as before SOFF
+					}
 					if (req.has("noSave")) {
 						// (SOFF, TEST) a level's saving flag set directly, as another mod would (no /save-off: no save first)
 						for (var e : req.getAsJsonObject("noSave").entrySet()) {

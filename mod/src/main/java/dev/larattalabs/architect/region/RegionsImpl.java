@@ -186,7 +186,7 @@ public final class RegionsImpl implements Regions {
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
 			// (slice SOFF) what can change the ledger or move paid items is held while saving is off (the read-only stages run on)
-			boolean admits = dev.larattalabs.architect.site.SaveHold.admits(s);
+			boolean admits = dev.larattalabs.architect.site.SaveHold.jobsAdmitted(s);
 			if (admits && reconcilePending) {
 				reconcilePending = false;
 				reconcileRemovals();

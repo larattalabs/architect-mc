@@ -45,6 +45,7 @@ public final class SaveHold {
 	public static void init() {
 		ServerTickEvents.START_SERVER_TICK.register(SaveHold::tick);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			testOff = false;
 			state = State.OPEN;
 			heldOver = null;
 			lastFailure = null;
@@ -128,9 +129,12 @@ public final class SaveHold {
 		}
 	}
 
+	/** (TEST, dev.stockpile.ps saveHold) the hold off: rows that measure a crash's drift under /save-off (rs-crash item 11) as before SOFF. */
+	static volatile boolean testOff;
+
 	/** Whether an operation that changes the ledger or moves paid items may start now (no level with saving off, no hold pending). */
 	public static boolean admits(@Nullable MinecraftServer srv) {
-		if (srv == null) {
+		if (srv == null || testOff) {
 			return true;
 		}
 		List<String> off = Stockpiles.levelsSavingOff(srv);
@@ -138,6 +142,14 @@ public final class SaveHold {
 			hold(off);
 		}
 		return state == State.OPEN;
+	}
+
+	/**
+	 * Whether the job ticks may run: admitted, or no stockpile ledger exists (with none, a job's items are all on the world's side: a crate's
+	 * own ledger, drops, containers, saved or not with their chunks; creative placements under /save-off run as before).
+	 */
+	public static boolean jobsAdmitted(@Nullable MinecraftServer srv) {
+		return admits(srv) || Stockpiles.all().isEmpty();
 	}
 
 	/** Why an operation is held now, or null. */
@@ -197,6 +209,7 @@ public final class SaveHold {
 		o.addProperty("deferred", DEFERRED.size());
 		o.addProperty("savingOffBarriers", savingOffBarriers);
 		o.addProperty("savingOffBarrierFailures", savingOffBarrierFailures);
+		o.addProperty("testOff", testOff);
 		return o;
 	}
 }

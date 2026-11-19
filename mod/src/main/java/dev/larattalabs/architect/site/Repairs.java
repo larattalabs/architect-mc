@@ -236,7 +236,7 @@ public final class Repairs {
 		if (startTicks < 0) {
 			return;
 		}
-		if (!SaveHold.admits(srv)) {
+		if (!SaveHold.jobsAdmitted(srv)) {
 			return; // (slice SOFF) the start's settles and the auto repair held while saving is off
 		}
 		if (!startDone) {
