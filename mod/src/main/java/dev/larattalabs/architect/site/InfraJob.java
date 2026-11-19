@@ -61,6 +61,8 @@ final class InfraJob implements Placement.Job {
 	/** (XR) A survival region tile's free pass: the region's writers, read once when it starts writing (null: not read yet). */
 	java.util.@org.jspecify.annotations.Nullable List<RegionOverwrites.Live> xrLives;
 	int cursor;
+	/** (slice SOFF2) take-up credit saves refused (the job waited). */
+	transient int takeUpRefusals;
 	@Nullable String entry;
 	boolean beforeRecord = true;
 	@Nullable String broken;
@@ -652,7 +654,16 @@ final class InfraJob implements Placement.Job {
 					WorldJournal.kill("K4");
 					Infra done = record.withPlacing(false);
 					if (RoadBuilder.wanted(done)) {
-						done = RoadBuilder.convert(level, done); // 6c 0c (C16): a construction road: its cells go back, queued
+						try {
+							done = RoadBuilder.convert(level, done); // 6c 0c (C16): a construction road: its cells go back, queued
+						} catch (Stockpiles.SaveRefused e) {
+							// (slice SOFF2) the road's take-ups' credit save was refused (before convert writes anything): parked at AFTER_COMMIT,
+							// retried next tick (held while saving is off); never broken into a rollback that would keep the refund
+							if (takeUpRefusals++ == 0) {
+								Architect.LOGGER.error("Placing {}: its take-ups' credit save was refused ({}); it waits and retries", siteId, e.getMessage());
+							}
+							return false;
+						}
 					}
 					Infras.put(server, done);
 					record = done;

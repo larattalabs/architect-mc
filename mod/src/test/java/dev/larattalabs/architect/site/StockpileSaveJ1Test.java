@@ -53,12 +53,12 @@ class StockpileSaveJ1Test {
 
 		String rj = read(SITE + "RestoreJob.java");
 		int rc = rj.indexOf("boolean booked = Builder.creditRefund(");
-		int rs = rj.indexOf("Stockpiles.saveCredit(server);", rc);
+		int rs = rj.indexOf("Stockpiles.saveCreditConfirmed(server);", rc); // (SOFF2) saveCredit, confirmed
 		assertTrue(rc >= 0 && rs > rc && rs < rj.indexOf("phase = DONE;", rc), "a standalone road's restore credit is saved before the job ends");
 
 		String ro = read(SITE + "RegionOverwrites.java");
 		String once = StockpileSaveHFTest.body(ro, "static Map<String, Integer> retakeOnce(");
-		assertTrue(once.indexOf("Stockpiles.saveCredit(srv);") > once.indexOf(".already()"), "a put-down's take-ups are saved once they book");
+		assertTrue(once.lastIndexOf("Stockpiles.saveCreditConfirmed(srv);") > once.indexOf(".already()"), "a put-down's take-ups are saved once they book");
 
 		String g = read(SITE + "Groups.java");
 		assertTrue(g.contains("Stockpiles.saveCredit(server);"), "Groups.credit goes through saveCredit (PS)");

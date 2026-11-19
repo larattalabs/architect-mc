@@ -230,8 +230,14 @@ public final class RegionOverwrites {
 				byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(), Integer::sum);
 			});
 		}
-		if (all.isEmpty() || pile.ledger.credited(key)) {
-			return all.isEmpty() ? all : Map.of();
+		if (all.isEmpty()) {
+			return all;
+		}
+		if (pile.ledger.credited(key)) {
+			// (slice SOFF2) credited already: a retry after a refused credit save (or a job resumed after a stop) goes on only once the ledger
+			// holding the credit is on disk (Stockpiles.SaveRefused otherwise: the job waits and retries)
+			Stockpiles.saveCreditConfirmed(srv);
+			return Map.of();
 		}
 		// (JR) each owner's share never more than its paid record (taken out of it)
 		all.clear();
@@ -244,9 +250,13 @@ public final class RegionOverwrites {
 			return all;
 		}
 		if (Stockpiles.credit(srv, pile, key, all, dropAt).already()) {
+			Stockpiles.saveCreditConfirmed(srv); // (SOFF2) as above
 			return Map.of();
 		}
-		Stockpiles.saveCredit(srv); // (J1, N1's shape) one save per put-down's take-ups, before the job that read the befores can end
+		// (J1, N1's shape) one save per put-down's take-ups, before the job that read the befores can end. (slice SOFF2, the review's XR
+		// finding) confirmed: a refused save (a level turned off inside it) throws Stockpiles.SaveRefused, and the job that called this parks
+		// (PlaceJob, InfraJob: AFTER_COMMIT kept, retried) instead of failing into a rollback that would keep this refund
+		Stockpiles.saveCreditConfirmed(srv);
 		if (Builder.TRACE_REFUNDS) {
 			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", by, key, all);
 		}

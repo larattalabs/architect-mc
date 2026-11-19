@@ -52,6 +52,56 @@ class StockpileSavingOffSOFFTest {
 		assertNull(SaveEvidence.incoherent(3, List.of("a", "b", "c"), List.of(), false, false), "an explicit save saves its players itself");
 	}
 
+	/** (slice SOFF2) Each saveAllChunks call's own frame: nested calls, the player save and exceptions. */
+	@Test
+	void evidenceIsPerInvocation() {
+		// an autosave: the players saved (completed), then its own chunk save
+		SaveEvidence.Frame ev = SaveEvidence.enter(SaveEvidence.Kind.EVERYTHING);
+		// a mod's raw save from a player-save hook: before the player save completed
+		SaveEvidence.Frame hook = SaveEvidence.enter(SaveEvidence.Kind.CHUNKS);
+		assertFalse(hook.players, "a chunk save inside the player save: the players are not saved yet");
+		SaveEvidence.exit(hook, true);
+		SaveEvidence.playersSaved(ev, true);
+		SaveEvidence.ownChunkSave(ev);
+		long mark = SaveEvidence.mark();
+		SaveEvidence.Frame own = SaveEvidence.enter(SaveEvidence.Kind.CHUNKS);
+		assertTrue(own.players, "the method's own chunk save, after the player save completed");
+		SaveEvidence.level("a", false, true);
+		// a nested raw save from its BEFORE_SAVE: its own record, no players, never the outer's
+		SaveEvidence.Frame nested = SaveEvidence.enter(SaveEvidence.Kind.CHUNKS);
+		assertFalse(nested.players, "a nested chunk save inherits no players");
+		SaveEvidence.level("a", false, true);
+		SaveEvidence.level("b", false, true);
+		SaveEvidence.level("c", false, true);
+		SaveEvidence.exit(nested, true);
+		SaveEvidence.level("b", false, true);
+		SaveEvidence.level("c", true, false);
+		assertEquals(List.of("a", "b"), own.saved, "the outer record is untouched by the nested one");
+		assertEquals(List.of("c"), own.skipped);
+		SaveEvidence.exit(own, true);
+		assertNotNull(SaveEvidence.refusal(own, mark, 3, true), "its skipped level refuses it");
+		assertNotNull(SaveEvidence.refusal(nested, mark, 3, false), "another call's frame is never this call's");
+		// a later chunk save inside the same method inherits nothing
+		SaveEvidence.Frame later = SaveEvidence.enter(SaveEvidence.Kind.CHUNKS);
+		assertFalse(later.players, "only the method's own call");
+		SaveEvidence.exit(later, true);
+		SaveEvidence.exit(ev, true);
+		assertFalse(SaveEvidence.saving());
+		// an exception: the frame popped, not completed, its levels recorded only on return
+		SaveEvidence.Frame st = SaveEvidence.enter(SaveEvidence.Kind.STOP);
+		SaveEvidence.playersSaved(st, false); // a player save failed
+		SaveEvidence.ownChunkSave(st);
+		long m2 = SaveEvidence.mark();
+		SaveEvidence.Frame c = SaveEvidence.enter(SaveEvidence.Kind.CHUNKS);
+		assertFalse(c.players, "a player save that failed grants nothing");
+		SaveEvidence.level("a", false, false); // threw: never written
+		SaveEvidence.exit(c, false);
+		SaveEvidence.exit(st, false);
+		assertFalse(SaveEvidence.saving(), "an exception leaves no frame open");
+		assertEquals("the save did not complete", SaveEvidence.refusal(c, m2, 1, false));
+		assertTrue(c.saved.isEmpty());
+	}
+
 	/** The hold: entered whenever a level has saving off; released only by a passed barrier with saving on everywhere. */
 	@Test
 	void theHoldIsReleasedOnlyByAPassedBarrier() {
@@ -74,7 +124,8 @@ class StockpileSavingOffSOFFTest {
 		int check = sww.indexOf("savingOffCheck(srv, false,");
 		assertTrue(check > 0 && check < sww.indexOf("getPlayerList().saveAll()") && check < sww.indexOf("srv.saveAllChunks("),
 			"saveWithWorld refuses before the players and the chunks");
-		assertTrue(sww.indexOf("SaveEvidence.chunksRefusal(srv)") > sww.indexOf("srv.saveAllChunks("), "then requires its own save's evidence");
+		assertTrue(sww.indexOf("SaveEvidence.ownRefusal(srv, mark)") > sww.indexOf("srv.saveAllChunks(") && sww.indexOf("long mark = SaveEvidence.mark();")
+			< sww.indexOf("srv.saveAllChunks("), "then requires its own save's evidence (SOFF2: its own frame)");
 		assertTrue(StockpileSaveHFTest.body(s, "static boolean save()").contains("savingOffCheck(sv, evidencedSave,"), "save() too");
 		int after = s.indexOf("AFTER_SAVE.register(");
 		int ev = s.indexOf("SaveEvidence.worldSaveRefusal(server)", after);
@@ -89,10 +140,20 @@ class StockpileSavingOffSOFFTest {
 		String fills = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Fills.java"));
 		assertTrue(fills.contains("!Stockpiles.ledgerOnDisk(srv)"), "(review finding 2) a fill's in-memory marker needs the ledger on disk");
 		String barrier = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/DurableBarrier.java"));
-		assertTrue(barrier.contains("SaveEvidence.chunksRefusal(srv)"), "(finding 4) the barrier's chunks step: its own save's evidence");
+		assertTrue(barrier.contains("SaveEvidence.ownRefusal(srv, mark)"), "(finding 4) the barrier's chunks step: its own save's evidence");
 		String placement = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Placement.java"));
 		assertTrue(placement.contains("if (!SaveHold.jobsAdmitted(srv)) {"), "every job parks while saving is off (a stockpile ledger standing)");
 		String builder = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
-		assertTrue(builder.contains("SaveHold.whenAdmitted(s, \"the start's stockpile reconcile\""), "the start's reconcile deferred");
+		assertTrue(builder.contains("SERVER_STARTED.register(Stockpiles::reconcileAtStartHeld)"), "(SOFF2) the start's reconcile at the start, held");
+		String fc = StockpileSaveHFTest.body(fills, "static boolean step(");
+		assertTrue(fc.indexOf("onDisk = Stockpiles.savedOrOff();") > 0 && fc.indexOf("if (!onDisk) {") < fc.lastIndexOf("s = setPhase(srv, s, FILLED);"),
+			"(SOFF2 item 4) the commit advances to FILLED only over a confirmed ledger");
+		String rj = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/RestoreJob.java"));
+		assertTrue(rj.indexOf("Stockpiles.saveCreditConfirmed(server)") < rj.indexOf("infraDone = inf;"), "(SOFF2 item 5) infraDone only after the credit's confirmed save");
+		String hold = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SaveHold.java"));
+		String bso = StockpileSaveHFTest.body(hold, "public static void beforeSavingOff(");
+		assertTrue(bso.indexOf("state = State.HELD;") > 0 && bso.indexOf("state = State.HELD;") < bso.indexOf("Stockpiles.durableBarrier(srv)"),
+			"(SOFF2 item 3) admission closed before /save-off's barrier");
+		assertFalse(hold.contains("testOff"), "(SOFF2 item 6) no TEST switch turns the hold off");
 	}
 }

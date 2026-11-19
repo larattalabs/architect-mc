@@ -109,6 +109,8 @@ final class PlaceJob implements Placement.Job {
 	boolean newCrate;
 	@Nullable String sharedGroup;
 	int clearCursor;
+	/** (slice SOFF2) take-up credit saves refused (the job waited). */
+	transient int takeUpRefusals;
 	/** The note and bed cells the placement finished with (for P8). */
 	@Nullable String finishNote;
 	@Nullable String layerOver;
@@ -503,7 +505,18 @@ final class PlaceJob implements Placement.Job {
 				// (XR) a survival region's lot: the blocks its placement took up (a queued cell about to be cleared and rebuilt, a cell it
 				// wrote over or cleared) that another writer of the region owns and paid for go back to the owner's stockpile now
 				if (record != null) {
-					RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
+					try {
+						RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
+					} catch (Stockpiles.SaveRefused e) {
+						// (slice SOFF2) its take-ups' credit save was refused: parked here (AFTER_COMMIT, committed), retried next tick (held while
+						// saving is off); the take-ups are credited once per key, so the retry only confirms the save. Never broken: a rollback
+						// would restore the blocks and keep the refund
+						if (takeUpRefusals++ == 0) {
+							dev.larattalabs.architect.Architect.LOGGER.error("Placing {}: its take-ups' credit save was refused ({}); it waits and retries", siteId,
+								e.getMessage());
+						}
+						return false;
+					}
 				}
 				Builder.placeCrate(level, new Builder.ConvertPlan(siteId, convert, dev.larattalabs.architect.journal.WorldJournal.empty(snapBox), snapBox,
 					newCrate, sharedGroup));

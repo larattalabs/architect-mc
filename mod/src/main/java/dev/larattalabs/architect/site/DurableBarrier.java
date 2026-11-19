@@ -181,6 +181,7 @@ public final class DurableBarrier {
 			boolean wasTiming = SaveTiming.explicit;
 			boolean timerWasOn = SaveTiming.on();
 			SaveTiming.explicit = true;
+			long mark = SaveEvidence.mark(); // (SOFF2) this call's own frame is the next pushed
 			try {
 				ChunkDebt.retry(); // (review P1-3, TXN item 5) every failed write's snapshot submitted again, before the flush waits for it
 				srv.saveAllChunks(true, true, false);
@@ -193,7 +194,7 @@ public final class DurableBarrier {
 					SaveTiming.stop(); // (T0 review 2 finding 8) the world save's timer the flushed save started: the barrier times itself
 				}
 			}
-			String skipped = SaveEvidence.chunksRefusal(srv); // (slice SOFF, review finding 4) its own save wrote every level, as recorded
+			String skipped = SaveEvidence.ownRefusal(srv, mark); // (slice SOFF, review finding 4) its own save wrote every level, as recorded
 			if (skipped != null) {
 				return skipped;
 			}

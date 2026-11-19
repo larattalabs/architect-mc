@@ -140,7 +140,9 @@ public final class Builder {
 		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		// (slice RL) after the above: the cells against the saved ledger; (slice SOFF) deferred while saving is off (another mod's), to the hold's release
-		ServerLifecycleEvents.SERVER_STARTED.register(s -> SaveHold.whenAdmitted(s, "the start's stockpile reconcile", () -> Stockpiles.reconcileAtStart(s)));
+		// (slice SOFF2, review finding 1) at the start even with saving off: against the books the world was saved with, never after the
+		// hold's release barrier refreshed them; its save waits for the release under the hold
+		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStartHeld);
 		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
 		// first server tick ({@link #fillsAtStart})
 		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);

@@ -701,17 +701,32 @@ public final class Fills {
 			dev.larattalabs.architect.survival.Refunds.Tally.total(spec.billed()), spec.billed(), spec.provided());
 		WorldJournal.kill("FK2");
 		// (d) the commit: players, the chunks flushed, then the ledger with the marker and the charge
+		// (slice SOFF2, review finding 4; pre-existing on main) the commit is the ledger on disk: saveWithWorld's refusal and a ledger write that
+		// returned false (save()'s false, swallowed before) both leave the fill FILLING with its locks locked; the retry above saves again and
+		// completes it only once the ledger holding the marker and the charge is confirmed on disk
 		inCommit = true;
+		boolean onDisk;
 		try {
 			Stockpiles.saveWithWorld(srv);
+			onDisk = Stockpiles.savedOrOff();
+		} catch (Stockpiles.SaveRefused e) {
+			onDisk = false;
+			Architect.LOGGER.error("Construction site {}: the fill's commit was not saved ({}); it waits, locked, and retries", s.id(), e.getMessage());
 		} finally {
 			inCommit = false;
+		}
+		if (!onDisk) {
+			COMMITS_REFUSED++;
+			return false;
 		}
 		s = setPhase(srv, s, FILLED);
 		WorldJournal.kill("FK4");
 		unlock(srv, level, s, spec, r);
 		return true;
 	}
+
+	/** (slice SOFF2, dev) fill commits whose ledger write was not confirmed (they waited, FILLING, and retried). */
+	static volatile int COMMITS_REFUSED;
 
 	/** Every lock cell back to its template state (with neighbour updates), then {@link #UNLOCKED}. Idempotent. */
 	static void unlock(MinecraftServer srv, ServerLevel level, Site s, Spec spec, Builder.Run r) {
