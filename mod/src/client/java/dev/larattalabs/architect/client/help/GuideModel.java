@@ -90,7 +90,8 @@ public final class GuideModel {
 				}
 			}
 			case DECLINE -> {
-				if (state == State.OFFERED || state == State.NEW) {
+				// "Don't ask again" on the offer, and (PR2) "End the tour" on the paused card: it ends from PAUSED too
+				if (state == State.OFFERED || state == State.NEW || state == State.PAUSED) {
 					state = State.DECLINED;
 				}
 			}

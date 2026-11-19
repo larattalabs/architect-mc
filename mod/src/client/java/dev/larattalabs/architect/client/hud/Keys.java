@@ -90,7 +90,10 @@ public final class Keys {
 		return word.length() > 9 ? word.substring(0, 9) : word;
 	}
 
-	/** (PR A4) The key code an action is bound to now (-1 when unbound; its default before registration). */
+	/**
+	 * (PR A4) The key code an action is bound to now (-1 when unbound; its default before registration). (PR2) A mouse button's binding is
+	 * its {@link PlacingKeys#mouse} code, which the mouse hook resolves, so Rotate on Mouse 4 rotates.
+	 */
 	public static int bound(PlacingKeys.Action a) {
 		KeyMapping k = placing.get(a);
 		if (k == null) {
@@ -100,7 +103,7 @@ public final class Keys {
 			return -1;
 		}
 		InputConstants.Key key = KeyMappingHelper.getBoundKeyOf(k);
-		return key.getType() == InputConstants.Type.KEYBOARD ? key.getValue() : -1;
+		return PlacingKeys.code(key.getType() == InputConstants.Type.KEYBOARD, key.getType() == InputConstants.Type.MOUSE, key.getValue());
 	}
 
 	/** (PR A4) An action's keycap label ("R", "Enter"), read live; its default's name before registration. */

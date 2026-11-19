@@ -38,6 +38,11 @@ public final class PlacingKeys {
 	public static final int L = 15;
 	public static final int F = 9;
 	public static final int H = 11;
+	/**
+	 * (PR2) Where mouse-button bindings live in the code space {@link #resolve} compares: {@code MOUSE + button}. Far above every keyboard
+	 * scancode, so a mouse binding never matches a key press (Mouse 4 is button 3, and scancode 3 must stay a key).
+	 */
+	public static final int MOUSE = 0x10000;
 
 	public enum Action {
 		CONFIRM("confirm", ENTER, EnumSet.allOf(Context.class)),
@@ -113,6 +118,22 @@ public final class PlacingKeys {
 	 */
 	public static boolean listening(boolean placing, boolean marking, boolean screenOpen, boolean preview) {
 		return (placing || marking) && !screenOpen && !preview;
+	}
+
+	/**
+	 * (PR2) The code {@link #resolve} compares for a binding or a press: a keyboard key's own code, a mouse button's {@link #mouse} code,
+	 * -1 for anything else (a scancode-only binding, unbound).
+	 */
+	public static int code(boolean keyboard, boolean mouse, int value) {
+		if (value < 0) {
+			return -1;
+		}
+		return keyboard ? value : mouse ? mouse(value) : -1;
+	}
+
+	/** (PR2) A mouse button's code (0 left, 1 right, 2 middle, 3 Mouse 4, 4 Mouse 5). */
+	public static int mouse(int button) {
+		return MOUSE + button;
 	}
 
 	/** The defaults (for tests, and the bindings before Keys registers). */

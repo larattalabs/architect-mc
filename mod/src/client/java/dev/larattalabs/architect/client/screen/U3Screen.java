@@ -232,6 +232,11 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledMouseClicked(e, doubleClick));
+	}
+
+	private boolean scaledMouseClicked(MouseButtonEvent e, boolean doubleClick) {
 		double mx = e.x();
 		double my = e.y();
 		if (keysOverlay().mouseClicked(mx, my) || dev.larattalabs.architect.client.help.ArchitectHelp.tip(helpId()).mouseClicked(mx, my)) {
@@ -262,6 +267,11 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledMouseDragged(e, dx, dy));
+	}
+
+	private boolean scaledMouseDragged(MouseButtonEvent e, double dx, double dy) {
 		for (ArchitectScreen.MouseTarget t : List.copyOf(targets)) {
 			if (t.drag(e.x(), e.y(), e.button())) {
 				return true;
@@ -292,6 +302,11 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledKeyPressed(e));
+	}
+
+	private boolean scaledKeyPressed(KeyEvent e) {
 		if (keysOverlay().keyPressed(e, focus != null)) {
 			return true;
 		}

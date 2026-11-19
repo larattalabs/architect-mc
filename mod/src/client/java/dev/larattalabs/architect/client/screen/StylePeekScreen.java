@@ -166,6 +166,18 @@ public final class StylePeekScreen extends Screen {
 		back();
 	}
 
+	/**
+	 * (PR2) Whatever replaces the strip (Back, Use, or a screen that is not ours, such as the death screen or a disconnect), the peek goes
+	 * with it: the preview is cleared and a build still in flight is dropped ({@link StylePeek#clear} moves its generation on). Clearing
+	 * again after Back or Use does nothing more.
+	 */
+	@Override
+	public void removed() {
+		dueAt = 0;
+		StylePeek.clear();
+		super.removed();
+	}
+
 	/** DevBridge: the strip's state. */
 	com.google.gson.JsonObject stateJson() {
 		com.google.gson.JsonObject o = new com.google.gson.JsonObject();

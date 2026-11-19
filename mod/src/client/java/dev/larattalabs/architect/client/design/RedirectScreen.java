@@ -91,6 +91,11 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return dev.larattalabs.architect.client.screen.ScaledInput.in(this, () -> scaledKeyPressed(e));
+	}
+
+	private boolean scaledKeyPressed(KeyEvent e) {
 		// (PR W1) the notes field always has the focus, so "?" types; F1 opens the overlay
 		if (keysOverlay().keyPressed(e, true)) {
 			return true;
@@ -123,6 +128,11 @@ public final class RedirectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return dev.larattalabs.architect.client.screen.ScaledInput.in(this, () -> scaledMouseClicked(e, doubleClick));
+	}
+
+	private boolean scaledMouseClicked(MouseButtonEvent e, boolean doubleClick) {
 		if (keysOverlay().mouseClicked(e.x(), e.y()) || dev.larattalabs.architect.client.help.ArchitectHelp.tip("redirect").mouseClicked(e.x(), e.y())) {
 			return true;
 		}

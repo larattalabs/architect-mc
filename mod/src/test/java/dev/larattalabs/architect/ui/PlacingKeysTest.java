@@ -109,4 +109,37 @@ class PlacingKeysTest {
 		assertTrue(lang.contains("key.category.architect_mc.architect_placing"));
 		assertEquals(13, List.of(Action.values()).size());
 	}
+
+	/** (PR2) A mouse-button binding is routed: Rotate on Mouse 4 rotates on that button, and never on the key whose scancode is 3. */
+	@Test
+	void mouseButtonBindingsResolveInTheirOwnCodeSpace() {
+		int mouse4 = PlacingKeys.code(false, true, 3); // GLFW button 3 is Mouse 4
+		assertEquals(PlacingKeys.mouse(3), mouse4);
+		Map<Action, Integer> b = new EnumMap<>(Action.class);
+		for (Action a : Action.values()) {
+			b.put(a, a.defaultKey);
+		}
+		b.put(Action.ROTATE, mouse4);
+		b.put(Action.CONFIRM, PlacingKeys.code(false, true, 4)); // Mouse 5
+		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, PlacingKeys.mouse(3), false, b::get));
+		assertEquals(Action.ROTATE, PlacingKeys.resolve(Context.PLACE, PlacingKeys.mouse(3), true, b::get), "Shift+Mouse 4 rotates back");
+		assertNull(PlacingKeys.resolve(Context.PLACE, 3, false, b::get), "a key with the button's number is not the button");
+		assertNull(PlacingKeys.resolve(Context.PLACE, InputConstants.KEY_R, false, b::get), "R no longer rotates");
+		assertEquals(Action.CONFIRM, PlacingKeys.resolve(Context.PLOT, PlacingKeys.mouse(4), false, b::get), "the plot hears it too");
+		assertEquals(Action.CONFIRM, PlacingKeys.resolve(Context.MASSING, PlacingKeys.mouse(4), false, b::get), "and the massing bar");
+		assertNull(PlacingKeys.resolve(Context.PLACE, PlacingKeys.mouse(0), false, b::get), "an unbound left click passes to vanilla");
+		assertNull(PlacingKeys.resolve(Context.PLACE, PlacingKeys.mouse(1), false, PlacingKeys::defaults), "defaults bind no button");
+	}
+
+	/** (PR2) What a binding's type and value become: keys keep their code, buttons move up, anything else never matches. */
+	@Test
+	void bindingCodes() {
+		assertEquals(InputConstants.KEY_R, PlacingKeys.code(true, false, InputConstants.KEY_R));
+		assertEquals(PlacingKeys.MOUSE + 2, PlacingKeys.code(false, true, 2));
+		assertEquals(-1, PlacingKeys.code(false, false, 30), "a scancode-only binding");
+		assertEquals(-1, PlacingKeys.code(true, false, -1), "unbound");
+		for (Action a : Action.values()) {
+			assertTrue(a.defaultKey < PlacingKeys.MOUSE, a.id + ": keyboard codes stay below the mouse space");
+		}
+	}
 }
