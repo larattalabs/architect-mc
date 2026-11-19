@@ -78,10 +78,10 @@ public abstract class SaveEvidenceServerMixin {
 		return original.call(srv, silent, flush, force);
 	}
 
-	@Inject(method = "setAutoSave", at = @At("HEAD"))
+	@Inject(method = "setAutoSave", at = @At("HEAD"), cancellable = true)
 	private void architect$beforeSavingOff(boolean on, CallbackInfoReturnable<Boolean> cir) {
-		if (!on) {
-			SaveHold.beforeSavingOff((MinecraftServer) (Object) this);
+		if (!on && SaveHold.beforeSavingOff((MinecraftServer) (Object) this) != null) {
+			cir.setReturnValue(false); // (SOFF2 fix round, finding 3) refused: no level's saving turns off
 		}
 	}
 }

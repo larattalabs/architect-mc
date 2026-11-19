@@ -18,7 +18,7 @@ public abstract class TxnHoldContainerMixin {
 	@Inject(method = "canOpen", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldOpen(Player player, CallbackInfoReturnable<Boolean> cir) {
 		BlockEntity be = (BlockEntity) (Object) this;
-		if (be.getLevel() != null && TxnServer.boxHeld(be.getLevel(), be.getBlockPos())) {
+		if (be.getLevel() != null && dev.larattalabs.architect.site.Fills.heldBox(be.getLevel(), be.getBlockPos())) {
 			cir.setReturnValue(false);
 		}
 	}
@@ -26,7 +26,7 @@ public abstract class TxnHoldContainerMixin {
 	@Inject(method = "stillValid", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldValid(Player player, CallbackInfoReturnable<Boolean> cir) {
 		BlockEntity be = (BlockEntity) (Object) this;
-		if (be.getLevel() != null && TxnServer.boxHeld(be.getLevel(), be.getBlockPos())) {
+		if (be.getLevel() != null && dev.larattalabs.architect.site.Fills.heldBox(be.getLevel(), be.getBlockPos())) {
 			cir.setReturnValue(false);
 		}
 	}

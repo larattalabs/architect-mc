@@ -672,6 +672,24 @@ export async function registerSAD(steps, h) {
     check(s4B.crate?.present === true && G.same(s4B.ledger?.stock, s40.ledger?.stock) && G.same(s4B.ledger?.placed, s40.ledger?.placed),
       `DFG A: with its tag back the crate reads again, its stock (${sum(s4B.ledger?.stock)}) and placed counts as before`, { stock: s4B.ledger?.stock });
     await conserve('DFG A');
+    // (slice SOFF2 fix round) SAC1b: readable, adoptCrates halted after its first save (the ledger holding the adoption on disk, the crate still
+    // standing): the start's repair clears the joined crate once (its stock the stockpile's), clears both references; then B finds it done
+    {
+      const b = await baseline('DFG SAC1b');
+      await call('dev.journal.killAt', { point: 'SAC1b' }, 10_000);
+      const Ld = await halt('DFG SAC1b', W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp: true });
+      if (Ld) {
+        const pS = await pile();
+        const movedS = G.plus(G.minus(stockOf(pS.ledger), stockOf(p0.ledger)), G.minus(pS.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
+        const standsS = await isBlock(at, crateBlock);
+        const r3 = await siteState(ids.house_3);
+        const r4 = await siteState(ids.house_4);
+        out.SAC1b = { moved: movedS, stands: standsS, refs: [r3.crate, r4.crate] };
+        check(G.same(movedS, s40.ledger?.stock ?? {}) && !standsS && r3.crate?.x === undefined && r4.crate?.x === undefined,
+          `DFG SAC1b: after the unclean restart the start's repair cleared the joined crate once (stock moved ${json(movedS)}; it held ${json(s40.ledger?.stock)}; its cell restored: ${!standsS}) and both references`, out.SAC1b);
+        await conserve('DFG SAC1b');
+      }
+    }
     // B: readable again: adopted once
     const aB = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     check(!aB.refused, `DFG B: adoptCrates with the crate readable (${json(aB.refused ?? 'adopted')})`);

@@ -358,7 +358,11 @@ public final class Stockpiles {
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
 		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> server.execute(() -> {
 			if (unsaved && server.isRunning() && savingOffCheck(server, false, "a logout's save") == null) { // (SOFF) quiet under /save-off
-				saveWithWorld(server);
+				try {
+					saveWithWorld(server);
+				} catch (SaveRefused e) {
+					Architect.LOGGER.error("Stockpiles: a logout's save was refused ({}); the ledger stays pending", e.getMessage()); // (SOFF2 fix round)
+				}
 			}
 		}));
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
@@ -1169,6 +1173,10 @@ public final class Stockpiles {
 		}
 		Map<String, Integer> dropped = new TreeMap<>();
 		BlockPos drop = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		// (SOFF2 fix round, review leftover 5) the ledger as it was, put back if the adoption's first save is refused; the crates to clear once
+		// the ledger holding the adoption is on disk
+		JsonObject ledgerBefore = p.ledger.toJson();
+		List<Object[]> toClear = new ArrayList<>();
 		// (DFG) the crates deferred: left exactly as they are (block, stock, journal entry, their targets' references); a later call retries
 		java.util.Set<String> deferred = new java.util.TreeSet<>();
 		for (var e : crates.entrySet()) {
@@ -1202,21 +1210,38 @@ public final class Stockpiles {
 						e.getKey(), unkeyed);
 				}
 				over.forEach((k, v) -> dropped.merge(k, v, Integer::sum));
-				l.takeStock(); // the crate's ledger now holds nothing (its block goes next)
-				be.ledgerChanged();
 			}
-			Builder.restoreCrateCell(level, c);
-			SiteJournal.releaseKind(e.getKey(), WorldJournal.CRATE);
+			toClear.add(new Object[] {be, c, e.getKey()});
 		}
 		// (SAD, SAC1) the ledger joined and the crate cells restored are saved together first (with the world: a crate's stock lives in its
 		// block entity), and only then do the records lose their crates (Sites' writes save architect-sites.json at once). Before, the records
 		// were saved first: a crash before the ledger's save left the crate standing in the reverted world with no record naming it, its stock
 		// and placed counts lost. A crash between the two saves (SAC2) is repaired by the next adoptCrates: its crate keys are credited, so a
 		// record that still names a gone crate is cleared without crediting the crate twice
+		changed(p);
+		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, nothing saved
+		// (slice SOFF2 fix round, review leftover 5) the ledger holding the adoption confirmed on disk first, the source crates still standing
+		// (never cleared or flushed away before it): a refused save puts the ledger back and refuses the adoption, nothing changed. A crash
+		// after it is repaired at the start (repairJoinedCrates: a standing crate whose adoption key the ledger credited is cleared once)
+		try {
+			saveWithWorld(srv);
+		} catch (SaveRefused e) {
+			p.ledger = StockLedger.fromJson(ledgerBefore);
+			changed(p);
+			throw e;
+		}
+		WorldJournal.kill("SAC1b"); // (SOFF2, test) the ledger joined and on disk, the crates still standing
+		for (Object[] x : toClear) {
+			if (x[0] instanceof CrateBlockEntity be) {
+				be.ledger().takeStock(); // the crate's ledger now holds nothing (its block goes next)
+				be.ledgerChanged();
+			}
+			Builder.restoreCrateCell(level, (Construction.Crate) x[1]);
+			SiteJournal.releaseKind((String) x[2], WorldJournal.CRATE);
+		}
 		Builder.dropItems(level, drop, dropped, null);
 		changed(p);
-		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		saveWithWorld(srv); // (JR) the crate cells restored, with the chunks; refused: the references stay (the next adoptCrates finishes)
 		for (var e : crates.entrySet()) {
 			if (e.getKey().startsWith(SiteGroupRec.CRATE_PREFIX) && !deferred.contains(e.getKey())) {
 				SiteGroupRec g = Sites.group(e.getKey().substring(SiteGroupRec.CRATE_PREFIX.length()));
@@ -1270,6 +1295,7 @@ public final class Stockpiles {
 			List<Object> joined = new ArrayList<>();
 			for (Site s : Sites.all()) {
 				if (p.owner.equals(s.owner()) && p.dimension.equals(s.dimension()) && joinedBefore(p, s)) {
+					clearJoinedCrate(srv, p, s.construction().crate(), Builder.crateOwner(s)); // (SOFF2 fix round) a crash between adoptCrates' saves
 					Sites.replace(srv, s.withConstruction(s.construction().withCrate(null)));
 					Builder.forgetRun(s.id());
 					any = true;
@@ -1284,6 +1310,7 @@ public final class Stockpiles {
 				Construction c = i.construction();
 				if (c != null && c.crate() != null && p.owner.equals(i.owner()) && p.dimension.equals(i.dimension()) && i.group() != null && namesJoined(
 					p.ledger::credited, i.id(), i.group(), c.crate().x(), c.crate().y(), c.crate().z())) {
+					clearJoinedCrate(srv, p, c.crate(), SiteGroupRec.CRATE_PREFIX + i.group());
 					Infras.put(srv, i.withConstruction(c.withCrate(null)));
 					any = true;
 					if (i.building()) {
@@ -1294,6 +1321,7 @@ public final class Stockpiles {
 			for (SiteGroupRec g : Sites.groups()) {
 				Construction.Crate c = g.crate();
 				if (c != null && p.owner.equals(g.owner()) && namesJoined(p.ledger::credited, g.crateOwner(), null, c.x(), c.y(), c.z())) {
+					clearJoinedCrate(srv, p, c, SiteGroupRec.CRATE_PREFIX + g.id());
 					Sites.putGroup(srv, g.withCrate(null));
 					any = true;
 				}
@@ -1310,7 +1338,38 @@ public final class Stockpiles {
 			}
 		}
 		if (any) {
+			startSave(srv, "the start's crate repair");
+		}
+	}
+
+	/**
+	 * (slice SOFF2 fix round) At the start: a crate the ledger already joined (its adoption key credited: adoptCrates saved the ledger, then
+	 * the world stopped before it cleared the crates) still standing as its owner's crate: its stock and cell go now, once (its stock is the
+	 * stockpile's), as adoptCrates would have. Server thread.
+	 */
+	private static void clearJoinedCrate(MinecraftServer srv, Pile p, Construction.@Nullable Crate c, String crateOwner) {
+		ServerLevel level = c == null ? null : Sites.levelOf(srv, p.dimension);
+		if (level == null) {
+			return;
+		}
+		BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
+		if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && crateOwner.equals(be.siteId())) {
+			be.ledger().takeStock();
+			be.ledgerChanged();
+			Builder.restoreCrateCell(level, c);
+			SiteJournal.releaseKind(crateOwner, WorldJournal.CRATE);
+			changed(p);
+			Architect.LOGGER.warn("Stockpile {}: crate {} at {} was joined (its adoption key credited) but still stood; cleared now", p.owner, crateOwner,
+				cp.toShortString());
+		}
+	}
+
+	/** (SOFF2 fix round) A save at the world's start: a refusal leaves the ledger pending (the periodic save, or the hold's release, retries). */
+	private static void startSave(MinecraftServer srv, String what) {
+		try {
 			saveWithWorld(srv);
+		} catch (SaveRefused e) {
+			Architect.LOGGER.error("Stockpiles: {}'s save was refused ({}); the ledger stays pending and is saved with the world later", what, e.getMessage());
 		}
 	}
 
@@ -3181,7 +3240,7 @@ public final class Stockpiles {
 			}
 		}
 		if (any) {
-			saveWithWorld(srv); // (HF) as every explicit save: the players and the chunks with the ledger
+			startSave(srv, "the start's reconcile"); // (HF) as every explicit save: the players and the chunks with the ledger
 			Architect.LOGGER.info("Stockpiles: the reconcile after an unclean stop took {} ms ({} target(s))", String.format(java.util.Locale.ROOT, "%.1f",
 				(System.nanoTime() - t0) / 1e6), LAST_RECONCILE.size());
 		}
@@ -3728,7 +3787,17 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 		}
-		save();
+		if (!save()) {
+			// (slice SOFF2 fix round, review leftover 5; pre-existing on main) the ledger was not written (a write failing, an owed save, saving
+			// turned off inside the save): refused, as every other refusal here; the ledger stays pending. Before, it returned as if saved
+			if (timed) {
+				SaveTiming.stop();
+			}
+			if (quiet) {
+				return;
+			}
+			throw new SaveRefused("Stockpiles: the ledger was not saved: its write did not complete (the log says why); it stays pending");
+		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
 		lastWorldSaveMs = ms;

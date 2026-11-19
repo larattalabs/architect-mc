@@ -325,12 +325,12 @@ public final class RegionOverwrites {
 	 * or a cell its placement changed (written over, or cleared for good), that another writer of the region owns and paid for goes back
 	 * to the owner's stockpile now. Nothing outside a region's group.
 	 */
-	static void lotTakeUp(MinecraftServer srv, ServerLevel level, String siteId, @Nullable String group, @Nullable String owner, String dimension,
+	static boolean lotTakeUp(MinecraftServer srv, ServerLevel level, String siteId, @Nullable String group, @Nullable String owner, String dimension,
 		Construction c, dev.larattalabs.architect.placement.Anchors.Bounds box) {
 		List<Live> ls = lives(srv, group, siteId);
 		JournalStore.Meta m = ls.isEmpty() ? null : SiteJournal.main(siteId);
 		if (m == null) {
-			return;
+			return false;
 		}
 		int dx = box.maxX() - box.minX() + 1;
 		int dz = box.maxZ() - box.minZ() + 1;
@@ -348,7 +348,11 @@ public final class RegionOverwrites {
 			}
 			up.put(e.getKey(), was);
 		}
-		retakeOnce(srv, ls, owner, dimension, up, at, siteId, "xr-lot:" + siteId + "@" + m.id());
+		String key = "xr-lot:" + siteId + "@" + m.id();
+		retakeOnce(srv, ls, owner, dimension, up, at, siteId, key);
+		// (SOFF2 fix round) whether its take-ups are credited (a refund the stockpile holds): its job is then past any rollback
+		Stockpiles.Pile pile = Stockpiles.get(owner);
+		return pile != null && pile.ledger.credited(key);
 	}
 
 	/** A writer's kind. */

@@ -151,9 +151,20 @@ class StockpileSavingOffSOFFTest {
 		String rj = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/RestoreJob.java"));
 		assertTrue(rj.indexOf("Stockpiles.saveCreditConfirmed(server)") < rj.indexOf("infraDone = inf;"), "(SOFF2 item 5) infraDone only after the credit's confirmed save");
 		String hold = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SaveHold.java"));
-		String bso = StockpileSaveHFTest.body(hold, "public static void beforeSavingOff(");
+		String bso = StockpileSaveHFTest.body(hold, "public static @Nullable String beforeSavingOff(");
 		assertTrue(bso.indexOf("state = State.HELD;") > 0 && bso.indexOf("state = State.HELD;") < bso.indexOf("Stockpiles.durableBarrier(srv)"),
 			"(SOFF2 item 3) admission closed before /save-off's barrier");
 		assertFalse(hold.contains("testOff"), "(SOFF2 item 6) no TEST switch turns the hold off");
+		// (SOFF2 fix round)
+		String mx = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/SaveEvidenceServerMixin.java"));
+		assertTrue(mx.contains("cancellable = true") && mx.contains("cir.setReturnValue(false)"), "(finding 3) a failed barrier refuses the save-off itself");
+		assertTrue(StockpileSaveHFTest.body(s, "static void saveWithWorld(MinecraftServer srv)").contains("if (!save()) {"), "(leftover 5) save()'s false is a refusal");
+		String ad = StockpileSaveHFTest.body(s, "public static Pile adopt(");
+		assertTrue(ad.indexOf("saveWithWorld(srv);") < ad.indexOf("be.ledger().takeStock();") && ad.indexOf("be.ledger().takeStock();") < ad.indexOf("Sites.putGroup("),
+			"(leftover 5) adoption: the ledger on disk before a source crate is cleared, the references retired after");
+		String pl = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Placement.java"));
+		assertTrue(StockpileSaveHFTest.body(pl, "static void rollBack(").contains("if (pj.takeUpStarted) {"), "(finding 1) never rolled back past its take-ups");
+		String fg = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/FillGuard.java"));
+		assertTrue(StockpileSaveHFTest.body(fg, "public static boolean guardedSlot(").contains("Fills.waitingBox("), "(finding 2) a waiting fill's every stack held");
 	}
 }

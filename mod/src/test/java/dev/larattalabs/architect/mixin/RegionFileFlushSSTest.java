@@ -117,7 +117,7 @@ class RegionFileFlushSSTest {
 		String body = sp.substring(sww, sp.indexOf("\n\t}\n", sww));
 		int chunks = body.indexOf("srv.saveAllChunks(true, true, false);");
 		int check = body.indexOf("RegionDurability.retryOwed();");
-		int ledger = body.lastIndexOf("save();");
+		int ledger = body.lastIndexOf("if (!save()) {"); // (SOFF2 fix round) a false save() refuses
 		assertTrue(chunks > 0 && check > chunks && ledger > check, "saveWithWorld: chunks, the durability check, then the ledger");
 		// the autosave's refusal is behavioural: SaveProbe's ledgerRefusedWhileAFailureIsOutstanding and owedPathRetriedThenLedgerPublished
 		// run the world save's callback with an owed path (ps-crash)

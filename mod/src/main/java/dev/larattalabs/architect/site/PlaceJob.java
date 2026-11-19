@@ -111,6 +111,8 @@ final class PlaceJob implements Placement.Job {
 	int clearCursor;
 	/** (slice SOFF2) take-up credit saves refused (the job waited). */
 	transient int takeUpRefusals;
+	/** (SOFF2 fix round) its take-ups are credited (a construction lot over another writer's paid cells): a rollback would keep that refund. */
+	transient boolean takeUpStarted;
 	/** The note and bed cells the placement finished with (for P8). */
 	@Nullable String finishNote;
 	@Nullable String layerOver;
@@ -506,8 +508,11 @@ final class PlaceJob implements Placement.Job {
 				// wrote over or cleared) that another writer of the region owns and paid for go back to the owner's stockpile now
 				if (record != null) {
 					try {
-						RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
+						if (RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox)) {
+							takeUpStarted = true; // (SOFF2 fix round, finding 1) its take-ups are credited: never rolled back from here
+						}
 					} catch (Stockpiles.SaveRefused e) {
+						takeUpStarted = true; // credited in memory, its save refused: parked, never rolled back
 						// (slice SOFF2) its take-ups' credit save was refused: parked here (AFTER_COMMIT, committed), retried next tick (held while
 						// saving is off); the take-ups are credited once per key, so the retry only confirms the save. Never broken: a rollback
 						// would restore the blocks and keep the refund
@@ -515,6 +520,9 @@ final class PlaceJob implements Placement.Job {
 							dev.larattalabs.architect.Architect.LOGGER.error("Placing {}: its take-ups' credit save was refused ({}); it waits and retries", siteId,
 								e.getMessage());
 						}
+						// (SOFF2 fix round, finding 1) committing, as T4a's TAKE_UP: its writes are done and its take-ups credited, so a cancel lets
+						// it finish (cancelBatch rolls back only the blocking item) instead of restoring the blocks while the refund stays credited
+						Batches.committing(batchId, itemKey);
 						return false;
 					}
 				}

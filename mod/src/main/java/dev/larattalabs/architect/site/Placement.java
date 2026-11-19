@@ -406,6 +406,12 @@ public final class Placement {
 		if (!(j instanceof PlaceJob pj)) {
 			return;
 		}
+		if (pj.takeUpStarted) {
+			// (slice SOFF2 fix round, finding 1) past its take-ups (credited, or parked on their save): it finishes, as a committing item does;
+			// a rollback would restore the blocks it took up while their refund stays credited
+			Architect.LOGGER.warn("Cancelling {}: its take-ups are credited; it finishes instead of rolling back ({})", siteId, why);
+			return;
+		}
 		JOBS.remove(j);
 		pj.aborted(srv);
 		clearGhost(srv, j, false);

@@ -151,6 +151,7 @@ public final class Builder {
 		ServerTickEvents.START_SERVER_TICK.register(Builder::fillsAtStart);
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			Fills.worldClosed(); // (SOFF2 fix round) no waiting fill carries into the next world
 			RUNS.clear();
 			PROGRESS.clear();
 			REFUNDED.clear();

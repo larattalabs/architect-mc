@@ -21,7 +21,7 @@ public abstract class TxnHoldBreakMixin {
 
 	@Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldBreak(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-		if (TxnServer.boxHeld(level, pos)) {
+		if (dev.larattalabs.architect.site.Fills.heldBox(level, pos)) {
 			cir.setReturnValue(false);
 		}
 	}

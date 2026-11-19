@@ -158,9 +158,9 @@ public final class SaveHold {
 	 * with the players and the chunks, so an operation admitted just before /save-off is on disk before saving stops. A barrier that fails
 	 * keeps the hold (vanilla still turns saving off): logged as an error, released only by a confirmed barrier after /save-on.
 	 */
-	public static void beforeSavingOff(MinecraftServer srv) {
+	public static @Nullable String beforeSavingOff(MinecraftServer srv) {
 		if (!srv.isSameThread()) {
-			return;
+			return null;
 		}
 		if (state == State.OPEN) {
 			state = State.HELD;
@@ -171,21 +171,39 @@ public final class SaveHold {
 			Architect.LOGGER.warn("Architect: /save-off: stockpile and build changes are held from now until saving is on and a confirmed save passes");
 		}
 		if (!Stockpiles.unsaved || !Stockpiles.levelsSavingOff(srv).isEmpty()) {
-			return;
+			return null;
 		}
 		savingOffBarriers++;
 		SaveTestHooks.inSavingOffBarrier = true; // (SOFF2, TEST) the depositInSavingOffBarrier hook's window
 		try {
 			Stockpiles.durableBarrier(srv);
 			Architect.LOGGER.info("Architect: /save-off: the stockpile ledger's pending changes saved with the players and the chunks first");
+			return null;
 		} catch (RuntimeException e) {
+			// (SOFF2 fix round, finding 3) the save-off itself refused (setAutoSave(false) cancelled: saving stays on), so the world's saves
+			// can still make the pending changes durable; held until a confirmed barrier passes
 			savingOffBarrierFailures++;
+			saveOffRefusals++;
 			lastFailure = e.getMessage();
-			Architect.LOGGER.error("Architect: /save-off: the pending stockpile changes could not be saved first ({}); they stay pending and Architect stays"
-				+ " held until saving is on and a confirmed save passes", e.getMessage());
+			Architect.LOGGER.error("Architect: /save-off refused: the pending stockpile changes could not be made durable first ({}); saving stays on and"
+				+ " Architect stays held until a confirmed save passes", e.getMessage());
+			String why = "/save-off refused: Architect could not make pending stock changes durable; " + e.getMessage();
+			saveOffRefusal = why;
+			return why;
 		} finally {
 			SaveTestHooks.inSavingOffBarrier = false;
 		}
+	}
+
+	/** (SOFF2 fix round) The last refused save-off's message, for /save-off's answer (taken once). */
+	private static @Nullable String saveOffRefusal;
+	static volatile int saveOffRefusals;
+
+	/** (SaveOffCommandMixin) The refusal of the save-off just attempted, or null; cleared. */
+	public static @Nullable String takeSaveOffRefusal() {
+		String w = saveOffRefusal;
+		saveOffRefusal = null;
+		return w;
 	}
 
 	static JsonObject json() {
@@ -199,6 +217,7 @@ public final class SaveHold {
 		o.addProperty("refused", refused);
 		o.addProperty("savingOffBarriers", savingOffBarriers);
 		o.addProperty("savingOffBarrierFailures", savingOffBarrierFailures);
+		o.addProperty("saveOffRefusals", saveOffRefusals);
 		return o;
 	}
 }
