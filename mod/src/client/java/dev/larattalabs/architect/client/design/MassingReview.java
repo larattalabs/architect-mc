@@ -596,7 +596,7 @@ public final class MassingReview {
 			if (lines.isEmpty()) {
 				return null;
 			}
-			hints = Keys.fitHints(font, hints, inner); // (PR3) a key name too wide for its own pair is cut by width
+			hints = Keys.fitHints(font, hints, inner); // (PR3, v0.84) the keys are cut by width, longest first, until the whole row fits inner
 			int textW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 			for (String[] l : lines) {
 				textW = Math.max(textW, font.width(l[0]));

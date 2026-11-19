@@ -50,16 +50,57 @@ class KeyLabelFitTest {
 	}
 
 	@Test
-	void hintsFitEachKeyToItsPairAndKeepTheVerbs() {
+	void hintsFitEachKeyToTheRowAndKeepTheVerbs() {
 		String[] in = {"Mouse Button 4", "rotate", "Esc", "cancel"};
-		// inner 200: both pairs fit alone, nothing cut
+		// inner 200: the row (188 px) fits, nothing cut
 		assertArrayEquals(in, PlacingKeys.fitHints(in, 200, 4, W));
-		// inner 80: the key's room is 80 - 4 (keycap pad) - 3 - 36 ("rotate") = 37 px, so "Mouse…" (36 px)
-		String[] out = PlacingKeys.fitHints(in, 80, 4, W);
-		assertEquals("Mouse" + PlacingKeys.ELLIPSIS, out[0]);
+		// inner 140: the Esc pair (61 px) and the gap leave the mouse pair 70 px: its key 70 - 4 - 3 - 36 = 27 px, so "Mou…" (24 px)
+		String[] out = PlacingKeys.fitHints(in, 140, 4, W);
+		assertEquals("Mou" + PlacingKeys.ELLIPSIS, out[0]);
 		assertEquals("rotate", out[1]);
 		assertEquals("Esc", out[2]);
 		assertEquals("cancel", out[3]);
 		assertEquals("Mouse Button 4", in[0], "the input row is not changed");
+	}
+
+	/** lab-ui UiBits.hintsWidth with the fake font: keycap max(12, label + pad), 3 px, verb, 9 px between pairs. */
+	static int rowWidth(String[] kv, int capPad) {
+		int w = 0;
+		for (int i = 0; i + 1 < kv.length; i += 2) {
+			w += Math.max(12, W.applyAsInt(kv[i]) + capPad) + 3 + W.applyAsInt(kv[i + 1]) + 9;
+		}
+		return Math.max(0, w - 9);
+	}
+
+	@Test
+	void aRowOfLongBindingsIsBudgetedAsAWhole() {
+		// (v0.84 review P2) each pair fits 240 alone, but the row (399 px) did not: the HUD dropped it or drew past the panel
+		String[] in = {"Mouse Button 4", "confirm", "Mouse Button 5", "re-mark", "Mouse Button 6", "back"};
+		assertTrue(rowWidth(in, 4) > 240);
+		String[] out = PlacingKeys.fitHints(in, 240, 4, W);
+		assertTrue(rowWidth(out, 4) <= 240, "the whole row fits: " + rowWidth(out, 4) + " " + String.join("|", out));
+		for (int i = 1; i < in.length; i += 2) {
+			assertEquals(in[i], out[i], "every verb kept");
+			assertFalse(out[i - 1].isEmpty(), "no empty keycap");
+		}
+	}
+
+	@Test
+	void theLongestKeyIsCutFirst() {
+		String[] in = {"Mouse Button 4", "rotate", "Esc", "cancel"};
+		// row 188 px; at 160 only the mouse label is cut, Esc stays whole
+		String[] out = PlacingKeys.fitHints(in, 160, 4, W);
+		assertTrue(rowWidth(out, 4) <= 160, String.join("|", out));
+		assertTrue(out[0].endsWith(PlacingKeys.ELLIPSIS), out[0]);
+		assertEquals("Esc", out[2]);
+	}
+
+	@Test
+	void aWrappingListStillFitsEachPairAlone() {
+		String[] in = {"Mouse Button 4", "rotate", "Esc", "cancel"};
+		String[] out = PlacingKeys.fitEachPair(in, 80, 4, W);
+		assertEquals("Mouse" + PlacingKeys.ELLIPSIS, out[0]); // 80 - 4 - 3 - 36 ("rotate") = 37 px
+		assertEquals("Esc", out[2]);
+		assertArrayEquals(in, PlacingKeys.fitEachPair(in, 200, 4, W));
 	}
 }

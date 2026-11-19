@@ -303,7 +303,7 @@ final class PlacementHud implements HudZones.Element {
 		all.addAll(List.of("Enter ×2", dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+ blocks"));
 		all.addAll(List.of("? or " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LEGEND), "hide"));
 		// (PR3) a pair wider than the panel on its own gets its key cut by width (the wrap below gives it a row of its own)
-		all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.fitHints(font, all.toArray(String[]::new), inner)));
+		all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.fitEachPair(font, all.toArray(String[]::new), inner)));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();
 		for (int i = 0; i < all.size(); i += 2) {

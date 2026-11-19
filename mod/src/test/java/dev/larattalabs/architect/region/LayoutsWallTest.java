@@ -184,6 +184,32 @@ class LayoutsWallTest {
 	}
 
 	@Test
+	void aDistrictWhoseIdExtendsAnothersKeepsItsOwnRoute() {
+		// districts b and b_1: route_d_a__b_1_1 is b_1's piece 1, not a group of b's piece 1 (v0.84.0 review P2)
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":64,\"maxZ\":50}}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[19,64,0]],\"width\":3},{\"id\":\"route_d_a__b_3\",\"points\":[[31,74,0],[59,80,0]],\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1_1\",\"points\":[[0,64,1],[0,64,39]],\"width\":3},{\"id\":\"route_d_a__b_1_3\",\"points\":[[0,64,51],[0,64,89]],\"width\":3}]}";
+		for (boolean reversed : new boolean[] {false, true}) {
+			JsonObject o = JsonParser.parseString(ir).getAsJsonObject();
+			if (reversed) {
+				var es = o.getAsJsonObject("graph").getAsJsonArray("edges");
+				var first = es.remove(0);
+				es.add(first);
+			}
+			Map<String, PartShape> m = Layouts.shapes(o, List.of(), -64, 319, id -> 0).stream().collect(Collectors.toMap(PartShape::part, x -> x));
+			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "each route once, no road piece alone (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0),
+				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's route: only b's pieces");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1), new BlockPos(0, 64, 39), new BlockPos(0, 64, 45), new BlockPos(0, 64, 51),
+				new BlockPos(0, 64, 89), new BlockPos(0, 64, 90)), m.get("route_d_a__b_1").ends(), "b_1's route: only b_1's pieces");
+		}
+	}
+
+	@Test
 	void theOldConstructorsStillWork() {
 		var s = new PartShape("p", "tile", null, new BoundingBox(0, 0, 0, 1, 1, 1), List.of(), 0, null, List.of());
 		assertEquals(0, s.width());

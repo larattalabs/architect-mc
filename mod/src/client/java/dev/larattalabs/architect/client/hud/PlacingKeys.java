@@ -189,13 +189,57 @@ public final class PlacingKeys {
 	}
 
 	/**
-	 * (PR3) A "key, verb, key, verb…" hint row with each key fitted so its pair fits {@code inner} on its own (keycap padding
-	 * {@code capPad}, then 3 px, then the verb); keys that already fit are unchanged. A new array; the verbs are kept.
+	 * (PR3) A "key, verb, key, verb…" hint row fitted to {@code inner} as a whole (v0.84 review: each pair fitting alone still let the row
+	 * overflow): when the row (lab-ui UiBits.hintsWidth: keycap max(12, label + {@code capPad}), 3 px, the verb, 9 px between pairs) is
+	 * wider than {@code inner}, every key is cut to one shared width cap, the widest that lets the row fit, so the longest keys are cut
+	 * first and short ones stay whole. A row that cannot fit even with one-character keys gets those. A new array; the verbs are kept.
 	 */
 	public static String[] fitHints(String[] keyThenVerb, int inner, int capPad, ToIntFunction<String> width) {
 		String[] o = keyThenVerb.clone();
+		if (hintsWidth(o, capPad, width) <= inner) {
+			return o;
+		}
+		int lo = 0, hi = 0, best = 0;
+		for (int i = 0; i + 1 < o.length; i += 2) {
+			hi = Math.max(hi, width.applyAsInt(o[i]));
+		}
+		while (lo <= hi) {
+			int mid = (lo + hi) >>> 1;
+			if (hintsWidth(capKeys(keyThenVerb, mid, width), capPad, width) <= inner) {
+				best = mid;
+				lo = mid + 1;
+			} else {
+				hi = mid - 1;
+			}
+		}
+		return capKeys(keyThenVerb, best, width);
+	}
+
+	/**
+	 * (PR3) A hint row that wraps (one pair per row at worst): each key fitted so its own pair fits {@code inner} alone, as
+	 * {@link #fitHints} did before v0.84. A new array; the verbs are kept.
+	 */
+	public static String[] fitEachPair(String[] keyThenVerb, int inner, int capPad, ToIntFunction<String> width) {
+		String[] o = keyThenVerb.clone();
 		for (int i = 0; i + 1 < o.length; i += 2) {
 			o[i] = fit(o[i], inner - capPad - 3 - width.applyAsInt(o[i + 1]), width);
+		}
+		return o;
+	}
+
+	/** (v0.84 review, pure) A hint row's width as lab-ui's UiBits.hintsWidth draws it, with keycap padding {@code capPad}. */
+	public static int hintsWidth(String[] keyThenVerb, int capPad, ToIntFunction<String> width) {
+		int w = 0;
+		for (int i = 0; i + 1 < keyThenVerb.length; i += 2) {
+			w += Math.max(12, width.applyAsInt(keyThenVerb[i]) + capPad) + 3 + width.applyAsInt(keyThenVerb[i + 1]) + 9;
+		}
+		return Math.max(0, w - 9);
+	}
+
+	private static String[] capKeys(String[] keyThenVerb, int cap, ToIntFunction<String> width) {
+		String[] o = keyThenVerb.clone();
+		for (int i = 0; i + 1 < o.length; i += 2) {
+			o[i] = fit(o[i], cap, width);
 		}
 		return o;
 	}

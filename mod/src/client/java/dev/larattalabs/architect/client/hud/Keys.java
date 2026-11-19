@@ -85,10 +85,16 @@ public final class Keys {
 		return PlacingKeys.fit(label, maxCapW - p.left() - p.right(), font::width);
 	}
 
-	/** (PR3) A hint row ({@code UiBits.hints}) with every key fitted so each pair fits {@code inner} alone. */
+	/** (PR3, v0.84) One hint row ({@code UiBits.hints}) fitted to {@code inner} as a whole, the longest keys cut first. */
 	public static String[] fitHints(net.minecraft.client.gui.Font font, String[] keyThenVerb, int inner) {
 		dev.larattalabs.labui.client.ui.Kit.Padding p = dev.larattalabs.labui.client.ui.Kit.padding("keycap");
 		return PlacingKeys.fitHints(keyThenVerb, inner, p.left() + p.right(), font::width);
+	}
+
+	/** (PR3) A hint list that wraps into rows: every key fitted so its own pair fits {@code inner} alone. */
+	public static String[] fitEachPair(net.minecraft.client.gui.Font font, String[] keyThenVerb, int inner) {
+		dev.larattalabs.labui.client.ui.Kit.Padding p = dev.larattalabs.labui.client.ui.Kit.padding("keycap");
+		return PlacingKeys.fitEachPair(keyThenVerb, inner, p.left() + p.right(), font::width);
 	}
 
 	/**

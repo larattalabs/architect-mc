@@ -141,7 +141,7 @@ final class PlotHud implements HudZones.Element {
 				: v != null && v.first() == null ? live("Enter", "corner", "F", "fit", "Esc", "back")
 				: live("Enter", "done", "F", "fit", "Esc", "back");
 		}
-		// (PR3) a key name too wide for its own pair (Mouse Button 4 at a small GUI) is cut by width, so the row still draws
+		// (PR3, v0.84) long key names (Mouse Button 4 at a small GUI) are cut by width, longest first, until the whole row fits, so it still draws
 		hints = dev.larattalabs.architect.client.hud.Keys.fitHints(font, hints, inner);
 		int hintW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 		int textW = hintW;
