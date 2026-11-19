@@ -141,16 +141,20 @@ export async function registerDRS(steps, h) {
     const f = (d1.findings ?? []).find((x) => x.code === 'STUCK' && x.site === site);
     check(!!f && f.lagging === lost && f.foreign === 0, `${tag}: diagnose reports STUCK ${site} with exactly the ${lost} lost cell(s) lagging, none foreign (${json(f && { cells: f.cells, lagging: f.lagging, foreign: f.foreign, diffs: f.diffs?.slice(0, 3) })})`, d1);
     const pendItems = S.pendingCredit?.[key]?.items ?? {};
+    // (slice T4b, N8) a stockpile site's refunds are credited by its removal's txn with its restore (no J2 pending credit): then the repair
+    // writes the lost cells and books nothing (the credit is on disk already)
+    const t4b = (S.credited ?? []).includes(key);
+    const wantCredit = t4b ? {} : G.plus(pendItems, S.custody?.[key] ?? {});
     const h0 = await hash(b);
     const pre = await pile();
     const dry = await repair(d1.planId, false);
-    check(dry.applied === false && dry.written === lost && G.same(dry.credited, G.plus(pendItems, S.custody?.[key] ?? {})), `${tag}: the dry run would write ${dry.written} and credit ${sum(dry.credited)} (the saved pending credit ${sum(pendItems)}) (${dry.message})`, dry);
+    check(dry.applied === false && dry.written === lost && G.same(dry.credited, wantCredit), `${tag}: the dry run would write ${dry.written} and credit ${sum(dry.credited)} (the saved pending credit ${sum(pendItems)}${t4b ? '; credited by its removal txn already' : ''}) (${dry.message})`, dry);
     check(await hash(b) === h0 && G.same(back((await pile()).ledger), back(pre.ledger)), `${tag}: the dry run changed no byte and moved nothing in the ledger`);
     const r = await repair(d1.planId, true);
     const post = await pile();
     const moved = G.minus(back(post.ledger), back(pre.ledger));
     check(r.applied === true && r.written === lost && /settled/.test(r.message), `${tag}: repaired: wrote ${r.written}, settled (${r.message})`, r);
-    check(G.same(r.credited, moved) && sum(moved) > 0 && G.same(moved, G.plus(pendItems, S.custody?.[key] ?? {})),
+    check(G.same(r.credited, moved) && (t4b || sum(moved) > 0) && G.same(moved, wantCredit),
       `${tag}: its pending credit booked once: ${sum(moved)} units came back = what the saved ledger held pending for ${key} (${sum(pendItems)}), item for item (items in = items out)`, { moved, pendItems, credited: r.credited });
     // (dev.stockpile.state's ledger leaves out `credited`): the saved file, which the repair's credit save wrote with the world
     const Sd = saved();
@@ -266,7 +270,7 @@ export async function registerDRS(steps, h) {
       check(lost > 0, `${tag}: the fault: ${lost} restored cell(s) of its west half put back as placed (their writes lost)`);
       if (!(await haltAS1(tag))) return out;
       const S = saved();
-      check(!!S.pendingCredit?.[key] && !(S.credited ?? []).includes(key), `${tag}: on disk ${key}'s credit is pending (${sum(S.pendingCredit?.[key]?.items)} units), not credited`, { pend: S.pendingCredit?.[key] });
+      check(!!S.pendingCredit?.[key] !== (S.credited ?? []).includes(key), `${tag}: on disk ${key}'s credit is pending (${sum(S.pendingCredit?.[key]?.items)} units), or (T4b, N8) credited by its removal's txn with its restore (${(S.credited ?? []).includes(key)})`, { pend: S.pendingCredit?.[key] });
       const s1 = await restart(tag);
       out.DR4a = await stuckCase(tag, s1, A.s, A.b, lost, key, S);
       check(await hash(A.b) === restored, `${tag}: the box is as its removal committed it`);
@@ -297,7 +301,8 @@ export async function registerDRS(steps, h) {
       if (!(await haltAS1(tag))) return out;
       const S = saved();
       const pend = S.pendingCredit?.[key]?.items ?? null;
-      check(!!pend, `${tag}: on disk ${key}'s credit is pending (${sum(pend)} units)`);
+      const t4bC = (S.credited ?? []).includes(key);
+      check(!!pend !== t4bC, `${tag}: on disk ${key}'s credit is pending (${sum(pend)} units), or (T4b, N8) credited by its removal's txn (${t4bC})`);
       await restart(tag);
       const d1 = await diag({ kind: 'site', id: C.s });
       const f1 = (d1.findings ?? []).find((x) => x.code === 'STUCK' && x.site === C.s);
@@ -333,7 +338,7 @@ export async function registerDRS(steps, h) {
         await restart(`${tag} ${point}`);
         const Sk = saved();
         conserve(`${tag} after ${point}`, S0);
-        check(!(Sk.credited ?? []).includes(key) && G.same(Sk.pendingCredit?.[key]?.items ?? {}, pend0) && G.same(back(Sk), back(S0)),
+        check((t4bC || !(Sk.credited ?? []).includes(key)) && G.same(Sk.pendingCredit?.[key]?.items ?? {}, pend0) && G.same(back(Sk), back(S0)),
           `${tag} after ${point}: ${key} not credited, its whole credit still pending, nothing booked`);
         walk.push({ point, credited: (Sk.credited ?? []).includes(key), pending: sum(Sk.pendingCredit?.[key]?.items) });
       }
@@ -341,8 +346,8 @@ export async function registerDRS(steps, h) {
       const r = await repair(d2.planId, true);
       await L.settle(2000);
       const S2 = saved();
-      check(!/settled/.test(r.message ?? '') && sum(r.credited) === 0 && G.same(back(S2), back(S0)) && !(S2.credited ?? []).includes(key)
-        && G.same(S2.pendingCredit?.[key]?.items ?? {}, pend0) && sum(S2.paid?.[key]) > 0 && !Object.keys(S2.pendingCredit ?? {}).some((k) => k.startsWith('taken:')),
+      check(!/settled/.test(r.message ?? '') && sum(r.credited) === 0 && G.same(back(S2), back(S0)) && (t4bC || !(S2.credited ?? []).includes(key))
+        && G.same(S2.pendingCredit?.[key]?.items ?? {}, pend0) && (t4bC || sum(S2.paid?.[key]) > 0) && !Object.keys(S2.pendingCredit ?? {}).some((k) => k.startsWith('taken:')),
         `${tag}: the open repair finished without settling: nothing booked, ${key}'s whole credit still pending (${sum(pend0)}), its paid record kept, no taken: key (DR2 ships without the taken-share settle: TXN T6) (${r.message})`, r);
       conserve(tag, S0);
       await L.leaveWorld();

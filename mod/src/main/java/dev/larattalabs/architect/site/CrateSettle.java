@@ -277,6 +277,19 @@ public final class CrateSettle {
 		}
 		Stockpiles.credit(srv, p, key, new TreeMap<>(items), at);
 		Stockpiles.changed(p);
+		Stockpiles.creditSaves++; // (T4b) J1's credit save is this txn's barrier (players, chunks, then the ledger), counted as one
+		REFUND_PUBLISHING = true;
+	}
+
+	/** (TEST alias CS1) A removal txn booked a stockpile refund that its barrier has not published yet. */
+	private static volatile boolean REFUND_PUBLISHING;
+
+	static boolean refundPublishing() {
+		return REFUND_PUBLISHING;
+	}
+
+	static void refundPublished() {
+		REFUND_PUBLISHING = false;
 	}
 
 	private static JsonObject stashOf(String key, String dim, BlockPos pos, String recipient, @Nullable String pile, @Nullable String site,
@@ -405,6 +418,30 @@ public final class CrateSettle {
 		}
 		if (held) {
 			dev.larattalabs.architect.txn.TxnServer.later(() -> sweep(srv));
+		}
+	}
+
+	/**
+	 * (T4b) The durable stashes as the Sites check sees them, which runs before the stockpiles load: read from {@code stockpiles.json} itself
+	 * (read only; the stockpiles load it again after). Null when the file can't be read: then no committed construction removal may be
+	 * judged at this start (its stash is unknown), and its entries are kept.
+	 */
+	static java.util.@Nullable Map<String, JsonObject> durableAtStart(MinecraftServer srv) {
+		java.nio.file.Path f = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(Stockpiles.FILE);
+		Map<String, JsonObject> out = new TreeMap<>();
+		if (!java.nio.file.Files.isRegularFile(f)) {
+			return out;
+		}
+		try {
+			JsonObject root = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8))
+				.getAsJsonObject();
+			if (root.get("crateSettles") instanceof JsonObject cs) {
+				cs.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsJsonObject()));
+			}
+			return out;
+		} catch (java.io.IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Sites check: {} could not be read ({}): committed construction removals wait for the next start", f, e.toString());
+			return null;
 		}
 	}
 
@@ -588,7 +625,12 @@ public final class CrateSettle {
 		if (in.stock().isEmpty() && in.refund().isEmpty() && !in.restore() && rm.first().isEmpty() && rm.last().isEmpty()) {
 			return Settled.NONE;
 		}
-		CrateTxn.Answer a = CrateTxn.settle(in, rm.kind(), rm.first(), rm.last(), rm.more());
+		CrateTxn.Answer a;
+		try {
+			a = CrateTxn.settle(in, rm.kind(), rm.first(), rm.last(), rm.more());
+		} finally {
+			refundPublished();
+		}
 		// (T2b part 2b) a barrier refused before the decision aborts the attempt (its take compensated: the stock back in the crate); an aborted
 		// attempt is never cached under the key, so it is retried as a hold, never taken for "the crate changed" (that orphaned the crate)
 		if (a.refused() != null && (a.refused().startsWith("held") || a.refused().startsWith("journal_unavailable") || a.refused().startsWith("aborted: barrier"))) {

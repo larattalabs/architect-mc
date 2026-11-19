@@ -236,6 +236,11 @@ public final class DurableBarrier {
 
 		@Override
 		public DurableFile.Result ledger() {
+			if (CrateSettle.refundPublishing() && "CS1".equals(dev.larattalabs.architect.journal.WorldJournal.armed())) {
+				// (TEST, slice T4b alias of J2's CS1) a removal txn publishing its refund: the players and the chunks (its restore) on disk, the ledger not
+				dev.larattalabs.architect.Architect.LOGGER.error("Stockpiles: kill point CS1: a removal's refund barrier flushed its chunks, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
+			}
 			return Stockpiles.writeConfirmed(srv);
 		}
 	}

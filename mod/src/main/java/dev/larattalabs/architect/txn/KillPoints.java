@@ -20,6 +20,11 @@ public final class KillPoints {
 	private static final Map<String, Set<String>> SEEN = new TreeMap<>();
 	private static @Nullable List<String> trace;
 
+	/** (slice T4b) The kind whose point names {@code kind}'s points answer too: a removal's settle answers {@code crate.settle}'s. Null: none. */
+	public static @Nullable String alias(String kind) {
+		return kind.equals("removal.site") || kind.equals("removal.road") ? "crate.settle" : null;
+	}
+
 	/** The point's full name. */
 	public static String name(String kind, boolean recovering, String step) {
 		return "TX:" + (recovering ? "recover:" : "") + kind + ":" + step;

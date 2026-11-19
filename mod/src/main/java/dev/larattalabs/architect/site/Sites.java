@@ -3251,6 +3251,9 @@ public final class Sites {
 		if (!releaseNow.isEmpty()) {
 			SiteJournal.releaseGroup(releaseNow);
 		}
+		// (T4b) the durable stashes, read from the ledger file (the stockpiles load after this check); null: unreadable, so no committed
+		// construction removal is judged at this start
+		Map<String, JsonObject> early = CrateSettle.durableAtStart(server);
 		// K6: the undo committed (R2) before the record went pending (R3): the record follows the journal, then the evidence decides
 		for (Site b : List.copyOf(map.values())) {
 			if (b.placing() || jobSites.contains(b.id()) || pendingIds.contains(b.id()) || SiteJournal.active(b.id()).stream().anyMatch(m -> !m.kind()
@@ -3269,7 +3272,7 @@ public final class Sites {
 				// (T2b fix round P1-c) the refunds tallied at prepare from the durable stash, saved before the undo committed
 				// (the stockpiles load after this check: the settle reads the durable stash on its tick, CrateSettle.resumeNow)
 				// (T4b, finding 1b) the durable stash first: a shared crate's member (no CRATE entry of its own) and a stockpile's site keep theirs
-				JsonObject st = CrateSettle.durable(b.id());
+				JsonObject st = early == null ? null : early.get(b.id());
 				if (st == null) {
 					st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
 				}
@@ -3339,7 +3342,12 @@ public final class Sites {
 					group = m.undoGroup();
 				}
 			}
-			JsonObject stashOf = p.settle() != null ? p.settle() : CrateSettle.durable(gone.id());
+			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
+			if (stashOf == null && early == null && gone.construction() != null && group != null) {
+				// (T4b) its stash can't be read now: never judged (a release here could pay later with its blocks standing); kept for the next start
+				report(gone.id(), true, "removed " + gone.id() + ": its settle can't be read (the ledger file is unreadable); it waits, nothing released");
+				continue;
+			}
 			if (group == null && stashOf != null) {
 				if (CrateSettle.standsInJournal(gone.id())) {
 					// (T4b) its undo never committed (its entries are active): it stands; its stash is dropped below with the record, nothing paid
@@ -3458,7 +3466,7 @@ public final class Sites {
 				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before it is settled");
 				continue;
 			}
-			if (CrateSettle.durable(gone.id()) != null) {
+			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null) {
 				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority
 				CrateSettle.resumeInfraLater(server, gone.id());
 				continue;

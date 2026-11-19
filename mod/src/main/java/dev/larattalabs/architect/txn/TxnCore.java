@@ -745,6 +745,13 @@ public final class TxnCore {
 		String point = KillPoints.name(t.kind, !t.live, step);
 		KillPoints.reached(t.kind, point);
 		env.kill(point);
+		String alias = KillPoints.alias(t.kind);
+		if (alias != null) {
+			// (slice T4b) a removal's settle answers T2b's crate.settle points too (Steward's and the gates' names keep working)
+			String ap = KillPoints.name(alias, !t.live, step);
+			KillPoints.reached(alias, ap);
+			env.kill(ap);
+		}
 	}
 
 	// ------------------------------------------------------------------ ops (§3.6 "The ops command")
