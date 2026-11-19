@@ -127,15 +127,15 @@ export async function registerSOFF(steps, h) {
     check(items.length > 0 && sum(need) >= 100, `SOFF: the town needs at least 100 units (${sum(need)})`);
     if (!items.length) return out;
 
-    // a hopper line: a chest over a hopper over crate k, its chest filled with a quarter of the need
-    const line = async ([x, y, z]) => {
-      await cmd(`/setblock ${x} ${y + 1} ${z} minecraft:hopper[facing=down]`);
+    // a hopper line over crate k: its chest (filled with a quarter of the need) before the baseline, the hopper under it in the case
+    const chest = async ([x, y, z]) => {
       await cmd(`/setblock ${x} ${y + 2} ${z} minecraft:chest`);
       let slot = 0;
       for (const k of items) {
         for (let left = Math.floor(need[k] / 4); left > 0 && slot < 27; slot++, left -= 64) await cmd(`/item replace block ${x} ${y + 2} ${z} container.${slot} with ${k} ${Math.min(64, left)}`);
       }
     };
+    const hopper = async ([x, y, z]) => cmd(`/setblock ${x} ${y + 1} ${z} minecraft:hopper[facing=down]`);
     const unline = async ([x, y, z]) => {
       await cmd(`/setblock ${x} ${y + 2} ${z} minecraft:air`);
       await cmd(`/setblock ${x} ${y + 1} ${z} minecraft:air`);
@@ -145,10 +145,11 @@ export async function registerSOFF(steps, h) {
     // ---------------------------------------------------------------- P, A: a hopper line with saving off
     for (const [tag, viaAutosave] of [['P', false], ['A', true]]) {
       await ps({ noPeriodic: viaAutosave, resetPeriodic: true });
+      await chest(crates[0]);
       out[tag] = await crashCase(tag, items, async (n, s0) => {
         const k0 = await stockOf();
         await cmd('/save-off');
-        await line(crates[0]);
+        await hopper(crates[0]);
         await call('dev.wait', { ms: viaAutosave ? 15_000 : 25_000 }, 60_000);
         if (viaAutosave) await ps({ autosave: true });
         const s = await heldNow(tag);
@@ -161,10 +162,11 @@ export async function registerSOFF(steps, h) {
     await ps({ noPeriodic: false });
 
     // ---------------------------------------------------------------- M: the Nether off directly, the Overworld on
+    await chest(crates[1]);
     out.M = await crashCase('M', items, async (n, s0) => {
       const k0 = await stockOf();
       await ps({ noSave: { 'minecraft:the_nether': true } });
-      await line(crates[1]);
+      await hopper(crates[1]);
       await call('dev.wait', { ms: 15_000 }, 60_000);
       await ps({ autosave: true });
       const s = await heldNow('M');
