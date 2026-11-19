@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  * <li>(LYW) A wall's answer ({@code geometry.line}): the wall, its gates and passages, its corner stubs; its lots carry {@code wall} and
  * {@code wallAt}. A district's connecting route with stair or graded sections: one route from the IR's graph edge and {@code paths}.</li>
  * <li>(LYW2) A bundled program's ring wall (the IR's {@code walls}, its {@code ring(..., {wall: true})}): the wall, its gates and its towers,
- * as a wall answer's, in place of its part's tile. A mixed district route's road pieces are in its one route only.</li>
+ * as a wall answer's, in place of its part's tile.</li>
  * </ul>
  * Geometry is cached per region, head revision and IR sha; targets and lots per part come from the survival build when read. Server
  * thread. Internal.
@@ -355,37 +355,21 @@ public final class Layouts {
 				}
 			}
 		}
-		// (v0.84 review) every district route edge first: a piece belongs to the longest edge id it extends (district b_1's
-		// route_d_a__b_1_1 is its own piece 1, not a group of b's piece 1)
-		List<String> edgeIds = new ArrayList<>();
-		for (JsonElement e : es) {
-			if (e instanceof JsonObject ed && StatusViews.str(ed, "id") != null && StatusViews.str(ed, "id").equals(StatusViews.str(ed, "path")) && DISTRICT_ROUTE
-				.matcher(StatusViews.str(ed, "id")).matches()) {
-				edgeIds.add(StatusViews.str(ed, "id"));
-			}
-		}
-		java.util.Set<String> folded = new java.util.HashSet<>();
-		Map<String, PartShape> routes = new LinkedHashMap<>();
 		for (JsonElement e : es) {
 			if (!(e instanceof JsonObject ed)) {
 				continue;
 			}
 			String id = StatusViews.str(ed, "id");
-			if (id == null || !edgeIds.contains(id) || out.containsKey(id) && routeOwner(id, edgeIds, ROAD_PIECE) == null) {
-				// (an id another part already has, unless it is another route's road piece, folded below)
+			if (id == null || !id.equals(StatusViews.str(ed, "path")) || !DISTRICT_ROUTE.matcher(id).matches() || out.containsKey(id)) {
 				continue;
 			}
-			java.util.regex.Pattern piece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + PATH_PIECE.pattern());
-			// ((LYW2) a road piece: <path>_<n>, or a long one's groups <path>_<n>_<k> (program.mjs _groundRoad))
-			java.util.regex.Pattern roadPiece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + ROAD_PIECE.pattern());
-			List<String> mine = new ArrayList<>();
+			java.util.regex.Pattern piece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + "_(\\d+)(l?)");
 			java.util.TreeMap<Double, List<BlockPos>> pieces = new java.util.TreeMap<>();
 			int[] b = null;
 			boolean section = false;
 			for (JsonElement q : paths) {
 				java.util.regex.Matcher m;
-				if (q instanceof JsonObject ps && StatusViews.str(ps, "id") != null && (m = piece.matcher(StatusViews.str(ps, "id"))).matches() && id.equals(routeOwner(
-					StatusViews.str(ps, "id"), edgeIds, PATH_PIECE)) && ps
+				if (q instanceof JsonObject ps && StatusViews.str(ps, "id") != null && (m = piece.matcher(StatusViews.str(ps, "id"))).matches() && ps
 					.get("box") instanceof JsonObject bx && bx.get("minX") != null) {
 					int[] r = {bx.get("minX").getAsInt(), num(bx, "minY", y0), bx.get("minZ").getAsInt(), bx.get("maxX").getAsInt(), num(bx, "maxY", y1), bx.get(
 						"maxZ").getAsInt()};
@@ -401,16 +385,14 @@ public final class Layouts {
 			if (ir.get("roads") instanceof JsonArray rs) {
 				for (JsonElement q : rs) {
 					java.util.regex.Matcher m;
-					if (q instanceof JsonObject rd && StatusViews.str(rd, "id") != null && (m = roadPiece.matcher(StatusViews.str(rd, "id"))).matches() && id.equals(
-						routeOwner(StatusViews.str(rd, "id"), edgeIds, ROAD_PIECE)) && rd
+					if (q instanceof JsonObject rd && StatusViews.str(rd, "id") != null && (m = piece.matcher(StatusViews.str(rd, "id"))).matches() && rd
 						.get("points") instanceof JsonArray pts) {
 						List<BlockPos> line = new ArrayList<>();
 						for (JsonElement pt : pts) {
 							JsonArray a = pt.getAsJsonArray();
 							line.add(pos(a, y0));
 						}
-						pieces.put(Integer.parseInt(m.group(1)) + (m.group(2) == null ? 0 : Integer.parseInt(m.group(2)) / 1000.0), line);
-						mine.add(StatusViews.str(rd, "id"));
+						pieces.put(Integer.parseInt(m.group(1)) + (m.group(2).isEmpty() ? 0 : 0.5), line);
 						BoundingBox rb = boxOf(line, w / 2, y0, y1);
 						if (rb != null) {
 							b = union(b, new int[] {rb.minX(), line.stream().mapToInt(BlockPos::getY).min().orElse(y0), rb.minZ(), rb.maxX(), line.stream().mapToInt(
@@ -431,35 +413,9 @@ public final class Layouts {
 			for (BlockPos q : line) {
 				b = union(b, new int[] {q.getX(), q.getY(), q.getZ(), q.getX(), q.getY(), q.getZ()});
 			}
-			folded.addAll(mine);
-			routes.put(id, new PartShape(id, "route", StatusViews.str(ed, "stage"), new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]), simplify(line), rid(ed), null,
+			out.put(id, new PartShape(id, "route", StatusViews.str(ed, "stage"), new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]), simplify(line), rid(ed), null,
 				List.of(), w, 0, null, null));
 		}
-		// ((LYW2) each road piece a route folds in is in that route only: not also its own route shape, from the IR's roads)
-		for (String f : folded) {
-			if (out.get(f) != null && "route".equals(out.get(f).kind())) {
-				out.remove(f);
-			}
-		}
-		routes.forEach(out::putIfAbsent);
-	}
-
-	/** (LYW) A district route's path section suffix ({@code _<n>}, {@code _<n>l}) and road piece suffix ({@code _<n>}, {@code _<n>_<k>}). */
-	private static final java.util.regex.Pattern PATH_PIECE = java.util.regex.Pattern.compile("_(\\d+)(l?)"),
-		ROAD_PIECE = java.util.regex.Pattern.compile("_(\\d+)(?:_(\\d+))?");
-
-	/**
-	 * (v0.84 review, pure) The district route edge a section or road piece id belongs to: the longest of {@code edgeIds} it extends by
-	 * {@code suffix}, or null.
-	 */
-	static @Nullable String routeOwner(String pieceId, List<String> edgeIds, java.util.regex.Pattern suffix) {
-		String best = null;
-		for (String e : edgeIds) {
-			if (pieceId.startsWith(e + "_") && (best == null || e.length() > best.length()) && suffix.matcher(pieceId.substring(e.length())).matches()) {
-				best = e;
-			}
-		}
-		return best;
 	}
 
 	/** A graph port reference's node ({@code node.port}; an external {@code region:node.port} has none here). */

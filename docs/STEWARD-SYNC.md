@@ -186,7 +186,8 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 ### New for Steward (NEXT, slice LYW2)
 - `Regions.layout` of a `walled_hill` or `sky_isle` region (planned from NEXT on) has its wall: the `wall` part is kind `connector.wall` (not
   `tile`), with its gate `wall_g1` (`connector.gate`) and towers `wall_tower_<n>` (kind `tower`, `wallAt: run`). A region planned before
-  stays a `tile`. A district route laid partly as roads lists each road piece once (inside its one `route_d_<a>__<b>` shape).
+  stays a `tile`. A district route laid partly as roads still lists each road piece both alone and inside its `route_d_<a>__<b>`
+  shape, as in v0.83.0: route-piece dedup is deferred until the kit records each piece's edge explicitly.
   CONTRACT "Slice LYW2".
 
 ### Open asks either way

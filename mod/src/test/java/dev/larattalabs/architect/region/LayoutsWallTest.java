@@ -168,24 +168,9 @@ class LayoutsWallTest {
 	}
 
 	@Test
-	void aMixedDistrictRouteListsEachRoadPieceOnce() {
-		// a route laid as a ground road, a stair section, then a long road in two groups (program.mjs _groundRoad's <id>_<k>)
-		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]}],\"edges\":[{\"id\":\"route_d_a__b\","
-			+ "\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3}]},"
-			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}}],"
-			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[19,64,0]],\"width\":3},"
-			+ "{\"id\":\"route_d_a__b_3_1\",\"points\":[[31,74,0],[45,77,0]],\"width\":3},{\"id\":\"route_d_a__b_3_2\",\"points\":[[45,77,0],[59,80,0]],\"width\":3},"
-			+ "{\"id\":\"street_a\",\"points\":[[0,64,0],[0,64,20]],\"width\":3}]}";
-		List<PartShape> s = Layouts.shapes(JsonParser.parseString(ir).getAsJsonObject(), List.of(), -64, 319, id -> 0);
-		assertEquals(List.of("street_a", "route_d_a__b"), s.stream().map(PartShape::part).toList(), "each road piece once: in its route, not also alone");
-		PartShape r = s.get(1);
-		assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0), new BlockPos(
-			45, 77, 0), new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), r.ends(), "from node, its pieces in order (both groups of the long road), to node");
-	}
-
-	@Test
-	void aDistrictWhoseIdExtendsAnothersKeepsItsOwnRoute() {
-		// districts b and b_1: route_d_a__b_1_1 is b_1's piece 1, not a group of b's piece 1 (v0.84.0 review P2)
+	void aDistrictWhoseIdExtendsAnothersLosesNoRoadPiece() {
+		// districts b and b_1: road ids like route_d_a__b_1_1 are ambiguous between b's and b_1's pieces, and the IR names no edge per piece,
+		// so (as v0.83.0) every road piece is its own route shape and also folded into its edge's route; nothing dropped or moved
 		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
 			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
 			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
@@ -201,11 +186,13 @@ class LayoutsWallTest {
 				es.add(first);
 			}
 			Map<String, PartShape> m = Layouts.shapes(o, List.of(), -64, 319, id -> 0).stream().collect(Collectors.toMap(PartShape::part, x -> x));
-			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "each route once, no road piece alone (reversed=" + reversed + ")");
+			for (String rd : List.of("route_d_a__b_1", "route_d_a__b_3", "route_d_a__b_1_1", "route_d_a__b_1_3")) {
+				assertEquals("route", m.get(rd).kind(), rd + ": every road piece is still its own route shape (reversed=" + reversed + ")");
+			}
+			assertEquals(List.of(new BlockPos(1, 64, 0), new BlockPos(19, 64, 0)), m.get("route_d_a__b_1").ends(), "the road piece keeps its own points");
+			assertEquals(List.of(new BlockPos(0, 64, 1), new BlockPos(0, 64, 39)), m.get("route_d_a__b_1_1").ends());
 			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0),
-				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's route: only b's pieces");
-			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1), new BlockPos(0, 64, 39), new BlockPos(0, 64, 45), new BlockPos(0, 64, 51),
-				new BlockPos(0, 64, 89), new BlockPos(0, 64, 90)), m.get("route_d_a__b_1").ends(), "b_1's route: only b_1's pieces");
+				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's route folds in only b's pieces, none of b_1's");
 		}
 	}
 

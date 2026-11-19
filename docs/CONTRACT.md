@@ -33547,13 +33547,14 @@ Steward's 8bS-2: a walled town's layout had no wall, since `Layouts.ofAnswer` re
 LYW's two leftovers. No API member, feature or version added (`layoutWalls` covers both).
 - Ring walls: the kit's `ring(c, r0, r1, {..., wall: true})` records the ring in the IR's new top-level `walls` member (only a plan with
   such a ring has it; a known format-2 member the evaluator ignores; no block changes): `{part, line: [[x, z], ...] (its mid-radius
-  polygon, at most 63 corners), closed: true, thickness, height (cells from the footing up), top: [min, max] (the top cell's y over the
-  line: survey ground or `baseY`), gates: [{id: <part>_g<n>, at (the threshold's feet), width, height}], towers: [{id: <part>_tower_<n>,
-  at (centre at the footing), r, height}]}`. `walled_hill` and `sky_isle` opt in; `crater_works`'s rim, `mega_bench` and authored programs
+  polygon, at most 63 corners), closed: true, thickness, height (cells from the footing up), top: [min, max] (`top[0]` the lowest
+  top-of-run cell's y over the line, from survey ground or `baseY`; `top[1]` the highest written cell, crenels included), gates: [{id: <part>_g<n>, at (the threshold's feet), width, height}], towers: [{id: <part>_tower_<n>,
+  at (its centre; `at[1]` its lowest footing), r, height}]}`. `walled_hill` and `sky_isle` opt in; `crater_works`'s rim, `mega_bench` and authored programs
   don't (their IRs are byte-identical). `Layouts` reads each as a wall answer: the wall (`connector.wall`, ends its line at the foot
   `top[0] - height + 1`, closed), its gates (`connector.gate`, their own height), its towers (kind `tower`, `wallAt: run`, a `2r + 1` square);
   the part is no longer a `tile`. The 6b goldens' `irSha` moved for those two only (tile shas unchanged).
-- Mixed routes: a district route with stair or graded sections and road pieces listed each road piece twice (its own `route` shape from
-  `ir.roads`, and inside the edge's one route). The pieces folded in (`<edge>_<n>`, and a long road's groups `<edge>_<n>_<k>`, which LYW's
-  match missed) are now in the one route only.
-- Units: `LayoutsWallTest` (a bundled ring wall; a mixed route), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).
+- Mixed routes: unchanged from v0.83.0. A district route with stair or graded sections and road pieces lists each road piece twice (its
+  own `route` shape from `ir.roads`, and folded into the edge's one route). Route-piece dedup is deferred until the kit records each
+  piece's edge explicitly: piece ids alone are ambiguous (`route_d_a__b_1_1` is edge `route_d_a__b` group 1 of piece 1, or edge
+  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review).
+- Units: `LayoutsWallTest` (a bundled ring wall; districts b and b_1 lose no road piece), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).
