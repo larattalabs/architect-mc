@@ -59,7 +59,7 @@ export default function skyIsle(ctx) {
   // ---- the citadel wall on the mass, its gate to the south
   const gA = 180;
   const wall = r.part('wall', { stage: 'mass' });
-  wall.ring([cx, cz], R - 4, R - 1, { height: 5, baseY: alt + 1, material: 'structure', towers: { every: 36, radius: 3, extra: 4 }, crenels: true, gates: [{ angle: gA, width: 5, height: 5 }] });
+  wall.ring([cx, cz], R - 4, R - 1, { height: 5, baseY: alt + 1, material: 'structure', towers: { every: 36, radius: 3, extra: 4 }, crenels: true, gates: [{ angle: gA, width: 5, height: 5 }], wall: true });
   // ---- the spiral tower south of the isle and the arched bridge to the gate
   const gd = compassDir(gA);
   const A = 6;

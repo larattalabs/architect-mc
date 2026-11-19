@@ -131,6 +131,58 @@ class LayoutsWallTest {
 		assertTrue(r.box().minY() <= 135 && r.box().maxY() >= 152);
 	}
 
+	/** (LYW2) walled_hill's ring wall record (kit program.mjs _ringWall), trimmed to 4 corners, 1 gate and 2 towers; its part's ring op. */
+	private static final String RING_IR = "{\"parts\":[{\"id\":\"wall\",\"stage\":\"ground\",\"set\":\"terrain\",\"ops\":[{\"op\":\"shape\","
+		+ "\"shape\":{\"kind\":\"ring\",\"c\":[0,{\"surface\":0},0],\"r0\":60,\"r1\":63,\"h\":7},\"bounds\":{\"minX\":-63,\"minY\":null,\"minZ\":-63,"
+		+ "\"maxX\":63,\"maxY\":null,\"maxZ\":63}}]},{\"id\":\"rails\",\"stage\":\"ground\",\"set\":\"terrain\",\"ops\":[{\"op\":\"shape\",\"bounds\":"
+		+ "{\"minX\":-56,\"minY\":null,\"minZ\":-56,\"maxX\":56,\"maxY\":null,\"maxZ\":56}}]}],"
+		+ "\"walls\":[{\"part\":\"wall\",\"line\":[[0,-61],[61,0],[0,61],[-61,0]],\"closed\":true,\"thickness\":3,\"height\":7,\"top\":[71,90],"
+		+ "\"gates\":[{\"id\":\"wall_g1\",\"at\":[0,77,62],\"width\":5,\"height\":5}],\"towers\":[{\"id\":\"wall_tower_1\",\"at\":[0,66,-61],"
+		+ "\"r\":3,\"height\":11},{\"id\":\"wall_tower_2\",\"at\":[36,68,-50],\"r\":3,\"height\":11}]}]}";
+
+	@Test
+	void aBundledProgramsRingWallIsAWallNotATile() {
+		List<PartShape> s = Layouts.shapes(JsonParser.parseString(RING_IR).getAsJsonObject(), List.of(), -64, 319, id -> 0);
+		Map<String, PartShape> m = byId(s);
+		PartShape w = m.get("wall");
+		assertEquals("connector.wall", w.kind(), "the wall's part is its wall, not a tile");
+		assertEquals("ground", w.stage());
+		assertEquals(3, w.width());
+		assertEquals(7, w.height());
+		assertEquals("wall", w.wall());
+		assertEquals(List.of(new BlockPos(0, 65, -61), new BlockPos(61, 65, 0), new BlockPos(0, 65, 61), new BlockPos(-61, 65, 0), new BlockPos(0, 65, -61)), w
+			.ends(), "its line at its foot (top 71 - 7 + 1), closed: four runs");
+		assertEquals(65, w.box().minY());
+		assertEquals(90, w.box().maxY());
+		PartShape g = m.get("wall_g1");
+		assertEquals("connector.gate", g.kind());
+		assertEquals(new BoundingBox(-2, 77, 60, 2, 81, 64), g.box(), "5 wide, its own height 5");
+		assertEquals("gate", g.wallAt());
+		PartShape t = m.get("wall_tower_2");
+		assertEquals("tower", t.kind());
+		assertEquals(new BoundingBox(33, 68, -53, 39, 78, -47), t.box(), "radius 3 round its centre, 11 cells up from its footing");
+		assertEquals("run", t.wallAt());
+		assertEquals("wall", t.wall());
+		assertEquals(List.of("rails"), s.stream().filter(x -> "tile".equals(x.kind())).map(PartShape::part).toList(), "the other parts stay tiles");
+		assertEquals(s, Layouts.shapes(JsonParser.parseString(RING_IR).getAsJsonObject(), List.of(), -64, 319, id -> 0), "deterministic");
+	}
+
+	@Test
+	void aMixedDistrictRouteListsEachRoadPieceOnce() {
+		// a route laid as a ground road, a stair section, then a long road in two groups (program.mjs _groundRoad's <id>_<k>)
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]}],\"edges\":[{\"id\":\"route_d_a__b\","
+			+ "\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[19,64,0]],\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_3_1\",\"points\":[[31,74,0],[45,77,0]],\"width\":3},{\"id\":\"route_d_a__b_3_2\",\"points\":[[45,77,0],[59,80,0]],\"width\":3},"
+			+ "{\"id\":\"street_a\",\"points\":[[0,64,0],[0,64,20]],\"width\":3}]}";
+		List<PartShape> s = Layouts.shapes(JsonParser.parseString(ir).getAsJsonObject(), List.of(), -64, 319, id -> 0);
+		assertEquals(List.of("street_a", "route_d_a__b"), s.stream().map(PartShape::part).toList(), "each road piece once: in its route, not also alone");
+		PartShape r = s.get(1);
+		assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0), new BlockPos(
+			45, 77, 0), new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), r.ends(), "from node, its pieces in order (both groups of the long road), to node");
+	}
+
 	@Test
 	void theOldConstructorsStillWork() {
 		var s = new PartShape("p", "tile", null, new BoundingBox(0, 0, 0, 1, 1, 1), List.of(), 0, null, List.of());

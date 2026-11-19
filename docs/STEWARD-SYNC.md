@@ -182,6 +182,12 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   or graded sections is now one `route` shape `route_d_<a>__<b>` (or `route_join`) from its graph edge and IR paths. Not covered: a bundled
   program's wall (`walled_hill`, `sky_isle`: still one `tile` part, its ring op leaves no line in the IR). CONTRACT "Slice LYW".
 
+### New for Steward (NEXT, slice LYW2)
+- `Regions.layout` of a `walled_hill` or `sky_isle` region (planned from NEXT on) has its wall: the `wall` part is kind `connector.wall` (not
+  `tile`), with its gate `wall_g1` (`connector.gate`) and towers `wall_tower_<n>` (kind `tower`, `wallAt: run`). A region planned before
+  stays a `tile`. A district route laid partly as roads lists each road piece once (inside its one `route_d_<a>__<b>` shape).
+  CONTRACT "Slice LYW2".
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.

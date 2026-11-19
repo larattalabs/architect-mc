@@ -73,7 +73,9 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
   'gateMechanisms',
   // ((7b LP) a plan's port links (the realise's link pass replays them) and, in IR v2, the bound entries' ports they were written from:
   // known members the evaluator ignores; only a plan with a link to a site lot's port has them)
-  'portLinks', 'linked'];
+  'portLinks', 'linked',
+  // ((LYW2) a bundled program's ring walls (ring(..., {wall: true})): Regions.layout's wall line; a known member the evaluator ignores)
+  'walls'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
