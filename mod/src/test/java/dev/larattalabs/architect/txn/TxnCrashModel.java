@@ -204,6 +204,11 @@ final class TxnCrashModel {
 		final List<String> serializeFails = new ArrayList<>();
 		/** BARRIER_SCOPE: the chunks the running txn touched (the only ones its barrier acknowledges). */
 		final List<String> scope = new ArrayList<>();
+		/**
+		 * (slice T4a) A scenario's own start, run after txn recovery and the generic legacy resolvers at every load: the legacy reconcile a
+		 * scenario models (its {@link #kill} points are recovery's own, so a second crash inside it is explored too). Null: none.
+		 */
+		@Nullable Consumer<World> startHook;
 
 		World(Naive naive) {
 			this.naive = naive;
@@ -274,6 +279,7 @@ final class TxnCrashModel {
 			playerDebt.forEach((k, v) -> w.playerDebt.put(k, v.deepCopy()));
 			w.serializeFails.addAll(serializeFails);
 			w.scope.addAll(scope);
+			w.startHook = startHook;
 			return w;
 		}
 
@@ -324,6 +330,9 @@ final class TxnCrashModel {
 			core = newCore();
 			core.recover();
 			legacy(this);
+			if (startHook != null) {
+				startHook.accept(this);
+			}
 		}
 
 		/** A power loss: every DurableFile store back at its forced version; without a durable folder entry, the folder is gone. */
