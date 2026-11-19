@@ -71,6 +71,15 @@ final class InfraJob implements Placement.Job {
 	private transient long takeUpRetryAt;
 	private transient boolean takeUpBooked;
 	private transient @Nullable PlaceResult takeUpResult;
+	/** (T4a fix round, finding 4.2) The queue generation holding this job in {@link #TAKE_UP} with its plan: confirmed before any booking. */
+	private transient long takeUpGen;
+	/** (T4a fix round) Its item was reported placed (and its futures answered) when it entered {@link #TAKE_UP}. Persisted. */
+	boolean placedReported;
+	/**
+	 * (T4a fix round, finding 4.5) A survival region tile's free pass over other writers' paid blocks, planned per cell as it writes (never
+	 * given back at once): booked with its take-ups once it is placed. Persisted, so a write the restart does again keeps what it took up.
+	 */
+	final java.util.LinkedHashMap<Long, RegionOverwrites.Cell> tileCells = new java.util.LinkedHashMap<>();
 	/** The cells to write, lowest first, and their planned values (rebuilt from the entry after a load). */
 	transient long[] positions = new long[0];
 	transient Value[] afters = new Value[0];
@@ -606,8 +615,11 @@ final class InfraJob implements Placement.Job {
 							}
 							if (!xrLives.isEmpty()) {
 								BlockState was = level.getBlockState(m);
-								if (!was.isAir() && !was.is(WorldJournal.state(v).getBlock())) {
-									RegionOverwrites.retakeToPile(server, xrLives, record.owner(), record.dimension(), m.immutable(), was, m.above().immutable(), record.id());
+								if (!was.isAir() && !was.is(WorldJournal.state(v).getBlock()) && !tileCells.containsKey(p)) {
+									RegionOverwrites.Cell tc = RegionOverwrites.tileCell(xrLives, m.immutable(), was);
+									if (tc != null) {
+										tileCells.put(p, tc); // (fix round, finding 4.5) booked once it is placed, never given back mid-write
+									}
 								}
 							}
 						}
@@ -678,9 +690,21 @@ final class InfraJob implements Placement.Job {
 						dev.larattalabs.architect.site.roads.RoadSync.changed(server, dimension, done.box());
 					}
 					PlaceResult pr = new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.copyOf(skipped));
+					if (!tileCells.isEmpty()) {
+						Stockpiles.Pile tp = Stockpiles.get(record.owner());
+						if (tp != null) {
+							RegionOverwrites.TakeUp tt = new RegionOverwrites.TakeUp(tp.owner(), record.dimension(), "xr-tile:" + siteId + "@" + entry, List.copyOf(
+								tileCells.values()), dropTileAt().asLong(), siteId);
+							takeUp = takeUp == null ? tt : new RegionOverwrites.TakeUp(takeUp.pile(), takeUp.dimension(), takeUp.key(), takeUp.plus(tt).cells(), takeUp
+								.dropAt(), takeUp.by());
+						}
+					}
 					if (takeUp != null) {
 						phase = TAKE_UP; // (T4a) placed: its take-ups book now, past the last point a rollback could reach
 						takeUpResult = pr;
+						placedReported = true;
+						futures.forEach(x -> x.complete(pr)); // (fix round) placed now: its futures and its item never wait on a refused save
+						Batches.infraPlaced(server, this);
 						return takeUpStep(server);
 					}
 					futures.forEach(x -> x.complete(pr));
@@ -821,6 +845,13 @@ final class InfraJob implements Placement.Job {
 		if (takeUp != null) {
 			o.add("takeUp", takeUp.toJson());
 		}
+		if (placedReported) {
+			o.addProperty("placedReported", true);
+		}
+		if (!tileCells.isEmpty()) {
+			RegionOverwrites.TakeUp tc = new RegionOverwrites.TakeUp("-", dimension, "-", List.copyOf(tileCells.values()), 0, siteId);
+			o.add("tileCells", tc.toJson().get("cells"));
+		}
 		return o;
 	}
 
@@ -835,22 +866,53 @@ final class InfraJob implements Placement.Job {
 		RegionOverwrites.TakeUp t = takeUp;
 		if (t != null) {
 			try {
-				takeUpBooked |= !RegionOverwrites.bookTakeUp(server, t).isEmpty();
+				// (fix round, finding 4.2) the plan durable first: a confirmed queue generation holding this job in TAKE_UP
+				if (takeUpGen == 0 || Placement.failed(takeUpGen)) {
+					takeUpGen = Placement.save(server, false);
+					if (takeUpGen == Placement.NOT_SAVED) {
+						takeUpGen = 0;
+						return waitTakeUp(server, t, "the queue file can't be written this session");
+					}
+					return false;
+				}
+				if (!Placement.written(takeUpGen)) {
+					return false;
+				}
+				ServerLevel level = Sites.levelOf(server, dimension);
+				if (level == null) {
+					return waitTakeUp(server, t, dimension + " is not loaded");
+				}
+				RegionOverwrites.Booking bk = RegionOverwrites.bookTakeUp(server, level, t);
+				if (bk.how() == RegionOverwrites.Booked.HOLD) {
+					return waitTakeUp(server, t, bk.why()); // (fix round, finding 4.4) an unreadable participant holds the booking
+				}
+				takeUpBooked |= !bk.items().isEmpty();
 				if (takeUpBooked) {
 					Stockpiles.saveCredit(server); // (J1, N1's shape) saved with the world before the job ends
 				}
 			} catch (RuntimeException e) {
-				takeUpRetryAt = server.getTickCount() + 100L;
-				dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} were booked but their save failed ({}); it waits and saves again",
-					siteId, t.key(), e.getMessage());
-				return false;
+				return waitTakeUp(server, t, e.getMessage());
 			}
 		}
 		takeUp = null;
 		phase = DONE;
-		PlaceResult pr = takeUpResult != null ? takeUpResult : new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.of());
-		futures.forEach(x -> x.complete(pr));
+		if (!placedReported) {
+			PlaceResult pr = takeUpResult != null ? takeUpResult : new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.of());
+			futures.forEach(x -> x.complete(pr));
+		}
 		return true;
+	}
+
+	private boolean waitTakeUp(MinecraftServer server, RegionOverwrites.TakeUp t, @Nullable String why) {
+		takeUpRetryAt = server.getTickCount() + 100L;
+		dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} wait ({}); retried", siteId, t.key(), why);
+		return false;
+	}
+
+	/** Where a tile's take-up credit drops if its stockpile were gone (never: it holds then): above its box's middle. */
+	private BlockPos dropTileAt() {
+		var b = record.box();
+		return new BlockPos((b.minX() + b.maxX()) / 2, b.maxY() + 1, (b.minZ() + b.maxZ()) / 2);
 	}
 
 	static InfraJob fromJson(JsonObject o) {
@@ -875,6 +937,17 @@ final class InfraJob implements Placement.Job {
 		}
 		j.writeMain = !o.has("writeMain") || o.get("writeMain").getAsBoolean();
 		j.takeUp = o.has("takeUp") && o.get("takeUp").isJsonObject() ? RegionOverwrites.TakeUp.fromJson(o.getAsJsonObject("takeUp")) : null;
+		j.placedReported = o.has("placedReported") && o.get("placedReported").getAsBoolean();
+		if (o.get("tileCells") instanceof JsonArray tc) {
+			JsonObject w = new JsonObject();
+			w.addProperty("pile", "-");
+			w.addProperty("dimension", j.dimension);
+			w.addProperty("key", "-");
+			w.addProperty("dropAt", 0);
+			w.addProperty("by", j.siteId);
+			w.add("cells", tc);
+			RegionOverwrites.TakeUp.fromJson(w).cells().forEach(c -> j.tileCells.put(c.pos(), c));
+		}
 		if (j.phase == WRITE) {
 			j.cursor = 0; // the cells are written again from the start (the same values: idempotent)
 		}

@@ -330,7 +330,7 @@ public final class Placement {
 				RestoreJob rb = new RestoreJob(pj.siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
 				rb.why = pj.broken;
 				JOBS.add(rb);
-			} else {
+			} else if (!pj.placedReported) {
 				Batches.placed(srv, pj);
 			}
 		} else if (j instanceof InfraJob ij) {
@@ -343,11 +343,21 @@ public final class Placement {
 				Batches.infraFailed(srv, ij, ij.broken);
 			} else if (ij.broken != null) {
 				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", ij.siteId, ij.broken);
+				// (T4a fix round, P2 finding 6) its extra targets wrote nothing: their entries released and their records dropped, as the unclean
+				// start does (else they stay placing with no job)
+				for (InfraJob.Extra e : ij.extras) {
+					try {
+						SiteJournal.release(e.record.id());
+					} catch (Sites.SiteException x) {
+						Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
+					}
+					Infras.drop(srv, e.record.id());
+				}
 				ij.failed(ij.broken);
 				RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
 				rb.why = ij.broken;
 				JOBS.add(rb);
-			} else {
+			} else if (!ij.placedReported) {
 				Batches.infraPlaced(srv, ij);
 			}
 		} else if (j instanceof RestoreJob rj) {
@@ -415,6 +425,11 @@ public final class Placement {
 		if (!(j instanceof PlaceJob pj)) {
 			return;
 		}
+		if (pj.phase == PlaceJob.TAKE_UP) {
+			// (T4a fix round, finding 4.1) placed, its take-ups booking: past the point of no rollback (a cancel finds it done)
+			Architect.LOGGER.info("Placing {}: not rolled back ({}): it is placed, only its take-ups are being booked", siteId, why);
+			return;
+		}
 		JOBS.remove(j);
 		pj.aborted(srv);
 		clearGhost(srv, j, false);
@@ -444,6 +459,9 @@ public final class Placement {
 				o.addProperty("phase", pj.phase);
 				o.addProperty("item", pj.itemKey);
 				o.addProperty("held", pj.held.size());
+				o.addProperty("takeUp", pj.phase == PlaceJob.TAKE_UP); // (T4a fix round) placed, its take-ups booking
+			} else if (j instanceof InfraJob ij) {
+				o.addProperty("takeUp", ij.phase == InfraJob.TAKE_UP);
 			}
 			a.add(o);
 		}
@@ -840,6 +858,12 @@ public final class Placement {
 				Architect.LOGGER.warn("Placement job for {} has no site record; dropped", pj.siteId);
 				return;
 			}
+			if (pj.phase == PlaceJob.TAKE_UP && level != null) {
+				// (T4a fix round, finding 4.1) placed (its record and its journal entry), only its take-ups left: never rolled back, clean or not
+				JOBS.add(pj);
+				Architect.LOGGER.info("Finishing the take-ups of {} ({}) (it is placed)", pj.siteId, pj.blueprint);
+				return;
+			}
 			boolean active = SiteJournal.main(pj.siteId) != null && SiteJournal.main(pj.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
 			if ((pj.phase == PlaceJob.AFTER_COMMIT || pj.phase == PlaceJob.CONSTRUCTION_CLEAR) && active && level != null) {
 				// K4: the journal wins (its ACTIVE commit is durable); a construction site's clearing starts over
@@ -872,7 +896,7 @@ public final class Placement {
 				Batches.infraRequeue(srv, ij); // its capture was not saved: planned again
 				return;
 			}
-			if (!ij.beforeRecord && !clean) {
+			if (!ij.beforeRecord && !clean && ij.phase != InfraJob.TAKE_UP) { // (T4a fix round) a placed road's take-ups only: resumed as they are
 				boolean active = SiteJournal.main(ij.siteId) != null && SiteJournal.main(ij.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
 				if (!active) {
 					// (6c RS) the extra targets wrote nothing: their entries are released and their records dropped (the main rolls back)

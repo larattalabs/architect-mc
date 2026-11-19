@@ -58,7 +58,7 @@ class StockpileSaveJ1Test {
 
 		// (slice T4a, finding 4) a put-down's take-ups are planned at its commit, booked once its record is placed, and saved by its job
 		String ro = read(SITE + "RegionOverwrites.java");
-		String book = StockpileSaveHFTest.body(ro, "static Map<String, Integer> bookTakeUp(");
+		String book = StockpileSaveHFTest.body(ro, "static Booking bookTakeUp(");
 		assertTrue(book.contains("credited(t.key())") && book.contains(".already()"), "a put-down's take-ups book once per key");
 		String pj = read(SITE + "PlaceJob.java");
 		String tu = StockpileSaveHFTest.body(pj, "private boolean takeUpStep(MinecraftServer server)");

@@ -170,7 +170,8 @@ class QueueWritePSVFixTest {
 		Map<String, Integer> again = Groups.withStock(r, "s1", Map.of("minecraft:cobblestone", 1), Map.of());
 		assertEquals(Map.of("minecraft:oak_planks", 5, "minecraft:cobblestone", 1), again, "the stock once, the tally as the world is now");
 		Groups.Removal back = Groups.Removal.fromJson(r.toJson());
-		assertEquals(stock, back.decStock.get("s1"), "the carried stock is saved with the removal");
+		// (T4a fix round) on the T2 base nothing is taken at prepare, so the carriage is inert: an imported decStock is ignored (T4c deletes it)
+		assertEquals(null, back.decStock.get("s1"), "an imported decStock is ignored (T4a fix round)");
 	}
 
 	/**
@@ -228,7 +229,7 @@ class QueueWritePSVFixTest {
 		com.google.gson.JsonObject o = r.toJson();
 		o.addProperty("stalled", true);
 		Groups.Removal back = Groups.Removal.fromJson(o);
-		assertEquals(stock, back.decStock.get("s1"), "saved with it: a retry carries it into its deconstruct items once");
+		assertEquals(null, back.decStock.get("s1"), "an imported decStock is ignored (T4a fix round: the carriage is inert on the T2 base)");
 		assertFalse(Groups.stallsAtEnd(r, true), "a removal that ended removed dropped it with its deconstruct items");
 		assertFalse(Groups.stallsAtEnd(new Groups.Removal("g2", null, null, false), false), "nothing carried, no undo: it ends");
 	}

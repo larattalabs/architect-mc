@@ -200,12 +200,13 @@ public final class RegionOverwrites {
 	}
 
 	/**
-	 * (XR; slice T4a, finding 4) A put-down's take-ups, planned: per owner of a taken-up paid cell, the items its block gives back, credited
-	 * later into {@code pile}'s stockpile under {@code key} (the writer's placement) by {@link #bookTakeUp}. Planned where the put-down reads
-	 * its befores (right after its journal commit); booked only once the placement can no longer roll back (its record placed), and saved by
-	 * the caller, which waits on a refused save and never throws past a credit. Persisted with the job, so a resumed job books the same plan.
+	 * (XR; slice T4a, finding 4 and its fix round) A put-down's take-ups, planned per cell: its position, the block taken up there, the writer
+	 * that owns and paid for it, and what that block gives back; credited later into {@code pile}'s stockpile under {@code key} (the writer's
+	 * placement) by {@link #bookTakeUp}. Planned where the put-down reads its befores; persisted with the job and confirmed in the queue file
+	 * before anything is booked; booked only once the placement can no longer roll back (its record placed), and then only for the cells whose
+	 * taken-up block is gone from the world (a cut or a write that never reached the disk keeps its block: nothing is credited for it).
 	 */
-	record TakeUp(String pile, String dimension, String key, Map<String, Map<String, Integer>> byOwner, long dropAt, String by) {
+	record TakeUp(String pile, String dimension, String key, List<Cell> cells, long dropAt, String by) {
 		JsonObject toJson() {
 			JsonObject o = new JsonObject();
 			o.addProperty("pile", pile);
@@ -213,22 +214,42 @@ public final class RegionOverwrites {
 			o.addProperty("key", key);
 			o.addProperty("dropAt", dropAt);
 			o.addProperty("by", by);
-			JsonObject b = new JsonObject();
-			byOwner.forEach((k, v) -> b.add(k, Builder.counts(v)));
-			o.add("byOwner", b);
+			JsonArray cs = new JsonArray();
+			for (Cell c : cells) {
+				JsonObject x = new JsonObject();
+				x.addProperty("pos", c.pos());
+				x.addProperty("was", c.was());
+				x.addProperty("owner", c.owner());
+				x.add("items", Builder.counts(c.items()));
+				cs.add(x);
+			}
+			o.add("cells", cs);
 			return o;
 		}
 
 		static TakeUp fromJson(JsonObject o) {
-			Map<String, Map<String, Integer>> b = new TreeMap<>();
-			o.getAsJsonObject("byOwner").entrySet().forEach(e -> {
+			List<Cell> cs = new ArrayList<>();
+			for (var e : o.getAsJsonArray("cells")) {
+				JsonObject x = e.getAsJsonObject();
 				Map<String, Integer> m = new TreeMap<>();
-				e.getValue().getAsJsonObject().entrySet().forEach(x -> m.put(x.getKey(), x.getValue().getAsInt()));
-				b.put(e.getKey(), m);
-			});
-			return new TakeUp(o.get("pile").getAsString(), o.get("dimension").getAsString(), o.get("key").getAsString(), b, o.get("dropAt").getAsLong(),
+				x.getAsJsonObject("items").entrySet().forEach(y -> m.put(y.getKey(), y.getValue().getAsInt()));
+				cs.add(new Cell(x.get("pos").getAsLong(), x.get("was").getAsString(), x.get("owner").getAsString(), m));
+			}
+			return new TakeUp(o.get("pile").getAsString(), o.get("dimension").getAsString(), o.get("key").getAsString(), cs, o.get("dropAt").getAsLong(),
 				o.get("by").getAsString());
 		}
+
+		/** Merged with {@code o} (the same key and pile: a tile's writes and its road's cuts): the union of their cells, by position. */
+		TakeUp plus(TakeUp o) {
+			Map<Long, Cell> m = new java.util.LinkedHashMap<>();
+			cells.forEach(c -> m.put(c.pos(), c));
+			o.cells().forEach(c -> m.putIfAbsent(c.pos(), c));
+			return new TakeUp(pile, dimension, key, List.copyOf(m.values()), dropAt, by);
+		}
+	}
+
+	/** One taken-up cell of a {@link TakeUp}: {@code was} the block id taken up, {@code owner} the writer whose paid block it was. */
+	record Cell(long pos, String was, String owner, Map<String, Integer> items) {
 	}
 
 	/**
@@ -241,7 +262,7 @@ public final class RegionOverwrites {
 		if (pile == null || !pile.dimension.equals(dimension) || ls.isEmpty()) {
 			return null;
 		}
-		Map<String, Map<String, Integer>> byOwner = new TreeMap<>();
+		List<Cell> out = new ArrayList<>();
 		for (var e : cells.entrySet()) {
 			BlockPos p = BlockPos.of(e.getKey());
 			BlockState was = e.getValue();
@@ -254,41 +275,101 @@ public final class RegionOverwrites {
 			if (t < 0) {
 				continue;
 			}
-			who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(),
-				Integer::sum));
+			Map<String, Integer> items = new TreeMap<>();
+			who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			if (!items.isEmpty()) {
+				out.add(new Cell(e.getKey(), net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(was.getBlock()).toString(), who.get(t).id(), items));
+			}
 		}
-		return byOwner.isEmpty() ? null : new TakeUp(pile.owner(), dimension, key, byOwner, dropAt.asLong(), by);
+		return out.isEmpty() ? null : new TakeUp(pile.owner(), dimension, key, List.copyOf(out), dropAt.asLong(), by);
+	}
+
+	/** How a booking went: {@code BOOKED} (now, or nothing left to book), {@code ALREADY} (its key was credited), {@code HOLD} (retry: {@code why}). */
+	enum Booked {
+		BOOKED, ALREADY, HOLD
+	}
+
+	/** A booking's answer: how it went, the items credited now, why it holds. */
+	record Booking(Booked how, Map<String, Integer> items, @Nullable String why) {
 	}
 
 	/**
-	 * (XR, JR) Books {@code t} once under its key: each owner's share capped by and taken out of its paid record, then one keyed credit into the
-	 * pile, past capacity as OVF credits. In memory only: the caller saves (and waits on a refused save). Returns the items credited now (empty
-	 * when the key was credited already, or nothing was left after the cap). Server thread.
+	 * (pure; fix round, finding 4.4) Whether a booking can go: the stockpiles unreadable, its pile missing or elsewhere hold it (never read as
+	 * done: the intent is kept); its key credited is the only "done" before a credit. Null: book it.
 	 */
-	static Map<String, Integer> bookTakeUp(MinecraftServer srv, TakeUp t) {
+	static @Nullable Booking bookStatus(boolean pilesUnreadable, boolean pileFound, boolean dimensionOk, boolean credited) {
+		if (pilesUnreadable) {
+			return new Booking(Booked.HOLD, Map.of(), "the stockpiles did not load");
+		}
+		if (!pileFound || !dimensionOk) {
+			return new Booking(Booked.HOLD, Map.of(), "its stockpile is gone or in another dimension");
+		}
+		return credited ? new Booking(Booked.ALREADY, Map.of(), null) : null;
+	}
+
+	/** (pure; fix round, finding 4.3) The cells of {@code t} whose taken-up block is gone ({@code now}: the block id standing at a position now). */
+	static List<Cell> gone(TakeUp t, java.util.function.LongFunction<String> now) {
+		List<Cell> out = new ArrayList<>();
+		for (Cell c : t.cells()) {
+			if (!c.was().equals(now.apply(c.pos()))) {
+				out.add(c);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (XR, JR) Books {@code t} once under its key: the cells whose taken-up block is gone from {@code level}, each owner's share capped by and
+	 * taken out of its paid record, then one keyed credit into the pile, past capacity as OVF credits; the key and the ledger change in one
+	 * ledger state. In memory only: the caller saves (and waits on a refused save). Server thread.
+	 */
+	static Booking bookTakeUp(MinecraftServer srv, ServerLevel level, TakeUp t) {
 		Stockpiles.Pile pile = Stockpiles.get(t.pile());
-		if (pile == null || !pile.dimension.equals(t.dimension()) || pile.ledger.credited(t.key())) {
-			return Map.of();
+		Booking st = bookStatus(Stockpiles.loadFailed(), pile != null, pile != null && pile.dimension.equals(t.dimension()), pile != null && pile.ledger
+			.credited(t.key()));
+		if (st != null) {
+			return st;
+		}
+		Map<String, Map<String, Integer>> byOwner = new TreeMap<>();
+		for (Cell c : gone(t, p -> net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level.getBlockState(BlockPos.of(p)).getBlock()).toString())) {
+			c.items().forEach((k, v) -> byOwner.computeIfAbsent(c.owner(), x -> new TreeMap<>()).merge(k, v, Integer::sum));
 		}
 		Map<String, Integer> all = new TreeMap<>();
 		Map<String, Map<String, Integer>> capped = new TreeMap<>();
-		for (var e : t.byOwner().entrySet()) {
+		for (var e : byOwner.entrySet()) {
 			Map<String, Integer> c = Stockpiles.fromPaid(e.getKey(), e.getValue());
 			capped.put(e.getKey(), c);
 			c.forEach((k, v) -> all.merge(k, v, Integer::sum));
 		}
 		if (all.isEmpty()) {
-			return all;
+			return new Booking(Booked.BOOKED, all, null); // nothing of it gone (or nothing left after the cap): nothing to credit
 		}
-		if (Stockpiles.credit(srv, pile, t.key(), all, BlockPos.of(t.dropAt())).already()) {
-			return Map.of();
+		if (Stockpiles.credit(srv, java.util.Objects.requireNonNull(pile), t.key(), all, BlockPos.of(t.dropAt())).already()) {
+			return new Booking(Booked.ALREADY, Map.of(), null);
 		}
 		if (Builder.TRACE_REFUNDS) {
 			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", t.by(), t.key(), all);
 		}
 		capped.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
 			.merge(k, v, Integer::sum)));
-		return all;
+		return new Booking(Booked.BOOKED, all, null);
+	}
+
+	/** (fix round, finding 4.5) A tile's free pass over another writer's paid block: planned into the job's take-up, booked when it is placed. */
+	static @Nullable Cell tileCell(List<Live> ls, BlockPos p, BlockState was) {
+		if (was.isAir() || ls.isEmpty()) {
+			return null;
+		}
+		List<Live> who = new ArrayList<>();
+		List<Integer> qs = new ArrayList<>();
+		int t = taken(claims(ls, p, was, who, qs));
+		if (t < 0) {
+			return null;
+		}
+		Map<String, Integer> items = new TreeMap<>();
+		who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+		return items.isEmpty() ? null : new Cell(p.asLong(), net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(was.getBlock()).toString(), who.get(t)
+			.id(), items);
 	}
 
 	/** (XR) {@link #retake} into the owner's stockpile ({@code owner}'s, in its dimension): a put-down's take-up (a road's cut, a lot's clear). */

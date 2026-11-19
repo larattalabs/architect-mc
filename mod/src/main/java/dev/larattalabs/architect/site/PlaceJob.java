@@ -121,6 +121,13 @@ final class PlaceJob implements Placement.Job {
 	/** (slice T4a) The tick before which a refused take-up save is not tried again; whether this session booked it (a save is owed). */
 	private transient long takeUpRetryAt;
 	private transient boolean takeUpBooked;
+	/** (T4a fix round, finding 4.2) The queue generation that holds this job in {@link #TAKE_UP} with its plan: confirmed before any booking. */
+	private transient long takeUpGen;
+	/**
+	 * (T4a fix round) Its item was reported placed when it entered {@link #TAKE_UP} (the placement is done; the take-up is bookkeeping): the
+	 * batch goes on and its futures answer while a refused save waits. Persisted, so it is reported once.
+	 */
+	boolean placedReported;
 	@Nullable String layerOver;
 	/** A survival construction site: converted when its last cell is written ({@link Sites#finishPlacing}). */
 	boolean construction;
@@ -550,6 +557,9 @@ final class PlaceJob implements Placement.Job {
 		}
 		if (takeUp != null && done != null && broken == null) {
 			phase = TAKE_UP; // (T4a) placed: its take-ups book now, past the last point a rollback could reach
+			Batches.committing(batchId, itemKey); // (fix round, finding 4.1) a cancel never rolls it back from here
+			placedReported = true;
+			Batches.placed(server, this); // (fix round) its item is placed now: a waiting save never holds the batch
 			return takeUpStep(server);
 		}
 		phase = DONE;
@@ -570,19 +580,43 @@ final class PlaceJob implements Placement.Job {
 			return true;
 		}
 		try {
-			takeUpBooked |= !RegionOverwrites.bookTakeUp(server, t).isEmpty();
+			// (fix round, finding 4.2) the plan made durable first: a queue generation that holds this job in TAKE_UP, confirmed written
+			if (takeUpGen == 0 || Placement.failed(takeUpGen)) {
+				takeUpGen = Placement.save(server, false);
+				if (takeUpGen == Placement.NOT_SAVED) {
+					takeUpGen = 0;
+					return waitTakeUp(server, t, "the queue file can't be written this session");
+				}
+				return false;
+			}
+			if (!Placement.written(takeUpGen)) {
+				return false;
+			}
+			ServerLevel level = Sites.levelOf(server, dimension);
+			if (level == null) {
+				return waitTakeUp(server, t, dimension + " is not loaded");
+			}
+			RegionOverwrites.Booking bk = RegionOverwrites.bookTakeUp(server, level, t);
+			if (bk.how() == RegionOverwrites.Booked.HOLD) {
+				return waitTakeUp(server, t, bk.why()); // (fix round, finding 4.4) an unreadable participant holds the booking: never done
+			}
+			takeUpBooked |= !bk.items().isEmpty();
 			if (takeUpBooked) {
 				Stockpiles.saveCredit(server); // (J1, N1's shape) the take-up's credit saved with the world before the job ends
 			}
 		} catch (RuntimeException e) {
-			takeUpRetryAt = server.getTickCount() + 100L;
-			dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} were booked but their save failed ({}); it waits and saves again",
-				siteId, t.key(), e.getMessage());
-			return false;
+			return waitTakeUp(server, t, e.getMessage());
 		}
 		takeUp = null;
 		phase = DONE;
 		return true;
+	}
+
+	/** (T4a; fix round) The take-up waits: retried every 5 s, the placement never rolled back from here. */
+	private boolean waitTakeUp(MinecraftServer server, RegionOverwrites.TakeUp t, @Nullable String why) {
+		takeUpRetryAt = server.getTickCount() + 100L;
+		dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} wait ({}); retried", siteId, t.key(), why);
+		return false;
 	}
 
 	/** One unit of work (a cell, or a whole short step); returns the cells handled. */
@@ -870,6 +904,9 @@ final class PlaceJob implements Placement.Job {
 		if (takeUp != null) {
 			o.add("takeUp", takeUp.toJson());
 		}
+		if (placedReported) {
+			o.addProperty("placedReported", true);
+		}
 		return o;
 	}
 
@@ -925,6 +962,7 @@ final class PlaceJob implements Placement.Job {
 		}
 		j.finishNote = o.has("finishNote") ? o.get("finishNote").getAsString() : null;
 		j.takeUp = o.has("takeUp") && o.get("takeUp").isJsonObject() ? RegionOverwrites.TakeUp.fromJson(o.getAsJsonObject("takeUp")) : null;
+		j.placedReported = o.has("placedReported") && o.get("placedReported").getAsBoolean();
 		return j;
 	}
 

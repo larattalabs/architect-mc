@@ -250,11 +250,10 @@ public final class Groups {
 				}
 			}
 			if (o.has("decStock")) {
-				o.getAsJsonObject("decStock").entrySet().forEach(e -> {
-					Map<String, Integer> items = new TreeMap<>();
-					e.getValue().getAsJsonObject().entrySet().forEach(i -> items.put(i.getKey(), i.getValue().getAsInt()));
-					r.decStock.put(e.getKey(), items);
-				});
+				// (T4a fix round) PSV's crate-stock carriage is inert on this base (nothing is taken at prepare since T2b, so no queue this build
+				// writes holds one): an imported decStock is ignored, never carried into a deconstruct (it would count a crate's stock twice)
+				Architect.LOGGER.warn("Removal of group {}: its queue entry carries a legacy decStock {}; ignored (T2b settles crates after the restore)",
+					r.group, o.get("decStock"));
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
