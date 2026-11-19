@@ -551,6 +551,8 @@ export async function planRegion(o) {
   }
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
   if (r.utility.length) ir.utility = r.utility;
+  // ((LYW2) the ring walls a bundled program recorded (ring(..., {wall: true})): a member only such a plan has, every other IR unchanged)
+  if (r.walls.length) ir.walls = r.walls;
   // ((GM-b, CONTRACT GM §17 item 4) the K1 swing gates' write data (meta walls[].gates[].mechanismWrite), which the realise's mech:<gate>
   // region cells item writes: a member only a plan with a swing has (every other IR unchanged)
   const gmw = (r.meta.walls ?? []).flatMap((w) => (w.gates ?? []).filter((g) => g.mechanismWrite).map((g) => ({ gate: g.id, wall: w.id, kind: g.mechanism.kind, ...g.mechanismWrite })));

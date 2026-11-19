@@ -29,6 +29,8 @@ import org.jspecify.annotations.Nullable;
  * no plan/0 kind), its box the union of its ops' bounds; and each 4e road, kind {@code route}, ends its points.</li>
  * <li>(LYW) A wall's answer ({@code geometry.line}): the wall, its gates and passages, its corner stubs; its lots carry {@code wall} and
  * {@code wallAt}. A district's connecting route with stair or graded sections: one route from the IR's graph edge and {@code paths}.</li>
+ * <li>(LYW2) A bundled program's ring wall (the IR's {@code walls}, its {@code ring(..., {wall: true})}): the wall, its gates and its towers,
+ * as a wall answer's, in place of its part's tile. A mixed district route's road pieces are in its one route only.</li>
  * </ul>
  * Geometry is cached per region, head revision and IR sha; targets and lots per part come from the survival build when read. Server
  * thread. Internal.
@@ -153,6 +155,10 @@ public final class Layouts {
 			}
 		}
 		districtRoutes(ir, out, y0, y1);
+		// ((LYW2) a bundled program's ring walls, before its tiles: the wall's part is its shape, not a tile)
+		if (bodies.isEmpty()) {
+			ringWalls(ir, out, y0, y1);
+		}
 		// a bundled program's IR parts (a plan/0 region's IR parts are its plan parts' writes, already shown by their answers)
 		if (bodies.isEmpty() && ir.get("parts") instanceof JsonArray ps) {
 			for (JsonElement e : ps) {
@@ -256,7 +262,18 @@ public final class Layouts {
 			for (JsonElement e : gs) {
 				if (e instanceof JsonObject q && StatusViews.str(q, "id") != null && q.get("at") instanceof JsonArray at && at.size() >= 3 && out.stream().noneMatch(
 					s -> s.part().equals(StatusViews.str(q, "id")))) {
-					out.add(gate(StatusViews.str(q, "id"), "connector.gate", stage, id, pos(at, foot), num(q, "width", 3), WALL_GATE_HEIGHT));
+					out.add(gate(StatusViews.str(q, "id"), "connector.gate", stage, id, pos(at, foot), num(q, "width", 3), num(q, "height", WALL_GATE_HEIGHT)));
+				}
+			}
+		}
+		// ((LYW2) a ring wall's towers along its run: {id, at (its centre at the footing), r, height}; a K1 wall has none)
+		if (g.get("towers") instanceof JsonArray tw) {
+			for (JsonElement e : tw) {
+				if (e instanceof JsonObject q && StatusViews.str(q, "id") != null && q.get("at") instanceof JsonArray at && at.size() >= 3) {
+					BlockPos c = pos(at, foot);
+					int r = num(q, "r", 3), th = num(q, "height", height);
+					out.add(new PartShape(StatusViews.str(q, "id"), "tower", stage, new BoundingBox(c.getX() - r, c.getY(), c.getZ() - r, c.getX() + r, c.getY() + Math
+						.max(1, th) - 1, c.getZ() + r), List.of(c), rid(p), null, List.of(), 2 * r + 1, th, id, "run"));
 				}
 			}
 		}
@@ -276,6 +293,44 @@ public final class Layouts {
 			}
 		}
 		return out;
+	}
+
+	/**
+	 * (LYW2, pure) A bundled program's ring walls (the IR's {@code walls}: kit program.mjs {@code _ringWall}), each read as a wall answer
+	 * ({@link #wallShapes}: its line, thickness, height, top, gates and towers), its part's stage and rid. A wall whose part already has a
+	 * shape, or that names no part, is skipped.
+	 */
+	static void ringWalls(JsonObject ir, Map<String, PartShape> out, int y0, int y1) {
+		if (!(ir.get("walls") instanceof JsonArray ws)) {
+			return;
+		}
+		Map<String, JsonObject> parts = new LinkedHashMap<>();
+		if (ir.get("parts") instanceof JsonArray ps) {
+			for (JsonElement e : ps) {
+				if (e instanceof JsonObject p && StatusViews.str(p, "id") != null) {
+					parts.put(StatusViews.str(p, "id"), p);
+				}
+			}
+		}
+		for (JsonElement e : ws) {
+			if (!(e instanceof JsonObject w) || StatusViews.str(w, "part") == null || !(w.get("line") instanceof JsonArray) || out.containsKey(StatusViews.str(w, "part"))) {
+				continue;
+			}
+			String id = StatusViews.str(w, "part");
+			JsonObject p = new JsonObject();
+			p.addProperty("part", id);
+			p.addProperty("block", "connector.wall");
+			JsonObject ip = parts.get(id);
+			if (ip != null && StatusViews.str(ip, "stage") != null) {
+				p.addProperty("stage", StatusViews.str(ip, "stage"));
+			}
+			if (ip != null && ip.get("rid") != null) {
+				p.add("rid", ip.get("rid"));
+			}
+			for (PartShape sh : wallShapes(p, w, null, y0, y1, new LinkedHashMap<>())) {
+				out.putIfAbsent(sh.part(), sh);
+			}
+		}
 	}
 
 	/** (LYW) A district's connecting route's edge id: the districts pass's {@code route_d_<a>__<b>} and its joins. */
@@ -309,6 +364,9 @@ public final class Layouts {
 				continue;
 			}
 			java.util.regex.Pattern piece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + "_(\\d+)(l?)");
+			// ((LYW2) a road piece: <path>_<n>, or a long one's groups <path>_<n>_<k> (program.mjs _groundRoad))
+			java.util.regex.Pattern roadPiece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + "_(\\d+)(?:_(\\d+))?");
+			List<String> folded = new ArrayList<>();
 			java.util.TreeMap<Double, List<BlockPos>> pieces = new java.util.TreeMap<>();
 			int[] b = null;
 			boolean section = false;
@@ -330,14 +388,15 @@ public final class Layouts {
 			if (ir.get("roads") instanceof JsonArray rs) {
 				for (JsonElement q : rs) {
 					java.util.regex.Matcher m;
-					if (q instanceof JsonObject rd && StatusViews.str(rd, "id") != null && (m = piece.matcher(StatusViews.str(rd, "id"))).matches() && rd
+					if (q instanceof JsonObject rd && StatusViews.str(rd, "id") != null && (m = roadPiece.matcher(StatusViews.str(rd, "id"))).matches() && rd
 						.get("points") instanceof JsonArray pts) {
 						List<BlockPos> line = new ArrayList<>();
 						for (JsonElement pt : pts) {
 							JsonArray a = pt.getAsJsonArray();
 							line.add(pos(a, y0));
 						}
-						pieces.put(Integer.parseInt(m.group(1)) + (m.group(2).isEmpty() ? 0 : 0.5), line);
+						pieces.put(Integer.parseInt(m.group(1)) + (m.group(2) == null ? 0 : Integer.parseInt(m.group(2)) / 1000.0), line);
+						folded.add(StatusViews.str(rd, "id"));
 						BoundingBox rb = boxOf(line, w / 2, y0, y1);
 						if (rb != null) {
 							b = union(b, new int[] {rb.minX(), line.stream().mapToInt(BlockPos::getY).min().orElse(y0), rb.minZ(), rb.maxX(), line.stream().mapToInt(
@@ -357,6 +416,12 @@ public final class Layouts {
 			}
 			for (BlockPos q : line) {
 				b = union(b, new int[] {q.getX(), q.getY(), q.getZ(), q.getX(), q.getY(), q.getZ()});
+			}
+			// ((LYW2) each road piece it folds in is in this route only: not also its own route shape, from the IR's roads)
+			for (String f : folded) {
+				if (out.get(f) != null && "route".equals(out.get(f).kind())) {
+					out.remove(f);
+				}
 			}
 			out.put(id, new PartShape(id, "route", StatusViews.str(ed, "stage"), new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]), simplify(line), rid(ed), null,
 				List.of(), w, 0, null, null));

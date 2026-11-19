@@ -54,7 +54,7 @@
    }
   },
   "sky_isle": {
-   "irSha": "c9cdf803178ea07dd3e29623c4e73874f1248f65e675ecbe09f03911bac41541",
+   "irSha": "5313e0a967e13670c7443be597ed0b99ace8585a118c85dbfc50654bc95415d4",
    "format": 1,
    "requires": [],
    "cells": 52289,
@@ -98,7 +98,7 @@
    }
   },
   "walled_hill": {
-   "irSha": "05ca529ac92ca6b32fa2c3df3d96e2dd5b5567b6aeef5db119c1c5fc859a687a",
+   "irSha": "2a0aa21b232917f03b425516e78ab9d28cadb349ad5835a49507d4e065ba52c1",
    "format": 1,
    "requires": [],
    "cells": 115991,

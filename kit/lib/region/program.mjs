@@ -223,6 +223,8 @@ export class Region {
     this.forms = []; // {id, generator, version, params, seed, bounds, part, opsFrom, opsTo}
     this.floatingDecl = []; // {parts, anchor}
     this.utility = [];
+    // ((LYW2) the ring walls a part asked to record (ring(..., {wall: true})): the IR's `walls`, Regions.layout's wall line)
+    this.walls = [];
     this.needVolumes = [];
     this.volumesUsed = {}; // name -> {blob, box, sha, blocks?}
     // (6c B) the block tags a `block` mask names, expanded at plan time (the IR's `blockTags`: the evaluator can't read the tables)
@@ -1529,9 +1531,11 @@ class Part {
    * 0 = north, clockwise): each opening has at least `width` x `height` clear over a flat threshold of walk-surface
    * cells (path role) at the plan survey's ground at the gate, filled below with foundation. (6b) `towers: {every: 48,
    * radius: 4, extra: 4}` (or true) puts cylinders on the wall line at most `every` apart, never over a gate; `crenels`
-   * adds merlons on every other outer-rim cell of the wall and tower tops.
+   * adds merlons on every other outer-rim cell of the wall and tower tops. (LYW2) `wall: true` records the ring as a wall in the IR's
+   * `walls` (no block changes): its line (an integer polygon at mid-radius, at most 63 corners), thickness, height in cells (footing
+   * included), `top` (the top cell's y range over the line), its gates and its towers, which Regions.layout reports as K1's wall answer.
    */
-  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels, baseY = null } = {}) {
+  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels, baseY = null, wall = false } = {}) {
     if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum)) throw new Error(`part ${this.id}: ring centre must be [x, z]`);
     if (!(isNum(r0) && isNum(r1) && r0 >= 0 && r1 > r0)) throw new Error(`part ${this.id}: ring needs 0 <= r0 < r1`);
     if (!(isInt(height) && height >= 1 && height <= 64)) throw new Error(`part ${this.id}: ring height must be 1..64`);
@@ -1601,7 +1605,31 @@ class Part {
       this._shapeOp({ kind: 'extrude', polygon: poly, y0: { abs: ty + 1 }, y1: { abs: ty + h } }, null, COND.IF_NATURAL);
       out.push({ at: [round(gx), ty, round(gz)], dir: d, width: w, height: h, polygon: poly });
     });
+    if (wall) this._ringWall(c, rm, r1 - r0, height + rise + 1, baseY, out, towerList, towers === true ? 4 : towers?.extra ?? 4);
     return out;
+  }
+
+  /**
+   * (LYW2) A ring wall's IR record (`walls[]`): `line` its mid-radius polygon ([x, z] corners, closed), `thickness`, `height` the cells it
+   * writes from its footing up, `top` the top cell's [min, max] y over the line (the footing's y the plan survey's ground there, or
+   * `baseY`), each gate (`<part>_g<n>`: `at` its threshold's feet, width and height) and each tower (`<part>_tower_<n>`: `at` its centre at
+   * the footing, `r`, `height` its cells from the footing up).
+   */
+  _ringWall(c, rm, thick, h, baseY, gates, towerList, extra) {
+    const footAt = (x, z) => (baseY === null ? this.region.survey.heightAt(x, z) : baseY);
+    const n = Math.max(12, Math.min(63, Math.ceil((2 * Math.PI * rm) / 8)));
+    const line = [];
+    for (let i = 0; i < n; i++) {
+      const d = compassDir((360 * i) / n);
+      const q = [round(c[0] + d[0] * rm), round(c[1] + d[1] * rm)];
+      if (!line.some((p) => p[0] === q[0] && p[1] === q[1])) line.push(q);
+    }
+    const tops = line.map(([x, z]) => footAt(x, z) + h - 1);
+    this.region.walls.push({
+      part: this.id, line, closed: true, thickness: Math.max(1, round(thick)), height: h, top: [Math.min(...tops), Math.max(...tops)],
+      gates: gates.map((g, i) => ({ id: `${this.id}_g${i + 1}`, at: [g.at[0], g.at[1] + 1, g.at[2]], width: g.width, height: g.height })),
+      towers: towerList.map(([x, z, r], i) => ({ id: `${this.id}_tower_${i + 1}`, at: [x, footAt(x, z), z], r, height: h + extra })),
+    });
   }
 
   // ---------------------------------------------------------------- terrace
