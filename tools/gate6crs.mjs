@@ -1035,8 +1035,14 @@ steps.t8b = async () => {
   const halted = await waitHalt('FLc+save');
   out.halted = halted;
   if (!halted) return out;
+  // the start's first fluids gate must not write the record before the hook is armed: a non-empty folder in the record's place refuses
+  // every write of it (the rename fails) until the hook (sticky) is armed; then the folder goes
+  const recDir = path.join(L.SAVES, s.world, 'architect-regions', region, 'fluids.json');
+  out.blocked = !fs.existsSync(recDir);
+  if (out.blocked) { fs.mkdirSync(recDir, { recursive: true }); fs.writeFileSync(path.join(recDir, 'block'), '8cTa row B'); }
   await L.openWorld(s.world);
   await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  if (out.blocked) { fs.rmSync(path.join(recDir, 'block')); fs.rmdirSync(recDir); }
   let fs1 = null;
   for (let i = 0; i < 150; i++) {
     fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
