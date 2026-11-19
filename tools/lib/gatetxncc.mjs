@@ -827,6 +827,177 @@ export async function registerTCC(steps, h) {
           `${tag}: a crate-fed group's removal reports its owed keys (${json(rm.owed)}), refund total ${rm.refundTotal} (owed listed apart)`, R[tag]);
       }
     }
+    // ================================================================ (slice T4a) T4 rows: removal refunds against blocks still standing.
+    // Recorded red at T4a (T2's removal runtime + PSVLC3 + the hooks commit); T4b makes them green. Each judges conservation from the blocks
+    // standing in the world (never a record) and "no refund paid while its paid blocks stand".
+    const fs = await import('node:fs');
+    /** A player's site built to about {@code frac} of its bill from its crate, then paused with more stock in the crate. */
+    const partBuilt = async (tag, site, frac) => {
+      for (let i = 0; i < 120; i++) { if ((await siteState(site))?.state === 'building') break; await L.sleep(1000); }
+      await boxOf(site);
+      await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+      const st0 = await siteState(site);
+      const bom = st0?.bom ?? {};
+      const part = {};
+      for (const [kk, v] of Object.entries(bom)) { const n = Math.floor(v * frac); if (n > 0) part[kk] = n; }
+      await call('dev.crate.insert', { site, items: part, exact: true }, 120_000);
+      await call('dev.stockpile.pause', { site, paused: false }, 60_000);
+      for (let i = 0; i < 90; i++) { if (sum((await siteState(site))?.ledger?.stock) === 0) break; await L.sleep(500); }
+      await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+      const extra = {};
+      for (const [kk, v] of Object.entries(bom).slice(0, 2)) extra[kk] = Math.max(1, Math.floor(v / 4));
+      await call('dev.crate.insert', { site, items: extra, exact: true }, 120_000);
+      await wait(1500);
+      const st1 = await siteState(site);
+      const cp = [st1.crate.x, st1.crate.y, st1.crate.z];
+      const items = Object.keys(bom);
+      check(sum(st1.ledger?.placed) > 0, `${tag}: ${site} built to about ${Math.round(frac * 100)}% (${sum(st1.ledger?.placed)} placed of ${sum(bom)}), its crate holding ${sum(st1.ledger?.stock)}`, st1);
+      return { cp, items };
+    };
+    /** Judges a T4 row: conservation over the standing blocks, and no refund owed while any paid block of a removed site stands. */
+    const judgeT4 = (tag, n, before, after) => {
+      const owedNew = sum(after.owed) - sum(before.owed);
+      n.before = before; n.after = after; n.owedNew = owedNew;
+      R[tag] = n;
+      log(`  ${tag}: before ${json(before.total)}; after ${json(after.total)} (placed ${json(after.placed)}, owed new ${owedNew}, stock ${json(after.stock)}, ground ${json(after.ground)}; ${json(after.states)})`);
+      check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + crate + owed + ground + inventory)`, n);
+      check(sum(after.placed) === 0 || owedNew <= sum(before.stock), `${tag}: no refund owed while ${sum(after.placed)} paid block(s) stand (owed new ${owedNew}, the crate's stock ${sum(before.stock)})`, n);
+      check(sum(after.ground) === 0, `${tag}: nothing dropped (${json(after.ground)})`, n);
+    };
+    /** K6 on {@code sites} (removing {@code target}), then optional dev-start.json, the world again (twice when the start itself halts). */
+    const k6Row = async (tag, sites, target, cp, items, { point = 'K6', start = null, after = null } = {}) => {
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await parts(sites, cp, items);
+      await call('dev.journal.killAt', { point }, 10_000);
+      const m = await call('dev.site.deconstruct', { site: target }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+      const down = await haltWait();
+      check(down, `${tag}: halted at ${point} (${json(m).slice(0, 120)})`);
+      if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); return; }
+      const arch = path.join(W.dir, 'architect');
+      if (start) { fs.mkdirSync(arch, { recursive: true }); fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(start)); }
+      if (after) after();
+      let halts = 0;
+      await L.openWorld(name);
+      if (start?.killAt) {
+        const again = await haltWait();
+        halts += again ? 1 : 0;
+        check(again, `${tag}: the start halted at ${start.killAt}`);
+        if (again) await L.openWorld(name);
+      }
+      await L.tp(...W.at);
+      await settleWait(sites, cp, null, 30_000);
+      await wait(4000);
+      judgeT4(tag, { tag, point, start, removal: m, txn: await txn(), halts }, before, await parts(sites, cp, items));
+    };
+    // T4-keep (finding 1a): about 40% built: K6 reads neither restored nor standing (KEEP), and the KEEP path settles its stash
+    for (const v of ['', '+save']) {
+      const tag = `T4-keep${v ? 's' : ''}`;
+      if (!want(tag)) continue;
+      const site = await single(tag);
+      if (!site) continue;
+      const { cp, items } = await partBuilt(tag, site, 0.4);
+      await k6Row(tag, [site], site, cp, items, { point: 'K6' + v });
+    }
+    // T4-shared (finding 1b): a member of a shared crate (the other still building), about 15% built, removed alone, K6
+    if (want('T4-shared')) {
+      const tag = 'T4-shared';
+      const g = await grouped(tag, 2);
+      if (g.sites.length === 2) {
+        const [a, b] = g.sites;
+        await boxOf(b);
+        const { cp, items } = await partBuilt(tag, a, 0.15);
+        await k6Row(tag, [a], a, cp, items);
+      }
+    }
+    // T4-2nd (finding 2a): mostly unbuilt (RELEASE: the start writes the committed restore), the start halted at KS1 (its release on disk,
+    // the restore's chunks not), then the world again
+    if (want('T4-2nd')) {
+      const tag = 'T4-2nd';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await partBuilt(tag, site, 0.1);
+        await k6Row(tag, [site], site, cp, items, { start: { killAt: 'KS1' } });
+      }
+    }
+    // T4-wnf (finding 2b): as T4-2nd, the start's write-now failing: the record stays pending, unsettled (and the queued settle must not pay)
+    if (want('T4-wnf')) {
+      const tag = 'T4-wnf';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await partBuilt(tag, site, 0.1);
+        await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true } });
+      }
+    }
+    // T4-road (finding 3a): a crate-fed road (no pile) with about half of its 100+ cells paid, the queue file failing, K7+save after the first
+    // 64 cells of its restore; at the start the majority reads restored, the road goes, the sweep pays its whole refund
+    if (want('T4-road')) {
+      const tag = 'T4-road';
+      const y = gy + 1, X = CX - 200, Z = CZ + 420;
+      await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 70} ${y - 1} ${Z + 3} minecraft:stone`);
+      await cmd(`/fill ${X + 71} ${y - 1} ${Z - 3} ${X + 140} ${y - 1} ${Z + 3} minecraft:stone`);
+      W.at = [X + 60, y + 1, Z + 6];
+      await L.tp(...W.at);
+      const road = { points: [[X, y, Z], [X + 130, y, Z]], width: 1, mode: 'AUTO' };
+      const bid = await later(`bqueue ${json({ id: `tcct4road${Date.now() % 100000}`, proximity: false, sharedCrate: true, autoApprove: true,
+        crateAt: [X + 10, y, Z - 8], items: [{ key: 'h1', bp: 'rs_hut', at: [X, y, Z - 24], rot: 0, mode: 'CONSTRUCTION' }, { key: 'r1', road }] })}`, 120_000);
+      let bv;
+      for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
+      const it = Object.fromEntries((bv?.items ?? []).map((x) => [x.key, x]));
+      const g = { hut: it.h1?.site, road: it.r1?.site, group: bv?.group };
+      check(!!g.road && !!g.hut, `${tag}: a hut and a 130-cell construction road from one shared crate (${g.hut}, ${g.road})`, bv);
+      if (g.road && g.hut) {
+        await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+        await fill(tag, g.hut);
+        await call('dev.site.finish', { site: g.hut }, 60_000);
+        await wait(1500);
+        const { cp, items, paid } = await payRoad(tag, g);
+        const rbox = [X - 1, y - 1, Z - 2, X + 131, y + 1, Z + 2];
+        const standingRoad = async () => {
+          const out = {};
+          for (const st of (await cellsOf(rbox)).values()) {
+            const id = String(st).replace(/\[.*$/, '');
+            const full = id.includes(':') ? id : `minecraft:${id}`;
+            if (items.includes(full)) out[full] = (out[full] ?? 0) + 1;
+          }
+          return out;
+        };
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const b0 = await roadParts(g.road, cp, items, W.at);
+        const sb = await standingRoad();
+        const before = { ...b0, placed: sb, total: [b0.stock, sb, b0.owed, b0.ground, b0.inventory].reduce((a, c) => G.plus(a, c), {}) };
+        await ps({ failQueueWrites: true });
+        await call('dev.journal.killAt', { point: 'K7+save' }, 10_000);
+        const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: halted at K7+save (the first 64 cells of the road's restore written and saved) (${json(m).slice(0, 120)})`);
+        if (down) {
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await settleWait([], cp, null, 30_000);
+          await wait(4000);
+          const a0 = await roadParts(g.road, cp, items, W.at);
+          const sa = await standingRoad();
+          const after = { ...a0, placed: sa, states: { [g.road]: a0.state }, total: [a0.stock, sa, a0.owed, a0.ground, a0.inventory].reduce((a, c) => G.plus(a, c), {}) };
+          judgeT4(tag, { tag, point: 'K7+save', removal: m, paid, txn: await txn() }, before, after);
+        } else {
+          await ps({ failQueueWrites: false });
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        }
+      }
+    }
+    // T4-corrupt (finding 3b; last: it leaves the world's sites file broken): K6 on a 40% site, its sites file unreadable at the start: the
+    // sweep reads the empty registry as "gone" and pays the durable stash
+    if (want('T4-corrupt')) {
+      const tag = 'T4-corrupt';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await partBuilt(tag, site, 0.4);
+        const sf = path.join(W.dir, 'architect-sites.json');
+        await k6Row(tag, [site], site, cp, items, { after: () => { fs.copyFileSync(sf, sf + '.t4keep'); fs.writeFileSync(sf, '{ not json'); } });
+      }
+    }
     await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
     await L.leaveWorld();
     const rows = Object.values(R);
