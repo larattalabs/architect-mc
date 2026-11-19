@@ -1068,7 +1068,8 @@ export async function t9rc(ctx) {
     L.call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
     await waitDownH(ctx, 'halt');
     await L.openWorld(world);
-    await L.cmd('/save-off'); // (no chunk save after the recheck's drain: the halt finds what a crash finds)
+    await L.cmd('/save-off');
+    await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2); // (no chunk save after the recheck's drain: the halt finds what a crash finds)
     let drained = false;
     for (let i = 0; i < 600 && !drained; i++) {
       const fs0 = await L.call('dev.fluid.state', { region }, 5_000).catch(() => null);
@@ -1080,6 +1081,7 @@ export async function t9rc(ctx) {
     await waitDownH(ctx, 'halt');
     await L.openWorld(world);
     await L.call('dev.fluid.hold', { write: true }, 10_000).catch(() => null);
+    await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
     await sleep(5000);
     const fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
     out.after = { state: (fs1?.bodies ?? []).find((b) => b.id === 'pond')?.state, sources: await ownSources(ctx, pond) };
@@ -1117,6 +1119,7 @@ export async function t9er(ctx) {
     await L.call('dev.fluid.hold', { settle: false }, 10_000);
     await waitDownH(ctx, 'TX:fluid.drain:apply:0+save');
     await L.openWorld(world);
+    await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
     await L.call('dev.fluid.hold', { settle: true }, 10_000).catch(() => null);
     await sleep(8000);
     const fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);

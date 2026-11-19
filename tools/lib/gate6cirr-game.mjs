@@ -1087,8 +1087,14 @@ export async function t9ll(ctx) {
   fs.rmSync(keep, { recursive: true, force: true });
   fs.cpSync(regionDir, keep, { recursive: true });
   const r1 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  for (let i = 0; i < 60; i++) {
+    const gone = !((await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false);
+    if (gone) break;
+    await sleep(1000);
+  }
   await L.settle(5000);
   const water1 = (await fluidsIn(ctx, w.box)).size;
+  await L.call('dev.stockpile.save', {}, 300_000);
   await L.leaveWorld();
   fs.cpSync(keep, regionDir, { recursive: true, force: true });
   const rec = path.join(L.SAVES, w.world, 'architect-regions', w.o.r.region, 'fluids.json');
