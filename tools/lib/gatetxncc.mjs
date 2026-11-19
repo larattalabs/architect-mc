@@ -878,12 +878,17 @@ export async function registerTCC(steps, h) {
       if (start) { fs.mkdirSync(arch, { recursive: true }); fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(start)); }
       if (after) after();
       let halts = 0;
-      await L.openWorld(name);
       if (start?.killAt) {
-        const again = await haltWait();
+        // the start itself halts (SERVER_STARTED, before the world is ready): the open never completes; raced, then opened again
+        const op = L.openWorld(name).then(() => 'open', (e) => `error: ${String(e?.message ?? e).slice(0, 120)}`);
+        const r0 = await Promise.race([op, L.sleep(200_000).then(() => 'timeout')]);
+        const again = r0 !== 'open';
         halts += again ? 1 : 0;
-        check(again, `${tag}: the start halted at ${start.killAt}`);
-        if (again) await L.openWorld(name);
+        check(again, `${tag}: the start halted at ${start.killAt} (the open answered ${r0})`);
+        await L.sleep(3000);
+        await L.openWorld(name);
+      } else {
+        await L.openWorld(name);
       }
       await L.tp(...W.at);
       await settleWait(sites, cp, null, 30_000);
