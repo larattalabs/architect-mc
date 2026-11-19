@@ -33515,3 +33515,16 @@ Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N
 **Gates:** units per slice (CXC failing first on main; the BuildStatus precedence table; the 200-target budget, 39 us of 500; layout over
 the goldens; the coalescer). In the batch: `cx-survival` checks the dry run's quote against the check's bill, a maxBill one under the bill
 refused BILL_CAP with nothing written, a lot cap refused, the place typed at exactly its bill; gatedrs DR12 checks SAVE_REFUSED.
+
+## Slice RVC: a revision's typed stop cause (as built, slice/RVC; light; versions NEXT; Steward's ask 8bS-1)
+
+- `RevisionView.removalStopCause` (feature `"revisionStopCause"`, Since NEXT): the typed cause of `waiting`, mirroring 8b's
+  `RegionView.removalStopCause`. A revision left `UNDOING` by a stopped `Regions.undoRevision` carries its stage removal's cause
+  (`Groups.Removed.stopCause`: SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX); a failed undo is OTHER. Null when `waiting`
+  is null; any other wait (a revision's own write that stopped) is OTHER. The `waiting` text and `RemoveResult.blockers` are unchanged
+  (8b put no cause on `RemoveResult` either).
+- Saved beside `waiting` in the revision record as `removalStopCause` (additive; only when typed); a record saved before it, or a name
+  this build doesn't know, reads OTHER. Cleared with the wait when the undo finishes.
+- Binary compatible: the 15-argument constructor stays (no cause: OTHER while waiting), the 14-argument one too.
+- Units: `RevisionStopCauseTest` (each cause, the saved shape, null when not waiting, legacy reads OTHER, the old constructors);
+  `ApiRulesTest` pins the feature name. Light tier: no in-game step of its own.

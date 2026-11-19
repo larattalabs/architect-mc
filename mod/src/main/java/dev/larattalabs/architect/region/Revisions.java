@@ -86,6 +86,11 @@ public final class Revisions {
 		public @Nullable String artifact;
 		public boolean survival;
 		public @Nullable String waiting;
+		/**
+		 * (RVC) {@code waiting}'s typed cause (RevisionView.removalStopCause): a stopped undo's stage removal cause. Null when not waiting,
+		 * and for an untyped wait or one saved before the cause: the view reads those OTHER, and the saved record stays as it was.
+		 */
+		public dev.larattalabs.architect.api.@Nullable RemovalStopCause waitingCause;
 		public @Nullable String batchId;
 		public @Nullable String opKey;
 		public @Nullable String actor;
@@ -115,6 +120,9 @@ public final class Revisions {
 			o.addProperty("survival", survival);
 			if (waiting != null) {
 				o.addProperty("waiting", waiting);
+				if (waitingCause != null) {
+					o.addProperty("removalStopCause", waitingCause.name()); // (RVC) additive
+				}
 			}
 			if (batchId != null) {
 				o.addProperty("batchId", batchId);
@@ -149,6 +157,7 @@ public final class Revisions {
 			r.artifact = o.has("artifact") ? o.get("artifact").getAsString() : null;
 			r.survival = o.has("survival") && o.get("survival").getAsBoolean();
 			r.waiting = o.has("waiting") ? o.get("waiting").getAsString() : null;
+			r.waitingCause = causeOf(o.has("removalStopCause") ? o.get("removalStopCause").getAsString() : null, r.waiting);
 			r.batchId = o.has("batchId") ? o.get("batchId").getAsString() : null;
 			r.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
 			r.actor = o.has("actor") ? o.get("actor").getAsString() : null;
@@ -160,7 +169,28 @@ public final class Revisions {
 
 		public RevisionView view() {
 			return new RevisionView(rid, position, parentRid, planId, irSha, state, createdAt, stages, lotsAdded, lotsRefilled, cells, artifact, survival, waiting,
-				sites);
+				sites, waitingCause);
+		}
+
+		/** (RVC) Sets what it waits for and its typed cause (null: the view reads OTHER while waiting); a null {@code why} clears both. */
+		public void waitFor(@Nullable String why, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
+			waiting = why;
+			waitingCause = why == null ? null : cause;
+		}
+
+		/** (RVC) A saved cause read back: its name; null when not waiting, saved before the cause or an unknown name (the view: OTHER). */
+		static dev.larattalabs.architect.api.@Nullable RemovalStopCause causeOf(@Nullable String name, @Nullable String waiting) {
+			if (waiting == null) {
+				return null;
+			}
+			if (name != null) {
+				try {
+					return dev.larattalabs.architect.api.RemovalStopCause.valueOf(name);
+				} catch (IllegalArgumentException e) {
+					// a later cause read by an older build: OTHER in the view
+				}
+			}
+			return null;
 		}
 
 		public boolean standing() {
@@ -1038,7 +1068,7 @@ public final class Revisions {
 		ServerLevel level = l.level(s);
 		if (ir == null || level == null) {
 			rv.state = "FAILED";
-			rv.waiting = ir == null ? "its IR could not be read" : rec.dimension + " is not loaded";
+			rv.waitFor(ir == null ? "its IR could not be read" : rec.dimension + " is not loaded", null);
 			end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 			return;
 		}
@@ -1190,7 +1220,7 @@ public final class Revisions {
 			rv.sites.add(i.siteId);
 		}
 		if (i.status == QItem.Status.FAILED && rv.waiting == null) {
-			rv.waiting = i.key + ": " + (i.reason == null ? "failed" : i.reason) + (i.message == null || i.message.isEmpty() ? "" : " (" + i.message + ")");
+			rv.waitFor(i.key + ": " + (i.reason == null ? "failed" : i.reason) + (i.message == null || i.message.isEmpty() ? "" : " (" + i.message + ")"), null);
 		}
 	}
 
@@ -1226,7 +1256,7 @@ public final class Revisions {
 			long c = held.get(0);
 			String msg = "revision " + rid + " stopped: (" + net.minecraft.core.BlockPos.getX(c) + ", " + net.minecraft.core.BlockPos.getY(c) + ", "
 				+ net.minecraft.core.BlockPos.getZ(c) + ") was taken by another site between its check and its write";
-			rv.waiting = msg;
+			rv.waitFor(msg, null);
 			if (batchId != null) {
 				Batches.failRest(batchId, Reason.OVERLAP, msg);
 			}
@@ -1750,11 +1780,12 @@ public final class Revisions {
 						// stays UNDOING with its reason (§4.4): a same-target call or a world start resumes it
 						String why = ex != null ? "it failed: " + (ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()) : res.removed() ? "TEST: dev.rv.undoFail"
 							: String.join("; ", res.blockers());
+						dev.larattalabs.architect.api.RemovalStopCause cause = undoStopCause(ex == null ? res : null); // (RVC) typed beside the text
 						cur.addProperty("waiting", "stage " + st + ": " + why);
 						writeUndo(l, cur);
 						for (Rev r : rec.revisions) {
 							if ("UNDOING".equals(r.state)) {
-								r.waiting = "undo " + opId + " waits: " + why;
+								r.waitFor("undo " + opId + " waits: " + why, cause);
 							}
 						}
 						RegionsImpl.save(l);
@@ -1784,6 +1815,15 @@ public final class Revisions {
 		if (phase.equals("removed")) {
 			finishUndo(s, l, op);
 		}
+	}
+
+	/**
+	 * (RVC) A stopped stage undo's typed cause, as 8b types a region's or group's stop: the removal's own cause ({@code Removed.stopCause}),
+	 * OTHER when it failed ({@code res} null) or reported removed (the dev.rv.undoFail hook).
+	 */
+	static dev.larattalabs.architect.api.RemovalStopCause undoStopCause(dev.larattalabs.architect.site.Groups.@Nullable Removed res) {
+		var c = res == null ? null : res.stopCause();
+		return c == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : c;
 	}
 
 	/**
@@ -1886,7 +1926,7 @@ public final class Revisions {
 		for (Rev r : rec.revisions) {
 			if (rids.contains(r.rid)) {
 				r.state = "UNDONE";
-				r.waiting = null;
+				r.waitFor(null, null);
 				for (String st : r.stages) {
 					rec.stages.remove(st);
 				}
@@ -2032,7 +2072,7 @@ public final class Revisions {
 			if (op == null) {
 				Architect.LOGGER.warn("Region {}: revision {} is accepted but its manifest is gone: ended FAILED", rec.id, rid);
 				rv.state = "FAILED";
-				rv.waiting = "its manifest was lost";
+				rv.waitFor("its manifest was lost", null);
 				end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 				continue;
 			}

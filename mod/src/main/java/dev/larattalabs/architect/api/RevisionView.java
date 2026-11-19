@@ -12,15 +12,30 @@ import org.jspecify.annotations.Nullable;
  * {@code lotsRefilled}; {@code cells} written; {@code artifact}: the plan artifact it was realised from, if any; {@code survivalAllowed};
  * {@code waiting}: what it waits for, or why it stopped; {@code sites}: every site it wrote (its tile cell sites, roads and lots, in
  * write order), each also carrying ext {@code architect_mc:revision {region, rid}}, so one revision is one history entry. Since 1.43.0.
+ *
+ * <p>(RVC, Steward's 8bS-1, feature {@code "revisionStopCause"}; Since NEXT) {@code removalStopCause}: the typed cause of {@code waiting}, as
+ * {@link RegionView#removalStopCause()}: a revision left {@code UNDOING} by a stopped undo ({@link Regions#undoRevision}) carries its stage
+ * removal's cause ({@link RemovalStopCause}: SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), so a caller tells a
+ * refused save apart without parsing {@code waiting} (whose text is unchanged). Null when {@code waiting} is null; any other wait (a
+ * revision's own write that stopped) is OTHER.
  */
 public record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,
 	List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact, boolean survivalAllowed, @Nullable String waiting,
-	List<String> sites) {
+	List<String> sites, @Nullable RemovalStopCause removalStopCause) {
 	public RevisionView {
+		removalStopCause = waiting == null ? null : removalStopCause == null ? RemovalStopCause.OTHER : removalStopCause;
 		stages = List.copyOf(stages);
 		lotsAdded = List.copyOf(lotsAdded);
 		lotsRefilled = List.copyOf(lotsRefilled);
 		sites = sites == null ? List.of() : List.copyOf(sites);
+	}
+
+	/** The 1.43.0 constructor: no typed stop cause (since NEXT: null when not waiting, else OTHER). */
+	public RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,
+		List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact, boolean survivalAllowed, @Nullable String waiting,
+		List<String> sites) {
+		this(rid, position, parentRid, planId, irSha, state, createdAt, stages, lotsAdded, lotsRefilled, cells, artifact, survivalAllowed, waiting, sites,
+			null);
 	}
 
 	/** The contract's §11 shape (no sites). */

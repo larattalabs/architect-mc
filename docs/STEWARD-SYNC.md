@@ -165,6 +165,11 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   mechanism's wait carries it as `waitsFor.cap`. LCAP-Q2: `lcap-survival` now covers a revision (rid > 0) with lot caps and an RV3 kill.
 - A realise or revision whose region record can't be saved is refused `JOURNAL_UNAVAILABLE` (detail `region_record`), nothing written.
 
+### New for Steward (NEXT, slice RVC; ask 8bS-1)
+- `RevisionView.removalStopCause` (feature `"revisionStopCause"`): a revision `UNDOING` after a stopped `undoRevision` carries its stage
+  removal's `RemovalStopCause` (SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), as 8b's `RegionView`; null when not
+  waiting. The `waiting` text is unchanged. Survives save and reload. CONTRACT "Slice RVC".
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.
