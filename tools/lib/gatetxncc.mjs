@@ -866,7 +866,7 @@ export async function registerTCC(steps, h) {
       check(sum(after.ground) === 0, `${tag}: nothing dropped (${json(after.ground)})`, n);
     };
     /** K6 on {@code sites} (removing {@code target}), then optional dev-start.json, the world again (twice when the start itself halts). */
-    const k6Row = async (tag, sites, target, cp, items, { point = 'K6', start = null, after = null } = {}) => {
+    const k6Row = async (tag, sites, target, cp, items, { point = 'K6', start = null, after = null, expectHeld = false, reopenAfter = null } = {}) => {
       await cmd('/save-all flush').catch(() => null);
       await wait(2000);
       const before = await parts(sites, cp, items);
@@ -879,7 +879,15 @@ export async function registerTCC(steps, h) {
       if (start) { fs.mkdirSync(arch, { recursive: true }); fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(start)); }
       if (after) after();
       let halts = 0;
-      if (start?.killAt) {
+      if (start?.killAt?.startsWith('TX:')) {
+        // (T4b fix round) a txn point on the first ticks after the start: the world opens, then it halts there; then the world again
+        await L.openWorld(name).catch(() => null);
+        const again = await haltWait();
+        halts += again ? 1 : 0;
+        check(again, `${tag}: the start's removal txn halted at ${start.killAt}`);
+        await L.sleep(3000);
+        await L.openWorld(name);
+      } else if (start?.killAt) {
         // the start itself halts (SERVER_STARTED, before the world is ready): the open never completes; raced, then opened again
         const op = L.openWorld(name).then(() => 'open', (e) => `error: ${String(e?.message ?? e).slice(0, 120)}`);
         const r0 = await Promise.race([op, L.sleep(200_000).then(() => 'timeout')]);
@@ -894,7 +902,24 @@ export async function registerTCC(steps, h) {
       await L.tp(...W.at);
       await settleWait(sites, cp, null, 30_000);
       await wait(4000);
-      judgeT4(tag, { tag, point, start, removal: m, txn: await txn(), halts }, before, await parts(sites, cp, items));
+      const after1 = await parts(sites, cp, items);
+      const t1 = await txn();
+      if (expectHeld) {
+        // (T4b fix round) the fault fired: the removal's txn is held (its W failed), nothing paid, its paid blocks still standing
+        const owedNew = sum(after1.owed) - sum(before.owed);
+        check(t1.openCount > 0 && owedNew === 0 && sum(after1.placed) > 0, `${tag}: the W failed and holds: txn open ${t1.openCount}, owed new ${owedNew}, ${sum(after1.placed)} paid block(s) standing`, { t1, after1 });
+      }
+      judgeT4(tag, { tag, point, start, removal: m, txn: t1, halts }, before, after1);
+      if (reopenAfter) {
+        // the fault cleared (the file put back): the removal completes, paid exactly once
+        await L.leaveWorld();
+        reopenAfter();
+        await L.openWorld(name);
+        await L.tp(...W.at);
+        await settleWait(sites, cp, null, 30_000);
+        await wait(4000);
+        judgeT4(`${tag}-after`, { tag: `${tag}-after`, txn: await txn() }, before, await parts(sites, cp, items));
+      }
     };
     // T4-keep (finding 1a): about 40% built: K6 reads neither restored nor standing (KEEP), and the KEEP path settles its stash
     for (const v of ['', '+save']) {
@@ -932,7 +957,213 @@ export async function registerTCC(steps, h) {
       const site = await single(tag);
       if (site) {
         const { cp, items } = await partBuilt(tag, site, 0.1);
-        await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true } });
+        await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true }, expectHeld: true });
+      }
+    }
+    // T4-2nd-b (fix round): a second crash between the new W and the credit's publication: at the start, the removal txn halted after its W
+    // applied (in memory), then the world again: paid exactly once
+    if (want('T4-2nd-b')) {
+      const tag = 'T4-2nd-b';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await partBuilt(tag, site, 0.4);
+        await k6Row(tag, [site], site, cp, items, { start: { killAt: 'TX:removal.site:apply:0' } });
+      }
+    }
+    // T4-nojournal (fix round, finding 2): a removal txn persisted (its W not yet on disk: halted at its intent), then the world opened with
+    // its journal unreadable: the W probe must hold (unknown), never read "released": nothing paid; with the journal back it completes once
+    if (want('T4-nojournal')) {
+      const tag = 'T4-nojournal';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await partBuilt(tag, site, 0.4);
+        const jf = path.join(W.dir, 'architect-journal', 'journal.json');
+        await k6Row(tag, [site], site, cp, items, { point: 'TX:removal.site:intent', expectHeld: true,
+          after: () => { fs.copyFileSync(jf, jf + '.t4keep'); fs.writeFileSync(jf, '{ not json'); },
+          reopenAfter: () => { fs.copyFileSync(jf + '.t4keep', jf); } });
+      }
+    }
+    // T4-mine (fix round, finding 3): a crate-fed road's removal paused before its first write; a player breaks one of its paid blocks: the
+    // box is held from the tally on (refused), so the refund stays true; else (the base) the block drops and its refund is paid too
+    if (want('T4-mine')) {
+      const tag = 'T4-mine';
+      const g = await roadGroup(tag);
+      if (g.road) {
+        await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+        await fill(tag, g.hut);
+        await call('dev.site.finish', { site: g.hut }, 60_000);
+        await wait(1500);
+        const { cp, items, paid } = await payRoad(tag, g);
+        const rv = await roadState(g.road);
+        const m = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
+        const rbox = m ? m.slice(1, 7).map(Number) : null;
+        const standingRoad = async () => {
+          const out = {}, at = [];
+          for (const [k2, st] of (await cellsOf(rbox)).entries()) {
+            const id = String(st).replace(/\[.*$/, '');
+            const full = id.includes(':') ? id : `minecraft:${id}`;
+            if (items.includes(full)) { out[full] = (out[full] ?? 0) + 1; at.push(k2); }
+          }
+          return { out, at };
+        };
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const b0 = await roadParts(g.road, cp, items, W.at);
+        const s0 = await standingRoad();
+        const before = { ...b0, placed: s0.out, total: [b0.stock, s0.out, b0.owed, b0.ground, b0.inventory].reduce((a, c) => G.plus(a, c), {}) };
+        await call('dev.removal.pause', { site: g.road, after: 0 }, 10_000);
+        const rm = api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        await wait(3000);
+        const cell = s0.at[0];
+        const at = typeof cell === 'string' ? cell.split(',').map(Number) : null;
+        const br = at ? await call('dev.pt.breaks', { at: [at], placer: 'T4Miner' }, 60_000).catch((e) => ({ error: String(e) })) : { error: 'no paid cell' };
+        await wait(1500);
+        const drop = at ? (await call('dev.items.near', { pos: at, radius: 3 }, 30_000)).items ?? {} : {};
+        await call('dev.removal.pause', { site: g.road, off: true }, 10_000);
+        await rm;
+        for (let i = 0; i < 60 && (await roadState(g.road)); i++) await L.sleep(1000);
+        await wait(4000);
+        const a0 = await roadParts(g.road, cp, items, W.at);
+        const sa = await standingRoad();
+        const nearCell = at ? pick((await call('dev.items.near', { pos: at, radius: 3 }, 30_000)).items ?? {}, items) : {};
+        const after = { ...a0, placed: sa.out, ground: G.plus(a0.ground, nearCell), states: { [g.road]: a0.state }, total: [a0.stock, sa.out, a0.owed, a0.ground, nearCell, a0.inventory].reduce((x, c) => G.plus(x, c), {}) };
+        log(`  ${tag}: a player broke ${at} while the removal waited: ${json(br)} (dropped ${json(drop)})`);
+        check((br.broken ?? 0) === 0, `${tag}: the break in the held removal box is refused (${json(br)})`, br);
+        judgeT4(tag, { tag, paid, break: br, txn: await txn() }, before, after);
+      }
+    }
+    // T4-legacy (fix round, finding 4): a pre-T4 stockpile removal (its refund a J2 pending credit, no stash): a stockpile site about 10% built
+    // halted at K6, its stash turned offline into the pre-T4 pending credit; at the start it must enter the new protocol (W first, then the
+    // credit), never the threshold release with the absence book (the base: paid while its blocks stand)
+    if (want('T4-legacy')) {
+      const tag = 'T4-legacy';
+      const owner = 'tcc:t4legacy';
+      const sp = slot();
+      await call('dev.stockpile.create', { owner, crates: [[sp[0], sp[1], sp[2]]] }, 120_000).catch((e) => ({ refused: String(e) }));
+      const g = await grouped(tag, 1, owner);
+      const site = g.sites[0];
+      if (site) {
+        for (let i = 0; i < 60; i++) { if ((await siteState(site))?.state === 'building') break; await L.sleep(1000); }
+        await boxOf(site);
+        await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+        const bom = (await siteState(site))?.bom ?? {};
+        const part = {};
+        for (const [kk, v] of Object.entries(bom)) { const n = Math.floor(v * 0.1); if (n > 0) part[kk] = n; }
+        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: part, exact: true }, 120_000).catch(() => null);
+        await call('dev.stockpile.pause', { site, paused: false }, 60_000);
+        const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+        for (let i = 0; i < 90; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
+        await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+        const items = Object.keys(bom);
+        const pparts = async () => {
+          const ps = await pst();
+          const placed = await standing(site, items);
+          const ow = await owedAll();
+          const near = await call('dev.items.near', { pos: (await boxOf(site)).slice(0, 3), radius: 16 }, 30_000);
+          const p = { stock: pick(ps.stock ?? {}, items), placed: pick(placed, items), owed: pick(ow.total, items), ground: pick(near.items ?? {}, items), inventory: {},
+            states: { [site]: (await siteState(site))?.state ?? null } };
+          p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
+          return p;
+        };
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await pparts();
+        check(sum(before.placed) > 0, `${tag}: ${site} fed from the stockpile of ${owner}, about 10% built (${sum(before.placed)} placed)`, before);
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        const m = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: halted at K6 (${json(m).slice(0, 120)})`);
+        if (down) {
+          // the pre-T4 shape: the removal's stash becomes the J2 pending credit (items, at) in its pile's ledger
+          const sf = path.join(W.dir, 'architect', 'stockpiles.json');
+          const root = JSON.parse(fs.readFileSync(sf, 'utf8'));
+          const st = root.crateSettles?.[site];
+          let made = false;
+          if (st?.pileKey) {
+            for (const po of root.stockpiles ?? []) {
+              if (po.owner !== owner) continue;
+              po.ledger = po.ledger ?? {};
+              po.ledger.pendingCredit = po.ledger.pendingCredit ?? {};
+              po.ledger.pendingCredit[st.pileKey] = { items: st.refund ?? {}, at: st.pos };
+              made = true;
+            }
+            delete root.crateSettles[site];
+            fs.writeFileSync(sf, JSON.stringify(root, null, 2));
+          }
+          check(made, `${tag}: the removal's stash turned into a pre-T4 pending credit offline (${json(st?.refund ?? null)})`, st);
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(5000);
+          const after = await pparts();
+          judgeT4(tag, { tag, removal: m, txn: await txn() }, { ...before, stock: {} }, after);
+        } else {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        }
+      }
+    }
+    // T4-pileroad (fix round, finding 5): a stockpile's road removed with its credit save refused, then the game halted unsaved: its refund
+    // intent is the removal.road stash (durable before the job), paid exactly once after the restart (the base: the refund lost)
+    if (want('T4-pileroad')) {
+      const tag = 'T4-pileroad';
+      const owner = 'tcc:t4road';
+      const at = slot();
+      k += 2;
+      const y = gy + 1, X = at[0], Z = at[2] + 20;
+      await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 30} ${y - 1} ${Z + 3} minecraft:stone`);
+      W.at = [X + 10, y + 1, Z + 6];
+      await L.tp(...W.at);
+      await call('dev.stockpile.create', { owner, crates: [[X + 10, y, Z - 8]] }, 120_000).catch((e) => ({ refused: String(e) }));
+      const road = { points: [[X, y, Z], [X + 26, y, Z]], width: 1, mode: 'AUTO' };
+      const bid = await later(`bqueue ${json({ id: `tcct4pr${Date.now() % 100000}`, proximity: false, owner, autoApprove: true, items: [{ key: 'r1', road }] })}`, 120_000);
+      let bv;
+      for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
+      const rid = bv?.items?.[0]?.site;
+      check(!!rid, `${tag}: a construction road fed from the stockpile of ${owner} (${rid})`, bv);
+      if (rid) {
+        const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+        await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
+        const bill = (await api(`stock ${bv.group}`).catch(() => ({}))).outstandingBySite?.[rid] ?? {};
+        const half = {};
+        for (const [kk, v] of Object.entries(bill)) half[kk] = Math.max(1, Math.floor(v / 2));
+        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: half, exact: true }, 120_000).catch(() => null);
+        await call('dev.stockpile.pause', { site: rid, paused: false }, 60_000).catch(() => null);
+        for (let i = 0; i < 60; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
+        await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
+        const items = Object.keys(bill);
+        const rv = await roadState(rid);
+        const mm = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
+        const rbox = mm ? mm.slice(1, 7).map(Number) : [X - 1, y - 1, Z - 2, X + 27, y + 1, Z + 2];
+        const rparts = async () => {
+          const placed = {};
+          for (const st of (await cellsOf(rbox)).values()) {
+            const id = String(st).replace(/\[.*$/, '');
+            const full = id.includes(':') ? id : `minecraft:${id}`;
+            if (items.includes(full)) placed[full] = (placed[full] ?? 0) + 1;
+          }
+          const near = await call('dev.items.near', { pos: W.at, radius: 24 }, 30_000);
+          const p = { stock: pick((await pst()).stock ?? {}, items), placed, owed: pick((await owedAll()).total, items), ground: pick(near.items ?? {}, items), inventory: {},
+            states: { [rid]: (await roadState(rid))?.state ?? null } };
+          p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
+          return p;
+        };
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await rparts();
+        check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
+        await ps({ refuseCreditSaves: 5 });
+        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await wait(4000);
+        call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${tag}: halted unsaved after the removal (${json(rm).slice(0, 160)})`);
+        if (down) {
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          for (let i = 0; i < 30 && (await roadState(rid)); i++) await L.sleep(1000);
+          await wait(5000);
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, await rparts());
+        }
       }
     }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the

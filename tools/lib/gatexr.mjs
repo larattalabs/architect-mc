@@ -118,7 +118,9 @@ export async function registerXr(steps, h) {
         for (let i = 0; i < 60 && !waiting; i++) { waiting = (await jobs()).find((j) => j.takeUp === true || j.phase === 17) ?? null; if (!waiting) await L.sleep(1000); }
         out.waiting = waiting;
         out.placedWhileWaiting = out.state;
-        await L.sleep(20_000); // a periodic save in between (the ledger with whatever is in memory)
+        // (T4b fix round) a cancel waits for a periodic save first (the ledger with whatever is in memory); a halt is bare at once (the review:
+        // a wait before it let the world changes reach the disk)
+        if (hold === 'cancel') await L.sleep(20_000);
         if (hold === 'cancel' && waiting?.batch) {
           out.cancel = await L.cmd(`/apitest bcancel ${waiting.batch}`).catch((e) => ({ error: String(e) }));
           await L.sleep(5000);
