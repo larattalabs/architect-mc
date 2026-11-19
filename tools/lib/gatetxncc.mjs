@@ -87,7 +87,7 @@ export async function registerTCC(steps, h) {
     if (!b) return {};
     const out = {};
     for (const st of (await cellsOf(b)).values()) {
-      const id = String(st).replace(/\[.*$/, '');
+      const id = String(st).replace(/\[.*$/, '').replace(/(^|:)wall_torch$/, '$1torch'); // (T4b) a wall torch is its torch item
       const full = id.includes(':') ? id : `minecraft:${id}`;
       if (items.includes(full)) out[full] = (out[full] ?? 0) + 1;
     }

@@ -572,7 +572,10 @@ export async function registerFK(steps, h) {
     const S = savedLedger(W.name);
     const pend = S.pendingCredit?.[key] ?? null;
     log(`  ${tag}: saved: pending ${json(pend)}, custody ${json(S.custody?.[key] ?? null)}, credited ${(S.credited ?? []).includes?.(key)}`);
-    check(!!pend && sum(S.custody?.[key]) > 0, `${tag}: at the halt the saved ledger holds ${key}'s credit pending (${sum(pend?.items)} units) and its custody (${sum(S.custody?.[key])})`, { pend, custody: S.custody?.[key] });
+    // (slice T4b, N8) a stockpile site's refunds ride its removal's stash (saved with the ledger before the commit), not a J2 pending credit:
+    // either one, with the custody, is what the start settles from
+    const stash = Object.values(S.crateSettles ?? {}).find((x) => x?.pileKey === key) ?? null;
+    check((!!pend || !!stash) && sum(S.custody?.[key]) > 0, `${tag}: at the halt the saved ledger holds ${key}'s credit pending (${sum(pend?.items)} units) or its removal's stash (${stash ? sum(stash.refund) + ' units' : 'none'}) and its custody (${sum(S.custody?.[key])})`, { pend, stash, custody: S.custody?.[key] });
     await restart(W.name);
     await L.settle(4000);
     const F = (await pile()).ledger;
