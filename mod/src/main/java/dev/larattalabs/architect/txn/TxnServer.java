@@ -63,6 +63,7 @@ public final class TxnServer {
 
 	private static void register(TxnCore c) {
 		c.register(TestMove.KIND);
+		dev.larattalabs.architect.region.FluidTxns.register(c); // (8cTb) region.charge, fluid.drain
 	}
 
 	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */

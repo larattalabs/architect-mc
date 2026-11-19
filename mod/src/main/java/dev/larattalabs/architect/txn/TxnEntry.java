@@ -92,6 +92,11 @@ public final class TxnEntry {
 		return result.deepCopy();
 	}
 
+	/** (8cTb) Whether this attempt runs forward in this session (false: recovered from txn.json). */
+	public boolean live() {
+		return live;
+	}
+
 	public @Nullable String held() {
 		return held;
 	}

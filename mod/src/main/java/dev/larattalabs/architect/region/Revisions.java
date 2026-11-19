@@ -2400,4 +2400,24 @@ public final class Revisions {
 	static Path world(MinecraftServer s) {
 		return s.getWorldPath(LevelResource.ROOT);
 	}
+
+	/**
+	 * (8cTb, Steward's ask) A revision's record whose removal drain is held: its UNDOING revision's {@code waiting} names where ({@code chunk
+	 * x,z}); null clears a drain's note (never another one). Server thread.
+	 */
+	static void drainWaiting(RegionsImpl.Live l, @org.jspecify.annotations.Nullable String why) {
+		if (l.rid() == 0) {
+			return;
+		}
+		for (Rev r : l.rec().revisions) {
+			if (r.rid == l.rid() && "UNDOING".equals(r.state)) {
+				if (why != null) {
+					r.waiting = why;
+				} else if (r.waiting != null && r.waiting.startsWith("the water drains first: ")) {
+					r.waiting = null;
+				}
+			}
+		}
+	}
+
 }

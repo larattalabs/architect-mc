@@ -927,3 +927,33 @@ export async function t8f(ctx) {
   await L.leaveWorld();
   return out;
 }
+
+/**
+ * (8cTb, E's removal half and Steward's S3 drain row) h_core_demo placed, its chunks saved; Regions.remove halted at the drain txn's
+ * `TX:fluid.drain:drain` (the drain written, no receipt yet), bare (the writes lost with the JVM) and +save (the writes on disk without
+ * their receipts). The start replays the drain from the txn (never trusts a record without its writes): the removal resumes and the box is
+ * E-flat 0 (conservation: no fluid left round the restored solids, nothing else changed).
+ */
+export async function t8rd(ctx) {
+  const { L, check, json } = ctx;
+  const out = {};
+  for (const point of ['TX:fluid.drain:drain', 'TX:fluid.drain:drain+save']) {
+    const tag = point.endsWith('+save') ? 'save' : 'bare';
+    const world = `G6B H T8RD ${tag}`;
+    await freshFlat(ctx, world, 'exact');
+    const d = await planDemo(ctx, { lava: true });
+    const box = demoBox(d.bodies);
+    const file = await snap(ctx, box, `h-t8rd-${tag}`);
+    const r = await realiseWait(ctx, d.p.planId);
+    await L.call('dev.stockpile.save', {}, 300_000);
+    await crashAt(ctx, world, point, async () => { await L.call('dev.region.remove', { region: r.region, requester: OWNER }, 600_000); });
+    const fs1 = await L.call('dev.fluid.state', { region: r.region }, 10_000).catch(() => null);
+    const rm = await removeWait(ctx, r.region).catch((e) => ({ state: `error ${e.message}` }));
+    await sleep(3000);
+    const dx = await diff(ctx, box, file);
+    out[tag] = { placed: r.view.state, atStart: fs1 ? { removal: fs1.removal ?? null, until: fs1.until ?? null } : null, removal: rm.state, mismatches: dx.mismatches };
+    check(r.view.state === 'PLACED' && rm.state === 'REMOVED' && dx.mismatches === 0, `RD (${point}: the drain written, no receipt): the start replays the drain txn; the removal resumed: ${rm.state}, E-flat ${dx.mismatches} (${json(out[tag].atStart)})`, dx.sample);
+    await L.leaveWorld();
+  }
+  return out;
+}

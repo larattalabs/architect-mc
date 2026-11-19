@@ -273,6 +273,16 @@ public final class TestMove {
 		return r == null ? List.of() : r;
 	}
 
+	/** (8cTb) A chunk's receipts, for another kind's W adapter (the fluids drain). */
+	public static List<String> receiptsOf(LevelChunk ch) {
+		return receipts(ch);
+	}
+
+	/** (8cTb) Adds a receipt to a chunk (marked unsaved: it reaches the region file with the chunk's next snapshot). */
+	public static void addReceiptTo(LevelChunk ch, String key) {
+		addReceipt(ch, key);
+	}
+
 	static void addReceipt(LevelChunk ch, String key) {
 		List<String> r = new ArrayList<>(receipts(ch));
 		r.add(key);

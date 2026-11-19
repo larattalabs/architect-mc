@@ -32,6 +32,13 @@ public final class KillPoints {
 		}
 	}
 
+	/** (8cTb) A kind's own named step (an adapter's): registered, then the armed kill point halts here ({@code TX:<kind>:<step>}). */
+	public static void step(String kind, boolean recovering, String step) {
+		String point = name(kind, recovering, step);
+		reached(kind, point);
+		dev.larattalabs.architect.journal.WorldJournal.kill(point);
+	}
+
 	/** Every point of {@code kind} reached this session, in first-reached order. */
 	public static synchronized List<String> points(String kind) {
 		return List.copyOf(SEEN.getOrDefault(kind, Set.of()));
