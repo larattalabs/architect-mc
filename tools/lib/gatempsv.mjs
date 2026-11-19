@@ -249,11 +249,25 @@ export async function registerPSV(steps, h) {
     return { name, gy, at, bv, site, stock, placed, crate };
   }
 
-  /** PSV5/PSV6: a legacy crate's stock across a crash at the removal's commit point: dropped exactly once. */
+  /** (slice T4a, on T2b) The owed total (dev.stockpile.owed): since T2b a crate's stock is owed (crate.settle), never dropped. */
+  const owedTotal = async () => ((await call('dev.stockpile.owed', {}, 30_000).catch(() => null))?.total) ?? {};
+  /** (slice T4a) What came back since {@code near0}/{@code owed0}: the ground near the crate plus the owed entries (T2b's no-drop rule). */
+  const backSince = async (crate, near0, owed0) => {
+    const near1 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    const ground = G.minus(near1.items ?? {}, near0.items ?? {});
+    const owed = G.minus(await owedTotal(), owed0);
+    return { ground, owed, back: G.plus(ground, owed) };
+  };
+
+  /**
+   * PSV5/PSV6: a legacy crate's stock across a crash at the removal's commit point: given back exactly once. (slice T4a, on T2b) Given back
+   * is owed (crate.settle), never dropped: the ground must stay empty.
+   */
   async function crateCrashCase(out, tag, point) {
     const { name, gy, at, bv, site, stock, placed, crate } = await crateSite(tag);
     if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
     const near0 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    const owed0 = await owedTotal();
     await call('dev.journal.killAt', { point }, 10_000);
     api(`sgremove ${bv.group}`).catch(() => null);
     const down = await haltWait();
@@ -271,12 +285,14 @@ export async function registerPSV(steps, h) {
     n.groupAfter = g?.state ?? null;
     check(/^removed$/i.test(n.groupAfter ?? ''), `${tag}: reopened, the loaded removal ends REMOVED (${n.groupAfter})`);
     await call('dev.wait', { ms: 3000 }, 30_000);
-    const near1 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
-    const dropped = G.minus(near1.items ?? {}, near0.items ?? {});
-    n.dropped = dropped;
-    // the crate's stock drops once; a placed block's refund may come on top (at most what was placed); nothing beyond
+    const b = await backSince(crate, near0, owed0);
+    const dropped = b.back;
+    n.dropped = b.ground;
+    n.owed = b.owed;
+    // the crate's stock comes back once (owed); a placed block's refund may come on top (at most what was placed); nothing beyond
     const bad = Object.keys(stock).filter((k) => (dropped[k] ?? 0) < stock[k] || (dropped[k] ?? 0) > stock[k] + (placed[k] ?? 0));
-    check(bad.length === 0, `${tag}: the crate's stock dropped once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}${placed[k] ? ` +${placed[k]} placed` : ''}`).join(', ')}; twice is the double)`, { stock, placed, dropped });
+    check(bad.length === 0, `${tag}: the crate's stock given back once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}${placed[k] ? ` +${placed[k]} placed` : ''}`).join(', ')}; twice is the double; owed ${json(b.owed)})`, { stock, placed, b });
+    check(Object.values(b.ground).every((v) => v <= 0), `${tag}: nothing dropped as an item entity (${json(b.ground)}; T2b's no-drop rule)`, b);
     log(`  ${tag}: ${json(n)}`);
     out[tag] = n;
     await L.leaveWorld();
@@ -285,18 +301,23 @@ export async function registerPSV(steps, h) {
   /**
    * PSV7 (slice PSVLC3 fix round, GPT P1 1): /save-off, the crate-fed site's removal: the take's barrier is refused, so the undo is never
    * committed while the world can't be saved (ca946197: it committed and ended REMOVED); /save-on: it ends REMOVED, the stock dropped once.
+   * (slice T4a, on T2b) Nothing is taken at R1 any more: the crate keeps its stock until its crate.settle, whose barrier is refused under
+   * /save-off, so while it is off nothing is given back and the crate still holds its stock; /save-on: REMOVED, the stock owed once.
    */
   async function saveOffCase(out, tag) {
     const { bv, site, stock, placed, crate } = await crateSite(tag);
     if (!site) { out[tag] = { bv }; await L.leaveWorld(); return; }
     const near0 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
+    const owed0 = await owedTotal();
     await cmd('/save-off');
     api(`sgremove ${bv.group}`).catch(() => null);
     await call('dev.wait', { ms: 15_000 }, 60_000);
     const g1 = await api(`sgroup ${bv.group}`).catch(() => null);
     const s1 = await call('dev.site.state', { site }, 60_000).catch(() => null);
     const n = { tag, site, group: bv.group, stock, placed, crate, whileOff: g1?.state ?? null, siteWhileOff: s1?.state ?? null };
-    check(!/^removed$/i.test(n.whileOff ?? '') && s1 && !s1.error, `${tag}: under /save-off the undo is not committed: the group ${n.whileOff}, the site still a record (${n.siteWhileOff})`, n);
+    const off = await backSince(crate, near0, owed0);
+    n.backWhileOff = off.back;
+    check(!/^removed$/i.test(n.whileOff ?? '') && Object.values(off.back).every((v) => v <= 0), `${tag}: under /save-off nothing is given back and the removal does not end (the group ${n.whileOff}; back ${json(off.back)}): its crate.settle waits for a barrier`, n);
     await cmd('/save-on');
     let g;
     for (let i = 0; i < 150; i++) {
@@ -307,11 +328,13 @@ export async function registerPSV(steps, h) {
     n.groupAfter = g?.state ?? null;
     check(/^removed$/i.test(n.groupAfter ?? ''), `${tag}: /save-on: the removal ends REMOVED (${n.groupAfter})`);
     await call('dev.wait', { ms: 3000 }, 30_000);
-    const near1 = await call('dev.items.near', { pos: crate, radius: 12 }, 30_000);
-    const dropped = G.minus(near1.items ?? {}, near0.items ?? {});
-    n.dropped = dropped;
+    const b = await backSince(crate, near0, owed0);
+    const dropped = b.back;
+    n.dropped = b.ground;
+    n.owed = b.owed;
     const bad = Object.keys(stock).filter((k) => (dropped[k] ?? 0) < stock[k] || (dropped[k] ?? 0) > stock[k] + (placed[k] ?? 0));
-    check(bad.length === 0, `${tag}: the crate's stock dropped once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}`).join(', ')})`, { stock, dropped });
+    check(bad.length === 0, `${tag}: the crate's stock given back once (${Object.keys(stock).map((k) => `${k} ${dropped[k] ?? 0} of ${stock[k]}`).join(', ')}; owed ${json(b.owed)})`, { stock, b });
+    check(Object.values(b.ground).every((v) => v <= 0), `${tag}: nothing dropped as an item entity (${json(b.ground)})`, b);
     log(`  ${tag}: ${json(n)}`);
     out[tag] = n;
     await L.leaveWorld();

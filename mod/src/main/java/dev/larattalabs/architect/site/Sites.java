@@ -3480,14 +3480,6 @@ public final class Sites {
 		}
 		if (!releaseAfter.isEmpty()) {
 			SiteJournal.releaseGroup(releaseAfter);
-			if ("KS1".equals(WorldJournal.armed()) || "KS1+save".equals(WorldJournal.armed())) {
-				// (TEST, slice T4a) the start's release on disk (the journal flushed), the restore's chunks not saved: a second crash here
-				JournalStore jf = WorldJournal.storeOrNull();
-				if (jf != null) {
-					jf.flush();
-				}
-				WorldJournal.kill("KS1");
-			}
 		}
 		for (Site b : map.values()) {
 			Boolean st = standsNow.get(b.id());
@@ -3502,6 +3494,15 @@ public final class Sites {
 				addToGroup(b);
 			}
 			save(server, state);
+		}
+		if ("KS1".equals(WorldJournal.armed())) {
+			// (TEST, slice T4a) the check's outcome on disk (its release flushed, its pending records saved), the restore it wrote at this start not:
+			// a second crash here
+			JournalStore jf = WorldJournal.storeOrNull();
+			if (jf != null) {
+				jf.flush();
+			}
+			WorldJournal.kill("KS1");
 		}
 		reports.values().forEach(r -> Architect.LOGGER.warn("Sites check: {}", r.message()));
 	}

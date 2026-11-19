@@ -792,7 +792,8 @@ export async function registerTCC(steps, h) {
       await cmd('/save-all flush').catch(() => null);
       await wait(2000);
       const before = await roadParts(g.road, cp, items, roadMid(g));
-      await ps({ failQueueWrites: true }); // the queue file never takes the removal's job (a full disk)
+      // (slice T4a) since the PSVLC3 merge a removal job waits, untouched, for a confirmed queue write before it plans (PSV's preflight): a
+      // failing queue file no longer loses the job, it holds the removal back. The row keeps its point with the queue writing.
       await call('dev.journal.killAt', { point: 'R4' + v }, 10_000);
       const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
       const down = await haltWait();
@@ -934,8 +935,10 @@ export async function registerTCC(steps, h) {
         await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true } });
       }
     }
-    // T4-road (finding 3a): a crate-fed road (no pile) with about half of its 100+ cells paid, the queue file failing, K7+save after the first
-    // 64 cells of its restore; at the start the majority reads restored, the road goes, the sweep pays its whole refund
+    // T4-road (finding 3a): a crate-fed road (no pile) with about half of its 100+ cells paid, K7+save after the first 64 cells of its restore.
+    // The review's precondition (the queue file failing, so the job is lost) can't arise since the PSVLC3 merge: PSV's preflight confirms the
+    // job's queue write before it plans. The job resumes; the row checks it is paid once. The majority rule itself is the model unit's
+    // (TxnRemovalModelT4Test 3a), and the sweep's absence rule is T4-corrupt's
     if (want('T4-road')) {
       const tag = 'T4-road';
       const y = gy + 1, X = CX - 200, Z = CZ + 420;
@@ -952,6 +955,10 @@ export async function registerTCC(steps, h) {
       const g = { hut: it.h1?.site, road: it.r1?.site, group: bv?.group };
       check(!!g.road && !!g.hut, `${tag}: a hut and a 130-cell construction road from one shared crate (${g.hut}, ${g.road})`, bv);
       if (g.road && g.hut) {
+        // a 130-cell road is still being placed when its batch item answers: wait for its record to be placed
+        let rs0 = null;
+        for (let i = 0; i < 120; i++) { rs0 = await roadState(g.road).catch(() => null); if (rs0 && !/plac/i.test(String(rs0.state))) break; await L.sleep(1000); }
+        log(`  ${tag}: ${g.road} ${rs0?.state ?? 'not listed'}`);
         await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
         await fill(tag, g.hut);
         await call('dev.site.finish', { site: g.hut }, 60_000);
@@ -972,7 +979,6 @@ export async function registerTCC(steps, h) {
         const b0 = await roadParts(g.road, cp, items, W.at);
         const sb = await standingRoad();
         const before = { ...b0, placed: sb, total: [b0.stock, sb, b0.owed, b0.ground, b0.inventory].reduce((a, c) => G.plus(a, c), {}) };
-        await ps({ failQueueWrites: true });
         await call('dev.journal.killAt', { point: 'K7+save' }, 10_000);
         const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
         const down = await haltWait();
@@ -987,7 +993,6 @@ export async function registerTCC(steps, h) {
           const after = { ...a0, placed: sa, states: { [g.road]: a0.state }, total: [a0.stock, sa, a0.owed, a0.ground, a0.inventory].reduce((a, c) => G.plus(a, c), {}) };
           judgeT4(tag, { tag, point: 'K7+save', removal: m, paid, txn: await txn() }, before, after);
         } else {
-          await ps({ failQueueWrites: false });
           await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
         }
       }

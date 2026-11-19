@@ -847,6 +847,6 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - (slice T4a, TEST) `dev.stockpile.ps {refuseCreditSaves: n}`: the next n `Stockpiles.saveCredit` calls (a put-down's take-up, a road's C29
   credit, a group member's credit) go down `refuseSave`'s real refusal path, one call each; the answer reports what is left.
 - (slice T4a, TEST) `<world>/architect/dev-start.json` (no DevBridge op: the gate writes it while the world is closed): read once and deleted
-  at SERVER_STARTED, before the stores load. `{"killAt": "<point>"}` arms a kill point for the start itself; `KS1` is new: the Sites check
-  released a settled removal's journal entries (the journal flushed) before the chunks of the restore it wrote at the start are saved.
+  at SERVER_STARTED, before the stores load. `{"killAt": "<point>"}` arms a kill point for the start itself; `KS1` is new: the Sites check's
+  outcome is on disk (its journal release flushed, its pending records saved) and the restore it wrote at the start is not saved yet.
   `{"failWriteNow": true}`: the check's write of a committed restore (a K6 construction removal that reads restored) fails.

@@ -16,8 +16,8 @@ import java.nio.file.Path;
  *
  * <pre>{"killAt": "KS1" | "KS1+save" | any kill point, "failWriteNow": true}</pre>
  *
- * {@code KS1}: the Sites check released a settled removal's journal entries (flushed to disk) before any restore it wrote at the start is
- * saved with the chunks. {@code failWriteNow}: the check's write of a committed restore (a K6 construction removal that reads restored)
+ * {@code KS1}: the Sites check's outcome is on disk (its journal release flushed, its pending records saved) and a restore it wrote at the
+ * start is not saved with the chunks yet. {@code failWriteNow}: the check's write of a committed restore (a K6 construction removal that reads restored)
  * fails. Nothing here runs without the file.
  */
 public final class DevStart {
