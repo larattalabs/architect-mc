@@ -917,10 +917,12 @@ export async function t8f(ctx) {
   }
   await sleep(3000);
   const dx = await diff(ctx, box, file);
-  out.resumed = { g1, elapsed: g1 != null && gHalt != null ? g1 - gHalt : null, state: st?.view?.state ?? 'REMOVED', mismatches: dx.mismatches };
+  // the record the removal finished with (kept on disk after REMOVED): the settle bound it waited, written after the start's re-drain
+  const fin = fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, 'utf8')) : {};
+  out.resumed = { g1, elapsed: g1 != null && gHalt != null ? g1 - gHalt : null, state: st?.view?.state ?? 'REMOVED', mismatches: dx.mismatches, final: { removal: fin.removal ?? null, until: fin.until ?? null } };
   log(`  F: ${json(out)}`);
   check(out.halted.removal === 'done' && out.halted.barrierDone === true && gHalt != null, `F: the precondition: halted at FL3x+save with done and barrierDone on disk (${json(out.halted)}), barrierDone stripped`);
-  check(out.resumed.elapsed != null && out.resumed.elapsed >= bound, `F: the re-drained removal waits a fresh settle bound before the solids: ${out.resumed.elapsed} tick(s) from the halt to the end (an upper bound of the wait; at least ${bound} wanted)`);
+  check(fin.removal === 'done' && typeof fin.until === 'number' && fin.until >= gHalt + bound, `F: the re-drained removal waits a fresh settle bound before the solids: its done record's wait ended at tick ${fin.until} (at least the halt ${gHalt} + the bound ${bound} wanted: a bound started after the start's re-drain; -1: no wait); ${out.resumed.elapsed} tick(s) from the halt to the end (recorded: the world's open is inside it)`);
   check(dx.mismatches === 0, `F conservation: Regions.remove resumed: E-flat ${dx.mismatches}`, dx.sample);
   await L.leaveWorld();
   return out;
