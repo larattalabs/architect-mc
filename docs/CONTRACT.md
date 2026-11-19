@@ -34171,3 +34171,26 @@ Overlap: items 1 and 4 extend TXN-S (8cT's helper). Item 3 is OVF-S3 as already 
      down (NOT_STARTED stays). After the decision, the only answers are removed=true, or `held(decided)` followed by `RemovalFinished`.
 9. **T4a's place.** T4a changes no removal semantics Steward can see, apart from finding 4 (a refused put-down save waits) and the javadoc.
    Aliases 1-8 land with T4b/T4c, and the Steward pin waits for T4c.
+
+### Slice T4a as built (branch `slice/T4` off origin/slice/T2 99d28f0f; strict; $0; 2026-11-19)
+
+- **Merge:** origin/slice/PSVLC3 e83c39b6 (LC3 seal, cargo, PSV preflight, queue on DurableFile). PSV's crate-stock carriage is inert on
+  this base (`Builder.crateTake` answers null: T2b takes nothing at prepare); T4c removes it. A dropped plan clears T2b's settle stashes.
+- **Finding 4 fixed (N5, all three):** `RegionOverwrites.TakeUp` planned at the put-down's commit, booked once per key by the job's new
+  `TAKE_UP` phase after the record is placed (PlaceJob after `finishPlacing`, InfraJob after `Infras.put`); a refused `saveCredit` waits
+  and retries every 5 s, never throws; Placement's catch marks a throwing InfraJob broken. `RemoveResult` javadoc: owed listed apart (P3).
+- **Hooks-only commit (TEST):** `dev-start.json` (killAt / failWriteNow for the world's own start), kill point `KS1` (after the start
+  check's save), `dev.stockpile.ps refuseCreditSaves`.
+- **Red record** (rows judge conservation over the blocks standing in the world, and "no refund owed while a paid block stands"):
+  t4-crash T4-keep, T4-keeps, T4-shared, T4-2nd (KS1), T4-wnf, T4-corrupt all red, 2 FAILs each (gate-runs-T4 20261119-062435 and
+  -070115; T4b makes them green). t4-xr red at aa246075 (PARTIAL, +47 stone_bricks minted; -052014), green at ed186df1 (6/0).
+  TxnRemovalModelT4Test: 1a, 1b, 2a (KS1), 2b, 3a red at the reviewer's points, T4's shape clean (depth 2). TakeUpT4aTest (red: no TakeUp).
+- **Deviations:** T4-road dropped (a lost road job can't arise since PSV's preflight; the model records 3a). LR-3/LR-3s and PSV5-7 updated
+  to the merged semantics (queue writing; stock owed, never dropped). Finding 6 and the RVU/FKC aliases stay T4b/T4c.
+- **Ran:** unit-scope (kit 149/0, Gradle full 1680/0). change --only --no-cache at ed186df1: t4-xr 6/0, xr-survival 24/0, rl-crash
+  110/0, hf-crash 56/0, ps-crash 81/0, fk-crash 73/0, fkb-crash 48/0, txn-core 75/0, txn-owed 73/0, txn-crate 68/0, txn-holds 50/0,
+  lc3-seal 40/0, lc3-undo 16/0; at c76a8930: txn-crash-crate 549/0, psv-crash 69/0.
+- **PL-gpt2 re-check at e83c39b6** (rule 5; the log was not found, premises from LEFTOVERS 868): 1 refused retake barrier: confirmed
+  (`resumeCommitted` ignores `worldDurable`), moot here (no take); 2 cargo cancel unseals before durable: plausible, not shown; 3 cargo key
+  reuse: confirmed (`cargo:<target>:<cell>`); 4 data-stack refusal strands: confirmed via decStock's stall, moot here; 5 fire, wither,
+  dragon bypass the seal: confirmed (only explosion and piston hooks); 6 ops resume double-pays: partly (needs the carriage). 2-5 land in T4c.
