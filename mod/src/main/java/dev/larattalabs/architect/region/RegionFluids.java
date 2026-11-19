@@ -159,6 +159,10 @@ public final class RegionFluids {
 	static final int CENSUS_EVERY = 5;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
+	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's write step (the forced tick, an ordered course's wave) is not run. Default off. */
+	public static volatile boolean holdWrite;
+	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's census (settle, escape guard) is not run. Default off. */
+	public static volatile boolean holdSettle;
 	/** DevBridge {@code dev.fluid.beforeGate} (gate item 3): run once, at the next fluids gate, right before its containment check. */
 	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeCheck;
 	private static final Map<String, Regional> STATE = new HashMap<>();
@@ -832,6 +836,7 @@ public final class RegionFluids {
 						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
 					return false;
 				}
+				WorldJournal.kill("FLc"); // (8cTa) TEST: the keyed charge on disk (saveConfirmed), the region record not updated or saved yet
 				JsonObject c = new JsonObject();
 				charge.forEach(c::addProperty);
 				l.rec().survival.add("charged", c);
@@ -1260,13 +1265,13 @@ public final class RegionFluids {
 		if (st.owed && !durable(l, st)) {
 			return; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
 		}
-		if (writeDue.getAsBoolean()) {
+		if (!holdWrite && writeDue.getAsBoolean()) {
 			write.run();
 			if (st.owed) {
 				return; // (round 2, P1 6) the write step's save failed: no census or escape drain on an undurable record this tick
 			}
 		}
-		if (settleDue.getAsBoolean()) {
+		if (!holdSettle && settleDue.getAsBoolean()) {
 			settle.run();
 		}
 	}
@@ -1518,6 +1523,7 @@ public final class RegionFluids {
 
 	static void settle(ServerLevel level, RegionsImpl.Live l, Regional st) {
 		boolean changed = false;
+		boolean escaped = false; // (8cTa) for the TEST kill point FLe only
 		long now = level.getGameTime();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
@@ -1529,6 +1535,7 @@ public final class RegionFluids {
 			if (!c.escaped().isEmpty()) {
 				escape(level, l, st, b, bs, "escaped", c.escaped());
 				changed = true;
+				escaped = true;
 			} else if (!c.ticking() && c.mismatch().isEmpty()) {
 				bs.state = "settled";
 				bs.settledAt = now - t0;
@@ -1537,6 +1544,7 @@ public final class RegionFluids {
 			} else if (now - t0 > 2L * b.settleTicks) {
 				escape(level, l, st, b, bs, "unsettled", c.mismatch());
 				changed = true;
+				escaped = true;
 			}
 		}
 		if (st.states.values().stream().allMatch(BodyState::ended)) {
@@ -1546,6 +1554,9 @@ public final class RegionFluids {
 		if (changed) {
 			save(l, st);
 			report(l, st);
+		}
+		if (escaped) {
+			WorldJournal.kill("FLe"); // (8cTa) TEST: an escape drain's record saved, its world writes not (no barrier)
 		}
 	}
 

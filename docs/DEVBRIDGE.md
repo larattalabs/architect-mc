@@ -820,3 +820,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `irr-df` (gate6cirr `df`) and `rv-df` (gate6drv `df`).
 - **2026-11-18 (slice DF round 3):** `dev.journal.killAt` gains `FL6d` (a lot removal's sources drained, T0's barrier and the `lotDrained`
   save not yet), also with `+save`.
+- **2026-11-18 (slice 8cTa, hooks only):** TEST `dev.fluid.hold {write?, settle?}` (a fluids record's write step, the forced tick or an
+  ordered course's wave, and/or its census, settle and escape guard, not run while on; default off). `dev.journal.killAt` gains `FLc` (a
+  survival region's keyed fluids charge on disk, its region record not updated or saved) and `FLe` (a census tick's escape or unsettled
+  drain, its fluids record saved, its world writes not), each also with `+save`.

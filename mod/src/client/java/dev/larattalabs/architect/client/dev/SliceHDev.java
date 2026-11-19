@@ -117,6 +117,19 @@ public final class SliceHDev {
 				o.addProperty("armed", true);
 				return CompletableFuture.completedFuture(o);
 			});
+		DevBridge.register("dev.fluid.hold", 10_000, "{write?: bool, settle?: bool} - (8cTa) TEST: a fluids record's write step (forced tick, wave) "
+			+ "and/or its census (settle, escape guard) not run while on; omitted keys keep their value -> {write, settle}", (req, mc) -> {
+				if (req.has("write")) {
+					RegionFluids.holdWrite = req.get("write").getAsBoolean();
+				}
+				if (req.has("settle")) {
+					RegionFluids.holdSettle = req.get("settle").getAsBoolean();
+				}
+				JsonObject o = new JsonObject();
+				o.addProperty("write", RegionFluids.holdWrite);
+				o.addProperty("settle", RegionFluids.holdSettle);
+				return CompletableFuture.completedFuture(o);
+			});
 		DevBridge.register("dev.fluid.bypass", 10_000, "{on: bool} - (6c H) TEST: the fluids stage's containment check is not run (every body is written: "
 			+ "gate item 2's negative control) -> {on}", (req, mc) -> {
 				RegionFluids.bypassCheck = req.get("on").getAsBoolean();
