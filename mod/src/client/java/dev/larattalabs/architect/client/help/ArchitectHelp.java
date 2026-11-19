@@ -60,7 +60,24 @@ public final class ArchitectHelp {
 
 	/** The "?" overlay of a screen (one per id, so it stays open across a re-init). */
 	public static KeysOverlay overlay(String id, String title, Supplier<List<Row>> rows) {
-		return OVERLAYS.computeIfAbsent(id, k -> new KeysOverlay(title, rows, TERMS.getOrDefault(k, List.of())));
+		return OVERLAYS.computeIfAbsent(id, k -> new KeysOverlay(title, () -> fitted(rows.get()), TERMS.getOrDefault(k, List.of())));
+	}
+
+	/**
+	 * (PR3) The rows with each key fitted by width to the overlay's key column: lab-ui's KeysOverlay caps that column at a third of
+	 * its inner width ({@code (min(guiW - 24, 420) - 20) / 3}) but draws a wider keycap whole, over the verb. Read live each draw.
+	 */
+	static List<Row> fitted(List<Row> rows) {
+		net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+		if (mc == null || mc.font == null) {
+			return rows;
+		}
+		int keyCol = (Math.min(mc.getWindow().getGuiScaledWidth() - 24, 420) - 20) / 3;
+		List<Row> out = new ArrayList<>(rows.size());
+		for (Row r : rows) {
+			out.add(new Row(Keys.fitCap(mc.font, r.key(), keyCol), r.verb()));
+		}
+		return out;
 	}
 
 	/** A screen opening starts with its "?" overlay closed (the overlays are kept per screen id). */
