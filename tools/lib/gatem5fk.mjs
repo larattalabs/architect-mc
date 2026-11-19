@@ -487,7 +487,9 @@ export async function registerFK(steps, h) {
       // pull from below, a Fabric Transfer API extraction (each probe puts back or aborts what it got)
       const ex = [];
       for (const c of (s?.containers ?? []).slice(0, 2)) {
-        if (!Array.isArray(c.at)) continue;
+        const at = Array.isArray(c.at) ? c.at : String(c.at ?? '').split(',').map(Number);
+        if (at.length !== 3 || at.some((v) => !Number.isFinite(v))) continue;
+        c.at = at;
         const it = Object.keys(c.holds ?? c.declared ?? {})[0] ?? 'minecraft:flint';
         const tk = await call('dev.fk.take', { pos: c.at, slot: 0, click: 'pickup' }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
         const tr = await call('dev.fk.transfer', { pos: c.at, item: it, max: 64 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));

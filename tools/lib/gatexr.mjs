@@ -88,13 +88,14 @@ export async function registerXr(steps, h) {
       // (slice SOFF2, TEST noSaveInCreditSave) the Nether's saving turned off from BEFORE_SAVE inside the first take-up's credit save (after
       // its refund is credited in memory): the save is refused; the job must park (held), never roll back keeping the refund. Saving is
       // then turned on again; after the release the build goes on
+      const fired0 = (await call('dev.stockpile.saved', {}, 60_000).catch(() => null))?.testHooks?.creditSavesTurnedOff ?? 0; // per JVM: an earlier case's count
       await call('dev.stockpile.ps', { noSaveInCreditSave: 'minecraft:the_nether' }, 30_000);
       out.creditSaveOff = { fired: 0 };
       watch = (async () => {
         for (let i = 0; i < 1800; i++) {
           const sv = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
-          if ((sv?.testHooks?.creditSavesTurnedOff ?? 0) >= 1) {
-            out.creditSaveOff = { fired: sv.testHooks.creditSavesTurnedOff, hold: sv.hold?.state };
+          if ((sv?.testHooks?.creditSavesTurnedOff ?? 0) > fired0) {
+            out.creditSaveOff = { fired: sv.testHooks.creditSavesTurnedOff - fired0, hold: sv.hold?.state };
             await L.sleep(4000);
             const sv2 = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
             out.creditSaveOff.heldAfter = sv2?.hold?.state;
