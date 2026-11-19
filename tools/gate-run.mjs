@@ -93,6 +93,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { buildFrozenClasses, kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
+import { ensureSlotPins } from './lib/pinned-deps.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
@@ -2039,6 +2040,9 @@ async function setupShard(sh, head) {
       cleanStrays(sh);
     }
   }
+  // (PDS) the slot's own .gradle-home has every pinned dev.larattalabs dependency (and the classpath seed) before its first offline
+  // build: a fresh slot clones the seed's home, which may lack a bumped lab_ui; a failed resolve aborts the run in setup
+  rec.pins = ensureSlotPins([{ name: sh.name, run: RUN, env: childEnv(sh) }], { log: (m) => log(m, sh) })[0];
   // the sidecar build runs in the background: the caller prepares every worktree serially (git and the seed clones), then waits
   // for all builds at once (12 shards' builds in parallel instead of one after another)
   log('setup: sidecar npm run build', sh);
