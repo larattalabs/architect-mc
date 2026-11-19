@@ -96,4 +96,41 @@ class GuideModelTest {
 			assertTrue(g.card("R", "Enter", "Z", "green").body().length() <= 90, s + " fits a card line or two");
 		}
 	}
+
+	/** (PR2) "End the tour" on the paused card ends it; it used to leave the tour paused. */
+	@Test
+	void endTheTourFromPaused() {
+		GuideModel g = new GuideModel(State.RUNNING, Step.MOVE_ROTATE, false);
+		g.on(Event.ESC, null);
+		assertEquals(State.PAUSED, g.state());
+		assertTrue(g.on(Event.DECLINE, null));
+		assertEquals(State.DECLINED, g.state());
+		assertNull(g.card("R", "Enter", "Z", "green"), "no card once ended");
+		assertFalse(g.on(Event.SCREEN_OPENED_NO_SITES, null), "not offered again");
+		g.on(Event.RESTART, null);
+		assertEquals(State.RUNNING, g.state(), "Status still restarts it");
+	}
+
+	/** (PR2) Wherever a card shows the decline button ("Don't ask again", "End the tour"), pressing it ends the tour. */
+	@Test
+	void everyDeclineButtonEndsTheTour() {
+		int shown = 0;
+		for (boolean survival : new boolean[] {false, true}) {
+			for (State s : State.values()) {
+				for (Step p : Step.values()) {
+					GuideModel g = new GuideModel(s, p, survival);
+					GuideModel.Card c = g.card("R", "Enter", "Z", "green");
+					if (c == null || c.buttons().stream().noneMatch(b -> b[0].equals("guide:decline"))) {
+						continue;
+					}
+					shown++;
+					String why = s + "/" + p + (survival ? "/survival" : "");
+					assertTrue(g.on(Event.DECLINE, null), why);
+					assertEquals(State.DECLINED, g.state(), why);
+					assertNull(g.card("R", "Enter", "Z", "green"), why);
+				}
+			}
+		}
+		assertTrue(shown > 0, "the offer and the paused card both show it");
+	}
 }

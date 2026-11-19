@@ -135,6 +135,19 @@ public final class PlacementFeature {
 	 * Only while placing with no screen open; releases always pass.
 	 */
 	public static boolean onKey(int action, KeyEvent e) {
+		return onInput(action, e.key(), e.hasShiftDown());
+	}
+
+	/**
+	 * (PR2) A mouse button, called by the mouse mixin before vanilla handles it: a placing action bound to a mouse button (Controls) acts
+	 * as its key would. Returns true when the press was consumed; releases always pass.
+	 */
+	public static boolean onMouse(int action, int button, boolean shift) {
+		return onInput(action, PlacingKeys.mouse(button), shift);
+	}
+
+	/** A key or mouse press by its {@link PlacingKeys#code}. */
+	private static boolean onInput(int action, int code, boolean shift) {
 		Minecraft mc = Minecraft.getInstance();
 		// (PR A4) only while placing or marking, with no screen open; an API preview has no keys. Otherwise every key passes (Esc pauses)
 		if (action == InputConstants.RELEASE || !PlacingKeys.listening(BuildPlacement.active(), PlotMarker.active(), mc.gui.screen() != null,
@@ -143,17 +156,17 @@ public final class PlacementFeature {
 		}
 		boolean repeat = action != InputConstants.PRESS;
 		if (PlotMarker.active()) {
-			return plotKey(e, repeat);
+			return plotKey(code, shift, repeat);
 		}
 		// (PR A4) rebindable actions (Controls > "Architect: while placing"); Shift stays a fixed modifier; Esc stays cancel
-		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLACE, e.key(), e.hasShiftDown(), Keys::bound);
+		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLACE, code, shift, Keys::bound);
 		if (act == null) {
 			return false;
 		}
 		switch (act) {
 			case ROTATE -> {
 				if (!repeat) {
-					BuildPlacement.rotate(e.hasShiftDown() ? -1 : 1);
+					BuildPlacement.rotate(shift ? -1 : 1);
 				}
 			}
 			case FORWARD -> BuildPlacement.nudge(1, 0, 0);
@@ -168,7 +181,7 @@ public final class PlacementFeature {
 				}
 			}
 			// SAFETY: a big placement asks for Enter twice (BuildPlacement.enter); Esc first disarms that, then cancels
-			case CONFIRM -> BuildPlacement.enter(e.hasShiftDown(), repeat);
+			case CONFIRM -> BuildPlacement.enter(shift, repeat);
 			case CANCEL -> {
 				if (!repeat) {
 					BuildPlacement.escape();
@@ -191,16 +204,16 @@ public final class PlacementFeature {
 	 * Plot-marking keys: Confirm (Enter) corner, Raise/Lower (PgUp/PgDn) height (Shift: 4), Cancel (Backspace) back a corner, Esc
 	 * cancel; (7b ST) Fit (F) the fit (Shift: back). (PR A4) Rebindable; Esc stays the fixed cancel.
 	 */
-	private static boolean plotKey(KeyEvent e, boolean repeat) {
-		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLOT, e.key(), e.hasShiftDown(), Keys::bound);
+	private static boolean plotKey(int code, boolean shift, boolean repeat) {
+		PlacingKeys.Action act = PlacingKeys.resolve(PlacingKeys.Context.PLOT, code, shift, Keys::bound);
 		if (act == null) {
 			return false;
 		}
-		boolean esc = e.key() == InputConstants.KEY_ESCAPE;
+		boolean esc = code == PlacingKeys.ESCAPE;
 		switch (act) {
 			case FIT -> {
 				if (!repeat) {
-					PlotMarker.cycleFit(e.hasShiftDown() ? -1 : 1);
+					PlotMarker.cycleFit(shift ? -1 : 1);
 				}
 			}
 			case CONFIRM -> {
@@ -208,8 +221,8 @@ public final class PlacementFeature {
 					PlotMarker.confirm();
 				}
 			}
-			case RAISE -> PlotMarker.adjustHeight(e.hasShiftDown() ? 4 : 1);
-			case LOWER -> PlotMarker.adjustHeight(e.hasShiftDown() ? -4 : -1);
+			case RAISE -> PlotMarker.adjustHeight(shift ? 4 : 1);
+			case LOWER -> PlotMarker.adjustHeight(shift ? -4 : -1);
 			case CANCEL -> {
 				if (!repeat) {
 					if (esc) {

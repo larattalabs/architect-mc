@@ -488,6 +488,15 @@ public final class MassingReview {
 	 * Esc) cancels. Returns true when the key was consumed.
 	 */
 	public static boolean onKey(int action, KeyEvent e) {
+		return onInput(action, e.key(), e.hasShiftDown());
+	}
+
+	/** (PR2) A mouse button bound to Confirm, Redirect or Cancel (Controls) acts on the review bar as its key would. */
+	public static boolean onMouse(int action, int button, boolean shift) {
+		return onInput(action, dev.larattalabs.architect.client.hud.PlacingKeys.mouse(button), shift);
+	}
+
+	private static boolean onInput(int action, int code, boolean shift) {
 		if (review == null || action == InputConstants.RELEASE) {
 			return false;
 		}
@@ -498,7 +507,7 @@ public final class MassingReview {
 		// (PR A4) rebindable (Controls > "Architect: while placing"): Confirm approves, Redirect (R) opens the note, Cancel (Backspace,
 		// Delete or Esc) cancels
 		dev.larattalabs.architect.client.hud.PlacingKeys.Action act = dev.larattalabs.architect.client.hud.PlacingKeys.resolve(
-			dev.larattalabs.architect.client.hud.PlacingKeys.Context.MASSING, e.key(), e.hasShiftDown(), dev.larattalabs.architect.client.hud.Keys::bound);
+			dev.larattalabs.architect.client.hud.PlacingKeys.Context.MASSING, code, shift, dev.larattalabs.architect.client.hud.Keys::bound);
 		if (act == null) {
 			return false;
 		}
