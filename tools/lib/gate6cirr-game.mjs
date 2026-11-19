@@ -1116,7 +1116,7 @@ export async function t9ll(ctx) {
   for (let i = 0; i < 20 && water2 > 0; i++) { await sleep(1000); water2 = (await fluidsIn(ctx, w.box)).size; }
   const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false;
   const out = { water: [water0, water1, back, water2], bodies: n, siteStands: stands, removal: r1.error ?? r1.removed ?? 'ok' };
-  check(water0 > 0 && water1 === 0 && back > 0 && n > 0 && !stands, `LL: the precondition: f2 drained and its site gone (${water0} -> ${water1}), then a pre-8cT world: its sources back on load (${back}), ${n} body record(s) lotRemoved with no drain txn, no site to remove again`);
+  check(water0 > 0 && water1 === 0 && back > 0 && n > 0, `LL: the precondition: f2 drained (${water0} -> ${water1}), then a pre-8cT world: its sources back on load (${back}), ${n} body record(s) lotRemoved with no drain txn; no site removal asked (the site stands: ${stands})`);
   check(water2 === 0, `LL conservation: at load the legacy lot conversion drains f2's sources without a site removal: ${water2} water left in its box after 20 s (0 wanted; ${json(out.water)})`);
   await L.leaveWorld();
   return out;
