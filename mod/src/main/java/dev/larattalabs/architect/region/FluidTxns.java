@@ -969,6 +969,7 @@ public final class FluidTxns {
 				});
 				throw new IllegalStateException("the fluids record could not be saved");
 			}
+			RegionFluids.report(l, st); // (a replay retried by the core's tick reports the rows too)
 		}
 	});
 

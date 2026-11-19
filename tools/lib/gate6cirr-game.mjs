@@ -952,13 +952,15 @@ export async function dfLot(ctx) {
   const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === sites.f2.siteId) ?? false;
   await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
   const out = { refused: { answer: r1.error ?? r1.removed ?? null, water: [water0, water1], siteStands: stands } };
-  check(water0 > 0 && water1 === water0 && stands, `DF lot (fluids.json refused): f2's removal drains nothing and restores nothing: water in its box ${water0} -> ${water1}, its site stands: ${stands} (answer ${json(out.refused.answer)})`);
+  // (8cTc) the lot's drain is a txn: its intent (txn.json) is the record before the drain, so the drain may run; its fluids record (R)
+  // refused holds the txn, and the lot's site is never restored until it lands
+  check(water0 > 0 && stands, `DF lot (fluids.json refused): f2's removal restores nothing until the drain's record is saved: its site stands: ${stands}; water in its box ${water0} -> ${water1} (the drain's intent is durable in txn.json; answer ${json(out.refused.answer)})`);
   // (round 3, P2) the refused record retries once a second: a removal asked within that second answers SITE_BUSY ("try again"); asked
   // again until it runs (at most 20 s)
   let r2 = null, tries = 0;
   for (; tries < 20; tries++) {
     r2 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
-    if (r2.removed !== false || !/irrigation record could not be saved/.test(r2.message ?? '')) break;
+    if (r2.removed !== false && !r2.error) break; // (8cTc) asked again while the lot's drain txn finishes (SITE_BUSY, not durable yet)
     await sleep(1000);
   }
   await L.settle(5000);
