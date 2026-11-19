@@ -219,6 +219,7 @@ public final class Sites {
 		Protected.init(); // 6c 0c (C17)
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
+			DevStart.arm(worldDir); // (TEST, slice T4a) dev-start.json: a kill point or fault armed before the world's own start runs
 			load(server);
 			SiteDeltas.server = server;
 			// (6d AD, §2.3) an adoption or un-adoption that stopped part way rolls forward or back first, so a record reconcile rebuilds
@@ -3370,6 +3371,9 @@ public final class Sites {
 					if (lv == null) {
 						throw new SiteException("its dimension is not loaded");
 					}
+					if (DevStart.failWriteNow()) {
+						throw new SiteException("TEST dev-start.json failWriteNow"); // (TEST, slice T4a) the start's write-now fails
+					}
 					SiteJournal.writeNow(lv, gone.id(), group);
 					Architect.LOGGER.info("Sites check: removed {}: its committed restore written now (its paid cells stood), then settled", gone.id());
 				} catch (SiteException | RuntimeException e) {
@@ -3476,6 +3480,14 @@ public final class Sites {
 		}
 		if (!releaseAfter.isEmpty()) {
 			SiteJournal.releaseGroup(releaseAfter);
+			if ("KS1".equals(WorldJournal.armed()) || "KS1+save".equals(WorldJournal.armed())) {
+				// (TEST, slice T4a) the start's release on disk (the journal flushed), the restore's chunks not saved: a second crash here
+				JournalStore jf = WorldJournal.storeOrNull();
+				if (jf != null) {
+					jf.flush();
+				}
+				WorldJournal.kill("KS1");
+			}
 		}
 		for (Site b : map.values()) {
 			Boolean st = standsNow.get(b.id());

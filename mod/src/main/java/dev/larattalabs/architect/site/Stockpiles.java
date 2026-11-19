@@ -1678,13 +1678,25 @@ public final class Stockpiles {
 		creditSaves++;
 		if (!testNoCreditSave) {
 			inCreditSave = true;
+			boolean refuse = TEST_REFUSE_CREDIT_SAVES.get() > 0 && TEST_REFUSE_CREDIT_SAVES.getAndDecrement() > 0;
+			boolean was = testRefuseSave;
+			if (refuse) {
+				testRefuseSave = true; // (slice T4a, TEST) this one credit save goes down the real refusal path (DR-S's refuseSave)
+				Architect.LOGGER.warn("Stockpiles: TEST refuseCreditSaves: this credit save is refused ({} more)", Math.max(0, TEST_REFUSE_CREDIT_SAVES.get()));
+			}
 			try {
 				saveWithWorld(srv);
 			} finally {
 				inCreditSave = false;
+				if (refuse) {
+					testRefuseSave = was;
+				}
 			}
 		}
 	}
+
+	/** (slice T4a, TEST dev.stockpile.ps refuseCreditSaves) The next n {@link #saveCredit} calls are refused as refuseSave refuses a save. */
+	static final java.util.concurrent.atomic.AtomicInteger TEST_REFUSE_CREDIT_SAVES = new java.util.concurrent.atomic.AtomicInteger();
 
 	/**
 	 * (J2) {@link #saveCredit} for a credit the ledger on disk already holds pending (a single-site removal's deconstruct,
@@ -2756,6 +2768,9 @@ public final class Stockpiles {
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
 					}
+					if (req.has("refuseCreditSaves")) {
+						TEST_REFUSE_CREDIT_SAVES.set(req.get("refuseCreditSaves").getAsInt()); // (slice T4a, TEST) the next n credit saves refused
+					}
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
@@ -2778,6 +2793,7 @@ public final class Stockpiles {
 					}
 					o.addProperty("noPeriodic", testNoPeriodic);
 					o.addProperty("refuseSave", testRefuseSave);
+					o.addProperty("refuseCreditSaves", TEST_REFUSE_CREDIT_SAVES.get());
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
