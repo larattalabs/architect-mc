@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000 } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000, hold = null } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -111,6 +111,27 @@ export async function registerXr(steps, h) {
       out.state = f.last?.st?.view?.state;
       if (f.error) out.feedError = f.error.slice(0, 300);
       if (refuseCredit) out.refuseLeft = (await call('dev.stockpile.ps', {}, 10_000).catch(() => ({}))).refuseCreditSaves;
+      if (hold) {
+        // (T4a fix round, findings 4.1 and the bounded wait) a job waiting in TAKE_UP (its credit saves refused), then cancelled or halted
+        const jobs = async () => (await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? [];
+        let waiting = null;
+        for (let i = 0; i < 60 && !waiting; i++) { waiting = (await jobs()).find((j) => j.takeUp === true || j.phase === 17) ?? null; if (!waiting) await L.sleep(1000); }
+        out.waiting = waiting;
+        out.placedWhileWaiting = out.state;
+        await L.sleep(20_000); // a periodic save in between (the ledger with whatever is in memory)
+        if (hold === 'cancel' && waiting?.batch) {
+          out.cancel = await L.cmd(`/apitest bcancel ${waiting.batch}`).catch((e) => ({ error: String(e) }));
+          await L.sleep(5000);
+          await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000);
+        } else if (hold === 'halt') {
+          call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
+          for (let i = 0; i < 45; i++) { await L.sleep(2000); const st = await call('dev.state', {}, 10_000).catch(() => null); if (st && st.inWorld === false) break; }
+          await L.openWorld(`G6B RS S gmc ${tag}`.slice(0, 60));
+          await L.sleep(3000);
+        }
+        for (let i = 0; i < 60 && (await jobs()).length; i++) await L.sleep(1000);
+        out.jobsLeft = (await jobs()).length;
+      }
     }
     out.built = await cons.point(midRemove ? 'mid-build' : 'built');
     const aud = await cons.parts();
@@ -174,6 +195,28 @@ export async function registerXr(steps, h) {
     check(G.same(r.retaken, want), `${n}: the take-ups credited once: retaken ${json(r.retaken)} = the overwritten paid cells' items ${json(want)}`);
     check(r.removedOk && G.exact(r.removed), `${n}: Regions.remove, conservation exact after the removal: ${json(r.removed?.diff)}`);
     check(!r.items, `${n}: no item dropped (${r.items})`);
+    return out;
+  };
+
+  // (slice T4a fix round, the early review's findings 4.1 and the bounded wait) xrhold (t4-xr-hold): xr_demo built with every take-up
+  // credit save refused, so a lot or a road waits in TAKE_UP; then (cancel) its batch cancelled or (halt) the game halted unsaved and the
+  // world opened again. The waiting job never rolls back: conservation exact, the overwritten paid cells' items credited once, no drop. Red
+  // on e5ea86b4 (a cancel or an unclean start rolled the credited lot back: its credit kept). GATE_XR_HOLD=cancel,halt (default both).
+  steps.xrhold = async () => {
+    await ensure();
+    await L.leaveWorld().catch(() => null);
+    const n = process.env.GATE_XR_REFUSE ?? 'prog:xr_demo';
+    const out = {};
+    for (const mode of (process.env.GATE_XR_HOLD ?? 'cancel,halt').split(',')) {
+      const r = await one(n, { refuseCredit: 100_000, feedMs: 600_000, hold: mode });
+      const want = expectedBack(r.owRows);
+      out[mode] = { ...r, owRows: r.owRows?.slice(0, 40), want };
+      check(!!r.waiting, `${mode}: a job waited in TAKE_UP with its credit saves refused (${json(r.waiting)}); the region ${r.placedWhileWaiting}`, r.waiting);
+      check(r.jobsLeft === 0, `${mode}: the waiting job finished after the ${mode} (jobs left ${r.jobsLeft})`);
+      check(G.exact(r.built), `${mode}: conservation exact after the ${mode}, every item: ${json(r.built?.diff)} (identity ${r.built?.identity})`);
+      check(r.removedOk && G.exact(r.removed), `${mode}: Regions.remove, conservation exact after the removal: ${json(r.removed?.diff)}`);
+      check(!r.items, `${mode}: no item dropped (${r.items})`);
+    }
     return out;
   };
 
