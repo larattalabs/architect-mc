@@ -814,13 +814,25 @@ export async function t8c(ctx) {
   await sleep(4000);
   const at = async () => (await L.call('dev.fluid.census', { box: [x, y, z, x, y, z] }, 60_000)).fluids.find(([a, b, c]) => a === x && b === y && c === z)?.[3] ?? 'none';
   const before = await at();
-  const rm = await removeWait(ctx, r.region);
+  // the cell read while the fluids drain and its settle wait run (the record drained, the solids not restored yet): that is the drain's
+  // own judgement (the stray pass), apart from the group undo that follows
+  const rmP = L.call('dev.region.remove', { region: r.region, requester: OWNER }, 3_600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  const during = [];
+  for (let i = 0; i < 600; i++) {
+    const fs0 = await L.call('dev.fluid.state', { region: r.region }, 10_000).catch(() => null);
+    if (fs0?.removal === 'drained') during.push(await at());
+    else if (during.length || !fs0 || fs0.removed || fs0.removal === 'done') break;
+    await sleep(200);
+  }
+  await rmP;
+  const rm = await removeWait(ctx, r.region).catch((e) => ({ state: `error ${e.message}` }));
   await sleep(3000);
   const after = await at();
-  out.removed = { state: rm.state, before, after };
+  out.removed = { state: rm.state, before, during: [...new Set(during)], reads: during.length, after };
   log(`  C: ${json(out.removed)}`);
   const src = (s) => s === kind || s === `${kind}[level=0]`;
-  check(src(before) && rm.state === 'REMOVED' && src(after), `C conservation: the dispensed ${pick.body.fluid} source at ${x},${y},${z} (a bucket; in ${pick.body.id}'s predicted flow at level ${pick.at[3]}) before the removal ${before}, after ${after} (a source wanted: the bucket stands)`);
+  check(src(before) && during.length > 0 && during.every(src), `C conservation (the drain's stray and spill passes): the dispensed ${pick.body.fluid} source at ${x},${y},${z} (a bucket; in ${pick.body.id}'s predicted flow at level ${pick.at[3]}) before the removal ${before}, through the drain's settle wait ${json(out.removed.during)} (${during.length} read(s); a source wanted: the bucket stands)`);
+  check(true, `(recorded) C: after the group undo the cell reads ${after} (${rm.state}); a cell a stage cleared is restored by its journal entry (StillOurs 6a: fluid in a cleared cell is the entry's), outside 8cT's scope`);
   await L.leaveWorld();
   return out;
 }

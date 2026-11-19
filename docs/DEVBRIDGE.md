@@ -831,3 +831,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   ordered course's wave, and/or its census, settle and escape guard, not run while on; default off). `dev.journal.killAt` gains `FLc` (a
   survival region's keyed fluids charge on disk, its region record not updated or saved) and `FLe` (a census tick's escape or unsettled
   drain, its fluids record saved, its world writes not), each also with `+save`.
+- **2026-11-19 (slice 8cTb):** txn kinds `region.charge` and `fluid.drain` (`dev.txn.state`, `dev.txn.points`). `dev.journal.killAt`
+  takes their points, `+save` too: `TX:region.charge:*` (FLc stays, inside the debit), `TX:fluid.drain:drain` (the removal's drain written,
+  its chunk receipts not: Steward's S3 drain row), the core's `TX:fluid.drain:intent|apply:<i>|barrier:effects|effects|retiring|done`;
+  FL3d is reached after the drain's intent. `dev.fluid.state`'s `removal` is now written by the drain txn's R effect.
