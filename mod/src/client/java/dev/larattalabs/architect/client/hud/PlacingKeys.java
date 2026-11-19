@@ -140,4 +140,63 @@ public final class PlacingKeys {
 	public static int defaults(Action a) {
 		return a.defaultKey;
 	}
+
+	// ------------------------------------------------------------------ (PR3) keycap labels, fitted by measured width
+
+	/** The ellipsis a fitted label ends with. */
+	public static final String ELLIPSIS = "…";
+
+	/**
+	 * (PR3) A key's name as a keycap shows it: punctuation whose glyph is only a pixel or two in the Minecraft font is spelled out, so
+	 * a keycap never looks empty. Long names ("Mouse Button 4", a localized name) stay whole; {@link #fit} cuts them by width where
+	 * the room is known (before PR3 they were cut at 9 characters).
+	 */
+	public static String readable(String s) {
+		return switch (s) {
+			case "`" -> "Backtick";
+			case "'" -> "Quote";
+			case "´" -> "Accent";
+			case "," -> "Comma";
+			case "." -> "Period";
+			case ";" -> "Semicolon";
+			case ":" -> "Colon";
+			case "|" -> "Bar";
+			default -> s;
+		};
+	}
+
+	/**
+	 * (PR3) {@code s} when it is at most {@code max} wide, else its longest prefix (whole code points, trailing spaces dropped) that
+	 * fits with {@link #ELLIPSIS} after it. Never empty for a non-empty {@code s}: when not even one character fits with the ellipsis,
+	 * the first character alone.
+	 */
+	public static String fit(String s, int max, ToIntFunction<String> width) {
+		if (s == null || s.isEmpty() || width.applyAsInt(s) <= max) {
+			return s == null ? "" : s;
+		}
+		String best = null;
+		int end = s.offsetByCodePoints(0, 1);
+		while (end < s.length()) {
+			String cand = s.substring(0, end).stripTrailing() + ELLIPSIS;
+			if (cand.length() > ELLIPSIS.length() && width.applyAsInt(cand) <= max) {
+				best = cand;
+			} else if (best != null) {
+				break;
+			}
+			end = s.offsetByCodePoints(end, 1);
+		}
+		return best != null ? best : s.substring(0, s.offsetByCodePoints(0, 1));
+	}
+
+	/**
+	 * (PR3) A "key, verb, key, verb…" hint row with each key fitted so its pair fits {@code inner} on its own (keycap padding
+	 * {@code capPad}, then 3 px, then the verb); keys that already fit are unchanged. A new array; the verbs are kept.
+	 */
+	public static String[] fitHints(String[] keyThenVerb, int inner, int capPad, ToIntFunction<String> width) {
+		String[] o = keyThenVerb.clone();
+		for (int i = 0; i + 1 < o.length; i += 2) {
+			o[i] = fit(o[i], inner - capPad - 3 - width.applyAsInt(o[i + 1]), width);
+		}
+		return o;
+	}
 }

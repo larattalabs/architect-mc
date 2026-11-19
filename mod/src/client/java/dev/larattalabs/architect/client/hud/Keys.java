@@ -74,20 +74,21 @@ public final class Keys {
 		return readable(k.getTranslatedKeyMessage().getString());
 	}
 
-	/** Spell out tiny punctuation glyphs; cut long names to 9 characters. */
+	/** Spell out tiny punctuation glyphs; long names stay whole (PR3: {@link PlacingKeys#readable}; fitted by width where drawn). */
 	public static String readable(String s) {
-		String word = switch (s) {
-			case "`" -> "Backtick";
-			case "'" -> "Quote";
-			case "´" -> "Accent";
-			case "," -> "Comma";
-			case "." -> "Period";
-			case ";" -> "Semicolon";
-			case ":" -> "Colon";
-			case "|" -> "Bar";
-			default -> s;
-		};
-		return word.length() > 9 ? word.substring(0, 9) : word;
+		return PlacingKeys.readable(s);
+	}
+
+	/** (PR3) A keycap label fitted to {@code maxCapW}, the keycap's whole width (its padding included). */
+	public static String fitCap(net.minecraft.client.gui.Font font, String label, int maxCapW) {
+		dev.larattalabs.labui.client.ui.Kit.Padding p = dev.larattalabs.labui.client.ui.Kit.padding("keycap");
+		return PlacingKeys.fit(label, maxCapW - p.left() - p.right(), font::width);
+	}
+
+	/** (PR3) A hint row ({@code UiBits.hints}) with every key fitted so each pair fits {@code inner} alone. */
+	public static String[] fitHints(net.minecraft.client.gui.Font font, String[] keyThenVerb, int inner) {
+		dev.larattalabs.labui.client.ui.Kit.Padding p = dev.larattalabs.labui.client.ui.Kit.padding("keycap");
+		return PlacingKeys.fitHints(keyThenVerb, inner, p.left() + p.right(), font::width);
 	}
 
 	/**

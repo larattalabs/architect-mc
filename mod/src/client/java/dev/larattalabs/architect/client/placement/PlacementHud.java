@@ -280,7 +280,9 @@ final class PlacementHud implements HudZones.Element {
 			boolean armed = BuildPlacement.bigArmed();
 			k.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
 			String[] a = k.toArray(String[]::new);
-			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {{"?", "keys", dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "place"}};
+			// (PR3) the short row keeps whole names when it fits; else a long key name (Mouse Button 4) is cut by width in its own pair
+			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {dev.larattalabs.architect.client.hud.Keys.fitHints(font, new String[] {"?", "keys", dev.larattalabs.architect.client.hud.Keys.label(
+					dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "place"}, inner)};
 		}
 		// (PR A4) the live bindings (Controls > "Architect: while placing"), so a rebound key shows here
 		List<String> all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "rotate", dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "back", dev.larattalabs.architect.client.hud.Keys.nudgeLabel(), "nudge",
@@ -300,6 +302,8 @@ final class PlacementHud implements HudZones.Element {
 		// a real key in the keycap: "1,000+" drawn as one read as a key to press (UI polish 1)
 		all.addAll(List.of("Enter ×2", dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+ blocks"));
 		all.addAll(List.of("? or " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LEGEND), "hide"));
+		// (PR3) a pair wider than the panel on its own gets its key cut by width (the wrap below gives it a row of its own)
+		all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.fitHints(font, all.toArray(String[]::new), inner)));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();
 		for (int i = 0; i < all.size(); i += 2) {
