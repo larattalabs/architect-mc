@@ -63,8 +63,20 @@ public final class Groups {
 		 */
 		@Nullable String planned;
 		final List<String> plannedSites = new ArrayList<>();
-		/** The queue save holding {@link #planned}, written before the commit is submitted. */
-		transient @Nullable CompletableFuture<Void> preSave;
+		/**
+		 * The queue save holding {@link #planned} (its generation, {@link Placement#save}), written before the commit is submitted (slice
+		 * PSV: a confirmed write, not the saver's turn). 0: none this session (a loaded {@link #planned} is in the file already).
+		 */
+		transient long preSave;
+		/** (PSV fix round, GPT P1 3) The confirmed queue write before the removal touches anything (fluids, custody, crate stock, tallies). */
+		final transient Placement.Preflight preflight = new Placement.Preflight();
+		/**
+		 * (PSV fix round) A legacy crate's stock R1 took (prepareDeconstruct's crate path) per member, kept across a replan (the second
+		 * prepareDeconstruct finds the crate gone) and saved: it drops with the member's deconstruct items, once. (slice PSVLC3, P1 1) Recorded
+		 * and confirmed in the queue file before the take ({@link Groups#crateRecorded}); it counts only while the crate is gone: a crate that
+		 * stands at R1 means the take never reached the disk, and its stock as it stands replaces what was carried ({@link Groups#withStock}).
+		 */
+		final Map<String, Map<String, Integer>> decStock = new LinkedHashMap<>();
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
 		/** Phase 6a: CELL cells the undo left as they are (the world no longer held what the entry wrote: a player's block). */
@@ -80,6 +92,26 @@ public final class Groups {
 		transient int blockerScan;
 		/** (DR-S) The save-first probe passed (this session): the world and ledger saved before anything of the removal changed the world. */
 		transient boolean probed;
+		/**
+		 * (slice PSVLC3, P1 1) The queue save holding {@link #decStock} as recorded for this R1's crate takes (a standing legacy crate's stock,
+		 * recorded before it is taken); R1 takes nothing until it is confirmed written. 0: none this session.
+		 */
+		transient long crateGen;
+		/**
+		 * (slice PSVLC3 fix round, GPT P1 1) R1 changed the world outside the journal (a crate taken, a player's holder replaced): the undo
+		 * commits only after T0's barrier made it durable (OK). A refused or IN_DOUBT barrier (/save-off, a failed chunk write) keeps it waiting,
+		 * retried every 5 s ({@link #barrierAt}). A load plans again (the world on disk decides what R1 finds).
+		 */
+		transient boolean worldPending;
+		transient long barrierAt;
+		/**
+		 * (fix round, GPT P1 4) Per player holder in a region target's cell (key {@code cargo:<target>:<cell>}): its contents, held pending in the
+		 * owner's ledger before the holder is replaced, and booked into the stock (past capacity) once the replacement is durable. Never item
+		 * entities. A crash between: the start's settle books it when the holder is gone, drops it when the holder still holds its items.
+		 */
+		final transient Map<String, Credit> cargo = new LinkedHashMap<>();
+		/** (fix round) The holders of {@link #cargo} were replaced (their contents only in the pending credits now). */
+		transient boolean cargoApplied;
 		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
 		transient @Nullable CompletableFuture<java.util.LinkedHashSet<String>> outsideF;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
@@ -159,6 +191,15 @@ public final class Groups {
 				});
 				o.add("dec", d);
 			}
+			if (!decStock.isEmpty()) {
+				JsonObject d = new JsonObject();
+				decStock.forEach((site, items) -> {
+					JsonObject it = new JsonObject();
+					items.forEach(it::addProperty);
+					d.add(site, it);
+				});
+				o.add("decStock", d);
+			}
 			if (!decCredit.isEmpty()) {
 				JsonObject c = new JsonObject();
 				decCredit.forEach((site, x) -> c.add(site, x.toJson()));
@@ -207,6 +248,13 @@ public final class Groups {
 					r.restoredCells = 0;
 					r.keptCells = 0;
 				}
+			}
+			if (o.has("decStock")) {
+				o.getAsJsonObject("decStock").entrySet().forEach(e -> {
+					Map<String, Integer> items = new TreeMap<>();
+					e.getValue().getAsJsonObject().entrySet().forEach(i -> items.put(i.getKey(), i.getValue().getAsInt()));
+					r.decStock.put(e.getKey(), items);
+				});
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -340,9 +388,40 @@ public final class Groups {
 		}
 	}
 
-	private static final List<Removal> REMOVALS = new ArrayList<>();
+	private static final RemovalSeal.Counted<Removal> REMOVALS = new RemovalSeal.Counted<>();
 	/** (6c X, C22) Removals that stopped with restorations unfinished (their undo committed): a retry resumes them, it never starts over. */
-	private static final List<Removal> STALLED = new ArrayList<>();
+	private static final RemovalSeal.Counted<Removal> STALLED = new RemovalSeal.Counted<>();
+
+	/** (slice LC3) The removals lists' structural changes so far. */
+	static int sealMods() {
+		int h = REMOVALS.mods() * 31 + STALLED.mods();
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				h = h * 31 + r.sites.size() * 2 + (r.current != null ? 1 : 0); // a member written leaves the list (or current)
+				h = h * 31 + r.undoSites.hashCode() * 17 + r.plannedSites.hashCode(); // (the whole member set, refilled at a commit or a reload)
+			}
+		}
+		return h;
+	}
+
+	/**
+	 * (slice LC3) The ids a group or stage removal seals: running or stalled (a retry resumes it with no new blocker scan), its members not
+	 * yet written and the one being written, and (LC3 fix, review 2) its members already written too, its whole undo set (or the planned
+	 * set before the commit): crash recovery can still write a written member again ({@link #writeAgainIn}) until the removal leaves the
+	 * queue, so none unseals before the removal ends. All of it is in the queue file.
+	 */
+	static void sealedIds(List<String> out) {
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				out.addAll(r.sites);
+				if (r.current != null) {
+					out.add(r.current);
+				}
+				out.addAll(r.undoSites);
+				out.addAll(r.plannedSites);
+			}
+		}
+	}
 
 	private static @Nullable Removal stalled(String group, @Nullable String stage) {
 		for (Removal r : STALLED) {
@@ -351,6 +430,94 @@ public final class Groups {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * (slice PSVLC3, P1 2) Why a removal of {@code group} ({@code stage} null: the whole group) can't start while another removal of the group
+	 * is stalled, or null. A stalled removal holds what only its own retry settles (a crate stock carried before its undo, restorations still
+	 * pending, its members sealed); a second removal over the same members would take them past it, and the stalled one's retry would never
+	 * find them again (adef7f9b: a whole-group removal over a stalled stage left the stage UNDONE and its carried stock unreachable).
+	 */
+	static @Nullable String stageRunningRefusal(String group) {
+		for (Removal x : REMOVALS) {
+			if (x.group.equals(group) && x.stage != null) {
+				return "the undo of stage " + x.stage + " of group " + group + " is in progress; remove the group once it ends";
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (fix round, GPT P1 3) The ops way out of a stalled removal that another stalled removal of its group blocks (only a queue file from
+	 * before this admission rule can hold two): resumes the named one as a retry does, past {@link #stalledRefusal}. Answers why not, or null
+	 * when it was resumed. Server thread.
+	 */
+	public static @Nullable String resumeStalled(MinecraftServer server, String group, @Nullable String stage) {
+		if (Placement.loadFailed()) {
+			return UNRECORDABLE;
+		}
+		for (Removal r : REMOVALS) {
+			if (r.group.equals(group)) {
+				return "a removal of group " + group + " is in progress";
+			}
+		}
+		Removal st = stalled(group, stage);
+		if (st == null) {
+			return "no stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage + " of group " + group);
+		}
+		Architect.LOGGER.warn("Removal of group {}{}: resumed by an operator", group, stage == null ? "" : " stage " + stage);
+		resume(st, new CompletableFuture<>());
+		Placement.save(server, false);
+		return null;
+	}
+
+	static @Nullable String stalledRefusal(String group, @Nullable String stage) {
+		for (Removal x : STALLED) {
+			if (x.group.equals(group) && !java.util.Objects.equals(x.stage, stage)) {
+				String what = x.stage == null ? "the removal of group " + group : "the undo of stage " + x.stage + " of group " + group;
+				return what + " is stalled (it holds what only its retry settles); retry " + (x.stage == null ? "the group's removal" : "that stage's undo")
+					+ " first";
+			}
+		}
+		return null;
+	}
+
+	// ------------------------------------------------------------------ (slice LC3 fix 2) a stalled removal (dev.seal.state)
+
+	/** (LC3 fix 2) A stalled removal's members: written (its restore done) and unwritten (still to write, the one that broke included). */
+	record Settle(List<String> written, List<String> unwritten) {
+	}
+
+	/** (pure) {@code r}'s members by whether their restore was written: its committed undo set, those left in its sites unwritten. */
+	static Settle settle(Removal r) {
+		List<String> written = new ArrayList<>();
+		List<String> unwritten = new ArrayList<>();
+		for (String id : r.undoSites) {
+			(r.sites.contains(id) || id.equals(r.current) ? unwritten : written).add(id);
+		}
+		return new Settle(List.copyOf(written), List.copyOf(unwritten));
+	}
+
+	/** (TEST, {@code dev.seal.state}) The stalled removals: group, stage, members written and not. */
+	static void stalledJson(JsonArray out) {
+		for (Removal r : STALLED) {
+			JsonObject o = new JsonObject();
+			o.addProperty("group", r.group);
+			if (r.stage != null) {
+				o.addProperty("stage", r.stage);
+			}
+			Settle st = settle(r);
+			JsonArray w = new JsonArray();
+			st.written().forEach(w::add);
+			JsonArray u = new JsonArray();
+			st.unwritten().forEach(u::add);
+			o.add("written", w);
+			o.add("unwritten", u);
+			if (r.current != null) {
+				o.addProperty("current", r.current); // (LC3 round 4) the member whose restore broke (among the unwritten)
+			}
+			out.add(o);
+		}
 	}
 
 	/** A retry takes over a stalled removal: its undo and remaining members, a fresh future. */
@@ -362,6 +529,15 @@ public final class Groups {
 		r.waited = 0;
 		r.nextCheck = 0;
 		r.started = true;
+		// (slice PSVLC3, P1 3) a removal that stalled before its undo checks its members again: a player who entered a box meanwhile is waited
+		// for, a blocker placed meanwhile refuses it, the covering sites are found again, and the queue write and save-first probe come first
+		r.scan = 0;
+		r.blockerScan = 0;
+		r.outsideF = null;
+		r.preflight.gen = 0;
+		r.probed = false;
+		r.crateGen = 0;
+		r.barrierAt = 0;
 		REMOVALS.add(r);
 		return r;
 	}
@@ -474,6 +650,7 @@ public final class Groups {
 		RestoreJob.failSkip = skip;
 	}
 
+
 	private Groups() {
 	}
 
@@ -550,6 +727,15 @@ public final class Groups {
 			// (C23) not the hook: a refused caller (another requester) must not end a removal that keeps running
 			return CompletableFuture.completedFuture(new Removed(false, List.of(owner), Map.of()));
 		}
+		if (Placement.loadFailed()) {
+			// (PSV fix round, GPT P1 2) nothing touched: no batch cancelled, no state, no custody or crate stock taken
+			return CompletableFuture.completedFuture(new Removed(false, List.of(UNRECORDABLE), Map.of()));
+		}
+		String other = stalledRefusal(groupId, null);
+		if (other != null) {
+			// (slice PSVLC3, P1 2) a stalled stage removal holds what only its own retry can settle: refused before anything is touched
+			return CompletableFuture.completedFuture(new Removed(false, List.of(other), Map.of()));
+		}
 		// (6c X, C22) a group this world already removed: removed again, nothing written (its tombstone keeps the time)
 		if (SiteGroupRec.REMOVED.equals(g.state()) && stalled(groupId, null) == null && REMOVALS.stream().noneMatch(x -> x.group.equals(groupId))) {
 			Removed yes = new Removed(true, List.of(), Map.of());
@@ -562,6 +748,11 @@ public final class Groups {
 				r.futures.add(f);
 				return f;
 			}
+		}
+		String running = stageRunningRefusal(groupId);
+		if (running != null) {
+			// (slice PSVLC3 fix round, GPT P1 3) one removal of a group at a time: a stage undo in progress is not joined by a whole-group removal
+			return CompletableFuture.completedFuture(new Removed(false, List.of(running), Map.of()));
 		}
 		for (QBatch b : Batches.all()) {
 			if (b.group.equals(groupId) && b.running()) {
@@ -587,6 +778,13 @@ public final class Groups {
 		dev.larattalabs.architect.apiimpl.SettlementSignals.mark(g.owner(), dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(groupId));
 		return f;
 	}
+
+	/**
+	 * (PSV fix round, GPT P1 2) Why a removal is refused when the queue file failed to load this session: nothing is saved over that file, so
+	 * no undo can be recorded; refused before anything is touched.
+	 */
+	public static final String UNRECORDABLE = "the queue file (" + Placement.FILE + ") failed to load this session: an undo can't be recorded, so nothing is "
+		+ "removed; fix or restore the file and reopen the world";
 
 	/** Undoes a placed (or partial) stage: its sites, last placed first; then the stage is UNDONE. Server thread. */
 	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force) {
@@ -616,6 +814,27 @@ public final class Groups {
 		if (guard != null) {
 			return CompletableFuture.failedFuture(new IllegalStateException(guard));
 		}
+		if (Placement.loadFailed()) {
+			return CompletableFuture.failedFuture(new IllegalStateException(UNRECORDABLE)); // (PSV fix round) before anything is touched
+		}
+		for (Removal r : REMOVALS) {
+			if (r.group.equals(groupId)) {
+				return CompletableFuture.failedFuture(new IllegalStateException("group " + groupId + " is already being taken down"));
+			}
+		}
+		String other = stalledRefusal(groupId, stage);
+		if (other != null) {
+			return CompletableFuture.failedFuture(new IllegalStateException(other)); // (slice PSVLC3, P1 2)
+		}
+		// (slice PSVLC3, P1 2) a stalled undo of this stage is retried before the stage's state is judged: it was admitted when it started, and
+		// only its retry settles what it holds (a carried crate stock, restorations still pending)
+		Removal st = stalled(groupId, stage);
+		if (st != null) {
+			CompletableFuture<Removed> f = new CompletableFuture<>();
+			resume(st, f);
+			Placement.save(server, false);
+			return f;
+		}
 		int i = g.stageIndex(stage);
 		if (i < 0) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("group " + groupId + " has no stage " + stage));
@@ -624,20 +843,8 @@ public final class Groups {
 		if (no != null) {
 			return CompletableFuture.failedFuture(new IllegalStateException(no));
 		}
-		for (Removal r : REMOVALS) {
-			if (r.group.equals(groupId)) {
-				return CompletableFuture.failedFuture(new IllegalStateException("group " + groupId + " is already being taken down"));
-			}
-		}
 		if (g.stages().get(i).sites().stream().anyMatch(x -> x.startsWith(Batches.DELTA_TOKEN))) {
 			return undoDeltaStage(server, g, stage, g.stages().get(i).sites(), force);
-		}
-		Removal st = stalled(groupId, stage);
-		if (st != null) {
-			CompletableFuture<Removed> f = new CompletableFuture<>();
-			resume(st, f);
-			Placement.save(server, false);
-			return f;
 		}
 		Removal r = new Removal(groupId, stage, null, true);
 		r.covered = covered;
@@ -806,8 +1013,12 @@ public final class Groups {
 			java.util.Collections.reverse(sites);
 			r.sites.addAll(sites);
 			r.started = true;
+			RemovalSeal.changed(); // (slice LC3) its members sealed from now on
 		}
 		if (r.nextCheck > tick) {
+			return;
+		}
+		if (r.undo == null && r.planner == null && !preflighted(server, r)) {
 			return;
 		}
 		// (slice DR-S) save first: a survival removal saves the world and the ledger before anything of it changes the world (its fluid
@@ -1015,6 +1226,9 @@ public final class Groups {
 						return;
 					}
 					if (!r.txn.isDone() || !preSaved(server, r)) {
+						if (r.preSave == Placement.NOT_SAVED) {
+							endUnrecorded(server, r);
+						}
 						return;
 					}
 					Object[] built;
@@ -1041,6 +1255,9 @@ public final class Groups {
 					}
 				} else {
 					if (!preSaved(server, r)) {
+						if (r.preSave == Placement.NOT_SAVED) {
+							endUnrecorded(server, r);
+						}
 						return;
 					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
@@ -1154,6 +1371,7 @@ public final class Groups {
 			top.removeIf(r.sites::contains);
 			ids.addAll(0, top);
 			r.sites.addAll(0, top);
+			RemovalSeal.changed(); // (slice LC3) the cascaded sites sealed before their scan
 			r.cascaded.addAll(top);
 		}
 		while (r.blockerScan < ids.size()) {
@@ -1172,6 +1390,14 @@ public final class Groups {
 				return;
 			}
 		}
+		// (slice PSVLC3, P1 1) a standing legacy crate's stock recorded with the removal in a confirmed queue write before R1 takes it
+		if (!crateRecorded(server, level, r, ids)) {
+			r.outsideF = CompletableFuture.completedFuture(outside); // what was found is kept; the checks go on once the write is confirmed
+			return;
+		}
+		if (!r.cargoApplied) {
+			r.cargo.clear(); // (fix round) found again below, per region target (a replan after the holders were replaced keeps their cargo)
+		}
 		// (M5 FK) a filled site's declared containers: their contents into the ledger's custody in this tick (the credit is fixed now; the
 		// undo writes them ticks later), then saved with the world; cargo found now ends the removal unwritten, the custody given back
 		boolean custody = false;
@@ -1182,8 +1408,8 @@ public final class Groups {
 				if (cargo != null) {
 					for (String back : ids) {
 						Site b = Sites.get(back);
-						if (b != null && Fills.phase(b) != null) {
-							Fills.writeBack(level, b);
+						if (b != null) {
+							Fills.writeBack(level, b); // (PSV fix round) by the custody held (none: nothing), not by the phase
 						}
 					}
 					end(server, r, Removed.blocked(id, List.of(cargo), true, Map.copyOf(r.refund)));
@@ -1234,6 +1460,19 @@ public final class Groups {
 				// (6c RS §9) a player's block in a region target drops at its cell; (J1, F10 for roads) a player's matching block is theirs, not
 				// refunded. (DR-S) Found now, left out of the refund, dropped only once the credits are saved (a refused save drops nothing)
 				var dropped = RegionTargets.dropPlayerBlocks(level, inf, false);
+				// (fix round, GPT P1 4) a player's holder in one of those cells: its contents are credited (never dropped); one with items carrying
+				// their own data (a name, an enchantment, contents) can't be credited by id: the removal ends, the holders as they are
+				String cargoNo = findCargo(level, r, id, inf, pile, dropped);
+				if (cargoNo != null) {
+					for (String back : ids) {
+						Site b = Sites.get(back);
+						if (b != null && Fills.phase(b) != null) {
+							Fills.writeBack(level, b);
+						}
+					}
+					end(server, r, new Removed(false, List.of(cargoNo), Map.copyOf(r.refund)));
+					return;
+				}
 				var matches = RoadBuilder.dropPlayerMatches(level, inf, false);
 				dropLater.add(inf);
 				if (!matches.isEmpty()) {
@@ -1262,9 +1501,18 @@ public final class Groups {
 		if (holdPending(r)) {
 			try {
 				Stockpiles.saveWithWorld(server);
+				if (!r.cargo.isEmpty() && !r.cargoApplied) {
+					// (fix round, GPT P1 4) the holders' contents pending in the ledger and the holders as they are, both durable before any
+					// holder is replaced (T0's barrier: a /save-off world saves nothing, so a plain save is not enough)
+					DurableBarrier.Result b = Stockpiles.barrier(server);
+					if (!b.ok()) {
+						throw new IllegalStateException("the world barrier before a player's container is replaced was " + b.outcome() + " (" + b.reason() + ")");
+					}
+				}
 			} catch (IllegalStateException e) {
 				// nothing dropped yet (dropLater): the player blocks stand as they were
 				dropPending(r);
+				dropCargoPending(r);
 				for (String back : ids) {
 					Site b = Sites.get(back);
 					if (b != null && Fills.phase(b) != null) {
@@ -1279,6 +1527,13 @@ public final class Groups {
 		for (Infra inf : dropLater) {
 			RegionTargets.dropPlayerBlocks(level, inf, true);
 			RoadBuilder.dropPlayerMatches(level, inf, true);
+		}
+		r.cargoApplied |= !r.cargo.isEmpty();
+		if (!r.cargo.isEmpty()) {
+			// (slice PSVLC3 fix round, GPT P1 1; T4a: no crate is taken at R1 since T2b) a player's holder replaced: the undo commits only once T0's barrier (players,
+			// chunks, then the ledger) made them durable; tried now, else before the commit (preSaved) until it is OK
+			r.worldPending = true;
+			worldDurable(server, r);
 		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
 		List<String> withCrate = new ArrayList<>(ids);
@@ -1337,16 +1592,199 @@ public final class Groups {
 	 * the saver is off the server thread). Without it, a stop after the commit reached the journal and before {@link #committed}'s save
 	 * left a queue file with no undo: the load planned again, found no active entry and ended the removal false over a drained region.
 	 */
-	private static boolean preSaved(MinecraftServer server, Removal r) {
+	static boolean preSaved(MinecraftServer server, Removal r) {
+		if (!worldDurable(server, r)) {
+			return false; // (fix round, GPT P1 1) R1's takes not durable yet: no pre-save, no commit
+		}
 		if (r.planned == null || !r.planned.equals(r.planGroup)) {
 			r.planned = r.planGroup;
 			r.plannedSites.clear();
 			r.plannedSites.addAll(r.planIds);
-			Placement.save(server, false);
-			r.preSave = Placement.saved();
+			r.preSave = Placement.preSave(server);
 			return false;
 		}
-		return r.preSave == null || r.preSave.isDone();
+		if (Placement.failed(r.preSave)) {
+			// (PSV fix round, GPT P1 3) its write failed after R1: the plan and its tallies are not committed against a world that may change
+			// while writes fail (a block mined, a block replaced): dropped, planned again once a queue write is confirmed
+			dropPlan(r);
+			return false;
+		}
+		return preSaveWritten(r.preSave);
+	}
+
+	/**
+	 * (PSV fix round, GPT P1 3) The removal's preflight (before anything is touched, each R1): a queue save confirmed written and no write
+	 * failing since. While writes fail the removal waits untouched (Placement retries every 5 s); the queue file failed to load: it ends,
+	 * untouched (a removal loaded or asked before {@link #UNRECORDABLE} took effect never reaches here: the queue started empty).
+	 */
+	private static boolean preflighted(MinecraftServer server, Removal r) {
+		if (Placement.loadFailed()) {
+			r.planned = null;
+			r.plannedSites.clear();
+			end(server, r, new Removed(false, List.of(UNRECORDABLE), Map.copyOf(r.refund)));
+			return false;
+		}
+		return r.preflight.ready(() -> Placement.save(server, false));
+	}
+
+	/**
+	 * (PSV fix round) A plan whose pre-save failed, dropped before its commit: R1 runs again from the checks once a queue write is confirmed
+	 * (its refunds re-tallied against the world then; the custody already held stays held, a legacy crate's stock is carried in
+	 * {@link Removal#decStock}). Nothing was committed, so nothing is undone.
+	 */
+	static void dropPlan(Removal r) {
+		Architect.LOGGER.warn("Removal of group {}: the queue file write holding its planned undo failed; the plan is dropped and made again once a queue "
+			+ "write is confirmed", r.group);
+		r.planner = null;
+		r.txn = null;
+		r.planGroup = null; // (planIds kept: end() gives back the custody held for them)
+		r.planned = null;
+		r.plannedSites.clear();
+		r.preSave = 0;
+		r.scan = 0;
+		r.blockerScan = 0;
+		r.outsideF = null;
+		r.preflight.gen = 0;
+		for (String id : List.copyOf(r.decItems.keySet())) {
+			if (!r.decStock.containsKey(id)) {
+				r.decItems.remove(id);
+				r.decAt.remove(id);
+			}
+		}
+		dropPending(r); // (slice PSVLC3) DR-S's held pending credits go with the plan (the replan holds them again); none stays behind unowned
+		r.decCredit.clear();
+		r.decSettle.clear(); // (T4a) T2b's crate settles are fixed again by the replan's prepare (nothing was taken: the crates keep their stock)
+		r.crateSettle = null;
+		r.crateGen = 0;
+		r.barrierAt = 0; // (fix round) worldPending stays: what R1 changed is still to be made durable
+	}
+
+	/**
+	 * (PSV fix round) A member's deconstruct items: {@code all} (this R1's tally, its crate stock in it) plus the crate stock an earlier R1 of
+	 * this removal took; this R1's crate stock is added to what is carried.
+	 */
+	static Map<String, Integer> withStock(Removal r, String id, Map<String, Integer> all, Map<String, Integer> crateStock) {
+		return withStock(r, id, all, crateStock, !crateStock.isEmpty());
+	}
+
+	/**
+	 * (slice PSVLC3, P1 1) {@link #withStock} by the world's evidence: {@code crateStood}, the member's crate stood before this R1's take.
+	 * Standing, its take never reached the disk (a crash put the world back to its last save, or nothing was taken yet), so nothing carried
+	 * is real: this take is the stock, once, and replaces what was carried (adef7f9b added it: twice). Gone, what is carried is the only
+	 * record of the take on disk and is added once.
+	 */
+	static Map<String, Integer> withStock(Removal r, String id, Map<String, Integer> all, Map<String, Integer> crateStock, boolean crateStood) {
+		Map<String, Integer> items = new TreeMap<>(all);
+		if (crateStood) {
+			if (crateStock.isEmpty()) {
+				r.decStock.remove(id);
+			} else {
+				r.decStock.put(id, new TreeMap<>(crateStock));
+			}
+			return items;
+		}
+		Map<String, Integer> carried = r.decStock.get(id);
+		if (carried != null) {
+			carried.forEach((k, v) -> items.merge(k, v, Integer::sum));
+		}
+		if (!crateStock.isEmpty()) {
+			Map<String, Integer> m = new TreeMap<>(carried == null ? Map.of() : carried);
+			crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum));
+			r.decStock.put(id, m);
+		}
+		return items;
+	}
+
+	/**
+	 * (slice PSVLC3, P1 1) Persist before mutate for a legacy crate's stock: each standing crate R1 is about to take has its stock recorded in
+	 * {@link Removal#decStock} (a standing crate's record replaces what was carried: the world says that take never reached the disk), and
+	 * the queue save holding it is confirmed written with no write failing since, before the take. True when R1 may go on (nothing to take,
+	 * or the record confirmed); false while it waits. The take then happens in the same tick as this check (nothing changes the crate between).
+	 * Whichever of the queue file and the world's chunks a crash keeps, the stock is counted once: the crate stands (its stock is taken again,
+	 * the record replaced) or it is gone (the record, confirmed before the take, is carried).
+	 */
+	static boolean crateRecorded(MinecraftServer server, ServerLevel level, Removal r, List<String> ids) {
+		boolean takes = false;
+		boolean changed = false;
+		for (String id : ids) {
+			Site s = Sites.get(id);
+			if (s == null || s.construction() == null || !Builder.crateStands(level, s)) {
+				continue; // no crate, or it is gone: what is carried (if anything) is the take on disk
+			}
+			Map<String, Integer> t = Builder.crateTake(level, s);
+			Map<String, Integer> want = t == null || t.isEmpty() ? null : new TreeMap<>(t);
+			takes |= want != null;
+			if (!java.util.Objects.equals(want, r.decStock.get(id))) {
+				if (want == null) {
+					r.decStock.remove(id);
+				} else {
+					r.decStock.put(id, want);
+				}
+				changed = true;
+			}
+		}
+		return switch (crateStep(takes, changed, r.crateGen, Placement.failed(r.crateGen), Placement.written(r.crateGen) && !Placement.writeFailing())) {
+			case SAVE -> {
+				r.crateGen = Placement.save(server, false);
+				yield false;
+			}
+			case WAIT -> false;
+			case GO -> true;
+		};
+	}
+
+	/** (fix round) {@link #crateRecorded}'s step. */
+	enum CrateStep {
+		SAVE, WAIT, GO
+	}
+
+	/**
+	 * (pure; fix round, GPT P1 2) {@link #crateRecorded}'s decision: a changed record (a new take's stock, or one cleared because the crate
+	 * emptied) is saved and waited for before R1 goes on, takes or not (ca946197 went on at once when no take was left: a crash could then keep
+	 * a cleared record's stock beside the blocks built from it); a record asked for is waited for until written with no write failing; with
+	 * nothing to take and no record asked for, R1 goes on.
+	 */
+	static CrateStep crateStep(boolean takes, boolean changed, long gen, boolean failed, boolean confirmed) {
+		if (changed || takes && (gen == 0 || failed) || gen > 0 && failed) {
+			return CrateStep.SAVE;
+		}
+		if (gen > 0) {
+			return confirmed ? CrateStep.GO : CrateStep.WAIT;
+		}
+		return CrateStep.GO;
+	}
+
+	/**
+	 * (slice PSV) Whether a pre-save lets the commit go: none this session (0: the planned undo came from the file), or its generation
+	 * confirmed written (fsynced and renamed). A failed write is not: the removal waits while Placement retries the save every 5 s.
+	 * {@link Placement#NOT_SAVED} (the queue file failed to load this session) never is.
+	 */
+	static boolean preSaveWritten(long gen) {
+		return gen == 0 || Placement.written(gen);
+	}
+
+	/**
+	 * (slice PSV) The queue file failed to load this session, so nothing is saved over it and an undo can't be recorded: the removal ends
+	 * before its commit, unwritten (as a cargo blocker: the custody R1 took is given back and saved with the ledger).
+	 */
+	private static void endUnrecorded(MinecraftServer server, Removal r) {
+		boolean back = false;
+		for (String id : r.planIds) {
+			Site b = Sites.get(id);
+			ServerLevel level = b == null ? null : Sites.levelOf(server, b.dimension());
+			if (level != null && Fills.holdsCustody(b)) {
+				Fills.writeBack(level, b);
+				back = true;
+			}
+		}
+		if (back) {
+			Stockpiles.saveWithWorld(server);
+		}
+		r.planner = null;
+		r.txn = null;
+		r.planned = null; // (PSV fix round) unwound: end() sees an untouched removal
+		r.plannedSites.clear();
+		end(server, r, new Removed(false, List.of(UNRECORDABLE), Map.copyOf(r.refund)));
 	}
 
 	/**
@@ -1386,13 +1824,48 @@ public final class Groups {
 		for (String id : r.undoSites) {
 			if (!r.sites.contains(id)) {
 				r.sites.add(0, id); // (a cascaded site: taken first, as planned)
+				RemovalSeal.changed();
 			}
 		}
 		r.handed = new TreeMap<>();
 		r.handedAll = new TreeMap<>();
+		retakeStanding(server, r);
 		Placement.save(server, false);
 		Architect.LOGGER.info("Removal of group {}: its undo {} was committed before the stop; the removal resumes its writes", r.group, g);
 		return true;
+	}
+
+	/**
+	 * (fix round, GPT P1 1) R1's standing-crate rule for an undo committed before a stop: a member whose crate still stands lost its take at
+	 * the stop (the commit waits for the barrier, so only a world older than that barrier can show it): the crate is taken again now and its
+	 * stock replaces what was carried in the member's deconstruct items, once.
+	 */
+	private static void retakeStanding(MinecraftServer server, Removal r) {
+		for (String id : List.copyOf(r.decStock.keySet())) {
+			Site s = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
+			ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
+			if (lv == null || s.construction() == null || !Builder.crateStands(lv, s)) {
+				continue;
+			}
+			Map<String, Integer> carried = r.decStock.get(id);
+			Map<String, Integer> items = new TreeMap<>(r.decItems.getOrDefault(id, Map.of()));
+			carried.forEach((k, v) -> items.merge(k, -v, Integer::sum));
+			Builder.Deconstruction d = Builder.prepareDeconstruct(lv, s);
+			d.crateStock().forEach((k, v) -> items.merge(k, v, Integer::sum));
+			items.values().removeIf(v -> v <= 0);
+			r.decItems.put(id, Map.copyOf(items));
+			if (d.crateStock().isEmpty()) {
+				r.decStock.remove(id);
+			} else {
+				r.decStock.put(id, new TreeMap<>(d.crateStock()));
+			}
+			r.worldPending = true;
+			Architect.LOGGER.warn("Removal of group {}: {}'s crate stood after the stop: taken again ({}), its carried stock {} replaced", r.group, id,
+				d.crateStock(), carried);
+		}
+		if (r.worldPending) {
+			worldDurable(server, r);
+		}
 	}
 
 	/** R2 submitted: the removal waits for its commit, then marks the records pending and writes. */
@@ -1517,12 +1990,119 @@ public final class Groups {
 				any = true;
 			}
 		}
+		for (Credit c : r.cargo.values()) {
+			Stockpiles.Pile p = Stockpiles.get(c.owner());
+			if (p != null && !p.ledger().credited(c.key())) {
+				p.ledger().holdPending(c.key(), c.items(), c.at()); // (fix round) the holder's contents, before the holder is replaced
+				Stockpiles.changed(p);
+				any = true;
+			}
+		}
 		return any;
+	}
+
+	/** (fix round, GPT P1 4) A player holder's credit key: {@code cargo:<target>:<cell>}. */
+	static String cargoKey(String targetId, long cell) {
+		return Stockpiles.CARGO_PREFIX + targetId + ":" + cell;
+	}
+
+	/**
+	 * (pure; fix round) The items a player holder's contents credit by id, or null when a stack carries its own data (a name, an enchantment,
+	 * a filled shulker box): crediting it by id would lose that data.
+	 */
+	static @Nullable Map<String, Integer> cargoItems(List<net.minecraft.world.item.ItemStack> contents) {
+		List<Stack> l = new ArrayList<>();
+		for (net.minecraft.world.item.ItemStack st : contents) {
+			l.add(new Stack(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), !st.getComponentsPatch().isEmpty()));
+		}
+		return cargoOf(l);
+	}
+
+	/** (pure) A holder's stack: its item id, its count, whether it carries its own data (a components patch). */
+	record Stack(String item, int count, boolean ownData) {
+	}
+
+	/** (pure) {@link #cargoItems} over {@link Stack}s. */
+	static @Nullable Map<String, Integer> cargoOf(List<Stack> contents) {
+		Map<String, Integer> m = new TreeMap<>();
+		for (Stack st : contents) {
+			if (st.ownData()) {
+				return null;
+			}
+			m.merge(st.item(), st.count(), Integer::sum);
+		}
+		return m;
+	}
+
+	/** (fix round, GPT P1 4) {@link Removal#cargo} for a region target's player cells {@code cells}; why not, or null. */
+	private static @Nullable String findCargo(ServerLevel level, Removal r, String id, Infra inf, Stockpiles.Pile pile,
+		it.unimi.dsi.fastutil.longs.LongSet cells) {
+		for (long c : cells) {
+			List<net.minecraft.world.item.ItemStack> st = Builder.holderContents(level.getBlockEntity(net.minecraft.core.BlockPos.of(c)));
+			if (st.isEmpty()) {
+				continue;
+			}
+			Map<String, Integer> items = cargoItems(st);
+			if (items == null) {
+				return "a player's container at " + net.minecraft.core.BlockPos.of(c).toShortString() + " in " + id
+					+ " holds items with their own data (named, enchanted or filled): take them out, then remove again";
+			}
+			String key = cargoKey(inf.id(), c);
+			r.cargo.putIfAbsent(key, new Credit(pile.owner(), key, Map.copyOf(items), c));
+		}
+		return null;
+	}
+
+	/**
+	 * (fix round, GPT P1 1 and 4) T0's barrier over what R1 changed outside the journal; on OK the player holders' contents are booked into
+	 * the stock (their pending credits dropped). False (waiting, retried every 5 s) when it is refused or in doubt.
+	 */
+	static boolean worldDurable(MinecraftServer server, Removal r) {
+		if (!r.worldPending) {
+			return true;
+		}
+		if (tick < r.barrierAt) {
+			return false;
+		}
+		DurableBarrier.Result b = Stockpiles.barrier(server);
+		if (!b.ok()) {
+			r.barrierAt = tick + 100;
+			Architect.LOGGER.warn("Removal of group {}: the world barrier after R1's takes was {} ({}); the undo waits, not committed, until it is OK",
+				r.group, b.outcome(), b.reason());
+			return false;
+		}
+		r.worldPending = false;
+		for (Credit c : r.cargo.values()) {
+			Stockpiles.Pile p = Stockpiles.get(c.owner());
+			if (p != null) {
+				Stockpiles.credit(server, p, c.key(), c.items(), net.minecraft.core.BlockPos.of(c.at()));
+				p.ledger().dropPending(c.key());
+				Stockpiles.changed(p);
+			}
+		}
+		r.cargo.clear();
+		r.cargoApplied = false;
+		return true;
+	}
+
+	/** (fix round) Cargo held pending whose holders were never replaced: dropped (the holders keep their contents). */
+	static void dropCargoPending(Removal r) {
+		if (r.cargoApplied) {
+			return;
+		}
+		for (Credit c : r.cargo.values()) {
+			Stockpiles.Pile p = Stockpiles.get(c.owner());
+			if (p != null && p.ledger().pendingKeys().contains(c.key())) {
+				p.ledger().dropPending(c.key());
+				Stockpiles.changed(p);
+			}
+		}
+		r.cargo.clear();
 	}
 
 	/** (DR-S) The removal ended unwritten (no undo): its held pending credits dropped (the targets stand). */
 	static void dropPending(Removal r) {
-		for (Credit c : r.decCredit.values()) {
+		for (Credit c : r.decCredit.values()) { // (fix round) a holder's cargo pending stays: its holder may be replaced already
 			Stockpiles.Pile p = Stockpiles.get(c.owner());
 			if (p != null && p.ledger().pendingKeys().contains(c.key())) {
 				p.ledger().dropPending(c.key());
@@ -1533,21 +2113,33 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		dropCargoPending(r); // (fix round) holders never replaced keep their contents
+		if (r.worldPending) {
+			r.barrierAt = 0;
+			worldDurable(server, r); // (fix round) a holder replaced: booked once durable, else its pending credit settles at the next start
+		}
+		if (!result.removed() && r.undo == null) {
+			voidStanding(server, r);
+		}
 		if (!result.removed() && r.undo == null && r.planned == null) {
 			dropPending(r); // (DR-S) nothing of it was committed: its targets stand
 		}
 		if (!result.removed() && r.undo == null) {
 			// (M5 FK) ended before its undo began: a custody taken for a member that still stands goes back into its containers
-			for (String id : r.decCredit.keySet()) {
+			java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.decCredit.keySet());
+			ids.addAll(r.planIds);
+			for (String id : ids) {
 				Site s = Sites.get(id);
 				ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
-				if (lv != null && Fills.phase(s) != null && Sites.pendingRecord(id) == null) {
+				// (PSV fix round) by the custody held (a ledger fill marker without a phase takes custody too), not by the phase
+				if (lv != null && Fills.holdsCustody(s) && Sites.pendingRecord(id) == null) {
 					Fills.writeBack(lv, s);
 				}
 			}
 		}
 		if (r.stage == null) {
 			boolean untouched = !result.removed() && r.undo == null && r.planned == null && r.current == null && r.undoSites.isEmpty() && r.restoredCells == 0
+				&& r.decStock.isEmpty() // (v0.77.0 fix a2) a crate's stock taken: its cell was written
 				&& result.restored() == 0 && result.handedDown().isEmpty() && !dev.larattalabs.architect.region.RegionFluids.drainStarted(r.group);
 			if (untouched) {
 				UNTOUCHED.add(r.group);
@@ -1564,8 +2156,12 @@ public final class Groups {
 			signalEnd(eg == null ? null : eg.owner(), r.group);
 		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
-		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {
-			STALLED.add(r); // (6c X, C22) restorations are still pending: the retry resumes them
+		if (stallsAtEnd(r, result.removed())) {
+			STALLED.add(r); // (6c X, C22) restorations are still pending, or (v0.77.0 fix a2) a crate's stock is carried: the retry resumes them
+			if (r.undo == null) {
+				Architect.LOGGER.warn("Removal of group {}: ended before its undo holding a crate's stock {}; it stays stalled (the stock saved with it) "
+					+ "until a retry", r.group, r.decStock);
+			}
 		}
 		long t0 = System.nanoTime();
 		SiteGroupRec g = Sites.group(r.group);
@@ -1603,6 +2199,39 @@ public final class Groups {
 		}
 		r.futures.forEach(f -> f.complete(result));
 		Placement.lap("end:futures", t0);
+	}
+
+	/**
+	 * (slice PSVLC3, P1 1) A removal ending before its undo: a crate stock recorded for a crate that still stands was never taken (or its take
+	 * never reached the disk): the record goes, the stock stays in the crate. Only a stock whose crate is gone keeps the removal stalled.
+	 */
+	private static void voidStanding(MinecraftServer server, Removal r) {
+		for (String id : List.copyOf(r.decStock.keySet())) {
+			Site s = Sites.get(id);
+			ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
+			if (lv != null && s.construction() != null && Builder.crateStands(lv, s)) {
+				r.decStock.remove(id);
+				r.decItems.remove(id);
+				r.decAt.remove(id);
+			}
+		}
+	}
+
+	/**
+	 * (6c X, C22) Whether a removal that ends stays in {@link #STALLED} (kept in the queue file, its members sealed) for a retry to resume:
+	 * its restorations are still pending; or (v0.77.0 fix a2) it ends before its undo holding a legacy crate's stock ({@link Removal#decStock}:
+	 * a pre-save failed, the plan was dropped, then the rescan refused). That stock can't be given back safely: prepareDeconstruct restores the
+	 * crate's cell as it takes the stock (the crate is gone; putting one back would write outside the journal), and a crate's stock never comes
+	 * from a stockpile. Stalled, it stays saved with the removal and a retry carries it into the deconstruct items once ({@link #withStock}).
+	 */
+	static boolean stallsAtEnd(Removal r, boolean removed) {
+		if (removed) {
+			return false;
+		}
+		if (r.undo == null) {
+			return !r.decStock.isEmpty();
+		}
+		return r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null);
 	}
 
 	// ------------------------------------------------------------------ persistence

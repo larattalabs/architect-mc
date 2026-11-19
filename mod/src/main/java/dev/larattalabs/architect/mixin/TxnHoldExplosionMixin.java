@@ -22,7 +22,7 @@ public abstract class TxnHoldExplosionMixin {
 	@Inject(method = "onExplosionHit", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldBlast(BlockState state, ServerLevel level, BlockPos pos, Explosion explosion, BiConsumer<ItemStack, BlockPos> drop,
 		CallbackInfo ci) {
-		if (TxnServer.boxHeld(level, pos)) {
+		if (TxnServer.boxHeld(level, pos) || dev.larattalabs.architect.site.RemovalSeal.refusesBlast(level, pos)) { // (PSVLC3) the removal seal too
 			ci.cancel();
 		}
 	}

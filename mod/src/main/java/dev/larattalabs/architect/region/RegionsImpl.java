@@ -3313,6 +3313,12 @@ public final class RegionsImpl implements Regions {
 			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
 		return onServer(s, () -> {
+			if (dev.larattalabs.architect.site.Placement.loadFailed()) {
+				// (PSV fix round, GPT P1 2) the queue file failed to load: no undo can be recorded, so nothing is touched (no mined cell put back,
+				// no batch cancelled, the region's state as it was)
+				Architect.LOGGER.warn("Region {}: removal refused, nothing changed: {}", l.rec().id, dev.larattalabs.architect.site.Groups.UNRECORDABLE);
+				return CompletableFuture.completedFuture(new RemoveResult(false, List.of(dev.larattalabs.architect.site.Groups.UNRECORDABLE), Map.of()));
+			}
 			ServerLevel lv = l.level(s);
 			if (lv != null && l.rec().survival()) {
 				dev.larattalabs.architect.site.RegionFreeDrops.restoreMined(lv, l); // (6c RS §9) mined free cells back first

@@ -1020,6 +1020,20 @@ steps.look = async () => {
   await registerFKB(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, CX, CZ, CLAIM, haltWait, root, javaTests, apiJars, nodeTest });
 }
 
+// ------------------------------------------------------------------ (slice FL) flsurvival: tools/lib/gatem5fl.mjs
+
+{
+  const { registerFL } = await import('./lib/gatem5fl.mjs');
+  await registerFL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM });
+}
+
+// ------------------------------------------------------------------ (slice LC3) lc3seal, lc3undo: tools/lib/gatem5lc3.mjs
+
+{
+  const { registerLC3 } = await import('./lib/gatem5lc3.mjs');
+  await registerLC3(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root });
+}
+
 // ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs
 
 {
@@ -1067,6 +1081,13 @@ steps.look = async () => {
 {
   const { registerPS } = await import('./lib/gatemps.mjs');
   await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
+}
+
+// ------------------------------------------------------------------ (slice PSV) psvcrash: tools/lib/gatempsv.mjs
+
+{
+  const { registerPSV } = await import('./lib/gatempsv.mjs');
+  await registerPSV(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
 }
 
 // ------------------------------------------------------------------ (slice BC-d) bcdgrow: tools/lib/gatebcd.mjs

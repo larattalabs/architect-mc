@@ -131,6 +131,8 @@ final class TemplateWriter {
 	final BitSet placed = new BitSet();
 	/** (6c IRR) Positions never written (a lot site's {@link LotMask}): the cursor still passes them. Null: none (every other use). */
 	java.util.function.@org.jspecify.annotations.Nullable LongPredicate skip;
+	/** (TEST, slice LC3) Stops the step at once when true (a paused removal restore, {@code dev.removal.pause}). Null: never. */
+	java.util.function.@org.jspecify.annotations.Nullable BooleanSupplier stop;
 	int minX = Integer.MAX_VALUE;
 	int minY = Integer.MAX_VALUE;
 	int minZ = Integer.MAX_VALUE;
@@ -174,6 +176,9 @@ final class TemplateWriter {
 		while (phase != DONE) {
 			if (handled > 0 && handled % CLOCK == 0 && System.nanoTime() >= deadline) {
 				return handled;
+			}
+			if (handled > 0 && stop != null && stop.getAsBoolean()) {
+				return handled; // (TEST, slice LC3) dev.removal.pause
 			}
 			switch (phase) {
 				case SET -> {

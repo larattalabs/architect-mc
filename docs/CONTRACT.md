@@ -31253,6 +31253,146 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **Release-review fix (v0.72.0 GPT review, 2 blockers):** (1) `Fills.atStart` runs at START_SERVER_TICK (`Builder.fillsAtStart`), before any level ticks, so an FK3 replay's hopper can't push before the reconcile; and `FillGuard` asks `Fills.guardedSite` (FILLING too), so the declared containers of a site saved mid-fill stay guarded. (2) `Fills.providedFits`: provided items go only into the template's declared block, never a dropper or dispenser; a swapped live block blocks the fill (it waits, `SWAP_REFUSED`), `writeBack` returns no provided item there (destroyed), and `creative` skips it. Gate: FK3-eject (fkb-crash; a chest under a declared hopper) and a hopper swapped for a dropper mid-fill (fkb-survival, `dev.fk.swap`); units FillsFKBTest +2. Ran after merging main 47630ede (J2's `settlePendingCredits` runs first in the same START-tick `atStart`): unit-scope PASS, step-inputs 426 OK, gitleaks clean; gate change run 20261115-154050 at e8bd209b: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. Verification follow-up (a resized library head moved a rotated site's fill cells): `Fills.world` derives the template size from the site's stored box and rotation (extents swapped for odd turns), never the head; every fill path goes through it. Unit FillsFKBTest +1 (11/0); gate run 20261115-161244 at 3905f771: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. No in-game resize case (it needs a versioned library re-cut; the unit covers the transform).
 - **Leftovers:** an all-provided fill whose blocks all went before its removal never credits (`Stockpiles.credit` returns early), so `provided`/`heldProvided` stay, as FK's `filled` marker does; bundles and drag covered by the code path only.
 
+### Slice FL as built (fill locks, Steward's S-M5-17, plus S-M5-18; branch `slice/FL` off origin/slice/LC 1d934d8e; $0; strict; 2026-11-16)
+
+- **Cause (a then b), reproduced first** (run `gate-runs-FL/20261116-025520-change`, fl-survival at 1f1e1234, no fix): a lock is a lever, an
+  ATTACHABLE, so `BuildOrder` puts it after the hoppers of its row; `Builder.put` writes it powered with `Sites.FLAGS` (no neighbour update),
+  and `HopperBlock.onPlace` had already run, so line hopper 0 stayed `enabled=true` beside a `powered=true` lever until the fill tick's
+  re-assert. 64 cobblestone in the input chest reached F0 (F2 3, F3 2 from the 5 in line hopper 2); `fill_blocked`, nothing charged.
+- **Fix: hold the containers, not the order** (`site/FillHold.java`, `mixin/HopperHoldMixin.java`): every vanilla insertion into a block
+  container (a hopper's push and pull, an item entity picked up, a dropper's push) passes `HopperBlockEntity.canPlaceItemInContainer`; it is
+  refused for a declared container of a fill site whose phase is not UNLOCKED (from its placement on). Why: reordering can't be proved (a
+  starved cell is skipped, support and stage order, ST), and a lever disables only its neighbours, so a line hopper elsewhere feeds its F
+  whatever the order. The item stays where it was: no loss, no mint. Index keyed on the sites map's identity (`Sites.storeIdentity`, copy-on-write)
+  and the library revision. A player's hand into F stays FK's `fill_blocked`; the lever's power still reaches the line only at the re-assert.
+- **S-M5-18:** `LandCheck.fillCell` + `Fills.filledContainerOurs`: a CHANGED cell that is a declared container of a filled site (FILLED or
+  UNLOCKED), the block holding what was written apart from its contents, holding its fill or less (plain stacks) is SAME; more is cargo.
+- **Gate:** `tools/lib/gatem5fl.mjs` fl-survival (fl_hall gate-local: input chest, 4-hopper line, overflow chest, an F under each line hopper,
+  the lever by line hopper 0). Run 20261116-031517-change at af4498c3: fl-survival 11/0 (69 cobblestone mid-build: every F empty, no
+  `fill_blocked`, all 69 in the overflow chest; filled once, unlocked, BUILT, F exact; consumed = quote 378 = 378; land check lot changed 1 =
+  the one undeclared container with cobblestone), fk-survival 17/0, fkb-survival 30/0, lc-survival 16/0. `dev.fk.container` answers `state`;
+  `dev.fk.state` answers `held`.
+- **Units:** FillHoldTest 2/0, LandCheckFLTest 1/0; unit-scope full Gradle 1341/0 at the final head;
+  step-inputs check clean; gitleaks clean.
+- **Leftovers:** the Fabric Transfer API insert path (`ContainerSlotWrapper.insert`) is not held: a pipe mod's item in F is FK's cargo
+  (`fill_blocked`, no loss); `FillHold.held` counts refused attempts, not items.
+
+### Slice LC3 as built (late cargo on removal by a seal, Steward's S-M5-12; branch `slice/LC3` off origin/main 7d793a60 with FL's 4 commits; $0; strict; 2026-11-16)
+
+- **Design: SEAL, not take-and-drop** (LC/LC2's take, drop, protect and merge logic is not on this branch). `site/RemovalSeal.java`: every box of a ticked removal refuses item insertion until it ends; nothing can enter, so a restore write never meets late cargo. Today's blocker scan is unchanged.
+- **The seal set, derived from persisted state each time:** every `RestoreJob` in the queue (remove, rollback), every `DeltaJob` revert, every group or stage removal running or STALLED (its retry has no new scan): members not yet written plus `current`. A box is the site's restore box (standing or pending record) or the road's/cell site's box. The queue file and the sites file load at SERVER_STARTED, before the first tick, so a crash re-seals the same boxes. Atomic removals (one call) need none. Index per dimension by chunk; rebuilt only when the sites state, the infra maps, the queue's or the removals' lists, or a removal's members change. A STALLED removal (e.g. after `dev.undo.failRestore`) stays in the queue file and keeps its boxes sealed until retried, across restarts.
+- **Paths sealed:** `HopperHoldMixin` (hopper push and pull, item pickup, dropper, crafter; FL's fill rule kept), `CopperGolemSealMixin` (`addItemsToContainer`: the golem keeps it), the Transfer API insert (`ContainerSlotWrapperMixin`, optional config), `UseBlockCallback` on any holder (menu, lectern, campfire, pot, shelf, jukebox, chiseled bookshelf; all use, taking out included), `BlockItemSealMixin` (a filled shulker box placed into a box by a player or a dispenser, at the real cell), `ContainerStillValidMixin` on `BaseContainerBlockEntity` and the crafter (its override skips super; an open menu: clicks refused, closed next tick), `ItemFrameSealMixin`. Brushable blocks: no insertion path. Message: "This is being taken down" (overlay).
+- **Kept from LC2:** `Builder.dropAtCell` (the before first, items on top; `Drops.protect` 200 ticks) for roads and region targets; `RegionTargets.dropPlayerBlocks` drops a player's holder's contents with its block (`Builder.holderContents`).
+- **TEST:** `dev.seal.*`, `dev.removal.pause {site|*, after}` (in `architect/dev-removal-pause.json`: kept across a restart; also roads), `dev.removal.undoStage` (DEVBRIDGE).
+- **Gate** (`--only --no-cache --shards 1`, 9068/9069; `artifacts/gate-runs-LC3/20261116-110735-change` at 4d6324b8): lc3-seal 30/0, lc3-undo 10/0, fl-survival 11/0, fk-crash 58/0, fkb-crash 48/0, fk-survival 17/0, rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0; rl-crash again 110/0 (`20261116-114347-change`). Earlier head dbaf18ad: the same 10 PASS (`20261116-102042-change`).
+- **Units:** `RemovalSealTest` (index, holders, the persisted sources, a reloaded queue's running and stalled removals sealed, every path's call, F10's drop height, the region target's order), `FillsFKBTest` (the insert injector), `StockpileSaveJ1Test` (F10's order); unit-scope full Gradle PASS; step-inputs build + check; gitleaks clean.
+- **Leftovers:** an item thrown into a box being removed is still the drop clear's; a player's block (an empty chest included) placed in a box mid-removal is overwritten; other mods' direct `setItem` is not sealed; delta apply, survival construction-delta deconstruction and a site still placing (a holder it wrote, then a rollback) are not sealed; a DeltaJob revert is shown by source only (not in the queue file: a halt mid-write is settled at SERVER_STARTED, before the first tick); `Drops.protect` is in memory and a vanilla merge can carry a protected drop into an unprotected stack (LC2 review findings 4/5 for that side-fix); a road or cell site seals its whole bounding box while it is removed (fixed below: its write footprint); the golem path is not shown in game; refusals are counted per attempt (a Transfer API insert counts each slot).
+
+#### LC3 fix (the rule-15 GPT review, NOT SAFE at 0bd63a94; one round, $0, strict)
+
+- **1 shelves:** a player's use of a holder whose chain (`SideChainPartBlock.getAllBlocksConnectedTo`: a powered shelf's `swapHotbar` reaches every connected shelf) holds a sealed holder is refused. lc3-seal: an outside shelf chained into the box, the whole hotbar (9 diamonds) kept.
+- **2 group members:** a group or stage removal seals its whole member set (`undoSites`, `plannedSites`, written members included) until it leaves the queue; any box that leaves the seal set lingers until `Placement.saved()` (the queue file without it on disk). Unit `aGroupRemovalKeepsItsWrittenMembersSealedUntilItEnds`; lc3-undo: member A written, B paused, A sealed before and after a flush, a halt and a restart, unsealed at the end.
+- **3 extraction:** refused out of a sealed holder: a hopper's or hopper minecart's pull (`tryTakeInItemFromSlot`), a sealed hopper's push (`ejectItems`), a sealed dispenser or dropper (`dispenseFrom`), a copper golem's pick-up, a Transfer API extract, a player breaking a sealed holder (`PlayerBlockBreakEvents.BEFORE`). lc3-seal: hopper and minecart below sealed chests, a sealed hopper pushing out, each against a working control.
+- **4 crafter:** `CrafterBlock.dispenseFrom` refused at its head when the crafter or its front cell is sealed: nothing assembled, consumed, ejected or dropped. lc3-seal: 9 iron ingots kept, a control crafts.
+- **5 vault:** `VaultBlockEntity.Server.tryInsertKey` refused at its head in a sealed box (no key consumed). lc3-seal: an active vault inside keeps the key, an active control outside takes it.
+- **Should-fix:** a road's or cell site's seal is its write footprint (its journal entries' cells, every status; the whole box when the journal can't be read). Unit `aRoadOrCellSiteSealsOnlyItsWriteFootprint`.
+- **Out of scope (documented):** #6 vanilla commands and datapacks (`/loot insert`, `/item replace`, `/data`, structure loads) are admin tools, like any mod's direct `setItem`. #7/#8, the kept LC2 side-fixes (`RegionTargets.dropPlayerBlocks`'s holder drop, `Drops.protect`), are strictly better than v0.73.0, which erased a player holder's contents outright; LC4 follow-ups: a durable pending-delivery record for the drop (crash between the block write and the item entities' save), and drop protection that survives a merge, a restart and the 200-tick expiry.
+- **Lifecycle notes:** a DeltaJob revert is not in the queue file (no kind saved); a halt mid-revert is settled at SERVER_STARTED, before the first tick, so it re-seals nothing and needs none (shown by source, not in game). A single failed restore job (`broken`) leaves the queue and unseals, unlike a STALLED group removal, which keeps its whole set sealed until retried.
+- **Still not sealed:** composters (no block entity; their hopper-facing container resolves to no cell), an explosion or piston breaking a sealed holder, an item thrown or dispensed into a box as an entity (the drop clear's, as before).
+- **After a restart** the start's settle can release a written member (its record and entries gone: nothing can write it again), so it unseals then; a member still pending is sealed (lc3-undo checks both through `dev.seal.state` `members`).
+- **Gate** (`--only --no-cache --shards 1 --no-turbo`, 9068/9069; `artifacts/gate-runs-LC3f`): `20261116-122948-change` at bb230641: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, fl-survival 11/0; lc3-seal 38/2 and lc3-undo 13/1 (test faults: a headless player's vault detection, and a released member expected sealed); fixed and re-run `20261116-130515-change` at fd1c848f: lc3-seal 40/0, lc3-undo 15/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
+
+#### LC3 fix 2 (the GPT fix-verification, NOT SAFE at 611ee4ee: two P1s; one small round, $0, strict)
+
+- **1 unseal on a confirmed queue write:** every `Placement.save` takes the next generation; a write counts only once its temporary file is
+  forced to disk and renamed with no exception (`writtenGen`; the write now forces, as the sites file's commit does). A box that leaves the
+  seal set lingers until a generation requested after it left is written (`need = requestedGen + 1`; the save is the tick's, never made
+  inside a seal check, which can run mid-change from a mixin); `Placement.saved()` (the saver's barrier) no longer decides it. A failed write
+  keeps it sealed and the placement tick retries the save every 5 s (one error line per failure streak). The tick also rebuilds the seal set
+  between its steps, so a removal that ends with no holder asked about meanwhile still lingers. A session whose queue file failed to load
+  (PS: never saved) keeps such boxes sealed until it ends (fail closed). Unit `aLingeringBoxUnsealsOnlyOnceAQueueGenerationThatExcludesItIsWritten`
+  (an injected failing write: still sealed though the barrier completed; the retry's write releases it); with 611ee4ee's rule (the barrier)
+  swapped in, it fails.
+- **2 ops abandon (REMOVED before merge: "LC3: ship without abandon" below):** `/architect removal abandon <group> [stage]` (permission level 2 as `/architect survival on|off`, the console too;
+  `SiteCommands`). Only a persisted STALLED group or stage removal: its written members are settled as after a normal finish (their pending
+  records and undone entries stay; the next start releases them on their evidence); its unwritten members (the one that broke included) stay
+  standing as they are, nothing written; for each still pending (one a start's settle already took back or released is left alone) a filled member's custody goes back into its containers (as `end()` does for a removal ended before
+  its undo), their journal entries are released (awaited) and their pending records dropped (`Sites.dropPending`), so no start's settle can
+  take them back and no removal restore them again; then it leaves the stalled list, the queue is saved, and its boxes unseal once that
+  generation is written (#1). Refusals (nothing changed): "No stalled removal of X (never stalled, finished, retried or already abandoned)"
+  (so a second abandon is refused), "The removal of X is running, not stalled", the journal unavailable, an unwritten member lying on top of
+  a site outside it (`SiteJournal.belowAny`, as `forget`). One ops log line (`Ops: <who> abandoned the stalled ...`). The group record keeps
+  the state the stall left (ACTIVE; its stages as they were); no region end is called. No player-facing change. Unit
+  `abandonSettlesOnlyAStalledRemovalItsWrittenAndUnwrittenMembers`; lc3-undo: a second town's group removal forced STALLED
+  (`dev.undo.failRestore` skip 1), a chest with 5 diamonds in written member A's sealed box; abandoned: it opens with its 5 diamonds; taken
+  out, flushed, halted, reopened: nothing resumes or is sealed, the chest stands empty (nothing replayed), the unwritten member has no record,
+  a second abandon refused (one for a group with no stalled removal too).
+- **Leftovers:** `RestoreJob.groupSaved` and `Groups.preSaved` still wait on the saver's barrier (`Placement.saved()`) before a commit, the
+  same weakness as #1 (a failed pre-save lets the commit go first); not changed here. An abandoned unwritten member's released entries
+  give up any hand-down its undo planned to a written sibling (an ops tool for a removal that cannot finish). `dev.seal.state` reports the
+  generations; there is no dev hook for a failing queue write (units only).
+- **Gate** (`--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3g`): `20261116-134209-change`
+  at 720a10c7: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, lc3-seal 40/0, fl-survival 11/0; lc3-undo 26/4 (test faults: the
+  runner's json drops whitespace, a chest under a solid block never opens, and `dev.seal.state` answered before a check rebuilt the set: the
+  chest was still, correctly, sealed until its generation was written). `20261116-141016-change` at 06975811: lc3-undo 27/3 (the refusals'
+  `success` flag, the same seal-state lag). Fixed (`dev.seal.state` rebuilds the set first) and re-run `20261116-141426-change` at 50a59d77:
+  lc3-undo 30/0, lc3-seal 40/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
+
+#### LC3 round 4 (the GPT final pass, NOT SAFE at f6a982f6: abandon's custody P1, FK-b's guard P2; $0, strict; its abandon work REMOVED, see below; the PSV merge kept)
+
+- **P1 durable custody return:** `Groups.abandonSteps` orders the abandon: every unwritten pending member's custody back (memory), then ONE
+  save confirmed durable (`Stockpiles.saveWithWorldConfirmed`: players, chunks flushed with every write known durable (SS), then the ledger's
+  temporary file forced and renamed; false on a refused, undurable or failed write, or stockpiles that failed to load), and only then the
+  journal release, `Sites.dropPending`/`Infras.drop` and the stalled list plus queue save. An unconfirmed save stops before any record changes
+  (the command answers so; still stalled and sealed; re-runnable). Refused up front when a filled member's stockpiles failed to load.
+- **Idempotent return** (`Fills.writeBackAbandoned`): a declared slot already holding its item counts as written back (a crash between the
+  save's chunks and its ledger); billed items with no declared slot are credited to the stockpile (a ledger change in the same save), never
+  dropped. A retried stalled removal (`retakeCustody`, before `resume`) takes custody again for an unwritten filled member holding none (a
+  crash after the save, before the records), so its restore refunds it once; (rule 17) saved confirmed before the retry goes on, else the
+  retry is refused (still stalled) and the next one saves again.
+- **P2:** the abandoned member keeps no record, so FillGuard would guard nothing: its provided items are settled by FK-b's rule, never
+  written back (held ones released and destroyed; any provided stack in its declared containers stripped).
+- **Kill points** (`dev.journal.killAt`): AB1 custody back in memory; AB2 inside the save (chunks on disk, ledger not); AB3 save confirmed,
+  no record dropped; AB4 records dropped, queue not saved. `dev.seal.state` stalled entries carry `current`.
+- **Units:** `AbandonCustodyTest`: a crash model over the recorded steps (once at every prefix; f6a982f6's order strands the custody and
+  fails it; an unconfirmed save touches no record), the idempotent return, the strip, `needsRetake`, the load-failed refusal.
+- **lc3-undo** adds the abandon crash cases on FK-b's filled town (`fkbFixture`, exported from gatem5fkb.mjs), the removal STALLED at its
+  member (`dev.undo.failRestore {stallBefore}`, new: a survival site deconstructs at once, so no RestoreJob breaks): clean (plus a restart) and AB1-AB4 (halted, restarted: still stalled; abandoned again): the billed items once (containers
+  plus stock gained = the bill), no custody or held slabs left, nothing dropped, no provided slab in the containers (f6a982f6's writeBack put the
+  16 slabs back there, unguarded), loose or with the player.
+- **Leftovers:** the ledger's `filled`/`provided`/paid records of an abandoned member's key stay (keyed by placement, inert); the retry's
+  re-take is shown by units and source only (no in-game crash point of its own: rule 18 not met there).
+- **PSV merged** (origin/slice/PSV f68b7716, its fix round READY): LC3's copies dropped (requestedGen, WRITTEN_GEN, failedGen, FAIL_WRITES,
+  writeSave(gen) with PSV's folder sync, saveIfDue's retry half, the load resets); kept `saveWanted`/`wantSave` (saveIfDue's tail) and
+  `RemovalSeal.observe`; `save` answers its generation. RemovalSealTest's barrier call became `flushSaves()` (PSV removed `saved()`). Gate at the merge 7a32ff45
+  (`20261117-035015-change`; `-034504` errored in setup: the run dir's gradle home lacked lab_ui 0.5.0, refreshed from b7's): rl-crash 110/0,
+  hf-crash 56/0, ps-crash 81/0, psv-crash 48/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 91/0, fl-survival 11/0.
+  Units on the merge: unit-scope full Gradle + kit PASS; sidecar (main's code, no change here) 945/948 at load 47, jobs.test PASS on a
+  re-run, proc-cpu's child CPU-time check (190 ms vs > 300) failing under load. The rule-17 retake change (49a5fcc0, after the merge run): lc3-undo 91/0 (`20261117-050654-change`; dirty = this as-built only); its targeted units PASS.
+- **Gate** (`--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3r4`): `20261117-013955-change`
+  at d5c5aefa: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0 (the shared fixture), lc3-seal
+  40/0, fl-survival 11/0; lc3-undo 40/1, stopped (`failRestore skip 0` never breaks a survival site's at-once deconstruct: the removal
+  finished); `stallBefore` added: `20261117-030103-change` the clean case PASS, AB1 refused by killAt's point list (fixed);
+  `20261117-030545-change` at b487ba2b: lc3-undo 91/0 (clean + restart, AB1-AB4; at AB2 the containers and the saved custody both held the
+  items: settled once). Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
+
+#### LC3: ship without abandon (Noah's call, 2026-11-17; abandon moves to TXN T5; $0, strict)
+
+- **Removed:** `/architect removal abandon <group> [stage]` (SiteCommands, `Groups.abandon`, its refusals and suggestions), round 4's
+  `Groups.abandonSteps`/`AbandonIo`, `Fills.writeBackAbandoned` (and its `returnBilled`/`stripProvided`/`Slots`), `Stockpiles.saveWithWorldConfirmed`,
+  the kill points AB1-AB4 (and `dev.journal.killAt`'s AB pattern), `dev.undo.failRestore {stallBefore}`, the retry's custody re-take
+  (`retakeCustody`, `retakeUnsaved`), fix 2's `Sites.dropPending` and `SiteJournal.belowAny`, `AbandonCustodyTest`, and lc3-undo's abandon
+  cases (fix 2's and round 4's); `gatem5fkb.mjs` back to f6a982f6's. No API or dev hook exposes abandon.
+- **The state as shipped:** a group or stage removal whose restore keeps failing stays STALLED in the queue file. Its whole member set (written
+  members included) stays sealed, so its holders accept and give up no items, across restarts, until a retry of the same removal finishes it.
+  That is safe (nothing enters, leaves or is refunded twice) and stuck: there is no command to give it up. Recovery is by ops later (TXN T5).
+  `dev.seal.state` still lists it under `stalled` (members written and not, `current`). Unit `aStalledRemovalKeepsItsWholeSetSealedAcrossAReload`.
+- **Kept:** the seal design (RemovalSeal, S-M5-12; FL's S-M5-17/18), fix 2's confirmed queue generations as PSV now has them, and the PSV merge.
+- **Not here:** the instant-build provided-slab P2 (LEFTOVERS, the coordinator) and the rename's directory sync (T0).
+- **Gate** (strict, `--only --no-cache --shards 1 --no-turbo --no-history-timeouts`, 9068/9069; `artifacts/gate-runs-LC3r5/20261117-053747-change`
+  at 0cbf8847): rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, psv-crash 48/0, sad-crash 26/0, fk-crash 58/0, fkb-crash 48/0, lc3-seal 40/0,
+  lc3-undo 15/0 (no abandon cases), fl-survival 11/0. Units: unit-scope full Gradle + kit PASS; step-inputs build + check; gitleaks clean.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
@@ -33648,6 +33788,41 @@ Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N
 **Gates:** units per slice (CXC failing first on main; the BuildStatus precedence table; the 200-target budget, 39 us of 500; layout over
 the goldens; the coalescer). In the batch: `cx-survival` checks the dry run's quote against the check's bill, a maxBill one under the bill
 refused BILL_CAP with nothing written, a lot cap refused, the place typed at exactly its bill; gatedrs DR12 checks SAVE_REFUSED.
+### Slice PSV as built (branch `slice/PSV` off origin/main 97d04b80; the pre-existing P1 from LC3's GPT fix-verification, item 2; no API change; $0; strict; recorded 2026-11-16)
+- **The bug:** `Groups.preSaved` and `RestoreJob.groupSaved` took the queue saver's turn (`Placement.saved()`) as persistence; a failed queue write still let R2 commit unrecorded, so a crash left a loaded job without its undo identity (it replanned against UNDONE entries and stopped) and could lose a group's refund credits (`decCredit`, fixed in R1).
+- **Mechanism (lifted from LC3 fix 2, same names):** `Placement.save` answers a generation (`++requestedGen`); `writeSave(root, f, gen)` forces the temp file and renames it, and only then raises `WRITTEN_GEN`; a failure records `failedGen`. `written(gen)`, `writeFailing()`, `requestedGen()`, `writtenGen()`, `FAIL_WRITES` (TEST); the tick's `saveIfDue` retries every 5 s while a write fails; `load()` clears the retry. `Placement.saved()` is gone (no callers left).
+- **Guards:** both now hold a `long preSave` generation and pass only on `Placement.written(gen)` (Groups: 0 = a planned undo loaded from the file, already durable). A failing write keeps the removal waiting (no commit) until a retry is written. `save` answers `NOT_SAVED` (-1) when the queue file failed to load (PS: nothing saved this session): a group removal then ends unwritten before its commit (custody R1 took written back and saved with the ledger), a removal job ends broken, instead of committing an undo no file can record.
+- **Other barrier callers:** none guard a commit. `Composites.modulePlaced` flushes before the CM1 TEST kill point only; `Builds`' index writer and the journal's own IO executor are not queue barriers.
+- **Units:** `QueueWriteConfirmedTest` (a real IO fault, a directory at the .tmp path: no commit; the retry written: commit; an injected failure; NOT_SAVED never written; a loaded plan durable). The same property probed on 97d04b80 fails ("expected false but was true": the saver's turn completes after the failed write). `StockpileSavePSTest` reads the new `save` signature. Full gradle build: 1360 tests PASS.
+- **Gate (strict, change --only --no-cache --shards 1 --no-turbo, 64b0d3e9, artifacts/gate-runs-psv/20261116-150819-change):** new `psv-crash` 27/0 (hook `dev.queue.writes`): every queue write failing, a survival town's removal waits 20 s with 0 cells changed; PSV1 halted then, reopened, removed again: world as before the town, refund 389 once, identity holds; PSV2 failure cleared, retry written, REMOVED live, halt: stays removed, stock kept (lost 0, minted 0). rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, x-resume 35/0.
+- **For LC3 on rebase:** drop its own copies of requestedGen/WRITTEN_GEN/failedGen/FAIL_WRITES/writeSave(gen)/the retry in saveIfDue/the load resets and keep only `saveWanted`/`wantSave` and the `RemovalSeal.observe` calls in `tick`; take `save`'s `long` answer (NOT_SAVED under loadFailed) and drop `saved()`; its "known leftover" on groupSaved/preSaved is closed here.
+- **Fix round after the rule-15 GPT NOT SAFE (2026-11-17; the three P1s and both should-fixes):**
+  - **P1 1, the rename durable:** `writeSave` forces the queue file's folder after the rename (`DIR_SYNC`, `forceDir`: `FileChannel.open(dir, READ).force(true)`), and only then raises `WRITTEN_GEN`; a force that throws is a failed write (retried); a folder that can't be opened (Windows) is best effort, logged once. Verified on macOS/APFS.
+  - **P1 2, NOT_SAVED before anything is touched:** under `loadFailed` the removal is refused at entry (`Groups.UNRECORDABLE`): `removeGroup` (before batches cancel or REMOVING), `undoStage`, `Regions.remove` (before mined cells go back), `Sites.removeLarge`, `InfraPlace.remove` (before the road's tally and handover); the tick's preflight is the backstop. No R1 runs, so no crate stock or custody is taken.
+  - **P1 3, no frozen plan:** `Placement.Preflight`: a removal (Groups, before RegionFluids/irrigation/custody/tallies; RestoreJob, before it plans) waits, untouched, for a queue save it asked for to be written with no write failing since. A pre-save that fails after R1 (`Placement.failed(gen)`) drops the plan (`Groups.dropPlan`: planner, txn, planned, tallies, scans; RestoreJob `dropPlan`) and R1 runs again after the next confirmed write, against the world then; a legacy crate's stock R1 took is carried in the saved `decStock` (`withStock`: once); a stockpile road's C29 credit is tallied again (`RoadBuilder.beforeRemove`). Nothing was committed, so nothing is undone. Custody is held, not re-taken (a second `takeCustody` adds nothing).
+  - **Should-fixes:** custody goes back by `Fills.holdsCustody` (the ledger), not `Fills.phase`, in the cargo path, `endUnrecorded` and `end()` (over decCredit keys and planIds); `planned` cleared on unwind (an untouched removal stays untouched, no PARTIAL).
+  - **TEST:** `dev.queue.writes {failAtPreSave: n}` (`Placement.preSave`: the next undo pre-save's write and n-1 after it fail).
+  - **Units:** `QueueWritePSVFixTest` (5): the folder synced after the rename and before the generation counts (never called on bb95ec19); a failed folder sync is a failed write, the retry acknowledges it; the preflight waits while writes fail and asks again after the retry; a pre-save failed after R1 drops the plan (bb95ec19 kept it: committed frozen); a crate stock carried once into the replan and saved. `node tools/unit-scope.mjs --run` PASS.
+  - **Gate:** psv-crash gains PSV3 (failAtPreSave; an oak plank set to air during the wait; refund = consumed less the plank exactly) and PSV4 (no stockpile, a crate-fed construction rs_hut with stock, the queue file corrupted, reopened: refused at once, the crate stands, stock + placed unchanged, the group not taken down); PSV1/PSV2 also check refund = consumed. Strict (change --only --no-cache --shards 1 --no-turbo, ports 9080:9081), artifacts/gate-runs-psvf: 20261117-013321-change at 6ae45195: rl-crash 110/0, hf-crash 56/0, ps-crash 81/0, sad-crash 26/0, fk-crash 58/0, x-resume 35/0; psv-crash 46/1 (PSV4's precondition: the unpaused builder had placed all 19 inserted items, stock 0; the refusal checks passed). Re-run alone after PSV4 pauses its site, 20261117-023328-change at 9aa76a59: psv-crash 48/0 (PSV1/PSV2 refund 389 = consumed; PSV3 oak_planks 77 of 78, 388 of 389, world diff 0; PSV4 refused, crate stands, stock 19 -> 19, group ACTIVE). Not run on bb95ec19 (reasoned: its R1 takes the crate stock and tallies the plank at once).
+
+### Slice PSVLC3 as built (branch `slice/PSVLC3` off origin/main 3d5acc41 / v0.79.0; LC3 848fa465 + PSV f68b7716 + adef7f9b merged onto T0; strict; no API change; $0; 2026-11-17)
+- **Merge:** origin/fix/v077-psv merged (FL rides inside LC3). Against T0/T1b/DR-S: the Transfer API wrapper guards txn holds and the seal; Groups' tick runs PSV's preflight (a wait, untouched) before DR-S's save-first probe; the player block drops on top of its cell after DR-S's apply guard.
+- **Queue writer on T0:** `Placement.writeSave` writes through `DurableFile("queue")` (generations persisted in the file, one instance per queue path, fresh at load); REFUSED and IN_DOUBT raise `failedGen` and are not written (no commit, no unseal). PSV's own forceDir/DIR_SYNC are gone; the units force through `DurableFile.FORCER`.
+- **P1 1 (double crate stock):** persist before mutate. `Groups.crateRecorded`: each standing legacy crate R1 will take has its stock recorded in `decStock` and that queue save confirmed (no write failing since) before the take, in the same tick as the take. At R1 a crate that still stands voids what was carried and its stock replaces it (`withStock(.., crateStood)`); a gone crate's record is carried once. Whichever of the queue file and the chunks a crash keeps, the stock counts once. T0's barrier runs after a take (not needed for conservation; a refusal logs). An end before the undo drops the records of crates that still stand (`voidStanding`).
+- **P1 2 (stranded stage stock):** `stalledRefusal`: no removal of a group starts while another of its removals is stalled (removeGroup before anything is touched; undoStage too); undoStage finds its own stalled entry before it judges the stage's state.
+- **P1 3 (stale scans):** `resume()` resets scan, blockerScan, outsideF, the preflight, the DR-S probe and the crate record's generation.
+- **Also:** `dropPlan` drops DR-S's held pending credits before it clears `decCredit`.
+- **Tests:** `StalledRemovalPSVLC3Test` (5; failing-first at d3097ee3: every case that compiles there fails, 17 for 12, the removals not refused, the scans 1 not 0; the 5-arg withStock case is new API); `QueueWritePSVFixTest`'s folder cases on `DurableFile.FORCER`. psv-crash PSV5 (K5, the crate's stock dropped once) and PSV6 (K5+save): at the merge PSV5 fails, 34 of 17 (run 20261118-023646-change), PSV6 passes.
+- **Gate:** full gradle build 1588 tests, 0 failures; `change --only lc3-undo,psv-crash,ps-crash,rl-crash,hf-crash,dr-crash,dr-survival,x-resume --no-cache` at 242cc69b: 8 PASS (run 20261118-023812-change). With T0's barrier after the take, PSV5 exercises the gone-crate path in game; the standing-crate rule is the unit's.
+- **Shared with T2b:** Groups.java, Placement.java, Builder.java (`crateStands`/`crateTake`, read only, beside prepareDeconstruct; LC2's dropAtCell/holderContents from the merge), Stockpiles.java not changed (only `barrier` called).
+- **Fix round (the GPT review of ca946197: NOT SAFE, five P1s; c77f799c):**
+  - P1 1: the undo commits only after T0's barrier is OK over R1's takes (a crate taken, a player's holder replaced); refused or IN_DOUBT (/save-off) waits, retried every 5 s (`worldPending`, `worldDurable` ahead of the pre-save). `resumeCommitted` applies R1's standing-crate rule (`retakeStanding`).
+  - P1 2: a changed crate record (a crate emptied after its stock was recorded) is saved and confirmed before R1 goes on, takes or not (`crateStep`).
+  - P1 3: no whole-group removal beside a running stage undo (`stageRunningRefusal`); the ops way out of a stalled pair is `/architect removal resume <group> [stage]` (`Groups.resumeStalled`, gamemaster).
+  - P1 4: a player's holder in a region target is never dropped: its contents held pending (`cargo:<target>:<cell>`) and made durable with the world (barrier) before the holder is replaced, booked into the stock (past capacity) once the replacement is durable; the start's settle books or drops by the world (`Stockpiles.cargoAction`). A stack with its own data ends the removal untouched.
+  - P1 5: the seal refuses explosions and pistons at a sealed holder (`RemovalSeal.refusesBlast`). Commands (/setblock, /fill) are ops tools and stay outside the seal.
+  - Failing-first at ca946197: units for 3, 4, 5 fail there (the stage-undo admission, the item-entity drop, the explosion guard); 2's `crateStep` and 4's `cargoOf`/`cargoAction` are new seams; in game psv-crash PSV7 (/save-off: REMOVED at once) and lc3-undo's TNT row (the chest blown up) fail there (run 20261118-035831-change).
+  - Gate: full gradle build 1592 tests, 0 failures; the same 8 steps at c77f799c: 8 PASS (run 20261118-041130-change; psv-crash 66/0 with PSV7, lc3-undo 16/0 with the TNT row).
 
 ## Phase T4: removals on the TXN layer (refunds, group removal, LC3 seal, cargo) (branch `slice/T4` off origin/slice/T2 99d28f0f; 2026-11-18; DEV MODE, strict; versions NEXT; $0; Noah's decisions and Steward's review in; T4a cleared)
 

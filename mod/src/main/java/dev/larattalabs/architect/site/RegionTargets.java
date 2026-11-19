@@ -1934,9 +1934,11 @@ public final class RegionTargets {
 			}
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
-			Builder.dropItems(level, p, items, null);
+			// (slice PSVLC3 fix round, GPT P1 4) a player's item holder there (a chest, a lectern, a campfire): its contents are never dropped as
+			// items; the group removal held them pending in the owner's ledger before this write and books them once it is durable (Groups.cargo)
 			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
 				Sites.CELL_FLAGS);
+			Builder.dropAtCell(level, p, items); // (LC2, F10) on top of the before just written, never inside it
 			n++;
 		}
 		if (n > 0) {

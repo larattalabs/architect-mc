@@ -415,6 +415,21 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `success: false` and `result: null` beside the error (client and headless). On the integrated client `/save-all` and `/op` are
   not commands, so a caller that sent them as a no-op catches the DevError (Architect's drivers do). New `dev.stockpile.save {}`:
   an explicit ledger save with the world, answered when `stockpiles.json` is written (`{written, path, bytes, saves}`).
+- **2026-11-17 (slice PSV fix round):** `dev.queue.writes` takes `failAtPreSave?: n` (TEST): the next undo pre-save's queue write and the n-1
+  after it fail (the failure starts after R1, the preflight already written); the answer adds `failAtPreSave` (left armed).
+- **2026-11-16 (slice PSV):** new (`StockpileDev`, generated headless too) `dev.queue.writes {fail?: n}`: TEST, the next n queue file
+  (`architect-queue.json`) writes fail before writing (0 clears) -> `{requestedGen, writtenGen, writeFailing, failWrites, loadFailed}`.
+  A failing write keeps a group removal's (and a removal job's) undo commit waiting; Placement retries every 5 s.
+- **2026-11-16 (slice LC3; TEST, in `SliceFkDev`, generated headless too):** `dev.seal.state {}` -> `{sealed: [{id, dim, box}], refused:
+  {path: n}, pause: {site: after}, jobs: [{site, kind, progress, cells}]}` (the removal seal now, its refusals since the start). `dev.seal.holder
+  {pos}` -> `{holder, kind, block, holds, sealed}`. `dev.seal.use {pos, item?, count?, contents?: {item: n}, face?}`: the first player
+  (survival for the call) uses item on the block at pos through `ServerPlayerGameMode.useItemOn` -> `{before, after, result, hand, menuOpened,
+  refused, nextBefore, nextAfter}`, the hand put back after. `dev.seal.menu {pos, open?, close?}`, `dev.seal.frame {pos, item, count?}`
+  (`ItemFrame.interact`), `dev.seal.transfer {pos, item, count?}` (a committed Transfer API insert). `dev.removal.pause {site | *, after?:
+  cells, off?}`: a removal restore pauses once it has written `after` cells; kept in `architect/dev-removal-pause.json`, so a restart keeps it.
+  `dev.removal.undoStage {site}` (LC's, kept). (LC3 fix 2) `dev.seal.state` also answers `members: [{id, pending, standing, sealed}]`,
+  `lingering: [{id, need}]` (boxes kept sealed until queue file generation `need` is written), `queueRequested`, `queueWritten`,
+  `queueWriteFailing`, and `stalled: [{group, stage?, written, unwritten, current?}]` (the STALLED removals, sealed until retried).
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,

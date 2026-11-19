@@ -35,6 +35,16 @@ public final class Infras {
 		return pending.get(id);
 	}
 
+	/** (slice LC3) The records map now (replaced on every change). */
+	static Object identity() {
+		return byId;
+	}
+
+	/** (slice LC3) The pending map now (replaced on every change). */
+	static Object pendingIdentity() {
+		return pending;
+	}
+
 	/** 6c Y1 (the audit): the removed records not settled yet. */
 	static List<Infra> allPending() {
 		return List.copyOf(pending.values());

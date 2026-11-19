@@ -2871,6 +2871,21 @@ public final class Builder {
 		return d;
 	}
 
+	/** (slice PSVLC3) Whether {@code s}'s legacy crate (its own or its group's shared one) stands at its cell. Read only; loads the chunk. */
+	static boolean crateStands(ServerLevel level, Site s) {
+		return crate(level, s, true) != null;
+	}
+
+	/**
+	 * (slice PSVLC3) What {@link #prepareDeconstruct} would take from {@code s}'s legacy crate now. (slice T4a) Always null: since T2b part 2b
+	 * prepareDeconstruct takes nothing from a crate (its stock settles after the restore, in crate.settle), so PSV's crate-stock carriage
+	 * ({@code Groups.Removal#decStock}, {@code crateRecorded}, {@code withStock}, {@code retakeStanding}) never records a take and stays inert
+	 * until T4c's group txn removes it. A recorded take here would count the stock twice (decItems and the settle).
+	 */
+	static @Nullable Map<String, Integer> crateTake(ServerLevel level, Site s) {
+		return null;
+	}
+
 	/**
 	 * One cell of a deconstruct ({@link #prepareDeconstruct}), booked in {@code tally}: {@code now} the block standing, {@code was} the
 	 * site's before there, {@code qi} the cell's queue position (-1: not queued), {@code adopted} the PT2 rule (an adopted site's removal
@@ -3001,6 +3016,84 @@ public final class Builder {
 		}
 		Anchors.Bounds b = s.restoreBox();
 		return new BlockPos((b.minX() + b.maxX()) / 2, b.maxY() + 1, (b.minZ() + b.maxZ()) / 2);
+	}
+
+	/**
+	 * (LC2, F10) Where an item dropped at {@code at} spawns: on top of the block standing there (its collision shape), or a quarter block up
+	 * in a cell with none. Never inside a solid block, which vanilla pushes the item out of toward whichever neighbour is free in that tick.
+	 */
+	static double cellDropY(ServerLevel level, BlockPos at) {
+		net.minecraft.world.phys.shapes.VoxelShape sh = level.getBlockState(at).getCollisionShape(level, at);
+		return dropY(at.getY(), sh.isEmpty() ? Double.NaN : sh.max(net.minecraft.core.Direction.Axis.Y));
+	}
+
+	/** (pure) {@link #cellDropY}: {@code top} the collision shape's top within the cell (NaN: no shape). */
+	static double dropY(int y, double top) {
+		return Double.isNaN(top) ? y + 0.25 : y + top + 0.01;
+	}
+
+	/**
+	 * (LC2, F10) A player's block's items dropped at its own cell, after the cell got its before back: on top of that block (never inside it),
+	 * spared by the removal's drop clears.
+	 */
+	static void dropAtCell(ServerLevel level, BlockPos p, Map<String, Integer> items) {
+		double y = cellDropY(level, p);
+		for (var e : items.entrySet()) {
+			Item it = Cells.item(e.getKey());
+			if (it == null || e.getValue() <= 0) {
+				continue;
+			}
+			int left = e.getValue();
+			int max = new ItemStack(it).getMaxStackSize();
+			while (left > 0) {
+				int n = Math.min(max, left);
+				left -= n;
+				ItemEntity ie = new ItemEntity(level, p.getX() + 0.5, y, p.getZ() + 0.5, new ItemStack(it, n), 0, 0, 0);
+				ie.setDefaultPickUpDelay();
+				level.addFreshEntity(ie);
+				Sites.Drops.protect(level, ie);
+			}
+		}
+	}
+
+	/**
+	 * (LC2, kept by LC3) Copies of what an item holder holds (a container's slots, a lectern's book, a campfire's items, a brushable
+	 * block's item); empty for anything else. Leaves the holder as it is.
+	 */
+	static List<ItemStack> holderContents(net.minecraft.world.level.block.entity.@Nullable BlockEntity be) {
+		List<ItemStack> out = new java.util.ArrayList<>();
+		if (be instanceof net.minecraft.world.Container c) {
+			for (int i = 0; i < c.getContainerSize(); i++) {
+				if (!c.getItem(i).isEmpty()) {
+					out.add(c.getItem(i).copy());
+				}
+			}
+		} else if (be instanceof net.minecraft.world.level.block.entity.LecternBlockEntity l && !l.getBook().isEmpty()) {
+			out.add(l.getBook().copy());
+		} else if (be instanceof net.minecraft.world.level.block.entity.CampfireBlockEntity cf) {
+			cf.getItems().forEach(st -> {
+				if (!st.isEmpty()) {
+					out.add(st.copy());
+				}
+			});
+		} else if (be instanceof net.minecraft.world.level.block.entity.BrushableBlockEntity b && !b.getItem().isEmpty()) {
+			out.add(b.getItem().copy());
+		}
+		return out;
+	}
+
+	/** (LC2, kept by LC3) {@link #dropAtCell} for whole stacks (components kept): on top of the cell's block, spared by the drop clears. */
+	static void dropStacksAtCell(ServerLevel level, BlockPos p, List<ItemStack> stacks) {
+		if (stacks.isEmpty()) {
+			return;
+		}
+		double y = cellDropY(level, p);
+		for (ItemStack st : stacks) {
+			ItemEntity ie = new ItemEntity(level, p.getX() + 0.5, y, p.getZ() + 0.5, st.copy(), 0, 0, 0);
+			ie.setDefaultPickUpDelay();
+			level.addFreshEntity(ie);
+			Sites.Drops.protect(level, ie);
+		}
 	}
 
 	static void dropItems(ServerLevel level, BlockPos at, Map<String, Integer> items, Sites.@Nullable Drops drops) {

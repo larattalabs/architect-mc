@@ -5,15 +5,22 @@
 	"mixins": [
 		"BlockBehaviourExplosionMixin",
 		"BlockEntityStripMixin",
+		"BlockItemSealMixin",
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
 		"ChunkMapDebtMixin",
 		"ChunkSaveFailMixin",
 		"ChunkSaveWaitMixin",
 		"CompoundContainerAccessor",
+		"ContainerStillValidMixin",
+		"CopperGolemSealMixin",
+		"CrafterSealMixin",
+		"DispenseSealMixin",
 		"FallingBlockEntityMixin",
 		"HopperGuardMixin",
+		"HopperHoldMixin",
 		"IOWorkerDebtMixin",
+		"ItemFrameSealMixin",
 		"LevelChunkMixin",
 		"LevelTicksAccessor",
 		"LevelTicksMixin",
@@ -60,7 +67,8 @@
 		"TxnHoldLootMixin",
 		"TxnHoldMenuMixin",
 		"TxnHoldPistonMixin",
-		"TxnHoldRandomizableMixin"
+		"TxnHoldRandomizableMixin",
+		"VaultSealMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

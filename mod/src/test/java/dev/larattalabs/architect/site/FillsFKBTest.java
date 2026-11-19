@@ -144,6 +144,9 @@ class FillsFKBTest {
 		Method m = w.getDeclaredMethod("extract", net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.class, long.class,
 			net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.class);
 		assertEquals(long.class, m.getReturnType());
+		// (slice LC3) the removal seal's insert injector
+		assertEquals(long.class, w.getDeclaredMethod("insert", net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.class, long.class,
+			net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.class).getReturnType());
 		Field storage = w.getDeclaredField("storage");
 		assertEquals(int.class, w.getDeclaredField("slot").getType());
 		Field container = storage.getType().getDeclaredField("container");
