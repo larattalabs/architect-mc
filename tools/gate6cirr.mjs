@@ -20,6 +20,7 @@
 //     crash     (irr-crash)            item 6: FL1+save and FL2+save on v62's realise, FL6+save on a lot removal's drain
 //     df        (irr-df)               slice DF round 2: a lot removal with fluids.json refused drains and restores nothing
 //     t8d       (8ct-d)                slice 8cTa row D: FL6d bare, lotDrained stripped (a DF-era record): asked again, 0 water
+//     t9ll, t9lb, t9lh (8ct-ll, 8ct-lb, 8ct-lh) 8cT last round: legacy lot at load; lot flags never bypass the barrier; held lot typed
 //     look      (irr-look)             a client, recorded: camera shots of v62's irrigated farms (Noah's look, the gallery)
 //     report                            REPORT.md over the step JSONs
 //
@@ -178,6 +179,9 @@ steps.t8d = async () => {
   spendZero();
   return out;
 };
+
+// (8cT last round) the legacy lot conversion at load; the lot flags and the barrier; a held lot drain answers typed
+for (const k of ['t9ll', 't9lb', 't9lh']) steps[k] = async () => { await ensure(); const out = await G[k](ctx); spendZero(); return out; };
 
 steps.look = async () => {
   await ensure();

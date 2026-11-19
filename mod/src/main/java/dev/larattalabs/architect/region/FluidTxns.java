@@ -16,6 +16,7 @@ import dev.larattalabs.architect.txn.TxnCore;
 import dev.larattalabs.architect.txn.TxnEntry;
 import dev.larattalabs.architect.txn.TxnKind;
 import dev.larattalabs.architect.txn.TxnServer;
+import net.minecraft.core.BlockPos;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -415,12 +416,21 @@ public final class FluidTxns {
 				throw new IllegalStateException("no server");
 			}
 			int lava = e.data().get("lava").getAsInt(), grates = e.data().get("grates").getAsInt();
-			// (8cTb review P1-3) never more than the drain this session saw standing or never written (a source taken while the txn waited)
-			RegionsImpl.Live l = e.data().has("region") ? live(region(e), rid(e)) : null;
-			RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
-			if (st != null && st.scoopSeen != null) {
-				lava = Math.min(lava, st.scoopSeen[0]);
-				grates = Math.min(grates, st.scoopSeen[1]);
+			// (8cT last round, #2) at most what the drain saw, summed from the seen receipts its W saved with its writes
+			Effect w = t.effects().stream().filter(x -> "fluid.drain".equals(x.op())).findFirst().orElse(null);
+			ServerLevel level = w == null ? null : level(w);
+			if (w != null && level != null) {
+				int sl = 0, sg = 0;
+				for (long[] c : chunksOf(w)) {
+					int[] seen = seenOf(level.getChunk((int) c[0], (int) c[1]), w.key(t.id));
+					if (seen == null) {
+						throw new IllegalStateException("chunk " + c[0] + "," + c[1] + " has no seen receipt of the drain");
+					}
+					sl += seen[0];
+					sg += seen[1];
+				}
+				lava = Math.min(lava, sl);
+				grates = Math.min(grates, sg);
 			}
 			Stockpiles.scoop(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), lava, grates);
 		}
@@ -435,6 +445,18 @@ public final class FluidTxns {
 			return "stockpile " + e.data().get("owner").getAsString();
 		}
 	};
+
+	/** (8cT last round, #2) A chunk's seen receipt for a drain's W ({@code <key>@seen=<lava>,<grates>}), or null. */
+	static int @Nullable [] seenOf(LevelChunk ch, String key) {
+		String pre = key + "@seen=";
+		for (String r : TestMove.receiptsOf(ch)) {
+			if (r.startsWith(pre)) {
+				String[] a = r.substring(pre.length()).split(",");
+				return new int[] {Integer.parseInt(a[0]), Integer.parseInt(a[1])};
+			}
+		}
+		return null;
+	}
 
 	static @Nullable ServerLevel level(Effect e) {
 		MinecraftServer s = TxnServer.server();
@@ -481,15 +503,24 @@ public final class FluidTxns {
 			if (level == null || l == null || st == null) {
 				throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
 			}
+			if (RegionFluids.holdDrain) {
+				throw new IllegalStateException("TEST: dev.fluid.hold drain"); // (8cT last round) the drain held until released
+			}
 			List<LevelChunk> chunks = new ArrayList<>();
 			for (long[] c : chunksOf(e)) {
 				chunks.add(level.getChunk((int) c[0], (int) c[1])); // loaded first: every write and receipt lands
 			}
+			String k0 = e.key(t.id);
 			if (l.rec().survival()) {
-				try {
-					st.scoopSeen = RegionFluids.scoopPlan(level, l, st, e.data().get("group").getAsString()); // before the writes
-				} catch (IllegalStateException ex) {
-					st.scoopSeen = null; // (the planned amounts stand)
+				// (8cT last round, #2) what the drain sees, per chunk, saved with that chunk before its first write: a chunk whose drain writes reached
+				// disk carries what it saw; a chunk whose snapshot was lost is seen again as it stands (a scan that can't read the journal holds)
+				String group = e.data().get("group").getAsString();
+				for (LevelChunk ch : chunks) {
+					if (seenOf(ch, k0) == null) {
+						int cx = ch.getPos().x(), cz = ch.getPos().z();
+						int[] seen = RegionFluids.scoopPlan(level, l, st, group, p -> BlockPos.getX(p) >> 4 == cx && BlockPos.getZ(p) >> 4 == cz);
+						TestMove.addReceiptTo(ch, k0 + "@seen=" + seen[0] + "," + seen[1]);
+					}
 				}
 			}
 			int n = RegionFluids.removalDrainWrites(level, l, st, e.data().get("group").getAsString(), e.data().get("flowing").getAsInt() == 1);
@@ -595,6 +626,8 @@ public final class FluidTxns {
 				case "fluid.escaped" -> FLUID_ESCAPED;
 				case "fluid.lotdrain" -> FLUID_LOTDRAIN;
 				case "fluid.lotdrained" -> FLUID_LOTDRAINED;
+				case "fluid.hold" -> FLUID_HOLD;
+				case "fluid.held" -> FLUID_HELD;
 				default -> null;
 			};
 		}
@@ -757,21 +790,73 @@ public final class FluidTxns {
 	 */
 	static Step write(RegionsImpl.Live l, RegionFluids.Regional st, List<String> due, boolean last) {
 		String key = "fluid-write:" + recKey(l) + "/" + String.join(",", due);
-		return record(WRITE, key, l, st, Effect.of("fluid.place", EffectClass.W).data("bodies", idsJson(due)), Effect.of("fluid.written", EffectClass.R).data(
-			"bodies", idsJson(due)).data("last", last ? 1 : 0), t -> {
-			});
+		TxnCore c = TxnServer.core();
+		TxnCore.Started started = c.begin(WRITE, key, List.of(resource(l)), null);
+		switch (started.status()) {
+			case ATTACHED -> {
+				return after(started.entry());
+			}
+			case REPLAYED -> {
+				return Step.done();
+			}
+			case HELD -> {
+				return new Step(Step.Kind.HELD, worded(started.detail()));
+			}
+			case UNAVAILABLE -> {
+				return new Step(Step.Kind.REFUSED, "txn_journal: " + started.detail());
+			}
+			default -> {
+			}
+		}
+		TxnEntry t = started.entry();
+		// (8cT last round, #1) one W per chunk: a missing receipt replays its own chunk only
+		java.util.TreeSet<Long> chunks = new java.util.TreeSet<>();
+		for (String id : due) {
+			RegionFluids.Body b = st.body(id);
+			if (b == null) {
+				continue;
+			}
+			for (long[] a : new long[][] {b.cells, b.ice, b.grate, b.decor}) {
+				for (long p : a) {
+					chunks.add(RegionFluids.chunkKey(p));
+				}
+			}
+		}
+		for (long ck : chunks) {
+			JsonArray one = new JsonArray();
+			JsonArray a = new JsonArray();
+			a.add((int) (ck >> 32));
+			a.add((int) ck);
+			one.add(a);
+			c.plan(t, Effect.of("fluid.place", EffectClass.W).data("bodies", idsJson(due)).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec()
+				.dimension).data("group", String.valueOf(l.rec().groupId)).data("chunks", one));
+		}
+		c.plan(t, Effect.of("fluid.written", EffectClass.R).data("bodies", idsJson(due)).data("last", last ? 1 : 0).data("region", l.rec().id).data("rid", l
+			.rid()));
+		DurableFile.Outcome p = c.persist(t);
+		if (p == DurableFile.Outcome.REFUSED) {
+			return new Step(Step.Kind.REFUSED, "txn_journal: the intent could not be written");
+		}
+		if (p == DurableFile.Outcome.OK) {
+			c.drive(t);
+		}
+		return after(t);
 	}
 
+	/**
+	 * (8cT last round, #1) One chunk's write: the due bodies' cells in it that are still open, except a lava or grate cell a tile's journal
+	 * entry wrote (a cell written and then emptied, harvested lava or broken bars, is never refilled: the tiles' write was its only one).
+	 */
 	static final TxnKind.Adapter FLUID_PLACE = w("place", (t, e, level, l, st) -> {
+		long[] c = chunksOf(e).get(0);
+		RegionFluids.JournalWrites jw = new RegionFluids.JournalWrites(l.rec().dimension, e.data().get("group").getAsString());
 		int n = 0;
 		for (String id : ids(e)) {
 			RegionFluids.Body b = st.body(id);
 			if (b != null) {
-				RegionFluids.writeBody(level, b);
-				n += RegionFluids.forceBody(level, b);
+				n += RegionFluids.writeBody(level, b, p -> BlockPos.getX(p) >> 4 == c[0] && BlockPos.getZ(p) >> 4 == c[1], jw);
 			}
 		}
-		st.forcedAt = st.forcedAt < 0 ? level.getGameTime() : st.forcedAt;
 		return n;
 	});
 
@@ -806,6 +891,15 @@ public final class FluidTxns {
 				bs.sources = b.cells.length;
 				bs.spill = b.spill.length;
 				bs.writeTxn = t.id;
+			}
+			if (level != null) {
+				for (String id : ids(e)) {
+					RegionFluids.Body b = st.body(id);
+					if (b != null) {
+						RegionFluids.forceBody(level, b); // (8cT last round) the forced tick once every chunk's cells are written
+					}
+				}
+				st.forcedAt = st.forcedAt < 0 ? level.getGameTime() : st.forcedAt;
 			}
 			String phase = st.phase;
 			if (e.data().get("last").getAsInt() == 1) {
@@ -865,7 +959,7 @@ public final class FluidTxns {
 		}
 		String key = "fluid-drain:" + recKey(l) + "/" + why + ":" + b.id;
 		return record(DRAIN, key, l, st, Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), Effect.of(
-			"fluid.escaped", EffectClass.R).data("body", b.id), t -> {
+			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), t -> {
 			});
 	}
 
@@ -895,6 +989,19 @@ public final class FluidTxns {
 		@Override
 		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
 			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
+			RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+			ServerLevel level = l.level(TxnServer.server());
+			if (b != null && level != null && e.data().has("why")) {
+				// (8cT last round, P2) the outcome rebuilt from the entry (a start that found the W's receipts skipped its writes and lost their
+				// state): the body and its upstream closure drained with their reasons, the typed why, the escaped cells
+				List<long[]> at = new ArrayList<>();
+				for (JsonElement x : e.data().getAsJsonArray("at")) {
+					JsonArray a = x.getAsJsonArray();
+					at.add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+				}
+				RegionFluids.escape(level, l, st, b, bs, e.data().get("why").getAsString(), at, false);
+				bs.why = e.data().get("typed").getAsString();
+			}
 			String was = bs.drainTxn;
 			bs.drainTxn = t.id;
 			if (st.states.values().stream().allMatch(RegionFluids.BodyState::ended)) {
@@ -924,6 +1031,9 @@ public final class FluidTxns {
 	}
 
 	static final TxnKind.Adapter FLUID_LOTDRAIN = w("drain", (t, e, level, l, st) -> {
+		if (RegionFluids.holdDrain) {
+			throw new IllegalStateException("TEST: dev.fluid.hold drain");
+		}
 		int n = RegionFluids.lotDrainWrites(level, l, st, e.data().get("lot").getAsString(), ids(e));
 		WorldJournal.kill("FL6d"); // (DF round 3's point, an alias) the lot's sources drained, the record not saved yet
 		return n;
@@ -970,6 +1080,78 @@ public final class FluidTxns {
 				throw new IllegalStateException("the fluids record could not be saved");
 			}
 			RegionFluids.report(l, st); // (a replay retried by the core's tick reports the rows too)
+		}
+	});
+
+
+	// ------------------------------------------------------------------ (8cT last round, #4) a held or rechecked body's drain
+
+	/**
+	 * (8cT last round, #4) A body held by the emission check (at its wave or forced tick) or failing the recheck after a stop: what the tiles
+	 * wrote of it (and of its pending upstream closure) drained (W, kill point {@code TX:fluid.drain:drain}), then the body recorded drained
+	 * (uncontained, its why and reason, the cells) with its upstream closure held (R), the barrier. A start replays it.
+	 */
+	static Step hold(RegionsImpl.Live l, RegionFluids.Regional st, RegionFluids.Body b, String typed, String reason, List<long[]> at) {
+		JsonArray cells = new JsonArray();
+		for (long[] c : at) {
+			JsonArray a = new JsonArray();
+			a.add(c[0]);
+			a.add(c[1]);
+			a.add(c[2]);
+			cells.add(a);
+		}
+		String key = "fluid-drain:" + recKey(l) + "/held:" + b.id;
+		return record(DRAIN, key, l, st, Effect.of("fluid.hold", EffectClass.W).data("body", b.id), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
+			.data("why", typed).data("reason", reason).data("at", cells), t -> {
+			});
+	}
+
+	static final TxnKind.Adapter FLUID_HOLD = w("drain", (t, e, level, l, st) -> {
+		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+		if (b == null) {
+			return 0;
+		}
+		RegionFluids.BodyState bs = st.states.get(b.id);
+		int n = bs.before.isEmpty() ? 0 : RegionFluids.drain(level, st, b, bs, false, st.othersOf(b));
+		for (RegionFluids.Body u : RegionFluids.upstreamOf(st, b)) {
+			RegionFluids.BodyState us = st.states.get(u.id);
+			if (!us.before.isEmpty() && !"settled".equals(us.state) && !"written".equals(us.state)) {
+				n += RegionFluids.drain(level, st, u, us, false, st.othersOf(u)); // its tile-written cells (a pending reach)
+			}
+		}
+		return n;
+	});
+
+	static final TxnKind.Adapter FLUID_HELD = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
+			return bs != null && t.id.equals(bs.drainTxn);
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+			RegionFluids.BodyState bs = b == null ? null : st.states.get(b.id);
+			if (bs == null) {
+				return;
+			}
+			bs.state = "drained";
+			bs.uncontained = true;
+			bs.why = e.data().get("why").getAsString();
+			bs.reason = e.data().get("reason").getAsString();
+			bs.at.clear();
+			for (JsonElement x : e.data().getAsJsonArray("at")) {
+				JsonArray a = x.getAsJsonArray();
+				bs.at.add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+			}
+			RegionFluids.holdUpstream(l, st, b);
+			bs.drainTxn = t.id;
+			if (!RegionFluids.save(l, st)) {
+				bs.drainTxn = null; // (the probe reads drainTxn: the next drive saves again)
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+			RegionFluids.report(l, st);
 		}
 	});
 

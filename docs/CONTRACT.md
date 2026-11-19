@@ -34218,3 +34218,13 @@ Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(dec
   rs-survival-smoke 40/0, txn-core 75/0, fl-ingame, h/hy/irr-ingame-smoke, irr-holders, h-holders, fl-natural. Full `./gradlew build`
   1611/0; api-compat 8/8. irr-df now reads the txn's record rule (the intent before the drain; the site waits for R).
 - **Leftovers:** P2-9; no TxnCrashModel per kind (the core's adapters read the world; one unit covers P1-1); no row for P1-2..6 alone.
+
+### N1 deviation accepted, with a condition (Noah, 2026-11-19, via parent)
+- The fluids tiles keep writing their cells (turning them into markers broke irr-holders' journal hand-down and the 8c-ingame fall basin).
+- Condition: the write txn's `writeBody` writes only cells with no tile journal entry, and never a cell that was written and then emptied
+  (a harvested or broken cell is never refilled). W is checked per chunk, not as one effect, so a missing receipt re-runs only its own chunk.
+- Last narrow round (Noah: "One last narrow round"): #1 the condition above; #2 what the drain saw persisted with its drain evidence; #3 escape
+  replay re-drains the whole upstream closure whatever its saved state; #4 held and recheck drains go through the drain txn; #5 the legacy lot
+  conversion runs at load; the three P2s (escape recovery rebuilds the R outcome; lot flags never bypass the txn's barrier; held drains answer
+  held(other) instead of leaving callers waiting); a failing-first row for each. Then one final check. If a P1 survives it, 8c stays off main,
+  `flowingWater` is not shipped until a T-series redesign, and no more rounds run.

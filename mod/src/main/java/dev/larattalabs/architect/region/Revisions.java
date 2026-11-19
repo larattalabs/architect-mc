@@ -1386,6 +1386,12 @@ public final class Revisions {
 		if (s == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
 		}
+		String held = FluidTxns.heldAny(regionId, FluidTxns.DRAIN);
+		if (held != null) {
+			// (8cT last round, P2) an undo asked while a drain of the region is held: typed at once (the revision stays UNDOING)
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, held + " (the region's water drains first;"
+				+ " it finishes by itself)", "held(other)"));
+		}
 		return RegionsImpl.onServer(s, () -> undo0(s, regionId, toPosition, actor)).thenCompose(f -> f);
 	}
 

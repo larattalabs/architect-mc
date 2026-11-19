@@ -3422,6 +3422,13 @@ public final class RegionsImpl implements Regions {
 		if (RegionAdopt.adopting(l.rec()) || RegionAdopt.BUSY.containsValue(regionId)) {
 			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
+		String heldDrain = FluidTxns.heldAny(regionId, FluidTxns.DRAIN);
+		if (heldDrain != null) {
+			// (8cT last round, P2) a removal (or lot or escape) drain held on a chunk: answered at once, typed, never left waiting; the drain
+			// finishes by itself (the region stays REMOVING) and a Remove asked after it joins
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, heldDrain + " (the region's water drains"
+				+ " first; it finishes by itself)", "held(other)"));
+		}
 		String heldWrite = FluidTxns.heldAny(regionId, FluidTxns.WRITE);
 		if (heldWrite != null) {
 			// (8cTc, Steward's ask) an open fluids write that is itself held (a chunk unreadable, a save in doubt): answered at once, never waited

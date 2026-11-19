@@ -8,6 +8,7 @@ import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.journal.WorldJournal;
+import dev.larattalabs.architect.txn.TxnEntry;
 import dev.larattalabs.architect.site.Batches;
 import dev.larattalabs.architect.site.DurableFile;
 import dev.larattalabs.architect.site.RegionItems;
@@ -257,6 +258,8 @@ public final class RegionFluids {
 	static final int WATCH_GROW = 2;
 	/** How often (ticks) a settling body's census runs. */
 	static final int CENSUS_EVERY = 5;
+	/** (8cT last round) TEST, DevBridge {@code dev.fluid.hold {drain}}: a removal's or lot's drain W refuses (held) while on. Default off. */
+	public static volatile boolean holdDrain;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
 	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's write step (the forced tick, an ordered course's wave) is not run. Default off. */
@@ -635,6 +638,10 @@ public final class RegionFluids {
 		@Nullable String drainHeldAt;
 		/** (8cTc) The cells the last lot drain wrote (its log line); transient. */
 		int lastLotCells;
+		/** (8cT last round, #5) This session's legacy lot conversion is done (or there was none); transient. */
+		boolean legacyLotsDone;
+		/** (8cT last round, P2) Why the last lot drain waits ({@code held(..) tx-<n>: chunk x,z} when its txn is held); transient. */
+		@Nullable String lastLotHeld;
 		/** (8cTb review P1-3) What the removal drain saw, just before its writes this session: {lava, grates} to refund at most; transient. */
 		int @Nullable [] scoopSeen;
 
@@ -1382,26 +1389,21 @@ public final class RegionFluids {
 			if (bad.isEmpty() && wash.isEmpty()) {
 				continue;
 			}
-			drain(level, st, body, bs, false, st.othersOf(body));
-			bs.state = "drained";
-			bs.uncontained = true;
+			String typed = "uncontained";
 			if (!wash.isEmpty()) {
 				bad = wash;
-				bs.why = "bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained";
+				typed = "bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained";
 			}
-			bs.reason = !wash.isEmpty() ? washReason(why[0], wash.size()) + " (checked again after a stop)" : "uncontained: " + bad.size()
+			String reason = !wash.isEmpty() ? washReason(why[0], wash.size()) + " (checked again after a stop)" : "uncontained: " + bad.size()
 				+ "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
-			bs.at.clear();
-			bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
-			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
-			// (6c HY) its upstream closure: pending bodies are held, their tile-written cells (if any) cleared
-			for (Body u : upstreamOf(st, body)) {
-				BodyState us = st.states.get(u.id);
-				if ("pending".equals(us.state) && !us.before.isEmpty()) {
-					drain(level, st, u, us, false, st.othersOf(u));
-				}
+			// (8cT last round, #4) the body's (and its pending upstream closure's) tile-written cells drained in a txn: W, R (drained, held
+			// upstream), the barrier
+			FluidTxns.Step g = FluidTxns.hold(l, st, body, typed, reason, bad.subList(0, Math.min(NAMED, bad.size())));
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				st.recheck = true; // (checked again next time: the txn finishes first)
+				return;
 			}
-			holdUpstream(l, st, body);
+			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
 			changed = true;
 		}
 		if (changed) {
@@ -1447,17 +1449,14 @@ public final class RegionFluids {
 	 * (8c round 2, P1-3) A body the emission check holds: its cells the stage's tiles already wrote drained back first (the guarded drain:
 	 * only what still holds its water), then reported drained (never while its sources stand), its upstream closure held.
 	 */
-	static int holdBody(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String[] why, List<long[]> at, String where) {
-		int n = bs.before.isEmpty() ? 0 : drain(level, st, b, bs, false, st.othersOf(b));
-		bs.state = "drained";
-		bs.uncontained = true;
-		bs.why = why[0];
-		bs.reason = why[1] + " (" + where + ")";
-		bs.at.clear();
-		bs.at.addAll(at);
-		holdUpstream(l, st, b);
-		Architect.LOGGER.info("Region {}: fluid body {} is not written ({}; {} cell(s) the tiles wrote drained): {}", l.rec().id, b.id, bs.reason, n, cells(bs.at));
-		return n;
+	static boolean holdBody(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String[] why, List<long[]> at, String where) {
+		// (8cT last round, #4) the tiles wrote it: its drain is a txn (W the drain, R the record drained, the barrier); true once done
+		FluidTxns.Step g = FluidTxns.hold(l, st, b, why[0], why[1] + " (" + where + ")", at);
+		if (g.kind() != FluidTxns.Step.Kind.DONE) {
+			return false;
+		}
+		Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, b.id, bs.reason, cells(bs.at));
+		return true;
 	}
 
 	static String washReason(@Nullable String why, int n) {
@@ -1649,6 +1648,7 @@ public final class RegionFluids {
 				continue;
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
+			legacyLots(l, st); // (8cT last round, #5) a lot removed before 8cT, its drain maybe lost: drained again at load, in a txn
 			final RegionsImpl.Live fl = l;
 			final Regional fst = st;
 			tickRecord(l, st, () -> "writing".equals(fst.phase) && stageWritten(fl), () -> {
@@ -1722,7 +1722,9 @@ public final class RegionFluids {
 				List<long[]> at = new ArrayList<>();
 				String[] why = emissionCheck(level, b, at);
 				if (why != null) {
-					holdBody(level, l, st, b, bs, why, at, "at its forced tick");
+					if (!holdBody(level, l, st, b, bs, why, at, "at its forced tick")) {
+						return; // (8cT last round) its drain txn runs first
+					}
 					continue;
 				}
 			}
@@ -1786,6 +1788,9 @@ public final class RegionFluids {
 			int n = 0;
 			for (Body b : waiting) {
 				BodyState bs = st.states.get(b.id);
+				if (b.lava || b.grate.length > 0) {
+					continue; // (8cT last round, #1) a charged body's tile-written cells stay: they are never written again (the N1 condition)
+				}
 				if (!bs.before.isEmpty()) {
 					n += drain(level, st, b, bs, false, st.othersOf(b));
 				}
@@ -1813,7 +1818,9 @@ public final class RegionFluids {
 				List<long[]> at = new ArrayList<>();
 				String[] why = emissionCheck(level, b, at);
 				if (why != null) {
-					holdBody(level, l, st, b, bs, why, at, "at its wave");
+					if (!holdBody(level, l, st, b, bs, why, at, "at its wave")) {
+						return; // (8cT last round) its drain txn runs first
+					}
 					held.add(b);
 					continue;
 				}
@@ -1852,13 +1859,25 @@ public final class RegionFluids {
 	 * (6c F3-c) Then its decor where the cell is open (after its water: a decor cell never takes a source first).
 	 */
 	static void writeBody(ServerLevel level, Body b) {
+		writeBody(level, b, p -> true, null);
+	}
+
+	/**
+	 * (8cT last round, #1, the N1 condition) {@link #writeBody} over the cells {@code in} accepts; with {@code jw}, a lava or grate cell a tile's
+	 * active journal entry wrote is never written again (if it is empty now, a player emptied it). Returns the cells written.
+	 */
+	static int writeBody(ServerLevel level, Body b, java.util.function.LongPredicate in, @Nullable JournalWrites jw) {
+		int written = 0;
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
 		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
 		BlockState bars = parse(GRATE);
 		for (long p : b.cells) {
-			if (b.decorState.containsKey(p)) {
+			if (b.decorState.containsKey(p) || !in.test(p)) {
 				continue; // (6c F3-c) the decor's own cell: written below, never water first
+			}
+			if (jw != null && (b.lava && jw.wrote(p, Blocks.LAVA) || grate.contains(p) && jw.wrote(p, Blocks.IRON_BARS))) {
+				continue; // (8cT last round, #1) the tiles wrote this charged cell: never refilled
 			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
@@ -1868,13 +1887,14 @@ public final class RegionFluids {
 			boolean open = !now.hasBlockEntity() && (now.isAir() || ownStillOurs(b, p, now) || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
 			if (open && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written++;
 			}
 		}
 		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already); a bed cell's stays as the tiles
 		// wrote it (the shell's cell, never cleared))
 		LongOpenHashSet own = b.decor.length > 0 ? new LongOpenHashSet(b.cells) : null;
 		for (long p : b.decor) {
-			if (!own.contains(p)) {
+			if (!own.contains(p) || !in.test(p)) {
 				continue;
 			}
 			BlockPos bp = BlockPos.of(p);
@@ -1887,6 +1907,9 @@ public final class RegionFluids {
 		// ((6c HY-c, §8.3) the grate's bars joined to each other and to the shell, as vanilla's own neighbour update would join them:
 		// unjoined bars are posts 2/16 wide with gaps of 14/16, which a 0.6-wide mob passes (HY-c's probe). Still no update sent.)
 		for (long p : b.grate) {
+			if (!in.test(p)) {
+				continue;
+			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			if (!now.is(Blocks.IRON_BARS)) continue;
@@ -1895,6 +1918,7 @@ public final class RegionFluids {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, joined, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 			}
 		}
+		return written;
 	}
 
 	/**
@@ -2122,14 +2146,27 @@ public final class RegionFluids {
 
 	/** §3.4: the escape guard: drain the body now, report it drained with the cells. */
 	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at) {
+		escape(level, l, st, b, bs, why, at, true);
+	}
+
+	/**
+	 * (8cT last round) The escape's writes ({@code writes}: the drain txn's W) and its outcome on the record (always: the R rebuilds it after
+	 * a start that found the W's receipts). (#3) The whole upstream closure is drained whatever its saved state: a replay after a crash
+	 * drains an upstream reach the record already called drained but whose drain the chunks lost.
+	 */
+	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at, boolean writes) {
 		// (6c HY, §3.3) the upstream closure first, in the same tick, upstream first: a reach above would pour into this one's emptied cells
 		for (Body u : upstreamOf(st, b)) {
 			BodyState us = st.states.get(u.id);
-			if ("drained".equals(us.state)) {
-				continue;
+			boolean was = "drained".equals(us.state);
+			int un = 0;
+			if (writes && !us.before.isEmpty()) {
+				un = st.flowingRegion() && u.flowing() && !"pending".equals(us.state) && !was ? abortFlowing(level, st, u, us) : drain(level, st, u, us,
+					!"pending".equals(us.state), st.othersOf(u));
 			}
-			int un = us.before.isEmpty() ? 0 : st.flowingRegion() && u.flowing() && !"pending".equals(us.state) ? abortFlowing(level, st, u, us) : drain(level, st, u, us,
-				!"pending".equals(us.state), st.othersOf(u));
+			if (was) {
+				continue; // (its outcome stands: an earlier drain's reason)
+			}
 			if ("pending".equals(us.state)) {
 				us.held = true;
 			}
@@ -2143,7 +2180,8 @@ public final class RegionFluids {
 				bs.escapedCells.add(BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]));
 			}
 		}
-		int n = st.flowingRegion() && b.flowing() ? abortFlowing(level, st, b, bs) : drain(level, st, b, bs, true, st.othersOf(b)); // ((8c fix round, P1-2))
+		int n = !writes ? 0 : st.flowingRegion() && b.flowing() && !"drained".equals(bs.state) ? abortFlowing(level, st, b, bs) : drain(level, st, b, bs, true, st
+			.othersOf(b)); // ((8c fix round, P1-2))
 		bs.state = "drained";
 		bs.escaped = "escaped".equals(why);
 		bs.reason = why + ": " + at.size() + " cell(s) " + ("escaped".equals(why) ? "outside the body's cells, spill and joins" : "not as predicted after 2 x "
@@ -2684,6 +2722,23 @@ public final class RegionFluids {
 	 * written yet is marked the same, so the fluids stage never writes it. The shells stay the region's until the region is removed.
 	 * Idempotent. Returns the cells written, or -1 when the group is no region or the lot has no irrigation.
 	 */
+	/** (8cT last round, P2) Per group, why its last lot drain waits ({@code held(other) tx-<n>: chunk x,z}), else absent. */
+	static final java.util.Map<String, String> LOT_WAIT = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (8cT last round, P2) A txn step's detail as {@code held(other) tx-<n>: <where>} (the caller's word: another txn holds it). */
+	static String heldOther(@Nullable String detail) {
+		if (detail == null) {
+			return "held(other): the region's water record";
+		}
+		return detail.startsWith("held(decided) ") ? "held(other) " + detail.substring("held(decided) ".length()) : detail.startsWith("held(") ? detail
+			: "held(other) " + detail;
+	}
+
+	/** (8cT last round, P2) The worded hold of a group's waiting lot drain, or null. */
+	public static @Nullable String lotWait(@Nullable String group) {
+		return group == null ? null : LOT_WAIT.get(group);
+	}
+
 	/** (slice DF round 2) {@link #drainLot}'s answer when its record could not be saved: the lot's site must not be restored now. */
 	public static final int NOT_DURABLE = -2;
 
@@ -2726,19 +2781,66 @@ public final class RegionFluids {
 			}
 		}
 		if (need.isEmpty()) {
+			// (8cT last round, P2) the flags are the R's: while the lot's txn is still open (its barrier refused, say), join it, never go on
+			TxnEntry open = FluidTxns.open(FluidTxns.DRAIN, "fluid-drain:" + FluidTxns.recKey(l) + "/lot:" + lotId);
+			if (open == null) {
+				return 0;
+			}
+			FluidTxns.Step j = FluidTxns.after(open);
+			if (j.kind() != FluidTxns.Step.Kind.DONE) {
+				st.lastLotHeld = j.detail();
+				LOT_WAIT.put(group, heldOther(j.detail()));
+				return NOT_DURABLE;
+			}
 			return 0;
 		}
 		FluidTxns.Step g = FluidTxns.lot(l, st, lotId, need);
 		if (g.kind() != FluidTxns.Step.Kind.DONE) {
 			Architect.LOGGER.warn("Region {}: lot {}'s drain is not durable yet{}; its site waits", l.rec().id, lotId, g.detail() == null ? "" : " (" + g.detail()
 				+ ")");
+			st.lastLotHeld = g.detail(); // (8cT last round, P2) the typed answer the site removal gives
+			LOT_WAIT.put(group, heldOther(g.detail()));
 			return NOT_DURABLE;
 		}
+		LOT_WAIT.remove(group);
 		report(l, st);
 		int n = st.lastLotCells;
 		Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
 		WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
 		return n;
+	}
+
+	/**
+	 * (8cT last round, #5) The legacy lot conversion at load: every body recorded {@code lotRemoved} without a drain txn (a world from before
+	 * 8cT, where the site's removal finished but its drain's chunks may not have) is drained again in its lot's txn, without waiting for a
+	 * site removal that can no longer run. Once a session per record; a txn that waits is driven again by the core's tick.
+	 */
+	static void legacyLots(RegionsImpl.Live l, Regional st) {
+		if (st.legacyLotsDone) {
+			return;
+		}
+		java.util.Map<String, List<String>> byLot = new java.util.TreeMap<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs.lotRemoved && bs.drainTxn == null) {
+				String lot = bs.reason != null && bs.reason.startsWith("lot removed: ") ? bs.reason.substring("lot removed: ".length()).split(" ")[0] : "legacy";
+				byLot.computeIfAbsent(lot, k -> new ArrayList<>()).add(b.id);
+			}
+		}
+		if (byLot.isEmpty()) {
+			st.legacyLotsDone = true;
+			return;
+		}
+		boolean all = true;
+		for (var e : byLot.entrySet()) {
+			FluidTxns.Step g = FluidTxns.lot(l, st, e.getKey(), e.getValue());
+			all &= g.kind() == FluidTxns.Step.Kind.DONE;
+			if (g.kind() == FluidTxns.Step.Kind.DONE) {
+				report(l, st);
+				Architect.LOGGER.info("Region {}: lot {} (removed before 8cT): its irrigation sources drained again at load", l.rec().id, e.getKey());
+			}
+		}
+		st.legacyLotsDone = all;
 	}
 
 	/** (8cTc, D) The lot drain txn's writes: each of {@code ids} marked removed (never written again) and drained (its decor water too). */
@@ -3193,6 +3295,11 @@ public final class RegionFluids {
 	 * {@code chargedBodies} (charged before DF round 3) gets the standing rule only.
 	 */
 	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group) {
+		return scoopPlan(level, l, st, group, p -> true);
+	}
+
+	/** {@link #scoopPlan} over the cells {@code in} accepts (8cT last round, #2: one chunk's, saved with that chunk). */
+	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
 		java.util.Set<String> paid = new java.util.HashSet<>();
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
 			cb.forEach(x -> paid.add(x.getAsString()));
@@ -3208,6 +3315,9 @@ public final class RegionFluids {
 			}
 			if (b.lava) {
 				for (long p : b.cells) {
+					if (!in.test(p)) {
+						continue;
+					}
 					FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
 						lava += ours || charged ? 1 : 0;
@@ -3217,6 +3327,9 @@ public final class RegionFluids {
 				}
 			}
 			for (long p : b.grate) {
+				if (!in.test(p)) {
+					continue;
+				}
 				if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
 					grates++;
 				} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.IRON_BARS)) {

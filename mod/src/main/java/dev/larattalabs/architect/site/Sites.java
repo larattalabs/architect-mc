@@ -140,9 +140,26 @@ public final class Sites {
 
 		/** (6c PT) A PLAYER_BUILD refusal with the builds in the way. */
 		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
+			this(reason, message, builds, "");
+		}
+
+		/** (8cT last round) A refusal with a stable detail ({@code held(other)}: a txn holds what it needs). */
+		public SiteException(Reason reason, String message, String detail) {
+			this(reason, message, List.of(), detail);
+		}
+
+		private SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
+			this.detail = detail == null ? "" : detail;
+		}
+
+		private final String detail;
+
+		/** (8cT last round) The refusal's stable detail, else "". */
+		public String detail() {
+			return detail;
 		}
 
 		/** (6c PT) The builds in the way (PLAYER_BUILD), else empty. */
@@ -2267,8 +2284,10 @@ public final class Sites {
 	 */
 	public static void drainIrrigation(ServerLevel level, @Nullable Site b) throws SiteException {
 		if (!drainIrrigationDurable(level, b)) {
-			throw new SiteException(Reason.SITE_BUSY, b.id() + ": its lot's irrigation record could not be saved before its drain, so nothing was drained or "
-				+ "restored; try again once the disk takes writes");
+			// (8cT last round, P2) typed: the lot's drain txn waits (held: where, as chunk x,z); its site is restored once it is done
+			String held = dev.larattalabs.architect.region.RegionFluids.lotWait(b.group());
+			throw new SiteException(Reason.SITE_BUSY, b.id() + ": " + (held != null ? held + " (its lot's water drains first; it finishes by itself)"
+				: "its lot's water drain is not durable yet; its site is restored once it is"), "held(other)");
 		}
 	}
 

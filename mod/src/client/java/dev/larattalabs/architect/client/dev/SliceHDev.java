@@ -144,7 +144,7 @@ public final class SliceHDev {
 				o.addProperty("armed", true);
 				return CompletableFuture.completedFuture(o);
 			});
-		DevBridge.register("dev.fluid.hold", 10_000, "{write?: bool, settle?: bool} - (8cTa) TEST: a fluids record's write step (forced tick, wave) "
+		DevBridge.register("dev.fluid.hold", 10_000, "{write?: bool, settle?: bool, drain?: bool} - (8cTa; drain: 8cT last round) TEST: a fluids record's write step (forced tick, wave) "
 			+ "and/or its census (settle, escape guard) not run while on; omitted keys keep their value -> {write, settle}", (req, mc) -> {
 				if (req.has("write")) {
 					RegionFluids.holdWrite = req.get("write").getAsBoolean();
@@ -152,9 +152,13 @@ public final class SliceHDev {
 				if (req.has("settle")) {
 					RegionFluids.holdSettle = req.get("settle").getAsBoolean();
 				}
+				if (req.has("drain")) {
+					RegionFluids.holdDrain = req.get("drain").getAsBoolean(); // (8cT last round) a removal's or lot's drain W refuses (held)
+				}
 				JsonObject o = new JsonObject();
 				o.addProperty("write", RegionFluids.holdWrite);
 				o.addProperty("settle", RegionFluids.holdSettle);
+				o.addProperty("drain", RegionFluids.holdDrain);
 				return CompletableFuture.completedFuture(o);
 			});
 		DevBridge.register("dev.fluid.bypass", 10_000, "{on: bool} - (6c H) TEST: the fluids stage's containment check is not run (every body is written: "

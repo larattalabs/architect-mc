@@ -879,7 +879,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
-		return new ArchitectRefused(e.reason(), e.getMessage(), "", e.builds());
+		return new ArchitectRefused(e.reason(), e.getMessage(), e.detail(), e.builds());
 	}
 
 	private dev.larattalabs.architect.api.Stockpile pileView(String owner) {
