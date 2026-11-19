@@ -1228,7 +1228,7 @@ public final class Stockpiles {
 		} catch (SaveRefused e) {
 			p.ledger = StockLedger.fromJson(ledgerBefore);
 			changed(p);
-			throw e;
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, "adoptCrates refused, nothing changed: " + e.getMessage()); // a typed refusal for the API
 		}
 		WorldJournal.kill("SAC1b"); // (SOFF2, test) the ledger joined and on disk, the crates still standing
 		for (Object[] x : toClear) {
