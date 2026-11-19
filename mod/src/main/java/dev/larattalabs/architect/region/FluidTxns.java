@@ -138,6 +138,10 @@ public final class FluidTxns {
 
 	/** The outcome of an attempt that began (or found) an entry: done once it retired, else held with its where, else waiting. */
 	static Step after(TxnEntry t) {
+		if (t.decision() != null && t.decision().isAbort()) {
+			// (8cTb review P1-1) an aborted attempt (a refused prepare barrier) applied nothing: never reported as done; the caller tries again
+			return new Step(Step.Kind.REFUSED, "aborted " + t.id + (t.result().has("refused") ? ": " + t.result().get("refused").getAsString() : ""));
+		}
 		if (!TxnServer.core().open().contains(t) || t.phase() == dev.larattalabs.architect.txn.Phase.EFFECTS_DONE || t.phase()
 			== dev.larattalabs.architect.txn.Phase.RETIRING && t.decision() != null && !t.decision().isAbort()) {
 			return Step.done(); // (8cTc) every effect applied and the barrier covered them: its retirement only waits for the stores' acknowledgements
@@ -266,6 +270,7 @@ public final class FluidTxns {
 				throw new IllegalStateException("region " + region(e) + " is not loaded");
 			}
 			JsonObject sv = l.rec().survival;
+			JsonObject was = sv.deepCopy();
 			sv.add("charged", e.data().getAsJsonObject("items").deepCopy());
 			sv.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, rid(e));
 			sv.add(RegionFluids.CHARGED_BODIES, e.data().getAsJsonArray("bodies").deepCopy());
@@ -274,6 +279,11 @@ public final class FluidTxns {
 			}
 			sv.addProperty("chargeTxn", t.id);
 			if (!RegionsImpl.saveRec(l)) {
+				// (8cTb review P1-2) the probe reads the record: a refused save leaves it as it was, so the next drive saves it again
+				for (String k : List.copyOf(sv.keySet())) {
+					sv.remove(k);
+				}
+				was.entrySet().forEach(x -> sv.add(x.getKey(), x.getValue()));
 				throw new IllegalStateException("the region record could not be saved");
 			}
 		}
@@ -340,11 +350,13 @@ public final class FluidTxns {
 			}
 		}
 		TxnEntry t = started.entry();
+		int[] sc = null;
 		if (l.rec().survival()) {
-			int[] sc = RegionFluids.scoopPlan(level, l, st, group);
-			if (sc[0] > 0 || sc[1] > 0) {
-				c.plan(t, Effect.of("pile.scoop", EffectClass.L).data("owner", String.valueOf(l.rec().owner)).data("key", scoopKey(l)).data("lava", sc[0])
-					.data("grates", sc[1]));
+			try {
+				sc = RegionFluids.scoopPlan(level, l, st, group);
+			} catch (IllegalStateException ex) {
+				// (8cTb review P2-8) a journal section that can't be read: wait for it, never guess the refund
+				return new Step(Step.Kind.WAIT, ex.getMessage());
 			}
 		}
 		JsonArray chunks = new JsonArray();
@@ -357,7 +369,17 @@ public final class FluidTxns {
 		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
 		c.plan(t, Effect.of("fluid.drain", EffectClass.W).data("region", l.rec().id).data("rid", l.rid()).data("group", group).data("dim", l.rec().dimension)
 			.data("chunks", chunks).data("bound", bound).data("flowing", flowing ? 1 : 0));
-		c.plan(t, Effect.of("fluid.drained", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("flowing", flowing ? 1 : 0));
+		c.plan(t, Effect.of("fluid.drained", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("flowing", flowing ? 1 : 0).data("bound",
+			bound));
+		// (8cTb review P1-3) the scoop after the drain's writes and its record: what it refunds no longer stands to be harvested
+		if (sc != null && (sc[0] > 0 || sc[1] > 0)) {
+			Effect.Builder sb = Effect.of("pile.scoop", EffectClass.L).data("owner", String.valueOf(l.rec().owner)).data("key", scoopKey(l)).data("lava", sc[0])
+				.data("grates", sc[1]).data("region", l.rec().id).data("rid", l.rid());
+			if (l.rid() > 0) {
+				sb.data("legacyKey", "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids"); // (P1-4) a revision's scoop before 8cT
+			}
+			c.plan(t, sb);
+		}
 		st.removal = st.removal == null ? "draining" : st.removal; // in memory: the removal began (drainStarted); the intent is its record
 		DurableFile.Outcome p = c.persist(t);
 		if (p == DurableFile.Outcome.REFUSED) {
@@ -377,7 +399,8 @@ public final class FluidTxns {
 			if (pile == null) {
 				return Probe.APPLIED; // no pile: the scoop has nowhere to go (as Stockpiles.scoop: nothing)
 			}
-			return pile.ledger().credited(e.data().get("key").getAsString()) ? Probe.APPLIED : Probe.ABSENT;
+			boolean legacy = e.data().has("legacyKey") && pile.ledger().credited(e.data().get("legacyKey").getAsString());
+			return legacy || pile.ledger().credited(e.data().get("key").getAsString()) ? Probe.APPLIED : Probe.ABSENT;
 		}
 
 		@Override
@@ -386,8 +409,15 @@ public final class FluidTxns {
 			if (s == null) {
 				throw new IllegalStateException("no server");
 			}
-			Stockpiles.scoop(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.data().get("lava").getAsInt(), e.data().get("grates")
-				.getAsInt());
+			int lava = e.data().get("lava").getAsInt(), grates = e.data().get("grates").getAsInt();
+			// (8cTb review P1-3) never more than the drain this session saw standing or never written (a source taken while the txn waited)
+			RegionsImpl.Live l = e.data().has("region") ? live(region(e), rid(e)) : null;
+			RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
+			if (st != null && st.scoopSeen != null) {
+				lava = Math.min(lava, st.scoopSeen[0]);
+				grates = Math.min(grates, st.scoopSeen[1]);
+			}
+			Stockpiles.scoop(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), lava, grates);
 		}
 
 		@Override
@@ -425,8 +455,8 @@ public final class FluidTxns {
 			String k = e.key(t.id);
 			for (long[] c : chunksOf(e)) {
 				LevelChunk ch = level.getChunkSource().getChunkNow((int) c[0], (int) c[1]);
-				if (ch == null && !t.live()) {
-					ch = level.getChunk((int) c[0], (int) c[1]); // recovery loads its chunks (bounded by the record's watch sets)
+				if (ch == null) {
+					ch = level.getChunk((int) c[0], (int) c[1]); // (8cTb review P1-3) loaded, never UNKNOWN: bounded by the record's watch sets
 				}
 				if (ch == null) {
 					return Probe.UNKNOWN;
@@ -449,6 +479,13 @@ public final class FluidTxns {
 			List<LevelChunk> chunks = new ArrayList<>();
 			for (long[] c : chunksOf(e)) {
 				chunks.add(level.getChunk((int) c[0], (int) c[1])); // loaded first: every write and receipt lands
+			}
+			if (l.rec().survival()) {
+				try {
+					st.scoopSeen = RegionFluids.scoopPlan(level, l, st, e.data().get("group").getAsString()); // before the writes
+				} catch (IllegalStateException ex) {
+					st.scoopSeen = null; // (the planned amounts stand)
+				}
 			}
 			int n = RegionFluids.removalDrainWrites(level, l, st, e.data().get("group").getAsString(), e.data().get("flowing").getAsInt() == 1);
 			// (F) every drain, a first one or a replay, starts a fresh settle bound from now
@@ -507,7 +544,13 @@ public final class FluidTxns {
 				st.removalPhase = "draining";
 			}
 			st.drainTxn = t.id;
+			long wasUntil = st.until;
+			ServerLevel lv = l.level(TxnServer.server());
+			if (lv != null && e.data().has("bound")) {
+				st.until = lv.getGameTime() + e.data().get("bound").getAsInt(); // (8cTb review P2-7) the fresh bound saved with drained, even after a replay
+			}
 			if (!RegionFluids.save(l, st)) {
+				st.until = wasUntil;
 				st.removal = was;
 				st.removalPhase = wasPhase;
 				throw new IllegalStateException("the fluids record could not be saved");

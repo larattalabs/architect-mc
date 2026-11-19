@@ -635,6 +635,8 @@ public final class RegionFluids {
 		@Nullable String drainHeldAt;
 		/** (8cTc) The cells the last lot drain wrote (its log line); transient. */
 		int lastLotCells;
+		/** (8cTb review P1-3) What the removal drain saw, just before its writes this session: {lava, grates} to refund at most; transient. */
+		int @Nullable [] scoopSeen;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -3261,12 +3263,8 @@ public final class RegionFluids {
 						}
 					}
 				} catch (IOException | RuntimeException ex) {
-					Architect.LOGGER.warn("Region removal: the journal could not be read for section {} ({}): its charged cells count as written", key, ex
-						.toString());
-					m = null;
-				}
-				if (m == null) {
-					return true; // unreadable: never refund a cell that may have been written (no mint); the standing rule still counts it
+					// (8cTb review P2-8) never guessed: the removal's drain waits until the journal reads
+					throw new IllegalStateException("the journal could not be read for section " + key + " (" + ex + "): the refund waits for it");
 				}
 				bySection.put(key, m);
 			}
@@ -3294,6 +3292,15 @@ public final class RegionFluids {
 			}
 			for (long p : st.states.get(b.id).escapedCells) {
 				c.add(chunkKey(p));
+			}
+			int[] lot = st.irrigation.get(b.id);
+			if (lot != null) {
+				// (8cTb review P1-6) the breach sweep's search box: the lot grown by BREACH_REACH (sweepBreach's own)
+				for (int x = (lot[0] - BREACH_REACH) >> 4; x <= (lot[2] + BREACH_REACH) >> 4; x++) {
+					for (int z = (lot[1] - BREACH_REACH) >> 4; z <= (lot[3] + BREACH_REACH) >> 4; z++) {
+						c.add((long) x << 32 | z & 0xffffffffL);
+					}
+				}
 			}
 		}
 		long[] out = c.toLongArray();
@@ -3697,8 +3704,7 @@ public final class RegionFluids {
 				// ((8c round 2, P1-2) a finished chunk leaves the saved list: a start resumes with the chunks left)
 				tickAround(level, written);
 				written.clear();
-				st.strayChunks.remove(ck);
-				save(l, st);
+				st.strayChunks.remove(ck); // (8cTb review P1-5) in memory only: the saved list keeps every chunk until done is saved after the barrier
 				if (ck == firstChunk && st.strayAt < w.length) {
 					WorldJournal.kill("FL9"); // (8c CR) the stray pass half done: one chunk's cells restored, the next not
 				}
@@ -3711,8 +3717,8 @@ public final class RegionFluids {
 			if (w.length <= 1 && st.strayDone == 0) {
 				WorldJournal.kill("FL9"); // (a pass with nothing to split still reaches its kill point once)
 			}
-			st.strayChunks.clear(); // (every chunk's work is done; chunks with none are done too)
-			return save(l, st);
+			st.strayChunks.clear(); // (every chunk's work is done; chunks with none are done too); (P1-5) not saved: done follows the barrier
+			return true;
 		}
 		return false;
 	}

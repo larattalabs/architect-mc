@@ -1003,3 +1003,33 @@ export async function t8wr(ctx) {
   }
   return out;
 }
+
+/**
+ * (8cTb review P2-7, receipt-present recovery) h_core_demo removed and halted at `TX:fluid.drain:apply:0+save`: the drain's writes and its
+ * receipts on disk, the record not (still its old deadline). The start finds the W effect applied and records drained: the wait must be a
+ * fresh bound from the start (the done record's until at least the halt + the bound), and the removal exact (E-flat 0).
+ */
+export async function t8rr(ctx) {
+  const { L, check, json } = ctx;
+  const out = {};
+  const world = 'G6B H T8RR';
+  await freshFlat(ctx, world, 'exact');
+  const d = await planDemo(ctx, { lava: true });
+  const box = demoBox(d.bodies);
+  const file = await snap(ctx, box, 'h-t8rr');
+  const r = await realiseWait(ctx, d.p.planId);
+  const bound = Math.max(...d.bodies.map((b) => b.settleTicks ?? 0));
+  const gt = async () => (await L.call('dev.ticks.pending', {}, 30_000)).gameTime;
+  const gHalt = await gt();
+  await crashAt(ctx, world, 'TX:fluid.drain:apply:0+save', async () => { await L.call('dev.region.remove', { region: r.region, requester: OWNER }, 600_000); });
+  const rm = await removeWait(ctx, r.region).catch((e) => ({ state: `error ${e.message}` }));
+  await sleep(3000);
+  const dx = await diff(ctx, box, file);
+  const rec = path.join(L.SAVES, world, 'architect-regions', r.region, 'fluids.json');
+  const fin = fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, 'utf8')) : {};
+  out.removed = { gHalt, bound, removal: rm.state, final: { removal: fin.removal ?? null, until: fin.until ?? null }, mismatches: dx.mismatches };
+  check(fin.removal === 'done' && typeof fin.until === 'number' && fin.until >= gHalt + bound, `RR (TX:fluid.drain:apply:0+save: the receipts on disk, the record not): the wait after the start is a fresh bound: until ${fin.until} (at least ${gHalt} + ${bound} wanted; ${json(out.removed.final)})`);
+  check(rm.state === 'REMOVED' && dx.mismatches === 0, `RR conservation: Regions.remove resumed: ${rm.state}, E-flat ${dx.mismatches}`, dx.sample);
+  await L.leaveWorld();
+  return out;
+}
