@@ -2732,6 +2732,9 @@ public final class Stockpiles {
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
+					if (req.has("autosave") && req.get("autosave").getAsBoolean()) {
+						srv.saveEverything(true, false, false); // (SOFF, TEST) vanilla's autosave (MinecraftServer.autoSave): unflushed, not forced
+					}
 					if (req.has("resetPeriodic") && req.get("resetPeriodic").getAsBoolean()) {
 						periodicSaves = 0;
 						lastPeriodicMs = 0;
