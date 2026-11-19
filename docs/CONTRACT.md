@@ -34228,3 +34228,30 @@ Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(dec
   conversion runs at load; the three P2s (escape recovery rebuilds the R outcome; lot flags never bypass the txn's barrier; held drains answer
   held(other) instead of leaving callers waiting); a failing-first row for each. Then one final check. If a P1 survives it, 8c stays off main,
   `flowingWater` is not shipped until a T-series redesign, and no more rounds run.
+
+### Slice 8cT last round as built (the final check of e29d8783: P1 FOUND, 5 P1 + 3 P2; Noah's one last narrow round; recorded 2026-11-19)
+
+- **Verified in code:** #1, #2, #4 (holdBody and recheck drained directly), #5, and the three P2s are **confirmed**. **#3 is refuted for
+  e29d8783's own flow**: at a downstream escape every upstream reach is still pending (waves write upstream only after downstream
+  settled), and e29d8783's wave clear empties a pending reach's tile water with the write txn's barrier, so a replay finds nothing to
+  skip. It became reachable with #1 (charged upstream reaches keep their tile cells), so the fix is in: a replay drains the whole
+  upstream closure whatever its saved state. No row (the UP row was green on both bases and is dropped).
+- **Fixes:** #1 one write W per chunk; `writeBody` never writes a lava or grate cell a tile's active journal entry wrote (harvested or
+  broken stays empty); the forced tick moves into the R; the wave clear leaves charged bodies. *Reading:* water cells the stage itself
+  cleared from a waiting reach are refilled (free water, nothing charged); only charged cells follow "never a journaled cell".
+  #2 each chunk's seen receipt (`<key>@seen=lava,bars`, before its first drain write); the scoop pays at most their sum. #4 a held body and
+  a recheck failure drain in a `fluid.drain` txn (W, R, barrier). #5 `legacyLots` at every record's tick (once a session). P2: the escape R
+  rebuilds the outcome from the entry; a lot whose flags are set but whose txn is open joins it; Remove, undoRevision and the lot removal
+  answer SITE_BUSY `held(other) tx-n: chunk x,z` at once while a fluids drain is held (SiteException gains a detail). TEST
+  `dev.fluid.hold {drain}`.
+- **Rows, red on e29d8783 + hooks** (`_work/architect-mc-8cTcred`, local) **then green:** 8ct-n1 (refilled, refund 10 for 9 + 1 taken)
+  and 8ct-n1c (the same through a `TX:fluid.write:place+save` replay); 8ct-s1 (refund 0 of 10 after `drain+save`); 8ct-s2 (refund 10, 9
+  seen); 8ct-er (the pond re-escaped as `unsettled`, the escape's outcome lost); 8ct-hd (the second Remove waited 10 s); 8ct-ll (1 water
+  left after the load); 8ct-lb (the second ask restored the site while the txn's barrier was refused); 8ct-lh (the untyped "nothing was
+  drained"). **8ct-rc stays green on the base too** (a restart heals the recheck case there); its fix is in, and it is a regression row.
+- **Change tier** (`20261119-084035-change`, `--no-cache`, 9054:9055 + 9056:9057, every 8ct row included through the 8c lane's path rule):
+  84 PASS / 3 FAIL. 8ct-d (its precondition raced the new conversion at load) was fixed and re-run: PASS (`gate-d`). **hr-unit and
+  voc-unit fail on the base too**: hr's asks tables (LOTS_SHORT, a main-side fixture) and VOC's docker step (OrbStack off) plus its
+  byte identity against fa0bf596d1. Region/txn units 414/0.
+- **Leftovers:** P2-9 (earlier round); the in-flight group/undo future still completes only when a held drain finishes (new asks are
+  answered at once); no TxnCrashModel per kind.
