@@ -251,11 +251,25 @@ public final class CrateSettle {
 	 * Restores this session wrote already, {@code site|group}, with what of their refunded cells stood just before (per chunk): the W effect
 	 * then only receipts them (the cells are in memory), its found amounts the ones read before the write.
 	 */
-	private static final Map<String, Map<Long, Map<String, Integer>>> RESTORED_NOW = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final java.util.Set<String> RESTORED_NOW = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-	/** {@code site}'s committed restore in {@code group} was just written (R4, a restore job), {@code found} read before: its W receipts them. */
-	static void markRestored(String site, String group, Map<Long, Map<String, Integer>> found) {
-		RESTORED_NOW.put(site + "|" + group, found);
+	/**
+	 * {@code site}'s committed restore in {@code group} was just written (R4, a restore job): its W receipts it. What of its refunded cells
+	 * stood was recorded in each chunk before that write ({@link #recordFound}).
+	 */
+	static void markRestored(String site, String group) {
+		RESTORED_NOW.add(site + "|" + group);
+	}
+
+	/**
+	 * (T4b fix round, N3) Before the first write of a removal's restore: in each chunk of its refunded cells, what of them stands now, recorded
+	 * in that chunk's receipts (the same tick as the writes after it, so a saved chunk that holds a restored cell holds this too). Never
+	 * recorded twice: a later replay reads it, not the world (which then shows the restore).
+	 */
+	static void recordFound(ServerLevel level, String site, String group, @Nullable JsonObject stash) {
+		if (stash != null && stash.get("cells") instanceof com.google.gson.JsonArray a) {
+			dev.larattalabs.architect.txn.RemovalTxn.recordFound(level, site, group, a);
+		}
 	}
 
 	/** (T4b fix round, N3) What of {@code stash}'s refunded cells stands in {@code level} now, per chunk (packed cx, cz). Empty: no cells. */
@@ -273,26 +287,6 @@ public final class CrateSettle {
 			Map<String, Integer> m = out.computeIfAbsent(ch, k -> new TreeMap<>());
 			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
 				c.getAsJsonObject("items").entrySet().forEach(e -> m.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
-			}
-		}
-		return out;
-	}
-
-	/** (N3) Found amounts per chunk as JSON ({"cx,cz": {item: n}}), and back. */
-	static JsonObject foundJson(Map<Long, Map<String, Integer>> found) {
-		JsonObject o = new JsonObject();
-		found.forEach((c, m) -> o.add((int) (c >> 32) + "," + (int) (long) c, Builder.counts(m)));
-		return o;
-	}
-
-	static Map<Long, Map<String, Integer>> foundOf(@Nullable JsonObject stash) {
-		Map<Long, Map<String, Integer>> out = new TreeMap<>();
-		if (stash != null && stash.get("found") instanceof JsonObject f) {
-			for (var e : f.entrySet()) {
-				String[] xz = e.getKey().split(",");
-				Map<String, Integer> m = new TreeMap<>();
-				e.getValue().getAsJsonObject().entrySet().forEach(x -> m.put(x.getKey(), x.getValue().getAsInt()));
-				out.put(pack(Integer.parseInt(xz[0]), Integer.parseInt(xz[1])), m);
 			}
 		}
 		return out;
@@ -321,16 +315,14 @@ public final class CrateSettle {
 	 * The W effect's write: {@code site}'s committed restore in {@code group}, from its journal entries (idempotent: the befores again). Only once
 	 * the Sites check has run (the records and the journal both loaded) and every store loaded: otherwise it throws and the txn holds.
 	 */
-	public static Map<Long, Map<String, Integer>> restoreSite(ServerLevel level, String site, String group, com.google.gson.@Nullable JsonArray cells) {
+	public static void restoreSite(ServerLevel level, String site, String group) {
 		String why = notReady();
 		if (why != null) {
 			throw new IllegalStateException(why);
 		}
-		Map<Long, Map<String, Integer>> now = RESTORED_NOW.remove(site + "|" + group);
-		if (now != null) {
-			return now; // written this session: its found amounts read just before that write
+		if (RESTORED_NOW.remove(site + "|" + group)) {
+			return; // written this session (its found amounts recorded in its chunks before that write)
 		}
-		Map<Long, Map<String, Integer>> found = cells == null ? Map.of() : foundIn(level, cells); // (N3) before the write: what still stands
 		if (DevStart.failWriteNow()) {
 			throw new IllegalStateException("TEST dev-start.json failWriteNow"); // (T4b fix round) the W apply fails: the txn holds, nothing paid
 		}
@@ -343,7 +335,6 @@ public final class CrateSettle {
 		} finally {
 			WRITING = was;
 		}
-		return found;
 	}
 
 	/** Why a removal's txn may not act now: a store that failed to load (never read as "empty"), or the Sites check not run yet. */
@@ -703,6 +694,14 @@ public final class CrateSettle {
 		}
 		o.add("refund", pending.get("items") instanceof JsonObject it ? it.deepCopy() : new JsonObject());
 		return o;
+	}
+
+	/**
+	 * (T4b fix round) Whether a stash read at the check enters the new protocol: every real stash does; a converted pre-T4 pending credit only
+	 * when its removal was a single removal (not a group's or a stage's undo, whose decCredit stays legacy until T4c).
+	 */
+	static boolean convertible(JsonObject stash, @Nullable String group) {
+		return !stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-");
 	}
 
 	/** The durable stash of {@code siteId}'s removal, or null. */

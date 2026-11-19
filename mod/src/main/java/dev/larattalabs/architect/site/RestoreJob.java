@@ -544,10 +544,10 @@ final class RestoreJob implements Placement.Job {
 		if (RemovalSeal.paused(siteId, cellCursor)) {
 			return false; // (TEST, slice LC3) dev.removal.pause
 		}
-		if (settle != null && settle.has("road") && !settle.has("found")) {
-			// (T4b fix round, N3) what of its refunded cells stands before its first write (the box is held since its tally): its removal
-			// txn's W receipts it, and its refunds pay min(planned, found). Saved with the job
-			settle.add("found", CrateSettle.foundJson(CrateSettle.foundNow(level, settle)));
+		if (settle != null && settle.has("road") && group != null) {
+			// (T4b fix round, N3) what of its refunded cells stands before its first write, recorded in their chunks (kept where recorded
+			// already): its removal txn's W receipts it, and its refunds pay min(planned, found)
+			CrateSettle.recordFound(level, siteId, group, settle);
 		}
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
@@ -590,7 +590,7 @@ final class RestoreJob implements Placement.Job {
 			// resumed job replays it); held: this job waits, the crate keeps its stock
 			if (settle.has("road") && group != null) {
 				CrateSettle.withGroup(settle, group); // (T4b) its W restore's source: this job's committed undo, just written
-				CrateSettle.markRestored(siteId, group, CrateSettle.foundOf(settle));
+				CrateSettle.markRestored(siteId, group);
 			}
 			CrateSettle.Settled ss = CrateSettle.settle(level, settle);
 			if (!ss.done()) {

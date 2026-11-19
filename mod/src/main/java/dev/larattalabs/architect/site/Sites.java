@@ -1787,7 +1787,8 @@ public final class Sites {
 		}
 		for (Site x : all) {
 			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
-			CrateSettle.markRestored(x.id(), group, CrateSettle.foundNow(level, stashes.get(x.id())));
+			CrateSettle.recordFound(level, x.id(), group, stashes.get(x.id()));
+			CrateSettle.markRestored(x.id(), group);
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
@@ -3306,6 +3307,9 @@ public final class Sites {
 				// (the stockpiles load after this check: the settle reads the durable stash on its tick, CrateSettle.resumeNow)
 				// (T4b, finding 1b) the durable stash first: a shared crate's member (no CRATE entry of its own) and a stockpile's site keep theirs
 				JsonObject st = early == null ? null : early.get(b.id());
+				if (st != null && !CrateSettle.convertible(st, CrateSettle.latestUndone(b.id()))) {
+					st = null; // (T4b fix round) a group removal's pending credit stays legacy (its decCredit, T4c)
+				}
 				if (st != null) {
 					CrateSettle.withBox(st, b.restoreBox()); // (T4b fix round) a converted pre-T4 stash gets its removal's box
 				}
@@ -3379,6 +3383,9 @@ public final class Sites {
 				}
 			}
 			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
+			if (stashOf != null && p.settle() == null && !CrateSettle.convertible(stashOf, group)) {
+				stashOf = null; // (T4b fix round) a group removal's pending credit stays legacy (its decCredit, T4c)
+			}
 			if (stashOf == null && early == null && gone.construction() != null && group != null) {
 				// (T4b) its stash can't be read now: never judged (a release here could pay later with its blocks standing); kept for the next start
 				report(gone.id(), true, "removed " + gone.id() + ": its settle can't be read (the ledger file is unreadable); it waits, nothing released");
@@ -3507,7 +3514,8 @@ public final class Sites {
 				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before it is settled");
 				continue;
 			}
-			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null) {
+			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null && CrateSettle.convertible(early.get(gone.id()),
+				group)) {
 				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority
 				CrateSettle.resumeInfraLater(server, gone.id(), early == null ? null : early.get(gone.id()));
 				continue;

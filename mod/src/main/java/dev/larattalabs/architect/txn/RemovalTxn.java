@@ -124,15 +124,18 @@ public final class RemovalTxn {
 			if (cs == null) {
 				throw new IllegalStateException("a chunk of its restore is not loaded");
 			}
-			java.util.Map<Long, java.util.Map<String, Integer>>[] found = new java.util.Map[1];
-			TxnServer.asHolder(t, () -> found[0] = CrateSettle.restoreSite(level, e.data().get("site").getAsString(), e.data().get("group").getAsString(), e.data()
-				.get("cells") instanceof JsonArray a ? a : null));
+			String site = e.data().get("site").getAsString();
+			String group = e.data().get("group").getAsString();
+			if (e.data().get("cells") instanceof JsonArray a) {
+				recordFound(level, site, group, a); // (T4b fix round, N3) before any write: kept where recorded already (never re-read after it)
+			}
+			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group));
 			String k = restoredKey(t, e);
+			String tag = foundTag(site, group);
 			for (LevelChunk ch : cs) {
-				// (T4b fix round, N3) what of its refunded cells stood here before the write, receipted with the cells (replay reads it, never the
-				// world again): its refunds pay min(planned, found)
-				java.util.Map<String, Integer> f = found[0].getOrDefault(chunkKey(ch), java.util.Map.of());
-				TestMove.addReceipt(ch, e.key(t.id) + "@found=" + encode(f));
+				// (N3) what of its refunded cells stood here before the first write, receipted for this txn: its refunds pay min(planned, found)
+				java.util.Map<String, Integer> f = entry(ch, tag);
+				TestMove.addReceipt(ch, e.key(t.id) + "@found=" + encode(f == null ? java.util.Map.of() : f));
 				TestMove.addReceipt(ch, k); // the same tick as its cells: the chunk's save holds both
 			}
 		}
@@ -148,6 +151,36 @@ public final class RemovalTxn {
 			return first == null ? "the restore of " + e.data().get("site").getAsString() : "chunk " + first.get(0).getAsInt() + "," + first.get(1).getAsInt();
 		}
 	};
+
+	/** (N3) The chunk receipt naming what of a removal's refunded cells stood there before its restore's first write. */
+	static String foundTag(String site, String group) {
+		return "found:" + site + "@" + group + "=";
+	}
+
+	/** (N3) The recorded found amounts in {@code ch} for {@code tag}, or null when none were recorded there. */
+	static java.util.@Nullable Map<String, Integer> entry(LevelChunk ch, String tag) {
+		for (String r : TestMove.receipts(ch)) {
+			if (r.startsWith(tag)) {
+				return decode(r.substring(tag.length()));
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (T4b fix round, N3) Records, in each chunk of {@code cells} that has none yet, what of them stands now (before the restore's first write
+	 * there). Server thread.
+	 */
+	public static void recordFound(ServerLevel level, String site, String group, JsonArray cells) {
+		String tag = foundTag(site, group);
+		java.util.Map<Long, java.util.Map<String, Integer>> now = CrateSettle.foundIn(level, cells);
+		for (var en : now.entrySet()) {
+			LevelChunk ch = level.getChunk((int) (en.getKey() >> 32), (int) (long) en.getKey());
+			if (entry(ch, tag) == null) {
+				TestMove.addReceipt(ch, tag + encode(en.getValue()));
+			}
+		}
+	}
 
 	static long chunkKey(LevelChunk ch) {
 		return (long) ch.getPos().x() << 32 | ch.getPos().z() & 0xFFFFFFFFL;
