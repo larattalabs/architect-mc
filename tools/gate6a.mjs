@@ -863,7 +863,7 @@ steps.apijars = async () => {
     // `FAIL SITE_PROGRESS Nx, at most 1/s (min gap G ms), ...`: with N >= 2 and G < 950 that is the quiet-dependent gap (timing); the same
     // old line also folds in built <= queued, so a count/ordering failure with a short gap is recorded too (documented in GATES.md).
     check(res.judged.pass, `apijars: the ${name} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL${res.retried ? '; RETRIED once, the first run failed' : ''})`, hard);
-    bar(fails.length === hard.length, `apijars: the ${name} jar's timing bars (${fails.length - hard.length} missed)`, timing);
+    bar(timing.length === 0, `apijars: the ${name} jar's timing bars (${timing.length} missed)`, timing);
     // (T2b) an archived assertion a reviewed behaviour change superseded (tools/lib/apijars-judge.mjs SUPERSEDED): recorded, never judged
     for (const l of res.judged.superseded ?? []) console.log(`  SUPERSEDED apijars ${name}: ${l}`);
     out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length, ...(res.judged.superseded?.length ? { superseded: res.judged.superseded } : {}),
