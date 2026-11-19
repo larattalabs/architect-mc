@@ -26,7 +26,7 @@
 import path from 'node:path';
 
 export async function registerTCC(steps, h) {
-  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ } = h;
+  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, cellsOf } = h;
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pick = (m, items) => Object.fromEntries(items.filter((k) => m?.[k]).map((k) => [k, m[k]]));
@@ -61,22 +61,49 @@ export async function registerTCC(steps, h) {
   const cellOf = async (cp) => (await call('dev.txn.cells', { cells: [cp] }, 30_000).catch(() => ({})))[cp.join(',')] ?? {};
   const isCrate = (c) => /crate/.test(String(c?.be ?? '')) || /crate/.test(String(c?.state ?? ''));
 
-  /** The units of {@code items} for {@code sites}: their crate's stock and placed cells (standing), the owed total, the ground near the crate, the inventory. */
+  /** The crate's own stock (dev.txn.cells: its ledger, whether a site still reads it or not), item -> units. */
+  const crateItems = async (cp) => {
+    const out = {};
+    for (const v of Object.values((await cellOf(cp)).slots ?? {})) {
+      const m = /^(\S+) x(\d+)$/.exec(String(v));
+      if (m) out[m[1]] = (out[m[1]] ?? 0) + Number(m[2]);
+    }
+    return out;
+  };
+  // (last round) each site's box, read while it stands: its placed items are counted from the blocks in the world, never its ledger (a
+  // record that vanished must not hide a block still standing)
+  const BOXES = {};
+  const boxOf = async (site) => {
+    if (!BOXES[site]) {
+      const v = ((await api('sites').catch(() => ({ all: [] }))).all ?? []).find((x) => x.id === site);
+      const m = v && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(v.box);
+      if (m) BOXES[site] = m.slice(1, 7).map(Number);
+    }
+    return BOXES[site] ?? null;
+  };
+  /** Blocks of {@code items} standing in {@code site}'s box (a block id counted as its item: cobblestone, glass_pane, copper_block, gravel). */
+  async function standing(site, items) {
+    const b = await boxOf(site);
+    if (!b) return {};
+    const out = {};
+    for (const st of (await cellsOf(b)).values()) {
+      const id = String(st).replace(/\[.*$/, '');
+      const full = id.includes(':') ? id : `minecraft:${id}`;
+      if (items.includes(full)) out[full] = (out[full] ?? 0) + 1;
+    }
+    return out;
+  }
+
+  /** The units of {@code items} for {@code sites}: their crate's stock, the blocks standing in their boxes, the owed total, the ground near the crate, the inventory. */
   async function parts(sites, cp, items) {
-    let stock = {}, placed = {}, seen = false;
+    let placed = {};
     const st = {};
     for (const s of sites) {
       const v = await siteState(s);
       st[s] = v ? v.state : null;
-      if (v) {
-        // a shared crate's ledger (its stock and its placed counts) is every member's: counted once
-        if (!seen) {
-          if (v.crate?.present) stock = G.plus(stock, v.ledger?.stock ?? {});
-          placed = G.plus(placed, v.ledger?.placed ?? {});
-        }
-        seen = true;
-      }
+      placed = G.plus(placed, await standing(s, items));
     }
+    const stock = await crateItems(cp);
     const ow = await owedAll();
     const near = await call('dev.items.near', { pos: cp, radius: 8 }, 30_000);
     const cell = await cellOf(cp);
@@ -92,6 +119,7 @@ export async function registerTCC(steps, h) {
       if ((await siteState(site))?.state === 'building') break;
       await L.sleep(1000);
     }
+    await boxOf(site);
     await call('dev.stockpile.pause', { site, paused: true }, 60_000);
     const st0 = await siteState(site);
     const give = {};
@@ -204,7 +232,7 @@ export async function registerTCC(steps, h) {
     judge(out, tag, { tag, point, sites, group, crate: cp, removal: m, txn: r.txn, groupEnd: r.group }, before, after);
   }
 
-  const P = (process.env.GATE_TCC_PARTS ?? 'S,G,P1,MF,FR').split(',');
+  const P = (process.env.GATE_TCC_PARTS ?? 'S,G,P1,MF,FR,LR').split(',');
   const want = (tag) => P.includes(tag) || P.includes(tag.split('-')[0]) || P.includes(tag.replace(/[0-9-].*$/, ''));
 
   steps.txncrashcrate = async () => {
@@ -512,15 +540,6 @@ export async function registerTCC(steps, h) {
       return { hut: it.h1?.site, road: it.r1?.site, group: bv?.group };
     };
     const roadState = async (id) => (await api('sites')).all.find((x) => x.id === id) ?? null;
-    /** The crate's own stock (dev.txn.cells: its ledger), item -> units. */
-    const crateItems = async (cp) => {
-      const out = {};
-      for (const v of Object.values((await cellOf(cp)).slots ?? {})) {
-        const m = /^(\S+) x(\d+)$/.exec(String(v));
-        if (m) out[m[1]] = (out[m[1]] ?? 0) + Number(m[2]);
-      }
-      return out;
-    };
     /** A road's units: the crate's stock, the owed total, the ground near the crate and near the road, the inventory; whether it stands. */
     const roadParts = async (roadId, cp, items, mid) => {
       const ow = await owedAll();
@@ -695,6 +714,114 @@ export async function registerTCC(steps, h) {
         R[tag] = { removal: rm, owedNew };
         check(rm.removed === true && owedNew > 0 && (rm.refundTotal ?? -1) === 0,
           `${tag}: a crate-fed removal with nothing credited: refund total ${rm.refundTotal} (owed ${owedNew} listed apart, never in it)`, R[tag]);
+      }
+    }
+    // ================================================================ (last round) LR rows: each red on 47587b40, green after
+    const ps = (o) => call('dev.stockpile.ps', o, 10_000);
+    /** A player's site built whole from its crate (its full bill inserted, then built: every cell paid); its crate settled at completion. */
+    const builtPaid = async (tag) => {
+      const site = await single(tag);
+      if (!site) return null;
+      await boxOf(site);
+      for (let i = 0; i < 60; i++) { if ((await siteState(site))?.state === 'building') break; await L.sleep(1000); }
+      const st0 = await siteState(site);
+      const cp = [st0.crate.x, st0.crate.y, st0.crate.z];
+      await call('dev.crate.insert', { site, items: st0.bom ?? {}, exact: false }, 120_000);
+      let st;
+      for (let i = 0; i < 240; i++) { st = await siteState(site); if (st?.state === 'built') break; await L.sleep(1000); }
+      check(st?.state === 'built', `${tag}: ${site} built from its crate, every cell paid (${st?.state}, placed ${sum(st?.ledger?.placed)})`, st);
+      return { site, cp, items: Object.keys(st0.bom ?? {}) };
+    };
+    // ---------------------------------------------------------------- LR-1 (P1 1): the stash save refused: the removal does not commit
+    if (want('LR-1')) {
+      const tag = 'LR-1';
+      const site = await single(tag);
+      if (site) {
+        const { cp, items } = await fill(tag, site, true); // a first part paid and placed: refunds to stash
+        const before = await parts([site], cp, items);
+        await ps({ failLedgerWrites: 1000 });
+        const rm = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ error: String(e).slice(0, 200) }));
+        await ps({ failLedgerWrites: 0 });
+        await wait(1500);
+        const after = await parts([site], cp, items);
+        R[tag] = { removal: rm, before, after };
+        log(`  ${tag}: the ledger's writes refused: ${json(rm).slice(0, 200)}; ${json(after.states)}`);
+        check(rm.removed === false && after.states[site] && after.crate && G.same(after.total, before.total),
+          `${tag}: a removal whose refund stash can't be saved confirmed does not commit: removed ${rm.removed}, the site ${json(after.states)}, crate ${after.crate ? 'stands' : 'gone'}, ${json(after.total)} = ${json(before.total)}`, R[tag]);
+      }
+    }
+    // ---------------------------------------------------------------- LR-2 (P1 2): K6 on a completed paid site, brought back: no refund
+    for (const v of ['', '+save']) {
+      const tag = `LR-2${v ? 's' : ''}`;
+      if (!want(tag)) continue;
+      const b = await builtPaid(tag);
+      if (!b) continue;
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await parts([b.site], b.cp, b.items);
+      await call('dev.journal.killAt', { point: 'K6' + v }, 10_000);
+      const m = await call('dev.site.deconstruct', { site: b.site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+      const down = await haltWait();
+      check(down, `${tag}: halted at K6${v} in the built site's removal (${json(m).slice(0, 120)})`);
+      if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+      await L.openWorld(name);
+      await L.tp(...W.at);
+      await settleWait([b.site], b.cp, null, 30_000);
+      await wait(3000);
+      const after = await parts([b.site], b.cp, b.items);
+      const owedNew = sum(after.owed) - sum(before.owed);
+      R[tag] = { before, after, owedNew };
+      log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}`);
+      check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock)`, R[tag]);
+      check(sum(after.placed) === 0 || owedNew === 0, `${tag}: no refund owed while the building stands (standing ${sum(after.placed)}, owed new ${owedNew})`, R[tag]);
+    }
+    // ---------------------------------------------------------------- LR-3 (P1 3): a paid road killed after its restore, before its settle's intent, its queue write failing
+    for (const v of ['', '+save']) {
+      const tag = `LR-3${v ? 's' : ''}`;
+      if (!want(tag)) continue;
+      const g = await roadGroup(tag);
+      if (!g.road) continue;
+      await call('dev.stockpile.pause', { site: g.road, paused: true }, 60_000).catch(() => null);
+      await fill(tag, g.hut);
+      await call('dev.site.finish', { site: g.hut }, 60_000);
+      await wait(1500);
+      const { cp, items, paid } = await payRoad(tag, g);
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await roadParts(g.road, cp, items, roadMid(g));
+      await ps({ failQueueWrites: true }); // the queue file never takes the removal's job (a full disk)
+      await call('dev.journal.killAt', { point: 'R4' + v }, 10_000);
+      const m = await api(`remove ${g.road} - noforce`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+      const down = await haltWait();
+      check(down, `${tag}: halted at R4${v} (the road's restore written, its settle not begun) (${json(m).slice(0, 120)})`);
+      if (!down) { await ps({ failQueueWrites: false }); await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+      await L.openWorld(name);
+      await L.tp(...W.at);
+      await settleWait([], cp, null, 30_000);
+      for (let i = 0; i < 30 && (await roadState(g.road)); i++) await L.sleep(1000);
+      await wait(3000);
+      const after = await roadParts(g.road, cp, items, roadMid(g));
+      const owedNew = G.plus(after.owed, Object.fromEntries(Object.entries(before.owed).map(([x, n]) => [x, -n])));
+      R[tag] = { before, after, paid, owedNew };
+      log(`  ${tag}: after the restart: road ${after.stands ? after.state : 'gone'}, crate ${after.crate ? 'stands ' + json(after.stock) : 'settled'}, owed new ${json(owedNew)}, ground ${json(after.ground)}`);
+      check(after.stands ? sum(owedNew) === 0 && after.crate && G.same(after.stock, before.stock) : G.same(owedNew, G.plus(before.stock, paid)),
+        `${tag}: paid once: ${after.stands ? 'the road stands again, nothing owed, the crate keeps its stock' : 'the road is gone: its stock and its paid cells owed'} (owed new ${json(owedNew)}; stock ${json(before.stock)}, paid ${json(paid)})`, R[tag]);
+      check(sum(after.ground) === 0, `${tag}: nothing dropped (${json(after.ground)})`, R[tag]);
+    }
+    // ---------------------------------------------------------------- LR-4 (group report P2): a crate-fed group without a pile reports its owed keys
+    if (want('LR-4')) {
+      const tag = 'LR-4';
+      const g = await grouped(tag);
+      if (g.sites.length) {
+        const { cp, items } = await fill(tag, g.sites[0], true);
+        const before = await parts(g.sites, cp, items);
+        const rm = await later(`sgremove ${g.group}`, 600_000).catch((e) => ({ error: String(e) }));
+        await wait(2000);
+        const after = await parts(g.sites, cp, items);
+        R[tag] = { removal: rm, before, after };
+        log(`  ${tag}: the group removed: refund ${json(rm.refund)}, owed ${json(rm.owed)}; owed now ${json(after.owed)}`);
+        check(rm.removed === true && Array.isArray(rm.owed) && rm.owed.length > 0 && (rm.refundTotal ?? 0) === 0 && sum(after.owed) > sum(before.owed),
+          `${tag}: a crate-fed group's removal reports its owed keys (${json(rm.owed)}), refund total ${rm.refundTotal} (owed listed apart)`, R[tag]);
       }
     }
     await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);

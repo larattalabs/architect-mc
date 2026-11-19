@@ -1059,7 +1059,7 @@ steps.look = async () => {
 
 {
   const { registerTCC } = await import('./lib/gatetxncc.mjs');
-  await registerTCC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, haltWait });
+  await registerTCC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, haltWait, cellsOf });
 }
 
 // ------------------------------------------------------------------ (slice PS) pscrash: tools/lib/gatemps.mjs
