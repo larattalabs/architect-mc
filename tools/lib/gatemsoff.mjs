@@ -371,21 +371,21 @@ export async function registerSOFF(steps, h) {
 
     // ---------------------------------------------------------------- (SOFF2) S: the start with saving off after an unclean stop
     {
-      await unpauseAll();
+      // paused: what they lack delivered and saved (the baseline); then unpaused: the cells they build next are on no saved ledger
+      await pauseAll();
       await call('dev.wait', { ms: 1500 }, 30_000);
       const lack = await lacking();
       await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: lack, exact: true }, 120_000);
-      const bS0 = await builtSum();
-      for (let i = 0; i < 20 && (await builtSum()) <= bS0; i++) await L.sleep(1500);
-      log(`  S: delivered ${json(lack)}; targets ${await targetsLine()}`);
       await ps({ noPeriodic: true });
+      await unpauseAll(); // (the feed order's own save with the world, before any cell is built)
       await cmd('/save-all flush').catch(() => null);
-      await call('dev.wait', { ms: 1500 }, 30_000);
       const sS = await saved();
       const atSave = await builtSum();
-      await call('dev.wait', { ms: 6000 }, 30_000);
+      for (let i = 0; i < 10 && (await builtSum()) <= atSave; i++) await L.sleep(700);
+      await call('dev.wait', { ms: 2000 }, 30_000);
       const atHalt = await builtSum();
       const sS2 = await saved();
+      log(`  S: delivered ${json(lack)}; targets ${await targetsLine()}`);
       const n = { tag: 'S', atSave, atHalt, ledgerSavesBetween: sS2.saves - sS.saves };
       check(atHalt > atSave, `S: cells built after the save (consumed ${atSave} -> ${atHalt}; ledger saves between ${n.ledgerSavesBetween})`, n);
       await ps({ savingOffAtStart: true, haltBeforeAutosaveLedger: true });
