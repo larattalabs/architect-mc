@@ -745,7 +745,7 @@ export async function registerTCC(steps, h) {
       if (site) {
         const { cp, items } = await fill(tag, site, true); // a first part paid and placed: refunds to stash
         const before = await parts([site], cp, items);
-        await ps({ failLedgerWrites: 1000 });
+        await ps({ failLedgerOnly: 1000 }); // the ledger's writes only (the queue file and txn.json still write)
         const rm = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ error: String(e).slice(0, 200) }));
         await ps({ failLedgerWrites: 0 });
         await wait(1500);

@@ -851,3 +851,5 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   outcome is on disk (its journal release flushed, its pending records saved) and the restore it wrote at the start is not saved yet.
   `{"failWriteNow": true}`: the check's write of a committed restore failed (T4a); inert since T4b, which removed that write (the removal's
   txn writes the restore, W, and holds on a failure).
+- (slice T4b fix round, TEST) `dev.stockpile.ps {failLedgerOnly: n}`: the next n writes of the stockpile ledger fail (a save with the world
+  flushes its chunks, then its ledger write is not confirmed; a barrier's ledger write is refused); the queue file and txn.json still write.

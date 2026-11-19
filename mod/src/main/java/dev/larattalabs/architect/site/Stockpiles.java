@@ -2822,6 +2822,9 @@ public final class Stockpiles {
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
 					}
+					if (req.has("failLedgerOnly")) {
+						TEST_FAIL_LEDGER.set(req.get("failLedgerOnly").getAsInt()); // (slice T4b fix round, TEST)
+					}
 					if (req.has("refuseCreditSaves")) {
 						TEST_REFUSE_CREDIT_SAVES.set(req.get("refuseCreditSaves").getAsInt()); // (slice T4a, TEST) the next n credit saves refused
 					}
@@ -3904,9 +3907,16 @@ public final class Stockpiles {
 	 * a REFUSED write and an IN_DOUBT one all answer false and leave the ledger pending (T0 review 3 finding 2: IN_DOUBT is never "saved").
 	 * True too when there is nothing to write (no stockpile ever).
 	 */
+	/** (slice T4b fix round, TEST dev.stockpile.ps failLedgerOnly) The next n ledger writes fail (the chunks flush; the queue file is untouched). */
+	static final java.util.concurrent.atomic.AtomicInteger TEST_FAIL_LEDGER = new java.util.concurrent.atomic.AtomicInteger();
+
 	static boolean save() {
 		Path d = dir;
 		if (d == null) {
+			return false;
+		}
+		if (TEST_FAIL_LEDGER.get() > 0 && TEST_FAIL_LEDGER.getAndDecrement() > 0) {
+			Architect.LOGGER.warn("Stockpiles: TEST failLedgerOnly: this ledger write fails");
 			return false;
 		}
 		if (loadFailed) {
@@ -4026,6 +4036,10 @@ public final class Stockpiles {
 	 * file), the cell books refreshed first as {@link #save} does. No file is made for a world that never had a stockpile (OK, generation 0).
 	 */
 	static DurableFile.Result writeConfirmed(MinecraftServer srv) {
+		if (TEST_FAIL_LEDGER.get() > 0 && TEST_FAIL_LEDGER.getAndDecrement() > 0) {
+			Architect.LOGGER.warn("Stockpiles: TEST failLedgerOnly: this ledger write fails");
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "TEST failLedgerOnly");
+		}
 		Path d = dir;
 		if (d == null) {
 			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "no world loaded");
