@@ -34156,3 +34156,29 @@ Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(dec
   removalPhase/strayChunks), JournalDev (the killAt list), gate-chains, step-inputs; the river's done also records `barrierDone`.
   Region units 379/0; full `./gradlew build` 1610 tests, 0 failures.
 - **Regression harness carried:** 8c-ingame, 8c-crash, 8c-survival (SV), the kit lane's goldens and the composer gate, with DF's rows.
+
+### Slice 8cTb as built (branch `slice/8cT`, after 8cTa; strict; $0; recorded 2026-11-19)
+
+- **`region.charge`** (`region/FluidTxns`): the intent {items, rid, bodies} durable, then the keyed debit (L; FLc stays inside it), then the
+  region record's `charged`, `chargedRid`, `chargedBodies`, `chargedAt`, `chargeTxn` (R, durable). A crash between them replays the record
+  from the entry (**B**); the gate waits while a charge txn is open; the legacy ledger settlement skips it and records `chargedBodies` for a
+  booking made before 8cT.
+- **`fluid.drain`** (a removal's, H and flowing paths; key `fluid-drain:<region>@<createdAt>#rv<rid>/removal|legacy`): the scoop's amounts
+  planned once (`scoopPlan`, **A**'s refund side, N2: a charged cell counts standing, or when no active journal entry of the group wrote the
+  body's lava or bars there; written-then-taken counts 0), the keyed scoop (L, per-revision key), the drain writes with a receipt in every
+  chunk they may touch (W; kill point `TX:fluid.drain:drain`; a fresh settle bound every time it runs, **F**), `drained` + `drainTxn` (R),
+  the barrier. A start replays an open drain; a `done` saved before the barrier is drained again in a `legacy` txn (**E**'s removal half,
+  **F**). The wait, the stray pass and `done` after the barrier stay the record's own steps. `neverWritten` and `scoopSurvival` are gone.
+- **C:** the drain's stray pass keeps 8cG's `flowStillOurs` (never a source: a dispensed bucket stays). The contract's level guard there was
+  tried and left out: it kept the body's own flow beside a foreign source (RegionFluidsLintTest strays/spout-and-bucket).
+- **Steward's asks:** `FluidsRemoval.heldAt` (old constructor kept) with the open phase `held`; an UNDOING revision's `waiting` names a held
+  drain's chunk; a held drain keeps REMOVING; the drain log lines kept word for word; killAt takes the TX names. S2: no fluid txn reads an
+  entity. Not built here (8cTc): `held(other)` for a new revision, Remove on a held write.
+- **Rows red (8cTa) then green** (run `20261119-025524-change`, 9054:9055 + 9056:9057, --no-cache): 8ct-a 3/0, 8ct-b 2/0, 8ct-f 3/0,
+  8ct-rd 2/0 (new: bare and +save), and 8ct-c 3/0 in `20261119-035133-change` after its judgement moved into the drain's settle wait (red
+  again on the base, `20261119-035038-change` in the red worktree). D and E stay red until 8cTc (lot and escape drains). Regressions 17/17:
+  h-df, rs-df, irr-df, rv-df, h-crash, hy-crash, irr-crash, h-rmcrash, rv-crash, rv-undo, rv-undo-crash, 8c-ingame 34/0, 8c-crash 47/0,
+  8c-survival 30/0, rs-survival-smoke, txn-core 75/0, fl-ingame. Full `./gradlew build` 1610/0; api-compat 8/8.
+- **Leftovers:** on h_core_demo the group undo then restores a dispensed source in a stage-cleared cell to air (StillOurs 6a: fluid in a
+  cleared cell is the entry's; outside 8cT); no TxnCrashModel units for the two kinds yet (the rows cover them in game); an unreadable
+  journal section counts a charged cell as written (never a mint; it may under-refund).
