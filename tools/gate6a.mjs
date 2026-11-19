@@ -864,7 +864,10 @@ steps.apijars = async () => {
     // old line also folds in built <= queued, so a count/ordering failure with a short gap is recorded too (documented in GATES.md).
     check(res.judged.pass, `apijars: the ${name} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL${res.retried ? '; RETRIED once, the first run failed' : ''})`, hard);
     bar(fails.length === hard.length, `apijars: the ${name} jar's timing bars (${fails.length - hard.length} missed)`, timing);
-    out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length, ...(res.retried ? { retried: res.retried.first } : {}) };
+    // (T2b) an archived assertion a reviewed behaviour change superseded (tools/lib/apijars-judge.mjs SUPERSEDED): recorded, never judged
+    for (const l of res.judged.superseded ?? []) console.log(`  SUPERSEDED apijars ${name}: ${l}`);
+    out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length, ...(res.judged.superseded?.length ? { superseded: res.judged.superseded } : {}),
+      ...(res.retried ? { retried: res.retried.first } : {}) };
   }
   await startClient('G6A Flat Base');
   return out;

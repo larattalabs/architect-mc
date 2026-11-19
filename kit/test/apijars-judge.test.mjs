@@ -52,3 +52,13 @@ test('runJarWithRetry: two failures fail, never hidden (one retry only)', async 
   assert.ok(res.retried);
   assert.match(lines.at(-1), /FAILED too/);
 });
+
+test('judgeApitest (T2b): the superseded refund line is recorded, not judged; any other refund line still fails', () => {
+  const sup = { code: 1, text: 'ok   a\nFAIL remove by the owner: refund 0 items (0 kinds)\n1 FAILED -> done\n' };
+  const j = judgeApitest(sup.text, sup.code);
+  assert.deepEqual([j.pass, j.hard.length, j.superseded.length], [true, 0, 1]);
+  const other = judgeApitest('ok   a\nFAIL remove by the owner: refund 0 items (2 kinds)\n1 FAILED -> done\n', 1);
+  assert.equal(other.pass, false, 'only the exact old line matches');
+  const mixed = judgeApitest('ok   a\nFAIL remove by the owner: refund 0 items (0 kinds)\nFAIL setTags: NPE\n2 FAILED -> done\n', 1);
+  assert.deepEqual([mixed.pass, mixed.hard], [false, ['FAIL setTags: NPE']]);
+});

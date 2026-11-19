@@ -8,15 +8,26 @@
 /** apitest prints timing bars as `FAIL BAR ...`; the archived one prints the quiet-dependent SITE_PROGRESS gap without the prefix. */
 export const isTiming = (l) => l.startsWith('FAIL BAR') || (/^FAIL SITE_PROGRESS (\d+)x, at most 1\/s \(min gap (\d+) ms\)/.test(l) && Number(RegExp.$1) >= 2 && Number(RegExp.$2) < 950);
 
-/** One run's text and exit code -> { pass, oks, fails, hard, timing, total }. */
+/**
+ * (T2b) An archived assertion an intended, reviewed behaviour change superseded: recorded beside the timing lines, never judged. Each
+ * entry names its exact line, the change and who agreed it. Only the old line's exact shape matches; the current tree's apitest.mjs
+ * checks the new behaviour (here: refund + owed growth > 0) and the txn crash rows check conservation.
+ */
+export const SUPERSEDED = [
+  { re: /^FAIL remove by the owner: refund 0 items \(0 kinds\)$/,
+    why: 'T2b: a crate-fed removal with no pile owes its give-back (RemoveResult.owed(), listed apart, never in the refund total; Steward T2b-owed-api Q4, confirmed 2026-11-18)' },
+];
+export const isSuperseded = (l) => SUPERSEDED.some((s) => s.re.test(l));
+
+/** One run's text and exit code -> { pass, oks, fails, hard, timing, superseded, total }. */
 export function judgeApitest(text, code) {
   const lines = String(text ?? '').split('\n');
   const fails = lines.filter((l) => l.startsWith('FAIL'));
   const oks = lines.filter((l) => l.startsWith('ok')).length;
-  const hard = fails.filter((l) => !isTiming(l));
+  const hard = fails.filter((l) => !isTiming(l) && !isSuperseded(l));
   const total = Number(String(text ?? '').match(/(\d+) FAILED ->/)?.[1] ?? -1); // apitest's own total must account for every FAIL line
   const pass = hard.length === 0 && (code === 0 || (total === fails.length && fails.length > hard.length)) && oks > 0;
-  return { pass, oks, fails, hard, timing: fails.filter(isTiming), total };
+  return { pass, oks, fails, hard, timing: fails.filter(isTiming), superseded: fails.filter(isSuperseded), total };
 }
 
 /**
