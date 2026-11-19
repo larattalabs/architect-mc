@@ -33464,6 +33464,16 @@ so two module lots that share items can't each be held to their own measured bou
   commits; a K6 recovery settles from them. P2-a: an aborted owed txn gives nothing (REFUSED). P2-b: owed is never in refund totals.
   Rows FR-a1/a2, FR-b1/b1s/b2, FR-c/cs, FR-d, FR-e: red on 2c4c59aa (gate-runs-fr), green on HEAD.
 
+- **Part 2b last round** (fix-round check: 3 P1 survived, 1 P2; Noah: the last round). P1 1: `saveWithWorld` throws when the ledger
+  write is not confirmed; a removal with a refund stash commits only over `saveWithWorldConfirmed` (a failed load refuses too). P1 2: a
+  pending settle pays only while its pending record stands; a start's sweep settles a durable stash only for a site or road that is gone
+  and drops it for one standing again; a K6 construction removal that reads "restored" (paid cells still standing) writes its committed
+  restore before release. P1 3: a road removal's settle is held durable with the ledger (confirmed) before its job is queued; the sweep
+  settles it if the job was lost. P2: group removals report their owed keys. Rows count placed items from the blocks standing in each
+  site's box. Red on 47587b40 + local harness (gate-runs-lr 20261119-022109: LR-1, LR-2/2s, LR-3/3s, LR-4, FR-c/cs), green on HEAD
+  (gate-runs-T2 20261119-021858, -023614). Leftovers: group stashes still ride the unforced queue (not durable); a group removal's owed
+  keys are this session's (not persisted across a restart); KEEP-pending roads never sweep.
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is
