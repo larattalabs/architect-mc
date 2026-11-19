@@ -107,7 +107,10 @@ export async function registerTCC(steps, h) {
     const ow = await owedAll();
     const near = await call('dev.items.near', { pos: cp, radius: 8 }, 30_000);
     const cell = await cellOf(cp);
-    const p = { stock: pick(stock, items), placed: pick(placed, items), owed: pick(ow.total, items), ground: pick(near.items ?? {}, items),
+    // (T4b fix round) owed counted from the entries naming these sites (an earlier row's held txn that finishes later is not this row's)
+    const own = {};
+    for (const e of ow.owed ?? []) if (sites.includes(e.site)) for (const [k2, v] of Object.entries(e.items ?? {})) own[k2] = (own[k2] ?? 0) + v;
+    const p = { stock: pick(stock, items), placed: pick(placed, items), owed: pick(own, items), ground: pick(near.items ?? {}, items),
       inventory: pick(near.inventory ?? {}, items), states: st, crate: isCrate(cell), owedEntries: (ow.owed ?? []).filter((e) => sites.includes(e.site)) };
     p.total = [p.stock, p.placed, p.owed, p.ground, p.inventory].reduce((a, b) => G.plus(a, b), {});
     return p;
@@ -905,9 +908,11 @@ export async function registerTCC(steps, h) {
       const after1 = await parts(sites, cp, items);
       const t1 = await txn();
       if (expectHeld) {
-        // (T4b fix round) the fault fired: the removal's txn is held (its W failed), nothing paid, its paid blocks still standing
+        // (T4b fix round) the fault fired: nothing paid, its paid blocks still standing; its txn held (a W that failed) or, a txn crashed
+        // before its decision (aborted by recovery), the next not begun while the evidence is unknown
         const owedNew = sum(after1.owed) - sum(before.owed);
-        check(t1.openCount > 0 && owedNew === 0 && sum(after1.placed) > 0, `${tag}: the W failed and holds: txn open ${t1.openCount}, owed new ${owedNew}, ${sum(after1.placed)} paid block(s) standing`, { t1, after1 });
+        const open = expectHeld === 'open' ? t1.openCount > 0 : true;
+        check(open && owedNew === 0 && sum(after1.placed) > 0, `${tag}: the W can't act and holds: txn open ${t1.openCount}, owed new ${owedNew}, ${sum(after1.placed)} paid block(s) standing`, { t1, after1 });
       }
       judgeT4(tag, { tag, point, start, removal: m, txn: t1, halts }, before, after1);
       if (reopenAfter) {
@@ -957,7 +962,7 @@ export async function registerTCC(steps, h) {
       const site = await single(tag);
       if (site) {
         const { cp, items } = await partBuilt(tag, site, 0.1);
-        await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true }, expectHeld: true });
+        await k6Row(tag, [site], site, cp, items, { start: { failWriteNow: true }, expectHeld: 'open' });
       }
     }
     // T4-2nd-b (fix round): a second crash between the new W and the credit's publication: at the start, the removal txn halted after its W
@@ -1060,7 +1065,9 @@ export async function registerTCC(steps, h) {
           const placed = await standing(site, items);
           const ow = await owedAll();
           const near = await call('dev.items.near', { pos: (await boxOf(site)).slice(0, 3), radius: 16 }, 30_000);
-          const p = { stock: pick(ps.stock ?? {}, items), placed: pick(placed, items), owed: pick(ow.total, items), ground: pick(near.items ?? {}, items), inventory: {},
+          const mine = {};
+          for (const e of ow.owed ?? []) if (e.site === site) for (const [k2, v] of Object.entries(e.items ?? {})) mine[k2] = (mine[k2] ?? 0) + v;
+          const p = { stock: pick(ps.stock ?? {}, items), placed: pick(placed, items), owed: pick(mine, items), ground: pick(near.items ?? {}, items), inventory: {},
             states: { [site]: (await siteState(site))?.state ?? null } };
           p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
           return p;
@@ -1142,7 +1149,9 @@ export async function registerTCC(steps, h) {
             if (items.includes(full)) placed[full] = (placed[full] ?? 0) + 1;
           }
           const near = await call('dev.items.near', { pos: W.at, radius: 24 }, 30_000);
-          const p = { stock: pick((await pst()).stock ?? {}, items), placed, owed: pick((await owedAll()).total, items), ground: pick(near.items ?? {}, items), inventory: {},
+          const mine = {};
+          for (const e of (await owedAll()).owed ?? []) if (e.site === rid) for (const [k2, v] of Object.entries(e.items ?? {})) mine[k2] = (mine[k2] ?? 0) + v;
+          const p = { stock: pick((await pst()).stock ?? {}, items), placed, owed: pick(mine, items), ground: pick(near.items ?? {}, items), inventory: {},
             states: { [rid]: (await roadState(rid))?.state ?? null } };
           p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
           return p;
