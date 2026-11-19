@@ -2246,8 +2246,8 @@ public final class RegionFluids {
 				if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, grate.contains(p)) || t.playerPlaced(bp)) {
 					continue; // ((DF round 3, P1 5) a source a player placed there (its Placed record) is theirs)
 				}
-				if (held.test(p)) {
-					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
+				if (held.test(p) && !ownLiquid(b, now)) {
+					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained ((8cTc) never the body's liquid)
 				}
 				String before = bs.before.get(p);
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
@@ -2315,6 +2315,11 @@ public final class RegionFluids {
 	 * cell, the bars on a grate cell, the column on a bubble cell, the decor's block on a decor cell. Anything else (a player's waterlogged
 	 * chest, stair or slab, a placed block) is not the body's: no drain, restore or abort writes it. Pure.
 	 */
+	/** (8cTc) A liquid block of the body's fluid (a source or its flow): never another entry's block. */
+	static boolean ownLiquid(Body b, BlockState now) {
+		return now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
+	}
+
 	static boolean ownStillOurs(Body b, long p, BlockState now) {
 		boolean liquid = now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
 		if (b.ice.length > 0 && b.iceSet().contains(p)) {
@@ -3520,11 +3525,15 @@ public final class RegionFluids {
 		LongOpenHashSet tick = new LongOpenHashSet();
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
-				if (drainSkips(b, p) || held.test(p)) {
+				if (drainSkips(b, p)) {
 					continue;
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
+				if (held.test(p) && !ownLiquid(b, now)) {
+					continue; // (fix/drain-holders) another entry's block on top; (8cTc) a liquid of the body's fluid is no entry's block: with the
+					// tiles as markers no journal entry of ours lies under a body cell, so the holders' floor can't tell our water from a later block
+				}
 				if (!ownStillOurs(b, p, now)) {
 					continue; // ((8c fix round, P1-1) a player's waterlogged chest in a source cell is never drained)
 				}
