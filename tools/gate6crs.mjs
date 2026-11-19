@@ -837,7 +837,10 @@ steps.item11 = async () => {
     const d = await G.twinDiff(ctx, T.box, T.file, R.crateAt);
     out.clean = { mid: mid && mid.percent, after: f.last.rs.build && f.last.rs.build.percent, twin: d.mismatches };
     check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && d.mismatches === 0 && !mid?.done, `item 11 (clean stop mid-build: the wall ${json((mid?.parts ?? []).find((p) => p.part === 'town_wall') && [(mid.parts.find((p) => p.part === 'town_wall')).built, (mid.parts.find((p) => p.part === 'town_wall')).cells])} built): resumed to PLACED and built, equal to its INSTANT twin (${d.mismatches} differ)`, d.list);
-    // (b) kill -9 after an autosave, mid-build of the next feed: drift within the units moved since the save
+    // (b) and (c), rewritten for HB's join barrier and slice SOFF's hold (the old premise, a build running on under /save-off and losing its
+    // cells at a kill, is what both now forbid): (b) under /save-off a fed build makes no progress that depends on unsaved stock, and a bare
+    // kill then finds the world, the ledger and the stock exactly as saved; (c) after /save-on and a confirmed save it resumes, and a bare kill
+    // mid-build (the periodic save on) leaves the cells built matching the ledger and the stock: conservation exact, the identity holding
     await G.remove(ctx, R.region);
   }
   {
@@ -846,50 +849,76 @@ steps.item11 = async () => {
     await C.start();
     const half = {};
     for (const [it, n] of Object.entries(R.ck.check.cost.bom ?? {})) if (Math.floor(n / 3) > 0) half[it] = Math.floor(n / 3);
+    const builtOf = async () => (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
+    const reopen = async () => {
+      await killJvm();
+      try { state.dev?.close(); } catch { /* gone */ }
+      state.dev = null;
+      await connect(300_000);
+      // (the host is up, its server gone: open the world again, the killed save; a session.lock left behind goes first)
+      fs.rmSync(path.join(L.SAVES, R.s.world, 'session.lock'), { force: true });
+      // (the host notices its server's death on its own time: dev.world.open retried until it takes)
+      for (let k = 0; ; k++) {
+        try { await L.call('dev.world.open', { name: R.s.world }, 30_000); break; } catch (e) { if (k >= 30) throw e; await sleep(2000); }
+      }
+      await L.waitInWorld(900_000);
+      await sleep(5000);
+    };
+    const diffOf = (t, base) => {
+      const d = {};
+      for (const k of new Set([...Object.keys(t), ...Object.keys(base)])) { const x = (t[k] ?? 0) - (base[k] ?? 0); if (x) d[k] = x; }
+      return d;
+    };
+    const holdOf = async () => (await L.call('dev.stockpile.saved', {}, 60_000)).hold ?? {};
     await C.insert(`stockpile:${G.OWNER}`, half);
     await sleep(8000);
     await cmd('/save-all flush').catch(() => null);
     await sleep(1000);
-    const atSave = await C.parts();
-    const totSave = C.total(atSave);
-    const injAtSave = { ...C.injected };
-    const builtAtSave = (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
-    await cmd('/save-off'); // (no autosave after this one: what is built from here is lost with the kill)
-    await C.insert(`stockpile:${G.OWNER}`, half);
-    await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.targets ?? []).reduce((a, t) => a + t.built, 0) > builtAtSave + 200 });
+    // (b) /save-off (its confirmed save first: what the feed built since the flush is on disk with it): the insert is held (nothing
+    // taken), the feed makes no progress; then a bare kill
+    await cmd('/save-off');
+    const totSave = C.total(await C.parts());
+    const builtAtSave = await builtOf();
+    const offIn = await C.insert(`stockpile:${G.OWNER}`, half);
+    await sleep(20_000);
+    const held = await C.parts();
+    const builtHeld = await builtOf();
+    const h0 = await holdOf();
+    out.held = { builtAtSave, builtHeld, taken: sum(offIn), hold: h0, diff: diffOf(C.total(held), totSave) };
+    check(sum(offIn) === 0 && builtHeld === builtAtSave && Object.keys(out.held.diff).length === 0 && h0.state === 'HELD',
+      `item 11b (/save-off): the insert held (${sum(offIn)} taken), no progress (${builtAtSave} -> ${builtHeld} cells), totals unchanged (${json(out.held.diff)}); hold ${h0.state}`, out.held);
+    await reopen();
+    const a1 = await C.parts();
+    out.killHeld = { diff: diffOf(C.total(a1), totSave), identity: a1.identity, built: await builtOf() };
+    check(Object.keys(out.killHeld.diff).length === 0 && a1.identity !== false && out.killHeld.built === builtAtSave,
+      `item 11b (a bare kill while held): conservation exact against the save (${json(out.killHeld.diff)}), identity ${a1.identity}, ${out.killHeld.built} cells built = ${builtAtSave} at the save`, out.killHeld);
+    // (c) /save-off again, then /save-on: held until a confirmed save, then the build resumes; a bare kill mid-build
+    await cmd('/save-off');
+    const offIn2 = await C.insert(`stockpile:${G.OWNER}`, half);
+    await cmd('/save-on');
+    let h1;
+    for (let i = 0; i < 60; i++) {
+      h1 = await holdOf();
+      if (h1.state === 'OPEN') break;
+      await sleep(1000);
+    }
+    check(sum(offIn2) === 0 && h1?.state === 'OPEN' && (h1?.releases ?? 0) >= 1, `item 11c (/save-on): released after a confirmed save (${json(h1)}); nothing taken before it (${sum(offIn2)})`, h1);
+    const builtOn = await builtOf();
+    await G.feed(ctx, R.region, { cons: C, fraction: 0.5, timeoutMs: 600_000, until: (st, rs) => (rs.targets ?? []).reduce((a, t) => a + t.built, 0) > builtOn + 200 });
+    await sleep(12_000); // no insert since: a periodic save (10 s) holds every injection; the feed's consumption moves stock into paid cells
     const pre = await C.parts();
-    const moved = {};
-    for (const k of new Set([...Object.keys(pre.ledger?.consumed ?? {}), ...Object.keys(pre.ledger?.delivered ?? {})])) {
-      const m = (pre.ledger.consumed?.[k] ?? 0) - (atSave.ledger?.consumed?.[k] ?? 0) + (pre.ledger.delivered?.[k] ?? 0) - (atSave.ledger?.delivered?.[k] ?? 0);
-      if (m) moved[k] = m;
-    }
-    const builtPre = (await G.rsState(ctx, R.region)).targets.reduce((a, t) => a + t.built, 0);
-    await killJvm();
-    try { state.dev?.close(); } catch { /* gone */ }
-    state.dev = null;
-    await connect(300_000);
-    // (the host is up, its server gone: open the world again, the killed save; a session.lock left behind goes first)
-    fs.rmSync(path.join(L.SAVES, R.s.world, 'session.lock'), { force: true });
-    // (the host notices its server's death on its own time: dev.world.open retried until it takes)
-    for (let k = 0; ; k++) {
-      try { await L.call('dev.world.open', { name: R.s.world }, 30_000); break; } catch (e) { if (k >= 30) throw e; await sleep(2000); }
-    }
-    await L.waitInWorld(900_000);
-    const a = await C.parts();
-    const now = C.total(a);
-    const drift = {};
-    for (const k of new Set([...Object.keys(now), ...Object.keys(totSave)])) { const dd = (now[k] ?? 0) - (totSave[k] ?? 0); if (dd) drift[k] = dd; }
-    for (const [k, v] of Object.entries(C.injected)) { const after = v - (injAtSave[k] ?? 0); if (after) drift[k] = (drift[k] ?? 0) + after; if (drift[k] === 0) delete drift[k]; }
-    const within = Object.entries(drift).every(([k, v]) => Math.abs(v) <= Math.abs(moved[k] ?? 0) + (C.injected[k] ?? 0) - (injAtSave[k] ?? 0));
-    out.kill = { drift, moved, builtPre };
-    check(within, `item 11 (kill -9 after an autosave): drift ${json(drift)} within the units moved since that save ${json(moved)} (recorded)`);
-    // (c) the lost cells: the rescan re-queues what the save lost; the build finishes
-    await sleep(25_000);
-    const rs = await G.rsState(ctx, R.region);
-    const builtNow = rs.targets.reduce((a, t) => a + t.built, 0);
+    const totPre = C.total(pre);
+    const builtPre = await builtOf();
+    check(builtPre > builtOn, `item 11c: the build resumed after the release (${builtOn} -> ${builtPre} cells)`);
+    await reopen();
+    const a2 = await C.parts();
+    const builtNow = await builtOf();
+    out.killOn = { builtOn, builtPre, builtNow, diff: diffOf(C.total(a2), totPre), identity: a2.identity };
+    check(Object.keys(out.killOn.diff).length === 0 && a2.identity !== false,
+      `item 11c (a bare kill mid-build, saving on): the cells built match the ledger and the stock: conservation exact (${json(out.killOn.diff)}), identity ${a2.identity}; ${builtPre} cells before the kill, ${builtNow} after (lost ones re-queued)`, out.killOn);
     const f = await G.feed(ctx, R.region, { timeoutMs: 2_400_000 });
-    out.rescan = { builtAtSave, builtPre, builtNow, rescanned: rs.rescanned, rewritten: rs.rewritten, done: f.last.rs.build?.done };
-    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && builtNow < builtPre, `item 11 (a halt without a save): the rescan re-reads the targets from the world (${builtAtSave} cells built at the save, ${builtPre} before the kill, ${builtNow} after the reload: the ${builtPre - builtNow} lost cells re-queued; rescanned ${rs.rescanned}, free cells rewritten ${rs.rewritten}), fed to built: done ${f.last.rs.build?.done}`);
+    out.rescan = { builtAtSave, builtPre, builtNow, done: f.last.rs.build?.done };
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `item 11c: fed to built after the kill: ${f.last.st.view.state}, done ${f.last.rs.build?.done}`);
     await G.remove(ctx, R.region);
   }
   return out;

@@ -61,7 +61,7 @@ public final class StockpileDev {
 			+ "hooks, nothing saved): a crash; no answer. (RL) mode autosave: the chunks saved first as an autosave saves them (no flush: their writes "
 			+ "may still be queued at the halt), then the halt", (req, mc) -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
 				if (req.has("mode") && "autosave".equals(req.get("mode").getAsString())) {
-					level.getServer().saveAllChunks(true, false, false);
+					dev.larattalabs.architect.site.SaveEvidence.asAutosave(() -> level.getServer().saveAllChunks(true, false, false)); // (SOFF) as before
 				}
 				dev.larattalabs.architect.Architect.LOGGER.error("dev.stockpile.halt: halting the JVM (nothing saved)");
 				Runtime.getRuntime().halt(7);

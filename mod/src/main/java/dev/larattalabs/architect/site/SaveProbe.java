@@ -184,14 +184,14 @@ final class SaveProbe {
 				threwRefusal = true;
 			}
 			boolean explicitRefused = threwRefusal && Stockpiles.saves == sv0 && Stockpiles.durabilityRefusals == rf0 + 1;
-			srv.saveAllChunks(true, false, false); // an autosave: the world save's callback writes the ledger after J1's wait
+			SaveEvidence.asAutosave(() -> srv.saveAllChunks(true, false, false)); // an autosave: the world save's callback writes the ledger after J1's wait
 			boolean autoRefused = Stockpiles.saves == sv0 && Stockpiles.durabilityRefusals == rf0 + 2;
 			add(cases, "ledgerRefusedWhileAFailureIsOutstanding", closeFailed && explicitRefused && autoRefused, "close failed " + closeFailed
 				+ ", the save with the world refused " + explicitRefused + ", the autosave refused " + autoRefused + " (saves " + (Stockpiles.saves - sv0) + ")");
 			RegionDurability.FAILING.remove(fx); // the disk recovers
 			long r0 = RegionDurability.RETRIED.get();
 			int sv1 = Stockpiles.saves;
-			srv.saveAllChunks(true, false, false);
+			SaveEvidence.asAutosave(() -> srv.saveAllChunks(true, false, false));
 			boolean autoPublished = Stockpiles.saves == sv1 + 1 && !RegionDurability.OWED.containsKey(fx) && RegionDurability.RETRIED.get() == r0 + 1;
 			Stockpiles.saveWithWorld(srv);
 			boolean explicitPublished = Stockpiles.saves == sv1 + 2;

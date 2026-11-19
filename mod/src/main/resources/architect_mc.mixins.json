@@ -25,6 +25,8 @@
 		"RegionFileFlushMixin",
 		"RegionStorageBarrierMixin",
 		"SaveEpochMixin",
+		"SaveEvidenceLevelMixin",
+		"SaveEvidenceServerMixin",
 		"SaveTimingLevelMixin",
 		"SaveTimingMixin",
 		"SaveTimingServerMixin",

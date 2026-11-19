@@ -193,6 +193,10 @@ public final class DurableBarrier {
 					SaveTiming.stop(); // (T0 review 2 finding 8) the world save's timer the flushed save started: the barrier times itself
 				}
 			}
+			String skipped = SaveEvidence.chunksRefusal(srv); // (slice SOFF, review finding 4) its own save wrote every level, as recorded
+			if (skipped != null) {
+				return skipped;
+			}
 			RegionDurability.retryOwed();
 			java.util.List<String> undurable = new java.util.ArrayList<>(RegionDurability.undurable("chunk", "entities"));
 			undurable.addAll(ChunkDebt.owed());
