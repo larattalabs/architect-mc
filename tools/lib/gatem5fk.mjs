@@ -494,7 +494,7 @@ export async function registerFK(steps, h) {
         const tk = await call('dev.fk.take', { pos: c.at, slot: 0, click: 'pickup' }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
         const tr = await call('dev.fk.transfer', { pos: c.at, item: it, max: 64 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
         const pl = await call('dev.fk.pull', { pos: c.at, n: 10 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
-        ex.push({ at: c.at, item: it, carried: tk.carried ?? tk.error ?? null, extracted: tr.extracted ?? tr.error ?? null, pulled: pl.pulled ?? pl.error ?? null });
+        ex.push({ at: c.at, item: it, carried: tk.carried ?? '', menu: tk.error ?? 'opened', extracted: tr.extracted ?? tr.error ?? null, pulled: pl.pulled ?? pl.error ?? null });
       }
       waited.extract = ex;
       const leaked = ex.filter((x) => (x.carried && x.carried !== '') || (typeof x.extracted === 'number' && x.extracted > 0) || sum(x.pulled ?? {}) > 0);
