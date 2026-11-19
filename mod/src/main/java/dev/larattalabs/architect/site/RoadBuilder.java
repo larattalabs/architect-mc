@@ -644,7 +644,8 @@ public final class RoadBuilder {
 			// 6c Y: a stockpile's road: its paid cells standing are refunded into the stockpile (once per placement); no crate here.
 			// C29: tallied now (the road left the feed with its removal job, so nothing is placed after this) and credited by the job
 			// once its restore is written (RestoreJob.credit), not before: a restore that breaks credits nothing
-			Map<String, Integer> refund = refundOf(level, road, dropPlayerMatches(level, road)); // (J1) a player's matching block: theirs
+			dev.larattalabs.architect.survival.Refunds.Tally pt = tallyOf(level, road, dropPlayerMatches(level, road)); // (J1) a player's matching block: theirs
+			Map<String, Integer> refund = pt.refund();
 			Builder.Run r = RUNS.get(road.id());
 			if (r != null) {
 				Builder.sendClear(srv, r, false);
@@ -654,19 +655,17 @@ public final class RoadBuilder {
 			PROGRESS.remove(road.id());
 			RegionTargets.forget(road.id());
 			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
-			return new Removing(new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong()), null);
+			// (T4b fix round, finding 5) also a removal.road stash: its refund credited by the txn after its restore, its intent durable before
+			// the job is queued (a refused credit save never loses it). The legacy credit stays for the group removals (T4c)
+			return new Removing(new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong()), CrateSettle.pileRoadStash(road,
+				pile.owner(), creditKey(road), refund, pt.cells(), dropAt(road)));
 		}
-		Map<String, Integer> refund = new LinkedHashMap<>();
 		BlockPos at = c.crate() == null ? new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ()
 			+ road.box().maxZ()) / 2) : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 		Builder.Run r = run(srv, road);
-		if (r != null) {
-			r.rescan(level, true);
-			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
-				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
-				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
-			}
-		}
+		// (T4b fix round, N3) the refunds tallied per cell (pos, block id): the restore's min pays only what it finds standing
+		dev.larattalabs.architect.survival.Refunds.Tally rt = tallyOf(level, road, null);
+		Map<String, Integer> refund = new LinkedHashMap<>(rt.refund());
 		// (T2b fix round P1-b) nothing is settled here, before the removal's commit: the road's refunds (and, when nothing else of the group
 		// builds from it, the crate's stock and cell) settle in one keyed crate.settle the restore job runs once the road's restore is
 		// written (RestoreJob.settle). Held or shared: the same, later or refunds alone; never dropped
@@ -674,6 +673,9 @@ public final class RoadBuilder {
 			.stream().allMatch(x -> x.id().equals(road.id()));
 		JsonObject settle = last ? CrateSettle.roadStash(road, c.crate(), refund, "road-removed")
 			: refund.isEmpty() ? null : CrateSettle.roadRefundStash(road, at, refund);
+		if (settle != null) {
+			CrateSettle.withCells(settle, rt.cells(), road.box());
+		}
 		if (r != null) {
 			Builder.sendClear(srv, r, false);
 		}
@@ -774,7 +776,12 @@ public final class RoadBuilder {
 
 	/** {@link #refundOf}, less the cells in {@code skip} (6c RS: a region target's player blocks, dropped and put back at their before). */
 	static Map<String, Integer> refundOf(ServerLevel level, Infra road, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
-		Map<String, Integer> refund = new TreeMap<>();
+		return tallyOf(level, road, skip).refund();
+	}
+
+	/** (T4b fix round, N3) {@link #refundOf} as a tally that also records each refunded cell (pos, block id), for the restore's min. */
+	static dev.larattalabs.architect.survival.Refunds.Tally tallyOf(ServerLevel level, Infra road, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
+		dev.larattalabs.architect.survival.Refunds.Tally t = new dev.larattalabs.architect.survival.Refunds.Tally();
 		Builder.Run r = road.construction() == null ? null : run(level.getServer(), road);
 		if (r != null) {
 			r.rescan(level, true);
@@ -783,10 +790,12 @@ public final class RoadBuilder {
 					continue;
 				}
 				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
-				r.refundCost(level.getBlockState(r.pos(q)), q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
+				BlockState now = level.getBlockState(r.pos(q));
+				t.at(r.pos(q).asLong(), Builder.blockId(now));
+				t.add(dev.larattalabs.architect.survival.Refunds.Outcome.REFUND, r.refundCost(now, q));
 			}
 		}
-		return refund;
+		return t;
 	}
 
 	/** The DevBridge's view of a construction road (dev.site.state's shape, roughly): built, queued, outstanding. */

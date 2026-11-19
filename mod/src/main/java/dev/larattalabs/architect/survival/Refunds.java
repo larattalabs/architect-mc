@@ -55,11 +55,26 @@ public final class Refunds {
 		return SOIL.contains(was) && SOIL.contains(now);
 	}
 
+	/** (slice T4b fix round, N3) One refunded cell: its position ({@code BlockPos.asLong}), its block's id, what it refunds. */
+	public record Cell(long pos, String block, Map<String, Integer> items) {
+	}
+
 	/** The items a deconstruct gives back, summed per item: refunds and the player's blocks apart. */
 	public static final class Tally {
 		private final Map<String, Integer> refund = new TreeMap<>();
 		private final Map<String, Integer> playerBlocks = new TreeMap<>();
 		private int mined;
+		/** (slice T4b fix round, N3) Each refunded cell: its position, the block it refunds, its items (in tally order). */
+		private final Map<Long, Cell> cells = new java.util.LinkedHashMap<>();
+		private long atPos = Long.MIN_VALUE;
+		private boolean unplaced;
+		private @org.jspecify.annotations.Nullable String atBlock;
+
+		/** (N3) The cell the next {@link #add} books: a REFUND there is recorded per cell (pos, block id), for the restore's min. */
+		public void at(long pos, String block) {
+			atPos = pos;
+			atBlock = block;
+		}
 
 		/** Books one cell. {@code costs}: what the cell's block costs ({@link SurvivalItems#cost}). */
 		public void add(Outcome o, List<SurvivalItems.Cost> costs) {
@@ -71,6 +86,25 @@ public final class Refunds {
 			if (to != null) {
 				costs.forEach(c -> to.merge(c.item(), c.count(), Integer::sum));
 			}
+			if (o == Outcome.REFUND && !costs.isEmpty() && (atPos == Long.MIN_VALUE || atBlock == null)) {
+				unplaced = true; // a refund booked without its cell: no per-cell record (the planned amounts stand, no min)
+			}
+			if (o == Outcome.REFUND && atPos != Long.MIN_VALUE && atBlock != null && !costs.isEmpty()) {
+				Map<String, Integer> items = new TreeMap<>();
+				Cell was = cells.get(atPos);
+				if (was != null) {
+					items.putAll(was.items());
+				}
+				costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+				cells.put(atPos, new Cell(atPos, atBlock, Map.copyOf(items)));
+			}
+			atPos = Long.MIN_VALUE;
+			atBlock = null;
+		}
+
+		/** (N3) The refunded cells, by position; null when a refund was booked without its cell (then no per-cell record at all). */
+		public java.util.@org.jspecify.annotations.Nullable Collection<Cell> cells() {
+			return unplaced ? null : List.copyOf(cells.values());
 		}
 
 		/** A queued, paid cell that the player mined (air now): counted for the report, never refunded. */

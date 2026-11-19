@@ -347,11 +347,13 @@ public final class Placement {
 				// start does (else they stay placing with no job)
 				for (InfraJob.Extra e : ij.extras) {
 					try {
-						SiteJournal.release(e.record.id());
+						// (T4b fix round, P2) the release awaited (durable) before its record goes; a release that fails keeps the record
+						SiteJournal.await(SiteJournal.release(e.record.id()), "the release of " + e.record.id());
+						Infras.drop(srv, e.record.id());
 					} catch (Sites.SiteException x) {
-						Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
+						Architect.LOGGER.warn("Region target {}: its entry could not be released ({}); its record is kept for the next start", e.record.id(),
+							x.getMessage());
 					}
-					Infras.drop(srv, e.record.id());
 				}
 				ij.failed(ij.broken);
 				RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);

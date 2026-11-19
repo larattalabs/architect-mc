@@ -612,7 +612,8 @@ public final class InfraPlace {
 				throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The removal of " + id + " was not started: " + e.getMessage());
 			}
 		}
-		Groups.Credit credit = removing.credit();
+		// (T4b fix round, finding 5) a stockpile road's refund is its removal.road stash's (credited after the restore by the txn), never C29's
+		Groups.Credit credit = CrateSettle.isPileStash(removing.settle()) ? null : removing.credit();
 		List<String> cascaded = new ArrayList<>();
 		List<String> infraCover = new ArrayList<>();
 		if (!cover.isEmpty() && covered == Sites.Covered.CASCADE) {
@@ -647,7 +648,7 @@ public final class InfraPlace {
 				return chain.thenCompose(done -> {
 					try {
 						return remove(level, id, Sites.Covered.KEEP).thenApply(r -> new Sites.Removed(r.site(), r.returned(), r.restored(), r.kept(), r.handedDown(),
-							List.copyOf(done), r.notes()));
+							List.copyOf(done), r.notes(), r.owed())); // (T4b fix round, P2) its owed keys kept
 					} catch (Sites.SiteException e) {
 						return CompletableFuture.failedFuture(e);
 					}
@@ -665,7 +666,7 @@ public final class InfraPlace {
 		job.futures.add(f);
 		Placement.add(level.getServer(), job);
 		return f.thenApply(r -> new Sites.Removed(r.site(), r.returned(), r.restored(), r.kept(), r.handedDown(), cascaded.isEmpty() ? r.cascaded()
-			: List.copyOf(cascaded), notes));
+			: List.copyOf(cascaded), notes, r.owed())); // (T4b fix round, P2) its owed keys kept
 	}
 
 	/** The road handover: this road's changed cells another standing road runs on go to that road (one commit, before the undo). */

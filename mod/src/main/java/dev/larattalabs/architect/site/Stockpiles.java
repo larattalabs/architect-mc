@@ -740,6 +740,11 @@ public final class Stockpiles {
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
+		String heldBy = CrateSettle.pileHeld(owner);
+		if (heldBy != null) {
+			// (T4b fix round, finding 6) a removal's refund is to be credited into it (its txn, or its durable stash): it stays until then
+			throw new Sites.SiteException(Reason.SITE_BUSY, "held(other) " + heldBy + ": the stockpile of " + owner + " receives a removal's refund first");
+		}
 		ServerLevel level = Sites.levelOf(srv, p.dimension);
 		if (level == null) {
 			throw new Sites.SiteException(Reason.NOT_LOADED, p.dimension + " is not loaded");
@@ -1751,6 +1756,11 @@ public final class Stockpiles {
 	 * as it was (pending): the next start resolves it again, and the credit's key keeps it once.
 	 */
 	static void settlePendingCredits(MinecraftServer srv) {
+		if (Sites.loadFailed() || CrateSettle.journalUnreadable()) {
+			// (T4b fix round, finding 4) its absence evidence (no site, no pending record) reads an empty registry: nothing is booked or dropped
+			Architect.LOGGER.warn("Stockpiles: the pending credits wait: the sites or the world journal did not load");
+			return;
+		}
 		boolean any = false;
 		for (Pile p : List.copyOf(PILES.values())) {
 			for (String key : p.ledger.pendingKeys()) {

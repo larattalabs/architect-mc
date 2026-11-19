@@ -170,6 +170,11 @@ public final class OwedLedger {
 		return after;
 	}
 
+	/** (T4b fix round, N3) Marks {@code effectKey} applied with nothing owed (its refund found nothing standing). */
+	public static synchronized void markApplied(String effectKey) {
+		mark(effectKey);
+	}
+
 	private static void mark(@Nullable String effectKey) {
 		if (effectKey != null) {
 			APPLIED.add(effectKey);

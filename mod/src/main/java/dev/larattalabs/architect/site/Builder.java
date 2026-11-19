@@ -2808,6 +2808,7 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							BlockState now = level.getBlockState(m);
 							if (qi >= 0 && !free.get(qi) && r.matches(now, qi) && (shadow == null || !shadow.contains(m.asLong()))) {
+								tally.at(m.asLong(), blockId(now)); // (T4b fix round, N3) recorded per cell for the restore's min
 								tally.add(Refunds.Outcome.REFUND, r.refundCost(now, qi));
 							}
 							continue;
@@ -2835,6 +2836,7 @@ public final class Builder {
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);
+					tally.at(m.asLong(), blockId(now)); // (T4b fix round, N3) a REFUND here is recorded per cell for the restore's min
 					Refunds.Outcome o = tallyCell(r, qi, now, was, free, only != null, () -> dev.larattalabs.architect.placed.Placed.record(level, m) != null,
 						tally);
 					if (o == null) {
@@ -2865,6 +2867,9 @@ public final class Builder {
 			// commit and the restore; the undo leaves its CRATE entry out). Only which crate, and the refunds it settles, are fixed now
 			at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 			settle = CrateSettle.stash(s, tally.refund());
+			if (settle != null) {
+				CrateSettle.withCells(settle, tally.cells(), s.restoreBox()); // (T4b fix round, N3) the restore's min and the removal's hold
+			}
 		}
 		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing, null, null, settle);
 		lastDeconstruction = d;
@@ -2978,6 +2983,11 @@ public final class Builder {
 			Architect.LOGGER.info("Deconstructed {}: refund {} ({} items), the player's blocks {}, crate stock {}, {} queued cells missing or mined",
 				s.id(), d.tally().refund(), Refunds.Tally.total(d.tally().refund()), d.tally().playerBlocks(), d.crateStock(), d.missing());
 		}
+	}
+
+	/** (T4b fix round, N3) A block state's block id, as a refunded cell records it. */
+	static String blockId(BlockState st) {
+		return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString();
 	}
 
 	/** 6c Y: the credit key of a site's deconstruct (§4 "Exactly once"): this placement of the site, whatever removal takes it down. */

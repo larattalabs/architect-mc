@@ -149,7 +149,61 @@ public final class CrateSettle {
 		o.addProperty("site", s.id());
 		o.addProperty("pileKey", d.key());
 		o.add("refund", Builder.counts(d.credit()));
-		return o;
+		return withCells(o, d.tally().cells(), s.restoreBox());
+	}
+
+	/**
+	 * (T4b fix round, N3) {@code stash} told its refunded cells (pos, block id, items: the restore pays min(planned, what it finds standing))
+	 * and its box (the removal's hold from the tally on: no block in it changes but by the removal, while the stash is durable).
+	 */
+	static JsonObject withCells(JsonObject stash, java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells,
+		dev.larattalabs.architect.placement.Anchors.Bounds box) {
+		if (cells != null) { // null: a refund booked without its cell (no min: the planned amounts stand)
+			com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+			for (dev.larattalabs.architect.survival.Refunds.Cell c : cells) {
+				JsonObject x = new JsonObject();
+				x.addProperty("pos", c.pos());
+				x.addProperty("block", c.block());
+				x.add("items", Builder.counts(c.items()));
+				a.add(x);
+			}
+			stash.add("cells", a);
+		}
+		com.google.gson.JsonArray b = new com.google.gson.JsonArray();
+		for (int v : new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()}) {
+			b.add(v);
+		}
+		stash.add("box", b);
+		boxesChanged();
+		return stash;
+	}
+
+	/** (T4b fix round) {@code stash} with its removal's box (the hold), unless it names one: a converted pre-T4 stash has none. */
+	static JsonObject withBox(JsonObject stash, dev.larattalabs.architect.placement.Anchors.Bounds box) {
+		if (!stash.has("box")) {
+			com.google.gson.JsonArray b = new com.google.gson.JsonArray();
+			for (int v : new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()}) {
+				b.add(v);
+			}
+			stash.add("box", b);
+		}
+		return stash;
+	}
+
+	/** (T4b fix round, finding 5) A stockpile's road's removal: its refund credited by its removal.road txn after its restore. */
+	static JsonObject pileRoadStash(Infra road, String owner, String key, Map<String, Integer> refund,
+		java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells, BlockPos at) {
+		JsonObject o = new JsonObject();
+		o.addProperty("key", "pile-refund:" + key);
+		o.addProperty("dim", road.dimension());
+		o.addProperty("pos", at.asLong());
+		o.addProperty("recipient", owner);
+		o.addProperty("pile", owner);
+		o.addProperty("site", road.id());
+		o.addProperty("pileKey", key);
+		o.addProperty("road", true);
+		o.add("refund", Builder.counts(refund));
+		return withCells(o, cells, road.box());
 	}
 
 	/** Whether {@code stash} is a stockpile site's refund ({@link #pileStash}). */
@@ -176,6 +230,11 @@ public final class CrateSettle {
 		return group;
 	}
 
+	/** (T4b fix round, finding 2) Whether the world journal can't be read now: its entries' absence then proves nothing (hold). */
+	public static boolean journalUnreadable() {
+		return WorldJournal.storeOrNull() == null || WorldJournal.unavailable() != null;
+	}
+
 	/** Whether {@code siteId} still has entries of undo group {@code group} (its W restore not yet settled). Server thread. */
 	public static boolean undoneExists(String siteId, String group) {
 		return !SiteJournal.undone(siteId, group).isEmpty();
@@ -188,12 +247,70 @@ public final class CrateSettle {
 
 	// ------------------------------------------------------------------ (slice T4b) the W restore's hooks
 
-	/** Restores this session wrote already, {@code site|group}: the W effect then only receipts them (the cells are in memory). */
-	private static final java.util.Set<String> RESTORED_NOW = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	/**
+	 * Restores this session wrote already, {@code site|group}, with what of their refunded cells stood just before (per chunk): the W effect
+	 * then only receipts them (the cells are in memory), its found amounts the ones read before the write.
+	 */
+	private static final Map<String, Map<Long, Map<String, Integer>>> RESTORED_NOW = new java.util.concurrent.ConcurrentHashMap<>();
 
-	/** {@code site}'s committed restore in {@code group} was just written (R4, a restore job): the removal's W effect receipts it. */
-	static void markRestored(String site, String group) {
-		RESTORED_NOW.add(site + "|" + group);
+	/** {@code site}'s committed restore in {@code group} was just written (R4, a restore job), {@code found} read before: its W receipts them. */
+	static void markRestored(String site, String group, Map<Long, Map<String, Integer>> found) {
+		RESTORED_NOW.put(site + "|" + group, found);
+	}
+
+	/** (T4b fix round, N3) What of {@code stash}'s refunded cells stands in {@code level} now, per chunk (packed cx, cz). Empty: no cells. */
+	static Map<Long, Map<String, Integer>> foundNow(ServerLevel level, @Nullable JsonObject stash) {
+		return stash == null || !(stash.get("cells") instanceof com.google.gson.JsonArray a) ? Map.of() : foundIn(level, a);
+	}
+
+	/** {@link #foundNow} over a {@code cells} array ([{pos, block, items}]). */
+	public static Map<Long, Map<String, Integer>> foundIn(ServerLevel level, com.google.gson.JsonArray cells) {
+		Map<Long, Map<String, Integer>> out = new TreeMap<>();
+		for (var el : cells) {
+			JsonObject c = el.getAsJsonObject();
+			BlockPos p = BlockPos.of(c.get("pos").getAsLong());
+			long ch = pack(p.getX() >> 4, p.getZ() >> 4);
+			Map<String, Integer> m = out.computeIfAbsent(ch, k -> new TreeMap<>());
+			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
+				c.getAsJsonObject("items").entrySet().forEach(e -> m.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+			}
+		}
+		return out;
+	}
+
+	/** (N3) Found amounts per chunk as JSON ({"cx,cz": {item: n}}), and back. */
+	static JsonObject foundJson(Map<Long, Map<String, Integer>> found) {
+		JsonObject o = new JsonObject();
+		found.forEach((c, m) -> o.add((int) (c >> 32) + "," + (int) (long) c, Builder.counts(m)));
+		return o;
+	}
+
+	static Map<Long, Map<String, Integer>> foundOf(@Nullable JsonObject stash) {
+		Map<Long, Map<String, Integer>> out = new TreeMap<>();
+		if (stash != null && stash.get("found") instanceof JsonObject f) {
+			for (var e : f.entrySet()) {
+				String[] xz = e.getKey().split(",");
+				Map<String, Integer> m = new TreeMap<>();
+				e.getValue().getAsJsonObject().entrySet().forEach(x -> m.put(x.getKey(), x.getValue().getAsInt()));
+				out.put(pack(Integer.parseInt(xz[0]), Integer.parseInt(xz[1])), m);
+			}
+		}
+		return out;
+	}
+
+	/** (pure, T4b fix round, N3) The restore's min: per item, the planned amount capped by what was found standing (null found: planned). */
+	public static Map<String, Integer> minOf(Map<String, Integer> planned, @Nullable Map<String, Integer> found) {
+		if (found == null) {
+			return planned;
+		}
+		Map<String, Integer> out = new TreeMap<>();
+		planned.forEach((k, v) -> {
+			int n = Math.min(v, found.getOrDefault(k, 0));
+			if (n > 0) {
+				out.put(k, n);
+			}
+		});
+		return out;
 	}
 
 	static void clearRestored() {
@@ -204,24 +321,34 @@ public final class CrateSettle {
 	 * The W effect's write: {@code site}'s committed restore in {@code group}, from its journal entries (idempotent: the befores again). Only once
 	 * the Sites check has run (the records and the journal both loaded) and every store loaded: otherwise it throws and the txn holds.
 	 */
-	public static void restoreSite(ServerLevel level, String site, String group) {
+	public static Map<Long, Map<String, Integer>> restoreSite(ServerLevel level, String site, String group, com.google.gson.@Nullable JsonArray cells) {
 		String why = notReady();
 		if (why != null) {
 			throw new IllegalStateException(why);
 		}
-		if (RESTORED_NOW.remove(site + "|" + group)) {
-			return;
+		Map<Long, Map<String, Integer>> now = RESTORED_NOW.remove(site + "|" + group);
+		if (now != null) {
+			return now; // written this session: its found amounts read just before that write
 		}
+		Map<Long, Map<String, Integer>> found = cells == null ? Map.of() : foundIn(level, cells); // (N3) before the write: what still stands
+		if (DevStart.failWriteNow()) {
+			throw new IllegalStateException("TEST dev-start.json failWriteNow"); // (T4b fix round) the W apply fails: the txn holds, nothing paid
+		}
+		boolean was = WRITING;
+		WRITING = true;
 		try {
 			SiteJournal.writeNow(level, site, group);
 		} catch (Sites.SiteException e) {
 			throw new IllegalStateException("the restore of " + site + " could not be written: " + e.getMessage());
+		} finally {
+			WRITING = was;
 		}
+		return found;
 	}
 
 	/** Why a removal's txn may not act now: a store that failed to load (never read as "empty"), or the Sites check not run yet. */
 	static @Nullable String notReady() {
-		if (Sites.loadFailed() || Stockpiles.loadFailed() || Placement.loadFailed()) {
+		if (journalUnreadable() || Sites.loadFailed() || Stockpiles.loadFailed() || Placement.loadFailed()) {
 			return "records unreadable"; // (T4b, finding 3b; Steward: "Architect's records didn't load; it waits")
 		}
 		return Sites.ready() ? null : "records not loaded yet";
@@ -229,8 +356,19 @@ public final class CrateSettle {
 
 	/** The chunks {@code site}'s restore in {@code group} writes ([cx, cz]), read from its journal entries. */
 	static List<long[]> chunksOf(ServerLevel level, String site, String group) throws Sites.SiteException {
+		return chunksOf(level, site, group, null);
+	}
+
+	/** {@link #chunksOf}, with the chunks of {@code cells} (the refunded cells: their found amounts are receipted there). */
+	static List<long[]> chunksOf(ServerLevel level, String site, String group, com.google.gson.@Nullable JsonArray cells) throws Sites.SiteException {
 		SiteJournal.Restore r = SiteJournal.restore(level, site, group);
 		java.util.TreeSet<Long> set = new java.util.TreeSet<>();
+		if (cells != null) {
+			for (var el : cells) {
+				BlockPos p = BlockPos.of(el.getAsJsonObject().get("pos").getAsLong());
+				set.add(pack(p.getX() >> 4, p.getZ() >> 4));
+			}
+		}
 		for (List<SiteJournal.CellWrite> l : List.of(r.cells(), r.pre(), r.halves())) {
 			for (SiteJournal.CellWrite w : l) {
 				set.add(pack(BlockPos.getX(w.pos()) >> 4, BlockPos.getZ(w.pos()) >> 4));
@@ -250,7 +388,15 @@ public final class CrateSettle {
 		return out;
 	}
 
-	private static long pack(int cx, int cz) {
+	static com.google.gson.JsonArray posJsonOf(BlockPos p) {
+		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+		a.add(p.getX());
+		a.add(p.getY());
+		a.add(p.getZ());
+		return a;
+	}
+
+	static long pack(int cx, int cz) {
 		return (long) cx << 32 | cz & 0xFFFFFFFFL;
 	}
 
@@ -327,6 +473,75 @@ public final class CrateSettle {
 	/** Site id -> its removal's stash (with the refunds tallied at prepare), saved in stockpiles.json (DurableFile) before the undo commits. */
 	private static final Map<String, JsonObject> DURABLE = new TreeMap<>();
 
+	// ------------------------------------------------------------------ (T4b fix round, N3) the removal's hold, from the tally on
+
+	/** A durable stash's box: no block in it changes but by its removal (and the txns' own adapters) while the stash is durable. */
+	private record HeldBox(String dim, int x0, int y0, int z0, int x1, int y1, int z1) {
+	}
+
+	private static volatile List<HeldBox> HELD = List.of();
+	/** The removal's own writes run with this set (its restore, its after-restore steps, a road's restore job): the hold exempts them. */
+	public static volatile boolean WRITING;
+
+	static void boxesChanged() {
+		List<HeldBox> out = new java.util.ArrayList<>();
+		for (JsonObject st : DURABLE.values()) {
+			if (st.get("box") instanceof com.google.gson.JsonArray b && b.size() == 6 && st.has("dim")) {
+				out.add(new HeldBox(st.get("dim").getAsString(), b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4)
+					.getAsInt(), b.get(5).getAsInt()));
+			}
+		}
+		HELD = List.copyOf(out);
+	}
+
+	/**
+	 * (T4b fix round, finding 6) Why {@code owner}'s pile may not be dissolved now: an open txn holds it, or a durable removal stash credits
+	 * into it; null when free.
+	 */
+	public static @Nullable String pileHeld(String owner) {
+		String s = stashCrediting(owner);
+		return s != null ? s : dev.larattalabs.architect.txn.TxnServer.heldWhy("pile:" + owner);
+	}
+
+	/** The durable removal stash that credits into {@code owner}'s pile, as "the removal of <id>", or null. */
+	static @Nullable String stashCrediting(String owner) {
+		for (var e : DURABLE.entrySet()) {
+			if (isPileStash(e.getValue()) && owner.equals(e.getValue().get("pile").getAsString())) {
+				return "the removal of " + e.getKey();
+			}
+		}
+		return null;
+	}
+
+	/** Whether any removal box is held (the guards' O(1) pre-check). */
+	public static boolean anyHeldBox() {
+		return !HELD.isEmpty();
+	}
+
+	/** Whether {@code (x, y, z)} of {@code dim} lies in a durable removal stash's box, outside the removal's own writes. */
+	public static boolean stashBoxHeld(String dim, int x, int y, int z) {
+		if (WRITING) {
+			return false;
+		}
+		for (HeldBox b : HELD) {
+			if (b.dim().equals(dim) && x >= b.x0() && y >= b.y0() && z >= b.z0() && x <= b.x1() && y <= b.y1() && z <= b.z1()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Runs {@code r} as the removal's own write (the hold exempts it). Server thread. */
+	static <T> T writing(java.util.function.Supplier<T> r) {
+		boolean was = WRITING;
+		WRITING = true;
+		try {
+			return r.get();
+		} finally {
+			WRITING = was;
+		}
+	}
+
 	static boolean durableEmpty() {
 		return DURABLE.isEmpty();
 	}
@@ -342,6 +557,7 @@ public final class CrateSettle {
 		if (e != null && e.isJsonObject()) {
 			e.getAsJsonObject().entrySet().forEach(x -> DURABLE.put(x.getKey(), x.getValue().getAsJsonObject()));
 		}
+		boxesChanged();
 	}
 
 	/**
@@ -359,6 +575,7 @@ public final class CrateSettle {
 		}
 		if (any) {
 			Stockpiles.owedChanged();
+			boxesChanged();
 		}
 		return any;
 	}
@@ -367,6 +584,7 @@ public final class CrateSettle {
 	static void holdDurable(String id, JsonObject stash) {
 		DURABLE.put(id, stash.deepCopy());
 		Stockpiles.owedChanged();
+		boxesChanged();
 	}
 
 	/**
@@ -438,11 +656,53 @@ public final class CrateSettle {
 			if (root.get("crateSettles") instanceof JsonObject cs) {
 				cs.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsJsonObject()));
 			}
+			// (T4b fix round, finding 4, N8) a pre-T4 stockpile removal's held pending credit (J2's, or C29's for a road) enters the same protocol:
+			// a pile stash, its restore (W) first, then its credit under its own key; never the threshold release with the absence-based book
+			if (root.get("stockpiles") instanceof com.google.gson.JsonArray piles) {
+				for (var pe : piles) {
+					JsonObject po = pe.getAsJsonObject();
+					if (!(po.get("ledger") instanceof JsonObject lg) || !(lg.get("pendingCredit") instanceof JsonObject pc)) {
+						continue;
+					}
+					for (var e : pc.entrySet()) {
+						JsonObject st = legacyStash(po.get("owner").getAsString(), po.get("dimension").getAsString(), e.getKey(), e.getValue().getAsJsonObject());
+						if (st != null && !out.containsKey(st.get("site").getAsString())) {
+							out.put(st.get("site").getAsString(), st);
+						}
+					}
+				}
+			}
 			return out;
 		} catch (java.io.IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Sites check: {} could not be read ({}): committed construction removals wait for the next start", f, e.toString());
 			return null;
 		}
+	}
+
+	/**
+	 * (pure, T4b fix round, finding 4) A pre-T4 held pending credit as a pile stash: {@code site:<id>@<placedAt>} (a site) or
+	 * {@code road:<id>@<placedAt>} (a road); null for any other key (a gate mechanism's, a delta's: legacy).
+	 */
+	static @Nullable JsonObject legacyStash(String owner, String dim, String key, JsonObject pending) {
+		boolean road = key.startsWith("road:");
+		if (!key.startsWith("site:") && !road || key.indexOf('@') < 0) {
+			return null;
+		}
+		String id = key.substring(key.indexOf(':') + 1, key.lastIndexOf('@'));
+		JsonObject o = new JsonObject();
+		o.addProperty("key", "pile-refund:" + key);
+		o.addProperty("dim", dim);
+		o.addProperty("pos", pending.has("at") ? pending.get("at").getAsLong() : 0L);
+		o.addProperty("recipient", owner);
+		o.addProperty("pile", owner);
+		o.addProperty("site", id);
+		o.addProperty("pileKey", key);
+		o.addProperty("legacy", true);
+		if (road) {
+			o.addProperty("road", true);
+		}
+		o.add("refund", pending.get("items") instanceof JsonObject it ? it.deepCopy() : new JsonObject());
+		return o;
 	}
 
 	/** The durable stash of {@code siteId}'s removal, or null. */
@@ -455,6 +715,7 @@ public final class CrateSettle {
 	static void forgetDurable(String siteId) {
 		if (DURABLE.remove(siteId) != null) {
 			Stockpiles.owedChanged();
+			boxesChanged();
 		}
 	}
 
@@ -587,13 +848,22 @@ public final class CrateSettle {
 		String group = stash.has("undoGroup") ? stash.get("undoGroup").getAsString() : latestUndone(site);
 		List<dev.larattalabs.architect.txn.Effect.Builder> first = new java.util.ArrayList<>();
 		List<String> more = new java.util.ArrayList<>();
+		String dim = stash.get("dim").getAsString();
+		if (stash.get("box") instanceof com.google.gson.JsonArray bx && bx.size() == 6) {
+			// (T4b fix round, N3) the removal's box (a CELL road's too), held while its txn is open as from its tally on
+			more.add(dev.larattalabs.architect.txn.RemovalTxn.box(dim, bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx
+				.get(4).getAsInt(), bx.get(5).getAsInt()));
+		}
+		com.google.gson.JsonArray cells = stash.get("cells") instanceof com.google.gson.JsonArray ca ? ca : null;
 		if (group != null && undoneExists(site, group)) {
 			try {
-				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(stash.get("dim").getAsString(), site, group, chunksOf(level, site, group)));
-				SiteJournal.Restore r = SiteJournal.restore(level, site, group);
-				dev.larattalabs.architect.placement.Anchors.Bounds b = r.box();
-				if (b != null) {
-					more.add(dev.larattalabs.architect.txn.RemovalTxn.box(stash.get("dim").getAsString(), b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()));
+				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group, cells), cells));
+				if (more.isEmpty()) {
+					SiteJournal.Restore r = SiteJournal.restore(level, site, group);
+					dev.larattalabs.architect.placement.Anchors.Bounds b = r.box();
+					if (b != null) {
+						more.add(dev.larattalabs.architect.txn.RemovalTxn.box(dim, b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()));
+					}
 				}
 			} catch (Sites.SiteException e) {
 				return new Removal(kind, List.of(), List.of(), List.of(), "its restore can't be read: " + e.getMessage());
@@ -608,10 +878,22 @@ public final class CrateSettle {
 			String pk = stash.get("pileKey").getAsString();
 			Stockpiles.Pile p = Stockpiles.get(owner);
 			Map<String, Integer> refund = refundOf(stash);
-			if (p != null && !p.ledger.credited(pk) && (!refund.isEmpty() || !p.ledger.custody(pk).isEmpty())) {
-				last.add(dev.larattalabs.architect.txn.RemovalTxn.pileRefund(owner, pk, refund, posOf(stash)));
-			} else if (p != null && !p.ledger.credited(pk)) {
-				Stockpiles.creditOfNothing(p, pk); // nothing to credit: its pending credit and its paid record go (no item moves)
+			if (p == null) {
+				// (T4b fix round, finding 6) its stockpile is gone (dissolved before T4b's hold): the refund is owed to its owner, never dropped
+				if (!refund.isEmpty()) {
+					dev.larattalabs.architect.txn.Effect.Builder ow = dev.larattalabs.architect.txn.Effect.of(CrateTxn.OWE, dev.larattalabs.architect.txn.EffectClass.O)
+						.items(refund).move("world", "owed").data("key", stash.get("key").getAsString()).data("recipient", owner).data("dim", dim).data("pos",
+							posJsonOf(posOf(stash))).data("reason", OwedLedger.GROUP_REFUND).data("site", site);
+					last.add(first.isEmpty() ? ow : ow.data("minOf", 0));
+				}
+			} else {
+				more.add("pile:" + owner); // (finding 6) its pile held: no dissolve meanwhile
+				if (!p.ledger.credited(pk) && (!refund.isEmpty() || !p.ledger.custody(pk).isEmpty())) {
+					dev.larattalabs.architect.txn.Effect.Builder pr = dev.larattalabs.architect.txn.RemovalTxn.pileRefund(owner, pk, refund, posOf(stash));
+					last.add(first.isEmpty() ? pr : pr.data("minOf", 0));
+				} else if (!p.ledger.credited(pk)) {
+					Stockpiles.creditOfNothing(p, pk); // nothing to credit: its pending credit and its paid record go (no item moves)
+				}
 			}
 		}
 		return new Removal(kind, first, last, more, null);
@@ -687,12 +969,19 @@ public final class CrateSettle {
 	 * settle): its removal txn settles it, its restore written again first, on the next tick; then its pending record goes. Never judged by
 	 * its majority, never dropped ahead of its restore.
 	 */
-	static void resumeInfraLater(MinecraftServer srv, String roadId) {
-		dev.larattalabs.architect.txn.TxnServer.later(() -> resumeInfraNow(srv, roadId));
+	static void resumeInfraLater(MinecraftServer srv, String roadId, @Nullable JsonObject read) {
+		dev.larattalabs.architect.txn.TxnServer.later(() -> resumeInfraNow(srv, roadId, read));
 	}
 
-	private static void resumeInfraNow(MinecraftServer srv, String roadId) {
+	private static void resumeInfraNow(MinecraftServer srv, String roadId, @Nullable JsonObject read) {
 		JsonObject st = durable(roadId);
+		if (st == null && read != null) {
+			st = read; // (T4b fix round, finding 4) a pre-T4 road's pending credit, read at the check
+			Infra pi = Infras.pending(roadId);
+			if (pi != null) {
+				withBox(st, pi.box());
+			}
+		}
 		if (st == null || Infras.pending(roadId) == null) {
 			return;
 		}
@@ -703,7 +992,7 @@ public final class CrateSettle {
 		Settled s = settle(level, st);
 		if (!s.done()) {
 			if (!"not committed".equals(s.held())) {
-				resumeInfraLater(srv, roadId);
+				resumeInfraLater(srv, roadId, read);
 			}
 			return;
 		}

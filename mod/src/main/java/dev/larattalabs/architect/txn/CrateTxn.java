@@ -95,14 +95,24 @@ public final class CrateTxn {
 
 	/** The pure plan of a settle (R-1): its effects in order. The seam {@code CrateSettlePlanTest} drives. */
 	static List<Effect.Builder> plan(Settle in) {
+		return plan(in, -1);
+	}
+
+	/**
+	 * (T4b fix round) {@link #plan(Settle)} for a removal's kind whose W restore is effect {@code w} (>= 0): its crate take runs after that
+	 * restore (no prepare effect, so an unreadable restore holds before anything is taken), and its refunds pay min(planned, found by it).
+	 */
+	static List<Effect.Builder> plan(Settle in, int w) {
 		List<Effect.Builder> out = new java.util.ArrayList<>();
 		if (!in.stock().isEmpty()) {
-			out.add(take(in.dim(), in.pos(), in.stock()));
+			out.add(w >= 0 ? Effect.of(TAKE, EffectClass.B).items(in.stock()).move("crate", Effect.TRANSIT).data("dim", in.dim()).data("pos", posJson(in.pos()))
+				: take(in.dim(), in.pos(), in.stock()));
 			out.add(book(in, in.key(), in.stock(), dev.larattalabs.architect.site.OwedLedger.CRATE_SETTLE));
 		}
 		if (!in.refund().isEmpty()) {
-			out.add(book(in, "refund:" + in.key(), in.refund(), dev.larattalabs.architect.site.OwedLedger.GROUP_REFUND).move("world", in.pile() != null
-				? "stock" : "owed"));
+			Effect.Builder rb = book(in, "refund:" + in.key(), in.refund(), dev.larattalabs.architect.site.OwedLedger.GROUP_REFUND).move("world", in.pile() != null
+				? "stock" : "owed");
+			out.add(w >= 0 ? rb.data("minOf", w) : rb);
 		}
 		if (in.restore()) {
 			out.add(restore(in.dim(), in.pos(), java.util.Objects.requireNonNull(in.state()), in.nbt()));
@@ -147,10 +157,11 @@ public final class CrateTxn {
 			return new Answer(List.of(), Map.of(), null, "journal_unavailable: " + s.detail(), false);
 		}
 		if (s.status() == TxnCore.Begin.REPLAYED) {
-			return new Answer(owedOf(in), Map.of(), null, null, true);
+			// (T4b fix round, P2) the owed keys its committed result saved, never rebuilt from this call's input (its crate may be gone now)
+			return new Answer(owedOf(s.done() == null ? null : s.done().result(), in), Map.of(), null, null, true);
 		}
 		if (s.status() == TxnCore.Begin.ATTACHED) {
-			return new Answer(owedOf(in), Map.of(), s.detail() != null ? s.detail() : "attached", null, true);
+			return new Answer(owedOf(java.util.Objects.requireNonNull(s.entry())), Map.of(), s.detail() != null ? s.detail() : "attached", null, true);
 		}
 		if (s.status() == TxnCore.Begin.HELD) {
 			return new Answer(List.of(), Map.of(), null, "held: " + s.detail(), false);
@@ -159,7 +170,7 @@ public final class CrateTxn {
 		for (Effect.Builder b : first) {
 			c.plan(t, b);
 		}
-		for (Effect.Builder b : plan(in)) {
+		for (Effect.Builder b : plan(in, first.isEmpty() ? -1 : 0)) {
 			c.plan(t, b);
 		}
 		for (Effect.Builder b : last) {
@@ -180,7 +191,37 @@ public final class CrateTxn {
 		}
 		Map<String, Integer> given = new java.util.TreeMap<>(in.stock());
 		in.refund().forEach((k, v) -> given.merge(k, v, Integer::sum));
-		return new Answer(owedOf(in), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
+		return new Answer(in.pile() != null ? List.of() : owedOf(t), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
+	}
+
+	/** (T4b fix round, P2) The owed keys an entry's O effects created (an owe whose min found nothing creates none). */
+	static List<String> owedOf(TxnEntry t) {
+		List<String> out = new java.util.ArrayList<>();
+		for (Effect e : t.effects) {
+			if (OWE.equals(e.op()) && dev.larattalabs.architect.site.OwedLedger.known(e.data().get("key").getAsString())) {
+				out.add(e.data().get("key").getAsString());
+			}
+		}
+		return out;
+	}
+
+	/** The owed keys of a committed result ({@code owed}), else rebuilt from {@code in} (a result saved before T4b). */
+	static List<String> owedOf(com.google.gson.@Nullable JsonObject result, Settle in) {
+		if (result != null && result.get("owed") instanceof JsonArray a) {
+			List<String> out = new java.util.ArrayList<>();
+			a.forEach(x -> out.add(x.getAsString()));
+			return out;
+		}
+		return owedOf(in);
+	}
+
+	/** A settle's result: the owed keys it created (replayed from the cache, never rebuilt). */
+	static com.google.gson.JsonObject resultOf(TxnEntry t) {
+		com.google.gson.JsonObject r = new com.google.gson.JsonObject();
+		JsonArray a = new JsonArray();
+		owedOf(t).forEach(a::add);
+		r.add("owed", a);
+		return r;
 	}
 
 	static List<String> owedOf(Settle in) {
@@ -279,7 +320,7 @@ public final class CrateTxn {
 			if (s == null) {
 				throw new IllegalStateException("no server");
 			}
-			dev.larattalabs.architect.site.CrateSettle.credit(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.items());
+			dev.larattalabs.architect.site.CrateSettle.credit(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), RemovalTxn.amount(t, e));
 		}
 
 		@Override
@@ -307,8 +348,13 @@ public final class CrateTxn {
 			BlockPos p = TestMove.posOf(e);
 			MinecraftServer s = TxnServer.server();
 			long tick = s == null ? 0 : s.getTickCount();
+			java.util.Map<String, Integer> items = RemovalTxn.amount(t, e); // (T4b fix round, N3) a refund pays min(planned, found by its restore)
+			if (items.isEmpty()) {
+				dev.larattalabs.architect.site.OwedLedger.markApplied(e.key(t.id)); // nothing of it stood: nothing owed, the effect done
+				return;
+			}
 			var entry = new dev.larattalabs.architect.site.OwedLedger.Entry(d.get("key").getAsString(), d.get("recipient").getAsString(), d.get("dim")
-				.getAsString(), p.getX(), p.getY(), p.getZ(), e.items(), d.get("reason").getAsString(), tick, System.currentTimeMillis(), d.has("site") ? d
+				.getAsString(), p.getX(), p.getY(), p.getZ(), items, d.get("reason").getAsString(), tick, System.currentTimeMillis(), d.has("site") ? d
 					.get("site").getAsString() : null, d.has("region") ? d.get("region").getAsString() : null);
 			dev.larattalabs.architect.site.OwedLedger.owe(entry, e.key(t.id));
 			dev.larattalabs.architect.site.Stockpiles.owedChanged();
@@ -354,6 +400,11 @@ public final class CrateTxn {
 				case OWE -> OWER;
 				default -> null;
 			};
+		}
+
+		@Override
+		public com.google.gson.JsonObject result(TxnEntry t) {
+			return resultOf(t);
 		}
 	};
 

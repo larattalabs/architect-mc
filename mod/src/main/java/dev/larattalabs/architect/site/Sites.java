@@ -1748,7 +1748,35 @@ public final class Sites {
 				Infras.markPending(server, c);
 			}
 		}
-		// R4: the writes, top first (the cascade is ordered top-down)
+		// R4: the writes, top first (the cascade is ordered top-down); (T4b fix round, N3) as the removal's own writes (its boxes are held)
+		boolean writingWas = CrateSettle.WRITING;
+		CrateSettle.WRITING = true;
+		try {
+			return writeRemoval(level, server, id, all, cascade, decs, stashes, undone, group, drops, force, tr);
+		} finally {
+			CrateSettle.WRITING = writingWas;
+		}
+	}
+
+	/** (T4b fix round) removeDetailed's R4 and after: the writes, then each site's settle; the removal's own writes. */
+	private static Removed writeRemoval(ServerLevel level, MinecraftServer server, String id, List<Site> all, List<String> cascade,
+		Map<String, Builder.Deconstruction> decs, Map<String, JsonObject> stashes, SiteJournal.Undone undone, String group, Drops drops, boolean force,
+		Trace tr) throws SiteException {
+		HELD_NOW.clear();
+		Removed r0 = writeRemoval0(level, server, id, all, cascade, decs, stashes, undone, group, drops, force, tr);
+		if (!HELD_NOW.isEmpty()) {
+			// (T4b fix round, P2) its undo is decided and written, its settle held: it finishes by itself; until then the call answers
+			// held(decided), never removed with a refund it has not paid
+			String why = String.join("; ", HELD_NOW);
+			HELD_NOW.clear();
+			throw new SiteException(Reason.SITE_BUSY, "held(decided) " + why);
+		}
+		return r0;
+	}
+
+	private static Removed writeRemoval0(ServerLevel level, MinecraftServer server, String id, List<Site> all, List<String> cascade,
+		Map<String, Builder.Deconstruction> decs, Map<String, JsonObject> stashes, SiteJournal.Undone undone, String group, Drops drops, boolean force,
+		Trace tr) throws SiteException {
 		Removed last = null;
 		Map<String, Integer> handed = handedBySite(undone.work());
 		tr.mark("pending");
@@ -1758,8 +1786,9 @@ public final class Sites {
 			}
 		}
 		for (Site x : all) {
+			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
+			CrateSettle.markRestored(x.id(), group, CrateSettle.foundNow(level, stashes.get(x.id())));
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
-			CrateSettle.markRestored(x.id(), group); // (T4b) its removal txn's W effect receipts these cells (written now, in memory)
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
@@ -1975,6 +2004,7 @@ public final class Sites {
 					settled(server, id);
 				} else {
 					CrateSettle.resumeLater(server, id);
+					HELD_NOW.add(id + ": " + settled.held()); // (T4b fix round, P2) decided, not done: the call answers held(decided)
 				}
 			}
 		} else {
@@ -1992,11 +2022,14 @@ public final class Sites {
 			settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 		}
 		Removed r = new Removed(b, Map.copyOf(returned), stats.restored(), stats.changed(), handed, cascaded, notes, List.copyOf(settled.owed()));
-		if (event) {
+		if (event && settled.done()) { // (T4b fix round, P2) a held settle is not removed yet (it finishes by itself)
 			ApiEvents.removed(server, r);
 		}
 		return r;
 	}
+
+	/** (T4b fix round, P2) The sites whose removal txn this call left held (decided, finishing later). Server thread. */
+	static final List<String> HELD_NOW = new ArrayList<>();
 
 	/** Refuses when a player stands in (or next to) a box about to get its old terrain back: restoring it would bury them. */
 	static void refusePlayerIn(ServerLevel level, Anchors.Bounds box, String id, String verb) throws SiteException {
@@ -3273,6 +3306,9 @@ public final class Sites {
 				// (the stockpiles load after this check: the settle reads the durable stash on its tick, CrateSettle.resumeNow)
 				// (T4b, finding 1b) the durable stash first: a shared crate's member (no CRATE entry of its own) and a stockpile's site keep theirs
 				JsonObject st = early == null ? null : early.get(b.id());
+				if (st != null) {
+					CrateSettle.withBox(st, b.restoreBox()); // (T4b fix round) a converted pre-T4 stash gets its removal's box
+				}
 				if (st == null) {
 					st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
 				}
@@ -3357,10 +3393,15 @@ public final class Sites {
 					continue;
 				}
 			}
-			if (group != null && stashOf != null) {
+			if (group != null && stashOf != null && !jobSites.contains(gone.id())) {
 				// (T4b, findings 1a, 1b, 2a, 2b) a committed removal with a stash is decided: never judged by a threshold, never brought back, its
 				// entries kept. Its removal txn writes its committed restore again (W, receipted per chunk), then pays; its pending record and its
-				// entries go once that txn is done (the record at its settle, the entries at a later start's check, on restored evidence)
+				// entries go once that txn is done (the record at its settle, the entries at a later start's check, on restored evidence).
+				// (T4b fix round, finding 4) a pre-T4 held pending credit comes in as such a stash too: kept on the pending record
+				if (p.settle() == null) {
+					pending.set(pending.indexOf(p), new Site.Pending(gone, p.at(), p.why(), CrateSettle.withBox(stashOf, gone.restoreBox())));
+					changed = true;
+				}
 				Architect.LOGGER.info("Sites check: removed {}: committed with its stash; its removal txn restores it, then settles", gone.id());
 				CrateSettle.resumeLater(server, gone.id());
 				continue;
@@ -3468,7 +3509,7 @@ public final class Sites {
 			}
 			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null) {
 				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority
-				CrateSettle.resumeInfraLater(server, gone.id());
+				CrateSettle.resumeInfraLater(server, gone.id(), early == null ? null : early.get(gone.id()));
 				continue;
 			}
 			Evidence ev = evidence(levelOf(server, gone.dimension()), gone.id(), group);

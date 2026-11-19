@@ -310,6 +310,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o), tagOwner);
 				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
+				if (e.getMessage() != null && e.getMessage().startsWith("held(decided)")) {
+					// (T4b fix round, P2) decided and written, its refunds not yet settled: it finishes by itself
+					return CompletableFuture.<RemoveResult>failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), "held(decided)"));
+				}
 				return CompletableFuture.completedFuture(refused(e.getMessage()));
 			}
 		}).thenCompose(f -> f);

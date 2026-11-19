@@ -36,6 +36,11 @@ public final class RemovalTxn {
 	public static final String PILE_REFUND = "pile.refund";
 
 	/** The W {@link #RESTORE} effect for {@code site}'s committed restore in undo group {@code group}, over {@code chunks}. */
+	public static Effect.Builder restore(String dim, String site, String group, List<long[]> chunks, @Nullable JsonArray cells) {
+		Effect.Builder b = restore(dim, site, group, chunks);
+		return cells == null ? b : b.data("cells", cells);
+	}
+
 	public static Effect.Builder restore(String dim, String site, String group, List<long[]> chunks) {
 		JsonArray cs = new JsonArray();
 		for (long[] c : chunks) {
@@ -87,6 +92,9 @@ public final class RemovalTxn {
 		public Probe probe(TxnEntry t, Effect e) {
 			String site = e.data().get("site").getAsString();
 			String group = e.data().get("group").getAsString();
+			if (CrateSettle.journalUnreadable()) {
+				return Probe.UNKNOWN; // (T4b fix round, finding 2) no journal read: its entries' absence is no evidence of a settled restore
+			}
 			if (!CrateSettle.undoneExists(site, group)) {
 				// its undo group's entries are released only after this txn retires (or, for a removal settled before T4, once its restore read
 				// restored at a start): nothing of it is left to write
@@ -116,9 +124,15 @@ public final class RemovalTxn {
 			if (cs == null) {
 				throw new IllegalStateException("a chunk of its restore is not loaded");
 			}
-			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, e.data().get("site").getAsString(), e.data().get("group").getAsString()));
+			java.util.Map<Long, java.util.Map<String, Integer>>[] found = new java.util.Map[1];
+			TxnServer.asHolder(t, () -> found[0] = CrateSettle.restoreSite(level, e.data().get("site").getAsString(), e.data().get("group").getAsString(), e.data()
+				.get("cells") instanceof JsonArray a ? a : null));
 			String k = restoredKey(t, e);
 			for (LevelChunk ch : cs) {
+				// (T4b fix round, N3) what of its refunded cells stood here before the write, receipted with the cells (replay reads it, never the
+				// world again): its refunds pay min(planned, found)
+				java.util.Map<String, Integer> f = found[0].getOrDefault(chunkKey(ch), java.util.Map.of());
+				TestMove.addReceipt(ch, e.key(t.id) + "@found=" + encode(f));
 				TestMove.addReceipt(ch, k); // the same tick as its cells: the chunk's save holds both
 			}
 		}
@@ -134,6 +148,62 @@ public final class RemovalTxn {
 			return first == null ? "the restore of " + e.data().get("site").getAsString() : "chunk " + first.get(0).getAsInt() + "," + first.get(1).getAsInt();
 		}
 	};
+
+	static long chunkKey(LevelChunk ch) {
+		return (long) ch.getPos().x() << 32 | ch.getPos().z() & 0xFFFFFFFFL;
+	}
+
+	static String encode(java.util.Map<String, Integer> m) {
+		StringBuilder b = new StringBuilder();
+		new java.util.TreeMap<>(m).forEach((k, v) -> b.append(b.length() == 0 ? "" : ",").append(k).append('*').append(v));
+		return b.toString();
+	}
+
+	static java.util.Map<String, Integer> decode(String s) {
+		java.util.Map<String, Integer> m = new java.util.TreeMap<>();
+		if (!s.isEmpty()) {
+			for (String p : s.split(",")) {
+				int star = p.lastIndexOf('*');
+				m.merge(p.substring(0, star), Integer.parseInt(p.substring(star + 1)), Integer::sum);
+			}
+		}
+		return m;
+	}
+
+	/**
+	 * (T4b fix round, N3) What the W effect {@code w} found standing of its refunded cells, summed over its chunks' receipts, or null when it
+	 * recorded none (no cells planned: the planned amounts stand). Throws when a chunk can't be read (the caller's effect holds).
+	 */
+	static java.util.@Nullable Map<String, Integer> found(TxnEntry t, Effect w) {
+		if (!(w.data().get("cells") instanceof JsonArray)) {
+			return null;
+		}
+		ServerLevel level = level(w);
+		java.util.List<LevelChunk> cs = level == null ? null : chunks(t, level, w);
+		if (cs == null) {
+			throw new IllegalStateException("a chunk of its restore is not loaded");
+		}
+		String pre = w.key(t.id) + "@found=";
+		java.util.Map<String, Integer> sum = new java.util.TreeMap<>();
+		boolean any = false;
+		for (LevelChunk ch : cs) {
+			for (String r : TestMove.receipts(ch)) {
+				if (r.startsWith(pre)) {
+					any = true;
+					decode(r.substring(pre.length())).forEach((k, v) -> sum.merge(k, v, Integer::sum));
+				}
+			}
+		}
+		return any ? sum : null;
+	}
+
+	/** (N3) The amount a refund effect pays: its planned items, capped by its W's found amounts when it names one ({@code minOf}). */
+	static java.util.Map<String, Integer> amount(TxnEntry t, Effect e) {
+		if (!e.data().has("minOf")) {
+			return e.items();
+		}
+		return CrateSettle.minOf(e.items(), found(t, t.effects.get(e.data().get("minOf").getAsInt())));
+	}
 
 	static final TxnKind.Adapter PILE_REFUNDER = new TxnKind.Adapter() {
 		@Override
@@ -152,7 +222,7 @@ public final class RemovalTxn {
 			if (s == null) {
 				throw new IllegalStateException("no server");
 			}
-			CrateSettle.bookRefund(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.items(), TestMove.posOf(e));
+			CrateSettle.bookRefund(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), amount(t, e), TestMove.posOf(e));
 		}
 
 		@Override
@@ -185,6 +255,11 @@ public final class RemovalTxn {
 					case CrateTxn.OWE -> CrateTxn.OWER;
 					default -> null;
 				};
+			}
+
+			@Override
+			public com.google.gson.JsonObject result(TxnEntry t) {
+				return CrateTxn.resultOf(t); // (T4b fix round, P2) its owed keys, replayed from the cache
 			}
 		};
 	}

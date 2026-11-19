@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.site.CrateSettle;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.site.DurableBarrier;
 import dev.larattalabs.architect.site.DurableFile;
@@ -258,7 +259,17 @@ public final class TxnServer {
 	 */
 	public static boolean boxHeld(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
 		TxnEntry t = cellHolder(level, pos);
-		return t != null && t != WRITER;
+		if (t != null && t != WRITER) {
+			return true;
+		}
+		// (T4b fix round, N3) a removal's box, from its tally on (a durable stash) and while its txn is open: every writer but the removal's own
+		// (its restore, a txn adapter) is refused (players, pistons, explosions, fluids, other mods), as a held cell is
+		if (WRITER != null || level == null || level.isClientSide() || !CrateSettle.anyHeldBox() && core.holds().isEmpty()) {
+			return false;
+		}
+		String dim = level.dimension().identifier().toString();
+		return CrateSettle.stashBoxHeld(dim, pos.getX(), pos.getY(), pos.getZ()) || !CrateSettle.WRITING && RemovalTxn.boxHeld(dim, pos.getX(), pos.getY(),
+			pos.getZ());
 	}
 
 	/** The txn holding the cell, or null (no txn open, a client level, no hold there). The holder's own writes are not exempted here. */

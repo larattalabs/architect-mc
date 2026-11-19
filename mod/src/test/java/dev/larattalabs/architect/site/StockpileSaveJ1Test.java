@@ -96,7 +96,7 @@ class StockpileSaveJ1Test {
 		// (LC2, F10) the before written, then the items dropped on top of it (never inside it), in the same tick (a second pass finds nothing)
 		assertTrue(dm.indexOf("Placed.set(level, p, was") >= 0 && dm.indexOf("Placed.set(level, p, was") < dm.indexOf("Builder.dropAtCell"),
 			"the before written, then dropped on top of it");
-		assertTrue(rb.contains("refundOf(level, road, dropPlayerMatches(level, road))"), "a standalone road's refund leaves them out");
+		assertTrue(rb.contains("tallyOf(level, road, dropPlayerMatches(level, road))"), "a standalone road's refund leaves them out"); // (T4b fix round: per cell)
 		String g = read(SITE + "Groups.java");
 		int m = g.indexOf("RoadBuilder.dropPlayerMatches(level, inf, false)"); // (DR-S) found for the tally, dropped after the credits' save
 		assertTrue(m >= 0 && m < g.indexOf("RoadBuilder.refundOf(level, inf, dropped)"), "a group's road refund leaves them out");
