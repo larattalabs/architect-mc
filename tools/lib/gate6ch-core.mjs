@@ -1159,7 +1159,8 @@ export async function t9hd(ctx) {
       sleep(10_000).then(() => ({ waiting: true }))]);
     out.second = { ...second, ms: Date.now() - t0 };
     log(`  HD: ${json(out)}`);
-    check(!!second.error && /held\(other\)/.test(second.error) && /chunk -?\d+,-?\d+/.test(second.error), `HD: a Remove asked while the drain is held is answered at once, typed (${json(out.second).slice(0, 300)})`);
+    const said = String(second.error ?? second.answer?.refused ?? '');
+    check(/held\(other\)/.test(said) && /chunk -?\d+,-?\d+/.test(said), `HD: a Remove asked while the drain is held is answered at once, typed (${json(out.second).slice(0, 300)})`);
   } finally {
     await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
   }
