@@ -583,14 +583,17 @@ export async function registerTCC(steps, h) {
         const st = await siteState(site);
         const mid = await parts([site], cp, items);
         R[tag] = { finish: fin, state: st?.state, before, mid };
-        const cs = pick(await crateItems(cp), items); // the crate's own ledger (the site's view hides a held crate's stock)
-        mid.total = [cs, mid.placed, mid.owed, mid.ground, mid.inventory].reduce((x, y) => G.plus(x, y), {});
+        // dev.site.finish places the rest free: the blocks it put down are not the crate's units, so this row counts crate + owed + ground + inventory
+        const units = (x) => [x.stock, x.owed, x.ground, x.inventory].reduce((a, b) => G.plus(a, b), {});
+        before.total = units(before);
+        mid.total = units(mid);
         check(st?.state === 'building' && mid.crate && G.same(mid.total, before.total) && sum(mid.ground) === 0,
           `${tag}: a completing site whose settle's barriers are refused stays BUILDING (${st?.state}), its crate kept (${mid.crate ? 'stands' : 'gone'}), nothing lost: ${json(mid.total)} = ${json(before.total)}`, R[tag]);
         await noBarriers(0);
         let s2;
         for (let i = 0; i < 30; i++) { s2 = await siteState(site); if (s2?.state === 'built') break; await L.sleep(1000); }
         const after = await parts([site], cp, items);
+        after.total = units(after);
         R[tag].after = after;
         check(s2?.state === 'built' && !after.crate && G.same(after.total, before.total) && sum(after.ground) === 0,
           `${tag}: barriers working again, it completes once: ${s2?.state}, leftovers owed (${json(after.owed)}), ${json(after.total)} = ${json(before.total)}`, R[tag]);
