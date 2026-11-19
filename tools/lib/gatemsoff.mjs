@@ -50,6 +50,27 @@ export async function registerSOFF(steps, h) {
   const books = (l) => json(sorted(Object.fromEntries(['delivered', 'returned', 'consumed', 'withdrawn', 'dropped', 'refundOverflow', 'paid'].map((k) => [k, l?.[k] ?? {}]))));
   /** (SOFF2) B's comparison: the item records plus the cell books, custody and fill markers. */
   const booksAll = (l) => json(sorted(Object.fromEntries(['delivered', 'returned', 'consumed', 'withdrawn', 'dropped', 'refundOverflow', 'paid', 'cells', 'custody', 'filled', 'provided', 'heldProvided', 'pendingCredit'].map((k) => [k, l?.[k] ?? {}]))));
+  /** (SOFF2) every target the stockpile feeds now (the feed order at the start, and any that joined since). */
+  const targetIds = async () => {
+    const st = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    return [...new Set([...(st.feedOrder ?? []), ...Object.keys(st.targets ?? {})])];
+  };
+  const targetsLine = async () => json(Object.fromEntries(Object.entries((await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile?.targets ?? {})
+    .map(([k, x]) => [k, [x.built, x.queued, x.paused ? 'paused' : 'on', x.frontierLoaded ? 'loaded' : 'unloaded', x.reserves ? 'reserves' : '-', json(x.outstanding ?? {}).slice(0, 80)]])));
+  /** (SOFF2) What the targets still lack beyond the stock, per item. */
+  const lacking = async () => {
+    const st = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    const o = {};
+    for (const [it, v] of Object.entries(st.outstanding ?? {})) { const l = v - (st.stock?.[it] ?? 0); if (l > 0) o[it] = l; }
+    return o;
+  };
+  /** (SOFF2) The item the targets lack most now, and up to a stack of it: an Insert from inventory takes it. */
+  const needed = async () => {
+    const [it, n] = Object.entries(await lacking()).sort((a, b) => b[1] - a[1])[0] ?? [];
+    return it ? [it, Math.min(64, n)] : [null, 0];
+  };
+  const unpauseAll = async () => { for (const id of await targetIds()) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000).catch(() => null); };
+  const pauseAll = async () => { for (const id of await targetIds()) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000).catch(() => null); };
   const builtSum = async () => Object.values((await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile?.targets ?? {}).reduce((n, x) => n + (x.built ?? 0), 0);
   const pos = (m) => Object.fromEntries(Object.entries(m ?? {}).filter(([, v]) => v > 0));
   /** (as gatem5rl's) standing paid cells against the targets' paid records. */
@@ -251,11 +272,14 @@ export async function registerSOFF(steps, h) {
 
     // ---------------------------------------------------------------- B: a build fed, then /save-off: nothing moves while held
     {
-      const k = Math.min(64, need[B] ?? 0);
-      await cmd(`/give @s ${B} ${k}`);
-      await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
-      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000);
-      await call('dev.wait', { ms: 5000 }, 30_000);
+      // (SOFF2) every target the stockpile feeds now unpaused (the street's roads joined after the start's), what they lack delivered:
+      // the build is running when saving goes off, with stock left for it after the release
+      await unpauseAll();
+      const lackB = await lacking();
+      await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: lackB, exact: true }, 120_000);
+      const bB0 = await builtSum();
+      for (let i = 0; i < 20 && (await builtSum()) <= bB0; i++) await L.sleep(1000);
+      log(`  B: delivered ${json(lackB)}; targets ${await targetsLine()}`);
       await cmd('/save-all flush').catch(() => null);
       await cmd('/save-off');
       const a0 = await audit();
@@ -283,7 +307,8 @@ export async function registerSOFF(steps, h) {
       n.built2 = built2;
       n.resumed = booksAll(a2.ledger) !== booksAll(a1.ledger) && built2 > built1;
       check(n.resumed, `B: after the release the build resumed: built ${built1} -> ${built2} cells, the ledger moved (${books(a2.ledger) !== books(a1.ledger)})`, n);
-      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+      log(`  B: after the release: targets ${await targetsLine()}`);
+      await pauseAll();
       await cmd('/save-all flush').catch(() => null);
       const hx = await halt('B');
       if (hx) {
@@ -296,18 +321,21 @@ export async function registerSOFF(steps, h) {
 
     // ---------------------------------------------------------------- (SOFF2) N, E: another mod's raw forced save inside a save
     {
-      const k = Math.min(64, Math.max(1, Math.floor((need[B] ?? 0) / 4)));
       await ps({ noPeriodic: true });
-      await cmd(`/give @s ${B} ${k}`);
-      out.N = await crashCase('N', [B], async (n) => {
+      const [IN, kN] = await needed();
+      check(!!IN, `N: an item the targets still lack (${IN} x${kN})`);
+      await cmd(`/give @s ${IN ?? B} ${Math.max(1, kN)}`);
+      out.N = await crashCase('N', [IN ?? B], async (n) => {
         const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
         n.moved = ins.moved;
         check(ins.moved > 0, `N: ${ins.moved} deposited (pending); then an autosave whose player save runs a raw saveAllChunks(true, true, true) and halts`, n);
         ps({ rawSaveIn: 'playerSave', haltAfter: true, autosave: true }).catch(() => null); // the hook halts the server inside
       }, { selfHalt: true });
       await ps({ noPeriodic: true });
-      await cmd(`/give @s ${B} ${k}`);
-      out.E = await crashCase('E', [B], async (n, s0) => {
+      const [IE, kE] = await needed();
+      check(!!IE, `E: an item the targets still lack (${IE} x${kE})`);
+      await cmd(`/give @s ${IE ?? B} ${Math.max(1, kE)}`);
+      out.E = await crashCase('E', [IE ?? B], async (n, s0) => {
         const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
         await ps({ rawSaveIn: 'beforeSave', autosave: true });
         const s = await saved();
@@ -321,10 +349,11 @@ export async function registerSOFF(steps, h) {
 
     // ---------------------------------------------------------------- (SOFF2) X: an insert inside /save-off's own barrier
     {
-      const k = Math.min(64, Math.max(1, Math.floor((need[B] ?? 0) / 4)));
       await ps({ noPeriodic: true });
-      await cmd(`/give @s ${B} ${k}`);
-      out.X = await crashCase('X', [B], async (n) => {
+      const [IX, kX] = await needed();
+      check(!!IX, `X: an item the targets still lack (${IX} x${kX})`);
+      await cmd(`/give @s ${IX ?? B} ${Math.max(1, kX)}`);
+      out.X = await crashCase('X', [IX ?? B], async (n) => {
         await ps({ depositInSavingOffBarrier: `stockpile:${G.OWNER}`, markUnsaved: true });
         await cmd('/save-off');
         const s = await heldNow('X');
@@ -338,13 +367,12 @@ export async function registerSOFF(steps, h) {
 
     // ---------------------------------------------------------------- (SOFF2) S: the start with saving off after an unclean stop
     {
-      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000);
-      const st = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
-      const lack = {};
-      for (const [it, v] of Object.entries(st.outstanding ?? {})) { const l = v - (st.stock?.[it] ?? 0); if (l > 0) lack[it] = Math.max(1, Math.floor(l / 2)); }
+      await unpauseAll();
+      const lack = await lacking();
       await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: lack, exact: true }, 120_000);
       const bS0 = await builtSum();
       for (let i = 0; i < 20 && (await builtSum()) <= bS0; i++) await L.sleep(1500);
+      log(`  S: delivered ${json(lack)}; targets ${await targetsLine()}`);
       await ps({ noPeriodic: true });
       await cmd('/save-all flush').catch(() => null);
       await call('dev.wait', { ms: 1500 }, 30_000);
@@ -387,7 +415,7 @@ export async function registerSOFF(steps, h) {
         check(n.balance.dupeUnits === 0 && a.identity !== false, `S: after the release no cell stands unpaid (standing ${n.balance.standing}, paid ${n.balance.paid}; dupe ${n.balance.dupeUnits}: ${json(n.balance.dupe)}; identity ${a.identity})`, n);
       }
       out.S = n;
-      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000).catch(() => null);
+      await pauseAll();
       await ps({ noPeriodic: false });
     }
 
