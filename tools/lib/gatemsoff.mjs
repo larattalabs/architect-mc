@@ -1,20 +1,24 @@
-// Slice SOFF gate: no Architect ledger save publishes the stockpile ledger while a level has saving off (/save-off). saveAllChunks skips
-// such a level unless forced, and RegionDurability tracks only the writes that happened, so the ledger would be on disk ahead of the world
-// it covers: a crash then mints (a hopper's source chest saved full, the ledger counting its deliveries) or loses (a Take's ground drop
-// never saved, the ledger's debit on disk).
+// Slice SOFF gate: while any level has saving off (/save-off, or another mod's noSave), Architect admits no operation that changes the
+// stockpile ledger or moves paid items (SaveHold), and no ledger save publishes over a save that did not write every level with the
+// players (SaveEvidence). saveAllChunks skips a level with saving off unless forced, so before SOFF the ledger went on disk ahead of the
+// world (a mint, a loss); with SOFF's first round alone (551ed9ac) inserts went on while their credit could not be saved (a loss).
 // Registered into tools/gate6dgr.mjs (GR's survival town and halt helpers). Headless server, the sim sidecar: $0.
 //
-//   node tools/gate6dgr.mjs soffcrash   (soff-crash)   one survival world, a stockpile of 4 crates, a town realised with every target paused
-//     (nothing consumed), a chest over a hopper over two of the crates. Each case: /save-all flush (the baseline, saving on), /save-off, the
-//     ledger change, a halt with nothing else saved (dev.stockpile.halt), the world opened again (saving is on again), conservation:
-//       P  the hopper line delivering for 25 s, the periodic save ticking: chest + hopper + stock after the restart = the baseline
-//          (before SOFF a mint: the periodic save wrote the deliveries, the chest's chunk was never saved)
-//       A  the periodic save off, a vanilla autosave (dev.stockpile.ps autosave: unflushed, not forced): the same (before SOFF a mint
-//          through the world save's callback)
-//       W  the region removed (its stock becomes credit), the inventory full, a Take (withdraw) whose items drop on the ground: inventory
-//          + stock + ground = the baseline (before SOFF a loss: the ledger's debit on disk, the dropped items never saved); refused with a
-//          message naming the dimension and /save-on
-//     and on the branch: no ledger save while saving was off, the refusals counted (dev.stockpile.saved savingOffRefusals).
+//   node tools/gate6dgr.mjs soffcrash   (soff-crash)   one survival world, a stockpile of 4 crates, a town realised with every target paused.
+//     Each case: a baseline (/save-all flush, saving on: the disk ledger read back), the case, a halt with nothing else saved, the world
+//     opened again (saving on: the flags are not kept), then conservation over everything the items can be in near the claim (chests,
+//     hoppers and other containers, item entities, the player's inventory, the stockpile) and the disk ledger at the halt against the
+//     snapshot the hold says is durable:
+//       P  a hopper line into a crate, /save-off, 25 s (the periodic save ticking): the crates take nothing while held
+//       A  the same with the periodic save off and a vanilla autosave (dev.stockpile.ps autosave)
+//       M  mixed dimensions: the Nether's saving turned off directly (dev.stockpile.ps noSave, as another mod would), the Overworld on,
+//          then a hopper line into an Overworld crate, an autosave: held in every dimension (the ledger is shared)
+//       D  a deposit (Insert from inventory) admitted just before /save-off, then an autosave and a logout (both save the player): /save-off
+//          saved the pending deposit first, so the disk ledger holds it
+//       F  saving on: a deposit, then another mod's raw saveAllChunks(true, true, true) (no players): no ledger publish over it
+//       B  targets unpaused and fed, /save-off: no feed, no fill, no payment while held; /save-on: held until a confirmed save, then the
+//          build resumes; the ledger's identity holds after a halt
+//       W  the region removed (credit), the inventory full, /save-off, a Take: refused naming the dimension and /save-on
 //
 // Evidence: artifacts/gate6d-gr/soffcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -30,26 +34,70 @@ export async function registerSOFF(steps, h) {
   const saved = async () => call('dev.stockpile.saved', {}, 60_000);
   const ps = async (o) => call('dev.stockpile.ps', o, 120_000);
   const audit = async (box) => call('dev.stockpile.audit', { owner: G.OWNER, ...(box ? { min: box.min, max: box.max } : {}) }, 60_000);
+  const sorted = (v) => (Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted(v[k])])) : v);
+  /** The ledger's item records (what conservation is judged on; the cell books and keys aside). */
+  const books = (l) => json(sorted(Object.fromEntries(['delivered', 'returned', 'consumed', 'withdrawn', 'dropped', 'refundOverflow', 'paid'].map((k) => [k, l?.[k] ?? {}]))));
+  let W;
+  const diskLedger = () => ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
 
-  async function halt(tag, W) {
+  async function halt(tag) {
     call('dev.stockpile.halt', {}, 10_000).catch(() => null); // the halt drops the call
     const down = await haltWait();
     check(down, `${tag}: halted with nothing else saved`);
     if (!down) return null;
-    const disk = JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8'));
+    const disk = diskLedger();
     await L.openWorld(path.basename(W.dir));
     await L.tp(W.at[0], W.at[1], W.at[2]);
     await call('dev.wait', { ms: 3000 }, 30_000);
     await caps.afterRestart(tag); // (BC-c) the reconcile inside the region's maxBill
-    return { diskLedger: ledgerOf(disk) };
+    return { disk };
   }
 
-  /** What happened to the ledger saves while saving was off: none on the branch, the refusals counted. */
-  function offSaves(tag, s0, s1, n) {
-    n.ledgerSavesWhileOff = s1.saves - s0.saves;
-    n.savingOffRefusals = (s1.savingOffRefusals ?? NaN) - (s0.savingOffRefusals ?? NaN);
-    check(n.ledgerSavesWhileOff === 0 && n.savingOffRefusals >= 1, `${tag}: no ledger save while saving was off (${n.ledgerSavesWhileOff} save(s)); ${n.savingOffRefusals} refusal(s) counted`, n);
+  /** Per item over `items`: containers + item entities + the player's inventory + the stock, in the claim's box. */
+  async function totals(items) {
+    const a = await audit(W.box);
+    const t = {};
+    for (const k of items) t[k] = (a.containers?.[k] ?? 0) + (a.entities?.[k] ?? 0) + (a.inventory?.[k] ?? 0) + (a.stock?.[k] ?? 0);
+    return { t, stock: Object.fromEntries(items.map((k) => [k, a.stock?.[k] ?? 0])), inv: Object.fromEntries(items.map((k) => [k, a.inventory?.[k] ?? 0])), ledger: a.ledger, identity: a.identity };
   }
+  const same = (a, b) => json(sorted(a)) === json(sorted(b));
+
+  /**
+   * One case: the baseline, `body()` (returns its notes; `expectDisk`: 'baseline' or 'live' (the ledger at the halt)), the halt, the
+   * world opened again, conservation and the disk ledger. `held`: the hold must be on during the body.
+   */
+  async function crashCase(tag, items, body, { expectDisk = 'baseline' } = {}) {
+    await cmd('/save-all flush').catch(() => null);
+    await call('dev.wait', { ms: 1500 }, 30_000);
+    const base = diskLedger();
+    const s0 = await saved();
+    const c0 = await totals(items);
+    const n = { tag, items, before: c0.t };
+    Object.assign(n, (await body(n, s0)) ?? {});
+    const c1 = await totals(items);
+    const s1 = await saved();
+    n.live = c1.t;
+    n.hold = s1.hold ?? null;
+    check(same(c1.t, c0.t), `${tag}: live totals conserved ${json(c0.t)} -> ${json(c1.t)}`, n);
+    const expect = expectDisk === 'live' ? c1.ledger : base;
+    const hx = await halt(tag);
+    if (!hx) return n;
+    const c2 = await totals(items);
+    n.after = c2.t;
+    const d = Object.fromEntries(items.map((k) => [k, (c2.t[k] ?? 0) - (c0.t[k] ?? 0)]));
+    n.mintUnits = sum(Object.fromEntries(Object.entries(d).filter(([, v]) => v > 0)));
+    n.lossUnits = -sum(Object.fromEntries(Object.entries(d).filter(([, v]) => v < 0)));
+    log(`  ${tag}: before ${json(c0.t)}; live ${json(c1.t)}; after the restart ${json(c2.t)}; minted ${n.mintUnits}, lost ${n.lossUnits}`);
+    check(n.mintUnits === 0 && n.lossUnits === 0, `${tag}: conservation: containers + entities + inventory + stock after the restart = the baseline (minted ${n.mintUnits}, lost ${n.lossUnits})`, n);
+    n.diskMatches = books(hx.disk) === books(expect);
+    check(n.diskMatches, `${tag}: the disk ledger at the halt equals the ${expectDisk === 'live' ? 'live ledger (its changes saved first)' : 'baseline (nothing published while held)'}`, { disk: books(hx.disk), expect: books(expect) });
+    return n;
+  }
+  const heldNow = async (tag) => {
+    const s = await saved();
+    check(s.hold?.state === 'HELD', `${tag}: the hold is on (${json(s.hold)})`);
+    return s;
+  };
 
   steps.soffcrash = async () => {
     await ensure();
@@ -69,60 +117,137 @@ export async function registerSOFF(steps, h) {
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
     const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...at);
-    const W = { dir: path.join(L.SAVES, name), at, region };
+    W = { dir: path.join(L.SAVES, name), at, region, box: { min: [CLAIM[0] - 12, gy - 1, CLAIM[1] - 12], max: [CLAIM[0] + 4, gy + 6, CLAIM[1] + 4] } };
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
-    for (const id of st0.feedOrder ?? []) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+    const feedOrder = st0.feedOrder ?? [];
+    for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
     const need = st0.outstanding ?? {};
     const items = Object.entries(need).sort((a, b) => b[1] - a[1]).map(([k]) => k);
-    log(`  SOFF: ${(st0.feedOrder ?? []).length} target(s) paused; the need ${json(need)}`);
-    check(items.length > 0 && sum(need) >= 100, `SOFF: the town needs at least 100 units (${sum(need)}: two hopper cases)`);
+    log(`  SOFF: ${feedOrder.length} target(s) paused; the need ${json(need)}`);
+    check(items.length > 0 && sum(need) >= 100, `SOFF: the town needs at least 100 units (${sum(need)})`);
     if (!items.length) return out;
 
-    // ---------------------------------------------------------------- P and A: a hopper line, saving off, a halt
-    const lines = crates.slice(0, 2);
-    for (const [x, y, z] of lines) {
+    // a hopper line: a chest over a hopper over crate k, its chest filled with a quarter of the need
+    const line = async ([x, y, z]) => {
       await cmd(`/setblock ${x} ${y + 1} ${z} minecraft:hopper[facing=down]`);
       await cmd(`/setblock ${x} ${y + 2} ${z} minecraft:chest`);
-    }
-    const fill = async ([x, y, z]) => {
       let slot = 0;
       for (const k of items) {
-        for (let left = Math.floor(need[k] / 2); left > 0 && slot < 27; slot++, left -= 64) await cmd(`/item replace block ${x} ${y + 2} ${z} container.${slot} with ${k} ${Math.min(64, left)}`);
+        for (let left = Math.floor(need[k] / 4); left > 0 && slot < 27; slot++, left -= 64) await cmd(`/item replace block ${x} ${y + 2} ${z} container.${slot} with ${k} ${Math.min(64, left)}`);
       }
     };
-    const xs = lines.map((c) => c[0]);
-    const box = { min: [Math.min(...xs), gy + 2, crates[0][2]], max: [Math.max(...xs), gy + 3, crates[0][2]] };
-    const totals = async () => {
-      const a = await audit(box);
-      const cont = sum(Object.fromEntries(items.map((k) => [k, a.containers?.[k] ?? 0])));
-      const stock = sum(Object.fromEntries(items.map((k) => [k, a.stock?.[k] ?? 0])));
-      return { cont, stock, total: cont + stock };
+    const unline = async ([x, y, z]) => {
+      await cmd(`/setblock ${x} ${y + 2} ${z} minecraft:air`);
+      await cmd(`/setblock ${x} ${y + 1} ${z} minecraft:air`);
     };
-    for (const [k, [tag, viaAutosave]] of [['P', false], ['A', true]].entries()) {
+    const stockOf = async () => sum((await audit()).stock ?? {});
+
+    // ---------------------------------------------------------------- P, A: a hopper line with saving off
+    for (const [tag, viaAutosave] of [['P', false], ['A', true]]) {
       await ps({ noPeriodic: viaAutosave, resetPeriodic: true });
-      await fill(lines[k]);
-      await cmd('/save-all flush').catch(() => null);
-      const s0 = await saved();
-      const c0 = await totals();
-      await cmd('/save-off');
-      await call('dev.wait', { ms: viaAutosave ? 15_000 : 25_000 }, 60_000);
-      if (viaAutosave) await ps({ autosave: true });
-      const c1 = await totals();
-      const s1 = await saved();
-      const n = { tag, viaAutosave, before: c0, live: c1, delivered: c1.stock - c0.stock, periodicSaves: s1.periodicSaves };
-      check(n.delivered > 0 && c1.total === c0.total, `${tag}: the hopper line delivered ${n.delivered} with saving off (${viaAutosave ? 'then a vanilla autosave' : `${s1.periodicSaves} periodic tick(s)`}); live totals conserved (${c0.total} -> ${c1.total})`, n);
-      offSaves(tag, s0, s1, n);
-      const hx = await halt(tag, W);
-      if (!hx) return out;
-      const c2 = await totals();
-      Object.assign(n, hx, { after: c2, mintUnits: Math.max(0, c2.total - c0.total), lossUnits: Math.max(0, c0.total - c2.total) });
-      log(`  ${tag}: baseline ${json(c0)}; live at the halt ${json(c1)}; after the restart ${json(c2)}; minted ${n.mintUnits}, lost ${n.lossUnits}`);
-      check(c2.total === c0.total, `${tag}: conservation: chest + hopper + stock after the restart ${c2.total} = ${c0.total} at the baseline (minted ${n.mintUnits}, lost ${n.lossUnits})`, n);
-      out[tag] = n;
+      out[tag] = await crashCase(tag, items, async (n, s0) => {
+        const k0 = await stockOf();
+        await cmd('/save-off');
+        await line(crates[0]);
+        await call('dev.wait', { ms: viaAutosave ? 15_000 : 25_000 }, 60_000);
+        if (viaAutosave) await ps({ autosave: true });
+        const s = await heldNow(tag);
+        n.taken = (await stockOf()) - k0;
+        n.ledgerSavesWhileOff = s.saves - s0.saves;
+        check(n.taken === 0 && n.ledgerSavesWhileOff === 0, `${tag}: while saving is off the crates took ${n.taken} (held) and no ledger save ran (${n.ledgerSavesWhileOff}); ${viaAutosave ? 'an autosave' : `${s.periodicSaves} periodic tick(s)`}`, n);
+      });
+      await unline(crates[0]);
     }
     await ps({ noPeriodic: false });
 
-    // ---------------------------------------------------------------- W: a Take onto the ground with saving off, a halt
+    // ---------------------------------------------------------------- M: the Nether off directly, the Overworld on
+    out.M = await crashCase('M', items, async (n, s0) => {
+      const k0 = await stockOf();
+      await ps({ noSave: { 'minecraft:the_nether': true } });
+      await line(crates[1]);
+      await call('dev.wait', { ms: 15_000 }, 60_000);
+      await ps({ autosave: true });
+      const s = await heldNow('M');
+      n.taken = (await stockOf()) - k0;
+      n.ledgerSavesWhileOff = s.saves - s0.saves;
+      check(n.taken === 0, `M: with the Nether's saving off, an Overworld crate took ${n.taken} (held in every dimension: the ledger is shared)`, n);
+    });
+    await unline(crates[1]);
+
+    // ---------------------------------------------------------------- D: a deposit just before /save-off, then an autosave and a logout
+    const [B] = items;
+    {
+      const k = Math.min(64, Math.max(1, Math.floor((need[B] ?? 0) / 4)));
+      await cmd(`/give @s ${B} ${k}`);
+      out.D = await crashCase('D', [B], async (n) => {
+        const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+        await cmd('/save-off'); // the same moment: no periodic save between
+        await ps({ autosave: true });
+        await call('dev.bot.relog', {}, 10_000).catch(() => null);
+        for (let i = 0; i < 60 && !(await call('dev.state', {}, 10_000).catch(() => null))?.player; i++) await L.sleep(1000);
+        const s = await heldNow('D');
+        n.moved = ins.moved;
+        n.savingOffBarriers = s.hold?.savingOffBarriers;
+        check(ins.moved > 0 && (s.hold?.savingOffBarriers ?? 0) >= 1, `D: ${ins.moved} deposited, then /save-off saved them first (${s.hold?.savingOffBarriers} barrier(s)); an autosave and a logout while held`, n);
+      }, { expectDisk: 'live' });
+    }
+
+    // ---------------------------------------------------------------- F: saving on, a deposit, another mod's forced chunk save (no players)
+    {
+      const k = Math.min(64, Math.max(1, Math.floor((need[B] ?? 0) / 4)));
+      await cmd(`/give @s ${B} ${k}`);
+      await cmd('/save-all flush').catch(() => null);
+      await ps({ noPeriodic: true });
+      out.F = await crashCase('F', [B], async (n, s0) => {
+        const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+        await ps({ rawForceSave: true });
+        const s = await saved();
+        n.moved = ins.moved;
+        n.ledgerSaves = s.saves - s0.saves;
+        check(ins.moved > 0 && n.ledgerSaves === 0, `F: ${ins.moved} deposited; a raw saveAllChunks(true, true, true) published no ledger (${n.ledgerSaves}): its players were not saved`, { n, lastSave: s.lastSave });
+      });
+      await ps({ noPeriodic: false });
+    }
+
+    // ---------------------------------------------------------------- B: a build fed, then /save-off: nothing moves while held
+    {
+      const k = Math.min(64, need[B] ?? 0);
+      await cmd(`/give @s ${B} ${k}`);
+      await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000);
+      await call('dev.wait', { ms: 5000 }, 30_000);
+      await cmd('/save-all flush').catch(() => null);
+      await cmd('/save-off');
+      const a0 = await audit();
+      await call('dev.wait', { ms: 15_000 }, 60_000);
+      const a1 = await audit();
+      await heldNow('B');
+      const n = { tag: 'B', before: books(a0.ledger), held: books(a1.ledger) };
+      check(books(a0.ledger) === books(a1.ledger), `B: while saving is off no feed, fill or payment changed the ledger (15 s, targets unpaused)`, n);
+      await cmd('/save-on');
+      let s;
+      for (let i = 0; i < 30; i++) {
+        s = await saved();
+        if (s.hold?.state === 'OPEN') break;
+        await L.sleep(1000);
+      }
+      check(s.hold?.state === 'OPEN' && (s.hold?.releases ?? 0) >= 1, `B: /save-on: released after a confirmed save (${json(s.hold)})`, n);
+      await call('dev.wait', { ms: 10_000 }, 30_000);
+      const a2 = await audit();
+      n.resumed = books(a2.ledger) !== books(a1.ledger);
+      log(`  B: the ledger after the release ${n.resumed ? 'moved (the build resumed)' : 'unchanged'}`);
+      for (const id of feedOrder) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+      await cmd('/save-all flush').catch(() => null);
+      const hx = await halt('B');
+      if (hx) {
+        const a3 = await audit();
+        n.identity = a3.identity;
+        check(a3.identity !== false, `B: after a halt the ledger's identity holds (${a3.identity})`, n);
+      }
+      out.B = n;
+    }
+
+    // ---------------------------------------------------------------- W: a Take onto the ground with saving off
     await call('dev.region.remove', { region, requester: G.OWNER }, 600_000).catch(() => null);
     let rs;
     for (let i = 0; i < 300; i++) {
@@ -133,41 +258,22 @@ export async function registerSOFF(steps, h) {
     const credit = ((await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {}).credit ?? {};
     const [T, kT] = Object.entries(credit).sort((a, b) => b[1] - a[1])[0] ?? [];
     check((kT ?? 0) > 1, `W: the region removed (${rs?.view?.state ?? 'gone'}); credit ${json(credit)}`);
-    if (!T) return out;
-    const junk = ['minecraft:dirt', 'minecraft:cobblestone', 'minecraft:sand', 'minecraft:gravel'].find((x) => x !== T && !credit[x]);
-    await cmd('/clear @s');
-    await cmd(`/give @s ${junk} 2304`); // the 36 main slots full: the Take drops on the ground
-    const count = async () => {
-      const a = await audit();
-      const near = await call('dev.items.near', { pos: at, radius: 12 }, 60_000).catch(() => null);
-      return { inv: a.inventory?.[T] ?? 0, stock: a.stock?.[T] ?? 0, ground: near ? near.items?.[T] ?? 0 : NaN, junk: a.inventory?.[junk] ?? 0 };
-    };
-    await cmd('/save-all flush').catch(() => null);
-    await call('dev.wait', { ms: 2000 }, 30_000);
-    const s0 = await saved();
-    const c0 = await count();
-    check(c0.junk === 2304 && c0.inv === 0, `W: the inventory full of ${junk} (${c0.junk}), no ${T} in it`, c0);
-    await cmd('/save-off');
-    const w = await call('dev.stockpile.withdraw', { owner: G.OWNER, items: { [T]: Math.floor(kT / 2) } }, 120_000).catch((e) => ({ refused: { message: String(e?.message ?? e) } }));
-    await call('dev.wait', { ms: 12_000 }, 30_000); // a periodic tick
-    const c1 = await count();
-    const s1 = await saved();
-    const total = (c) => c.inv + c.stock + c.ground;
-    const n = { tag: 'W', item: T, take: Math.floor(kT / 2), withdraw: w, before: c0, live: c1 };
-    const msg = w.refused?.message ?? '';
-    check(!!w.refused && msg.includes('/save-on') && msg.includes('minecraft:overworld'), `W: the Take refused while saving is off, naming the dimension and /save-on: ${json(w.refused ?? w.withdrawn)}`, n);
-    check(total(c1) === total(c0), `W: live inventory + stock + ground conserved (${total(c0)} -> ${total(c1)})`, n);
-    n.ledgerSavesWhileOff = s1.saves - s0.saves;
-    check(n.ledgerSavesWhileOff === 0, `W: no ledger save while saving was off (${n.ledgerSavesWhileOff})`, n);
-    const hx = await halt('W', W);
-    if (hx) {
-      const c2 = await count();
-      const d = total(c2) - total(c0);
-      Object.assign(n, hx, { after: c2, mintUnits: Math.max(0, d), lossUnits: Math.max(0, -d) });
-      log(`  W: baseline ${json(c0)}; live ${json(c1)}; after the restart ${json(c2)}; minted ${n.mintUnits}, lost ${n.lossUnits}`);
-      check(d === 0, `W: conservation: inventory + stock + ground ${T} after the restart ${total(c2)} = ${total(c0)} at the baseline (minted ${n.mintUnits}, lost ${n.lossUnits})`, n);
+    if (T) {
+      const junk = ['minecraft:dirt', 'minecraft:cobblestone', 'minecraft:sand', 'minecraft:gravel'].find((x) => x !== T && !credit[x]);
+      await cmd('/clear @s');
+      await cmd(`/give @s ${junk} 2304`); // the 36 main slots full: a Take would drop on the ground
+      out.W = await crashCase('W', [T], async (n, s0) => {
+        await cmd('/save-off');
+        const w = await call('dev.stockpile.withdraw', { owner: G.OWNER, items: { [T]: Math.floor(kT / 2) } }, 120_000).catch((e) => ({ refused: { message: String(e?.message ?? e) } }));
+        await call('dev.wait', { ms: 12_000 }, 30_000);
+        const s = await saved();
+        n.withdraw = w;
+        n.ledgerSavesWhileOff = s.saves - s0.saves;
+        const msg = w.refused?.message ?? '';
+        check(!!w.refused && msg.includes('/save-on') && msg.includes('minecraft:overworld'), `W: the Take refused while saving is off, naming the dimension and /save-on: ${json(w.refused ?? w.withdrawn)}`, n);
+        check(n.ledgerSavesWhileOff === 0, `W: no ledger save while saving was off (${n.ledgerSavesWhileOff})`, n);
+      });
     }
-    out.W = n;
     await L.leaveWorld();
     spendZero();
     return out;

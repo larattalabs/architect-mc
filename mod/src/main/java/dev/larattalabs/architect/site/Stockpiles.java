@@ -2754,6 +2754,19 @@ public final class Stockpiles {
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
+					if (req.has("noSave")) {
+						// (SOFF, TEST) a level's saving flag set directly, as another mod would (no /save-off: no save first)
+						for (var e : req.getAsJsonObject("noSave").entrySet()) {
+							for (ServerLevel l : srv.getAllLevels()) {
+								if (l.dimension().identifier().toString().equals(e.getKey())) {
+									l.noSave = e.getValue().getAsBoolean();
+								}
+							}
+						}
+					}
+					if (req.has("rawForceSave") && req.get("rawForceSave").getAsBoolean()) {
+						srv.saveAllChunks(true, true, true); // (SOFF, TEST) another mod's forced chunk save: no players
+					}
 					if (req.has("autosave") && req.get("autosave").getAsBoolean()) {
 						srv.saveEverything(true, false, false); // (SOFF, TEST) vanilla's autosave (MinecraftServer.autoSave): unflushed, not forced
 					}
