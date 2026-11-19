@@ -745,7 +745,7 @@ export async function registerTCC(steps, h) {
       if (site) {
         const { cp, items } = await fill(tag, site, true); // a first part paid and placed: refunds to stash
         const before = await parts([site], cp, items);
-        await ps({ failLedgerOnly: 1000 }); // the ledger's writes only (the queue file and txn.json still write)
+        await ps({ failLedgerWrites: 1000 });
         const rm = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ error: String(e).slice(0, 200) }));
         await ps({ failLedgerWrites: 0 });
         await wait(1500);
@@ -912,9 +912,10 @@ export async function registerTCC(steps, h) {
         // before its decision (aborted by recovery), the next not begun while the evidence is unknown
         const owedNew = sum(after1.owed) - sum(before.owed);
         const open = expectHeld === 'open' ? t1.openCount > 0 : true;
-        check(open && owedNew === 0 && sum(after1.placed) > 0, `${tag}: the W can't act and holds: txn open ${t1.openCount}, owed new ${owedNew}, ${sum(after1.placed)} paid block(s) standing`, { t1, after1 });
+        const standing = reopenAfter ? true : sum(after1.placed) > 0; // (a held txn after its restore reached the disk: its refunds in transit)
+        check(open && owedNew === 0 && standing, `${tag}: the W can't act and holds: txn open ${t1.openCount}, owed new ${owedNew}, ${sum(after1.placed)} paid block(s) standing`, { t1, after1 });
       }
-      judgeT4(tag, { tag, point, start, removal: m, txn: t1, halts }, before, after1);
+      if (!reopenAfter) judgeT4(tag, { tag, point, start, removal: m, txn: t1, halts }, before, after1); // else judged once it completes
       if (reopenAfter) {
         // the fault cleared (the file put back): the removal completes, paid exactly once
         await L.leaveWorld();
@@ -1166,7 +1167,7 @@ export async function registerTCC(steps, h) {
         await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
         const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
         await wait(2000);
-        await ps({ failLedgerWrites: 1000 });
+        await ps({ failLedgerOnly: 1000 }); // the ledger's writes only (the queue file and txn.json still write)
         await call('dev.removal.pause', { site: rid, off: true }, 10_000);
         await wait(5000);
         call('dev.txn.halt', { save: false }, 10_000).catch(() => null);

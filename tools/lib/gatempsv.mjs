@@ -323,6 +323,11 @@ export async function registerPSV(steps, h) {
     for (let i = 0; i < 150; i++) {
       g = await api(`sgroup ${bv.group}`).catch(() => null);
       if (/^removed$/i.test(g?.state ?? '')) break;
+      if (i === 10 && /^active$/i.test(g?.state ?? '')) {
+        // (T4b merge, SOFF) under /save-off the removal is refused before anything is touched (SaveHold): asked again once saving is on
+        n.refusedWhileOff = true;
+        api(`sgremove ${bv.group}`).catch(() => null);
+      }
       await call('dev.wait', { ms: 2000 }, 30_000);
     }
     n.groupAfter = g?.state ?? null;
