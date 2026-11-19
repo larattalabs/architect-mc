@@ -129,6 +129,7 @@ public final class Sites {
 	public static final class SiteException extends Exception {
 		private final Reason reason;
 		private final List<dev.larattalabs.architect.api.BuildHit> builds;
+		private final String detail;
 
 		public SiteException(String message) {
 			this(Reason.OTHER, message);
@@ -140,9 +141,20 @@ public final class Sites {
 
 		/** (6c PT) A PLAYER_BUILD refusal with the builds in the way. */
 		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
+			this(reason, message, builds, "");
+		}
+
+		/** (slice SOFF2) With a stable sub-code for the API's {@code ArchitectRefused.detail()} / {@code Refusal.detail()}. */
+		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
+			this.detail = detail == null ? "" : detail;
+		}
+
+		/** (slice SOFF2) The refusal's sub-code ({@code ""} when it has none): {@code saving_off:<dims>} for the saving-off hold. */
+		public String detail() {
+			return detail;
 		}
 
 		/** (6c PT) The builds in the way (PLAYER_BUILD), else empty. */

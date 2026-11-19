@@ -102,7 +102,21 @@ class StockpileSavingOffSOFFTest {
 		assertTrue(c.saved.isEmpty());
 	}
 
-	/** The hold: entered whenever a level has saving off; released only by a passed barrier with saving on everywhere. */
+	/** (slice SOFF2, Steward's ask) The hold's refusal sub-code, stable: saving_off:<dims>, carried to ArchitectRefused.detail(). */
+	@Test
+	void theHoldsRefusalCarriesAStableDetail() throws Exception {
+		assertEquals("saving_off:minecraft:the_nether", SaveHold.detail(List.of("minecraft:the_nether")));
+		assertEquals("saving_off:minecraft:overworld,minecraft:the_nether", SaveHold.detail(List.of("minecraft:overworld", "minecraft:the_nether")));
+		String hold = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SaveHold.java"));
+		assertTrue(StockpileSaveHFTest.body(hold, "public static void require(").contains("detail("), "require() throws with the detail");
+		String api = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/apiimpl/SitesImpl.java"));
+		assertTrue(api.contains("new ArchitectRefused(e.reason(), e.getMessage(), e.detail(), e.builds())"), "the stockpile API carries it");
+		Sites.SiteException e = new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "m", List.of(), SaveHold.detail(List.of("x")));
+		assertEquals("saving_off:x", e.detail());
+		assertEquals(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, e.reason(), "the Reason as before");
+	}
+
+		/** The hold: entered whenever a level has saving off; released only by a passed barrier with saving on everywhere. */
 	@Test
 	void theHoldIsReleasedOnlyByAPassedBarrier() {
 		assertEquals(SaveHold.State.OPEN, SaveHold.next(SaveHold.State.OPEN, false, false), "saving on: as before");

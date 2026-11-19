@@ -181,6 +181,12 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - District roads: a plan/0 district's flat routes were already `route` shapes (its IR roads `route_d_<a>__<b>_<n>`); a route laid in stairs
   or graded sections is now one `route` shape `route_d_<a>__<b>` (or `route_join`) from its graph edge and IR paths. Not covered: a bundled
   program's wall (`walled_hill`, `sky_isle`: still one `tile` part, its ring op leaves no line in the IR). CONTRACT "Slice LYW".
+### New for Steward (NEXT, slice SOFF2)
+- The saving-off hold's refusal has a stable sub-code: `ArchitectRefused.detail()` (and `Refusal.detail()` on a construction delta) is
+  `saving_off:<dims>`, the dimension ids comma-separated (e.g. `saving_off:minecraft:the_nether`), while any level has saving off or the hold
+  waits for its confirmed save after `/save-on` (then the levels that were off). The `Reason` stays `NOT_ALLOWED`; the message is unchanged.
+  On every stockpile entry the hold refuses: `withdraw` (Take), `dissolveStockpile`, `removeStockpileCrate`, `addStockpileCrate`,
+  `createStockpile`, `setFeedOrder`, `adoptCrates`, and a construction delta. No new API member. CONTRACT "Slice SOFF2".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

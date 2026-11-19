@@ -198,7 +198,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				String note = Sites.lastNote();
 				return new PlaceResult(true, Optional.of(s.id()), List.of(), note == null ? List.of() : Arrays.asList(note.split("; ")));
 			} catch (Sites.SiteException e) {
-				return new PlaceResult(false, Optional.empty(), List.of(new Refusal(e.reason(), e.getMessage(), e.builds())), List.of());
+				return new PlaceResult(false, Optional.empty(), List.of(new Refusal(e.reason(), e.getMessage(), e.builds(), e.detail())), List.of());
 			}
 		});
 	}
@@ -794,7 +794,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 					return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, deltaRequest(r), r.actor())));
 				});
 			} catch (Sites.SiteException e) {
-				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage(), e.builds())));
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage(), e.builds(), e.detail())));
 			}
 		});
 		return f.thenCompose(x -> x);
@@ -831,7 +831,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, new dev.larattalabs.architect.site.SiteDeltas
 					.Request(siteId, toVersion, dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, b.owner(), true), actor)));
 			} catch (Sites.SiteException e) {
-				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(e.reason(), e.getMessage())));
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(e.reason(), e.getMessage(), List.of(), e.detail())));
 			}
 		});
 		return f.thenCompose(x -> x);
@@ -879,7 +879,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
-		return new ArchitectRefused(e.reason(), e.getMessage(), "", e.builds());
+		return new ArchitectRefused(e.reason(), e.getMessage(), e.detail(), e.builds()); // (SOFF2) the sub-code carried
 	}
 
 	private dev.larattalabs.architect.api.Stockpile pileView(String owner) {

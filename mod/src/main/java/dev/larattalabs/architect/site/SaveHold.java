@@ -148,8 +148,14 @@ public final class SaveHold {
 	public static void require(@Nullable MinecraftServer srv) throws Sites.SiteException {
 		String r = refusal(srv);
 		if (r != null) {
-			throw new Sites.SiteException(Reason.NOT_ALLOWED, r);
+			List<String> off = Stockpiles.levelsSavingOff(srv);
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, r, List.of(), detail(off.isEmpty() && heldOver != null ? List.of(heldOver.split(",\\s*")) : off));
 		}
+	}
+
+	/** (slice SOFF2, Steward's ask; NEXT) The hold's stable refusal sub-code: {@code saving_off:<dims>}, the dimension ids comma-separated. */
+	static String detail(List<String> dims) {
+		return "saving_off:" + String.join(",", dims);
 	}
 
 	/**
