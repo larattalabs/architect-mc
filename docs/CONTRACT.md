@@ -33648,3 +33648,351 @@ Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N
 **Gates:** units per slice (CXC failing first on main; the BuildStatus precedence table; the 200-target budget, 39 us of 500; layout over
 the goldens; the coalescer). In the batch: `cx-survival` checks the dry run's quote against the check's bill, a maxBill one under the bill
 refused BILL_CAP with nothing written, a lot cap refused, the place typed at exactly its bill; gatedrs DR12 checks SAVE_REFUSED.
+
+## Phase T4: removals on the TXN layer (refunds, group removal, LC3 seal, cargo) (branch `slice/T4` off origin/slice/T2 99d28f0f; 2026-11-18; DEV MODE, strict; versions NEXT; $0; Noah's decisions and Steward's review in; T4a cleared)
+
+
+Design only: nothing is built or run, $0, nothing committed. Read in the worktree `_work/architect-mc-T4` (branch `slice/T4` =
+origin/slice/T2 ae502f7b; 52fa4713..ae502f7b changes `tools/apitest.mjs` only, so the review's line numbers hold), against
+origin/slice/PSVLC3 e83c39b6, origin/slice/T3b d751ebe2 and origin/main cfeef06e. **Tier: strict** (refunds, stock, undo, crash recovery).
+**The base moved to e0460f0e** (origin/slice/T2). ae502f7b..e0460f0e touches only `tools/lib/apijars-judge.mjs` (its `SUPERSEDED` list),
+`tools/gate6a.mjs` and a kit unit. There is no runtime change, so the verdicts below hold. T4 builds on e0460f0e: the local `slice/T4` is
+reset to it before T4a begins (the builder does this). Red rows stay on ae502f7b or e0460f0e, which are the same runtime.
+- **Sources:** `gpt-T2b-2b-lastround.log` (after the last "tokens used"), with the `-final` and `-fixround` logs; CONTRACT.md T0, T1, T1b, T2a
+  and T2b as-builts (part 2b and its last round); TXN-DESIGN §3.4-§3.6, §3.10, §5, §6; the T2, T2b-owed, T3 and 8cT notes;
+  steward-TXN-review §4 and Q4; LEFTOVERS 740, 838, 864-870, 985-986; GATES speed rules 3-6.
+- **Decisions already made:** slice/T2 is T4's base and nothing from T2 ships alone. All of T2 and T3b wait for T4 (Noah's own decision, 11-18,
+  not a delegation). PSVLC3 stops being patched
+  (PL-gpt2, 6 P1s open): the LC3 seal, its cargo and PSV's crate-take recovery move to T4, its tests become T4's harness, and the branch and
+  `_work/architect-mc-PL` are kept as the reference until T4 merges.
+- **Goal:** each removal becomes one txn, with its refunds paid only on evidence that the paid blocks are gone. That evidence is the W
+  effect's chunk receipts, never a block-count threshold and never a missing record.
+
+### 0. The findings, checked at ae502f7b (rule 5)
+
+| # | Verdict | Where | The scenario as checked |
+|---|---|---|---|
+| 1a | **confirmed** | `Sites.java:3398-3402` (KEEP), `:3346` | A crate-fed construction site is about 40% built and removed. Halt at K6 (undo committed, R4 not written). At the start the cells that were never built read `before`, so `holdBefore` is about 60%. That passes neither `RESTORED` 0.9 nor `STANDING` 0.8 (`Reconcile.java:14,25`), so the decision is **KEEP**. The `:3346` write-now runs only for RELEASE. KEEP calls `CrateSettle.resumeLater`, and `resumeNow` (`CrateSettle.java:392-415`) pays the durable stash's refunds while every paid block stands. Nothing writes the committed restore later |
+| 1b | **confirmed** | `Sites.java:3239`, `:3246` | A member of a shared crate (others still build from it) has no CRATE entry of its own, so `st` is null and its Pending gets no settle. Its refund-only stash (`crate-refund:`, `CrateSettle.java:84-90`) is in `DURABLE` anyway. Its evidence says RELEASE (mostly unbuilt): `:3346` needs `p.settle() != null`, so the restore is never written, and the record is dropped. The sweep then finds the site gone and pays (`CrateSettle.java:225-247`). Under KEEP, `resumeNow` pays it instead |
+| 2a | **confirmed** | `Sites.java:3358` → `:3463`, `SiteJournal.java:1224-1232` | `writeNow` changes the chunks in memory only. `releaseGroup` then submits the journal release, with no barrier between the two. Crash after the release lands and before any chunk save: the paid blocks are back from disk, the undo entries are gone, and the pending record still holds its stash. At the second start `group == null && p.settle() != null` (`:3306`) settles: refunds paid, blocks standing, nothing left that could restore them |
+| 2b | **confirmed** | `Sites.java:3246` vs `:3361-3363` | The K6 loop queues `resumeLater` **unconditionally**. If the write-now then fails, the code `continue`s and the record stays pending "unsettled", but the queued callback still finds a pending record and pays |
+| 3a | **confirmed** | `CrateSettle.java:228-235`, `Sites.java:3018` | A road with 100 paid changed cells is removed while queue writes fail (`TEST_FAIL_WRITES`, `Placement.java:522`), so the job is never on disk. Halt at K7+save after the first 64 cells. Road evidence uses a majority (`holdAfter * 2 > total`): with 36 standing it reads not-standing, so `restored = true` → RELEASE → `Infras.drop`. The sweep sees no record and pays all 100 |
+| 3b | **confirmed** | `Sites.java:3763-3792`, `Stockpiles.java:3870` | An unreadable sites file sets `Sites.loadFailed`, `state = EMPTY` and empty `Infras`. The sweep never checks `loadFailed`, so every durable stash reads "gone" and is paid. **Same class, pile-fed (my reading; builder confirms with a row):** `settlePendingCredits` (`Stockpiles.java:1741`) reads `standingSite` from `Sites.all()` too, and a mostly unbuilt pile-fed K6 site that RELEASEs is never written (`:3346` is crate-only) |
+| 4 | **confirmed** | `RegionOverwrites.java:246-249` (`fromPaid` `:238`), `Stockpiles.java:1682`/`:3582`, `Placement.java:226-232`, `:315-320` | `PlaceJob` step → `lotTakeUp` (`PlaceJob.java:506`) → `retakeOnce` credits keyed `xr-lot:<site>@<entry>` and takes the paid record. `saveCredit` → `saveWithWorld` then throws on an unconfirmed write. Placement catches the throw (`broken`), and a ROLLBACK RestoreJob brings the original blocks back. The credit and the paid-record change stay in memory, and the next save writes them. A retry has a new entry id, so it credits again. **Wider (partly verified):** `RoadBuilder.convert:170` runs inside `InfraJob` (`:655`). The step catch marks only PlaceJob and RestoreJob as broken, so the road is reported placed (`completed` → `infraPlaced`), `Infras.put` and the futures are skipped, and the credit is kept |
+| 5 | **confirmed** | `Groups.java:878`, `:951`; `toJson` `:105-175`, `fromJson` `:178-230` | `r.owed` is never written to the queue. Member A settles and its `decSettle` is removed and saved, then a restart before B: the final result has only B's keys. The failure `Removed` constructors (`:290-300`) pass `List.of()` |
+| 6 | **confirmed** | `RestoreJob.java:492`, `:506`; `Placement.java:343-344` | `infraDone` is set before `saveCredit` throws. `completed()` takes the "single road, futures were completed" branch, so the API future never completes. Also skipped: `removedInfra`, `RoadSync.changed` and the settle |
+| 7 | **confirmed** (P3) | `RemoveResult.java:17-19` | It says owed are "in `refund` too". The built rule (`architect-T2b-owed-api.md`, final shape) is listed apart, never in the totals. The `refund` param still says "dropped at the crate's cell" |
+
+The as-built's leftovers (item 8) are real. A group's `decSettle`/`crateSettle` rides the unforced queue (`Placement.java:526`, no force);
+`r.owed` is memory only; and a KEEP-pending road's stash is skipped by the sweep (`Infras.pending(id) != null`, `CrateSettle.java:225`) until it
+settles, so it is never swept.
+
+### 1. What PSVLC3 / "T4" was meant to be
+
+- **Planned T4 (TXN-DESIGN §6.1):** `removal.group` / `removal.stage`. `decCredit`/`decStock` become txn refs, `Groups.credit` becomes an L effect
+  per member with one barrier per tick, `end()` becomes compensation, and RestoreJob roads join. 2-3 days. "T4 is the largest risk. It changes
+  the queue file's shape." RVU1/RVU2 stay as aliases through T4 (Steward). T5 is abandon.
+- **LC3 seal** (`RemovalSeal`, about 740 lines plus 9 mixins): every box of a ticked removal refuses item insertion and extraction until the
+  removal ends. That covers hoppers, golems, the Transfer API, use, shelves, crafters, vaults and, since the fix round, explosions and pistons.
+  The seal set is derived from persisted state, and a box unseals only on a confirmed queue generation.
+- **Cargo** (PSVLC3 fix P1 4): a player's holder in a region target is never dropped. Its contents are held pending (`cargo:<target>:<cell>`),
+  made durable before the holder is replaced, and booked into stock past capacity. At a start, `cargoAction` books the contents, or drops the
+  pending entry when the holder still holds them. That is evidence read from the world.
+- **PSV retake:** `crateRecorded` / `withStock(crateStood)` / `retakeStanding` keep a legacy crate's stock taken at R1 in `decStock` and count it
+  once across a replan or a crash. **This is moot on the T2 base:** T2b takes nothing at prepare and `decStock` does not exist there, so T4 drops
+  it. Kept: PSV's preflight, NOT_SAVED/loadFailed refusals and the queue on `DurableFile` (PSVLC3's T0 port), `stalledRefusal`, and
+  `stageRunningRefusal`.
+- **Open at PL-gpt2 (from LEFTOVERS 868's one-line summary; the review log was not found, so these are NOT verified in code):**
+  - a committed recovery ignores a refused retake barrier (moot if there is no retake);
+  - cargo cancel unseals before it is durable;
+  - cargo keys are reused;
+  - a data-stack refusal strands the removal;
+  - fire, wither and dragon bypass the seal;
+  - an ops resume pays twice.
+
+  T4a re-verifies each at e83c39b6 (rule 5) before §3's answer for it is frozen or its row is written.
+
+### 2. Scope (frozen once Noah answers §8)
+
+- **In:** single-site removal (`removeDetailed`, a cascade, `removeLarge`), road and cell-site removal (`InfraPlace.remove` / RestoreJob),
+  group and stage removal (Groups), each with its crate settle, refunds (crate-fed and pile-fed), custody and cargo. Pile-fed is in scope
+  because TXN §6.1 gave `removal.site`, with its pile L credit, to T2, and T2 never built it. Also the LC3 seal and
+  PSVLC3's admission rules merged in; finding 4 (and its InfraJob twin); findings 5-7; and main's pre-T4 removal state converted.
+- **Not converted:** T2b's own stash formats (`Site.Pending.settle`, `CrateSettle.DURABLE`, the queue's `decSettle`/`crateSettle`). T2 never
+  shipped, so no world holds them, and T4 deletes them.
+- **Out:** abandon (T5; a txn removal refuses it); deltas, fills, take-ups and repair as kinds (T6; finding 4 gets the minimal fix in §5);
+  player blocks found in a box (still the LC2 drop, counted as `ground`, T7); `openCrate` orphan drops (T7); player mining inside a
+  removal box (§8 N3).
+
+### 3. TXN kinds
+
+One txn per removal call (precedent: Steward's TXN review Q4, "one decision per group or stage, blockers first"; R-4(d), one barrier per
+tick). The kinds are `removal.site`, `removal.road` and `removal.group` (a stage removal is `removal.group` with `stage`). The key is the
+removal's semantic key (`site:<id>@<placedAt>`, `road:<id>@<placedAt>`, `group:<id>[/stage]@<started>`): a re-ask attaches. The resources are
+every member's `site:`/`road:`, the boxes (`box:`; the LC3 seal set reads held boxes as a source), the crates, and the piles credited.
+
+**Plan (R-1), before persist.** The blocker scans, per member:
+- the refund of paid cells standing (`prepareDeconstruct`'s tally) and its sink: the pile L key, or O `group_refund`;
+- the crate it settles (T2b's `CrateSettle.Ref`) and the crate's stock, read now: the crate is held from begin, so the stock can't change;
+- the custody amounts (Fills) and cargo per holder;
+- the undo plan's entry ids (the crate's own CRATE entry excluded, as T2b does).
+
+**Effects, in order:**
+
+| i | op | class | receipt / probe | phase |
+|---|---|---|---|---|
+| c.. | `custody.take`, `cargo.take` per holder | B | chunk `tx-n/i` (`!c` compensation) | prepare |
+| — | barrier → PREPARED_DONE (confirmed) | | | |
+| d | `journal.undo` (undoGroup = txn id): **the decision** | D | the index's undoGroup | decide |
+| w.. | `world.restore` per member per chunk (`writeNow` / RestoreJob cells) | W | `tx-n/i@restored` in the chunk attachment, written in the tick of the chunk's last cell | commit |
+| — | barrier covering every W chunk of member m | | | |
+| l.. | m's refund: `pile.credit` keyed `site:<creditKey>`, or `owed.owe` `group_refund` | L / O | `credited` / the `owed` key | commit |
+| k.. | m's crate settle (T2b's ops inside this txn): `crate.take`, credit or owe, `crate.restore`, `journal.release` CRATE | B, L/O, W, R | as T2b | commit |
+| q.. | custody and cargo booked (L, past capacity), or given back where the holder stands (B) | L / B | key / receipt | commit |
+| r.. | records: pending dropped, the group or road record, owed keys in the result | R | `txn` / tombstone | commit |
+| — | barrier → EFFECTS_DONE (futures, events) → `journal.release` of the undo group (R) → retire | | | |
+
+**The rule that closes 1-3:** a member's L/O/settle effect runs only when **every** W effect of that member reads DONE **and** a barrier
+after them is OK. The undo entries are released only at retirement, after the barrier (2a). Recovery redoes a W effect from the retained
+undo entries (TXN §3.10), never from a threshold. Nothing pays from "the record is missing" (3a). A participant store that failed to
+load (`Sites.loadFailed`, `Stockpiles.loadFailed`, `Placement.loadFailed`, the txn file) **holds** every removal txn (`held(decided) txn
+store unreadable`); nothing reads an empty store as absent (3b).
+
+**Recovery** (TXN §3.6, per member, each point × bare / +save):
+
+| state on disk | recovery |
+|---|---|
+| no entry | nothing: the removal never began (main's RECOVER message is gone for txn removals) |
+| PREPARED, some B receipts | compensate custody and cargo (`!c`), abort, unseal after the barrier |
+| decision (D APPLIED), W partly receipted | redo the missing chunks from the entry's undo ids, barrier, then L/O and the settle |
+| W all DONE, L key absent | credit or owe from the entry's amount (R-7: one copy, the entry's) |
+| an UNKNOWN chunk or player | that member held; the others go on (W before credits) |
+| any store loadFailed | everything held; nothing paid |
+
+**Groups.** The queue keeps only the job cursor. `decCredit`, `decSettle`, `crateSettle` and `owed` move into the txn entry (`txn.json`,
+confirmed), which closes item 8 (unforced queue) and finding 5 (the result's owed keys are rebuilt from the entry's O effects after a
+restart). A partial failure before the decision compensates. After it, the group always finishes, so "stopped after N of M" is decided
+by blockers before begin. STALLED becomes held. The ops `resume` (PL-gpt2: pays twice) is replaced by txn recovery, and ops are given
+`/architect txn resolve` only.
+
+**LC3 seal and cargo on the txn** (the PL-gpt2 answers below are proposals until T4a has verified each premise). `RemovalSeal`'s source becomes "boxes an open or retiring removal txn holds". It unseals at retirement,
+so it can't unseal before the cancel is durable (PL-gpt2 2). Fire, wither, dragon and other explosion sources are added to `refusesBlast`
+(PL-gpt2 5). Cargo is a B effect keyed by txn and effect (`tx-n/i`, so it is never reused: PL-gpt2 3), and is booked by its L. A stack
+with its own data is an O `cargo` entry, not a refusal, so it never strands (PL-gpt2 4; a new reason).
+
+### 4. Roads (findings 3, 6)
+
+`removal.road`: W per chunk on the RestoreJob's 64-cell slices. The C29 credit and the road's settle come after the W DONE barrier. A
+refused barrier holds the txn, and its future fails `SITE_BUSY held(decided)` per §3.12.6 (6). Until T4b lands, the minimal guard is
+`completed()` failing a broken standalone road's futures exceptionally. The road evidence's majority rule stays only for legacy conversion.
+
+### 5. Finding 4: the credit after the point of no rollback, never a throw after a credit
+
+Neither "compensate" nor "save before credit" fits as stated: the credit is what the save publishes. The fix:
+1. `lotTakeUp` and `RoadBuilder.convert`'s cuts **plan** the take-up (amounts, key) on the job. They book it (`retakeOnce`'s credit and
+   `fromPaid`) only once the placement can no longer roll back: PlaceJob at its last write after the journal commit (DONE), and
+   InfraJob after `Infras.put` (K4+). A rollback before that has nothing to undo.
+2. At that point a refused save is a **wait**. The job stays, retried each tick, and the keyed credit is idempotent. It is never a throw.
+   A crash then resumes the job and credits the same key once.
+3. Placement's step catch marks `InfraJob.broken` too, so any runtime throw rolls back and completes the futures.
+The full XR kind stays T6.
+
+### 6. Failing-first rows (red on ae502f7b + a hooks-only commit, green on HEAD)
+
+**Hooks-only commit:**
+- `dev.queue.writes` (PSVLC3's, beside T2's `TEST_FAIL_WRITES`);
+- a `settle:release` kill point after `releaseGroup` and before the chunk save;
+- `dev.undo.failRestore` on the reconcile's write-now;
+- `dev.removal.pause` (PSVLC3).
+
+The `t4-lc3-*` rows can't be red on ae502f7b, which has no seal: their red base is e83c39b6.
+
+**Every row ends with conservation.** In base units, per owner and in total:
+- blocks standing in the boxes (paid and player);
+- crate stock (crates scanned in the boxes' chunks);
+- pile stock, custody and pending credits;
+- owed;
+- ground (item entities, **0** except the LC2 player-block drop, counted);
+- player inventories;
+- in transit (open txns, by their probes).
+
+The sum must equal the before total. IN_DOUBT cases are units (TxnCrashModel).
+
+| row | finding | set-up | red on ae502f7b | green |
+|---|---|---|---|---|
+| `t4-k6-keep` | 1a | crate-fed site with no pile, about 40% built, remove, K6 bare and +save | owed refund + paid blocks standing: over by the refund | W redone, then owed; exact |
+| `t4-k6-shared` | 1b | group with a shared crate, one member about 15% built (the others building), remove it, K6 | sweep or resume pays; blocks stand | as above |
+| `t4-k6-pile` | 1a class (pile) | pile-fed, about 5% built, K6: RELEASE is never written (`:3346` needs `p.settle()`) and the J2 pending credit books | **expected** red (pile credit, blocks stand); the builder records the actual | exact |
+| `t4-2nd-crash` | 2a | crate-fed, mostly unbuilt, K6; at the start, halt at `settle:release` | refunds paid, blocks back | exact |
+| `t4-wn-fail` | 2b | as 1a's RELEASE case with `failRestore` | queued callback pays | held, nothing paid |
+| `t4-road-partial` | 3a | **crate-fed** survival road with no pile (its refunds in a `DURABLE` stash, `InfraPlace:600-603`), 100 paid cells, queue writes failing, K7+save after 64. A pile road only loses its C29 credit (under-refunds, never mints) | 100 refunded (owed), 36 stand | W redone, exact |
+| `t4-sites-corrupt` | 3b | a crate-fed K6 halt (the stash durable), then `sites.json` broken offline (`node -e`, as 8cT did) before the restart | stash paid | held; nothing paid |
+| `t4-xr-rollback` | 4 | construction lot over paid region blocks, `dev.stockpile.ps refuseSave` | credit kept, blocks back | waits; credit once; exact |
+| `t4-xr-road` | 4 (InfraJob) | survival road cut over a sibling's paid block, refused save | "placed", no record, future pending | waits, then placed; exact |
+| `t4-group-owed` | 5 | two crate-fed members; A settles, queue saved, restart before B | result lacks A's keys | both |
+| `t4-road-future` | 6 | stockpile road, refused credit save | future never completes (60 s) | `held(decided)`, then completes |
+| `t4-lc3-*` | PL-gpt2 2-6 | PSVLC3's lc3-undo/psv-crash rows plus the six findings (fire, wither, cargo cancel, key reuse, data stack, resume) | per PL-gpt2 on e83c39b6 | exact |
+
+**TX matrix:** every `TX:removal.{site,road,group}:*` point × bare / +save on single, cascade, large, road and group (shared crate, two
+chunks, a cargo holder). Each recovers exactly once and conserves. Aliases K5/K6/K7/R4/RVU1/RVU2/AB* map to their TX points (Steward).
+**Regression:**
+- txn-core, txn-crate, txn-holds, txn-owed and txn-crash-crate (its K5/K6/R4 rows re-pointed);
+- rl-crash, hf-crash, ps-crash, fk-crash, fkb-crash, dr-survival, so-survival, sad-*, x-resume;
+- psv-crash, lc3-seal and lc3-undo;
+- T3b's txn-crash-adopt (the batch);
+- api-compat.
+
+### 7. API impact (additive, Since NEXT; Steward reviews)
+
+- **`RemoveResult` javadoc:** `refund` is items credited back to a pile or given back now. Owed keys are listed apart in `owed`, never in
+  `refund`. The stale "dropped at the crate's cell" goes. No signature change.
+- **Group owed keys:** the group removal's result (`SitesImpl:460` → `RemoveResult.owed`) is rebuilt from the txn entry, so it is complete after
+  a restart and on a partial failure. Failure results carry the keys booked so far.
+- **Futures** complete at EFFECTS_DONE. A decided removal that becomes held fails `SITE_BUSY held(decided)` and finishes later (roads
+  included).
+- **A txn removal never "stands again (remove it again)"** after its decision (Steward §4: wanted).
+- `RemoveResult.replayed()` is already in TXN's list; T4 uses it for an attached re-ask.
+
+### 8. Slices, estimate, questions
+
+| id | what | closes | size | gate |
+|---|---|---|---|---|
+| **T4a** | merge PSVLC3 onto ae502f7b (seal, cargo, admission, queue on DurableFile; PSV's decStock carriage dropped); the hooks commit; §6's rows and TxnCrashModel legacy kinds recorded red; §5's fix and the InfraJob catch; the P3 javadoc | 4, 7 | 1.5 days | unit-scope (full: journal, ledgers), the red record, `t4-xr-*` green, psv-crash/lc3-* regression |
+| **T4b** | `removal.site` and `removal.road` with the crate settle inside; T2b's stash formats deleted; reconcile legacy-only; main's pending records converted | 1a, 1b, 2a, 2b, 3a, 3b, 6 | 2 days | rows 1-3, 6 green; TX matrix single, large and road; regressions; early GPT review |
+| **T4c** | `removal.group`/`stage`: the queue down to a cursor, entry-held credits, settles and owed keys; seal and cargo on the txn; STALLED as held; main's `decCredit` converted | 5, item 8, PL-gpt2 2-6 | 2-2.5 days | group rows, t4-lc3-*, TX matrix group; regressions; GPT review |
+
+- **About 5.5-6 builder days.** T4a-c join one batch with T2 (T2a, T2b) and T3b. T3b is not on slice/T2 (its base is main fa0bf596). It carries
+  its own `CrateTxn`, `OwedTxn` and `TxnServer` changes (+1637 lines in `txn/`), so its rebase onto T4c is a real merge, not a replay. Rule 4 applies to each part's review: one fix round, then Noah.
+- The parent's condition (LEFTOVERS 870) stands: **no T4 build before Noah sees this draft.**
+
+**For Noah**
+- **N1.** One txn per removal call (group and stage included, one decision per group), not one per member? Recommended: yes. It matches
+  Steward Q4 and R-4(d), and the members are still paid one at a time, each after its own W receipts.
+- **N2.** Fold the crate settle into the removal's txn (one entry, no stash), keeping `crate.settle` as its own kind only for `Builder.complete`'s
+  `built:` leftovers and the adopt path? Recommended: yes.
+- **N3.** A player mining a paid block inside a removal box between the plan and its W: refuse breaking in a held removal box (a new hold
+  surface), or pay min(planned, found by the W) per chunk? Recommended: both (the hold, and the min as the backstop). Out of the frozen scope
+  until answered.
+- **N4.** Delete T2b's unshipped stash formats with no conversion, and convert only main's pre-T4 state? Recommended: yes.
+- **N5.** Finding 4: the minimal fix is §5 steps 2-3 (a refused save waits, never throws, plus the InfraJob catch). That alone closes the
+  regression. Step 1 (book after the point of no rollback) also covers rollbacks from other causes, which predate T2b (T6's XR row 11).
+  Recommended: all three. The alternative to step 1 is a compensating keyed debit on rollback, which needs T6's XR kind.
+- **N8.** Main's held pending credits (`holdPendingCredits`, J2) are TXN's T6 conversion item. Should they be pulled forward for removals only
+  (8cT's N3 shape), so that pile-fed removals are paid only after their W receipts? Recommended: yes. The alternative: legacy pending credits
+  keep `settlePendingCredits`, with a `loadFailed` guard and the K6 write-now extended to pile-fed sites.
+- **N6.** A stack with its own data in cargo becomes an O `cargo` entry rather than refusing the removal (PSVLC3's accepted refusal stranded it)?
+- **N7.** The ops `/architect removal resume` (PSVLC3) is dropped for `/architect txn resolve`?
+
+**For Steward**
+- **S1.** Group and stage removals become one txn: a held decided group answers `held(decided)` and finishes later; nothing returns
+  "stopped after N of M" once decided. Is Undo's group path ready (SD2 note left open, as 8cT's S1)?
+- **S2.** The `RemoveResult.refund` / `owed` wording in §7, and owed keys present after a restart. Enough?
+- **S3.** The aliases K5/K6/K7/R4/RVU1/RVU2 → TX points: which does your e2e name besides RVU1/RVU2?
+- **S4.** The seal now lasts until the txn retires (one barrier after the last write), slightly longer than a queue generation. Any
+  Steward flow that inserts into a box right after `REMOVED`?
+
+
+### Steward review
+
+Read only. Steward main 2288eac, pinned to Architect 0.79.0, reviewed against e0460f0e. Paths are under `mod/src/main/java/dev/larattalabs/steward/service/` unless another path is given. A region removal (`Undo.region`, cancelVillage, the orphan sweep) and `undoRevision` (`Growths.undo`) reach `Groups` inside Architect, so T4c's `removal.group`/stage covers every Steward removal except the chain's single `sites.remove`.
+
+**S1: not ready. No removal caller handles `held(decided)`, and the 8cT list still stands.** The new findings:
+- **Group path** (`Undo.java:154-167`): when the future fails, `gone` is read from absence (`sites.get(id).isEmpty()`, `:158`). A PARTIAL PROJECT_REMOVED is logged (`:159`), the code says "Undo stopped after N of M" (`:161`) and clears UNDOING. Nothing ever logs the members that finish later, and their refund is never said: the failed future never carries the final `RemoveResult`. Only regions have an SD2 intent and sweep (`intentTag` "undo:region:", `:300-348`). Groups and the chain have neither.
+- **Chain** (`:175-200`): one txn per site. A `held(decided)` stops the chain (`:198`), and the held site finishes unlogged.
+- **"Stopped after N of M" after blockers** (`:165`): under T4 that means nothing was taken down. The words become "Nothing was taken down: blocked by …". Steward parses no "stopped after" text from Architect (no hits). The only typed stop Steward reads is `removalStop` (`RemovalStops.java:14,44-47`). **Ask:** after the decision, NOT_STARTED stays and PARTIAL is never answered for a txn removal.
+- **Words that change:** `RemovalStops.growthWaiting` (`:59-62`) says "carries on when you ask again or when the world next starts". Under a decided hold it carries on by itself. `reportingOverCapacity` (`Undo.java:61-70`) measures at the "Undo stopped" line, before the held refund is booked.
+- **Steward's words for `held(decided)`:** "Undo under way: it finishes by itself when chunk x, z loads. Nothing more to do." There is no FAILED entry and no PARTIAL log. UNDOING is released, and the SD2 note stays open (8cT item 2).
+- **Ask:** a retire event (`RemovalFinished(group|site|region, RemoveResult incl. owed)`), *or* a guarantee that a re-ask after retirement answers `replayed()` with the full refund and owed for a stated lifetime. Without one of these, Steward can't log or word a held group or site that finishes later.
+
+**S2: the §7 wording is enough for the API. Steward's lines need OVF-S3.**
+- Steward reads no `owed` anywhere today (no hits in `mod/src` or `tools/`).
+- `Growths.refundLine` (`Growths.java:184-188`) says "nothing came back" when `refund` is `{}`. Under T2b and T4, that is false when `owed` is non-empty. The same applies to `refunded` at `SettlementRunner.java:4567` and the note "what it drew was refunded" at `:4573`. `Undo.java:443` and `SettlementRunner.java:4576` print it.
+- Steward's survival builds are pile-fed: `Stockpiles.java:28-29,99` make a pile before the first build. Owed should therefore be rare: legacy crate-fed sites, or adoptCrates.
+- **Restart:** Steward reads `owed` after a restart only through the replay or event asked for in S1, and through OVF-S's planned world-start note. The sweep never reads a `RemoveResult`.
+- **e2e:** the conservation sums add owed to `returned + refundOverflow` (`e2e.mjs:426, 3322-3336, 3872, 4073-4075, 4443-4454`), and assert owed stays 0 for a pile-fed owner.
+
+**S3: Steward names RVU1, RVU2, FKC1, FKC2, CS1 and FKC0. It never names K5, K6, K7, R4 or AB\*.**
+- `e2e.mjs:4622` `killed('RVU1+save', cancel)` and `:4637` `RVU2+save`. Both flows expect the removal to *finish* after the restart (`:4623`, `:4638`). The growth sweep line "was taken up by Architect after a restart" (`:4643`) must follow. **RVU1 must therefore map to a point after D (decided).** A PREPARED alias aborts, and both flows fail with "no completion".
+- `module-measure-hall.mjs:1703` FKC1, FKC2 and CS1 at a stage removal (`dev.rv.undo`, `:1718`). These are T4c's custody B effects and settle, and **they are missing from §6's alias list**. FK1-FK4 (`:1622`) are fill points, not removals.
+- FKC0 is the hook `dev.removal.failAfterCustody` (`:1760-1781`). **Ask:** does T4a ship it?
+- **Log format:** `kill point <P> reached` (`e2e.mjs:4560`). The hall tool also accepts `kill point <P>:` from "Stockpiles: kill point P: …" (`:1595-1596`). An alias must log its alias name in one of these forms.
+- **Dev ledger:** after the restart the hall tool asserts that the ledger's `custody`, `heldProvided` and `pendingCredit` are empty (`:1740-1742`) and that `custody` was on disk at the FKC1 halt (`:1740`). If T4 moves custody into the txn entry, keep a dev view of it.
+- **Re-undo:** an unchanged re-undo is expected to answer NOT_ALLOWED (`:1752`). Say whether a re-ask before retirement attaches (`replayed()`), and so answers removed=true.
+
+**S4: no Steward flow inserts into a removal box after REMOVED.**
+- Every e2e `dev.crate.insert` targets `stockpile:<owner>` (`e2e.mjs:2724…8917`). Those crates sit in Steward's RS keep-out area (`Stockpiles.java:46-59`), outside every site box.
+- Steward's product code inserts nothing. Its only `setItem` calls are ModuleDev's dev ops (`module/ModuleDev.java:350-384`).
+- The hall tool's `putItems` and `clearContainers` (`:583-588`) follow only *refused* undos.
+- Steward has no remove-then-place path. Revert and Updates call no removal. The only removal callers are listed above, plus `Districts.java:636`, `VillageSweep.java:481` and `SettlementRunner.java:4472,4678`.
+- **Asks:** (a) a removal refused before begin seals nothing. (b) "The piles credited" as a resource never holds inserts or draws on a pile while a removal is open, since Steward feeds piles all the time. (c) Futures complete at EFFECTS_DONE, before retirement: a placement on the same lot in that window answers `held(other)` (Steward retries) rather than failing.
+
+**Other consumer points**
+- **Cargo:** T4 books a player's holder rather than refusing. Steward parses Architect's refusal, "Move these out of <s> first … chest at x, y, z" (`HallCargo.java:242-264`; `module-measure-hall.mjs:425`, used at `:571` and `:587`). **Ask:** a design container holding items still refuses with this text, and only a *player-placed* holder becomes cargo. The product path pre-checks halls (`Undo.java:265-270`), but the hall tool's steps 5-6 depend on the text. If anything else changes what a player loses, it goes to Noah.
+- **"Gone" read from absence, unguarded:** `Undo.java:158` and `:177` (the chain logs a missing site as removed) and `SettlementRunner.java:4680` (`orElse(true)`). By contrast, `Adoption.java:340` and `Districts.java:593` guard with `loadHealthy()`. Under 3b, a load-failed store holding the removal would make Steward log PROJECT_REMOVED and give up the districts. **Ask:** a held txn store also makes `loadHealthy()` read false, and `held(decided)`'s `<where>` for "txn store unreadable" is wordable ("Architect's records didn't load; it waits").
+- **Ids:** Steward joins on group, site and region ids and on the detail prefix, never `tx-<n>`. N2 (the crate settle folded into the removal) has no Steward effect beyond the refund lines.
+
+**Steward work (strict tier, at the pin carrying T4c; one slice with TXN-S, ADP-S and OVF-S3)**
+1. Extend 8cT's `siteBusy(err)` to the group and chain paths. On `held(decided)`, log nothing and keep a group or site intent note with a sweep, like SD2 (the new part).
+2. Add `loadHealthy()` guards at `Undo.java:158,177` and `SettlementRunner.java:4680`.
+3. OVF-S3: `refundLine`, `refunded` and the NOT_PLACED note include owed, and e2e conservation adds owed (this is TXN review §3, unchanged).
+4. New words: blocked means nothing was taken down; `growthWaiting` when the hold carries on by itself; over-capacity said when the refund lands.
+5. e2e and hall tool: RVU1/RVU2 checked against the D-side aliases; FKC1/FKC2/CS1 aliases and the custody dev view; FKC0 once the hook exists; the `:1752` answer.
+
+Overlap: items 1 and 4 extend TXN-S (8cT's helper). Item 3 is OVF-S3 as already scoped. ADP-S is untouched except for the shared `siteBusy` helper.
+
+### Decisions (Noah, 2026-11-18, via parent: "Take all 8")
+- N1 yes: one txn per removal call (group and stage included, one decision per group); members are still paid one at a time, each after its own W receipts.
+- N2 yes: the crate settle folds into the removal's txn. `crate.settle` stays its own kind only for `Builder.complete`'s `built:` leftovers and the adopt path.
+- N3 both: refuse breaking a paid block inside a held removal box (a new hold surface), and as the backstop pay min(planned, found by the W) per chunk.
+- N4 yes: T2b's unshipped stash formats are deleted with no conversion; only main's pre-T4 state is converted.
+- N5 all three: a refused save waits and never throws; the InfraJob catch; credits booked only after the point of no rollback.
+- N6 yes: a stack with its own data in cargo becomes an O `cargo` entry instead of stranding the removal.
+- N7 yes: the ops `/architect removal resume` is dropped for `/architect txn resolve`.
+- N8 yes: main's held pending credits are pulled forward from T6 for removals only; pile-fed removals pay only after their W receipts.
+- T4a starts now (Steward's review is in). T4a-c join one batch with T2 and T3b.
+
+### Coordinator's call on Steward's S1 ask (2026-11-18)
+- A `RemovalFinished` event (group | site | region, with the full RemoveResult including owed), fired when a held, decided removal retires.
+  Steward chose between this and a replay guarantee; the event is simpler to consume and needs no stated lifetime. A re-ask after retirement
+  still answers replayed() for as long as the txn's result cache holds it. Once decided, a removal never answers PARTIAL.
+
+### Changes from Steward's review (2026-11-18; this section wins over the text above it)
+
+1. **Aliases (T4b/T4c; T4a keeps the old points firing where they are).**
+   - **RVU1** maps to `TX:removal.group:decided`, the point after D (the journal undo commit) is applied and the decision is recorded. It
+     never maps to a PREPARED point. **RVU2** maps to the point after the region's drain, still after D. Both flows finish after a restart.
+   - **FKC1** maps to after `custody.take` B and its barrier (PREPARED_DONE), and **FKC2** to after a member's W DONE with its custody
+     credit not yet booked. **CS1** maps to inside the barrier that publishes a member's L credit, after the chunks and before the ledger.
+     These hold for stage and group removals (the hall tool's `dev.rv.undo`), and for single removals where the point exists.
+   - Every alias logs `kill point <ALIAS> reached` under the alias name (e2e's format), not the TX name.
+2. **Custody dev view.** Custody moves into the txn entry (T4c), but `dev.stockpile.ledger` (or its successor) keeps showing `custody`,
+   `heldProvided` and `pendingCredit`. Open txns' custody shows as `custody` with `txn` beside it. After a removal retires, all three are
+   empty, as the hall tool asserts.
+3. **FKC0 (`dev.removal.failAfterCustody`).** It is not in T4a: it was slice LC's hook and was never on main. T4c ships it as a TEST hook that
+   aborts a group or stage removal right after its custody B effects: compensate, `decision: abort`, retire. Alias FKC0, the same log
+   line.
+4. **Re-undo.** A re-ask before retirement attaches to the open txn and answers its result with `replayed()` true (removed=true once it is
+   EFFECTS_DONE). After retirement, a re-ask answers `replayed()` while the result cache holds the key. Past that, it answers as today,
+   so the hall tool's unchanged re-undo gets NOT_ALLOWED.
+5. **The seal.**
+   - (a) A removal refused before begin holds and seals nothing.
+   - (b) A pile named as a resource of a removal txn never refuses inserts or draws (feed, deposit, withdraw, crate inserts). It refuses
+     only dissolve, `removeStockpile`, adopt, and another txn's read of this txn's transit amounts (TXN §3.6).
+   - (c) Futures complete at EFFECTS_DONE. A placement whose box overlaps a removal box between EFFECTS_DONE and retirement answers
+     SITE_BUSY `held(other)`, so Steward retries.
+6. **Cargo.** A **design container** (one the site's blueprint placed) that holds items still refuses the removal with today's text, word for
+   word: "Move these out of <s> first … chest at x, y, z". Only a **player-placed** holder (no `Placed` record, or one the player placed after
+   the site was written) becomes cargo (B, then L, or O `cargo` for a stack with its own data, N6). Any other change to what a player loses
+   goes to Noah first.
+7. **Startup.** A participant store held because it failed to load (the txn file, sites, stockpiles, the queue) makes `Sites.loadHealthy()`
+   false. The `held(decided)` `<where>` for that case is the stable text `records unreadable`, worded by Steward as "Architect's records didn't
+   load; it waits".
+8. **S1 (T4c; frozen now).**
+   - New event `SiteEvents.REMOVAL_FINISHED`: `RemovalFinished(String kind /* group | site | region */, String id, RemoveResult result)`, with
+     the full result including `owed`. It fires once at retirement for every removal txn whose future already failed `held(decided)`.
+     It fires at least once: re-fired after recovery, so consumers stay idempotent. It also fires for an unheld removal at its
+     EFFECTS_DONE, so Steward has one path. Since NEXT; feature id `"removal_finished"`.
+   - Once decided, a txn removal never answers PARTIAL. Blockers are decided before begin: a removal stopped by blockers took nothing
+     down (NOT_STARTED stays). After the decision, the only answers are removed=true, or `held(decided)` followed by `RemovalFinished`.
+9. **T4a's place.** T4a changes no removal semantics Steward can see, apart from finding 4 (a refused put-down save waits) and the javadoc.
+   Aliases 1-8 land with T4b/T4c, and the Steward pin waits for T4c.
