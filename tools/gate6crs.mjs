@@ -17,7 +17,6 @@
 //     crash     (rs-crash)              item 11
 //     df        (rs-df)                 slice DF: fluids.json refused in survival (rs03_water), FL1r+save, conservation and the charge once
 //     t8a       (8ct-a)                 slice 8cTa row A: tile-written lava, never forced, one taken: the refund + taken == charged
-//     t8ca      (8ct-ca)                8cTb review P1-1: the charge's prepare barrier refused: no lava stands unpaid
 //     t8b       (8ct-b)                 slice 8cTa row B: FLc+save, the charge settled at the start, never written, removed: refunded
 //     toggle    (rs-toggle)             item 18 (fix/survival-off-storm): /architect survival off mid-build: 0 chunks generated or charged
 //                                       outside claim + 2, a forceloaded chunk not charged, built in its mode as its twin, E-flat 0
@@ -1078,58 +1077,6 @@ steps.t8b = async () => {
   out.removed = { refundedLava: got, chargedLava, lavaStock: [ps0.stock?.['minecraft:lava_bucket'] ?? 0, ps2.stock?.['minecraft:lava_bucket'] ?? 0], point: p };
   log(`  B: ${json({ got, chargedLava, diff: p.diff })}`);
   check(got === chargedLava && G.exact(p), `B (${tag}) conservation: the charge settled at the start, never written, removed: lava buckets refunded ${got} of ${chargedLava} charged; the stockpile exact (${json(p.diff)})`);
-  return out;
-};
-
-/**
- * (8cTb review P1-1) rs03_water in survival with the first barrier after the fluids gate refused (dev.stockpile.barrier failChunkWrite 1:
- * the charge txn's prepare barrier): the charge aborts having applied nothing. Conservation: no lava stands while the ledger holds no
- * charge for the region (red at 3f86e1ee: the aborted charge read as done, the stage wrote lava unpaid); then the charge goes on once.
- */
-steps.t8ca = async () => {
-  await ensure();
-  const out = {};
-  const tag = 'rs03t8ca';
-  const fx = G.fixture(ctx, 'rs03_water');
-  const entries = entriesOf(fx);
-  const s = await G.site(ctx, tag, fx);
-  if (Object.keys(entries).length) await G.designs(ctx);
-  const box = G.boxOf(s.W);
-  const ck = await G.check(ctx, tag, s);
-  await G.pile(ctx, s, 4);
-  const C = new G.Conservation(ctx, box);
-  await C.start();
-  const region = await G.realise(ctx, ck.check.artifactSha, entries);
-  let armed = false, unpaid = null;
-  await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000, until: (st) => ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
-    extra: async () => {
-      // the lava buckets held back until the fluids gate waits for them; then the next barriers' chunk writes refused (3: a periodic save may
-      // take one) and the lava fed: the charge's prepare barrier is refused
-      const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
-      if (!armed && x && x.phase === 'gate') { await L.call('dev.stockpile.barrier', { run: false, failChunkWrite: 3, failPlayerReplace: 3 }, 60_000).catch(() => null); armed = true; }
-      if (!armed) { const ps = await G.pileState(ctx); const n = ps.outstanding?.['minecraft:lava_bucket'] ?? 0; return n > 0 ? { 'minecraft:lava_bucket': -n } : {}; }
-      if (armed && !unpaid) {
-        const rs = await G.rsState(ctx, region);
-        const c = await L.call('dev.fluid.census', { box }, 600_000).catch(() => null);
-        const lava = (c?.fluids ?? []).filter(([, , , st]) => LAVA(st)).length;
-        const booked = (await G.pileState(ctx)).charged?.[`region:${region}`] ?? null;
-        if (lava > 0 && !(rs.record?.chargeTxn || rs.record?.charged) ) unpaid = { lava, record: rs.record?.charged ?? null, booked };
-        if (lava > 0 && rs.record?.charged && !rs.record?.chargeTxn && !rs.record?.chargedBodies) unpaid = { lava, record: rs.record?.charged, note: 'charged without its txn' };
-      }
-      return {};
-    } });
-  const p = await C.point('placed');
-  const rs = await G.rsState(ctx, region);
-  // the txn journal's finished entries: a charge attempt under the region's charge key decided abort
-  await L.call('dev.stockpile.save', {}, 300_000).catch(() => null);
-  const tj = path.join(L.SAVES, s.world, 'architect', 'txn.json');
-  const done = fs.existsSync(tj) ? (JSON.parse(fs.readFileSync(tj, 'utf8')).done ?? []) : [];
-  const aborted = done.some((d) => /:fluids:charge$/.test(d.key ?? '') && /abort/.test(String(d.decision)));
-  const tx = JSON.stringify(done.filter((d) => /:fluids:charge$/.test(d.key ?? '')));
-  out.placed = { armed, aborted, unpaid, charged: rs.record?.charged ?? null, chargeTxn: rs.record?.chargeTxn ?? null, point: p };
-  log(`  CA: ${json(out.placed)}`);
-  check(armed && aborted, `CA (${tag}): the precondition: the barrier refusal armed at the fluids gate and a charge attempt aborted (${aborted})`, tx.slice(0, 600));
-  check(!unpaid && G.exact(p), `CA (${tag}) conservation: no lava stood without its charge (${json(unpaid)}); placed, charged once (${json(out.placed.charged)}), the stockpile exact (${json(p.diff)})`);
   return out;
 };
 

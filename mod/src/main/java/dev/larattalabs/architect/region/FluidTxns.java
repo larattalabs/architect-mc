@@ -138,11 +138,16 @@ public final class FluidTxns {
 
 	/** The outcome of an attempt that began (or found) an entry: done once it retired, else held with its where, else waiting. */
 	static Step after(TxnEntry t) {
+		return after(TxnServer.core(), t);
+	}
+
+	/** {@link #after(TxnEntry)} over a given core (a unit's). */
+	static Step after(TxnCore core, TxnEntry t) {
 		if (t.decision() != null && t.decision().isAbort()) {
 			// (8cTb review P1-1) an aborted attempt (a refused prepare barrier) applied nothing: never reported as done; the caller tries again
 			return new Step(Step.Kind.REFUSED, "aborted " + t.id + (t.result().has("refused") ? ": " + t.result().get("refused").getAsString() : ""));
 		}
-		if (!TxnServer.core().open().contains(t) || t.phase() == dev.larattalabs.architect.txn.Phase.EFFECTS_DONE || t.phase()
+		if (!core.open().contains(t) || t.phase() == dev.larattalabs.architect.txn.Phase.EFFECTS_DONE || t.phase()
 			== dev.larattalabs.architect.txn.Phase.RETIRING && t.decision() != null && !t.decision().isAbort()) {
 			return Step.done(); // (8cTc) every effect applied and the barrier covered them: its retirement only waits for the stores' acknowledgements
 		}
