@@ -33834,3 +33834,325 @@ The binding contract is the 8c draft with its "Decisions", "Steward review" and 
 - **Leftovers:** the kit's shell check (pond.mjs `unwrittenShell`) refuses LEAK when the virtual world's subsurface (dirt) and the frozen
   volume (grass under the terrain builder's grass) disagree at a shell cell: the gate fills dirt there (gate6chy-b's builder leaves the base's
   grass top); a capped removal's `foreign` positions stay unit-only.
+
+## Phase 8cT: 8c's fluid write, drain and undo on the TXN layer (branch `slice/8cT` off origin/slice/DF a6b14ace; FROZEN 2026-11-18 after Noah's decisions and Steward's review; strict; $0)
+
+Design only: nothing is built or run, $0. Read in the worktree `_work/architect-mc-8cT` (branch `slice/8cT` = origin/slice/DF a6b14ace,
+nothing committed), against origin/main 1f7cdb1e (RegionFluids.java and MechCharges.java unchanged since DF's base 3d5acc41), slice/8cG
+9b25e299, slice/SV 4ade87c9 and slice/T2 47587b40. **Tier: strict** (refunds and charges, undo, crash recovery).
+- **Sources:** the DF final review (`artifacts/reviews/gpt-DF-r3-final.log` in `_work/architect-mc-DF3`); CONTRACT.md TXN, T0, T1, T1b and the
+  three DF as-builts; TXN-DESIGN §3.4 (effect classes), §3.9 (bulk streams), §3.10, §6 (T6); the 8c draft with its decisions and Steward's
+  review; 8cG's and SV's as-builts; T2 and T2b's owed notes; T3's format; GATES speed rules 3-6.
+- **Goal:** DF's records keep crash state as flags in `fluids.json` (`owed`, `removal`, `barrierDone`, `lotDrained`, `chargedBodies`,
+  `neverWritten`). Each of A-F is a case where a flag and the world disagree after a crash or a player action. 8cT replaces those flags with
+  TXN entries, per-chunk W receipts and keyed L effects. Each finding then has evidence that survives the crash, and a failing-first row.
+- **Decision (Noah, 11-18):** DF doesn't merge alone; it is 8cT's base. 8cG and SV stop patching; their rows become 8cT's harness.
+  Main keeps its known fluids-save gap until 8cT merges.
+
+#### 0. The findings, checked at a6b14ace (rule 5)
+
+| | Verdict | Where | The scenario as checked | Main |
+|---|---|---|---|---|
+| **A** | **confirmed** | `RegionFluids.java:863` `neverWritten`, `:2441-2462` the scoop | The stage's tiles write a survival lava body's sources. `force` (`:1297`) or `writeWaves` (`:1358`) sets `sources`, `writtenAt` and `written` only later, so meanwhile `neverWritten` is true. A player scoops one written source, then the region is removed. The cell is `ours` but not a source, so the `else if (unwritten)` branch counts it: lava++. The stockpile is refunded a bucket the player already holds. **Grates have the same hole:** bars a player breaks out of a written grate are refunded again | Main counts standing cells only (main `:2144-2163`), so it never double-refunds. It **under**-refunds instead: a charged body that was never written is not refunded at all (DF round 1's P1 4). A is DF round 3's |
+| **B** | **confirmed** | `MechCharges.java:305` → `RegionFluids.java:896-916` | Crash after the keyed charge's `saveConfirmed` (Stockpiles `:1523`) and before `saveRec` (`:842`). At the first tick `Builder:1735` → `MechCharges.settleBooked` → `settleCharge` writes `charged`, `chargedRid` and `chargedAt`, **not** `chargedBodies`. The gate's provenance block is behind `!has("chargedAt")` (`:806`, `:814-817`), so it never runs. If the body is then removed before any write (for example, while its record's save is refused), `paid` is empty: the charge is never refunded | Main loses every charged, never-written body this way, on every path. DF's fix is incomplete |
+| **C** | **confirmed** | `:1700-1716` the stray loop; `:1943` `strayCandidates` | `strayCandidates` = `escapedCells` + **every** `b.predicted` key. A dispenser (no `Placed` record) puts a water or lava source into a predicted flow cell after the build. The watch pass spares it (`predictedLevel` false at `:1686`), then the stray pass checks only the fluid type and sets the cell to AIR: the dispensed bucket is lost. It is reachable from `escape` too (`:1574`, `strays=true`) | **Predates DF.** Main's stray loop is the same (main `:1596-1610`). Main's watch pass is broader still: any fluid other than the before state, of any type (main `:1584`) |
+| **D** | **confirmed** (migration) | load `:2899`, `drainLot` `:2026`/`:2067` | Main drained, then saved `lotRemoved` with no barrier and no force (main `:1873-1897`). A crash with fluids.json on disk and the chunk not leaves `lotRemoved=true` beside standing sources. DF's loader reads the missing `lotDrained` as `lotRemoved`, so both drainLot loops skip the body. The site is restored with the sources surviving around it | **The window is main's.** DF carries it forward through the legacy default |
+| **E** | **confirmed** | `settle` `:1529-1547`, `escape` `:1550-1595` | An escape (or unsettled, or upstream) drain writes AIR with no update. The body is marked `drained` (and the phase `done` when all have ended), then saved: no barrier, no replay. A crash before the chunk save brings the sources back. `tickRecord` censuses `written` bodies only, so nothing drains them until a Remove: the escaped water (or lava) runs unmanaged | **Predates DF** (main `:1461`, the same code) |
+| **F** | **confirmed, wider than reported** (P2) | load `:2870-2875`; `:2488-2525`; `removalWait` `:145` | A migrated `done` gets `until=-1`. Its re-drain never sets a new `until`, so `removalWait(now,-1,..)` answers CAPPED at once when ticks are pending, and DONE when they aren't: no fresh wait either way. **Also:** the ordinary resume (`!redrained`, `:2488-2501`) re-drains without resetting `until`. Any resumed `drained` removal whose stored `until` has passed skips the wait | The resume path is main's. The `-1` path is DF round 3's |
+
+#### 1. Scope (frozen once Noah answers §8)
+
+- **In:** the fluids stage's write (H, HY, IRR, 8c rivers and falls), the region and revision removal drain, the lot drain (IRR), the
+  escape, unsettled, upstream and held-body drains, and a survival region's fluids charge and scoop. Plus the conversion of DF records
+  that were saved before 8cT.
+- **Merged first:** origin/slice/SV 4ade87c9 (which contains 8cG 9b25e299, with DF round 2 211e3866 inside) onto a6b14ace. This is real
+  work. 8cG's `scoopSurvival` uses round 2's per-kind max, and its drain uses round 2's guards. Both are replaced here (§3), so the merge
+  keeps round 3's guards plus 8cG's still-ours rule, and drops the max.
+- **Out:** solids restore and group undo (the journal's D/W, T4); `mech.charge` and the other T6 kinds; owed (no fluids path drops an
+  item: the scoop is past-capacity stock under OVF); cell-level holds on watch sets; `asyncAt` (+async rows come with T1's deferred hook);
+  the census, settle and escape *detection* (read-only, unchanged); the kit, IR and goldens (byte-identical).
+
+#### 2. TXN kinds
+
+One txn per record operation, never one per cell (TXN §3.9). World writes are **W effects, one per chunk**. Each W effect writes a receipt
+`tx-n/i@<op>` into `architect_mc:txn_receipts` (T1's `TestMove.addReceipt`/`receipts`, on main) in the same tick as its cells, so the
+receipt is saved in the same chunk save. **The probe:** the receipt present means DONE. Absent means not yet: redo it (every W apply is
+idempotent through the ownership rules). An unreadable chunk is UNKNOWN: hold, never guess. `fluids.json` stays an **R store** (DurableFile,
+`{store, gen}`). An intent pins the gen holding its befores instead of copying them (rs03's befores are about 23 KB compact per region):
+**this changes T1's "payloads in the intent" rule; Steward and the T1 owner should review it.** The resource is `fluid:<region>#rv<rid>`.
+All three kinds decide **commit at persist**: no prepare effects, never rolled back, always rolled forward.
+
+**2.1 `region.charge`** (L; T6's kind, pulled forward for fluids only). Key `chargeKey(l)` (unchanged).
+The intent carries the items, the rid and **`bodies`** (the ids it pays for).
+- **e0 L `pile.charge`.** `chargeOnce` with the key, probed by `charged(key)`.
+- **e1 R `region.survival`.** It writes `charged`, `chargedRid`, `chargedAt` and `chargedBodies` into region.json, with `txn`.
+- **Recovery** replays e1 from the entry, so the body set can't be dropped (**B**). `MechCharges.settleBooked`'s fluids branch is retired.
+  It stays only to convert a booking made before 8cT (§4).
+- **Points:** `TX:region.charge:persist`, `:charged` (B's window), `:recorded`.
+
+**2.2 `fluid.write`.** One per wave: an H region has one, an ordered course one per wave. Key `fluid:<rec>/w<k>`.
+- **The tiles no longer write fluid cells.** The fluids stage's tiles become markers. `writeBody` writes the sources, ice cap, grate and
+  decor, as ordered regions already do, and only into air or what the body wrote (8cG round 2). The IR is unchanged. This removes the
+  "tile-written, not yet forced" state behind **A**.
+- **Plan (R-1):** the live check and the wash check (8cG), then the befores saved (FL1's save, gen g), then the intent `{bodies, gen g,
+  chunks}`.
+- **Effects:**
+  - **e0..k W `fluid.place`** per chunk, with the cells written counted in the receipt;
+  - **barrier** (TXB1-3);
+  - **e(k+1) R** the bodies `written`, with `writtenAt`;
+  - **EFFECTS_DONE**, then the forced tick. The forced tick is physics: it is replayed while the record reads `written` and has no
+    `forcedAt`.
+- A body whose cell is taken between the gate and its chunk's write is held (`why: uncontained`). The W effect skips that body, and its
+  receipt names it.
+- **Points:** `persist` (FL1r alias on REFUSED), `place` (after the first chunk: the half-written state, new), `placed`, TXB1-3,
+  `effects_done` (alias of FL2, or FL4 between waves).
+
+**2.3 `fluid.drain`.** One per drain. `reason` is `removal`, `lot`, `escape`, `unsettled`, `upstream`, `held` or `legacy`.
+Key `fluid-drain:<rec>/<reason>/<sorted body ids>`, so a Remove asked during a drain replays the same txn and joins it (Steward's ask).
+- **Plan (R-1, the world read while the sources stand):**
+  - the order (reverse write order);
+  - **the scoop amounts, per cell, from receipts:**
+    - a charged cell with no `fluid.place` receipt counts;
+    - a cell with a receipt counts only while it still stands (a lava source, or the grate's bars);
+    - a cell that was written and then taken counts **0** (**A**);
+  - the bound;
+  - the stray chunks (8cG's `strayChunks`).
+- **Effects:**
+  - **e0 L `region.scoop`** (`scoopInto`, keyed), for removals only, with amounts from the entry and never recounted. The key gains
+    `#rv<rid>`, which closes DF's leftover where a revision shared the region's key. A legacy key is probed too.
+  - **e1..k W `fluid.drain`** per chunk: sources, ice, grates, spill and watch, under the ownership rules below.
+  - **e(k+1) await `settle`**: a persisted `until` = the game time of the step + bound. Any recovery that redoes a drain chunk writes a new
+    `until` before waiting. No path waits on a stored `until` it did not just write (**F**, both paths).
+  - **e(k+2..) W `fluid.stray`** per chunk (8cG's budgeted pass).
+  - **barrier** (TXB1-3).
+  - **R** the bodies `drained` (reason, `why`); the removal `done`; `fluidsRemoval` null.
+  - **EFFECTS_DONE.**
+- **What waits on it:** the solids restore, `drainLot`'s caller (the lot's site restore) and the region's `removalGate` wait for
+  EFFECTS_DONE. While the txn is held, they read `SiteWait.TXN_HELD` / SITE_BUSY `held(decided)`.
+- **E:** an escape, unsettled, upstream or held drain is this kind, so `drained` is written only by the last R effect, after the barrier.
+  After a crash, the open entry redoes the chunks whose receipt is missing.
+- **Points:** `persist` (alias FL3d), `scoop`, `drain` (after the first chunk; alias FL5 on an ordered head), `drained` (FL8; FL6d for a
+  lot), `settle`, `stray` (after the first chunk; FL9), TXB1-3, `done` (aliases FL3, FL3x, FL6).
+
+**Ownership (C), one rule for every drain.**
+- **Own cells:** 8cG's `ownStillOurs` and DF's `bodyWrote`.
+- **Spill, watch and stray cells:** 8cG's `flowStillOurs` (flowing water of the body's fluid in a liquid block; **never a source**, never
+  waterlogged) **and** DF's `predictedLevel` on a predicted cell, **and** not `playerPlaced`.
+- The stray pass gets the same test as the watch pass. A dispensed or bucketed source in the current is a source, so it is never taken.
+  This is a code rule: TXN doesn't close C by itself.
+
+#### 3. Recovery (per kind; every point × bare / +save)
+
+| state on disk | recovery |
+|---|---|
+| no entry (befores maybe saved) | nothing. The gate runs again (H §3.5's recheck), and so does the removal's gate |
+| entry, no receipts | roll forward from the entry. The L probes keyed; every W redone |
+| some W receipts | the missing chunks redone. A drain then writes a new `until` and waits it |
+| L key in the ledger, R missing (B's window) | R replayed from the entry, `chargedBodies` included |
+| after the barrier, R missing | R replayed; EFFECTS_DONE; events re-fired at least once |
+| intent write REFUSED | the stage or the removal waits SITE_BUSY `txn_journal` (nothing touched). IN_DOUBT: held, never compensated (decision 4) |
+| W chunk unloaded or unreadable | DR2's bounded ticket. Then UNKNOWN: held, with `held(decided) tx-n: chunk x,z` |
+
+#### 4. DF's records: mapped or retired
+
+| DF piece | in 8cT |
+|---|---|
+| fluids.json through `DurableFile("fluids")`, compact | **kept** as the R store. Every body-state write is an R effect carrying `txn` |
+| `owed`, `mayWrite`, `owedTriedAt`, the 1 s retry, `itemMayWrite`, `stageMayRun` | **retired** for the txn's steps (TxnCore's persist, hold and backoff). `mayWrite` stays only for the befores' own save before the intent |
+| `removal` draining / drained / done, `barrierDone`, `redrained`, `until` | **derived** from the open `fluid.drain`. They stay in fluids.json for the view only (`fluidsRemoval`) |
+| `lotRemoved` / `lotDrained` | the lot's `fluid.drain`. `lotRemoved` stays a report flag |
+| `survival.chargedBodies`; `neverWritten` | the charge entry and its R effect; **`neverWritten` deleted** (receipts replace it) |
+| `Stockpiles.barrier` calls in `gateOne` / `drainLot` | TxnCore's barrier step |
+| `RegionStore.write` on `DurableFile.writeBytes`, `PENDING_INSTALL`, the RVU and region-record rules | **unchanged** (not fluids) |
+| FL1r, FL3d, FL3x, FL6d, FL1-FL9 | aliases of the TX points (§2) while their gates exist |
+
+**Converting old records** (at load, after txn recovery; it skips a record that an open txn holds):
+- `removal` draining or drained, or done without `barrierDone`, starts a `fluid.drain` with reason `legacy`: a fresh drain, then a fresh
+  `until` (**F**).
+- `lotRemoved` without `lotDrained` **or** with `lotDrained` but no barrier evidence (any DF-era lot record) starts a `legacy` lot drain
+  (**D**). It is idempotent: the drain takes only what the ownership rule allows.
+- A `writing` phase starts the write's recheck.
+- **A legacy scoop has no receipts.** The amount comes per cell from the stage's journal entries: journaled and standing, or charged and
+  not journaled. This is Noah's N2.
+
+#### 5. Failing-first rows (red on a6b14ace + a hooks-only commit, green on HEAD)
+
+**Red runs on** a6b14ace plus one commit that adds kill points and dev hooks only, with no behaviour change (DF's own precedent, f4003a35).
+- Each row sets up its precondition explicitly: `dev.stockpile.save` before the mutation wherever the bug needs pre-mutation state on disk
+  (D, E). The GPT log already shows FL6d is green on old code.
+- **Every row ends with conservation:** pile stock + charged + standing lava, grates and bars (`fluidStanding`) + player inventories +
+  item entities (0) = before, in base units, plus E-flat 0 in the watch sets.
+- **IN_DOUBT cases are units** (`failNextSave {inDoubt}` covers region files only).
+
+| row | finding | set-up | red on a6b14ace | green |
+|---|---|---|---|---|
+| `fl-refund-partial` | A | rs03_water survival, a lava body over 2 chunks. Its second tile held on the slow-tile path (builder reading: or a TEST hook `dev.fluid.holdTile`). One written source scooped by the player's bucket, one grate's bars broken. Remove | refund = every cell + the player's bucket and bars: +1 lava, +bars | refund = unwritten cells + standing only; conservation exact |
+| `fl-charge-crash` | B | survival lava. Halt at `TX:region.charge:charged` (red: the hooks commit's FLc after `saveConfirmed`) +save. Restart with fluids.json refused (sticky). Remove before any write | 0 lava back: the charge is lost | the whole charge back |
+| `fl-stray-dispenser` | C | river_demo (water) and an H lava pond with spill. After settling, a dispenser puts a bucket into a predicted flow cell. Remove; also an escape on the pond | the cell is AIR: a bucket lost | the source stands; its row names it foreign |
+| `fl-lot-legacy` | D | IRR lot. Bare FL6d after a forced save, then `lotDrained` stripped offline (`node -e`) to make a DF-era record. Restart, then the lot removal is retried | sources standing round the restored site | re-drained; E-flat 0 |
+| `fl-escape-crash` | E | an H body with a forced leak (the escape guard). `dev.stockpile.save` before the leak, halt bare after the escape's save (FLe) | sources back; the record `drained`; flow unmanaged | the drain replayed, then the barrier; the body drained; E-flat 0 |
+| `fl-settle-fresh` | F | a unit (`removalWait`) and an in-game row: `done` without `barrierDone` with a fluid still ticking, and the `!redrained` resume past `until` | capped or done at once | waits a fresh bound |
+
+**The TX matrix:** every `TX:fluid.write:*`, `TX:fluid.drain:*` and `TX:region.charge:*` point × bare / +save, on h (pond), rs03 (survival
+lava and grate), irr (lot) and river_demo. Every row recovers exactly once, with conservation `match`. Plus `TxnCrashModel` units for
+the three kinds, with the legacy variants (DF's flags) red at the reviewer's points and green as built.
+
+#### 6. The harness carried over (regression; these rows can't be red on a6b14ace, which has no flowing build)
+
+- **8cG `8c-ingame`:** river, fall, nowash, torch, foreign, join, chest, bucket, wavetorch, wavechest.
+- **8cG `8c-crash`:** FL7, FL8, FL9 bare and +save; FL1, FL2, FL4, FL5 +save; FL3 and +save. Each is re-pointed at its TX alias.
+- **SV `8c-survival`:** isle, wash, nowash, town.
+- **DF:** h-df, rs-df (with its harvested row), irr-df, rv-df.
+- **Existing:** h-crash, hy-crash, irr-crash, irr-holders, fl-ingame, fl-natural, rv-crash, rv-undo, rv-undo-crash, h-rmcrash,
+  rs-survival-smoke; txn-core.
+- **The kit lane** (goldens, unchanged by 8cT: a regression check that the IR is byte-identical): WM, SE, CL, RV and RV-b. That is the
+  water-lint corpus, its two river shards, the river fixtures c01-c09, `RegionFluidsRiverLintTest`'s five cases,
+  `kit/test/{flowing-8cf,rv,rv-b}.test.mjs`, and the 138 non-8c corpus entries byte-identical.
+- **The composer gate:** sidecar `compose-8c.test.ts`, with the system-refs and repair prompts gated on `flowingWater` (8cG P2-8, P2-6).
+
+#### 7. API and feature
+
+- **`flowingWater` stays unadvertised until 8cT merges.** `flowingBuild()` is on only under a TEST flag (`dev.fluid.flowing`) for the
+  harness. The feature, IrStale's acceptance and the sidecar's `region.flowingWater` turn on in 8cTc's last commit. **Steward:** your pin
+  slice waits for it.
+- **No new Reason.** The 8cF and SV members (rows, `fluidsWatch`, `RegionView.fluidsRemoval`, `Reason.UNSETTLED`) are unchanged.
+- **Steward review:**
+  - (a) Remove, revise and the lot removal (`Sites.drainIrrigation`) can answer SITE_BUSY `held(decided)` ("finishing later; re-read")
+    while a fluid txn is held. Today they answer DF's untyped "not durable".
+  - (b) `fluidsRemoval.phase` gains `held` (an open enum).
+  - (c) Survival refunds change in amount: the correct ones, A and B.
+  - (d) A Remove asked during an open `fluid.write` **waits** for it to retire (one tick plus a barrier), never refused.
+  - (e) The intent pins the fluids.json gen rather than copying the befores (§2).
+
+#### 8. Slices, estimate, questions
+
+| id | what | closes | size | gate |
+|---|---|---|---|---|
+| **8cTa** | merge SV/8cG onto a6b14ace (resolve against round 3); the hooks-only commit; §5's rows and the TxnCrashModel legacy units recorded red; no runtime change (T3a's shape) | — | 1 day | unit-scope, Gradle full, §6's regression rows green on the merge, the red record |
+| **8cTb** | `region.charge`, `region.scoop`, the removal's `fluid.drain` (settle await, stray W, ownership rule), the legacy conversion of removals | A (refund side), B, C, F, E's removal half | 2 days | §5 rows A-C, F green; the TX matrix for removals; regressions; early GPT review (rule 3) |
+| **8cTc** | `fluid.write` (tiles as markers), escape, unsettled, upstream, held and lot drains on `fluid.drain`, the legacy lot conversion; `flowingWater` advertised | A (write side), D, E | 1.5-2 days | rows A, D, E green; the full TX matrix; 8c-ingame, 8c-crash, 8c-survival; GPT review |
+
+- **About 5 builder days.** 8cTb and 8cTc join a batch **together**: neither closes A-F alone. Rule 4 applies to each part's review:
+  one fix round, then Noah.
+- **Ports:** the coordinator's block (DF used 9070:9071).
+
+**For Noah**
+- **N1.** May the fluids stage's tiles stop writing fluid cells (the txn writes them, as ordered regions already do)? This closes A by
+  construction. The alternative, keeping tile writes and deriving "written" from journal entries, is weaker: journal and chunk aren't
+  atomic.
+- **N2.** How should a pre-8cT survival body that was partly written at upgrade be refunded? Recommended: per cell from journal entries.
+  The alternative is standing only, which may under-refund but never mints.
+- **N3.** May 8cT pull T6's `region.charge` / `region.scoop` forward for fluids only, with the scoop key per revision (`#rv<rid>`)?
+- **N4.** May 8cT define its own fluid W adapter on T1's receipt primitive rather than wait for T2's `RESTORE_ADAPTER` (slice/T2 is
+  waiting on Noah over T2b's P1-a)? Recommended: yes, and it converges to the shared name when T2 lands.
+- **N5.** Confirm that 8cG and SV never merge alone, and that `flowingWater` is advertised only with 8cTc.
+
+**For Steward**
+- **S1.** Are the §7 (a)-(e) items acceptable: `held(decided)` on Remove, revise and the lot removal; the `held` phase; Remove waiting on
+  an open write?
+- **S2.** A fluid txn holds no cells: buckets, dispensers and players act freely on watch sets, and the ownership rule decides at the drain.
+  Do you need any cell-level wait (for example, the steward not placing in a draining box) beyond `fluidsWatch`?
+- **S3.** Does your RC need a crash-mid-write row as well as crash-mid-drain, now that the write is a txn?
+
+**Builder readings** (recorded in the as-built): whether rs03_water has a grate (else add one to the A row's fixture); the slow-tile hook
+versus `dev.fluid.holdTile`; whether the stage's tile writes are journaled per cell (N2).
+
+### Decisions (Noah, 2026-11-18, via parent)
+- N1 yes: tiles stop writing fluid cells; `fluid.write` writes them, with per-chunk receipts.
+- N2: refund an old, partly written survival body per cell from journal entries where they exist, and otherwise only what is still standing.
+- N3 yes: pull T6's `region.charge` and `region.scoop` forward, for fluids only, with a per-revision scoop key.
+- N4 yes: 8cT builds its own W adapter (it does not wait for T2) and merges onto T2's later.
+- N5 yes: 8cG and SV never merge on their own; `flowingWater` is advertised only with 8cTc.
+- 8cTb starts once Steward's review of S1–S3 (and the payload-rule change) is in. 8cTb and 8cTc join a batch together.
+
+
+### Steward review (2026-11-18)
+
+Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(decided)` / `held(other)` details are v0.81.0's (`Refusal.java:6`, `txn/Holds.java:60-67`). Paths are under `mod/src/main/java/dev/larattalabs/steward/service/` unless named.
+
+**S1 (a) SITE_BUSY `held(decided)` on Remove, undoRevision and the lot removal: accepted. No Steward removal caller handles it today.** There is no `held(` or `startsWith("held` anywhere in `mod/src`. ADP-S and TXN-S (LEFTOVERS:258, 270) are unbuilt and cover adoption only. Typed SITE_BUSY is read only in `StuckSites.java:230` (repair) and `MaterialRequests.java:288` (TXN_HELD). Every removal caller prints the raw message as a stop:
+- Undo group `Undo.java:161`, site chain `:198`, region `:287-295`. The region one says "Clear it and run /steward undo again".
+- **The SD2 edge:** `:291` writes `closedNote` on any `!ok`. On `held(decided)` that closes the intent note, so `interrupted()` (`:330-348`) drops the region. A drain that finishes later is then never logged until the player's next undo hits the tombstone path (`:236-245`).
+- `Growths.undo` `Growths.java:378`: "could not be taken up: <raw>", then "run /steward undo again once it is clear" (`Undo.java:445`). `:377` already says "waits to carry on" when the revision reads UNDOING with `waiting()` set. **Ask:** put the hold's `<where>` in `RevisionView.waiting` too. Then the undoRevision case needs no code.
+- cancelVillage: `SettlementRunner.java:4683` says "could not be taken up yet... cancel again" and never feeds CancelConfirmed. The `Undo.region` branch (`:4690-4698`) says "What the village placed stays" and feeds BatchDone, both false for a decided removal.
+- `Districts.java:636-640` (roads, "tried again later") and `VillageSweep.java:481-487` (orphan, logs only) are fine as they are.
+- The lot removal: Steward never calls `drainIrrigation` (no hits). It reaches it only through `sites.remove`/`removeGroup` and `regions.remove` above.
+- **Steward words.** `held(decided)`: "Undo under way: the water drains first, and it finishes when chunk x, z loads (by itself)". No FAILED entry, no retry, the SD2 note left open, UNDOING released. `held(other)` before a decision: "Architect is still finishing an earlier change there; try again in a moment."
+- **Ask on "revise":** if (a) also covers a *new* revision (planRevision/realise) refused by a held drain, answer it `held(other)`. Steward reads `held(decided)` as "yours, finishing later".
+
+**(b) the `held` phase in `fluidsRemoval`: accepted, an open enum.** Steward reads no `fluidsRemoval` today (no hits). The 8c pin slice's draining line gains: "The water is draining before the land is restored; it waits for chunk x, z to load." **Ask:** a `heldAt` beside the phase, using `held(decided)`'s `<where>` format (`chunk x,z`), never the raw `fluid:<region>#rv<rid>` resource. Steward never shows a `where` it can't word.
+
+**(c) Remove waits on an open `fluid.write`: accepted.** **Ask:** if that write is itself held (UNKNOWN chunk), Remove answers `held(other)` at once rather than wait. A wait would keep `UNDOING` (`Undo.java:137, 229`) set all session (TXN review Q1).
+- **Join keys:** the drain key carries `reason`. Say what a Remove or undoRevision gets during an open *escape*, unsettled or `legacy` drain (a different key): wait, join, or `held(other)`.
+- **Survival refunds:** the amounts change (§7 c) with no Steward effect. No e2e flow builds lava or grates (no `lava`/`iron_bars` in `tools/e2e.mjs`). grove-coral's undo checks only PROJECT_REMOVED (`e2e.mjs:2778`), and the ledger sums count whatever is booked.
+
+**S2: no cell-level wait.** Steward writes no blocks itself (no `setBlock` or `destroyBlock` in `mod/src`). Its builds near water are Architect's own writes under `fluid:<region>#rv<rid>`. The NPC:
+- it is owner-tagged, so Architect's occupancy checks ignore it (`StewardEntity.java:88-91`);
+- it is stepped out of site boxes before an undo (`Undo.java:126`), avoids water only while idle (`StewardEntity.java:63`), and counts a water cell as standable (`StewardSpots.java:32`).
+
+**Ask:** confirm a `fluid.write` or `fluid.drain` never holds or skips a body (`why: uncontained`) for an entity in its cells or watch box, only for a block. Keeping the steward out of watch boxes is Steward's own work (8c review, item 5).
+
+**S3: yes, a crash-mid-write row as well as a crash-mid-drain row, both on the `farm-pond` flow** (`e2e.mjs:2468-2509`, an H pond, undone through `Undo.region` with the SD2 intent).
+- Write: `killed('TX:fluid.write:place+save', build)`. After the restart the pond is settled, the batch is logged placed once, and the undo is E-flat.
+- Drain: `TX:fluid.drain:drain+save` on `/steward undo`. The sweep waits (REMOVING → `Resume.WAIT`, `Undo.java:359-361`), then logs the removal once ("taken up while the world was closed").
+- `killed()` is local to suppliedGrowthFlow (`e2e.mjs:4422-4445`) and is lifted to a shared helper. It needs `dev.journal.killAt` to accept TX names and to log "kill point <name> reached".
+- Steward's e2e names no FL point, so the aliases don't touch it.
+- **Ask:** a held or replayed drain keeps the region REMOVING (and the revision UNDOING). A PARTIAL read makes the sweep LEAVE it.
+
+**The payload rule (intent pins the fluids.json gen): no consumer consequence.** Steward never reads `fluids.json`; the only `dev.fluid` mention is a comment (`e2e.mjs:6841`). It reads only the region ext `architect_mc:fluids` (`RegionReports.java:14-30`).
+
+**Other consumer points**
+- **Log lines the e2e parses:** "stage fluids ... placed" (`e2e.mjs:2497, 2818, 2893, 3426`) and `/drain/i` (`:2507, 2829, 3436`). Keep both once the tiles become markers, or the water flows fail.
+- **The `architect_mc:fluids` rows:** Steward words only `state == "drained"` (`RegionReports.java:26`), at BATCH_DONE (`SettlementRunner.java:4469`). Under E, `drained` lands after the barrier, so an escape drain still held at BATCH_DONE is never spoken. That is minor. Keep `state` open; an unknown state is skipped.
+- **Correction to the 8c review:** SD2's sweep doesn't re-ask a Remove. `finishInterrupted` (`Undo.java:375-411`) reads state and logs on REMOVED only. The re-askers are:
+  - the player's `/steward undo`;
+  - the orphan path (`VillageSweep.java:481`);
+  - cancelVillage (`SettlementRunner.java:4680`);
+  - `Growths.decide`'s UNDOING resume (`Growths.java:125`), which re-asks undoRevision and must join.
+- **Ids:** Steward joins on nothing new. It reads the detail prefix, never `tx-<n>`, and needs `<where>` stable as `chunk x,z`.
+
+**Steward work (at the pin that brings 8cTc; strict tier, folded into TXN-S)**
+1. A `siteBusy(err)` helper that tells `held(decided)` from `held(other)`. Wire it into Undo (`:161`, `:198`, `:287-295`), `Growths.java:378`, cancelVillage (`:4683`, `:4697`: wait for REMOVED, not BatchDone) and `Districts.java:640`.
+2. `Undo.java:291`: no `closedNote` on `held(decided)`, so SD2 finishes it.
+3. The `fluidsRemoval` draining and `held` line (8c review, item 3).
+4. e2e: the shared `killed()` helper, plus farm-pond's write and drain crash rows.
+5. The watch-box step-out and the water-cell spots (8c review, item 5).
+
+### Changes from Steward's review (2026-11-18; this section wins over the text above it)
+
+1. **The hold's place.** Every `held(..)` a fluid txn causes carries `<where>` as `chunk x,z` (the W effect's chunk), never the raw
+   `fluid:<region>#rv<rid>` resource. It appears in the refusal's message, in `RevisionView.waiting` (an UNDOING revision held by a
+   drain), and as **`heldAt`** beside `RegionView.fluidsRemoval.phase == "held"`.
+2. **Who gets which detail.** A Remove or undoRevision that **joins** an open drain whose own txn is held gets `held(decided)`
+   ("yours, finishing later"). A **new** revision (planRevision, realise) refused because a drain holds the record gets `held(other)`.
+   A Remove asked while an open `fluid.write` is itself held answers `held(other)` at once (8cTc); while the write is not held, it waits.
+3. **Other drain kinds.** A Remove or undoRevision asked during an open escape, unsettled, held or legacy drain (a different key)
+   waits for that drain to retire (one barrier), then begins its own removal drain; if that drain is held it answers `held(other)`.
+   A Remove asked during the removal's own drain joins it (same key).
+4. **S2.** A fluid txn never holds or skips a body for an **entity**, only for a block. (The gate's existing PLAYER_IN_BOX / OCCUPIED
+   waits stay where they are, before any txn begins; no txn effect reads entities.)
+5. **S3 rows (Steward runs them):** `TX:fluid.drain:drain+save` (8cTb) and `TX:fluid.write:place+save` (8cTc) on the farm-pond flow.
+   `dev.journal.killAt` accepts any registered TX name (+save) and logs `kill point <name> reached`.
+6. **REMOVING stays REMOVING.** A held or replayed drain keeps the region `REMOVING` and the revision `UNDOING`, never `PARTIAL`.
+7. **Log lines kept.** "stage fluids ... placed" (when the tiles become markers, 8cTc) and the removal's drain line ("removal drained N
+   fluid cell(s)...") stay, word for word.
+8. **Re-askers.** The player's undo, the orphan sweep, cancelVillage and Growths' UNDOING resume re-ask a Remove or undoRevision; each
+   joins the open drain (same key) or gets the detail in item 2. Steward's SD2 sweep only reads state.
+
+### Slice 8cTa as built (branch `slice/8cT` off origin/slice/DF a6b14ace; failing-first rows only; strict; $0; recorded 2026-11-19)
+
+- **Hooks only** (1fe46d39, 71b65d4f; no behaviour change): TEST `dev.fluid.hold {write?, settle?}`; kill points `FLc` (the keyed charge on
+  disk, the region record not) and `FLe` (an escape or unsettled drain's record saved, its writes not), accepted by `dev.journal.killAt`.
+- **Rows** (gate steps `8ct-a`..`8ct-f`; gate6crs `t8a`/`t8b`, gate6ch `t8c`/`t8e`/`t8f`, gate6cirr `t8d`), each ending in its conservation
+  check; F's unit `RegionFluids8cTaRedTest`. Red on a6b14ace + the hooks (the red worktree `_work/architect-mc-8cTred`, 71b65d4f plus the
+  driver fixes, local only): A refunded 10 lava for 9 standing + 1 taken (minted 1); B refunded 0 of 10 charged (chargedBodies dropped);
+  C the dispensed water source at the spout's predicted flow erased; D 1 water left in f2's box; E 50 sources and 1 escaped cell back
+  under a body recorded drained; F the done record waited until -1; F's unit DONE at once. Runs `20261119-023209-change` (A, C, D),
+  `20261119-024030-change` (E, F), `20261119-024820-change` (B), all under `artifacts/gate-runs-8cT` of the two worktrees.
+- **Driver fixes found by the red runs:** killAt rejected FLc/FLe (71b65d4f); F judged by the done record's `until` (the world's open,
+  117 ticks, hid an 80-tick wait); B blocks the record's first write at the start (the gate wrote it before the hook was armed).
+- **Merged** origin/slice/SV 4ade87c9 (8cG 9b25e299 inside), e9eecca8. Conflicts: RegionFluids (6: fields, the own-cell, spill/watch and
+  stray guards as the union of both sides, the scoop as DF round 3's per-cell rule in `scoopSurvival`, load's barrierDone beside
+  removalPhase/strayChunks), JournalDev (the killAt list), gate-chains, step-inputs; the river's done also records `barrierDone`.
+  Region units 379/0; full `./gradlew build` 1610 tests, 0 failures.
+- **Regression harness carried:** 8c-ingame, 8c-crash, 8c-survival (SV), the kit lane's goldens and the composer gate, with DF's rows.
