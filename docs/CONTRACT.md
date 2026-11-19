@@ -34288,3 +34288,29 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   piece's edge explicitly: piece ids alone are ambiguous (`route_d_a__b_1_1` is edge `route_d_a__b` group 1 of piece 1, or edge
   `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review).
 - Units: `LayoutsWallTest` (a bundled ring wall; districts b and b_1 lose no road piece), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).
+
+### Slice T4b fix round as built (the GPT review of 50c4a15f: NOT SAFE; one round)
+
+- **Verified in code (rule 5):** 2, 3 (the window from the tally to the txn, CELL roads with no box, rbox outside the general holds), 4, 5 and
+  6 confirmed, and the P2s confirmed. Finding 1 (saveWithWorld under /save-off) is left to Noah and SOFF, as asked.
+- **Fixed:**
+  - **2:** an unreadable journal holds the W probe, every settle, the sweep and the pending credits.
+  - **3, the min:** each refund is tallied per cell. Each chunk records what of its refunded cells stood before the restore's first write
+    (R4, a road's job, or the W), in the same tick as the writes. The W receipts it, and the refunds pay min(planned, found).
+  - **3, the hold:** a durable stash's box (a CELL road's too) holds every writer but the removal's own, from the tally to the settle. The
+    hold reaches every guard via `TxnServer.boxHeld`.
+  - **4:** a pre-T4 single-removal pending credit enters as a pile stash (read from the ledger file). Group and stage credits stay legacy.
+  - **5:** a stockpile road removal is a `removal.road` stash, durable before its job.
+  - **6:** a pile stash holds its pile (a txn resource; dissolve refuses), and a pile already gone owes.
+  - **P2s:** held(decided) until done; road owed keys kept; replayed owed keys come from the result; failWriteNow is rewired; the extras'
+    release is awaited.
+  - **Removal kinds:** they take the crate after the W.
+- **Merged origin/main v0.85.0 (SOFF):** a construction removal is refused at entry while saving is off; settles at a start park until
+  SaveHold admits; jobs and take-ups park with every job.
+- **Red** on 50c4a15f's runtime plus the rows (gate-runs-T4red): T4-mine (the break goes through, +2 gravel), T4-legacy (paid twice),
+  T4-nojournal (paid with the journal unread), and T4-wnf (the fault never fired).
+- **Green** at db6b4d48: t4-crash 78/0, txn-crash-crate 575/0, psv-crash 69/0. Also at fbd74fd1, 0 failures each: t4-xr, t4-xr-hold,
+  xr-survival, so-survival, rl-crash, dr-survival, hf-crash, txn-core, txn-owed, txn-crate, txn-holds, ps-crash, sad-survival, sad-crash,
+  fk-crash, fkb-crash, lc3-seal, lc3-undo and x-resume. Gradle full 1753/0.
+- **Not shown red:** T4-pileroad and T4-2nd-b pass at the base too (finding 5's loss and the W-to-credit crash were not reproduced in game);
+  5 rests on code and its unit.
