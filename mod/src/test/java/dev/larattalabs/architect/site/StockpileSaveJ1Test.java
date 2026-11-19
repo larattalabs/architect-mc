@@ -56,9 +56,13 @@ class StockpileSaveJ1Test {
 		int rs = rj.indexOf("Stockpiles.saveCredit(server);", rc);
 		assertTrue(rc >= 0 && rs > rc && rs < rj.indexOf("phase = DONE;", rc), "a standalone road's restore credit is saved before the job ends");
 
+		// (slice T4a, finding 4) a put-down's take-ups are planned at its commit, booked once its record is placed, and saved by its job
 		String ro = read(SITE + "RegionOverwrites.java");
-		String once = StockpileSaveHFTest.body(ro, "static Map<String, Integer> retakeOnce(");
-		assertTrue(once.indexOf("Stockpiles.saveCredit(srv);") > once.indexOf(".already()"), "a put-down's take-ups are saved once they book");
+		String book = StockpileSaveHFTest.body(ro, "static Map<String, Integer> bookTakeUp(");
+		assertTrue(book.contains("credited(t.key())") && book.contains(".already()"), "a put-down's take-ups book once per key");
+		String pj = read(SITE + "PlaceJob.java");
+		String tu = StockpileSaveHFTest.body(pj, "private boolean takeUpStep(MinecraftServer server)");
+		assertTrue(tu.indexOf("Stockpiles.saveCredit(server);") > tu.indexOf("bookTakeUp("), "a lot's take-ups are saved once they book");
 
 		String g = read(SITE + "Groups.java");
 		assertTrue(g.contains("Stockpiles.saveCredit(server);"), "Groups.credit goes through saveCredit (PS)");

@@ -114,6 +114,14 @@ public final class RoadBuilder {
 		return i.road() && i.construction() == null && i.spec().has(SPEC_CONSTRUCTION) && i.spec().get(SPEC_CONSTRUCTION).getAsBoolean();
 	}
 
+	/** (T4a, finding 4) The take-up {@link #convert} planned for a road, handed to its InfraJob (which books it once the road is placed). */
+	static final Map<String, RegionOverwrites.TakeUp> TAKE_UPS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (T4a) The take-up {@link #convert} planned for {@code roadId}, taken (null when none). */
+	static RegionOverwrites.@Nullable TakeUp takeUpOf(String roadId) {
+		return TAKE_UPS.remove(roadId);
+	}
+
 	/**
 	 * After the instant road's ACTIVE commit: the queue (centre-line order, bottom up per column), the group's crate (put down
 	 * when the group has none yet), every queued cell back to its {@code before}. Returns the record with its construction.
@@ -166,8 +174,13 @@ public final class RoadBuilder {
 					cuts.put(BlockPos.asLong(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[k]);
 				}
 			}
-			// once per placement (a convert run again after a stop credits nothing more)
-			RegionOverwrites.retakeOnce(srv, sibs, road.owner(), road.dimension(), cuts, dropAt(road), road.id(), "xr-road:" + road.id() + "@" + main.id());
+			// once per placement (a convert run again after a stop credits nothing more). (T4a, finding 4) planned here, booked by the InfraJob
+			// once the road's record is placed (a rollback before that has nothing to undo), its save waited on, never thrown past
+			RegionOverwrites.TakeUp tu = RegionOverwrites.planTakeUp(sibs, road.owner(), road.dimension(), cuts, dropAt(road), road.id(), "xr-road:" + road.id()
+				+ "@" + main.id());
+			if (tu != null) {
+				TAKE_UPS.put(road.id(), tu);
+			}
 		}
 		// every queued cell back to its before (no drops, no neighbour shape updates); cut cells stay cleared
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();

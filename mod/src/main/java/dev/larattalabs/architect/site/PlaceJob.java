@@ -60,6 +60,11 @@ final class PlaceJob implements Placement.Job {
 	static final int AFTER_COMMIT = 15;
 	/** A construction site's queued cells cleared over ticks (after P7). */
 	static final int CONSTRUCTION_CLEAR = 16;
+	/**
+	 * (slice T4a, finding 4) After P8: a survival region lot's take-ups ({@link #takeUp}) booked and saved. Its record is placed, so nothing
+	 * rolls it back; a refused save waits here (retried), never throws past the credit.
+	 */
+	static final int TAKE_UP = 17;
 	private static final int CLOCK = 16;
 
 	final String siteId;
@@ -111,6 +116,11 @@ final class PlaceJob implements Placement.Job {
 	int clearCursor;
 	/** The note and bed cells the placement finished with (for P8). */
 	@Nullable String finishNote;
+	/** (slice T4a) The take-ups planned at the put-down's journal commit (K4), booked in {@link #TAKE_UP}; persisted with the job. */
+	RegionOverwrites.@Nullable TakeUp takeUp;
+	/** (slice T4a) The tick before which a refused take-up save is not tried again; whether this session booked it (a save is owed). */
+	private transient long takeUpRetryAt;
+	private transient boolean takeUpBooked;
 	@Nullable String layerOver;
 	/** A survival construction site: converted when its last cell is written ({@link Sites#finishPlacing}). */
 	boolean construction;
@@ -310,6 +320,9 @@ final class PlaceJob implements Placement.Job {
 					return false;
 				}
 			}
+			if (phase == TAKE_UP) {
+				return takeUpStep(server);
+			}
 			if (phase == AFTER || phase == AFTER_COMMIT || phase == CONSTRUCTION_CLEAR) {
 				return journalAfter(server, level, deadline);
 			}
@@ -503,7 +516,7 @@ final class PlaceJob implements Placement.Job {
 				// (XR) a survival region's lot: the blocks its placement took up (a queued cell about to be cleared and rebuilt, a cell it
 				// wrote over or cleared) that another writer of the region owns and paid for go back to the owner's stockpile now
 				if (record != null) {
-					RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
+					takeUp = RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
 				}
 				Builder.placeCrate(level, new Builder.ConvertPlan(siteId, convert, dev.larattalabs.architect.journal.WorldJournal.empty(snapBox), snapBox,
 					newCrate, sharedGroup));
@@ -535,6 +548,39 @@ final class PlaceJob implements Placement.Job {
 				Fills.creative(server, lv, done);
 			}
 		}
+		if (takeUp != null && done != null && broken == null) {
+			phase = TAKE_UP; // (T4a) placed: its take-ups book now, past the last point a rollback could reach
+			return takeUpStep(server);
+		}
+		phase = DONE;
+		return true;
+	}
+
+	/**
+	 * (slice T4a, finding 4) {@link #TAKE_UP}: the take-ups booked once (keyed: a resumed job books the same plan, never twice), then saved with
+	 * the world. A refused save (or any failure here) waits and retries every 5 s: the placement is done and is never rolled back from here.
+	 */
+	private boolean takeUpStep(MinecraftServer server) {
+		if (server.getTickCount() < takeUpRetryAt) {
+			return false;
+		}
+		RegionOverwrites.TakeUp t = takeUp;
+		if (t == null) {
+			phase = DONE;
+			return true;
+		}
+		try {
+			takeUpBooked |= !RegionOverwrites.bookTakeUp(server, t).isEmpty();
+			if (takeUpBooked) {
+				Stockpiles.saveCredit(server); // (J1, N1's shape) the take-up's credit saved with the world before the job ends
+			}
+		} catch (RuntimeException e) {
+			takeUpRetryAt = server.getTickCount() + 100L;
+			dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} were booked but their save failed ({}); it waits and saves again",
+				siteId, t.key(), e.getMessage());
+			return false;
+		}
+		takeUp = null;
 		phase = DONE;
 		return true;
 	}
@@ -821,6 +867,9 @@ final class PlaceJob implements Placement.Job {
 		if (finishNote != null) {
 			o.addProperty("finishNote", finishNote);
 		}
+		if (takeUp != null) {
+			o.add("takeUp", takeUp.toJson());
+		}
 		return o;
 	}
 
@@ -875,6 +924,7 @@ final class PlaceJob implements Placement.Job {
 			j.clearCursor = o.has("clearCursor") ? o.get("clearCursor").getAsInt() : 0;
 		}
 		j.finishNote = o.has("finishNote") ? o.get("finishNote").getAsString() : null;
+		j.takeUp = o.has("takeUp") && o.get("takeUp").isJsonObject() ? RegionOverwrites.TakeUp.fromJson(o.getAsJsonObject("takeUp")) : null;
 		return j;
 	}
 

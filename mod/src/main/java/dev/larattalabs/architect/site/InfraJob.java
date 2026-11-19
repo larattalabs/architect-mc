@@ -48,6 +48,8 @@ final class InfraJob implements Placement.Job {
 	static final int WRITE = 3;
 	static final int AFTER_COMMIT = 4;
 	static final int DONE = 5;
+	/** (slice T4a, finding 4) After the record is placed: a construction road's take-ups ({@link #takeUp}) booked and saved; a refused save waits. */
+	static final int TAKE_UP = 6;
 	private static final int CLOCK = 64;
 
 	final String siteId;
@@ -64,6 +66,11 @@ final class InfraJob implements Placement.Job {
 	@Nullable String entry;
 	boolean beforeRecord = true;
 	@Nullable String broken;
+	/** (slice T4a) The take-ups {@link RoadBuilder#convert} planned, booked in {@link #TAKE_UP} once the road is placed; persisted with the job. */
+	RegionOverwrites.@Nullable TakeUp takeUp;
+	private transient long takeUpRetryAt;
+	private transient boolean takeUpBooked;
+	private transient @Nullable PlaceResult takeUpResult;
 	/** The cells to write, lowest first, and their planned values (rebuilt from the entry after a load). */
 	transient long[] positions = new long[0];
 	transient Value[] afters = new Value[0];
@@ -653,6 +660,7 @@ final class InfraJob implements Placement.Job {
 					Infra done = record.withPlacing(false);
 					if (RoadBuilder.wanted(done)) {
 						done = RoadBuilder.convert(level, done); // 6c 0c (C16): a construction road: its cells go back, queued
+						takeUp = RoadBuilder.takeUpOf(siteId); // (T4a) its take-ups: booked below, once the road's record is placed
 					}
 					Infras.put(server, done);
 					record = done;
@@ -669,8 +677,17 @@ final class InfraJob implements Placement.Job {
 					if (done.road()) {
 						dev.larattalabs.architect.site.roads.RoadSync.changed(server, dimension, done.box());
 					}
-					futures.forEach(x -> x.complete(new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.copyOf(skipped))));
+					PlaceResult pr = new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.copyOf(skipped));
+					if (takeUp != null) {
+						phase = TAKE_UP; // (T4a) placed: its take-ups book now, past the last point a rollback could reach
+						takeUpResult = pr;
+						return takeUpStep(server);
+					}
+					futures.forEach(x -> x.complete(pr));
 					return true;
+				}
+				case TAKE_UP -> {
+					return takeUpStep(server);
 				}
 				default -> {
 					return true;
@@ -801,7 +818,39 @@ final class InfraJob implements Placement.Job {
 		JsonArray n = new JsonArray();
 		notes.forEach(n::add);
 		o.add("notes", n);
+		if (takeUp != null) {
+			o.add("takeUp", takeUp.toJson());
+		}
 		return o;
+	}
+
+	/**
+	 * (slice T4a, finding 4) {@link #TAKE_UP}: the road's take-ups booked once (keyed) and saved with the world. A refused save (or any failure
+	 * here) waits and retries every 5 s; the road is placed and is never rolled back from here. Its futures complete once it is saved.
+	 */
+	private boolean takeUpStep(MinecraftServer server) {
+		if (server.getTickCount() < takeUpRetryAt) {
+			return false;
+		}
+		RegionOverwrites.TakeUp t = takeUp;
+		if (t != null) {
+			try {
+				takeUpBooked |= !RegionOverwrites.bookTakeUp(server, t).isEmpty();
+				if (takeUpBooked) {
+					Stockpiles.saveCredit(server); // (J1, N1's shape) saved with the world before the job ends
+				}
+			} catch (RuntimeException e) {
+				takeUpRetryAt = server.getTickCount() + 100L;
+				dev.larattalabs.architect.Architect.LOGGER.warn("Placing {}: its take-ups {} were booked but their save failed ({}); it waits and saves again",
+					siteId, t.key(), e.getMessage());
+				return false;
+			}
+		}
+		takeUp = null;
+		phase = DONE;
+		PlaceResult pr = takeUpResult != null ? takeUpResult : new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.of());
+		futures.forEach(x -> x.complete(pr));
+		return true;
 	}
 
 	static InfraJob fromJson(JsonObject o) {
@@ -825,6 +874,7 @@ final class InfraJob implements Placement.Job {
 			x.forEach(e -> j.extras.add(Extra.fromJson(e.getAsJsonObject())));
 		}
 		j.writeMain = !o.has("writeMain") || o.get("writeMain").getAsBoolean();
+		j.takeUp = o.has("takeUp") && o.get("takeUp").isJsonObject() ? RegionOverwrites.TakeUp.fromJson(o.getAsJsonObject("takeUp")) : null;
 		if (j.phase == WRITE) {
 			j.cursor = 0; // the cells are written again from the start (the same values: idempotent)
 		}

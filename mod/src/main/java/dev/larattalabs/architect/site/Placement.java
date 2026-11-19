@@ -238,6 +238,8 @@ public final class Placement {
 				complete = true;
 				if (j instanceof PlaceJob pj) {
 					pj.broken = "it failed (" + e + ")";
+				} else if (j instanceof InfraJob ij) {
+					ij.broken = "it failed (" + e + ")"; // (slice T4a, finding 4) rolled back, its futures failed: never reported placed
 				} else if (j instanceof RestoreJob rj) {
 					rj.broken = "it failed (" + e + ")";
 				}

@@ -200,18 +200,47 @@ public final class RegionOverwrites {
 	}
 
 	/**
-	 * (XR) A put-down's take-ups (a lot's placement and clear, a road's cuts), credited to the owner's stockpile once under {@code key} (the
-	 * writer's placement): a job resumed after a stop runs its put-down again, and the journal's befores it reads give the same cells, so
-	 * they are never credited twice. {@code cells}: position to the block taken up. Returns the items given back (empty when none, or
-	 * when the key was credited already).
+	 * (XR; slice T4a, finding 4) A put-down's take-ups, planned: per owner of a taken-up paid cell, the items its block gives back, credited
+	 * later into {@code pile}'s stockpile under {@code key} (the writer's placement) by {@link #bookTakeUp}. Planned where the put-down reads
+	 * its befores (right after its journal commit); booked only once the placement can no longer roll back (its record placed), and saved by
+	 * the caller, which waits on a refused save and never throws past a credit. Persisted with the job, so a resumed job books the same plan.
 	 */
-	static Map<String, Integer> retakeOnce(MinecraftServer srv, List<Live> ls, @Nullable String owner, String dimension, Map<Long, BlockState> cells,
-		BlockPos dropAt, String by, String key) {
+	record TakeUp(String pile, String dimension, String key, Map<String, Map<String, Integer>> byOwner, long dropAt, String by) {
+		JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("pile", pile);
+			o.addProperty("dimension", dimension);
+			o.addProperty("key", key);
+			o.addProperty("dropAt", dropAt);
+			o.addProperty("by", by);
+			JsonObject b = new JsonObject();
+			byOwner.forEach((k, v) -> b.add(k, Builder.counts(v)));
+			o.add("byOwner", b);
+			return o;
+		}
+
+		static TakeUp fromJson(JsonObject o) {
+			Map<String, Map<String, Integer>> b = new TreeMap<>();
+			o.getAsJsonObject("byOwner").entrySet().forEach(e -> {
+				Map<String, Integer> m = new TreeMap<>();
+				e.getValue().getAsJsonObject().entrySet().forEach(x -> m.put(x.getKey(), x.getValue().getAsInt()));
+				b.put(e.getKey(), m);
+			});
+			return new TakeUp(o.get("pile").getAsString(), o.get("dimension").getAsString(), o.get("key").getAsString(), b, o.get("dropAt").getAsLong(),
+				o.get("by").getAsString());
+		}
+	}
+
+	/**
+	 * (XR) {@link TakeUp}'s plan: {@code cells} (position to the block taken up) against the region's other live writers {@code ls}. Null
+	 * when nothing goes back (no pile of {@code owner} in {@code dimension}, no other writer, no owned block among the cells). Reads only.
+	 */
+	static @Nullable TakeUp planTakeUp(List<Live> ls, @Nullable String owner, String dimension, Map<Long, BlockState> cells, BlockPos dropAt, String by,
+		String key) {
 		Stockpiles.Pile pile = Stockpiles.get(owner);
 		if (pile == null || !pile.dimension.equals(dimension) || ls.isEmpty()) {
-			return Map.of();
+			return null;
 		}
-		Map<String, Integer> all = new TreeMap<>();
 		Map<String, Map<String, Integer>> byOwner = new TreeMap<>();
 		for (var e : cells.entrySet()) {
 			BlockPos p = BlockPos.of(e.getKey());
@@ -225,32 +254,39 @@ public final class RegionOverwrites {
 			if (t < 0) {
 				continue;
 			}
-			who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> {
-				all.merge(c.item(), c.count(), Integer::sum);
-				byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(), Integer::sum);
-			});
+			who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(),
+				Integer::sum));
 		}
-		if (all.isEmpty() || pile.ledger.credited(key)) {
-			return all.isEmpty() ? all : Map.of();
+		return byOwner.isEmpty() ? null : new TakeUp(pile.owner(), dimension, key, byOwner, dropAt.asLong(), by);
+	}
+
+	/**
+	 * (XR, JR) Books {@code t} once under its key: each owner's share capped by and taken out of its paid record, then one keyed credit into the
+	 * pile, past capacity as OVF credits. In memory only: the caller saves (and waits on a refused save). Returns the items credited now (empty
+	 * when the key was credited already, or nothing was left after the cap). Server thread.
+	 */
+	static Map<String, Integer> bookTakeUp(MinecraftServer srv, TakeUp t) {
+		Stockpiles.Pile pile = Stockpiles.get(t.pile());
+		if (pile == null || !pile.dimension.equals(t.dimension()) || pile.ledger.credited(t.key())) {
+			return Map.of();
 		}
-		// (JR) each owner's share never more than its paid record (taken out of it)
-		all.clear();
-		for (var e : byOwner.entrySet()) {
-			Map<String, Integer> capped = Stockpiles.fromPaid(e.getKey(), e.getValue());
-			e.setValue(capped);
-			capped.forEach((k, v) -> all.merge(k, v, Integer::sum));
+		Map<String, Integer> all = new TreeMap<>();
+		Map<String, Map<String, Integer>> capped = new TreeMap<>();
+		for (var e : t.byOwner().entrySet()) {
+			Map<String, Integer> c = Stockpiles.fromPaid(e.getKey(), e.getValue());
+			capped.put(e.getKey(), c);
+			c.forEach((k, v) -> all.merge(k, v, Integer::sum));
 		}
 		if (all.isEmpty()) {
 			return all;
 		}
-		if (Stockpiles.credit(srv, pile, key, all, dropAt).already()) {
+		if (Stockpiles.credit(srv, pile, t.key(), all, BlockPos.of(t.dropAt())).already()) {
 			return Map.of();
 		}
-		Stockpiles.saveCredit(srv); // (J1, N1's shape) one save per put-down's take-ups, before the job that read the befores can end
 		if (Builder.TRACE_REFUNDS) {
-			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", by, key, all);
+			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", t.by(), t.key(), all);
 		}
-		byOwner.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
+		capped.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
 			.merge(k, v, Integer::sum)));
 		return all;
 	}
@@ -313,12 +349,12 @@ public final class RegionOverwrites {
 	 * or a cell its placement changed (written over, or cleared for good), that another writer of the region owns and paid for goes back
 	 * to the owner's stockpile now. Nothing outside a region's group.
 	 */
-	static void lotTakeUp(MinecraftServer srv, ServerLevel level, String siteId, @Nullable String group, @Nullable String owner, String dimension,
+	static @Nullable TakeUp lotTakeUp(MinecraftServer srv, ServerLevel level, String siteId, @Nullable String group, @Nullable String owner, String dimension,
 		Construction c, dev.larattalabs.architect.placement.Anchors.Bounds box) {
 		List<Live> ls = lives(srv, group, siteId);
 		JournalStore.Meta m = ls.isEmpty() ? null : SiteJournal.main(siteId);
 		if (m == null) {
-			return;
+			return null;
 		}
 		int dx = box.maxX() - box.minX() + 1;
 		int dz = box.maxZ() - box.minZ() + 1;
@@ -336,7 +372,7 @@ public final class RegionOverwrites {
 			}
 			up.put(e.getKey(), was);
 		}
-		retakeOnce(srv, ls, owner, dimension, up, at, siteId, "xr-lot:" + siteId + "@" + m.id());
+		return planTakeUp(ls, owner, dimension, up, at, siteId, "xr-lot:" + siteId + "@" + m.id()); // (T4a) booked by the job once it is placed
 	}
 
 	/** A writer's kind. */
