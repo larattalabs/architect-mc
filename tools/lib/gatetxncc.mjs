@@ -975,7 +975,7 @@ export async function registerTCC(steps, h) {
         await k6Row(tag, [site], site, cp, items, { start: { killAt: 'TX:removal.site:apply:0' } });
       }
     }
-    // T4-nojournal (fix round, finding 2): a removal txn persisted (its W not yet on disk: halted at its intent), then the world opened with
+    // T4-nojournal (fix round, finding 2): a removal txn decided (its W not yet on disk: halted at its decision), then the world opened with
     // its journal unreadable: the W probe must hold (unknown), never read "released": nothing paid; with the journal back it completes once
     if (want('T4-nojournal')) {
       const tag = 'T4-nojournal';
@@ -983,7 +983,7 @@ export async function registerTCC(steps, h) {
       if (site) {
         const { cp, items } = await partBuilt(tag, site, 0.4);
         const jf = path.join(W.dir, 'architect-journal', 'journal.json');
-        await k6Row(tag, [site], site, cp, items, { point: 'TX:removal.site:intent', expectHeld: true,
+        await k6Row(tag, [site], site, cp, items, { point: 'TX:removal.site:decided', expectHeld: 'open',
           after: () => { fs.copyFileSync(jf, jf + '.t4keep'); fs.writeFileSync(jf, '{ not json'); },
           reopenAfter: () => { fs.copyFileSync(jf + '.t4keep', jf); } });
       }
@@ -1129,6 +1129,7 @@ export async function registerTCC(steps, h) {
       check(!!rid, `${tag}: a construction road fed from the stockpile of ${owner} (${rid})`, bv);
       if (rid) {
         const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+        for (let i = 0; i < 60; i++) { const rv0 = await roadState(rid).catch(() => null); if (rv0 && !/plac/i.test(String(rv0.state))) break; await L.sleep(1000); }
         await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
         const bill = (await api(`stock ${bv.group}`).catch(() => ({}))).outstandingBySite?.[rid] ?? {};
         const half = {};
@@ -1160,9 +1161,14 @@ export async function registerTCC(steps, h) {
         await wait(2000);
         const before = await rparts();
         check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
-        await ps({ refuseCreditSaves: 5 });
+        // the job queued and paused before its first write (its stash saved), then every ledger write failing (its chunks flush, its ledger
+        // does not: the review's case), then the job runs and the game halts unsaved
+        await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
         const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
-        await wait(4000);
+        await wait(2000);
+        await ps({ failLedgerWrites: 1000 });
+        await call('dev.removal.pause', { site: rid, off: true }, 10_000);
+        await wait(5000);
         call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
         const down = await haltWait();
         check(down, `${tag}: halted unsaved after the removal (${json(rm).slice(0, 160)})`);
