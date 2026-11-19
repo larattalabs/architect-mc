@@ -114,6 +114,12 @@ public final class SaveTestHooks {
 		o.addProperty("depositMoved", depositMoved);
 		o.addProperty("rawSaveIn", rawSaveIn);
 		o.addProperty("rawSaves", rawSaves);
+		MinecraftServer srv = Stockpiles.SERVER;
+		com.google.gson.JsonArray off = new com.google.gson.JsonArray();
+		if (srv != null) {
+			Stockpiles.levelsSavingOff(srv).forEach(off::add);
+		}
+		o.add("levelsOff", off); // (SOFF2 fix round) the levels with saving off now
 		return o;
 	}
 

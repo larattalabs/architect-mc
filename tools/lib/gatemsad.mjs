@@ -274,6 +274,25 @@ export async function registerSAD(steps, h) {
       check(c1.crate?.present === true && G.same(c1.ledger?.stock, crate0.ledger?.stock) && G.same(c1.ledger?.placed, crate0.ledger?.placed) && G.same(stockOf(LdS), stockOf(la))
         && json(LdS.paid ?? {}) === json(la.paid ?? {}), `SAC1: after the unclean restart the shared crate stands with its ledger as before (stock ${sum(c1.ledger?.stock)}, placed ${sum(c1.ledger?.placed)}), the stockpile and its paid records as saved: no mint, no loss`, out.sac1);
     }
+    // (slice SOFF2 fix round, finding 4) SACL: adoptCrates with every stockpile ledger write failing (TEST failLedgerWrites, a full disk):
+    // the adoption is refused before a source crate is cleared or a reference retired; a halt then finds the crate standing with its ledger
+    // and the stockpile as saved: no loss (before: the crates cleared and flushed, the references retired, the ledger never written)
+    {
+      const bL = await baseline('SACL');
+      const crateL = await siteState(ids.house_4);
+      await call('dev.stockpile.ps', { failLedgerWrites: true }, 30_000);
+      const ans = {};
+      const LdL = await halt('SACL', W, bL, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000)
+        .then((r) => { ans.r = r?.refused ?? 'joined'; }, (e) => { ans.r = `error: ${String(e?.message ?? e)}`; })
+        .finally(() => call('dev.stockpile.halt', {}, 10_000).catch(() => null)));
+      if (LdL) {
+        const la = (await pile()).ledger ?? {};
+        const c1 = await siteState(ids.house_4);
+        out.sacl = { answer: ans.r, crate: [crateL.crate, c1.crate], crateLedger: [crateL.ledger, c1.ledger], stock: [stockOf(LdL), stockOf(la)] };
+        check(c1.crate?.present === true && G.same(c1.ledger?.stock, crateL.ledger?.stock) && G.same(c1.ledger?.placed, crateL.ledger?.placed) && G.same(stockOf(LdL), stockOf(la))
+          && json(LdL.paid ?? {}) === json(la.paid ?? {}), `SACL: adoptCrates with the ledger write failing (${String(ans.r).slice(0, 160)}); after the unclean restart the shared crate stands with its ledger as before (stock ${sum(c1.ledger?.stock)}, placed ${sum(c1.ledger?.placed)}), the stockpile and its paid records as saved: no loss`, out.sacl);
+      }
+    }
     const p0 = await pile();
     const crateBefore = await siteState(ids.house_4);
     // SAC2: halted between adoptCrates' two saves (the ledger joined and saved with the world; the groups' crates cleared, the sites' crate

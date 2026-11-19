@@ -483,6 +483,20 @@ export async function registerFK(steps, h) {
       const hk = (await call('dev.stockpile.saved', {}, 60_000)).testHooks ?? {};
       waited = { phase: s?.phase, state: s?.state, lever: leverUnlocked(s ?? {}), writesFailed: hk.ledgerWritesFailed };
       check(s?.phase === 'FILLING' && !leverUnlocked(s ?? {}) && (hk.ledgerWritesFailed ?? 0) >= 1, `${tag}: with the ledger write failing (${hk.ledgerWritesFailed} failed) the fill waits: phase ${s?.phase}, the lever ${leverUnlocked(s ?? {}) ? 'unlocked' : 'locked'} (never FILLED or unlocked over a ledger not on disk)`, waited);
+      // (SOFF2 fix round, finding 2) while it waits for its ledger, nothing billed leaves its containers: a player's menu take, a hopper
+      // pull from below, a Fabric Transfer API extraction (each probe puts back or aborts what it got)
+      const ex = [];
+      for (const c of (s?.containers ?? []).slice(0, 2)) {
+        if (!Array.isArray(c.at)) continue;
+        const it = Object.keys(c.holds ?? c.declared ?? {})[0] ?? 'minecraft:flint';
+        const tk = await call('dev.fk.take', { pos: c.at, slot: 0, click: 'pickup' }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const tr = await call('dev.fk.transfer', { pos: c.at, item: it, max: 64 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const pl = await call('dev.fk.pull', { pos: c.at, n: 10 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        ex.push({ at: c.at, item: it, carried: tk.carried ?? tk.error ?? null, extracted: tr.extracted ?? tr.error ?? null, pulled: pl.pulled ?? pl.error ?? null });
+      }
+      waited.extract = ex;
+      const leaked = ex.filter((x) => (x.carried && x.carried !== '') || (typeof x.extracted === 'number' && x.extracted > 0) || sum(x.pulled ?? {}) > 0);
+      check(ex.length > 0 && leaked.length === 0, `${tag}: while the fill waits for its ledger nothing billed leaves its containers (a menu take, a Transfer API extraction, a hopper pull from below): ${json(ex).slice(0, 400)}`, waited);
       call('dev.stockpile.halt', {}, 10_000).catch(() => null);
       if (!(await halt(tag))) { await L.leaveWorld(); return null; }
     } else {

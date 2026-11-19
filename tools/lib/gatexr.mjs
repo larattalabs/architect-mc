@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, creditSaveOff = false } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, creditSaveOff = false, cancelParked = false } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -98,7 +98,17 @@ export async function registerXr(steps, h) {
             await L.sleep(4000);
             const sv2 = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
             out.creditSaveOff.heldAfter = sv2?.hold?.state;
+            if (cancelParked) {
+              // (SOFF2 fix round, finding 1) the parked lot's batch cancelled while held: a rollback would restore the paid blocks it took
+              // up while its refund stays credited; it must finish instead (committing)
+              const jobs = await call('dev.placement.jobs', {}, 30_000).catch(() => []);
+              const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && x.phase === 15 && x.batch);
+              out.cancel = { job: pj ?? null };
+              if (pj) out.cancel.answer = await L.cmd(`/apitest bcancel ${pj.batch}`).catch((e) => String(e?.message ?? e));
+              await L.sleep(3000);
+            }
             await call('dev.stockpile.ps', { noSave: { 'minecraft:the_nether': false } }, 30_000);
+            if (out.cancel) out.cancel.at = Date.now();
             return;
           }
           await L.sleep(2000);
@@ -125,7 +135,8 @@ export async function registerXr(steps, h) {
       const rs = await G.rsState(ctx, region);
       out.mid = { retaken: back, state: st?.view?.state, done: rs.build?.done ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
-      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: creditSaveOff ? 900_000 : 3_600_000 });
+      const until = cancelParked ? () => !!out.cancel?.at && Date.now() > out.cancel.at + 45_000 : undefined;
+      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: creditSaveOff ? 900_000 : 3_600_000, ...(until ? { until } : {}) });
       out.state = f.last.st.view.state;
     }
     if (watch) {
@@ -205,6 +216,14 @@ export async function registerXr(steps, h) {
       check(G.exact(r.built), `xr_demo (saving off inside a credit save): conservation exact after the build, every item: ${json(r.built.diff)} (identity ${r.built.identity})`);
       check(G.same(r.retaken, want), `xr_demo (saving off inside a credit save): retaken = the overwritten paid cells' items: ${json(r.retaken)} vs ${json(want)}`);
       check(r.removedOk && G.exact(r.removed), `xr_demo (saving off inside a credit save): removed, conservation exact: ${json(r.removed.diff)}`);
+    }
+    // (SOFF2 fix round) the same, and the parked lot's batch cancelled while held: never rolled back keeping the refund
+    if (process.env.GATE_XR_SOFF !== 'none') {
+      const r = await one('prog:xr_demo', { creditSaveOff: true, cancelParked: true });
+      out.soffCancel = { ...r, owRows: r.owRows?.slice(0, 40) };
+      check((r.creditSaveOff?.fired ?? 0) >= 1 && !!r.cancel?.job, `xr_demo (cancel while parked): the hook fired (${r.creditSaveOff?.fired}); the parked lot's batch cancelled (${json(r.cancel?.job)}; ${json(r.cancel?.answer)?.slice(0, 120)})`, r.cancel);
+      check(G.exact(r.built), `xr_demo (cancel while parked): conservation exact after the cancel and the release, every item: ${json(r.built.diff)} (identity ${r.built.identity}; the lot ${r.state})`);
+      check(r.removedOk && G.exact(r.removed), `xr_demo (cancel while parked): removed, conservation exact: ${json(r.removed.diff)}`);
     }
     // mid-build removals on xr_demo: after its first take-up (a target over a target, the street stage), and after its lots were put
     // down (their placement's take-ups credited, the pavement's 81 + 47 + 3 stone bricks back), the lots starved, not built

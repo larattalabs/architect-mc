@@ -369,6 +369,31 @@ export async function registerSOFF(steps, h) {
       await ps({ noPeriodic: false });
     }
 
+    // ---------------------------------------------------------------- (SOFF2 fix round) Y: /save-off whose barrier fails
+    {
+      await ps({ noPeriodic: true });
+      const [IY, kY] = await needed();
+      check(!!IY, `Y: an item the targets still lack (${IY} x${kY})`);
+      await cmd(`/give @s ${IY ?? B} ${Math.max(1, kY)}`);
+      out.Y = await crashCase('Y', [IY ?? B], async (n) => {
+        const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+        n.moved = ins.moved;
+        await ps({ failLedgerWrites: true });
+        n.answer = await cmd('/save-off').then((r) => json(r ?? null), (e) => `error: ${String(e?.message ?? e)}`);
+        const s = await saved();
+        n.levelsOff = s.testHooks?.levelsOff;
+        n.holdAfter = s.hold?.state;
+        check(ins.moved > 0 && Array.isArray(n.levelsOff) && n.levelsOff.length === 0 && n.holdAfter === 'HELD', `Y: ${ins.moved} deposited, then /save-off with its barrier failing (the ledger write fails): refused, saving still on in every level (off: ${json(n.levelsOff)}), held (${n.holdAfter}); answer ${String(n.answer).slice(0, 200)}`, n);
+        await ps({ failLedgerWrites: false });
+        let s2;
+        for (let i = 0; i < 20; i++) { s2 = await saved(); if (s2.hold?.state === 'OPEN') break; await L.sleep(1000); }
+        n.released = s2?.hold;
+        check(s2?.hold?.state === 'OPEN', `Y: the ledger writable again: released only after a confirmed save (${json(s2?.hold)})`, n);
+      }, { expectDisk: 'live' });
+      await cmd('/save-on').catch(() => null);
+      await ps({ noPeriodic: false });
+    }
+
     // ---------------------------------------------------------------- (SOFF2) S: the start with saving off after an unclean stop
     {
       // paused: what they lack delivered and saved (the baseline); then unpaused: the cells they build next are on no saved ledger
