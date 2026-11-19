@@ -34194,3 +34194,54 @@ Overlap: items 1 and 4 extend TXN-S (8cT's helper). Item 3 is OVF-S3 as already 
   (`resumeCommitted` ignores `worldDurable`), moot here (no take); 2 cargo cancel unseals before durable: plausible, not shown; 3 cargo key
   reuse: confirmed (`cargo:<target>:<cell>`); 4 data-stack refusal strands: confirmed via decStock's stall, moot here; 5 fire, wither,
   dragon bypass the seal: confirmed (only explosion and piston hooks); 6 ops resume double-pays: partly (needs the carriage). 2-5 land in T4c.
+
+### Slice T4a fix round as built (the early GPT review of e5ea86b4: NOT SAFE; one round)
+
+- **Verified in code (rule 5):** 4.1 confirmed (a `TAKE_UP` PlaceJob missed the load's ACTIVE exception and `rollBack` had no guard), 4.2
+  confirmed (no confirmed queue generation before booking), 4.3 confirmed (`RoadBuilder.convert` books cuts never reapplied after an ACTIVE
+  recovery), 4.4 confirmed (missing pile, wrong dimension and "already credited" all returned empty), 4.5 confirmed (the tile's
+  `retakeToPile`), P2 6 confirmed. Cargo key reuse and the wither/dragon seal bypass also confirmed; both left for T4c, as the coordinator planned.
+- **Fixed:** a job in `TAKE_UP` never rolls back (rollBack refuses it; an unclean start resumes it; it is marked committing); its item is
+  reported placed and its futures answered when it starts waiting, so a refused save never holds the batch. It books only after a confirmed
+  queue generation holds its plan. The plan is per cell, and only cells whose taken-up block is gone are credited. A missing or unreadable
+  pile holds; only a credited key is done. A tile's free pass plans its cells into the job's take-up (persisted). A throwing InfraJob's extras
+  are released and dropped. An imported `decStock` is ignored.
+- **Rows:** t4-xr-hold red at b371a58a (cancel: +47 stone_bricks, and losses; 20261119-073212), green at 23b41f58 (cancel and halt 10/0;
+  -073422). Units in `TakeUpT4aTest` (evidence, booking status, phase guards, the tile plan, the extras, decStock): red on e5ea86b4 (they
+  don't compile there or fail their source checks), green now.
+
+### Slice T4b as built (removals on the txn layer; $0; strict)
+
+- **Shape:** a removal's settle runs as `removal.site` / `removal.road`. Its first effect is `site.restore` (W), which writes the committed
+  restore again from the journal's undo group (receipted in every chunk). The crate settle, the refunds and (N8) a stockpile site's
+  `pile.refund` (L, under `site:<id>@<placedAt>`) follow it. The barrier then publishes the chunks before the ledger.
+  - **Before the commit:** each single removal's stash names its undo group and is saved confirmed.
+  - **At a start:** the Sites check reads the stashes from stockpiles.json itself. A committed removal with a stash is never judged by a
+    threshold, brought back or released early.
+  - **The sweep:** it reads the journal and holds while any store failed to load. A pending road with a stash settles through `removal.road`.
+  - **N3:** an open removal txn holds its box, and players can't break blocks in it.
+  - **Also:** finding 6's guard, and finding 5 (group owed keys persisted, and reported on a failure).
+  - **Aliases:** a removal's TX points also answer `crate.settle`'s, and CS1 fires inside the refund barrier.
+- **Red to green:** t4-crash T4-keep, T4-keeps, T4-shared, T4-2nd, T4-wnf, T4-corrupt 43/0 (20261119-092547). `GroupsOwedT4bTest` and
+  `RemovalBoxT4bTest` pass. `TxnRemovalModelT4Test` keeps the base red and T4's shape clean.
+- **Deviations:**
+  - The decision stays the journal's undo commit, with the stash as the intent, rather than a D effect in txn.json.
+  - N3's min(planned, found) backstop is not built: the box hold makes the window unreachable.
+  - Pre-T4 pending credits and decCredit keep their legacy resolvers.
+  - RVU1/RVU2/FKC1/FKC2 still fire where they are (group paths, T4c).
+  - The rows changed to match T4b's rules:
+    - DR4a/DR4c accept the N8 credit;
+    - fk-crash CS1 accepts the stash;
+    - LR-2 now completes the decided removal.
+- **Ran** (`change --only --no-cache`, 2 shards, own run dirs):
+  - **At e0b26d75:** t4-xr 6/0, t4-xr-hold 10/0, xr-survival 24/0, so-survival 55/0, rl-crash 110/0, hf-crash 56/0, txn-core 75/0,
+    txn-owed 73/0, txn-crate 68/0, txn-holds 50/0, psv-crash 69/0, sad-survival 56/0, sad-crash 26/0, fkb-crash 48/0, lc3-seal 40/0,
+    lc3-undo 16/0, x-resume 35/0.
+  - **Then:** dr-survival 95/0, t4-crash 43/0, ps-crash 81/0 at cb1b9ff3; txn-crash-crate 575/0 at a94bb79b; fk-crash 73/0 at 3229719d.
+  - **Units:** unit-scope kit 149/0, Gradle full 1687/0.
+- **W before L (the coordinator's check):**
+  - No removal credit effect (`pile.credit`, `owed.owe`, `pile.refund`) saves the ledger when it applies: each marks it dirty. Every
+    ledger save that carries a world change flushes the chunks first and refuses when they are not durable.
+  - A ledger written early by a plain ledger-only save still mints nothing: the undo group's entries are kept until the txn retires, so
+    recovery redoes a lost W from the journal (its probe is the chunk receipts), and the block changes come back.
+  - So T4b adds no core W→L barrier. The crash rows are txn-crash-crate's S-TX/G-TX `apply:<i>` points, bare and +save, through the alias.
