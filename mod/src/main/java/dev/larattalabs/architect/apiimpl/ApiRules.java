@@ -57,7 +57,10 @@ public final class ApiRules {
 		// (8b EV) SiteEvents.SETTLEMENT_CHANGED: one coalesced "re-read" signal per (owner, region)
 		"settlementChanged",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion");
+		"apiVersion",
+		// (LYW) Regions.layout of a walled town: its wall (connector.wall, ends its line, width and height), gates, corner towers, the wall's
+		// lots (PartShape.wall/wallAt), and a district's connecting routes laid in stairs or graded sections
+		"layoutWalls");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:

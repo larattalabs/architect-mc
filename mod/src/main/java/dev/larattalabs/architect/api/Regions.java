@@ -467,7 +467,8 @@ public interface Regions {
 	/**
 	 * (8b LY, feature {@code "regionLayout"}) A region's geometry for a map: its lots (pads too) and parts, with kind, box and ends
 	 * ({@link RegionLayout}). Cached per IR sha and head revision; the same in creative and survival. Empty for an unknown region. Server
-	 * thread; loads no chunk, asks no sidecar. Since 1.69.0.
+	 * thread; loads no chunk, asks no sidecar. Since 1.69.0. (LYW, feature {@code "layoutWalls"}; Since NEXT) A walled town's wall, gates
+	 * and corner towers, and a district's stair or graded connecting routes ({@link PartShape}).
 	 */
 	default Optional<RegionLayout> layout(String regionId) {
 		throw new UnsupportedOperationException("Regions.layout needs Architect API 1.69.0 (feature regionLayout)");

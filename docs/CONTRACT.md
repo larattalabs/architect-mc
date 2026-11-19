@@ -33515,3 +33515,18 @@ Steward may call `placeConnector` and `checkConnector` (N-8b-3); BL after T2b (N
 **Gates:** units per slice (CXC failing first on main; the BuildStatus precedence table; the 200-target budget, 39 us of 500; layout over
 the goldens; the coalescer). In the batch: `cx-survival` checks the dry run's quote against the check's bill, a maxBill one under the bill
 refused BILL_CAP with nothing written, a lot cap refused, the place typed at exactly its bill; gatedrs DR12 checks SAVE_REFUSED.
+
+### Slice LYW: town walls in `Regions.layout` (light; branch `slice/LYW` off main cfeef06e; versions NEXT; recorded 2026-11-18)
+Steward's 8bS-2: a walled town's layout had no wall, since `Layouts.ofAnswer` read only `link`, `legs` and `rect`, and K1's wall answer is
+`geometry.line`. Additive, feature `layoutWalls`:
+- `PartShape` + `width`, `height`, `wall`, `wallAt` (old 8-arg constructor kept). A wall answer gives the wall (`connector.wall`, its
+  line at its foot `top[0] - height + 1`, closed back to its first point; width its thickness), each gate (`connector.gate`: a gate part's
+  answer wins over the wall's list; a square of its width round `at`, default height 3), each gatehouse passage (`<lot>_passage`, front
+  and back), and with `corners: tower` (read from the artifact's plan) the stubs no lot holds (`tower`, max(3, t + 1) square, 3 above).
+  The wall's `wallLots` set `wall`/`wallAt` on the tower and gatehouse lots. Routes from IR roads carry their width.
+- District routes: flat ones were already IR roads. A `route_d_*` / `route_join*` graph edge with stair or graded sections in `ir.paths`
+  is now one `route` (from node, section centres, to node; width the edge's).
+- Not covered: a bundled program's wall (`walled_hill`, `sky_isle`): its ring op leaves only columns in the IR (no line, towers or gates),
+  so it stays a `tile`. It would need the program to record its wall (as K1's meta does) in the IR.
+- Units: `LayoutsWallTest` (walled, unwalled, named gate, the districts_demo stair route, old constructors); `ApiRulesTest`.
+
