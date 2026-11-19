@@ -1046,7 +1046,7 @@ export async function t8d(ctx) {
   await L.settle(5000);
   const water2 = (await fluidsIn(ctx, boxB)).size;
   const out = { water: [water0, water1, water2], stripped, again: again.error ?? again.removed ?? 'ok' };
-  check(water0 > 0 && stripped > 0 && water1 > 0, `D: the precondition: f2's sources on disk (${water0} water, ${water1} at the start), ${stripped} body record(s) made DF-era (lotRemoved, no lotDrained)`);
+  check(water0 > 0 && stripped > 0, `D: the precondition: f2's sources on disk (${water0} water; ${water1} at the first read after the start: since the last round the legacy conversion may already have run at load), ${stripped} body record(s) made DF-era (lotRemoved, no lotDrained)`);
   check(water2 === 0, `D conservation: the lot removal asked again (${json(out.again)}) leaves ${water2} water in f2's box (0 wanted: a DF-era lotRemoved re-drained)`);
   ob.r = await core.regionOf(ctx, ob.r.region);
   out.removal = await removeRegion(ctx, ob, 'D: the region afterwards', { judged: false });
