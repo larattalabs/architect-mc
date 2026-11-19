@@ -367,8 +367,14 @@ switch (step) {
     // ---- remove: another requester without force, then the owner (refund in survival)
     const other = await result(await api(`remove ${siteA} other_mod:x noforce`));
     check(!other.removed && /owned by apitest:village\/1/.test(other.blockers[0] ?? ''), `remove from another requester refused: ${other.blockers[0]}`, other);
+    // (T2b) a crate-fed site's give-back with no pile is owed, listed apart and never in the refund total (Steward's T2b-owed-api Q4); an
+    // apitest jar older than RemoveResult.owed() cannot see it, so the owed ledger's growth across the removal is read server-side
+    // (dev.stockpile.owed; absent before T2b, read as 0 there, where the refund itself is > 0)
+    const owedSum = async () => Object.values((await call('dev.stockpile.owed', {}, 30_000).catch(() => null))?.total ?? {}).reduce((a, n) => a + Number(n || 0), 0);
+    const owedBefore = await owedSum();
     const mine = await result(await api(`remove ${siteA} ${OWNER} noforce`), 60_000);
-    check(mine.removed === true && mine.refundTotal > 0, `remove by the owner: refund ${mine.refundTotal} items (${Object.keys(mine.refund).length} kinds)`, mine);
+    const owedGrew = (await owedSum()) - owedBefore;
+    check(mine.removed === true && mine.refundTotal + owedGrew > 0, `remove by the owner: refund ${mine.refundTotal} + owed ${owedGrew} items (${Object.keys(mine.refund).length} refund kinds)`, { ...mine, owedGrew });
     const evR = await waitEvent((e) => e.event === 'SITE_REMOVED' && e.id === siteA);
     check(!!evR && evR.result.refundTotal === mine.refundTotal, 'SITE_REMOVED with the same RemoveResult', evR);
     // (J2 item 1) a wild animal in the air of B's box: a named one blocks anywhere, an unnamed one only where the removal changes its cell
