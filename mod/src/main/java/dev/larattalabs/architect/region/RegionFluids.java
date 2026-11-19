@@ -1570,22 +1570,18 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			// (8cTc, N1) the tiles are markers: every body's cells, ice cap and grate, and its decor in its own cells, are the write txn's
-			// (FluidTxns.write); (6c F3-c) a bed's decor stays the tile's. A body never written (not contained, held, its lot removed) drops its
-			// bed decor too (no live coral on a bed that holds no water)
-			boolean never = "drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty());
-			LongOpenHashSet own = new LongOpenHashSet(b.cells);
-			for (long p : b.cells) {
-				drop.add(p);
-			}
-			for (long p : b.ice) {
-				drop.add(p);
-			}
-			for (long p : b.grate) {
-				drop.add(p);
-			}
-			for (long p : b.decor) {
-				if (never || own.contains(p)) {
+			// not contained (or held, HY): never written; (6c IRR) nor a source whose lot was removed. (8cTc, deviation from N1) the tiles
+			// still write the bodies' cells: their journal entries carry the undo's hand-down to a later entry layered over a body cell
+			// (irr-holders) and the drain's holders' floor; the write txn records and forces what they wrote (FluidTxns.write)
+			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty())) {
+				for (long p : b.cells) {
+					drop.add(p);
+				}
+				for (long p : b.ice) {
+					drop.add(p);
+				}
+				// ((6c F3-c) and its decor: no live coral on a bed that holds no water)
+				for (long p : b.decor) {
 					drop.add(p);
 				}
 			}
@@ -2235,9 +2231,8 @@ public final class RegionFluids {
 		LongOpenHashSet breach = lot == null ? null : breachFlow(level, st, b, lot, others);
 		for (long[] a : new long[][] {b.ice, b.cells}) {
 			for (long p : a) {
-				if (removal && drainSkips(b, p) && bs.writeTxn == null) {
-					continue; // ((6c F3-c) a decor cell the tiles wrote (a record from before 8cTc): the group undo restores it after the drain, as the
-					// bed; (8cTc) a body the write txn wrote has no journal entry there: its drain takes it)
+				if (removal && drainSkips(b, p)) {
+					continue; // ((6c F3-c) a decor cell: the group undo restores it after the drain, as the bed)
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
@@ -2246,8 +2241,8 @@ public final class RegionFluids {
 				if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, grate.contains(p)) || t.playerPlaced(bp)) {
 					continue; // ((DF round 3, P1 5) a source a player placed there (its Placed record) is theirs)
 				}
-				if (held.test(p) && !ownLiquid(b, now)) {
-					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained ((8cTc) never the body's liquid)
+				if (held.test(p)) {
+					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
 				}
 				String before = bs.before.get(p);
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
@@ -2315,11 +2310,6 @@ public final class RegionFluids {
 	 * cell, the bars on a grate cell, the column on a bubble cell, the decor's block on a decor cell. Anything else (a player's waterlogged
 	 * chest, stair or slab, a placed block) is not the body's: no drain, restore or abort writes it. Pure.
 	 */
-	/** (8cTc) A liquid block of the body's fluid (a source or its flow): never another entry's block. */
-	static boolean ownLiquid(Body b, BlockState now) {
-		return now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
-	}
-
 	static boolean ownStillOurs(Body b, long p, BlockState now) {
 		boolean liquid = now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
 		if (b.ice.length > 0 && b.iceSet().contains(p)) {
@@ -3530,9 +3520,8 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = level.getBlockState(bp);
-				if (held.test(p) && !ownLiquid(b, now)) {
-					continue; // (fix/drain-holders) another entry's block on top; (8cTc) a liquid of the body's fluid is no entry's block: with the
-					// tiles as markers no journal entry of ours lies under a body cell, so the holders' floor can't tell our water from a later block
+				if (held.test(p)) {
+					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
 				}
 				if (!ownStillOurs(b, p, now)) {
 					continue; // ((8c fix round, P1-1) a player's waterlogged chest in a source cell is never drained)
