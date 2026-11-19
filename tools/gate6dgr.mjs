@@ -1125,6 +1125,13 @@ steps.look = async () => {
   await registerLCAP(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, BOXOF, cellsOf, diff, haltWait, rvState, rvWait });
 }
 
+// ------------------------------------------------------------------ (slice SOFF) soffcrash: tools/lib/gatemsoff.mjs
+
+{
+  const { registerSOFF } = await import('./lib/gatemsoff.mjs');
+  await registerSOFF(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);

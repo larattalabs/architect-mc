@@ -42,10 +42,22 @@ public final class RegionGhost {
 	public static final int NEAR = 64;
 	static final int DROP = 128;
 	static final String KEY = "region-ghost:";
-	static final int ADDED = 0xFF3CCB5A;
-	static final int PATH = 0xFFC8A060;
-	static final int LOT = 0xFF4A90E2;
-	static final int FLOATING = 0xFFB070E0;
+	// (PR A2) from lab-ui's GhostPalette (the player's palette), read when the region's cells are built
+	static int added() {
+		return dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.REGION_ADDED, 0xFF);
+	}
+
+	static int path() {
+		return dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.REGION_PATH, 0xFF);
+	}
+
+	static int lot() {
+		return dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.REGION_LOT, 0xFF);
+	}
+
+	static int floating() {
+		return dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.REGION_FLOATING, 0xFF);
+	}
 
 	private static @Nullable GhostPlan plan;
 	private static long gen;
@@ -153,10 +165,23 @@ public final class RegionGhost {
 		return o;
 	}
 
+	/** (PR A2) The palette the shown tiles were tinted in: a change re-requests them (their tints are baked into the layers). */
+	private static dev.larattalabs.labui.ui.GhostPalette.Palette tintedIn = dev.larattalabs.labui.ui.GhostPalette.current();
+
 	private static void tick(Minecraft mc) {
 		GhostPlan p = plan;
 		if (p == null || mc.player == null || ++ticks % 10 != 0) {
 			return;
+		}
+		if (tintedIn != dev.larattalabs.labui.ui.GhostPalette.current()) {
+			tintedIn = dev.larattalabs.labui.ui.GhostPalette.current();
+			for (String k : List.copyOf(REQUESTED)) {
+				REQUESTED.remove(k);
+				SHOWN.remove(k);
+				SHAS.remove(k);
+				CompositePreview.clear(KEY + k);
+			}
+			gen++;
 		}
 		int px = mc.player.getBlockX();
 		int pz = mc.player.getBlockZ();
@@ -233,7 +258,7 @@ public final class RegionGhost {
 		int[] rx = new int[n * 3];
 		int gn = 0;
 		int rn = 0;
-		int[] tint = {ADDED, 0, PATH, LOT, FLOATING};
+		int[] tint = {added(), 0, path(), lot(), floating()};
 		for (int i = 0; i < n; i++) {
 			long pos = t.pos()[i];
 			int x = BlockPos.getX(pos);
@@ -265,7 +290,7 @@ public final class RegionGhost {
 		}
 		if (rn > 0) {
 			int[] ra = new int[rn];
-			java.util.Arrays.fill(ra, 0xFFE0302A);
+			java.util.Arrays.fill(ra, dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.REGION_REFUSED, 0xFF));
 			out.add(new CompositePreview.CellLayer("region:" + p.planId() + ":" + key + ":removed", CompositeMesh.Style.REMOVED, origin, sx, sy, sz,
 				java.util.Arrays.copyOf(rx, rn * 3), ra));
 		}
@@ -278,31 +303,31 @@ public final class RegionGhost {
 		int[] c = p.claim();
 		int y = p.groundY();
 		for (int x = c[0]; x <= c[3]; x++) {
-			cells.add(new int[] {x, y, c[2], ADDED});
-			cells.add(new int[] {x, y, c[5], ADDED});
+			cells.add(new int[] {x, y, c[2], added()});
+			cells.add(new int[] {x, y, c[5], added()});
 		}
 		for (int z = c[2] + 1; z < c[5]; z++) {
-			cells.add(new int[] {c[0], y, z, ADDED});
-			cells.add(new int[] {c[3], y, z, ADDED});
+			cells.add(new int[] {c[0], y, z, added()});
+			cells.add(new int[] {c[3], y, z, added()});
 		}
 		for (int[] b : p.lots()) {
 			for (int x = b[0]; x <= b[3]; x++) {
 				for (int yy : new int[] {b[1], b[4]}) {
-					cells.add(new int[] {x, yy, b[2], LOT});
-					cells.add(new int[] {x, yy, b[5], LOT});
+					cells.add(new int[] {x, yy, b[2], lot()});
+					cells.add(new int[] {x, yy, b[5], lot()});
 				}
 			}
 			for (int z = b[2] + 1; z < b[5]; z++) {
 				for (int yy : new int[] {b[1], b[4]}) {
-					cells.add(new int[] {b[0], yy, z, LOT});
-					cells.add(new int[] {b[3], yy, z, LOT});
+					cells.add(new int[] {b[0], yy, z, lot()});
+					cells.add(new int[] {b[3], yy, z, lot()});
 				}
 			}
 			for (int yy = b[1] + 1; yy < b[4]; yy++) {
-				cells.add(new int[] {b[0], yy, b[2], LOT});
-				cells.add(new int[] {b[3], yy, b[2], LOT});
-				cells.add(new int[] {b[0], yy, b[5], LOT});
-				cells.add(new int[] {b[3], yy, b[5], LOT});
+				cells.add(new int[] {b[0], yy, b[2], lot()});
+				cells.add(new int[] {b[3], yy, b[2], lot()});
+				cells.add(new int[] {b[0], yy, b[5], lot()});
+				cells.add(new int[] {b[3], yy, b[5], lot()});
 			}
 		}
 		if (cells.isEmpty()) {

@@ -488,6 +488,15 @@ public final class MassingReview {
 	 * Esc) cancels. Returns true when the key was consumed.
 	 */
 	public static boolean onKey(int action, KeyEvent e) {
+		return onInput(action, e.key(), e.hasShiftDown());
+	}
+
+	/** (PR2) A mouse button bound to Confirm, Redirect or Cancel (Controls) acts on the review bar as its key would. */
+	public static boolean onMouse(int action, int button, boolean shift) {
+		return onInput(action, dev.larattalabs.architect.client.hud.PlacingKeys.mouse(button), shift);
+	}
+
+	private static boolean onInput(int action, int code, boolean shift) {
 		if (review == null || action == InputConstants.RELEASE) {
 			return false;
 		}
@@ -495,26 +504,28 @@ public final class MassingReview {
 		if (mc.gui.screen() != null || BuildPlacement.active()) {
 			return false;
 		}
-		boolean ours = switch (e.key()) {
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER, InputConstants.KEY_R, InputConstants.KEY_BACKSPACE, InputConstants.KEY_DELETE,
-				InputConstants.KEY_ESCAPE -> true;
-			default -> false;
-		};
-		if (action != InputConstants.PRESS) {
-			return ours; // a held key repeats nothing
+		// (PR A4) rebindable (Controls > "Architect: while placing"): Confirm approves, Redirect (R) opens the note, Cancel (Backspace,
+		// Delete or Esc) cancels
+		dev.larattalabs.architect.client.hud.PlacingKeys.Action act = dev.larattalabs.architect.client.hud.PlacingKeys.resolve(
+			dev.larattalabs.architect.client.hud.PlacingKeys.Context.MASSING, code, shift, dev.larattalabs.architect.client.hud.Keys::bound);
+		if (act == null) {
+			return false;
 		}
-		switch (e.key()) {
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
+		if (action != InputConstants.PRESS) {
+			return true; // a held key repeats nothing
+		}
+		switch (act) {
+			case CONFIRM -> {
 				if (!sending) {
 					approve();
 				}
 				return true;
 			}
-			case InputConstants.KEY_R -> {
+			case REDIRECT -> {
 				redirectDialog();
 				return true;
 			}
-			case InputConstants.KEY_BACKSPACE, InputConstants.KEY_DELETE, InputConstants.KEY_ESCAPE -> {
+			case CANCEL -> {
 				cancel();
 				return true;
 			}
@@ -554,7 +565,9 @@ public final class MassingReview {
 				lines.add(new String[] {TextUtil.ellipsize(font, detail, inner), Integer.toString(HudInk.soft())});
 				lines.add(new String[] {TextUtil.ellipsize(font, sending ? "Sending…" : "Approve to design the detail inside these masses, or redirect it.", inner),
 					Integer.toString(HudInk.ok())});
-				hints = new String[] {"Enter", "approve", "R", "redirect…", "Backspace", "cancel"};
+				hints = new String[] {dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "approve",
+					dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.REDIRECT), "redirect…",
+					dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL), "cancel"};
 			} else if (shownSet != null) {
 				JsonObject raw = Sidecar.state().group(shownSet);
 				Group gr = raw == null ? null : Wire4b.group(raw);
@@ -583,6 +596,7 @@ public final class MassingReview {
 			if (lines.isEmpty()) {
 				return null;
 			}
+			hints = Keys.fitHints(font, hints, inner); // (PR3, v0.84) the keys are cut by width, longest first, until the whole row fits inner
 			int textW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 			for (String[] l : lines) {
 				textW = Math.max(textW, font.width(l[0]));

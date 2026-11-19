@@ -34245,3 +34245,46 @@ Overlap: items 1 and 4 extend TXN-S (8cT's helper). Item 3 is OVF-S3 as already 
   - A ledger written early by a plain ledger-only save still mints nothing: the undo group's entries are kept until the txn retires, so
     recovery redoes a lost W from the journal (its probe is the chunk receipts), and the block changes come back.
   - So T4b adds no core W→L barrier. The crash rows are txn-crash-crate's S-TX/G-TX `apply:<i>` points, bare and +save, through the alias.
+
+## Slice RVC: a revision's typed stop cause (as built, slice/RVC; light; versions NEXT; Steward's ask 8bS-1)
+
+- `RevisionView.removalStopCause` (feature `"revisionStopCause"`, Since NEXT): the typed cause of `waiting`, mirroring 8b's
+  `RegionView.removalStopCause`. A revision left `UNDOING` by a stopped `Regions.undoRevision` carries its stage removal's cause
+  (`Groups.Removed.stopCause`: SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX); a failed undo is OTHER. Null when `waiting`
+  is null; any other wait (a revision's own write that stopped) is OTHER. The `waiting` text and `RemoveResult.blockers` are unchanged
+  (8b put no cause on `RemoveResult` either).
+- Saved beside `waiting` in the revision record as `removalStopCause` (additive; only when typed); a record saved before it, or a name
+  this build doesn't know, reads OTHER. Cleared with the wait when the undo finishes.
+- Binary compatible: the 15-argument constructor stays (no cause: OTHER while waiting), the 14-argument one too.
+- Units: `RevisionStopCauseTest` (each cause, the saved shape, null when not waiting, legacy reads OTHER, the old constructors);
+  `ApiRulesTest` pins the feature name. Light tier: no in-game step of its own.
+### Slice LYW: town walls in `Regions.layout` (light; branch `slice/LYW` off main cfeef06e; versions NEXT; recorded 2026-11-18)
+Steward's 8bS-2: a walled town's layout had no wall, since `Layouts.ofAnswer` read only `link`, `legs` and `rect`, and K1's wall answer is
+`geometry.line`. Additive, feature `layoutWalls`:
+- `PartShape` + `width`, `height`, `wall`, `wallAt` (old 8-arg constructor kept). A wall answer gives the wall (`connector.wall`, its
+  line at its foot `top[0] - height + 1`, closed back to its first point; width its thickness), each gate (`connector.gate`: a gate part's
+  answer wins over the wall's list; a square of its width round `at`, default height 3), each gatehouse passage (`<lot>_passage`, front
+  and back), and with `corners: tower` (read from the artifact's plan) the stubs no lot holds (`tower`, max(3, t + 1) square, 3 above).
+  The wall's `wallLots` set `wall`/`wallAt` on the tower and gatehouse lots. Routes from IR roads carry their width.
+- District routes: flat ones were already IR roads. A `route_d_*` / `route_join*` graph edge with stair or graded sections in `ir.paths`
+  is now one `route` (from node, section centres, to node; width the edge's).
+- Not covered: a bundled program's wall (`walled_hill`, `sky_isle`): its ring op leaves only columns in the IR (no line, towers or gates),
+  so it stays a `tile`. It would need the program to record its wall (as K1's meta does) in the IR.
+- Units: `LayoutsWallTest` (walled, unwalled, named gate, the districts_demo stair route, old constructors); `ApiRulesTest`.
+
+
+### Slice LYW2: ring walls and mixed routes in `Regions.layout` (light; branch `slice/LYW2` off main 5e538bbd; versions NEXT; recorded 2026-11-19)
+LYW's two leftovers. No API member, feature or version added (`layoutWalls` covers both).
+- Ring walls: the kit's `ring(c, r0, r1, {..., wall: true})` records the ring in the IR's new top-level `walls` member (only a plan with
+  such a ring has it; a known format-2 member the evaluator ignores; no block changes): `{part, line: [[x, z], ...] (its mid-radius
+  polygon, at most 63 corners), closed: true, thickness, height (cells from the footing up), top: [min, max] (`top[0]` the lowest
+  top-of-run cell's y over the line, from survey ground or `baseY`; `top[1]` the highest written cell, crenels included), gates: [{id: <part>_g<n>, at (the threshold's feet), width, height}], towers: [{id: <part>_tower_<n>,
+  at (its centre; `at[1]` its lowest footing), r, height}]}`. `walled_hill` and `sky_isle` opt in; `crater_works`'s rim, `mega_bench` and authored programs
+  don't (their IRs are byte-identical). `Layouts` reads each as a wall answer: the wall (`connector.wall`, ends its line at the foot
+  `top[0] - height + 1`, closed), its gates (`connector.gate`, their own height), its towers (kind `tower`, `wallAt: run`, a `2r + 1` square);
+  the part is no longer a `tile`. The 6b goldens' `irSha` moved for those two only (tile shas unchanged).
+- Mixed routes: unchanged from v0.83.0. A district route with stair or graded sections and road pieces lists each road piece twice (its
+  own `route` shape from `ir.roads`, and folded into the edge's one route). Route-piece dedup is deferred until the kit records each
+  piece's edge explicitly: piece ids alone are ambiguous (`route_d_a__b_1_1` is edge `route_d_a__b` group 1 of piece 1, or edge
+  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review).
+- Units: `LayoutsWallTest` (a bundled ring wall; districts b and b_1 lose no road piece), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).

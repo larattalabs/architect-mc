@@ -52,7 +52,7 @@ export default function walledHill(ctx) {
   }
   // ---- the ring wall at the foot, with a south gate
   const gA = 180, gd = compassDir(gA);
-  r.part('wall', { stage: 'ground' }).ring([cx, cz], R + 4, R + 7, { height: 6, material: 'structure', towers: { every: 40, radius: 3, extra: 4 }, crenels: true, gates: [{ angle: gA, width: 5, height: 5 }] });
+  r.part('wall', { stage: 'ground' }).ring([cx, cz], R + 4, R + 7, { height: 6, material: 'structure', towers: { every: 40, radius: 3, extra: 4 }, crenels: true, gates: [{ angle: gA, width: 5, height: 5 }], wall: true });
   // ---- lots on the levels (between the level's rim and the next level's wall), outer two levels first
   const placed = [];
   const lr = rng('lots');

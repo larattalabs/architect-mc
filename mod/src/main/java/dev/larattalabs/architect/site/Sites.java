@@ -1599,6 +1599,9 @@ public final class Sites {
 		if (b == null) {
 			throw new SiteException("No site " + id + " (see /architect list)");
 		}
+		if (b.construction() != null) {
+			SaveHold.require(level.getServer()); // (T4b, SOFF) its refunds move the ledger: refused before anything is touched while saving is off
+		}
 		if (!b.dimension().equals(dimensionId(level))) {
 			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
 		}

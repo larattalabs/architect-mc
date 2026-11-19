@@ -159,7 +159,7 @@ steps.ingame = async () => {
   // the Build a link key: the connector mode (no drop remembered: both ends are marked)
   const k = await call('dev.cx.key', { press: true }, 10_000);
   out.key = { key: k.key, drop: k.drop, connector: k.marker?.connector, phase: k.marker?.phase };
-  check(k.key === 'K' && k.drop === null && k.marker?.active && k.marker?.connector === 'rope_bridge' && k.marker?.phase === 'first_corner',
+  check(k.key === 'N' && k.drop === null && k.marker?.active && k.marker?.connector === 'rope_bridge' && k.marker?.phase === 'first_corner',
     `the Build a link key (${k.key}) starts the plot marker's connector mode: ${k.marker?.connector} (the default), the first end, no drop remembered`, out.key);
   // a refusal through the marker: a rock stair between the two flat lips (nothing to climb) stays on the second end with its reason
   await call('dev.cx.key', { kind: 'rock_stair' }, 10_000);

@@ -190,6 +190,7 @@ public final class LibraryFeature {
 
 	public static void select(@Nullable String id) {
 		selected = id;
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.PICKED, id); // (PR F1)
 	}
 
 	public static @Nullable String message() {

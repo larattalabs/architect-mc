@@ -201,7 +201,7 @@ steps.ingame = async () => {
   const toasts = await call('dev.ui2b.toasts');
   out.toasts = toasts;
   const placedToast = JSON.stringify(toasts);
-  check(/Undo: \[Undo\] in chat/.test(placedToast) && !/Library > Placed > Remove, or/.test(placedToast), `the Placed toast is short and keeps the undo hint (${String(toasts.last).slice(0, 160)})`, toasts);
+  check(/Undo: .*\[Undo\] in chat/.test(placedToast) && !/Library > Placed > Remove, or/.test(placedToast), `the Placed toast is short and keeps the undo hint (${String(toasts.last).slice(0, 160)})`, toasts);
   out.shots.push(...await atScales('placed_toast_chat', null, [2]));
   await call('dev.screen', { open: 'chat' });
   await sleep(500);
@@ -373,6 +373,8 @@ steps.gallery = async () => {
     await cmd(`/fill ${x0} ${ORIGIN[1] - 3} ${z0} ${x1} ${ORIGIN[1] - 1} ${z1} minecraft:dirt`);
   };
   await L.fresh('G6B UIG', FLAT);
+  // (PR F1) the first-build tour's offer would sit over every screen of a world without the player's sites: answered here, shot in its own block
+  await call('dev.pr.guide', { reset: true, event: 'decline' }).catch(() => null);
   await L.setRules('exact');
   await cmd('/time set 6000');
   await cmd('/weather clear');
@@ -531,6 +533,13 @@ steps.gallery = async () => {
   await sec('world', 'ghost', 'normal', async () => { await start(); await cam(6, 16, 34); await waitVerdict(); }, { once: true, closeScreen: false });
   await sec('ui', 'placement_hud', 'legend', async () => { await call('dev.build.legend', { on: true }); await sleep(200); }, { closeScreen: false });
   await call('dev.build.legend', { on: false }).catch(() => null);
+  // (PR A4) the legend after rotate is rebound to G in Controls: the legend shows G and Shift+G
+  await sec('ui', 'placement_hud', 'legend_rebound', async () => {
+    // G is 26.3's InputConstants.KEY_G (SDL scancode 10)
+    await call('dev.pr.rebind', { action: 'rotate', key: 10 }); await call('dev.build.legend', { on: true }); await sleep(200);
+  }, { closeScreen: false });
+  await call('dev.build.legend', { on: false }).catch(() => null);
+  await call('dev.pr.rebind', { action: 'rotate' }).catch(() => null);
   // replaced: the ghost over blocks that will be replaced (a stone slab laid in its box)
   await sec('world', 'ghost', 'replaced', async () => {
     // real blocks inside the footprint, above the ground row (the cabin's walls and interior replace them): the HUD must read "N blocks replaced"
@@ -560,6 +569,48 @@ steps.gallery = async () => {
     await waitVerdict(); await cam(6, 16, 34, 6, 4, 6);
   }, { once: true, closeScreen: false });
   await call('dev.build.cancel').catch(() => null);
+
+  // ================================================================ (PR A2) the ghost categories again in the Okabe-Ito palette, plus hazards
+  // (water in front of the door) in both; each also gets a deuteranopia-filtered copy in the review sheet
+  const hazardScene = async () => {
+    await start(); await waitVerdict();
+    const b = boxOf(await buildState());
+    await cmd(`/fill ${b.min[0] - 1} ${b.min[1]} ${b.max[2] + 1} ${b.max[0] + 1} ${b.min[1]} ${b.max[2] + 3} minecraft:water`);
+    await start(); await cam(6, 16, 34); await waitVerdict(); await sleep(500);
+  };
+  await sec('world', 'ghost', 'hazard', hazardScene, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
+  await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 22);
+  if (onlyWants('ghost_okabe', 'status_okabe')) {
+    await call('dev.pr.palette', { palette: 'okabe_ito' }).catch((e) => GAL.notes.push(`dev.pr.palette: ${errMsg(e)}`));
+    await sec('world', 'ghost_okabe', 'normal', async () => { await start(); await cam(6, 16, 34); await waitVerdict(); }, { once: true, closeScreen: false });
+    await sec('world', 'ghost_okabe', 'replaced', async () => {
+      await start(); await waitVerdict();
+      const b = boxOf(await buildState());
+      await cmd(`/fill ${b.min[0] + 2} ${b.min[1] + 1} ${b.min[2] + 2} ${b.max[0] - 2} ${b.min[1] + 4} ${b.max[2] - 2} minecraft:stone`);
+      await start(); await cam(6, 16, 34); await waitVerdict(); await sleep(500);
+    }, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 16);
+    await sec('world', 'ghost_okabe', 'block_entity', async () => {
+      await start(); await waitVerdict(); await chestAt(true);
+      await start(); await waitVerdict();
+      await call('dev.build.confirm', {}, 60_000).catch(() => null);
+      await sleep(300); await cam(6, 16, 34);
+    }, { once: true, closeScreen: false });
+    await chestAt(false).catch(() => null);
+    await sec('world', 'ghost_okabe', 'refused', async () => {
+      await call('dev.build.cancel').catch(() => null);
+      await call('dev.build.start', { blueprint: 'cabin', origin: [ORIGIN[0], -70, ORIGIN[2]], ground: false, turns: 0 });
+      await waitVerdict(); await cam(6, 16, 34, 6, 4, 6);
+    }, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await sec('world', 'ghost_okabe', 'hazard', hazardScene, { once: true, closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 22);
+    await sec('ui', 'status_okabe', 'tab', async () => openTab('status'));
+    await call('dev.pr.palette', { palette: 'standard' }).catch(() => null);
+  }
 
   // ================================================================ toasts, the paged chat list, Library > Placed
   const row = [];
@@ -667,6 +718,10 @@ steps.gallery = async () => {
     await sleep(6000);
     const rc = async () => call('dev.camera', { x: -40, y: 90, z: 20, yaw: 180, pitch: 35, mode: 'spectator', closePause: true }, 30_000).then(() => sleep(2500));
     await sec('world', 'region_ghost', 'plan', rc, { once: true, closeScreen: false });
+    // (PR A2) the region ghost in the Okabe-Ito palette (its cells are tinted when built: re-run the check)
+    await call('dev.pr.palette', { palette: 'okabe_ito' }).catch(() => null);
+    await sec('world', 'region_ghost', 'plan_okabe', rc, { once: true, closeScreen: false });
+    await call('dev.pr.palette', { palette: 'standard' }).catch(() => null);
     await call('dev.region.ghost', { off: true }, 30_000);
   } catch (e) { GAL.failed.push({ kind: 'world', screen: 'region_ghost', state: 'plan', scale: null, error: errMsg(e) }); }
   await call('dev.release', {}).catch(() => null);
@@ -752,6 +807,83 @@ steps.gallery = async () => {
     });
     await call('dev.screen', { open: null });
     await call('dev.site.deconstruct', { site: siteB, force: true }).catch(() => null);
+  }
+  // ================================================================ (PR) the player-ready pass: Help, the "?" overlays, the Controls page
+  if (onlyWants('status', 'design', 'library', 'designs', 'styles', 'keybinds')) {
+    await call('dev.screen', { open: null });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    await sec('ui', 'status', 'help', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); });
+    for (const tab of ['design', 'library', 'designs', 'status']) {
+      await sec('ui', tab, 'keys', async () => { await openTab(tab); await call('dev.pr.keys', { press: true }); });
+    }
+    await sec('ui', 'styles', 'keys', async () => { await browser(); await call('dev.pr.keys', { press: true }); });
+    await sec('ui', 'keybinds', 'architect', async () => { await call('dev.screen', { open: 'keybinds' }); await sleep(600); });
+    await sec('ui', 'library', 'tip_hidden', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('library'); });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    await sec('ui', 'status', 'tips_again', async () => { await call('dev.pr.tips', { hide: 'library' }); await openTab('status'); });
+    await call('dev.pr.tips', { reset: true }).catch(() => null);
+    if (process.env.GATEUIG_TEXT150 !== '0') {
+      // (PR A3) text at 150 % at GUI scale 4 on each screen
+      await call('dev.pr.textScale', { percent: 150 }).catch((e) => GAL.notes.push(`dev.pr.textScale: ${errMsg(e)}`));
+      for (const tab of ['design', 'library', 'designs', 'status']) await sec('ui', tab, 'text150', async () => openTab(tab));
+      await sec('ui', 'styles', 'text150', async () => browser());
+      await sec('ui', 'status', 'help_text150', async () => { await openTab('status'); await call('dev.ui.click', { control: 'status:help' }); });
+      await call('dev.pr.textScale', { percent: 100 }).catch(() => null);
+    }
+    await call('dev.screen', { open: null });
+  }
+
+  // ================================================================ (PR P1) Preview on ghost: the strip, the sample cabin in three Styles, the cap
+  if (onlyWants('preview', 'styles')) {
+    await call('dev.screen', { open: null });
+    await call('dev.build.cancel').catch(() => null);
+    await L.tp(160.5, 70, 120.5, 0, 12);
+    const peek = async (style, extra) => {
+      await browser(); await call('dev.pr.peek', { select: style, open: true });
+      if (extra) await call('dev.pr.peek', extra);
+      await sleep(1800);
+    };
+    await sec('ui', 'styles', 'peek', () => peek('nordic'));
+    for (const st of ['rustic', 'nordic', 'modern']) await sec('world', 'preview', `cabin_${st}`, () => peek(st), { scales: [2] });
+    await sec('world', 'preview', 'over_cap', () => peek('medieval', { thin: true }), { scales: [2] });
+    await call('dev.pr.peek', { back: true }).catch(() => null);
+    await call('dev.screen', { open: null });
+  }
+
+  // ================================================================ (PR F1) the first-build tour: each card (driven through dev.pr.guide)
+  if (onlyWants('guide')) {
+    const G = (o) => call('dev.pr.guide', o);
+    const gcam = async () => {
+      await call('dev.camera', { x: 112, y: 76, z: 88, lookAt: { x: 106, y: 66, z: 106 }, mode: 'spectator', closePause: true }, 30_000);
+      await call('dev.hud', { hidden: false });
+      await sleep(1000);
+    };
+    await call('dev.build.cancel').catch(() => null);
+    await G({ reset: true, survival: false });
+    await sec('ui', 'guide', 'offer', async () => { await G({ reset: true, survival: false }); await openTab('library'); await G({ event: 'screen_opened_no_sites' }); });
+    await sec('ui', 'guide', 'step1', async () => { await G({ reset: true }); await openTab('library'); await G({ event: 'start', survival: false }); });
+    await sec('ui', 'guide', 'step2', async () => { await G({ reset: true }); await G({ event: 'start' }); await G({ event: 'picked', arg: 'cabin' }); await openTab('library'); await call('dev.library.select', { entry: 'cabin' }).catch(() => null); });
+    const world = async (events, below = false) => {
+      await G({ reset: true, survival: false }); await G({ event: 'start' });
+      await call('dev.screen', { open: null });
+      await call('dev.build.cancel').catch(() => null);
+      // step 4 below the world: refused, so the card stays on "read the outline" (a fitting ghost moves it on at once)
+      await call('dev.build.start', { blueprint: 'cabin', origin: below ? [100, -70, 100] : [100, 64, 100], ground: !below, turns: 0 });
+      for (const e of events) await G({ event: e });
+      await gcam();
+    };
+    await sec('world', 'guide', 'step3', () => world([]), { closeScreen: false });
+    await sec('world', 'guide', 'step4', () => world(['rotated'], true), { closeScreen: false });
+    await sec('world', 'guide', 'step5', () => world(['rotated', 'verdict_ok']), { closeScreen: false });
+    await call('dev.build.cancel').catch(() => null);
+    await sec('world', 'guide', 'step6', async () => { await world(['rotated', 'verdict_ok']); await call('dev.build.cancel').catch(() => null); await G({ event: 'placed' }); await gcam(); }, { closeScreen: false });
+    await sec('ui', 'guide', 'closing', async () => { await G({ reset: true, survival: false }); await G({ event: 'start' }); await G({ event: 'placed' }); await G({ event: 'keep' }); await openTab('library'); });
+    await sec('world', 'guide', 'survival_crate', async () => {
+      await G({ reset: true, survival: true }); await G({ event: 'start' }); await G({ event: 'placed' }); await call('dev.screen', { open: null }); await gcam();
+    }, { scales: [2], closeScreen: false });
+    await sec('ui', 'guide', 'paused', async () => { await G({ reset: true, survival: false }); await G({ event: 'start' }); await G({ event: 'esc' }); await openTab('status'); });
+    await G({ reset: true, event: 'decline', survival: false }).catch(() => null);
+    await call('dev.build.cancel').catch(() => null);
   }
   await call('dev.survival.set', { on: false }).catch(() => null);
   await call('dev.release', {}).catch(() => null);

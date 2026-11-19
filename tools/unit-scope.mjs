@@ -20,12 +20,14 @@
 // the slice runs anyway; it gets `node --check` here instead of the full kit suite.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { moduleClosure, dirtyPaths } from './lib/step-inputs.mjs';
 import { globToRe } from './gate-impact.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { junitCounts, junitFileCounts, unitScopeLine } from './lib/step-counts.mjs';
 
 const ALL = ['kit', 'sidecar', 'gradle'];
 const J = 'mod/src/main/java/dev/larattalabs/architect';
@@ -356,17 +358,35 @@ if (isMain) {
   }
   if (flag('--run')) {
     const results = [];
+    // the summed line's counts: each suite's JUnit report (kit and sidecar to a temp file, Gradle's XMLs written during this run)
+    const rep = fs.mkdtempSync(path.join(os.tmpdir(), 'unit-scope-'));
+    const counts = [];
+    const checks = { pass: 0, fail: 0 };
     const run = (name, cmd, args, cwd, env) => {
       console.log(`\nunit-scope --run ${name}: nice -n 10 ${cmd} ${args.length > 8 ? `${args.slice(0, 8).join(' ')} ... (${args.length} args)` : args.join(' ')} (cwd ${path.relative(SRC, cwd) || '.'})`);
       const r = spawnSync('nice', ['-n', '10', cmd, ...args], { cwd, env: { ...process.env, ...env }, stdio: 'inherit' });
       results.push({ name, code: r.status ?? 1 });
+      return r.status ?? 1;
     };
-    for (const f of sel.checks) run(`node --check ${f}`, 'node', ['--check', f], SRC);
-    if (plan.kit.full) run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...[...graph.tests].filter(([, s]) => s === 'kit').map(([t]) => t).sort()], SRC);
-    else if (plan.kit.picked) run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...plan.kit.tests], SRC);
+    const suiteCounts = (name, c, code, missing) => {
+      if (!c || (c.tests === 0 && code !== 0)) counts.push({ name, error: c ? `0 tests read, exit ${code}` : missing });
+      else counts.push({ name, tests: c.tests, pass: c.tests - c.failures - c.skipped, fail: c.failures });
+    };
+    for (const f of sel.checks) checks[run(`node --check ${f}`, 'node', ['--check', f], SRC) === 0 ? 'pass' : 'fail']++;
+    const kitReporters = (file) => ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${file}`];
+    const kitTests = plan.kit.full ? [...graph.tests].filter(([, s]) => s === 'kit').map(([t]) => t).sort() : plan.kit.picked ? plan.kit.tests : [];
+    if (kitTests.length) {
+      const file = path.join(rep, 'kit.xml');
+      const code = run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...kitReporters(file), ...kitTests], SRC);
+      suiteCounts('kit', junitFileCounts(file), code, 'no JUnit report written');
+    }
     const sc = path.join(SRC, 'sidecar');
-    if (plan.sidecar.full) run('sidecar', 'npx', ['vitest', 'run'], sc);
-    else if (plan.sidecar.picked) run('sidecar', 'npx', ['vitest', 'run', ...plan.sidecar.tests.map((t) => path.relative('sidecar', t))], sc);
+    const scReporters = (file) => ['--reporter=default', '--reporter=junit', `--outputFile.junit=${file}`];
+    if (plan.sidecar.full || plan.sidecar.picked) {
+      const file = path.join(rep, 'sidecar.xml');
+      const code = run('sidecar', 'npx', ['vitest', 'run', ...scReporters(file), ...(plan.sidecar.full ? [] : plan.sidecar.tests.map((t) => path.relative('sidecar', t)))], sc);
+      suiteCounts('sidecar', junitFileCounts(file), code, 'no JUnit report written');
+    }
     if (plan.gradle.full || plan.gradle.picked) {
       const gh = process.env.GRADLE_USER_HOME ?? path.join(SRC, '.gradle-home');
       if (!fs.existsSync(gh) || path.relative(SRC, path.resolve(gh)).startsWith('..')) {
@@ -374,11 +394,18 @@ if (isMain) {
         results.push({ name: 'gradle', code: 2 });
       } else {
         const args = plan.gradle.full ? ['--offline', '--no-daemon', 'build'] : ['--offline', '--no-daemon', 'test', ...plan.gradle.tests.flatMap((t) => ['--tests', graph.gradle.get(t)])];
-        run('gradle', './gradlew', args, path.join(SRC, 'mod'), { GRADLE_USER_HOME: path.resolve(gh) });
+        // only the XMLs this run wrote: the results directory keeps older reports, and an up-to-date test task writes none
+        const since = Date.now() - 1000;
+        const code = run('gradle', './gradlew', args, path.join(SRC, 'mod'), { GRADLE_USER_HOME: path.resolve(gh) });
+        const c = junitCounts(path.join(SRC, 'mod', 'build', 'test-results', 'test'), { since });
+        suiteCounts('gradle', c && c.files ? { tests: c.tests, failures: c.failures + c.errors, skipped: c.skipped } : null, code, 'no JUnit XML written this run (the test task up to date?)');
       }
     }
+    fs.rmSync(rep, { recursive: true, force: true });
     const bad = results.filter((r) => r.code !== 0);
     console.log(`\nunit-scope --run: ${results.map((r) => `${r.name} ${r.code === 0 ? 'PASS' : `FAIL (exit ${r.code})`}`).join(', ') || 'nothing to run'}`);
+    // the one summed line gate-run parses (tools/gate-chains.json unit-scope `parse`); nothing ran: says so, with tests 0
+    console.log(unitScopeLine(counts, checks));
     process.exit(bad.length ? 1 : 0);
   }
 }

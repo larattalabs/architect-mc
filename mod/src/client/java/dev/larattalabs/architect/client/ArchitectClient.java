@@ -17,6 +17,10 @@ public class ArchitectClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		AutoWorld.init();
+		dev.larattalabs.labui.ui.TextScale.optIn("architect_mc"); // (PR A3) Architect's screens follow lab-ui's text size (Steward: not yet)
+		dev.larattalabs.labui.client.prefs.LabUiPrefs.applyStored(); // (PR A2, A3) the stored ghost palette and text size
+		dev.larattalabs.architect.client.help.ArchitectGlossary.register();
+		dev.larattalabs.architect.client.help.GuideFeature.init(); // (PR F1) the guided first build // (PR G1) the shared glossary's Architect section
 		PlacementFeature.init();
 		dev.larattalabs.architect.client.placement.RoadCellsClient.init(); // phase 4e: road cells for the ghost's approach
 		dev.larattalabs.architect.client.placement.CompositePreview.init();
@@ -69,6 +73,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.SliceLpDev.init(); // phase 7b slice LP hooks (dev.lp.*)
 		dev.larattalabs.architect.client.dev.SliceCoDev.init(); // phase 7c slice CO hooks (dev.region.compose)
 		dev.larattalabs.architect.client.dev.SliceAuDev.init(); // phase 7c slice AU hooks (dev.region.author, dev.au.store)
+		dev.larattalabs.architect.client.dev.SlicePrDev.init(); // (PR) the player-ready pass's hooks (dev.pr.*)
 		dev.larattalabs.architect.client.dev.SliceUi2bDev.init(); // slice UI-2b hooks (dev.ui2b.*, dev.gui.scale)
 		dev.larattalabs.architect.client.dev.SliceUi03Dev.init(); // slice UI-0.3 hooks (dev.hud.zones, dev.ui03.*)
 		dev.larattalabs.architect.client.dev.SliceSafetyDev.init(); // slice SAFETY hooks (dev.safety.*)

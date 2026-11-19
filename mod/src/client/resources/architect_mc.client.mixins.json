@@ -9,6 +9,7 @@
 		"ClientLevelAccessor",
 		"KeyboardHandlerMixin",
 		"MinecraftMixin",
+		"MouseHandlerMixin",
 		"RenderSystemMixin"
 	],
 	"injectors": {

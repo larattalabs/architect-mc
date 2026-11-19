@@ -80,6 +80,11 @@ final class PlacementHud implements HudZones.Element {
 			String mv = BuildPlacement.moving();
 			String title = mv != null ? "Moving " + mv + " (" + v.bp().name() + ")" : (BuildPlacement.preview() ? "Preview: " : "Placing ") + v.bp().name();
 			add.accept(Row.text(TextUtil.ellipsize(font, title, inner), HudInk.text()), dev.larattalabs.architect.placement.HudFit.KEEP);
+			// (PR W1) what this HUD is, until the first placement (or Status hides it)
+			var tip = dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement");
+			if (!BuildPlacement.preview() && tip.shown() && !legend) { // the legend needs the room
+				add.accept(Row.text(TextUtil.ellipsize(font, tip.text(), inner), dev.larattalabs.labui.client.ui.UiStyle.OnDark.muted()), 2);
+			}
 			add.accept(Row.chips(chips(v)), dev.larattalabs.architect.placement.HudFit.KEEP);
 			if (BuildPlacement.tooFar()) {
 				add.accept(Row.text(TextUtil.ellipsize(font, "▲ " + BuildPlacement.TOO_FAR, inner), HudInk.warn()), 9);
@@ -94,7 +99,7 @@ final class PlacementHud implements HudZones.Element {
 				dev.larattalabs.architect.placement.Approach.Plan ap = v.approach();
 				int[] feet = ap.feet();
 				int rise = feet[feet.length - 1] - feet[0];
-				add.accept(Row.segs(List.of(new Seg(GhostRenderer.PATH | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
+				add.accept(Row.segs(List.of(new Seg(GhostRenderer.path() | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
 					: rise > 0 ? ", up " + rise : ", down " + -rise) + (ap.fillCount() == 0 ? "" : " · " + ap.fillCount() + " filled") + (ap.clearCount() == 0
 					? "" : " · " + ap.clearCount() + " cut"), HudInk.soft()))), 3);
 			}
@@ -248,19 +253,19 @@ final class PlacementHud implements HudZones.Element {
 			s.add(new Seg(0, "nothing in the way", HudInk.soft()));
 		}
 		if (v.obstructedCount() > 0) {
-			s.add(new Seg(GhostRenderer.OBSTRUCTED | 0xFF000000, v.obstructedCount() + " block" + (v.obstructedCount() == 1 ? "" : "s") + " replaced", HudInk.warn()));
+			s.add(new Seg(GhostRenderer.obstructed() | 0xFF000000, v.obstructedCount() + " block" + (v.obstructedCount() == 1 ? "" : "s") + " replaced", HudInk.warn()));
 		}
 		if (v.blockedCount() > 0) {
-			s.add(new Seg(GhostRenderer.BLOCKED | 0xFF000000, v.blockedCount() + " block entit" + (v.blockedCount() == 1 ? "y" : "ies") + " (chests, signs…)",
+			s.add(new Seg(GhostRenderer.blocked() | 0xFF000000, v.blockedCount() + " block entit" + (v.blockedCount() == 1 ? "y" : "ies") + " (chests, signs…)",
 				HudInk.error()));
 		}
-		s.add(v.fillCount() == 0 ? new Seg(0, "no foundation needed", HudInk.soft()) : new Seg(GhostRenderer.FOUNDATION | 0xFF000000, v.fillCount()
+		s.add(v.fillCount() == 0 ? new Seg(0, "no foundation needed", HudInk.soft()) : new Seg(GhostRenderer.foundation() | 0xFF000000, v.fillCount()
 			+ " foundation", HudInk.soft()));
 		if (v.clearCount() > 0) {
-			s.add(new Seg(GhostRenderer.CLEARED | 0xFF000000, v.clearCount() + " terrain cleared", HudInk.soft()));
+			s.add(new Seg(GhostRenderer.cleared() | 0xFF000000, v.clearCount() + " terrain cleared", HudInk.soft()));
 		}
 		if (v.lavaCount() > 0) {
-			s.add(new Seg(GhostRenderer.LAVA | 0xFF000000, v.lavaCount() + " lava", HudInk.error()));
+			s.add(new Seg(GhostRenderer.lava() | 0xFF000000, v.lavaCount() + " lava", HudInk.error()));
 		}
 		return s;
 	}
@@ -270,26 +275,35 @@ final class PlacementHud implements HudZones.Element {
 		if (!legend) {
 			List<String> k = new ArrayList<>(List.of("?", "keys"));
 			if (v.forceArmed()) {
-				k.addAll(List.of("Shift+Enter", "force"));
+				k.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "force"));
 			}
 			boolean armed = BuildPlacement.bigArmed();
-			k.addAll(List.of("Enter", armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
+			k.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
 			String[] a = k.toArray(String[]::new);
-			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {{"?", "keys", "Enter", "place"}};
+			// (PR3) the short row keeps whole names when it fits; else a long key name (Mouse Button 4) is cut by width in its own pair
+			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {dev.larattalabs.architect.client.hud.Keys.fitHints(font, new String[] {"?", "keys", dev.larattalabs.architect.client.hud.Keys.label(
+					dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "place"}, inner)};
 		}
-		List<String> all = new ArrayList<>(List.of("R", "rotate", "Shift+R", "back", "Arrows", "nudge", "PgUp/Dn", "raise", "L", v.locked() ? "unlock" : "lock",
-			"Enter", BuildPlacement.bigArmed() ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place"));
+		// (PR A4) the live bindings (Controls > "Architect: while placing"), so a rebound key shows here
+		List<String> all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "rotate", dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.ROTATE), "back", dev.larattalabs.architect.client.hud.Keys.nudgeLabel(), "nudge",
+			dev.larattalabs.architect.client.hud.Keys.heightLabel(), "raise", dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LOCK), v.locked() ? "unlock" : "lock",
+			dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), BuildPlacement.bigArmed() ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place"));
 		if (v.forceArmed()) {
-			all.addAll(List.of("Shift+Enter", "force"));
+			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.shift(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CONFIRM), "force"));
 		}
 		all.addAll(List.of("Esc", BuildPlacement.bigArmed() ? "disarm" : "cancel"));
+		if (dev.larattalabs.architect.client.hud.Keys.bound(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL) != dev.larattalabs.architect.client.hud.PlacingKeys.ESCAPE) {
+			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.CANCEL), "cancel too"));
+		}
 		// SAFETY: the undo key (outside placement) and the confirm threshold
 		if (dev.larattalabs.architect.client.hud.Keys.undoLast != null) {
 			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast), "undo last placement"));
 		}
 		// a real key in the keycap: "1,000+" drawn as one read as a key to press (UI polish 1)
 		all.addAll(List.of("Enter ×2", dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+ blocks"));
-		all.addAll(List.of("?", "hide"));
+		all.addAll(List.of("? or " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.PlacingKeys.Action.LEGEND), "hide"));
+		// (PR3) a pair wider than the panel on its own gets its key cut by width (the wrap below gives it a row of its own)
+		all = new ArrayList<>(List.of(dev.larattalabs.architect.client.hud.Keys.fitEachPair(font, all.toArray(String[]::new), inner)));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();
 		for (int i = 0; i < all.size(); i += 2) {

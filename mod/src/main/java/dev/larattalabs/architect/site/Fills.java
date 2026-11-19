@@ -641,7 +641,12 @@ public final class Fills {
 		}
 		String key = Builder.creditKey(s);
 		if (FILLED.equals(ph) || led.filled(key)) {
-			// the commit is on disk: never filled again, even into a container now empty (a player may have taken from it)
+			// the commit is on disk: never filled again, even into a container now empty (a player may have taken from it).
+			// (slice SOFF, review finding 2) an in-memory marker is not proof: a commit whose save was refused left it in memory only; the
+			// site advances only once the ledger holding it is confirmed on disk (else it waits, its locks locked)
+			if (!FILLED.equals(ph) && !Stockpiles.loadFailed() && (!SaveHold.admits(srv) || !Stockpiles.ledgerOnDisk(srv))) {
+				return false;
+			}
 			if (!FILLED.equals(ph)) {
 				s = setPhase(srv, s, FILLED);
 			}
@@ -700,6 +705,9 @@ public final class Fills {
 				SiteWaits.observe(srv, level, s.id(), dev.larattalabs.architect.survival.WaitCalc.Outcome.STARVED);
 				return false;
 			}
+		}
+		if (!SaveHold.admits(srv)) {
+			return false; // (slice SOFF) held while saving is off: parked before any payment or write
 		}
 		// (a) the intent, synchronous
 		if (!replay) {

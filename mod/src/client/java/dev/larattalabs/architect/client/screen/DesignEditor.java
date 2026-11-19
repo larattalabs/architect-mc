@@ -211,7 +211,7 @@ final class DesignEditor {
 	private int muted(GuiGraphicsExtractor g, String text, int x, int y, int w) {
 		for (String l : TextUtil.wrapPlain(font(), text, Math.max(20, w)).stream().limit(3).toList()) {
 			g.text(font(), l, x, y, UiStyle.mutedText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		return y;
 	}
@@ -608,7 +608,7 @@ final class DesignEditor {
 				+ (f.style().isEmpty() ? "?" : f.style()) + (f.noteSent().isEmpty() ? "" : ", with your words in the notes") + ".";
 			if (errors.containsKey("style")) {
 				g.text(font(), TextUtil.ellipsize(font(), errors.get("style"), iw - 4 - LABEL_W), sx + LABEL_W, y, UiBits.errorText(), false);
-				y += 11;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 			} else {
 				y = muted(g, explain, sx + LABEL_W, y, iw - 4 - LABEL_W) + 2;
 			}
@@ -769,12 +769,12 @@ final class DesignEditor {
 			DesignSpec.Choice tc = DesignSpec.find(DesignSpec.TYPES, f.type);
 			if (tc != null) {
 				g.text(font(), TextUtil.ellipsize(font(), tc.description(), w - LABEL_W), x + LABEL_W, y, UiStyle.mutedText(), false);
-				y += 11;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 			}
 		}
 		if (errors.containsKey("type")) {
 			g.text(font(), TextUtil.ellipsize(font(), errors.get("type"), w - LABEL_W), x + LABEL_W, y, UiBits.errorText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		// size
 		label(g, "Size", x, y);
@@ -810,10 +810,10 @@ final class DesignEditor {
 			+ "×" + p.dz() + " at " + p.minX() + ", " + p.y() + ", " + p.minZ() + ", entrance " + p.front() : "");
 		g.text(font(), TextUtil.ellipsize(font(), at, w - LABEL_W), x + LABEL_W, y, errors.containsKey("maxSize") ? UiBits.errorText() : UiStyle.mutedText(),
 			false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		if (errors.containsKey("maxSize")) {
 			g.text(font(), TextUtil.ellipsize(font(), errors.get("maxSize"), w - LABEL_W), x + LABEL_W, y, UiBits.errorText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		// name and notes
 		label(g, "Name", x, y);
@@ -881,7 +881,7 @@ final class DesignEditor {
 		if (b != null && f.features().stream().anyMatch(f.styleForm::fromStyle)) {
 			g.text(font(), TextUtil.ellipsize(font(), "✦ suggested by " + b.name() + "; untouched ones change with the Style", w), x, y, UiStyle.mutedText(),
 				false);
-			y += 12;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		}
 		return y + 2;
 	}
@@ -945,7 +945,7 @@ final class DesignEditor {
 			int ec = f.estimateError != null ? UiBits.errorText() : UiStyle.color("palette.ui.teal_text", 0xFF1E7472);
 			for (String l : TextUtil.wrapPlain(font(), est, w).stream().limit(2).toList()) {
 				g.text(font(), l, x, y, ec, false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			y += 2;
 		}
@@ -1236,7 +1236,7 @@ final class DesignEditor {
 		}
 		if (!f.skipped().isEmpty()) {
 			g.text(font(), TextUtil.ellipsize(font(), "ignored: " + String.join("; ", f.skipped()), w), x, y, UiBits.errorText(), false);
-			y += 11;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		label(g, "Name", x, y);
 		s.textField(g, Focus.VNAME, lib.variantNameView, lib.variantName, x + LABEL_W, y, w - LABEL_W, new TextFieldView.Style(null, 0,

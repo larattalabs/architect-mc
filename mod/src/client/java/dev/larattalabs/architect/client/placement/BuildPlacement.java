@@ -273,6 +273,7 @@ public final class BuildPlacement {
 		setStatus(null, false);
 		update(mc, true);
 		Architect.LOGGER.info("Placement: {} ({} cells, {} visible)", b.id(), c.count(), model(0).visibleCount());
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.PLACING, b.id()); // (PR F1)
 	}
 
 	/**
@@ -368,6 +369,7 @@ public final class BuildPlacement {
 			return;
 		}
 		userTurns = Math.floorMod(userTurns + quarterTurns, 4);
+		dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.ROTATED, null); // (PR F1)
 		forceArmed = false;
 		layerArmed = false;
 		BIG.cancel();
@@ -646,7 +648,11 @@ public final class BuildPlacement {
 			setStatus(r.message(), false);
 			// UI-2b: a short toast (the old one cut off the undo hint), the whole line with its links in chat
 			Toasts.push(Toasts.Level.INFO, moved ? "Moved" : construction ? "Construction site placed" : "Placed", refused.bp().name() + " (" + r.buildingId()
-				+ ")" + (moved ? "" : ". Undo: [Undo] in chat"));
+				+ ")" + (moved ? "" : ". Undo: " + undoKeyWords() + " or [Undo] in chat"));
+			if (!moved) {
+				dev.larattalabs.architect.client.help.ArchitectHelp.tip("hud.placement").hide(); // (PR W1) the HUD's tip has done its job
+				dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.PLACED, null); // (PR F1)
+			}
 			lastChat = placedChat(r, moved, construction);
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.gui != null && mc.gui.hud != null) {
@@ -689,6 +695,11 @@ public final class BuildPlacement {
 	 * construction site is taken down and its blocks refunded) and [Open in Library] ({@code /architect library <site>}). A move
 	 * has no [Undo] (moving it back is another move).
 	 */
+	/** (PR W1, contract 2.7) The undo key as the toast and chat say it: "Z twice" (the live binding). */
+	static String undoKeyWords() {
+		return dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice";
+	}
+
 	static net.minecraft.network.chat.Component placedChat(Result r, boolean moved, boolean construction) {
 		String id = r.buildingId();
 		net.minecraft.network.chat.MutableComponent m = net.minecraft.network.chat.Component.literal(r.message().replace(
@@ -697,6 +708,7 @@ public final class BuildPlacement {
 			// SAFETY: "undo" stays one click while it is the player's latest own placement (else it asks like remove)
 			m.append(link("[Undo]", "/architect remove " + id + " undo", construction ? "Take the construction site down (its blocks come back to you)"
 				: "Remove it: the ground comes back as it was")).append(" ");
+			m.append(net.minecraft.network.chat.Component.literal("(or " + undoKeyWords() + ") ").withStyle(net.minecraft.ChatFormatting.GRAY));
 		}
 		if (id != null) {
 			m.append(link("[Open in Library]", "/architect library " + id, "Show it in Library > Placed here"));
@@ -803,6 +815,16 @@ public final class BuildPlacement {
 	 * The server's verdict for the ghost's current site, or null while none arrived for it (the HUD says "Checking").
 	 * Client thread.
 	 */
+	/** (PR F1) The guide's view of the verdict: null while there is none yet, else whether the ghost fits (client and server). */
+	public static @Nullable Boolean fitsNow() {
+		View v = view();
+		Sites.Verdict sv = serverVerdict();
+		if (v == null || sv == null) {
+			return null;
+		}
+		return v.refusals().isEmpty() && sv.ok();
+	}
+
 	static Sites.@Nullable Verdict serverVerdict() {
 		View v = view();
 		return v != null && verdict != null && verdictKey(v, forceArmed).equals(verdictKey) ? verdict : null;
@@ -1064,12 +1086,12 @@ public final class BuildPlacement {
 		String water = TerrainFit.waterWarning(plan);
 		if (water != null) {
 			notes.add(water);
-			noteInk.add(GhostRenderer.WATER);
+			noteInk.add(GhostRenderer.water());
 		}
 		String wet = Approach.waterWarning(approach);
 		if (wet != null) {
 			notes.add(wet);
-			noteInk.add(GhostRenderer.WATER);
+			noteInk.add(GhostRenderer.water());
 		}
 		String shortOf = Approach.shortWarning(approach);
 		if (shortOf != null) {
@@ -1080,7 +1102,7 @@ public final class BuildPlacement {
 		SiteWarnings.Result site = ground ? SiteWarnings.forBlueprint(b, turns, box, approach, world) : SiteWarnings.Result.NONE;
 		for (String w : site.warnings()) {
 			notes.add(w);
-			noteInk.add(GhostRenderer.HAZARD);
+			noteInk.add(GhostRenderer.hazard());
 		}
 		// (7b ST) the standalone ports that meet no standable ground ("the entrance opens onto a drop"), as the server's verdict notes them
 		if (onSite != null) {
@@ -1088,7 +1110,7 @@ public final class BuildPlacement {
 			int dsz = turns % 2 == 0 ? sz : sx;
 			for (String w : dev.larattalabs.architect.site.SiteFit.drops(onSite, dsx, dsz, world)) {
 				notes.add(w);
-				noteInk.add(GhostRenderer.HAZARD);
+				noteInk.add(GhostRenderer.hazard());
 			}
 			viewDrops = dev.larattalabs.architect.site.SiteFit.dropsOf(onSite, dsx, dsz, world); // (7c CX) the Build a link key's first end
 		} else {

@@ -92,6 +92,11 @@ public final class ArchitectScreen extends Screen {
 	static final int CHIP_H = dev.larattalabs.labui.client.widget.Chip.H;
 	private static final int ROW_H = 24;
 
+	/** (PR A3) A list row's height at the text size: its two text lines grow. */
+	static int rowH() {
+		return ROW_H + 2 * Panels.textGrow();
+	}
+
 	enum Focus {
 		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT,
 		/** (4c) the Designs tab's redirect notes for a set's item. */
@@ -311,7 +316,7 @@ public final class ArchitectScreen extends Screen {
 	private int listScroll;
 	private int listNeeded;
 	private int listAvailable;
-	private int scrollStep = ROW_H;
+	private int scrollStep = rowH();
 	private int[] listArea = new int[4];
 	/** The Designs tab's set detail: its item list (wheel-scrolled by rows). */
 	private int[] groupArea = new int[4];
@@ -320,6 +325,120 @@ public final class ArchitectScreen extends Screen {
 	public ArchitectScreen(@Nullable Tab tab) {
 		super(Component.literal("Architect"));
 		this.tab = tab == null ? lastTab : tab;
+		dev.larattalabs.architect.client.help.ArchitectHelp.closeOverlays(); // (PR W1) a new screen starts without its ? overlay
+		dev.larattalabs.architect.client.help.GuideFeature.screenOpened(); // (PR F1) offer the tour in a world with none of the player's sites
+	}
+
+	/** (PR F1) The guide card's buttons this frame (checked before the screen's own controls). */
+	private final List<Hit> guideHits = new ArrayList<>();
+
+	/** (PR F1) The guide's card inside the screen: the offer, a paused tour, the in-screen steps, the closing card. */
+	private static boolean guideModal(dev.larattalabs.architect.client.help.GuideModel m) {
+		return switch (m.state()) {
+			case OFFERED, PAUSED, CLOSING -> true;
+			default -> false;
+		};
+	}
+
+	/**
+	 * (PR F1) A running tour's step inside the screen: a band under the tabs (in place of the "what's this" line), so it never covers the
+	 * control it points at. Returns the height used (0 when there is no step to show).
+	 */
+	private int guideBand(GuiGraphicsExtractor g, int x, int y, int w, int mx, int my) {
+		var m = dev.larattalabs.architect.client.help.GuideFeature.model();
+		var c = dev.larattalabs.architect.client.help.GuideFeature.card();
+		if (c == null || m.state() != dev.larattalabs.architect.client.help.GuideModel.State.RUNNING) {
+			return 0;
+		}
+		// one line, the height of the "what's this" line it replaces, so no tab's layout moves
+		String keep = c.buttons().isEmpty() ? null : c.buttons().get(0)[1];
+		int kw = keep == null ? 0 : font.width(keep) + 12;
+		int h = dev.larattalabs.labui.client.ui.TextUtil.lh(dev.larattalabs.labui.client.help.WhatsThis.H);
+		g.fill(x, y - 2, x + 2, y - 2 + h, UiStyle.BRASS);
+		String step = c.title().replace("Step ", "").replace(" of ", "/") + " · ";
+		int sw = font.width(step);
+		g.text(font, step, x + 6, y, UiStyle.clayText(), false);
+		String line = TextUtil.ellipsize(font, c.body(), w - 6 - sw - kw - 4);
+		g.text(font, line, x + 6 + sw, y, UiBits.ink(), false);
+		if (!line.equals(c.body())) {
+			int lx = x + 6 + sw;
+			if (mx >= lx && mx < lx + font.width(line) && my >= y - 2 && my < y + h) {
+				tooltip.offer("guide:band", c.body());
+			}
+		}
+		if (keep != null) {
+			String id = c.buttons().get(0)[0];
+			int kx = x + w - kw + 6;
+			guideHits.add(new Hit(id, keep, kx - 3, y - 2, kw, h, true, false, () -> dev.larattalabs.architect.client.help.GuideFeature.press(id)));
+			g.text(font, keep, kx, y, UiStyle.link(), false);
+		}
+		return h;
+	}
+
+	/** (PR F1) The tour's offer, pause and closing cards: modal, centred over a dimmed screen. */
+	private void drawGuide(GuiGraphicsExtractor g, int mx, int my) {
+		var m = dev.larattalabs.architect.client.help.GuideFeature.model();
+		var c = dev.larattalabs.architect.client.help.GuideFeature.card();
+		if (c == null || !guideModal(m)) {
+			return;
+		}
+		guideHits.clear();
+		boolean offer = m.state() == dev.larattalabs.architect.client.help.GuideModel.State.OFFERED;
+		int w = Math.min(300, width - 24);
+		Kit.Padding pad = Kit.padding("panel_paper");
+		int inner = w - pad.left() - pad.right();
+		List<String> body = TextUtil.wrapPlain(font, c.body(), inner);
+		List<String[]> buttons = c.buttons();
+		int lh10 = TextUtil.lh(10);
+		int h = pad.top() + (TextUtil.wrapPlain(font, c.title(), inner).size() * lh10 + 4) + body.size() * lh10 + (buttons.isEmpty() ? 0 : 26) + (offer ? TextUtil.lh(16) : 0) + pad.bottom();
+		int x = (width - w) / 2;
+		int y = (height - h) / 2;
+		g.nextStratum();
+		g.fill(0, 0, width, height, UiStyle.withAlpha(UiStyle.INK, 110));
+		Panels.panel(g, x, y, w, h);
+		int cx = x + pad.left();
+		int cy = y + pad.top();
+		for (String l : TextUtil.wrapPlain(font, c.title(), inner)) {
+			g.text(font, l, cx, cy, UiStyle.clayText(), false);
+			cy += lh10;
+		}
+		cy += 4;
+		for (String l : body) {
+			g.text(font, l, cx, cy, UiBits.ink(), false);
+			cy += lh10;
+		}
+		int before = hits.size();
+		if (!buttons.isEmpty()) {
+			cy += 4;
+			int bx = cx;
+			for (int i = 0; i < buttons.size(); i++) {
+				String[] b = buttons.get(i);
+				String id = b[0];
+				button(g, id, b[1], bx, cy, bw(b[1]), i == 0, true, mx, my, () -> {
+					dev.larattalabs.architect.client.help.GuideFeature.press(id);
+					if (id.equals("guide:design")) {
+						setTab(Tab.DESIGN);
+					}
+				});
+				bx += bw(b[1]) + 4;
+			}
+			cy += 24;
+		}
+		if (offer) {
+			// (N-PR-4) the colour-blind safe ghost colours, offered here: a checkbox under the choice
+			boolean on = dev.larattalabs.labui.ui.GhostPalette.current() == dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO;
+			String pal = "Use colour-blind safe ghost colours";
+			hits.add(new Hit("guide:okabe", pal, cx, cy, Math.min(inner, 13 + font.width(pal)), 12, true, on, () -> dev.larattalabs.architect.client.help
+				.GuideFeature.press("guide:okabe")));
+			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, cx, cy + 1, 10, 10, 0xFFFFFFFF);
+			g.text(font, TextUtil.ellipsize(font, pal, inner - 13), cx + 13, cy + 2, UiBits.ink(), false);
+		}
+		while (hits.size() > before) {
+			guideHits.add(hits.remove(hits.size() - 1));
+		}
+		// modal: nothing under the card takes a click
+		guideHits.add(new Hit("guide:modal", "", 0, 0, width, height, true, false, () -> {
+		}));
 	}
 
 	/** Opens the screen (B, /architect, after plot marking) at {@code tab} (null = the last one). */
@@ -342,6 +461,71 @@ public final class ArchitectScreen extends Screen {
 		tab = t;
 		lastTab = t;
 		listScroll = 0;
+		statusHelp = false;
+	}
+
+	/** (PR G1) The Status tab shows its Help page (the glossary) instead of its settings. */
+	boolean statusHelp;
+
+	/** (PR G1) Status > Help: the shared glossary (Architect's terms first, then any other mod's section), scrolled like the tab. */
+	private void drawStatusHelp(GuiGraphicsExtractor g, int x, int top0, int w, int footerY, int mx, int my) {
+		int viewH = footerY - 2 - top0;
+		listArea = new int[] {x, top0, w, viewH};
+		listAvailable = viewH;
+		scrollStep = 20;
+		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - viewH)));
+		int hitsBefore = hits.size();
+		boolean scrolls = listNeeded > viewH;
+		if (scrolls) {
+			w -= 10;
+		}
+		g.enableScissor(x, top0, x + w + 10, top0 + viewH);
+		int top = top0 - listScroll;
+		int y = top;
+		String back = "‹ Back to Status";
+		button(g, "status:help_back", back, x, y, bw(back), false, true, mx, my, () -> {
+			statusHelp = false;
+			listScroll = 0;
+		});
+		y += 24;
+		g.text(font, "Terms", x, y, UiStyle.clayText(), false);
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
+		for (String line : TextUtil.wrapPlain(font, "The words Architect's screens use. A screen's ? key (Shift+/) lists its keys and the terms it uses.", w)) {
+			g.text(font, line, x, y, UiBits.muted(), false);
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+		}
+		y += 8;
+		// two columns when there is room (GUI scale 2), one at GUI scale 4
+		var sections = dev.larattalabs.labui.ui.Glossary.sections(dev.larattalabs.architect.client.help.ArchitectGlossary.OWNER);
+		if (w >= 560) {
+			int colW = (w - 14) / 2;
+			int yl = y;
+			int yr = y;
+			for (var sec : sections) {
+				List<dev.larattalabs.labui.ui.Glossary.Term> terms = sec.terms();
+				int half = (terms.size() + 1) / 2;
+				var a = new dev.larattalabs.labui.ui.Glossary.Section(sec.owner(), sec.title(), terms.subList(0, half));
+				var b = new dev.larattalabs.labui.ui.Glossary.Section(sec.owner(), sec.title() + " (more)", terms.subList(half, terms.size()));
+				int m = Math.max(yl, yr);
+				yl = m + dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, List.of(a), x, m, colW);
+				yr = m + dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, List.of(b), x + colW + 14, m, colW);
+			}
+			y = Math.max(yl, yr);
+		} else {
+			y += dev.larattalabs.labui.client.help.GlossaryView.draw(g, font, sections, x, y, w);
+		}
+		g.disableScissor();
+		listNeeded = y - top;
+		for (int i = hits.size() - 1; i >= hitsBefore; i--) {
+			Hit h = hits.get(i);
+			if (h.y() + h.h() <= top0 || h.y() >= top0 + viewH) {
+				hits.remove(i);
+			}
+		}
+		if (scrolls) {
+			scrollbar(g, x + w + 4, top0, viewH);
+		}
+		UiBits.hints(g, font, x, footerY + 4, false, "Esc", "back", "?", "keys");
 	}
 
 	@Override
@@ -405,7 +589,16 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent e) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledKeyPressed(e));
+	}
+
+	private boolean scaledKeyPressed(KeyEvent e) {
 		int k = e.key();
+		// (PR W1) the "?" overlay first: Shift+/ or F1 ("?" yields to a focused field or an open pop-up's search)
+		if (keysOverlay().keyPressed(e, focus != Focus.NONE || popup != null)) {
+			return true;
+		}
 		Popup pp = popup;
 		if (pp != null && !e.isEscape() && pp.list.keyPressed(e)) {
 			return true;
@@ -421,6 +614,9 @@ public final class ArchitectScreen extends Screen {
 				library.cancelEdit();
 			} else if (focus != Focus.NONE) {
 				setFocus(Focus.NONE);
+			} else if (tab == Tab.STATUS && statusHelp) {
+				statusHelp = false;
+				listScroll = 0;
 			} else if (tab == Tab.DESIGN && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
 				closeSet();
 			} else if (!(tab == Tab.LIBRARY && library.escape())) {
@@ -586,6 +782,21 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledMouseClicked(e, doubleClick));
+	}
+
+	private boolean scaledMouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		if (keysOverlay().mouseClicked(e.x(), e.y()) || popup == null && dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).mouseClicked(e.x(), e
+			.y())) {
+			return true;
+		}
+		for (Hit h : List.copyOf(guideHits)) { // (PR F1) the guide card's buttons
+			if (h.enabled() && h.contains(e.x(), e.y())) {
+				h.action().run();
+				return true;
+			}
+		}
 		Popup pp = popup;
 		if (pp != null) {
 			if (pp.contains(e.x(), e.y())) {
@@ -668,6 +879,11 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
+		// (PR2) measure text as it is drawn: the click or caret move lands on the character under the pointer at any text size
+		return ScaledInput.in(this, () -> scaledMouseDragged(e, dx, dy));
+	}
+
+	private boolean scaledMouseDragged(MouseButtonEvent e, double dx, double dy) {
 		Popup pp = popup;
 		if (pp != null && pp.list.mouseDragged(e.x(), e.y(), e.button())) {
 			return true;
@@ -1142,6 +1358,11 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		// (PR A3) the text size: drawn at the GUI size over the scale, so the layout reflows (opted-in mods only)
+		dev.larattalabs.labui.client.prefs.TextScaleHost.render(this, "architect_mc", g, mouseX, mouseY, (gg, x, y) -> extractScaled(gg, x, y, a));
+	}
+
+	private void extractScaled(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		if (U3Dev.park) {
 			mouseX = -1000;
 			mouseY = -1000;
@@ -1205,20 +1426,25 @@ public final class ArchitectScreen extends Screen {
 		boolean jhov = jh.contains(mouseX, mouseY);
 		dev.larattalabs.labui.client.widget.Paint.box(g, jx, band[0], jw, band[1], jhov ? UiStyle.rowHover() : UiStyle.withAlpha(UiStyle.PAPER, 255),
 			waiting > 0 ? UiStyle.selectedEdge() : jhov ? UiStyle.rowHoverEdge() : UiStyle.chipEdge());
-		g.text(font, jl, jx + 6, band[0] + (band[1] - 8) / 2 + 1, UiBits.ink(), false);
+		g.text(font, jl, jx + 6, band[0] + (band[1] - TextUtil.lh(8)) / 2 + 1, UiBits.ink(), false);
 		// tabs
-		int ty = cy + 16;
+		int grow = Panels.textGrow(); // (PR A3) the header and tabs grow with the text size
+		int ty = cy + 16 + grow;
 		int tx = cx;
 		for (Tab t : Tab.values()) {
 			String label = t.label() + badge(t);
 			int w = font.width(label) + 16;
-			Hit h = new Hit("tab:" + t.id(), label, tx, ty, w, 16, true, t == tab, () -> setTab(t));
+			Hit h = new Hit("tab:" + t.id(), label, tx, ty, w, 16 + grow, true, t == tab, () -> setTab(t));
 			hits.add(h);
-			Panels.sprite(g, t == tab ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, tx, ty, w, 16);
+			Panels.sprite(g, t == tab ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, tx, ty, w, 16 + grow);
 			g.text(font, label, tx + 8, ty + 4, t == tab ? UiBits.ink() : h.contains(mouseX, mouseY) ? UiBits.ink() : UiBits.muted(), false);
 			tx += w + 3;
 		}
-		int top = ty + 22;
+		int top = ty + 22 + grow;
+		// (PR W1) the tab's "what's this" line under the tabs (× hides it; Status > Show tips again)
+		guideHits.clear();
+		int guideH = guideBand(g, cx, top - 1, cw, mouseX, mouseY); // (PR F1) a running tour's step takes the line's place
+		top += guideH > 0 ? guideH : dev.larattalabs.architect.client.help.ArchitectHelp.tip(tab.id()).draw(g, font, cx, top - 3, cw, mouseX, mouseY);
 		int footerY = bottom - 20;
 		switch (tab) {
 			case DESIGN -> drawDesign(g, cx, top, cw, footerY, mouseX, mouseY);
@@ -1237,6 +1463,14 @@ public final class ArchitectScreen extends Screen {
 			g.nextStratum();
 			tooltip.draw(g, font, mouseX, mouseY);
 		}
+		drawGuide(g, mouseX, mouseY); // (PR F1)
+		keysOverlay().draw(g, font, width, height);
+	}
+
+	/** (PR W1) This tab's "?" overlay: its keys (labels read live) and the terms it uses. */
+	dev.larattalabs.labui.client.help.KeysOverlay keysOverlay() {
+		return dev.larattalabs.architect.client.help.ArchitectHelp.overlay(tab.id(), tab.label(), () -> dev.larattalabs.architect.client.help.ArchitectHelp
+			.tabKeys(tab.id()));
 	}
 
 	private String badge(Tab t) {
@@ -1419,7 +1653,7 @@ public final class ArchitectScreen extends Screen {
 			int lh = footerY - 16 - ly;
 			listArea = new int[] {x, ly, listW, lh};
 			listAvailable = lh;
-			scrollStep = ROW_H;
+			scrollStep = rowH();
 			Panels.inset(g, x, ly, listW, lh);
 			drawSites(g, x, ly, listW, lh, x + listW + 12, w - listW - 12, footerY, mx, my);
 		}
@@ -1491,7 +1725,7 @@ public final class ArchitectScreen extends Screen {
 			LibraryFeature::nameOf);
 		int needed = 4;
 		for (var gr : groups) {
-			needed += SITE_HEAD_H + gr.rows().size() * ROW_H;
+			needed += SITE_HEAD_H + gr.rows().size() * rowH();
 		}
 		listNeeded = needed;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
@@ -1512,20 +1746,20 @@ public final class ArchitectScreen extends Screen {
 				if (sel && gr.readOnly()) {
 					managedBy = gr.title().substring("Managed by ".length());
 				}
-				if (ry + ROW_H > ly && ry < ly + lh) {
-					Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(ROW_H - 2, ly + lh - ry), true, sel,
+				if (ry + rowH() > ly && ry < ly + lh) {
+					Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(rowH() - 2, ly + lh - ry), true, sel,
 						() -> selectedSite = s.id());
 					hits.add(h);
 					if (sel) {
-						Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+						Panels.selectedRow(g, x + 2, ry, listW - 4, rowH() - 2);
 					} else if (h.contains(mx, my)) {
-						Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+						Panels.hoverRow(g, x + 2, ry, listW - 4, rowH() - 2);
 					}
 					g.text(font, TextUtil.ellipsize(font, row.name(), listW - 16), x + 8, ry + 2, UiBits.ink(), false);
 					g.text(font, TextUtil.ellipsize(font, "at " + s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + (s.placing() ? " · placing" : ""),
-						listW - 16), x + 8, ry + 12, UiBits.muted(), false);
+						listW - 16), x + 8, ry + 2 + TextUtil.lh(10), UiBits.muted(), false);
 				}
-				ry += ROW_H;
+				ry += rowH();
 			}
 		}
 		g.disableScissor();
@@ -1543,7 +1777,7 @@ public final class ArchitectScreen extends Screen {
 		}
 		int y = ly;
 		g.text(font, TextUtil.ellipsize(font, siteName(s), dw), dx, y, UiBits.ink(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		var b = s.box();
 		List<String> lines = new ArrayList<>();
 		lines.add("At " + b.minX() + ", " + b.minY() + ", " + b.minZ() + " · " + facing(s.rotation()));
@@ -1557,14 +1791,14 @@ public final class ArchitectScreen extends Screen {
 		}
 		for (String line : lines) {
 			g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (managedBy != null) {
 			y += 2;
 			for (String line : TextUtil.wrapPlain(font, dev.larattalabs.architect.library.PlacedGroups.managedReason(managedBy) + ".", dw).stream().limit(2)
 				.toList()) {
 				g.text(font, line, dx, y, UiStyle.clayText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		y = drawVersions(g, s, dx, y, dw, footerY, mx, my);
@@ -1572,7 +1806,7 @@ public final class ArchitectScreen extends Screen {
 		if (r != null) {
 			for (String line : TextUtil.wrapPlain(font, r.message(), dw).stream().limit(4).toList()) {
 				g.text(font, line, dx, y, r.problem() ? UiBits.errorText() : UiBits.muted(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		int by = footerY - 16 - 20;
@@ -1635,7 +1869,7 @@ public final class ArchitectScreen extends Screen {
 		String line = v == 0 ? "its version can't be found (remove or place it again)" : "v" + v + (head > v ? " · v" + head + " available" : " · up to date")
 			+ (s.versioning().deviations() > 0 ? " · " + s.versioning().deviations() + " cell(s) you changed kept" : "");
 		g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, head > v && v > 0 ? UiStyle.clayText() : UiBits.muted(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		int bx = dx;
 		if (v > 0 && head > v && !s.id().equals(updateSite)) {
 			String up = "Update…";
@@ -1649,7 +1883,7 @@ public final class ArchitectScreen extends Screen {
 			var c = updateCheck;
 			if (c == null) {
 				g.text(font, "Working out the update…", dx, y, UiBits.muted(), false);
-				y += 12;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 			} else {
 				List<String> info = new java.util.ArrayList<>();
 				info.add("v" + c.from() + " -> v" + c.to() + ": +" + c.added() + " -" + c.removed() + " ~" + c.changed() + " cells");
@@ -1681,7 +1915,7 @@ public final class ArchitectScreen extends Screen {
 					} else {
 						g.text(font, TextUtil.ellipsize(font, l, dw), dx, y, l.startsWith("!") ? UiBits.errorText() : UiBits.muted(), false);
 					}
-					y += 10;
+					y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				}
 				y += 2;
 				String apply = "Apply";
@@ -1697,7 +1931,7 @@ public final class ArchitectScreen extends Screen {
 			for (Site.History h : s.versioning().history()) {
 				g.text(font, TextUtil.ellipsize(font, "v" + h.version() + " · " + h.kind() + (h.revertible() ? "" : " · kept for good"), dw), dx, y, UiBits
 					.muted(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			int hx = dx;
 			java.util.Set<Integer> offered = new java.util.TreeSet<>();
@@ -1970,7 +2204,7 @@ public final class ArchitectScreen extends Screen {
 		int lh = footerY - 16 - top;
 		listArea = new int[] {x, top, listW, lh};
 		listAvailable = lh;
-		scrollStep = ROW_H;
+		scrollStep = rowH();
 		Panels.inset(g, x, top, listW, lh);
 		Job sel = null;
 		for (Job j : jobs) {
@@ -1982,20 +2216,20 @@ public final class ArchitectScreen extends Screen {
 			sel = jobs.get(0);
 			selectedDesign = sel.id();
 		}
-		listNeeded = jobs.size() * ROW_H + 4;
+		listNeeded = jobs.size() * rowH() + 4;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
 		g.enableScissor(x + 1, top + 1, x + listW - 1, top + lh - 1);
 		int ry = top + 3 - listScroll;
 		for (Job j : jobs) {
 			boolean isSel = j == sel;
-			if (ry + ROW_H > top && ry < top + lh) {
-				Hit h = new Hit("design:" + j.id(), j.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(ROW_H - 2, top + lh - ry), true, isSel,
+			if (ry + rowH() > top && ry < top + lh) {
+				Hit h = new Hit("design:" + j.id(), j.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(rowH() - 2, top + lh - ry), true, isSel,
 					() -> selectedDesign = j.id());
 				hits.add(h);
 				if (isSel) {
-					Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					Panels.selectedRow(g, x + 2, ry, listW - 4, rowH() - 2);
 				} else if (h.contains(mx, my)) {
-					Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					Panels.hoverRow(g, x + 2, ry, listW - 4, rowH() - 2);
 				}
 				Panels.paperDot(g, j.fam(), x + 6, ry + 4);
 				String kind = j.kind().equals("design") ? "" : j.kind().toUpperCase(Locale.ROOT);
@@ -2004,9 +2238,9 @@ public final class ArchitectScreen extends Screen {
 				if (!kind.isEmpty()) {
 					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, UiStyle.clayText(), false);
 				}
-				g.text(font, TextUtil.ellipsize(font, jobLine(j), listW - 24), x + 16, ry + 12, UiBits.muted(), false);
+				g.text(font, TextUtil.ellipsize(font, jobLine(j), listW - 24), x + 16, ry + 2 + TextUtil.lh(10), UiBits.muted(), false);
 			}
-			ry += ROW_H;
+			ry += rowH();
 		}
 		g.disableScissor();
 		if (jobs.isEmpty()) {
@@ -2035,30 +2269,30 @@ public final class ArchitectScreen extends Screen {
 			return;
 		}
 		g.text(font, TextUtil.ellipsize(font, j.title(), dw), dx, y, UiBits.ink(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		g.text(font, TextUtil.ellipsize(font, jobLine(j), dw), dx, y, UiBits.muted(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		if (j.design() != null) {
 			JsonObject r = j.design().request();
 			for (String k : List.of("type", "style", "materials", "name")) {
 				if (r.has(k)) {
 					g.text(font, TextUtil.ellipsize(font, k + ": " + r.get(k).getAsString(), dw), dx, y, UiBits.ink(), false);
-					y += 10;
+					y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				}
 			}
 			if (r.has("remix")) {
 				g.text(font, TextUtil.ellipsize(font, "remix of: " + LibraryFeature.nameOf(r.get("remix").getAsString()), dw), dx, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			if (r.has("features")) {
 				g.text(font, TextUtil.ellipsize(font, "features: " + r.get("features").toString().replaceAll("[\\[\\]\"]", "").replace(",", ", "), dw),
 					dx, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			if (r.has("maxSize")) {
 				JsonObject sz = r.getAsJsonObject("maxSize");
 				g.text(font, "at most " + sz.get("x") + " × " + sz.get("y") + " × " + sz.get("z"), dx, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			// (4c) a massing job, or a detail pass and its conformance
 			var mref = dev.larattalabs.architect.apiimpl.Wire4c.designMassing(j.design().raw());
@@ -2067,19 +2301,19 @@ public final class ArchitectScreen extends Screen {
 				String extra = mraw == null ? "" : " · " + dev.larattalabs.architect.apiimpl.Wire4c.massing(mraw).parts().size() + " masses" + (mraw.has(
 					"detail") ? " · detailed" : "");
 				g.text(font, TextUtil.ellipsize(font, "massing v" + mref.get().version() + extra, dw), dx, y, UiStyle.clayText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				if (r.has("redirect") && r.get("redirect").isJsonObject()) {
 					for (String line : TextUtil.wrapPlain(font, "redirect: " + r.getAsJsonObject("redirect").get("notes").getAsString(), dw).stream().limit(2)
 						.toList()) {
 						g.text(font, line, dx, y, UiBits.ink(), false);
-						y += 10;
+						y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 					}
 				}
 			}
 			if (r.has("fromMassing")) {
 				g.text(font, TextUtil.ellipsize(font, "detail of the massing" + (r.has("massingVersion") ? " v" + r.get("massingVersion").getAsString() : ""),
 					dw), dx, y, UiStyle.clayText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			var conf = dev.larattalabs.architect.apiimpl.Wire4c.conformance(j.design().raw().get("conformance"));
 			if (conf.isPresent()) {
@@ -2087,16 +2321,16 @@ public final class ArchitectScreen extends Screen {
 				String cl = c.ok() && c.warnings() == 0 ? "conformance: ok (" + UiBits.CHECK + " part names, boxes, size, roofs)" : "conformance: " + (c.ok()
 					? "ok" : "not ok") + ", " + c.warnings() + " warning" + (c.warnings() == 1 ? "" : "s");
 				g.text(font, TextUtil.ellipsize(font, cl, dw), dx, y, c.ok() && c.warnings() == 0 ? UiBits.okText() : UiStyle.clayText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				List<String> all = new ArrayList<>(c.errors());
 				all.addAll(c.issues());
 				for (String warn : all.stream().limit(4).toList()) {
 					g.text(font, TextUtil.ellipsize(font, "· " + warn, dw), dx, y, UiStyle.clayText(), false);
-					y += 10;
+					y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				}
 				if (all.size() > 4) {
 					g.text(font, "· " + (all.size() - 4) + " more", dx, y, UiBits.muted(), false);
-					y += 10;
+					y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 				}
 			}
 			// (5a) the critique: how it ended, every round with its overall (the best one starred), the best round's scores and issues
@@ -2109,29 +2343,31 @@ public final class ArchitectScreen extends Screen {
 			SidecarState.Variant v = j.variant();
 			if (v.from() != null) {
 				g.text(font, TextUtil.ellipsize(font, "from: " + LibraryFeature.nameOf(v.from()), dw), dx, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			if (v.path() != null) {
 				g.text(font, TextUtil.ellipsize(font, "file: " + java.nio.file.Path.of(v.path()).getFileName(), dw), dx, y, UiBits.ink(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			g.text(font, TextUtil.ellipsize(font, "no Claude call: the helper " + (v.isImport() ? "checks the structure (custom profile)"
 				: "re-runs the design's code"), dw), dx, y, UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (j.blueprintId() != null) {
 			g.text(font, TextUtil.ellipsize(font, "result: " + LibraryFeature.nameOf(j.blueprintId()) + (j.size() == null ? "" : " (" + j.size()[0] + "×"
 				+ j.size()[1] + "×" + j.size()[2] + ")"), dw), dx, y, UiBits.okText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (j.error() != null) {
 			for (String line : TextUtil.wrapPlain(font, j.error(), dw).stream().limit(6).toList()) {
 				g.text(font, line, dx, y, UiBits.errorText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		int by = footerY - 16 - 20;
 		int bx = dx;
+		// (PR A3) the button row owns its band: detail lines that reach it at a large text size are covered, not drawn through
+		g.fill(dx - 1, by - 3, x + w, by + 21, UiStyle.CREAM);
 		if (j.design() != null) {
 			String cancel = "Cancel";
 			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), !j.running() ? "It has finished"
@@ -2178,7 +2414,7 @@ public final class ArchitectScreen extends Screen {
 			" · $%.2f", c.usd());
 		g.text(font, TextUtil.ellipsize(font, head, dw), dx, y, c.ended() && c.end() == dev.larattalabs.architect.api.Critique.EndReason.SHIP
 			? UiBits.okText() : UiStyle.clayText(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		List<String> rounds = dev.larattalabs.architect.design.CritiqueRules.roundLines(c);
 		for (int i = 0; i < rounds.size() && y + 10 <= bottom; i++) {
 			var r = c.rounds().get(i);
@@ -2188,16 +2424,16 @@ public final class ArchitectScreen extends Screen {
 			}
 			g.text(font, TextUtil.ellipsize(font, rounds.get(i), dw - 4), dx + 2, y, best ? UiBits.ink() : r.error().isPresent() ? UiStyle.clayText()
 				: UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (!c.scores().isEmpty() && y + 10 <= bottom) {
 			g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(c.scores()), dw), dx, y, UiBits.ink(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(c.openIssues());
 		for (int i = 0; i < issues.size() && y + 10 <= bottom; i++) {
 			g.text(font, TextUtil.ellipsize(font, "· " + issues.get(i), dw), dx, y, UiStyle.clayText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		return y;
 	}
@@ -2206,30 +2442,30 @@ public final class ArchitectScreen extends Screen {
 	private void drawGroup(GuiGraphicsExtractor g, dev.larattalabs.architect.api.Group gr, int dx, int top, int dw, int footerY, int mx, int my) {
 		int y = top;
 		g.text(font, TextUtil.ellipsize(font, gr.name() + "  (" + gr.id() + ")", dw), dx, y, UiBits.ink(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		var st = gr.status();
 		String head = st.wire().replace('_', ' ') + " · " + gr.done() + " of " + gr.items().size() + " done" + (gr.failed() > 0 ? ", " + gr.failed()
 			+ " failed" : "") + (gr.wave() >= 0 && !gr.finished() ? " · wave " + gr.wave() : "");
 		Panels.dot(g, fam(st), dx, y + 1, false);
 		g.text(font, TextUtil.ellipsize(font, head, dw - 10), dx + 10, y, st == dev.larattalabs.architect.api.Group.Status.FAILED ? UiBits.errorText()
 			: UiBits.ink(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		String bibleName = dev.larattalabs.architect.client.design.SetFeature.bible(gr.bible().id()).map(dev.larattalabs.architect.api.Bible::name)
 			.orElse(gr.bible().id());
 		String cost = String.format(Locale.ROOT, "$%.2f", gr.cost().usd()) + gr.budgetUsd().map(b -> String.format(Locale.ROOT, " of $%.2f budget", b))
 			.orElse(" (no budget)");
 		g.text(font, TextUtil.ellipsize(font, "Style " + bibleName + " v" + gr.bible().version() + " · " + gr.concurrency() + " at a time · " + cost, dw),
 			dx, y, UiBits.muted(), false);
-		y += 10;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		if (st == dev.larattalabs.architect.api.Group.Status.HELD_USAGE) {
 			String until = gr.usageLimitUntil() > 0 ? UiBits.clock(gr.usageLimitUntil()) : "the reset";
 			g.text(font, TextUtil.ellipsize(font, "Held by a usage limit: every building waits until " + until + ", then all resume.", dw), dx, y,
 				UiStyle.clayText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		} else if (gr.reason().isPresent()) {
 			for (String line : TextUtil.wrapPlain(font, gr.reason().get(), dw).stream().limit(2).toList()) {
 				g.text(font, line, dx, y, st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET ? UiStyle.clayText() : UiBits.errorText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		// (4c) who approves a massingFirst set
@@ -2239,7 +2475,7 @@ public final class ArchitectScreen extends Screen {
 			String who = architectUi ? "massings first · approve each shape here" + (gr.maxRedirects() > 0 ? ", " + gr.maxRedirects() + " redirect"
 				+ (gr.maxRedirects() == 1 ? "" : "s") + " each" : "") : "massings first · its owner approves: " + gr.owner().orElse("?");
 			g.text(font, TextUtil.ellipsize(font, who, dw), dx, y, architectUi ? UiStyle.clayText() : UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		y += 3;
 		// the items
@@ -2401,23 +2637,23 @@ public final class ArchitectScreen extends Screen {
 		g.text(font, TextUtil.ellipsize(font, (bj.kind().equals("revise") ? "Revise the Style " : "New Style ") + bj.bible().map(
 			dev.larattalabs.architect.api.Bible::name).orElse(bj.request().has("name") ? bj.request().get("name").getAsString() : "") + " v" + bj.version(), dw),
 			dx, y, UiBits.ink(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		String bst = bj.status().name().toLowerCase(Locale.ROOT);
 		g.text(font, TextUtil.ellipsize(font, bj.step().isEmpty() ? bst : bj.step().startsWith(bst) ? bj.step() : bst + ": " + bj.step(), dw), dx, y,
 			UiBits.muted(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		String prompt = bj.request().has("prompt") ? bj.request().get("prompt").getAsString() : "";
 		for (String line : TextUtil.wrapPlain(font, "prompt: " + prompt, dw).stream().limit(2).toList()) {
 			g.text(font, line, dx, y, UiBits.ink(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		g.text(font, String.format(Locale.ROOT, "cost $%.2f · %d component round%s", bj.cost().usd(), bj.rounds(), bj.rounds() == 1 ? "" : "s"), dx, y,
 			UiBits.muted(), false);
-		y += 10;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		if (bj.error().isPresent()) {
 			for (String line : TextUtil.wrapPlain(font, bj.error().get(), dw).stream().limit(3).toList()) {
 				g.text(font, line, dx, y, UiBits.errorText(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		int by = footerY - 16 - 20;
@@ -2457,6 +2693,10 @@ public final class ArchitectScreen extends Screen {
 	// ------------------------------------------------------------------ Status tab
 
 	private void drawStatus(GuiGraphicsExtractor g, int x, int top0, int w, int footerY, int mx, int my) {
+		if (statusHelp) {
+			drawStatusHelp(g, x, top0, w, footerY, mx, my);
+			return;
+		}
 		// (slice UI, A-placed "GUI-4 Status scroll"; UI-AUDIT 14) the tab scrolls when it is taller than the panel (GUI scale 4 cut it off)
 		int viewH = footerY - 2 - top0;
 		listArea = new int[] {x, top0, w, viewH};
@@ -2474,9 +2714,24 @@ public final class ArchitectScreen extends Screen {
 		int lx = x;
 		int rx = x + colW + 14;
 		int y = top;
+		// (PR G1, W1) first, so it is in view at every GUI scale: the Help page (the glossary) and the hidden "what's this" lines
+		String help = "Help and terms…";
+		button(g, "status:help", help, lx, y, bw(help), false, true, mx, my, () -> {
+			statusHelp = true;
+			listScroll = 0;
+		});
+		int hidden = dev.larattalabs.architect.client.design.UiPrefs.tipsHiddenCount();
+		if (hidden > 0) {
+			String again = "Show tips again (" + hidden + " hidden)";
+			int ax = lx + bw(help) + 8;
+			hits.add(new Hit("status:tips_again", again, ax, y + 4, Math.min(colW - bw(help) - 8, font.width(again)), 12, true, false,
+				dev.larattalabs.architect.client.help.ArchitectHelp::showTipsAgain));
+			g.text(font, TextUtil.ellipsize(font, again, colW - bw(help) - 8), ax, y + 6, UiStyle.link(), false);
+		}
+		y += 26;
 		// left: the helper
 		g.text(font, "Design helper", lx, y, UiStyle.clayText(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		LauncherPlan.State st = Launcher.state();
 		String fam = switch (st) {
 			case RUNNING -> "done";
@@ -2486,27 +2741,27 @@ public final class ArchitectScreen extends Screen {
 		};
 		Panels.dot(g, fam, lx, y + 1, false);
 		g.text(font, st.wire(), lx + 10, y, UiBits.ink(), false);
-		y += 11;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		// UI-2b: the plain sentence first; the technical detail (exit codes, ports, env vars) as small print under it
 		String plain = Launcher.summary().isEmpty() ? Launcher.detail() : Launcher.summary();
 		for (String line : TextUtil.wrapPlain(font, plain, colW).stream().limit(3).toList()) {
 			g.text(font, line, lx, y, st == LauncherPlan.State.NODE_MISSING || st == LauncherPlan.State.CRASHED ? UiStyle.error() : UiBits.ink(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (st == LauncherPlan.State.INSTALLING && Launcher.installStartedAt() > 0) {
 			dev.larattalabs.architect.client.hud.ProgressStrip.draw(g, font, lx, y, colW, "Installing · " + dev.larattalabs.architect.client.hud
 				.ProgressStrip.elapsed(Launcher.installStartedAt()), -1, UiBits.muted(), UiStyle.status("working"), UiStyle.rule());
-			y += 13;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(13);
 		}
 		String small = (Launcher.summary().isEmpty() ? "" : "Details: " + Launcher.detail()) + (Launcher.devBuildWithoutBundle()
 			&& !Launcher.detail().equals(Launcher.NO_BUNDLE) ? (Launcher.summary().isEmpty() ? "" : " · ") + Launcher.NO_BUNDLE : "");
 		for (String line : TextUtil.wrapPlain(font, small, colW).stream().limit(3).toList()) {
 			g.text(font, line, lx, y, UiStyle.mutedText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (Launcher.installLine() != null) {
 			g.text(font, TextUtil.ellipsize(font, "npm: " + Launcher.installLine(), colW), lx, y, UiStyle.mutedText(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		y += 2;
 		LauncherPlan.Source src = Launcher.source();
@@ -2525,7 +2780,7 @@ public final class ArchitectScreen extends Screen {
 			// (slice UI) wrapped, never cut: GUI 4 cut "started by this game"
 			for (String line : TextUtil.wrapPlain(font, f, colW)) {
 				g.text(font, line, lx, y, UiBits.muted(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		y += 4;
@@ -2547,15 +2802,22 @@ public final class ArchitectScreen extends Screen {
 		y += 24;
 		// SAFETY: the big-placement confirm's threshold and the undo key (the left column: the right one is full at GUI scale 4)
 		g.text(font, "Safety", lx, y, UiStyle.clayText(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		String safety = "Placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
 			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (the number is in Architect's config file). Undo last "
 			+ "placement: " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice (Controls to rebind).";
 		for (String line : TextUtil.wrapPlain(font, safety, colW)) {
 			g.text(font, line, lx, y, UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
-		y += 6;
+		y += 4;
+		// (PR F1) the guided first build: start it again (or resume it)
+		var gm = dev.larattalabs.architect.client.help.GuideFeature.model();
+		String gl = gm.state() == dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? "Resume the first-build tour" : "Restart the first-build tour";
+		button(g, "status:guide", gl, lx, y, bw(gl), false, true, mx, my, () -> dev.larattalabs.architect.client.help.GuideFeature.on(gm.state()
+			== dev.larattalabs.architect.client.help.GuideModel.State.PAUSED ? dev.larattalabs.architect.client.help.GuideModel.Event.RESUME
+			: dev.larattalabs.architect.client.help.GuideModel.Event.RESTART, null));
+		y += 24;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
 			int th = Math.min(footerY - 4 - y, tail.size() * 9 + 6);
@@ -2564,14 +2826,48 @@ public final class ArchitectScreen extends Screen {
 				int ly = y + 3;
 				for (String line : tail.subList(Math.max(0, tail.size() - (th - 6) / 9), tail.size())) {
 					g.text(font, TextUtil.ellipsize(font, line, colW - 8), lx + 4, ly, UiBits.ink(), false);
-					ly += 9;
+					ly += dev.larattalabs.labui.client.ui.TextUtil.lh(9);
 				}
 			}
 		}
-		// right: auth
+		// right: (PR A2, A3) Display first, so the text size, its fit note and the ghost colours are in view at every GUI scale
 		int ry = top;
+		g.text(font, "Display", rx, ry, UiStyle.clayText(), false);
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
+		// (PR A3) the text size: 100 / 125 / 150 % of Architect's screens (lab-ui's setting); clamped to fit at this GUI scale
+		int pref = dev.larattalabs.labui.ui.TextScale.preference();
+		var tsr = dev.larattalabs.labui.client.prefs.TextScaleHost.result(this, "architect_mc");
+		String tl = "› Text size: " + pref + " %";
+		hits.add(new Hit("text_scale", tl, rx, ry, Math.min(colW, font.width(tl)), 12, true, pref != 100, () -> dev.larattalabs.labui.client.prefs.TextScaleHost
+			.set(dev.larattalabs.labui.ui.TextScale.next(pref))));
+		g.text(font, TextUtil.ellipsize(font, tl, colW), rx, ry + 2, UiStyle.link(), false);
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
+		if (tsr.dropped()) {
+			for (String line : TextUtil.wrapPlain(font, "Shown at " + tsr.percent() + " %: " + pref + " % doesn't fit at this GUI scale. A smaller GUI "
+				+ "scale (Options > Video) makes room.", colW)) {
+				g.text(font, line, rx, ry + 2, UiStyle.warn(), false);
+				ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+			}
+		}
+		ry += 2;
+		// (PR A2) the ghost colours: standard or colour-blind safe (lab-ui's setting: Steward's ghosts follow it)
+		var pal = dev.larattalabs.labui.ui.GhostPalette.current();
+		String pl = "› Ghost colours: " + pal.label();
+		hits.add(new Hit("ghost_palette", pl, rx, ry, Math.min(colW, font.width(pl)), 12, true, pal != dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD,
+			() -> dev.larattalabs.labui.client.prefs.LabUiPrefs.setGhostPalette(pal == dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD
+				? dev.larattalabs.labui.ui.GhostPalette.Palette.OKABE_ITO : dev.larattalabs.labui.ui.GhostPalette.Palette.STANDARD)));
+		for (String line : TextUtil.wrapPlain(font, pl, colW)) {
+			g.text(font, line, rx, ry + 2, UiStyle.link(), false);
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+		}
+		for (String line : TextUtil.wrapPlain(font, "Outlines are dashed when a design can't go there, in both palettes.", colW)) {
+			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
+		}
+		ry += 2;
+		ry += 6;
 		g.text(font, "Claude access", rx, ry, UiStyle.clayText(), false);
-		ry += 12;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		SidecarState.Status s = Sidecar.state().status();
 		String auth = !Sidecar.connected() ? "unknown (helper not connected)" : switch (s.auth()) {
 			case "ok" -> "ready" + (s.authSource() == null ? "" : ": " + s.authSource());
@@ -2582,15 +2878,15 @@ public final class ArchitectScreen extends Screen {
 		};
 		Panels.dot(g, "ok".equals(s.auth()) ? "done" : "failed".equals(s.auth()) || "missing".equals(s.auth()) ? "error" : "idle", rx, ry + 1, false);
 		g.text(font, TextUtil.ellipsize(font, auth, colW - 10), rx + 10, ry, UiBits.ink(), false);
-		ry += 11;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		if (Sidecar.connected()) {
 			g.text(font, TextUtil.ellipsize(font, "Agent SDK " + s.sdk() + (s.version() == null ? "" : " · helper " + s.version()), colW), rx, ry,
 				UiBits.muted(), false);
-			ry += 10;
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		ry += 6;
 		g.text(font, "Anthropic API key", rx, ry, UiStyle.clayText(), false);
-		ry += 11;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		int fw = colW;
 		Hit field = new Hit("key_field", "API key", rx, ry, fw, TextFieldView.BASE_H, true, focus == Focus.KEY, () -> setFocus(Focus.KEY));
 		hits.add(field);
@@ -2615,10 +2911,10 @@ public final class ArchitectScreen extends Screen {
 			this::clearKey);
 		ry += 24;
 		statusLine(g, keyMessage, keyMessageError, rx, ry, colW);
-		ry += 12;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		for (String line : TextUtil.wrapPlain(font, "Stored by the design helper, never in the game's files.", colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
-			ry += 10;
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		ry += 6;
 		boolean on = s.useClaudeLogin();
@@ -2628,10 +2924,10 @@ public final class ArchitectScreen extends Screen {
 		hits.add(t);
 		Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, Sidecar.connected() ? 0xFFFFFFFF : 0x90FFFFFF);
 		g.text(font, TextUtil.ellipsize(font, toggle, colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
-		ry += 14;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(14);
 		for (String line : TextUtil.wrapPlain(font, CLAUDE_LOGIN_NOTE, colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
-			ry += 10;
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		// (5a, N1) critique by default: the Design tab's and the set dialog's "Critique and revise" start on
 		ry += 6;
@@ -2641,10 +2937,10 @@ public final class ArchitectScreen extends Screen {
 		hits.add(ct);
 		Panels.sprite(g, crit ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, 0xFFFFFFFF);
 		g.text(font, TextUtil.ellipsize(font, cl, colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
-		ry += 14;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(14);
 		for (String line : TextUtil.wrapPlain(font, "A critic reviews each design's renders and the designer revises it (up to 2 rounds, at most about doubling its cost). Off by default.", colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
-			ry += 10;
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		// UI-2b: the construction HUD's size (the J key cycles it too)
 		ry += 4;
@@ -2657,11 +2953,11 @@ public final class ArchitectScreen extends Screen {
 		hits.add(new Hit("site_hud", hl, rx, ry, Math.min(colW, font.width(hl)), 12, true, hudMode != dev.larattalabs.architect.client.design.UiPrefs.SiteHud
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
-		ry += 12;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.clayText(), false);
-		ry += 12;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		boolean inWorld = dev.larattalabs.architect.survival.SurvivalWorld.loaded();
 		boolean survivalOn = dev.larattalabs.architect.survival.SurvivalWorld.on();
 		boolean may = inWorld && dev.larattalabs.architect.client.survival.SurvivalFeature.mayToggle();
@@ -2670,17 +2966,17 @@ public final class ArchitectScreen extends Screen {
 		hits.add(sv);
 		Panels.sprite(g, survivalOn ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, may ? 0xFFFFFFFF : 0x90FFFFFF);
 		g.text(font, TextUtil.ellipsize(font, sl + (survivalOn ? ": on" : ": off"), colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
-		ry += 14;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(14);
 		String svNote = !inWorld ? "Open a world to see its setting." : (survivalOn
 			? "Place makes a construction site that builds as its crate is fed (hoppers welcome)."
 			: "Placement is instant and free.") + (may ? " Changing it needs cheats (permission level 2): you have them."
 			: " Changing it needs cheats (permission level 2): ask an operator, or /architect survival on or off with cheats.");
 		for (String line : TextUtil.wrapPlain(font, svNote, colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
-			ry += 10;
+			ry += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		statusLine(g, survivalMessage, survivalMessageError, rx, ry, colW);
-		ry += 12;
+		ry += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		g.disableScissor();
 		listNeeded = Math.max(y, ry) - top;
 		// controls scrolled out of the view take no clicks
@@ -2693,7 +2989,7 @@ public final class ArchitectScreen extends Screen {
 		if (scrolls) {
 			scrollbar(g, x + w + 4, top0, viewH);
 		}
-		String[] hints = {"1-4", "tabs", "Esc", "close"};
+		String[] hints = {"1-4", "tabs", "?", "keys", "Esc", "close"};
 		UiBits.hints(g, font, x, footerY + 4, false, hints);
 	}
 

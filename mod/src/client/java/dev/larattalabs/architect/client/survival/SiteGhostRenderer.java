@@ -15,7 +15,10 @@ import net.minecraft.world.phys.Vec3;
  */
 final class SiteGhostRenderer {
 	static final int ALPHA = 0x48;
-	static final int NEXT = 0xA05FD068;
+	/** (PR A2) The next cells' colour, from lab-ui's GhostPalette (the player's palette). */
+	static int next() {
+		return dev.larattalabs.labui.ui.GhostPalette.argb(dev.larattalabs.labui.ui.GhostPalette.Cat.SITE_NEXT, 0xA0);
+	}
 	static final float INFLATE = 0.004f;
 	private static final float[] FACE_SHADE = {0.62f, 1.0f, 0.86f, 0.86f, 0.74f, 0.74f};
 	static volatile int lastQuads;
@@ -41,7 +44,7 @@ final class SiteGhostRenderer {
 					if (f == 0) {
 						continue;
 					}
-					int argb = next.contains(i) ? NEXT : (ALPHA << 24) | (TemplateCells.color(g.states[i]) & 0xFFFFFF);
+					int argb = next.contains(i) ? next() : (ALPHA << 24) | (TemplateCells.color(g.states[i]) & 0xFFFFFF);
 					if ((argb >>> 24) == 0) {
 						continue;
 					}

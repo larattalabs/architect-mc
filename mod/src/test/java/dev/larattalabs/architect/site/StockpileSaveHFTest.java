@@ -76,7 +76,7 @@ class StockpileSaveHFTest {
 				byLedgerFirst++;
 				continue;
 			}
-			String before = s.substring(Math.max(0, p - 1600), p);
+			String before = s.substring(Math.max(0, p - 2400), p); // (SOFF) wider: AFTER_SAVE refuses over a level with saving off first
 			if (before.contains("AFTER_SAVE.register") || before.contains("SERVER_STOPPING.register")) { // (J1) AFTER_SAVE, was BEFORE_SAVE
 				byLifecycle++;
 			}

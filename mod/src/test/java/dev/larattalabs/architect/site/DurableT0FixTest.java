@@ -544,8 +544,10 @@ class DurableT0FixTest {
 	@Test
 	void r2_1_payoutsWaitWhileASaveIsOwed() throws IOException {
 		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
-		assertTrue(sp.contains("dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {\n\t\trequireNoDebt();")
-			&& sp.contains("ServerPlayer to) throws Sites.SiteException {\n\t\trequireNoDebt();"), "withdraw and dissolve refuse first");
+		// (slice SOFF) the saving-off hold may come first: it refuses before anything changes too
+		String hold = "\n\t\tSaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes";
+		assertTrue(sp.contains("dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {" + hold + "\n\t\trequireNoDebt();")
+			&& sp.contains("ServerPlayer to) throws Sites.SiteException {" + hold + "\n\t\trequireNoDebt();"), "withdraw and dissolve refuse first");
 	}
 
 	@Test

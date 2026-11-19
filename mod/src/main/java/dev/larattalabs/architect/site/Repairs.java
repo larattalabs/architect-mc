@@ -125,7 +125,11 @@ public final class Repairs {
 		ServerTickEvents.END_SERVER_TICK.register(Repairs::tick);
 		ServerLifecycleEvents.BEFORE_SAVE.register((srv, flush, force) -> saveStartedAt = System.currentTimeMillis());
 		// registered after Stockpiles' AFTER_SAVE (which joins the chunk IO): the save's start time is the conservative bound
-		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> recordSave(srv));
+		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> {
+			if (marksSave(SaveEvidence.chunksRefusal(srv))) {
+				recordSave(srv);
+			}
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(srv -> running = false);
 		ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
 			running = false;
@@ -194,6 +198,15 @@ public final class Repairs {
 		}
 	}
 
+	/**
+	 * (slice SOFF, pure) Whether a world save advances the running marker's {@code saved=}: only when it wrote every level (SaveEvidence,
+	 * recorded while it ran: a level with saving off is skipped unless forced), or a crash after it would take entries committed before it
+	 * as on disk (never LAGGING).
+	 */
+	static boolean marksSave(@org.jspecify.annotations.Nullable String chunksRefusal) {
+		return chunksRefusal == null;
+	}
+
 	/** After a completed save while the world runs: the marker records the save's start and the jobs running then (atomic). */
 	private static void recordSave(MinecraftServer srv) {
 		Path w = world;
@@ -222,6 +235,9 @@ public final class Repairs {
 	private static void tick(MinecraftServer srv) {
 		if (startTicks < 0) {
 			return;
+		}
+		if (!SaveHold.jobsAdmitted(srv)) {
+			return; // (slice SOFF) the start's settles and the auto repair held while saving is off
 		}
 		if (!startDone) {
 			startTicks++;

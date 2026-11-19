@@ -20,8 +20,12 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
-| v0.81.0 | 2026-11-18 | 1.69.0 | 0.73.0 | 26 | `buildStatus`, `connectorCheck`, `regionLayout`, `removalStopCause`, `settlementChanged` | RC pending | ok |
-| v0.80.0 | 2026-11-18 | 1.68.0 | 0.73.0 | 26 |  | RC pending | ok |
+| v0.85.0 | 2026-11-19 | 1.70.0 | 0.74.0 | 26 |  | RC pending | ok |
+| v0.84.0 | 2026-11-19 | 1.70.0 | 0.74.0 | 26 |  | RC pending | ok |
+| v0.83.0 | 2026-11-19 | 1.70.0 | 0.73.0 | 26 | `layoutWalls`, `revisionStopCause` | RC passed | ok |
+| v0.82.0 | 2026-11-18 | 1.69.0 | 0.73.0 | 26 |  | RC passed | ok |
+| v0.81.0 | 2026-11-18 | 1.69.0 | 0.73.0 | 26 | `buildStatus`, `connectorCheck`, `regionLayout`, `removalStopCause`, `settlementChanged` | RC passed | ok |
+| v0.80.0 | 2026-11-18 | 1.68.0 | 0.73.0 | 26 |  | RC passed | ok |
 | v0.79.0 | 2026-11-17 | 1.68.0 | 0.72.0 | 26 | `terrainConstruction` | RC passed | ok |
 | v0.78.0 | 2026-11-17 | 1.67.0 | 0.71.0 | 26 | `diagnoseRepair`, `maxBillPerLot`, `removalStop`, `repairSuspects` | RC passed | ok |
 | v0.77.0 | 2026-11-17 | 1.66.0 | 0.71.0 | 26 |  | RC passed | ok |
@@ -164,6 +168,28 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - LCAP-Q1: `SiteWait.capScope` names the cap a `bill_cap` wait hit: `"region"`, `"lot:<id>"` or `"lot:<id>,region"` (lot first); a gate
   mechanism's wait carries it as `waitsFor.cap`. LCAP-Q2: `lcap-survival` now covers a revision (rid > 0) with lot caps and an RV3 kill.
 - A realise or revision whose region record can't be saved is refused `JOURNAL_UNAVAILABLE` (detail `region_record`), nothing written.
+
+### New for Steward (NEXT, slice RVC; ask 8bS-1)
+- `RevisionView.removalStopCause` (feature `"revisionStopCause"`): a revision `UNDOING` after a stopped `undoRevision` carries its stage
+  removal's `RemovalStopCause` (SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), as 8b's `RegionView`; null when not
+  waiting. The `waiting` text is unchanged. Survives save and reload. CONTRACT "Slice RVC".
+### New for Steward (NEXT, slice LYW; 8bS-2)
+- `layoutWalls` (feature `"layoutWalls"`): `Regions.layout` of a plan/0 walled town now has its wall. `PartShape` gains `width`, `height`,
+  `wall`, `wallAt` (the 1.69.0 constructor stays). The wall is one shape of kind `connector.wall` (part = the plan part, so `PartBuild`
+  colours it): `ends` its line at the foot, a closed wall's last point its first again (each consecutive pair one straight run), `width` its
+  thickness, `height` its height. Gates are `connector.gate` (a named gate part's own answer, else the wall's listed gate, ends `[at]`); a
+  gatehouse's passage is `<lot>_passage` (ends front, back). `corners: tower` stubs are kind `tower` (`<wall>_tower_<n>`). Tower and gatehouse
+  lots stay `lot` with `wall` and `wallAt` (`corner`, `gate`, `run`). Routes carry `width`.
+- District roads: a plan/0 district's flat routes were already `route` shapes (its IR roads `route_d_<a>__<b>_<n>`); a route laid in stairs
+  or graded sections is now one `route` shape `route_d_<a>__<b>` (or `route_join`) from its graph edge and IR paths. Not covered: a bundled
+  program's wall (`walled_hill`, `sky_isle`: still one `tile` part, its ring op leaves no line in the IR). CONTRACT "Slice LYW".
+
+### New for Steward (NEXT, slice LYW2)
+- `Regions.layout` of a `walled_hill` or `sky_isle` region (planned from NEXT on) has its wall: the `wall` part is kind `connector.wall` (not
+  `tile`), with its gate `wall_g1` (`connector.gate`) and towers `wall_tower_<n>` (kind `tower`, `wallAt: run`). A region planned before
+  stays a `tile`. A district route laid partly as roads still lists each road piece both alone and inside its `route_d_<a>__<b>`
+  shape, as in v0.83.0: route-piece dedup is deferred until the kit records each piece's edge explicitly.
+  CONTRACT "Slice LYW2".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

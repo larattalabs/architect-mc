@@ -14,7 +14,7 @@ import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 /**
- * (7c CX, docs/CONTRACT.md "Phase 7c" §3 row 11) The "Build a link" key ({@link Keys#buildLink}, K by default): the connector mode of the
+ * (7c CX, docs/CONTRACT.md "Phase 7c" §3 row 11) The "Build a link" key ({@link Keys#buildLink}, N by default since PR K1; K before): the connector mode of the
  * plot marker ({@link PlotMarker#startConnector}). After a site house was placed whose entrance opens onto a drop ({@link SiteFit#dropsOf},
  * the warning's "build a link here"), the key starts the link from that port's outside cell (the first end marked: the player marks the
  * other end, on the ground or another site); otherwise both ends are marked. The remembered drop is used once, or forgotten after
@@ -72,7 +72,7 @@ public final class BuildLinkKey {
 		}
 		drops = List.copyOf(d);
 		dropsAt = Util.getMillis();
-		String k = Keys.buildLink == null ? "K" : Keys.label(Keys.buildLink);
+		String k = Keys.buildLink == null ? "N" : Keys.label(Keys.buildLink);
 		Toasts.push(Toasts.Spec.of(Toasts.Level.NEED, "The entrance opens onto a drop", "Port " + d.get(0).port() + " faces " + d.get(0).facing()
 			+ " over a drop: " + SiteFit.LINK_HERE).hint(k, "build a link"));
 	}

@@ -145,6 +145,9 @@ public final class UndoLastKey {
 			boolean bad = m.startsWith("!");
 			lastMessage = bad ? m.substring(1) : m;
 			say(bad ? Toasts.Level.WARN : Toasts.Level.INFO, bad ? "Not undone" : "Undone", lastMessage);
+			if (!bad) {
+				dev.larattalabs.architect.client.help.GuideFeature.on(dev.larattalabs.architect.client.help.GuideModel.Event.UNDONE, null); // (PR F1)
+			}
 		});
 	}
 

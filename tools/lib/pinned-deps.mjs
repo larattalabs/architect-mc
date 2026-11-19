@@ -137,6 +137,20 @@ export function ensurePinnedDeps({ home, modDir, slot = home, env = process.env,
   return { checked, resolved: names, seed: seedClasspath({ home, modDir, slot, env, log, run: seedRun }) };
 }
 
+/**
+ * (PDS) The gate runner's slot setup: every run dir (shard or offline lane) builds `--offline` in its own `<run>/.gradle-home`
+ * (unit-mod, umt, unit-scope, the drivers), which a fresh slot clones from the seed. The v0.84.0 verifier's fresh slot lacked the
+ * bumped lab_ui 0.6.1 and unit-mod stopped the chain, because only the frozen-source, build-artifact, server-host and nomod-server
+ * builds called ensurePinnedDeps. gate-run's setupShard calls this once per slot per run, before any step: the pins (one online
+ * resolve when missing) and the classpath seed. `slots`: [{ name, run, env }]; `ensure` stubbable. -> [{ slot, home, ...result }]
+ */
+export function ensureSlotPins(slots, { log = () => {}, ensure = ensurePinnedDeps, ...opts } = {}) {
+  return slots.map(({ name, run, env = process.env }) => {
+    const home = path.join(run, '.gradle-home');
+    return { slot: name, home, ...ensure({ ...opts, home, modDir: path.join(run, 'mod'), slot: name, env, log }) };
+  });
+}
+
 // ------------------------------------------------------------------ (GI A46) the full-classpath seed
 
 /** The build files whose content decides what resolves (relative to the repo root, the mod dir's parent; a missing one hashes as absent). */

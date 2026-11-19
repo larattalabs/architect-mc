@@ -56,6 +56,11 @@ final class LibraryTab {
 	static final int CARD_MIN_W = 84;
 	/** (U3) a shorter card: more rows of designs in the same grid. */
 	static final int CARD_H = 70;
+
+	/** (PR A3) A card's height at the text size: its two text lines grow, the preview keeps its size. */
+	static int cardH() {
+		return CARD_H + 2 * dev.larattalabs.labui.client.ui.Panels.textGrow();
+	}
 	static final int GAP = 5;
 	static final List<String> VIEW_KINDS = List.of("iso", "top", "front", "cutaway");
 	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ROOT).withZone(ZoneId.systemDefault());
@@ -292,12 +297,16 @@ final class LibraryTab {
 		// search, right of the Designs/Placed chips
 		// (U3) at a narrow width (GUI scale 4) the search keeps to the room the chips leave, and the filters get short labels
 		boolean narrow = gridW < 330;
-		int sw = Math.max(56, gx + gridW - chipsRight - 6);
+		// (PR A3) when the chips leave less than 80 px (a large text size at GUI 4), the search takes a row of its own
+		int room = gx + gridW - chipsRight - 6;
+		boolean searchRow = room < 80;
+		int sw = searchRow ? gridW : room;
 		int sx = gx + gridW - sw;
-		s.textField(g, Focus.SEARCH, searchView, search, sx, top, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
+		int sy = searchRow ? top + ArchitectScreen.CHIP_H + 3 : top;
+		s.textField(g, Focus.SEARCH, searchView, search, sx, sy, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
 		// filters row (slice UI, A-chips: kit chips at 18 px; GUI 4 keeps whole words and wraps to a second row instead of "Coll.", a bare ★
 		// and a bare ↕)
-		int fy = top + ArchitectScreen.CHIP_H + 3;
+		int fy = sy + ArchitectScreen.CHIP_H + 3;
 		LibraryQuery q = LibraryFeature.query();
 		List<LibraryCard> all = LibraryFeature.cards();
 		int rowEnd = gx + gridW;
@@ -501,15 +510,15 @@ final class LibraryTab {
 		int cols = Math.max(1, (inner + GAP) / (CARD_MIN_W + GAP));
 		int cw = (inner - (cols - 1) * GAP) / cols;
 		int rows = (cards.size() + cols - 1) / cols;
-		int needed = rows * (CARD_H + GAP) + 4;
-		s.setScrollArea(x, y, w - 6, h, needed, CARD_H + GAP);
+		int needed = rows * (cardH() + GAP) + 4;
+		s.setScrollArea(x, y, w - 6, h, needed, cardH() + GAP);
 		int scroll = s.scroll();
 		g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
 		for (int i = 0; i < cards.size(); i++) {
 			LibraryCard c = cards.get(i);
 			int cx = x + 4 + (i % cols) * (cw + GAP);
-			int cy = y + 4 + (i / cols) * (CARD_H + GAP) - scroll;
-			if (cy + CARD_H < y || cy > y + h) {
+			int cy = y + 4 + (i / cols) * (cardH() + GAP) - scroll;
+			if (cy + cardH() < y || cy > y + h) {
 				continue;
 			}
 			drawCard(g, c, cx, cy, cw, y, y + h, c == sel || sel != null && sel.id().equals(c.id()), mx, my);
@@ -536,7 +545,7 @@ final class LibraryTab {
 	private void drawCard(GuiGraphicsExtractor g, LibraryCard c, int x, int y, int w, int clipTop, int clipBottom, boolean selected, int mx, int my) {
 		Font font = font();
 		int hy = Math.max(y, clipTop);
-		int hh = Math.min(y + CARD_H, clipBottom) - hy;
+		int hh = Math.min(y + cardH(), clipBottom) - hy;
 		boolean hover = mx >= x && mx < x + w && my >= hy && my < hy + hh;
 		// star first: it takes the click before the card does
 		int starX = x + w - 13;
@@ -551,13 +560,13 @@ final class LibraryTab {
 				cancelEdit();
 			}));
 		}
-		g.fill(x, y, x + w, y + CARD_H, selected ? 0x30D97757 : hover ? 0x16000000 : 0x0C000000);
+		g.fill(x, y, x + w, y + cardH(), selected ? 0x30D97757 : hover ? 0x16000000 : 0x0C000000);
 		int border = selected ? UiStyle.CLAY_DARK : 0x26000000;
 		g.fill(x, y, x + w, y + 1, border);
-		g.fill(x, y + CARD_H - 1, x + w, y + CARD_H, border);
-		g.fill(x, y, x + 1, y + CARD_H, border);
-		g.fill(x + w - 1, y, x + w, y + CARD_H, border);
-		int ph = CARD_H - 27;
+		g.fill(x, y + cardH() - 1, x + w, y + cardH(), border);
+		g.fill(x, y, x + 1, y + cardH(), border);
+		g.fill(x + w - 1, y, x + w, y + cardH(), border);
+		int ph = CARD_H - 27; // the preview keeps its size; the text rows under it grow
 		g.fill(x + 2, y + 2, x + w - 2, y + 2 + ph, 0x22FFFFFF);
 		drawPreview(g, c.id(), "iso", x + 3, y + 3, w - 6, ph - 2);
 		// star (filled when starred, faint outline on hover)
@@ -574,7 +583,7 @@ final class LibraryTab {
 			g.text(font, badge, x + 6, y + ph - 9, UiStyle.OnDark.text(), false); // on the dark badge bar: the on-dark token
 		}
 		g.text(font, TextUtil.ellipsize(font, c.name(), w - 6), x + 3, y + ph + 4, UiBits.ink(), false);
-		g.text(font, TextUtil.ellipsize(font, c.type() + " · " + c.sizeText(), w - 6), x + 3, y + ph + 14, UiBits.muted(), false);
+		g.text(font, TextUtil.ellipsize(font, c.type() + " · " + c.sizeText(), w - 6), x + 3, y + ph + 4 + TextUtil.lh(10), UiBits.muted(), false);
 	}
 
 	/** A preview image of {@code kind}, else the iso one, else the built-in top-down plan. */
@@ -662,8 +671,25 @@ final class LibraryTab {
 		// (5a) its critique: the verdict line, the scores, the open issues (at most 2 lines)
 		var critique = bomOpen ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : critiqueOf(c.id());
 		int critLines = critique.map(cr -> 1 + (cr.scores().isEmpty() ? 0 : 1) + Math.min(2, cr.openIssues().size())).orElse(0);
-		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (mats ? 1 : 0) + (survival ? 1 : 0) + critLines;
-		int textH = textLines * 10 + 4 + (edit != Edit.NONE ? 12 : 0);
+		// (PR A3) the lines that fit over the buttons with at least a 36 px preview: the critique goes first, then the materials line,
+		// then the description, so a large text size never runs text into the buttons
+		int lineH = TextUtil.lh(10);
+		int chipsRoom = PreviewImages.find(c.id()).size() > 1 ? ArchitectScreen.CHIP_H + 3 : 0;
+		int fit = (buttonsTop - 4 - chipsRoom - y - 36 - 4 - (edit != Edit.NONE ? 12 : 0)) / lineH;
+		int fixedLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + (survival ? 1 : 0);
+		if (fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) + critLines > fit) {
+			critique = java.util.Optional.empty();
+			critLines = 0;
+		}
+		if (fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) > fit) {
+			mats = false;
+		}
+		int descRoom = Math.max(0, Math.min(2, fit - fixedLines - (mats ? 1 : 0)));
+		if (desc.size() > descRoom) {
+			desc = descRoom == 0 ? List.of() : List.of(desc.subList(0, descRoom).toArray(String[]::new));
+		}
+		int textLines = fixedLines + Math.min(2, desc.size()) + (mats ? 1 : 0) + critLines;
+		int textH = textLines * lineH + 4 + (edit != Edit.NONE ? 12 : 0);
 		List<String> kinds = new ArrayList<>();
 		for (PreviewImages.Found f : PreviewImages.find(c.id())) {
 			kinds.add(f.kind());
@@ -698,7 +724,7 @@ final class LibraryTab {
 			s.chip(g, "edit:save", "Save", x + w - okW, ty + 1, true, true, mx, my, this::commitEdit);
 			ty += 18;
 			g.text(font, TextUtil.ellipsize(font, "Enter saves · Esc cancels", w), x, ty, UiBits.muted(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		} else {
 			String star = c.favorite() ? "★ " : "";
 			int nx = x;
@@ -707,12 +733,12 @@ final class LibraryTab {
 				nx += font.width(star);
 			}
 			g.text(font, TextUtil.ellipsize(font, c.name(), w - (nx - x)), nx, ty, UiBits.ink(), false);
-			ty += 11;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(11);
 		}
 		String facts = c.type() + " · " + c.sizeX() + " × " + c.sizeY() + " × " + c.sizeZ() + (b == null ? "" : " · entrance " + b.front())
 			+ (c.createdAt() > 0 ? " · " + date(c.createdAt()) : "") + versionFacts(c.id());
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
-		ty += 10;
+		ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
 		if (c.pinned()) {
 			prov = "pinned to its site (" + c.pinnedFit().replace('_', ' ') + ") · " + prov; // (7b ST, N-7b-6)
@@ -723,15 +749,15 @@ final class LibraryTab {
 				+ c.bible()) + " v" + c.bibleVersion() + " · " + prov;
 		}
 		g.text(font, TextUtil.ellipsize(font, prov, w), x, ty, UiStyle.clayText(), false);
-		ty += 10;
+		ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		if (!c.userTags().isEmpty()) {
 			g.text(font, TextUtil.ellipsize(font, "#" + String.join("  #", c.userTags()), w), x, ty, UiStyle.color("palette.ui.teal_text", 0xFF1E7472),
 				false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		for (String line : desc.stream().limit(2).toList()) {
 			g.text(font, line, x, ty, UiBits.ink(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (mats) {
 			List<String> matNames = new ArrayList<>();
@@ -739,7 +765,7 @@ final class LibraryTab {
 				matNames.add(m.replace("minecraft:", "").replace('_', ' '));
 			}
 			g.text(font, TextUtil.ellipsize(font, "uses " + String.join(", ", matNames), w), x, ty, UiBits.muted(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		if (critique.isPresent()) {
 			var cr = critique.get();
@@ -749,16 +775,16 @@ final class LibraryTab {
 				+ cr.openIssues().size() + " open issue" + (cr.openIssues().size() == 1 ? "" : "s") + (cr.stale() ? " · stale: the design changed since"
 					: "");
 			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : UiStyle.clayText(), false);
-			ty += 10;
+			ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			if (!cr.scores().isEmpty()) {
 				g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(cr.scores()), w), x, ty, cr.stale()
 					? UiBits.muted() : UiBits.ink(), false);
-				ty += 10;
+				ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 			List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(cr.openIssues());
 			for (String line : issues.stream().limit(2).toList()) {
 				g.text(font, TextUtil.ellipsize(font, "· " + line, w), x, ty, UiBits.muted(), false);
-				ty += 10;
+				ty += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		if (survival) {
@@ -777,7 +803,9 @@ final class LibraryTab {
 		}
 		// buttons: Place, Edit, ⋯
 		String placeL = c.pinned() ? (survival ? "Construction site on its site" : "Place on its site") : survival ? "Place construction site" : "Place";
-		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 14));
+		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 6 - 8));
+		// (PR A3) the button row owns its band: nothing above runs under the buttons at a large text size
+		g.fill(x, buttonsTop - 3, x + w, buttonsTop + 21, UiStyle.CREAM);
 		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, NO_WORLD, mx, my, () -> place(c.id()));
 		int ex = x + pw + 4;
 		// Edit: the design's variants editor (its Style, materials and parameters), else a remix (an import has no source)
@@ -1168,11 +1196,11 @@ final class LibraryTab {
 		Font font = font();
 		int y = top - 3;
 		g.text(font, "Import a structure (.nbt)", x, y + 1, UiStyle.clayText(), false);
-		y += 12;
+		y += dev.larattalabs.labui.client.ui.TextUtil.lh(12);
 		for (String line : TextUtil.wrapPlain(font, "From architect/imports/ and this world's structure-block saves (generated/<namespace>/structure/). "
 			+ "It becomes a custom entry, checked by the helper; imports have no source, so no variants.", w).stream().limit(2).toList()) {
 			g.text(font, line, x, y, UiBits.muted(), false);
-			y += 10;
+			y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 		}
 		y += 3;
 		// (U3) a search over the files (name and path)
@@ -1225,7 +1253,7 @@ final class LibraryTab {
 			for (String line : TextUtil.wrapPlain(font, "No .nbt or .schem files yet. Put structure files or Sponge schematics in " + Exchange.importsDir(Blueprints.gameDataDir())
 				+ ", or save one with a structure block in this world, then Refresh.", w - 12)) {
 				g.text(font, line, x + 6, y + 6, UiBits.muted(), false);
-				y += 10;
+				y += dev.larattalabs.labui.client.ui.TextUtil.lh(10);
 			}
 		}
 		// footer

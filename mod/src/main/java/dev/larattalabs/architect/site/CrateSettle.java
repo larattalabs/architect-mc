@@ -590,6 +590,10 @@ public final class CrateSettle {
 	}
 
 	private static void sweep(MinecraftServer srv) {
+		if (!SaveHold.admits(srv)) {
+			dev.larattalabs.architect.txn.TxnServer.later(() -> sweep(srv)); // (SOFF) parked while saving is off, never refused mid-way
+			return;
+		}
 		String why = notReady();
 		if (why != null) {
 			// (T4b, finding 3b) a store failed to load (an empty registry is no evidence that anything is gone): nothing is paid this session
@@ -932,6 +936,10 @@ public final class CrateSettle {
 	}
 
 	private static void resumeNow(MinecraftServer srv, String siteId) {
+		if (!SaveHold.admits(srv)) {
+			resumeLater(srv, siteId); // (SOFF) parked while saving is off
+			return;
+		}
 		Site.Pending p = Sites.pendingOf(siteId);
 		if (p == null) {
 			// (T2b last round P1 2) no pending removal (a recovery brought the site back, or it settled): nothing is paid here; a durable stash
@@ -973,6 +981,10 @@ public final class CrateSettle {
 	}
 
 	private static void resumeInfraNow(MinecraftServer srv, String roadId, @Nullable JsonObject read) {
+		if (!SaveHold.admits(srv)) {
+			resumeInfraLater(srv, roadId, read); // (SOFF) parked while saving is off
+			return;
+		}
 		JsonObject st = durable(roadId);
 		if (st == null && read != null) {
 			st = read; // (T4b fix round, finding 4) a pre-T4 road's pending credit, read at the check

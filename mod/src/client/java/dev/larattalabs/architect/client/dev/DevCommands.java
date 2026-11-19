@@ -227,6 +227,23 @@ public final class DevCommands {
 		DevBridge.registerScreen("title", mc -> new TitleScreen());
 		DevBridge.registerScreen("pause", mc -> new PauseScreen(true));
 		DevBridge.registerScreen("options", mc -> new OptionsScreen(mc.gui.screen(), mc.options));
+		// (PR K1) Options > Controls > Key Binds, scrolled to the end, where the mods' categories (Architect, lab-ui) are listed
+		DevBridge.registerScreen("keybinds", mc -> new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(mc.gui.screen(), mc.options) {
+			private boolean scrolled;
+
+			@Override
+			public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor g, int mx, int my, float pt) {
+				if (!scrolled) {
+					scrolled = true;
+					for (var c : children()) {
+						if (c instanceof net.minecraft.client.gui.components.AbstractScrollArea list) {
+							list.setScrollAmount(list.maxScrollAmount());
+						}
+					}
+				}
+				super.extractRenderState(g, mx, my, pt);
+			}
+		});
 		DevBridge.registerScreen("inventory", mc -> {
 			LocalPlayer p = needPlayer(mc);
 			return p.isCreative() && mc.getConnection() != null

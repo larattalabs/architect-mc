@@ -19,7 +19,7 @@
 import { info, normalize, qualify, tagBlocks } from '../blocks.mjs';
 import { variant } from '../kit.mjs';
 import { fnv64 } from '../noise.mjs';
-import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, yrefError } from '../sdf.mjs';
+import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, yrefError, yrefFn } from '../sdf.mjs';
 import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
 import { maskError } from '../mask.mjs';
@@ -223,6 +223,8 @@ export class Region {
     this.forms = []; // {id, generator, version, params, seed, bounds, part, opsFrom, opsTo}
     this.floatingDecl = []; // {parts, anchor}
     this.utility = [];
+    // ((LYW2) the ring walls a part asked to record (ring(..., {wall: true})): the IR's `walls`, Regions.layout's wall line)
+    this.walls = [];
     this.needVolumes = [];
     this.volumesUsed = {}; // name -> {blob, box, sha, blocks?}
     // (6c B) the block tags a `block` mask names, expanded at plan time (the IR's `blockTags`: the evaluator can't read the tables)
@@ -1529,9 +1531,11 @@ class Part {
    * 0 = north, clockwise): each opening has at least `width` x `height` clear over a flat threshold of walk-surface
    * cells (path role) at the plan survey's ground at the gate, filled below with foundation. (6b) `towers: {every: 48,
    * radius: 4, extra: 4}` (or true) puts cylinders on the wall line at most `every` apart, never over a gate; `crenels`
-   * adds merlons on every other outer-rim cell of the wall and tower tops.
+   * adds merlons on every other outer-rim cell of the wall and tower tops. (LYW2) `wall: true` records the ring as a wall in the IR's
+   * `walls` (no block changes): its line (an integer polygon at mid-radius, at most 63 corners), thickness, height in cells (footing
+   * included), `top` (the wall top's lowest y and the highest cell written, crenels included, over the whole ring: v0.84), its gates and its towers, which Regions.layout reports as K1's wall answer.
    */
-  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels, baseY = null } = {}) {
+  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels, baseY = null, wall = false } = {}) {
     if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum)) throw new Error(`part ${this.id}: ring centre must be [x, z]`);
     if (!(isNum(r0) && isNum(r1) && r0 >= 0 && r1 > r0)) throw new Error(`part ${this.id}: ring needs 0 <= r0 < r1`);
     if (!(isInt(height) && height >= 1 && height <= 64)) throw new Error(`part ${this.id}: ring height must be 1..64`);
@@ -1540,7 +1544,8 @@ class Part {
     // (6b) baseY: an absolute footing (a wall on a raised mass), else the frozen surface
     if (baseY !== null && !isInt(baseY)) throw new Error(`part ${this.id}: ring baseY must be an integer`);
     const B = baseY === null ? { surface: 0 } : { abs: baseY };
-    this._shapeOp({ kind: 'ring', c: [c[0], B, c[1]], r0, r1, h: height + rise + 1 }, mat, COND.IF_NATURAL);
+    const ringShape = { kind: 'ring', c: [c[0], B, c[1]], r0, r1, h: height + rise + 1 };
+    this._shapeOp(ringShape, mat, COND.IF_NATURAL);
     const top = height + rise + 1; // the wall's top cell is ground + height + rise
     const rm = (r0 + r1) / 2;
     const gateAt = gates.map((g) => {
@@ -1558,23 +1563,25 @@ class Part {
         const d = compassDir((360 * i) / n + (t.start ?? 0));
         const tx = round(c[0] + d[0] * rm), tz = round(c[1] + d[1] * rm);
         if (gateAt.some((g) => Math.sqrt(sq(g.x - tx) + sq(g.z - tz)) < g.w / 2 + tr + 2)) continue;
-        this._shapeOp({ kind: 'cylinder', c: [tx, B, tz], r: tr, h: top + extra }, mat, COND.IF_NATURAL);
-        towerList.push([round(tx), round(tz), tr]);
+        const cyl = { kind: 'cylinder', c: [tx, B, tz], r: tr, h: top + extra };
+        this._shapeOp(cyl, mat, COND.IF_NATURAL);
+        towerList.push([round(tx), round(tz), tr, cyl, []]);
       }
     }
     // (6b) crenels: merlons on every other outer-rim cell of the wall top (checkerboard), plus the towers' rims
+    const wallCrenels = [];
     if (crenels) {
       const cols = new Cols(B, B);
       const R1 = Math.ceil(r1) + 1;
       for (let z = Math.floor(c[1] - R1); z <= Math.ceil(c[1] + R1); z++) for (let x = Math.floor(c[0] - R1); x <= Math.ceil(c[0] + R1); x++) {
         const d = Math.sqrt(sq(x - c[0]) + sq(z - c[1]));
-        if (d >= r1 - 1 && d <= r1 && ((x + z) & 1) === 0 && !gateAt.some((g) => Math.sqrt(sq(g.x - x) + sq(g.z - z)) < g.w / 2 + 1.5)) cols.add(x, z, top, top, mat);
+        if (d >= r1 - 1 && d <= r1 && ((x + z) & 1) === 0 && !gateAt.some((g) => Math.sqrt(sq(g.x - x) + sq(g.z - z)) < g.w / 2 + 1.5)) { cols.add(x, z, top, top, mat); wallCrenels.push([x, z, top]); }
       }
-      for (const [tx, tz, tr] of towerList) {
+      for (const [tx, tz, tr, , tc] of towerList) {
         for (let z = Math.floor(tz - tr); z <= Math.ceil(tz + tr); z++) for (let x = Math.floor(tx - tr); x <= Math.ceil(tx + tr); x++) {
           const d = Math.sqrt(sq(x - tx) + sq(z - tz));
           const textra = (towers === true ? 4 : towers.extra ?? 4);
-          if (d >= tr - 1 && d <= tr && ((x + z) & 1) === 0) cols.add(x, z, top + textra, top + textra, mat);
+          if (d >= tr - 1 && d <= tr && ((x + z) & 1) === 0) { cols.add(x, z, top + textra, top + textra, mat); tc.push([x, z, top + textra]); }
         }
       }
       this._colsOp(cols, COND.IF_NATURAL);
@@ -1601,7 +1608,46 @@ class Part {
       this._shapeOp({ kind: 'extrude', polygon: poly, y0: { abs: ty + 1 }, y1: { abs: ty + h } }, null, COND.IF_NATURAL);
       out.push({ at: [round(gx), ty, round(gz)], dir: d, width: w, height: h, polygon: poly });
     });
+    if (wall) this._ringWall(c, rm, r1 - r0, height + rise + 1, baseY, out, towerList, { ringShape, B, wallCrenels });
     return out;
+  }
+
+  /**
+   * (LYW2) A ring wall's IR record (`walls[]`): `line` its mid-radius polygon ([x, z] corners, closed), `thickness`, `height` the cells it
+   * writes from its footing up, `top` [the wall top's lowest y, the highest cell written] (the footing's y the plan survey's ground, or
+   * `baseY`), each gate (`<part>_g<n>`: `at` its threshold's feet, width and height) and each tower (`<part>_tower_<n>`: `at` its centre at
+   * its lowest footing, `r`, `height` its cells from there up).
+   * (v0.84 review) The y bounds are over every cell the wall's masonry writes, not the line's corners alone: `top[0]` is the lowest
+   * footing over the whole ring plus `height - 1` (so `top[0] - height + 1` is its lowest cell), `top[1]` the highest cell written,
+   * its crenels included; a tower's `at[1]` is the lowest cell of its footprint and its `height` reaches its crenels.
+   */
+  _ringWall(c, rm, thick, h, baseY, gates, towerList, { ringShape, B, wallCrenels }) {
+    const s = this.region.survey;
+    const colAt = (x, z) => ({ g: s.heightAt(x, z), h: s.topAt(x, z), f: s.floorAt(x, z) });
+    const base = yrefFn(B);
+    // a shape's lowest and highest written cell over its whole footprint (the shape op's columns, as the evaluator writes them)
+    const span = (shape, extraCells) => {
+      const node = compileShape(shape, this.region.blobs);
+      let lo = Infinity, hi = -Infinity;
+      for (let z = Math.floor(node.minZ); z <= Math.ceil(node.maxZ); z++) for (let x = Math.floor(node.minX); x <= Math.ceil(node.maxX); x++) {
+        columnCells(node, x, z, colAt(x, z), this.region.claim.minY, this.region.claim.maxY, (y) => { if (y < lo) lo = y; if (y > hi) hi = y; });
+      }
+      for (const [x, z, dy] of extraCells) { const y = base(colAt(x, z)) + dy; if (y < lo) lo = y; if (y > hi) hi = y; }
+      return [lo, hi];
+    };
+    const n = Math.max(12, Math.min(63, Math.ceil((2 * Math.PI * rm) / 8)));
+    const line = [];
+    for (let i = 0; i < n; i++) {
+      const d = compassDir((360 * i) / n);
+      const q = [round(c[0] + d[0] * rm), round(c[1] + d[1] * rm)];
+      if (!line.some((p) => p[0] === q[0] && p[1] === q[1])) line.push(q);
+    }
+    const ringSpan = span(ringShape, wallCrenels);
+    this.region.walls.push({
+      part: this.id, line, closed: true, thickness: Math.max(1, round(thick)), height: h, top: [ringSpan[0] + h - 1, Math.max(ringSpan[0] + h - 1, ringSpan[1])],
+      gates: gates.map((g, i) => ({ id: `${this.id}_g${i + 1}`, at: [g.at[0], g.at[1] + 1, g.at[2]], width: g.width, height: g.height })),
+      towers: towerList.map(([x, z, r, cyl, tc], i) => { const [lo, hi] = span(cyl, tc); return { id: `${this.id}_tower_${i + 1}`, at: [x, lo, z], r, height: hi - lo + 1 }; }),
+    });
   }
 
   // ---------------------------------------------------------------- terrace

@@ -830,7 +830,7 @@ public final class WorldJournal {
 			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt
 			var sv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();
 			if (sv != null) {
-				sv.saveAllChunks(true, true, true);
+				dev.larattalabs.architect.site.SaveEvidence.asAutosave(() -> sv.saveAllChunks(true, true, true)); // (SOFF) as before: the ledger with it
 			}
 			Architect.LOGGER.error("World journal: kill point {} reached after a save; halting the JVM (dev.journal.killAt)", killAt);
 			Runtime.getRuntime().halt(7);
