@@ -772,3 +772,156 @@ export async function df(ctx) {
   }
   return out;
 }
+
+// ------------------------------------------------------------------ (slice 8cTa, failing first) the DF final review's C, E and F
+
+/** Waits until the server halted (an armed kill point), at most 6 min. */
+async function waitDownH(ctx, point) {
+  for (let i = 0; i < 180; i++) {
+    await sleep(2000);
+    const s = await ctx.L.call('dev.state', {}, 10_000).catch(() => null);
+    if (s && s.inWorld === false) return true;
+  }
+  throw new Error(`the kill point ${point} did not halt the server`);
+}
+
+/**
+ * (8cT row C, the DF final review's P1 C) h_core_demo placed; a source of a body's fluid set in one of its predicted flowing cells (as a
+ * dispenser places one: no Placed record), in no other body's cells, spill or watch; then Regions.remove. Conservation: the dispensed
+ * source (one bucket) still stands after the removal (red on a6b14ace: the stray pass takes every predicted cell holding the body's
+ * fluid at any level, so the bucket is erased).
+ */
+export async function t8c(ctx) {
+  const { L, check, json, log } = ctx;
+  const out = {};
+  const world = 'G6B H T8C';
+  await freshFlat(ctx, world, 'exact');
+  const d = await planDemo(ctx, { lava: true });
+  const r = await realiseWait(ctx, d.p.planId);
+  const own = new Set(d.bodies.flatMap((b) => [...b.cells, ...b.ice].map(k3)));
+  let pick = null;
+  for (const b of [...d.bodies].sort((a, c) => c.predicted.length - a.predicted.length)) {
+    const others = new Set(d.bodies.filter((o) => o !== b).flatMap((o) => [...o.cells, ...o.ice, ...o.predicted, ...o.spill, ...o.watch, ...o.shell].map(k3)));
+    const at = b.predicted.find((p) => p[3] > 0 && !own.has(k3(p)) && !others.has(k3(p)));
+    if (at) { pick = { body: b, at }; break; }
+  }
+  out.placed = { state: r.view.state, pick: pick ? { body: pick.body.id, at: pick.at, fluid: pick.body.fluid } : null };
+  check(r.view.state === 'PLACED' && !!pick, `C: h_core_demo placed (${r.view.state}) and a predicted flowing cell to dispense into (${json(out.placed.pick)})`);
+  if (!pick) { await L.leaveWorld(); return out; }
+  const [x, y, z] = pick.at;
+  const kind = pick.body.fluid === 'lava' ? 'minecraft:lava' : 'minecraft:water';
+  await L.cmd(`/setblock ${x} ${y} ${z} ${kind}`);
+  await sleep(4000);
+  const at = async () => (await L.call('dev.fluid.census', { box: [x, y, z, x, y, z] }, 60_000)).fluids.find(([a, b, c]) => a === x && b === y && c === z)?.[3] ?? 'none';
+  const before = await at();
+  const rm = await removeWait(ctx, r.region);
+  await sleep(3000);
+  const after = await at();
+  out.removed = { state: rm.state, before, after };
+  log(`  C: ${json(out.removed)}`);
+  const src = (s) => s === kind || s === `${kind}[level=0]`;
+  check(src(before) && rm.state === 'REMOVED' && src(after), `C conservation: the dispensed ${pick.body.fluid} source at ${x},${y},${z} (a bucket; in ${pick.body.id}'s predicted flow at level ${pick.at[3]}) before the removal ${before}, after ${after} (a source wanted: the bucket stands)`);
+  await L.leaveWorld();
+  return out;
+}
+
+/**
+ * (8cT row E, the DF final review's P1 E) h_core_demo with its census held (dev.fluid.hold settle): every body written and forced; a
+ * water body's deepest side shell cell opened, its water out for 5 s, then the chunks saved (dev.stockpile.save); the census released
+ * with FLe armed (bare): the escape drain records the body drained and the JVM halts before its writes are saved. Conservation at the
+ * start: a body the record calls drained holds 0 sources and 0 fluid runs outside (red on a6b14ace: no barrier and no replay, the
+ * sources and the escaped flow come back with the chunks and nothing drains them).
+ */
+export async function t8e(ctx) {
+  const { L, check, json, log } = ctx;
+  const out = {};
+  const world = 'G6B H T8E';
+  await freshFlat(ctx, world, 'exact');
+  const d = await planDemo(ctx, { lava: true });
+  await L.call('dev.fluid.hold', { settle: true }, 10_000);
+  let region = null;
+  try {
+    region = await L.realise(d.p.planId);
+    let fs0 = null;
+    for (let i = 0; i < 450; i++) {
+      fs0 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
+      if (fs0?.phase === 'settling' && (fs0.bodies ?? []).every((b) => b.state !== 'pending')) break;
+      await sleep(2000);
+    }
+    const b = d.bodies.find((x) => x.fluid === 'water' && breachCell(x) && (fs0?.bodies ?? []).find((y) => y.id === x.id)?.state === 'written');
+    out.written = { phase: fs0?.phase, bodies: (fs0?.bodies ?? []).map((x) => [x.id, x.state]), body: b?.id ?? null };
+    check(fs0?.phase === 'settling' && !!b, `E: the bodies written and forced, the census held (${json(out.written)})`);
+    if (!b) return out;
+    const c = breachCell(b);
+    await L.cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:air`);
+    await sleep(5000);
+    await L.call('dev.stockpile.save', {}, 300_000);
+    const pre = await censusOf(ctx, b, null, d.bodies);
+    await L.call('dev.journal.killAt', { point: 'FLe' }, 10_000);
+    await L.call('dev.fluid.hold', { settle: false }, 10_000);
+    await waitDownH(ctx, 'FLe');
+    await L.openWorld(world);
+    await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
+    await sleep(10_000);
+    const fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
+    const post = await censusOf(ctx, b, null, d.bodies);
+    const state = (fs1?.bodies ?? []).find((y) => y.id === b.id)?.state ?? null;
+    out.restarted = { breach: c, saved: { sources: pre.sources, outside: pre.outsideCount }, state, sources: post.sources, outside: post.outsideCount };
+    log(`  E: ${json(out.restarted)}`);
+    check(pre.sources > 0 && pre.outsideCount > 0, `E: the precondition: on disk before the escape, ${pre.sources} source(s) and ${pre.outsideCount} escaped fluid cell(s)`);
+    check(state === 'drained' && post.sources === 0 && post.outsideCount === 0, `E conservation (FLe bare: the escape drain's record saved, its writes not): ${b.id} reads ${state}; the start leaves ${post.sources} source(s) in its cells and ${post.outsideCount} fluid cell(s) outside (0 and 0 wanted: the drain replayed)`);
+  } finally {
+    await L.call('dev.fluid.hold', { settle: false }, 10_000).catch(() => null);
+  }
+  await L.leaveWorld().catch(() => null);
+  return out;
+}
+
+/**
+ * (8cT row F, the DF final review's P2 F) h_core_demo placed, removed, halted at FL3x+save (its done record saved, the solids not
+ * restored); the record's `barrierDone` stripped offline (a done written before round 3); the start: the removal re-drains, then must wait
+ * a fresh settle bound before the solids. Judged in game ticks: from the halt (the last game time read before it) to REMOVED at least the
+ * largest body's settle bound (red on a6b14ace: until -1, no wait). Conservation: E-flat 0 after the removal.
+ */
+export async function t8f(ctx) {
+  const { L, check, json, log } = ctx;
+  const out = {};
+  const world = 'G6B H T8F';
+  await freshFlat(ctx, world, 'exact');
+  const d = await planDemo(ctx, { lava: true });
+  const box = demoBox(d.bodies);
+  const file = await snap(ctx, box, 'h-t8f');
+  const r = await realiseWait(ctx, d.p.planId);
+  const bound = Math.max(...d.bodies.map((b) => b.settleTicks ?? 0));
+  const gt = async () => (await L.call('dev.ticks.pending', {}, 30_000)).gameTime;
+  await L.call('dev.journal.killAt', { point: 'FL3x+save' }, 10_000);
+  L.call('dev.region.remove', { region: r.region, requester: OWNER }, 600_000).catch(() => null);
+  let gHalt = null;
+  for (let i = 0; i < 900; i++) {
+    const g = await gt().catch(() => null);
+    if (g == null) { const s = await L.call('dev.state', {}, 10_000).catch(() => null); if (s && s.inWorld === false) break; } else gHalt = g;
+    await sleep(250);
+  }
+  const rec = path.join(L.SAVES, world, 'architect-regions', r.region, 'fluids.json');
+  const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
+  out.halted = { gHalt, removal: j.removal, barrierDone: j.barrierDone ?? null, bound };
+  delete j.barrierDone;
+  fs.writeFileSync(rec, JSON.stringify(j));
+  await L.openWorld(world);
+  let g1 = null, st = null;
+  for (let i = 0; i < 4800; i++) {
+    st = await L.call('dev.region.state', { region: r.region }, 60_000).catch(() => null);
+    const s = st?.view?.state;
+    if (!s || s === 'REMOVED' || s === 'PARTIAL' || s === 'FAILED') { g1 = await gt().catch(() => null); break; }
+    await sleep(250);
+  }
+  await sleep(3000);
+  const dx = await diff(ctx, box, file);
+  out.resumed = { g1, elapsed: g1 != null && gHalt != null ? g1 - gHalt : null, state: st?.view?.state ?? 'REMOVED', mismatches: dx.mismatches };
+  log(`  F: ${json(out)}`);
+  check(out.halted.removal === 'done' && out.halted.barrierDone === true && gHalt != null, `F: the precondition: halted at FL3x+save with done and barrierDone on disk (${json(out.halted)}), barrierDone stripped`);
+  check(out.resumed.elapsed != null && out.resumed.elapsed >= bound, `F: the re-drained removal waits a fresh settle bound before the solids: ${out.resumed.elapsed} tick(s) from the halt to the end (an upper bound of the wait; at least ${bound} wanted)`);
+  check(dx.mismatches === 0, `F conservation: Regions.remove resumed: E-flat ${dx.mismatches}`, dx.sample);
+  await L.leaveWorld();
+  return out;
+}

@@ -19,6 +19,7 @@
 //                                      removed alone (drainLot) and then the region: the stair stands, E-flat 0 outside it, 0 after it goes
 //     crash     (irr-crash)            item 6: FL1+save and FL2+save on v62's realise, FL6+save on a lot removal's drain
 //     df        (irr-df)               slice DF round 2: a lot removal with fluids.json refused drains and restores nothing
+//     t8d       (8ct-d)                slice 8cTa row D: FL6d bare, lotDrained stripped (a DF-era record): asked again, 0 water
 //     look      (irr-look)             a client, recorded: camera shots of v62's irrigated farms (Noah's look, the gallery)
 //     report                            REPORT.md over the step JSONs
 //
@@ -166,6 +167,14 @@ steps.crash = async () => {
 steps.df = async () => {
   await ensure();
   const out = await G.dfLot(ctx);
+  spendZero();
+  return out;
+};
+
+// (slice 8cTa, failing first) the DF final review's D: a DF-era lotRemoved record re-drained
+steps.t8d = async () => {
+  await ensure();
+  const out = await G.t8d(ctx);
   spendZero();
   return out;
 };

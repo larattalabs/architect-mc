@@ -22,6 +22,8 @@
 //                                      E-flat 0 outside it, then 0 after the stair site goes (tools/lib/gate6ch-holders.mjs)
 //     df        (h-df)                 slice DF: a refused fluids.json save waits SITE_BUSY with 0 sources (main wrote them), then
 //                                      settles and undoes exactly; the halt at FL1r bare and +save resumes from the gate
+//     t8c, t8e, t8f (8ct-c, 8ct-e, 8ct-f) slice 8cTa rows C (a dispensed source in predicted flow survives the removal), E (FLe bare:
+//                                      the escape drain replayed), F (a done without barrierDone waits a fresh bound)
 //     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
 //                                      file not saved), K7+save (mid-R4)
 //     probe     (h-probe)              item 14: (a) the sand anomaly (a sand cell on a rewritten cell, dry and under water, re-read with
@@ -193,6 +195,8 @@ steps.df = async () => {
   await ensure();
   return await (await import('./lib/gate6ch-core.mjs')).df(ctx);
 };
+// (slice 8cTa, failing first) the DF final review's C, E and F
+for (const k of ['t8c', 't8e', 't8f']) steps[k] = async () => { await ensure(); return await (await import('./lib/gate6ch-core.mjs'))[k](ctx); };
 // (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
 steps.holders = async () => {
   await ensure();
