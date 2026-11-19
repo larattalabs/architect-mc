@@ -2725,6 +2725,12 @@ public final class Stockpiles {
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
 					}
+					if (req.has("failQueueWrites")) {
+						Placement.TEST_FAIL_WRITES = req.get("failQueueWrites").getAsBoolean(); // (T2b last round, TEST)
+					}
+					if (req.has("failLedgerWrites")) {
+						DurableFile.FAIL_BEFORE_RENAME.set(req.get("failLedgerWrites").getAsInt()); // (T2b last round, TEST) the next durable writes fail
+					}
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)
 					}
@@ -3490,6 +3496,18 @@ public final class Stockpiles {
 			+ ": the world can't be saved, so a repair can't be made durable; /save-on, then repair";
 	}
 
+	/**
+	 * (T2b last round P1 1) {@link #saveWithWorld}, refused too when the stockpiles failed to load this session (that save writes nothing and
+	 * returns): for a record the caller needs durable before it goes on (a removal's settle stash). Throws IllegalStateException.
+	 */
+	static void saveWithWorldConfirmed(MinecraftServer srv) {
+		if (loadFailed || dir == null) {
+			refusedSave();
+			throw new IllegalStateException("Stockpiles: the ledger can't be saved: " + (loadFailed ? FILE + " failed to load this session" : "no world"));
+		}
+		saveWithWorld(srv);
+	}
+
 	static void saveWithWorld(MinecraftServer srv) {
 		boolean quiet = quietSave;
 		quietSave = false;
@@ -3554,7 +3572,15 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 		}
-		save();
+		boolean confirmed = save();
+		if (!confirmed && !quiet) {
+			// (T2b last round P1 1) a ledger write not confirmed (REFUSED or IN_DOUBT, an owed player or chunk save): an explicit save with the
+			// world throws as a chunk write not durable does, so no caller treats it as saved (the ledger stays pending; the next save writes it)
+			if (timed) {
+				logTiming(caller() + " REFUSED", t0, SaveTiming.stop());
+			}
+			throw new IllegalStateException("Stockpiles: the ledger was not saved: its write was not confirmed");
+		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
 		lastWorldSaveMs = ms;
@@ -3841,6 +3867,7 @@ public final class Stockpiles {
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 		forgetEarlyRuns(server);
 		Sites.crateCheckAfterStockpiles(server); // (chore LT) the crate-less sites' crate check, now that it can see which a stockpile feeds
+		CrateSettle.sweepLater(server); // (T2b last round P1 2, 3) the durable settle stashes no job or pending record carries: settled or forgotten
 	}
 
 	/**

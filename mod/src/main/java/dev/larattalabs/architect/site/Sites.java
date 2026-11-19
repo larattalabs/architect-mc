@@ -1671,7 +1671,11 @@ public final class Sites {
 		boolean stashHeld = CrateSettle.holdDurable(stashes);
 		if (custody || pendingHeld || stashHeld) {
 			try {
-				Stockpiles.saveWithWorld(server);
+				if (stashHeld) {
+					Stockpiles.saveWithWorldConfirmed(server); // (T2b last round P1 1) the stash confirmed on disk, or the removal never starts
+				} else {
+					Stockpiles.saveWithWorld(server);
+				}
 			} catch (IllegalStateException e) {
 				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
 				Stockpiles.dropPendingCredits(decs.values());

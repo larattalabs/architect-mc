@@ -49,6 +49,8 @@ public final class Groups {
 		long waited;
 		long nextCheck;
 		final Map<String, Integer> refund = new TreeMap<>();
+		/** (T2b last round, group report P2) the owed keys its settles wrote (listed apart from the refund; this session's). */
+		final List<String> owed = new ArrayList<>();
 		final List<CompletableFuture<Removed>> futures = new ArrayList<>();
 		/** Phase 4e: the undo group once planned (one undo over the sites), the sites it covers, and what it handed down. */
 		@Nullable String undo;
@@ -284,7 +286,13 @@ public final class Groups {
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
-		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
+		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed) {
+		/** The S-DRS-1 shape (no owed keys). */
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, kept, cause, List.of());
+		}
+
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
 			this(removed, blockers, refund, 0, Map.of(), List.of(), 0, null);
 		}
@@ -867,11 +875,13 @@ public final class Groups {
 			if (st.owed().isEmpty()) {
 				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 			}
+			r.owed.addAll(st.owed());
 			r.crateSettle = null;
 			Placement.save(server, false);
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells));
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells,
+				null, List.copyOf(r.owed)));
 			return;
 		}
 		String id = r.sites.get(0);
@@ -938,6 +948,7 @@ public final class Groups {
 			if (st.owed().isEmpty()) {
 				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 			}
+			r.owed.addAll(st.owed());
 			it.remove();
 			changed = true;
 		}

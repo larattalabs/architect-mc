@@ -662,6 +662,9 @@ public class ApiTest implements ModInitializer {
 		JsonArray c = new JsonArray();
 		r.cascaded().forEach(c::add);
 		o.add("cascaded", c);
+		JsonArray ow = new JsonArray();
+		r.owed().forEach(ow::add); // (T2b) owed keys, listed apart from the refund
+		o.add("owed", ow);
 		return o;
 	}
 

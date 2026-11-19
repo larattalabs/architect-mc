@@ -205,6 +205,52 @@ public final class CrateSettle {
 		return any;
 	}
 
+	/** (T2b last round P1 3) Records a road removal's stash (in memory; the caller saves the ledger confirmed before its restore can commit). */
+	static void holdDurable(String id, JsonObject stash) {
+		DURABLE.put(id, stash.deepCopy());
+		Stockpiles.owedChanged();
+	}
+
+	/**
+	 * (T2b last round P1 2, 3) On the first tick after a start (every store loaded, the Sites check's reconcile done): each durable stash
+	 * that no queued job carries and no pending site record settles is settled when its site or road is gone (its removal committed and
+	 * released: keyed, a replay pays nothing twice), and forgotten when it stands (the removal never committed, or recovery brought it back).
+	 */
+	static void sweepLater(MinecraftServer srv) {
+		if (!DURABLE.isEmpty()) {
+			dev.larattalabs.architect.txn.TxnServer.later(() -> sweep(srv));
+		}
+	}
+
+	private static void sweep(MinecraftServer srv) {
+		boolean held = false;
+		for (String id : List.copyOf(DURABLE.keySet())) {
+			if (Placement.job(id) != null || Sites.pendingOf(id) != null || Infras.pending(id) != null) {
+				continue; // its job or its pending record settles it (a pending record only through resumeNow)
+			}
+			if (Sites.get(id) != null || Infras.get(id) != null) {
+				Architect.LOGGER.info("crate.settle of {}: it stands (its removal did not commit, or it was brought back): its stash is dropped, nothing owed", id);
+				forgetDurable(id);
+				continue;
+			}
+			JsonObject st = DURABLE.get(id);
+			ServerLevel level = Sites.levelOf(srv, st.get("dim").getAsString());
+			if (level == null) {
+				continue;
+			}
+			Settled s = settle(level, st);
+			if (!s.done()) {
+				held = true;
+				continue;
+			}
+			forgetDurable(id);
+			Architect.LOGGER.info("crate.settle of removed {} from its durable stash at a start: owed {}, given {}", id, s.owed(), s.given());
+		}
+		if (held) {
+			dev.larattalabs.architect.txn.TxnServer.later(() -> sweep(srv));
+		}
+	}
+
 	/** The durable stash of {@code siteId}'s removal, or null. */
 	static @Nullable JsonObject durable(String siteId) {
 		JsonObject o = DURABLE.get(siteId);
@@ -340,14 +386,19 @@ public final class CrateSettle {
 
 	private static void resumeNow(MinecraftServer srv, String siteId) {
 		Site.Pending p = Sites.pendingOf(siteId);
+		if (p == null) {
+			// (T2b last round P1 2) no pending removal (a recovery brought the site back, or it settled): nothing is paid here; a durable stash
+			// left alone is the sweep's (it pays only a site that is gone)
+			return;
+		}
 		JsonObject st = durable(siteId); // (T2b fix round P1-c) the stash with its refunds, saved before the undo committed
-		if (st == null && p != null) {
+		if (st == null) {
 			st = p.settle();
 		}
 		if (st == null) {
 			return;
 		}
-		ServerLevel level = p != null ? Sites.levelOf(srv, p.site()) : Sites.levelOf(srv, st.get("dim").getAsString());
+		ServerLevel level = Sites.levelOf(srv, p.site());
 		if (level == null) {
 			return;
 		}

@@ -597,6 +597,17 @@ public final class InfraPlace {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
 		RoadBuilder.Removing removing = RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
+		if (removing.settle() != null) {
+			// (T2b last round P1 3) the road's settle (its refunds, the group's crate) confirmed on disk with the ledger before its restore job is
+			// queued (the queue file is not forced): a start that lost the job finds the stash and settles it once the road is gone
+			CrateSettle.holdDurable(id, removing.settle());
+			try {
+				Stockpiles.saveWithWorldConfirmed(level.getServer());
+			} catch (IllegalStateException e) {
+				CrateSettle.forgetDurable(id);
+				throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The removal of " + id + " was not started: " + e.getMessage());
+			}
+		}
 		Groups.Credit credit = removing.credit();
 		List<String> cascaded = new ArrayList<>();
 		List<String> infraCover = new ArrayList<>();

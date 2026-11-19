@@ -518,8 +518,14 @@ public final class Placement {
 		PENDING_SAVE.set(null);
 	}
 
+	/** (T2b last round, TEST dev.stockpile.ps failQueueWrites) the queue file's writes fail (as a full disk) while true. */
+	static volatile boolean TEST_FAIL_WRITES;
+
 	private static synchronized void writeSave(JsonObject root, Path f) {
 		try {
+			if (TEST_FAIL_WRITES) {
+				throw new IOException("injected queue write failure (TEST dev.stockpile.ps failQueueWrites)");
+			}
 			Path tmp = f.resolveSibling(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
