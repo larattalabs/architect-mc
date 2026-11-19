@@ -34182,3 +34182,39 @@ Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(dec
 - **Leftovers:** on h_core_demo the group undo then restores a dispensed source in a stage-cleared cell to air (StillOurs 6a: fluid in a
   cleared cell is the entry's; outside 8cT); no TxnCrashModel units for the two kinds yet (the rows cover them in game); an unreadable
   journal section counts a charged cell as written (never a mint; it may under-refund).
+
+### Slice 8cTb review fix round as built (GPT early review NOT SAFE at 3f86e1ee: 6 P1, 3 P2; one round; recorded 2026-11-19)
+
+- **Confirmed in code, all of P1-1..6 and P2-7..9; none refuted.** P1-1: `after()` read an aborted (refused prepare barrier) attempt as
+  DONE. P1-2: the charge's R set the record before `saveRec`. P1-3: the scoop ran before the drain's W, whose live probe was UNKNOWN for
+  an unloaded chunk. P1-4: only the per-revision key was probed. P1-5: the stray pass saved its chunk progress before the barrier.
+  P1-6: the receipts missed the irrigation breach sweep's box. P2-7: the fresh `until` was only in memory beside saved receipts. P2-8:
+  an unreadable journal section counted as written. P2-9: a source our own water forms after a breach is spared.
+- **Fixes:** an aborted txn is REFUSED (the caller tries again); the charge's R restores the record when its save is refused; the removal
+  drain is W, R, then L, the W probe loads its chunks, and the scoop pays at most what the drain saw; a revision's scoop also probes the
+  pre-8cT key; the stray pass keeps its chunk list in memory (only done, after the barrier, is saved); the receipts cover the breach box;
+  drained's R writes a fresh bound; an unreadable journal section makes the drain wait. **P2-9 left** (documented leftover).
+- **Failing first:** `FluidTxnsReviewTest` (P1-1: REFUSED vs DONE, red with the old `after()`); row `8ct-rr` (P2-7:
+  `TX:fluid.drain:apply:0+save`, red at 3f86e1ee `20261119-043331-change`: until -1; green). An in-game abort row (CA) could not time
+  the charge's prepare barrier and was dropped for the unit. P1-2..6 have no row of their own (the matrix rows cover their paths).
+
+### Slice 8cTc as built (recorded 2026-11-19)
+
+- **`fluid.write`:** each wave (an H region: one) is a txn: W writes the due bodies where still open and forces them (kill point
+  `TX:fluid.write:place`, before its receipts), R records them written with `writeTxn` (and settling with the last wave), the barrier.
+  **Deviation from N1:** the tiles keep writing the bodies' cells. As markers they broke the journal's hand-down to a later entry layered
+  over a body cell (irr-holders: the stair's undo restored our water, E-flat 1) and the drain's holders' floor (8c-ingame fall: E-flat
+  251). The scoop reads a cell as written by its journal entry or its body's write txn. **Noah should confirm.**
+- **E:** an escape or unsettled drain (and its upstream closure) is a `fluid.drain` txn (W drain, R drained + `drainTxn`, FLe after R).
+  **D:** a lot drain is a `fluid.drain` txn (W, FL6d after it; R lotRemoved, lotDrained, `drainTxn`); a lotRemoved body without a drain txn
+  is drained again (the legacy lot conversion). A held body has nothing written at its wave: its 8cG drain stays direct.
+- **Steward's asks:** Remove answers SITE_BUSY `held(other)` at once while an open write is held; a new revision blocked by a held fluid
+  txn gets `held(other)`; holds are worded (`chunk x,z`, "the region's water record", never the `fluid:` resource) in the refusal,
+  `RevisionView.waiting` and `FluidsRemoval.heldAt`; the drain and "stage fluids ... placed" log lines kept. `flowingWater` is advertised
+  (8cG's switch was already on since the 8cTa merge).
+- **Rows** (run `20261119-060311-change`, 9054:9055 + 9056:9057, --no-cache): **32/32 PASS**. A 3/0, B 2/0, C 3/0, **D 3/0** and **E 3/0**
+  (red until now), F 3/0, rd 2/0, rr 2/0, **wr 4/0** (Steward's S3 write row, +save and bare); regressions h-df, rs-df, irr-df, rv-df,
+  h-crash, hy-crash, irr-crash, h-rmcrash, rv-crash, rv-undo, rv-undo-crash, 8c-ingame 34/0, 8c-crash 47/0, 8c-survival 30/0,
+  rs-survival-smoke 40/0, txn-core 75/0, fl-ingame, h/hy/irr-ingame-smoke, irr-holders, h-holders, fl-natural. Full `./gradlew build`
+  1611/0; api-compat 8/8. irr-df now reads the txn's record rule (the intent before the drain; the site waits for R).
+- **Leftovers:** P2-9; no TxnCrashModel per kind (the core's adapters read the world; one unit covers P1-1); no row for P1-2..6 alone.

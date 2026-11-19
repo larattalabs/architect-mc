@@ -835,3 +835,6 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   takes their points, `+save` too: `TX:region.charge:*` (FLc stays, inside the debit), `TX:fluid.drain:drain` (the removal's drain written,
   its chunk receipts not: Steward's S3 drain row), the core's `TX:fluid.drain:intent|apply:<i>|barrier:effects|effects|retiring|done`;
   FL3d is reached after the drain's intent. `dev.fluid.state`'s `removal` is now written by the drain txn's R effect.
+- **2026-11-19 (slice 8cTc):** txn kind `fluid.write` (`TX:fluid.write:place`, the wave written and forced, its receipts not: Steward's
+  S3 write row; the core's points too); `fluid.drain` also carries escape/unsettled (`TX:fluid.drain:drain`, FLe after its R) and lot drains
+  (FL6d after its W).
