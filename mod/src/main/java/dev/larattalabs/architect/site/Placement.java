@@ -364,7 +364,11 @@ public final class Placement {
 			if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose) && rj.group != null && !rj.group.startsWith("u:remove-")) {
 				Groups.removed(srv, rj);
 			} else if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose)) {
-				// a single road or cell site removal: its futures were completed
+				// a single road or cell site removal: its futures were completed, unless it broke after its restore (T4b, finding 6: a refused
+				// credit save threw past infraDone): then they fail, never left pending
+				if (rj.broken != null) {
+					rj.futures.forEach(f -> f.completeExceptionally(new IllegalStateException(rj.broken)));
+				}
 			} else if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
 				Batches.rolledBack(srv, rj);
 			} else if (rj.group != null && rj.group.startsWith("u:remove-")) {

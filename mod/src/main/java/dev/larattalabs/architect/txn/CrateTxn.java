@@ -128,9 +128,21 @@ public final class CrateTxn {
 
 	/** Runs one settle. Server thread. A begin refused (held, journal unavailable) touches nothing: the crate keeps its stock. */
 	public static Answer settle(Settle in) {
+		return settle(in, SETTLE, List.of(), List.of(), List.of());
+	}
+
+	/**
+	 * (slice T4b) {@link #settle(Settle)} as kind {@code kind} ({@link RemovalTxn#SITE} or {@link RemovalTxn#ROAD}): {@code first} planned
+	 * before the settle's effects (the removed site's W restore), {@code last} after them (a stockpile's site's refund), {@code more} held
+	 * besides the crate (the removal's box). The crate is held only when the settle takes from it or restores it.
+	 */
+	public static Answer settle(Settle in, String kind, List<Effect.Builder> first, List<Effect.Builder> last, List<String> more) {
 		TxnCore c = TxnServer.core();
-		List<String> res = List.of(resource(in.dim(), in.pos()));
-		TxnCore.Started s = c.begin(SETTLE, in.key(), res, in.recipient());
+		List<String> res = new java.util.ArrayList<>(more);
+		if (SETTLE.equals(kind) || !in.stock().isEmpty() || in.restore()) {
+			res.add(resource(in.dim(), in.pos()));
+		}
+		TxnCore.Started s = c.begin(kind, in.key(), res, in.recipient());
 		if (s.status() == TxnCore.Begin.UNAVAILABLE) {
 			return new Answer(List.of(), Map.of(), null, "journal_unavailable: " + s.detail(), false);
 		}
@@ -144,7 +156,13 @@ public final class CrateTxn {
 			return new Answer(List.of(), Map.of(), null, "held: " + s.detail(), false);
 		}
 		TxnEntry t = s.entry();
+		for (Effect.Builder b : first) {
+			c.plan(t, b);
+		}
 		for (Effect.Builder b : plan(in)) {
+			c.plan(t, b);
+		}
+		for (Effect.Builder b : last) {
 			c.plan(t, b);
 		}
 		dev.larattalabs.architect.site.DurableFile.Outcome p = c.persist(t);

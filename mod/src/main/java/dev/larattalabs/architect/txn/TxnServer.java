@@ -69,6 +69,8 @@ public final class TxnServer {
 		c.register(OwedTxn.COLLECT_KIND); // (slice T2b)
 		c.register(OwedTxn.CREDIT_KIND);
 		c.register(CrateTxn.SETTLE_KIND); // (slice T2b part 2b)
+		c.register(RemovalTxn.SITE_KIND); // (slice T4b)
+		c.register(RemovalTxn.ROAD_KIND);
 	}
 
 	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */

@@ -578,6 +578,10 @@ final class RestoreJob implements Placement.Job {
 			WorldJournal.kill("R4"); // (TEST, T2b last round) a road's restore written, its settle's intent not yet
 			// (T2b fix round P1-b) the restore is written (after the undo's durable commit): the refunds and the crate settle now, keyed (a
 			// resumed job replays it); held: this job waits, the crate keeps its stock
+			if (settle.has("road") && group != null) {
+				CrateSettle.withGroup(settle, group); // (T4b) its W restore's source: this job's committed undo, just written
+				CrateSettle.markRestored(siteId, group);
+			}
 			CrateSettle.Settled ss = CrateSettle.settle(level, settle);
 			if (!ss.done()) {
 				return false;

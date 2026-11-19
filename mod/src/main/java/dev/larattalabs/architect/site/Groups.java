@@ -210,6 +210,11 @@ public final class Groups {
 				decSettle.forEach(c::add);
 				o.add("settle", c);
 			}
+			if (!owed.isEmpty()) {
+				com.google.gson.JsonArray ow = new com.google.gson.JsonArray(); // (T4b, finding 5) the owed keys its settles wrote, across a restart
+				owed.forEach(ow::add);
+				o.add("owed", ow);
+			}
 			if (crateSettle != null) {
 				o.add("crateSettle", crateSettle);
 			}
@@ -266,6 +271,9 @@ public final class Groups {
 			}
 			if (o.has("settle")) {
 				o.getAsJsonObject("settle").entrySet().forEach(e -> r.decSettle.put(e.getKey(), e.getValue().getAsJsonObject()));
+			}
+			if (o.get("owed") instanceof com.google.gson.JsonArray ow) {
+				ow.forEach(e -> r.owed.add(e.getAsString()));
 			}
 			if (o.has("crateSettle") && o.get("crateSettle").isJsonObject()) {
 				r.crateSettle = o.getAsJsonObject("crateSettle");
@@ -2110,7 +2118,10 @@ public final class Groups {
 		}
 	}
 
-	private static void end(MinecraftServer server, Removal r, Removed result) {
+	private static void end(MinecraftServer server, Removal r, Removed given) {
+		// (T4b, finding 5) a removal that ends stopped or failed still reports the owed keys its settles wrote so far
+		Removed result = !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given.restored(),
+			given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given;
 		REMOVALS.remove(r);
 		dropCargoPending(r); // (fix round) holders never replaced keep their contents
 		if (r.worldPending) {

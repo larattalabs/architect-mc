@@ -134,6 +134,151 @@ public final class CrateSettle {
 			regionOf(g), refund, null, null, null);
 	}
 
+	/**
+	 * (slice T4b, N8) A stockpile's construction site's removal: its refunds (and the custody held under its credit key) credited into its pile
+	 * under {@code site:<id>@<placedAt>} by the removal's txn, after its restore ({@link RemovalTxn#PILE_REFUND}), never ahead of it as a held
+	 * pending credit. Kept with the others in the durable stash, saved confirmed before the undo commits.
+	 */
+	static JsonObject pileStash(Site s, Builder.Deconstruction d) {
+		JsonObject o = new JsonObject();
+		o.addProperty("key", "pile-refund:" + d.key());
+		o.addProperty("dim", s.dimension());
+		o.addProperty("pos", d.at().asLong());
+		o.addProperty("recipient", d.stockpile());
+		o.addProperty("pile", d.stockpile());
+		o.addProperty("site", s.id());
+		o.addProperty("pileKey", d.key());
+		o.add("refund", Builder.counts(d.credit()));
+		return o;
+	}
+
+	/** Whether {@code stash} is a stockpile site's refund ({@link #pileStash}). */
+	static boolean isPileStash(@Nullable JsonObject stash) {
+		return stash != null && stash.has("pileKey");
+	}
+
+	/** (slice T4b) {@code stash} told which undo group its removal committed (its W restore's source). */
+	static JsonObject withGroup(JsonObject stash, String group) {
+		stash.addProperty("undoGroup", group);
+		return stash;
+	}
+
+	/** The latest undo group {@code siteId}'s journal holds undone, or null (none committed, or its entries released). */
+	static @Nullable String latestUndone(String siteId) {
+		String group = null;
+		long at = Long.MIN_VALUE;
+		for (dev.larattalabs.architect.journal.JournalStore.Meta m : SiteJournal.entries(siteId)) {
+			if (m.status() == dev.larattalabs.architect.journal.Journal.Status.UNDONE && m.undoGroup() != null && m.undoneAt() >= at) {
+				at = m.undoneAt();
+				group = m.undoGroup();
+			}
+		}
+		return group;
+	}
+
+	/** Whether {@code siteId} still has entries of undo group {@code group} (its W restore not yet settled). Server thread. */
+	public static boolean undoneExists(String siteId, String group) {
+		return !SiteJournal.undone(siteId, group).isEmpty();
+	}
+
+	/** Whether {@code siteId} has any active (not undone) entry but its crates': a removal of it was never committed. */
+	static boolean standsInJournal(String siteId) {
+		return SiteJournal.active(siteId).stream().anyMatch(m -> !m.kind().equals(WorldJournal.CRATE));
+	}
+
+	// ------------------------------------------------------------------ (slice T4b) the W restore's hooks
+
+	/** Restores this session wrote already, {@code site|group}: the W effect then only receipts them (the cells are in memory). */
+	private static final java.util.Set<String> RESTORED_NOW = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** {@code site}'s committed restore in {@code group} was just written (R4, a restore job): the removal's W effect receipts it. */
+	static void markRestored(String site, String group) {
+		RESTORED_NOW.add(site + "|" + group);
+	}
+
+	static void clearRestored() {
+		RESTORED_NOW.clear();
+	}
+
+	/**
+	 * The W effect's write: {@code site}'s committed restore in {@code group}, from its journal entries (idempotent: the befores again). Only once
+	 * the Sites check has run (the records and the journal both loaded) and every store loaded: otherwise it throws and the txn holds.
+	 */
+	public static void restoreSite(ServerLevel level, String site, String group) {
+		String why = notReady();
+		if (why != null) {
+			throw new IllegalStateException(why);
+		}
+		if (RESTORED_NOW.remove(site + "|" + group)) {
+			return;
+		}
+		try {
+			SiteJournal.writeNow(level, site, group);
+		} catch (Sites.SiteException e) {
+			throw new IllegalStateException("the restore of " + site + " could not be written: " + e.getMessage());
+		}
+	}
+
+	/** Why a removal's txn may not act now: a store that failed to load (never read as "empty"), or the Sites check not run yet. */
+	static @Nullable String notReady() {
+		if (Sites.loadFailed() || Stockpiles.loadFailed() || Placement.loadFailed()) {
+			return "records unreadable"; // (T4b, finding 3b; Steward: "Architect's records didn't load; it waits")
+		}
+		return Sites.ready() ? null : "records not loaded yet";
+	}
+
+	/** The chunks {@code site}'s restore in {@code group} writes ([cx, cz]), read from its journal entries. */
+	static List<long[]> chunksOf(ServerLevel level, String site, String group) throws Sites.SiteException {
+		SiteJournal.Restore r = SiteJournal.restore(level, site, group);
+		java.util.TreeSet<Long> set = new java.util.TreeSet<>();
+		for (List<SiteJournal.CellWrite> l : List.of(r.cells(), r.pre(), r.halves())) {
+			for (SiteJournal.CellWrite w : l) {
+				set.add(pack(BlockPos.getX(w.pos()) >> 4, BlockPos.getZ(w.pos()) >> 4));
+			}
+		}
+		if (r.box() != null) {
+			for (int cx = r.box().minX() >> 4; cx <= r.box().maxX() >> 4; cx++) {
+				for (int cz = r.box().minZ() >> 4; cz <= r.box().maxZ() >> 4; cz++) {
+					set.add(pack(cx, cz));
+				}
+			}
+		}
+		List<long[]> out = new java.util.ArrayList<>();
+		for (long c : set) {
+			out.add(new long[] {(int) (c >> 32), (int) c});
+		}
+		return out;
+	}
+
+	private static long pack(int cx, int cz) {
+		return (long) cx << 32 | cz & 0xFFFFFFFFL;
+	}
+
+	/** Whether {@code owner}'s pile booked {@code key} (the L probe of a stockpile site's refund). */
+	public static boolean refundBooked(String owner, String key) {
+		Stockpiles.Pile p = Stockpiles.get(owner);
+		return p != null && p.ledger.credited(key);
+	}
+
+	/**
+	 * A stockpile site's refund credited under its own key, as {@code Builder.creditRefund} books it (its custody with it, its paid record
+	 * dropped; a credit of nothing drops its pending credit and paid record). Its pile dissolved meanwhile: refused (the txn holds).
+	 */
+	public static void bookRefund(MinecraftServer srv, String owner, String key, Map<String, Integer> items, BlockPos at) {
+		Stockpiles.Pile p = Stockpiles.get(owner);
+		if (p == null) {
+			throw new IllegalStateException(owner + " has no stockpile now");
+		}
+		if (items.isEmpty() && p.ledger.custody(key).isEmpty()) {
+			Stockpiles.creditOfNothing(p, key);
+			p.ledger.credit(key, new TreeMap<>(), Stockpiles.capacity(srv, p), Stockpiles::maxStack); // the probe's key: booked once
+			Stockpiles.changed(p);
+			return;
+		}
+		Stockpiles.credit(srv, p, key, new TreeMap<>(items), at);
+		Stockpiles.changed(p);
+	}
+
 	private static JsonObject stashOf(String key, String dim, BlockPos pos, String recipient, @Nullable String pile, @Nullable String site,
 		@Nullable String region, Map<String, Integer> refund, @Nullable String crateOwner, Construction.@Nullable Crate cell, @Nullable String sharedGroup) {
 		JsonObject o = new JsonObject();
@@ -194,7 +339,7 @@ public final class CrateSettle {
 	static boolean holdDurable(Map<String, JsonObject> bySite) {
 		boolean any = false;
 		for (var e : bySite.entrySet()) {
-			if (e.getValue() != null && !refundOf(e.getValue()).isEmpty()) {
+			if (e.getValue() != null && (!refundOf(e.getValue()).isEmpty() || isPileStash(e.getValue()))) {
 				DURABLE.put(e.getKey(), e.getValue().deepCopy());
 				any = true;
 			}
@@ -223,17 +368,29 @@ public final class CrateSettle {
 	}
 
 	private static void sweep(MinecraftServer srv) {
+		String why = notReady();
+		if (why != null) {
+			// (T4b, finding 3b) a store failed to load (an empty registry is no evidence that anything is gone): nothing is paid this session
+			Architect.LOGGER.warn("crate.settle sweep: {}: the {} durable stash(es) wait, nothing paid", why, DURABLE.size());
+			if (!Sites.loadFailed() && !Stockpiles.loadFailed() && !Placement.loadFailed()) {
+				dev.larattalabs.architect.txn.TxnServer.later(() -> sweep(srv)); // only not loaded yet: the next tick
+			}
+			return;
+		}
 		boolean held = false;
 		for (String id : List.copyOf(DURABLE.keySet())) {
 			if (Placement.job(id) != null || Sites.pendingOf(id) != null || Infras.pending(id) != null) {
-				continue; // its job or its pending record settles it (a pending record only through resumeNow)
+				continue; // its job or its pending record settles it (through its txn, W restore first)
 			}
-			if (Sites.get(id) != null || Infras.get(id) != null) {
+			JsonObject st = DURABLE.get(id);
+			String group = st.has("undoGroup") ? st.get("undoGroup").getAsString() : latestUndone(id);
+			boolean committed = group != null && undoneExists(id, group);
+			if (!committed && (Sites.get(id) != null || Infras.get(id) != null || standsInJournal(id))) {
+				// (T4b, findings 3a/3b) the evidence is the journal, not a record's absence: no committed undo and it stands: never removed
 				Architect.LOGGER.info("crate.settle of {}: it stands (its removal did not commit, or it was brought back): its stash is dropped, nothing owed", id);
 				forgetDurable(id);
 				continue;
 			}
-			JsonObject st = DURABLE.get(id);
 			ServerLevel level = Sites.levelOf(srv, st.get("dim").getAsString());
 			if (level == null) {
 				continue;
@@ -330,12 +487,16 @@ public final class CrateSettle {
 		BlockPos pos = posOf(stash);
 		String recipient = stash.get("recipient").getAsString();
 		String pile = stash.has("pile") ? stash.get("pile").getAsString() : null;
-		if (pile != null && Stockpiles.get(pile) == null) {
+		if (pile != null && Stockpiles.get(pile) == null && !isPileStash(stash)) {
 			pile = null; // dissolved since: owed instead
 		}
 		String site = stash.has("site") ? stash.get("site").getAsString() : null;
 		String region = stash.has("region") ? stash.get("region").getAsString() : null;
-		Map<String, Integer> refund = refundOf(stash);
+		Map<String, Integer> refund = isPileStash(stash) ? Map.of() : refundOf(stash);
+		Removal rm = removalOf(level, stash);
+		if (rm.held() != null) {
+			return new Settled(List.of(), Map.of(), rm.held(), rm.held()); // not begun: retried, nothing of it happened
+		}
 		if (hasCrate(stash)) {
 			String owner = stash.get("crateOwner").getAsString();
 			if (level.getBlockEntity(pos) instanceof CrateBlockEntity be && owner.equals(be.siteId())) {
@@ -347,7 +508,7 @@ public final class CrateSettle {
 					}
 				}
 				Settled s = run(new CrateTxn.Settle(key, dim, pos, stock, refund, recipient, pile, site, region, stash.get("state").getAsString(), stash.has("nbt")
-					? stash.get("nbt").getAsString() : null, owner, true));
+					? stash.get("nbt").getAsString() : null, owner, true), rm);
 				if (!s.done() || s.refused() == null || !s.refused().startsWith("aborted")) {
 					return s; // done, or held (retried: the crate keeps its stock)
 				}
@@ -359,17 +520,75 @@ public final class CrateSettle {
 				}
 			}
 		}
-		if (refund.isEmpty()) {
+		if (refund.isEmpty() && rm.first().isEmpty() && rm.last().isEmpty()) {
 			return Settled.NONE;
 		}
-		return run(new CrateTxn.Settle(key, dim, pos, Map.of(), refund, recipient, pile, site, region, null, null, null, false));
+		return run(new CrateTxn.Settle(key, dim, pos, Map.of(), refund, recipient, pile, site, region, null, null, null, false), rm);
+	}
+
+	/**
+	 * (slice T4b) What a removal's settle adds to T2b's crate.settle: its kind, the W restore of the removed site first (its committed undo
+	 * group, from the stash or the journal), a stockpile site's refund last, and the removal's box held (N3). {@code held}: why it can't begin
+	 * now (a store unreadable, the records not loaded, a removal not committed): nothing begins, it is retried. A stash with no undo group
+	 * (a group removal's member, T4c's) settles as T2b did.
+	 */
+	record Removal(String kind, List<dev.larattalabs.architect.txn.Effect.Builder> first, List<dev.larattalabs.architect.txn.Effect.Builder> last,
+		List<String> more, @Nullable String held) {
+		static final Removal LEGACY = new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), null);
+	}
+
+	static Removal removalOf(ServerLevel level, JsonObject stash) {
+		String site = stash.has("site") ? stash.get("site").getAsString() : null;
+		if (site == null || !stash.has("undoGroup") && !isPileStash(stash) && !stash.has("road")) {
+			return Removal.LEGACY;
+		}
+		String why = notReady();
+		if (why != null) {
+			return new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), why);
+		}
+		String kind = stash.has("road") ? dev.larattalabs.architect.txn.RemovalTxn.ROAD : dev.larattalabs.architect.txn.RemovalTxn.SITE;
+		String group = stash.has("undoGroup") ? stash.get("undoGroup").getAsString() : latestUndone(site);
+		List<dev.larattalabs.architect.txn.Effect.Builder> first = new java.util.ArrayList<>();
+		List<String> more = new java.util.ArrayList<>();
+		if (group != null && undoneExists(site, group)) {
+			try {
+				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(stash.get("dim").getAsString(), site, group, chunksOf(level, site, group)));
+				SiteJournal.Restore r = SiteJournal.restore(level, site, group);
+				dev.larattalabs.architect.placement.Anchors.Bounds b = r.box();
+				if (b != null) {
+					more.add(dev.larattalabs.architect.txn.RemovalTxn.box(stash.get("dim").getAsString(), b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()));
+				}
+			} catch (Sites.SiteException e) {
+				return new Removal(kind, List.of(), List.of(), List.of(), "its restore can't be read: " + e.getMessage());
+			}
+		} else if (standsInJournal(site)) {
+			// its undo was never committed: it stands (the removal stopped before its decision), so nothing of it is paid; the caller drops it
+			return new Removal(kind, List.of(), List.of(), List.of(), "not committed");
+		}
+		List<dev.larattalabs.architect.txn.Effect.Builder> last = new java.util.ArrayList<>();
+		if (isPileStash(stash)) {
+			String owner = stash.get("pile").getAsString();
+			String pk = stash.get("pileKey").getAsString();
+			Stockpiles.Pile p = Stockpiles.get(owner);
+			Map<String, Integer> refund = refundOf(stash);
+			if (p != null && !p.ledger.credited(pk) && (!refund.isEmpty() || !p.ledger.custody(pk).isEmpty())) {
+				last.add(dev.larattalabs.architect.txn.RemovalTxn.pileRefund(owner, pk, refund, posOf(stash)));
+			} else if (p != null && !p.ledger.credited(pk)) {
+				Stockpiles.creditOfNothing(p, pk); // nothing to credit: its pending credit and its paid record go (no item moves)
+			}
+		}
+		return new Removal(kind, first, last, more, null);
 	}
 
 	static Settled run(CrateTxn.Settle in) {
-		if (in.stock().isEmpty() && in.refund().isEmpty() && !in.restore()) {
+		return run(in, Removal.LEGACY);
+	}
+
+	static Settled run(CrateTxn.Settle in, Removal rm) {
+		if (in.stock().isEmpty() && in.refund().isEmpty() && !in.restore() && rm.first().isEmpty() && rm.last().isEmpty()) {
 			return Settled.NONE;
 		}
-		CrateTxn.Answer a = CrateTxn.settle(in);
+		CrateTxn.Answer a = CrateTxn.settle(in, rm.kind(), rm.first(), rm.last(), rm.more());
 		// (T2b part 2b) a barrier refused before the decision aborts the attempt (its take compensated: the stock back in the crate); an aborted
 		// attempt is never cached under the key, so it is retried as a hold, never taken for "the crate changed" (that orphaned the crate)
 		if (a.refused() != null && (a.refused().startsWith("held") || a.refused().startsWith("journal_unavailable") || a.refused().startsWith("aborted: barrier"))) {
@@ -409,11 +628,50 @@ public final class CrateSettle {
 		}
 		Settled s = settle(level, st);
 		if (!s.done()) {
+			if ("not committed".equals(s.held())) {
+				Architect.LOGGER.warn("crate.settle of {}: its removal was never committed (its entries active): nothing paid, its stash dropped", siteId);
+				Sites.settled(srv, siteId);
+				return;
+			}
 			resumeLater(srv, siteId); // held: next tick (the crate keeps its stock)
 			return;
 		}
 		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)
 		Architect.LOGGER.info("crate.settle of removed {} at a restart: owed {}, given {}", siteId, s.owed(), s.given());
+	}
+
+	/**
+	 * (slice T4b, finding 3a) A pending road or cell site whose removal committed with a durable stash (its job lost, or ended before its
+	 * settle): its removal txn settles it, its restore written again first, on the next tick; then its pending record goes. Never judged by
+	 * its majority, never dropped ahead of its restore.
+	 */
+	static void resumeInfraLater(MinecraftServer srv, String roadId) {
+		dev.larattalabs.architect.txn.TxnServer.later(() -> resumeInfraNow(srv, roadId));
+	}
+
+	private static void resumeInfraNow(MinecraftServer srv, String roadId) {
+		JsonObject st = durable(roadId);
+		if (st == null || Infras.pending(roadId) == null) {
+			return;
+		}
+		ServerLevel level = Sites.levelOf(srv, st.get("dim").getAsString());
+		if (level == null) {
+			return;
+		}
+		Settled s = settle(level, st);
+		if (!s.done()) {
+			if (!"not committed".equals(s.held())) {
+				resumeInfraLater(srv, roadId);
+			}
+			return;
+		}
+		forgetDurable(roadId);
+		// its restore is on disk (the txn's barrier came before its retirement): its undone entries go, then its pending record
+		List<String> ids = SiteJournal.entries(roadId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.UNDONE)
+			.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList();
+		SiteJournal.releaseGroup(ids);
+		Infras.drop(srv, roadId);
+		Architect.LOGGER.info("removal.road of {} at a restart: owed {}, given {}", roadId, s.owed(), s.given());
 	}
 
 	// ------------------------------------------------------------------ the hooks the adapters reach (server thread)

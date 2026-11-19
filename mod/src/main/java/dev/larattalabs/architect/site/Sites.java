@@ -220,6 +220,8 @@ public final class Sites {
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			DevStart.arm(worldDir); // (TEST, slice T4a) dev-start.json: a kill point or fault armed before the world's own start runs
+			ready = false;
+			CrateSettle.clearRestored();
 			load(server);
 			SiteDeltas.server = server;
 			// (6d AD, §2.3) an adoption or un-adoption that stopped part way rolls forward or back first, so a record reconcile rebuilds
@@ -233,6 +235,7 @@ public final class Sites {
 				}
 			}
 			reconcile(server, Placement.jobSites(server));
+			ready = true; // (T4b) a removal txn's W restore may write from here on (the records and the journal read, the check done)
 			SiteDeltas.atStart(server);
 			notifyListeners();
 		});
@@ -256,6 +259,13 @@ public final class Sites {
 	}
 
 	/** Whether the world's sites file exists but could not be read (nothing is loaded, placing is refused). */
+	/** (slice T4b) Whether this world's records are loaded and its start check ran: a removal txn's W restore waits for it. */
+	private static volatile boolean ready;
+
+	public static boolean ready() {
+		return ready;
+	}
+
 	public static boolean loadFailed() {
 		return loadFailed;
 	}
@@ -1673,13 +1683,17 @@ public final class Sites {
 				decs.put(x.id(), Builder.prepareDeconstruct(level, x));
 			}
 		}
-		// (J2, FK's durability leftover) each stockpile deconstruct's credit held pending in the ledger and saved with the custody, before the
-		// commit: a crash anywhere after it rolls the credit forward at the next start (Stockpiles.settlePendingCredits) or, if the removal
-		// never settled, drops it (the site stands: its custody goes back)
-		boolean pendingHeld = Stockpiles.holdPendingCredits(decs.values());
-		// (T2b fix round P1-c) each crate-fed site's settle with its refunds, saved with the ledger (confirmed) before the undo commits
+		// (T4b, N8) a stockpile's site's refunds no longer ride a held pending credit (J2): they settle in the removal's txn, after its restore,
+		// from a stash saved (confirmed) with the others before the undo commits. Every stash names the undo group the removal commits (its W
+		// restore's source)
+		String group = SiteJournal.group(id);
+		boolean pendingHeld = false;
 		Map<String, JsonObject> stashes = new LinkedHashMap<>();
-		decs.forEach((k, d) -> stashes.put(k, d == null ? null : d.settle()));
+		decs.forEach((k, d) -> {
+			Site x0 = get(k);
+			JsonObject st = d == null ? null : d.stockpile() != null && x0 != null ? CrateSettle.pileStash(x0, d) : d.settle();
+			stashes.put(k, st == null ? null : CrateSettle.withGroup(st, group));
+		});
 		boolean stashHeld = CrateSettle.holdDurable(stashes);
 		if (custody || pendingHeld || stashHeld) {
 			try {
@@ -1714,7 +1728,6 @@ public final class Sites {
 			}
 		}
 		WorldJournal.kill("K5");
-		String group = SiteJournal.group(id);
 		// (T2b part 2b) a crate a removal settles keeps its CRATE entry out of the undo: the settle restores its cell after the restore
 		List<String> keep = new ArrayList<>();
 		for (Site x : all) {
@@ -1728,8 +1741,7 @@ public final class Sites {
 		WorldJournal.kill("K6");
 		// R3: the records pending (with the crate.settle each owes: a restart before it settles it from there)
 		for (Site x : all) {
-			Builder.Deconstruction d = decs.get(x.id());
-			markPending(server, x, "removed", d == null ? null : d.settle());
+			markPending(server, x, "removed", stashes.get(x.id()));
 		}
 		for (String c : cascade) {
 			if (Infras.get(c) != null) {
@@ -1747,6 +1759,7 @@ public final class Sites {
 		}
 		for (Site x : all) {
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
+			CrateSettle.markRestored(x.id(), group); // (T4b) its removal txn's W effect receipts these cells (written now, in memory)
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
@@ -1950,11 +1963,14 @@ public final class Sites {
 		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
 		if (dec != null) {
 			WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: the site's restore written; its refunds and its crate's stock not yet settled
-			Builder.dropDeconstruction(level, b, dec, drops);
-			if (dec.settle() != null) {
-				// (T2b part 2b) after the restore: the crate's stock and the refunds in one keyed crate.settle, then its cell and its entry; held:
-				// retried each tick from the pending record (the crate keeps its stock meanwhile)
-				settled = CrateSettle.settle(level, dec.settle());
+			// (T4b) the stash the removal saved before its commit (with its undo group): a stockpile site's refunds settle there too (N8)
+			Site.Pending pd = pendingOf(id);
+			JsonObject stash = pd != null && pd.settle() != null ? pd.settle() : dec.settle();
+			Builder.dropDeconstruction(level, b, dec, drops, !CrateSettle.isPileStash(stash));
+			if (stash != null) {
+				// (T2b part 2b; T4b) after the restore: its removal txn writes the restore's receipts (W), then the crate's stock and the refunds,
+				// then its cell and its entry; held: retried each tick from the pending record (the crate keeps its stock meanwhile)
+				settled = CrateSettle.settle(level, stash);
 				if (settled.done()) {
 					settled(server, id);
 				} else {
@@ -3252,7 +3268,11 @@ public final class Sites {
 				// (T2b part 2b) the crate its undo left out settles from the record (its stock; the refunds tallied at prepare are not known here)
 				// (T2b fix round P1-c) the refunds tallied at prepare from the durable stash, saved before the undo committed
 				// (the stockpiles load after this check: the settle reads the durable stash on its tick, CrateSettle.resumeNow)
-				JsonObject st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
+				// (T4b, finding 1b) the durable stash first: a shared crate's member (no CRATE entry of its own) and a stockpile's site keep theirs
+				JsonObject st = CrateSettle.durable(b.id());
+				if (st == null) {
+					st = SiteJournal.idsOf(b.id(), WorldJournal.CRATE).isEmpty() ? null : CrateSettle.stash(b, Map.of());
+				}
 				pending.add(new Site.Pending(b, at, "removed", st));
 				if (st != null) {
 					pendingSettles.add(b.id());
@@ -3319,8 +3339,22 @@ public final class Sites {
 					group = m.undoGroup();
 				}
 			}
-			if (group == null && p.settle() != null) {
-				CrateSettle.resumeLater(server, gone.id()); // (T2b part 2b) its undo was released, its crate.settle not done: it settles first
+			JsonObject stashOf = p.settle() != null ? p.settle() : CrateSettle.durable(gone.id());
+			if (group == null && stashOf != null) {
+				if (CrateSettle.standsInJournal(gone.id())) {
+					// (T4b) its undo never committed (its entries are active): it stands; its stash is dropped below with the record, nothing paid
+					CrateSettle.forgetDurable(gone.id());
+				} else {
+					CrateSettle.resumeLater(server, gone.id()); // released before T4 (none since): its txn finds nothing to restore, then settles
+					continue;
+				}
+			}
+			if (group != null && stashOf != null) {
+				// (T4b, findings 1a, 1b, 2a, 2b) a committed removal with a stash is decided: never judged by a threshold, never brought back, its
+				// entries kept. Its removal txn writes its committed restore again (W, receipted per chunk), then pays; its pending record and its
+				// entries go once that txn is done (the record at its settle, the entries at a later start's check, on restored evidence)
+				Architect.LOGGER.info("Sites check: removed {}: committed with its stash; its removal txn restores it, then settles", gone.id());
+				CrateSettle.resumeLater(server, gone.id());
 				continue;
 			}
 			if (group == null) {
@@ -3359,27 +3393,6 @@ public final class Sites {
 				report(gone.id(), true, "removed " + gone.id() + " reads restored, but players took " + Repairs.takenAfterUndo(server, gone.id(), group)
 					+ " of its standing blocks after its removal: it stays pending (its stored refund holds them: never paid twice)");
 				action = Reconcile.Action.KEEP;
-			}
-			if (action == Reconcile.Action.RELEASE && gone.construction() != null && p.settle() != null) {
-				// (the stockpiles, and so the durable stash with its refunds, load after this check: every construction removal that still owes
-				// its settle writes its committed restore; on cells already restored the write changes nothing)
-				// (T2b last round P1 2) a construction site whose committed undo reads "restored" because most of its cells were never built
-				// (its paid cells still stand): its restore is written now, before its entries go, so the refunds its settle pays are for blocks
-				// that are gone. A write that fails keeps it pending, unsettled
-				ServerLevel lv = levelOf(server, gone);
-				try {
-					if (lv == null) {
-						throw new SiteException("its dimension is not loaded");
-					}
-					if (DevStart.failWriteNow()) {
-						throw new SiteException("TEST dev-start.json failWriteNow"); // (TEST, slice T4a) the start's write-now fails
-					}
-					SiteJournal.writeNow(lv, gone.id(), group);
-					Architect.LOGGER.info("Sites check: removed {}: its committed restore written now (its paid cells stood), then settled", gone.id());
-				} catch (SiteException | RuntimeException e) {
-					report(gone.id(), true, "removed " + gone.id() + ": its restore could not be written (" + e.getMessage() + "); it stays pending, unsettled");
-					continue;
-				}
 			}
 			switch (action) {
 				case RELEASE -> {
@@ -3443,6 +3456,11 @@ public final class Sites {
 			}
 			if (jobSites.contains(gone.id())) {
 				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before it is settled");
+				continue;
+			}
+			if (CrateSettle.durable(gone.id()) != null) {
+				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority
+				CrateSettle.resumeInfraLater(server, gone.id());
 				continue;
 			}
 			Evidence ev = evidence(levelOf(server, gone.dimension()), gone.id(), group);

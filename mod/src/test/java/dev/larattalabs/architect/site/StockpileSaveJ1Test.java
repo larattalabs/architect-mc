@@ -42,7 +42,7 @@ class StockpileSaveJ1Test {
 		assertTrue(sc.contains("if (!testNoCreditSave)") && sc.contains("saveWithWorld(srv);"), "saveCredit is saveWithWorld unless the TEST switch");
 
 		String b = read(SITE + "Builder.java");
-		String dec = StockpileSaveHFTest.body(b, "static void dropDeconstruction(");
+		String dec = StockpileSaveHFTest.body(b, "static void dropDeconstruction(ServerLevel level, Site s, Deconstruction d, Sites.Drops drops, boolean credit)"); // (T4b)
 		int credit = dec.indexOf("creditRefund(");
 		int save = dec.indexOf("Stockpiles.saveCreditPending("); // (J2) saveCredit, a refusal left pending
 		assertTrue(credit >= 0 && save > credit && save < dec.indexOf("forget("), "a deconstruct's credit is saved before its record goes");

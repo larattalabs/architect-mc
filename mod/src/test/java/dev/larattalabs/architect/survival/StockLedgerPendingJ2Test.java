@@ -63,12 +63,15 @@ class StockLedgerPendingJ2Test {
 	void theRemovalHoldsItsCreditsBeforeItsCommitAndTheStartSettlesThem() throws Exception {
 		String site = "src/main/java/dev/larattalabs/architect/site/";
 		String sites = Files.readString(Path.of(site + "Sites.java"));
-		int hold = sites.indexOf("Stockpiles.holdPendingCredits(decs.values())");
-		int save = sites.indexOf("Stockpiles.saveWithWorld(server);", hold);
-		int refused = sites.indexOf("Stockpiles.dropPendingCredits(decs.values())", save);
+		// (slice T4b, N8) a stockpile site's refunds are a stash (CrateSettle.pileStash) held durable with the others, saved confirmed, before
+		// the commit; its removal txn credits them after the restore (the J2 pending credit is legacy only)
+		int pile = sites.indexOf("CrateSettle.pileStash(");
+		int hold = sites.indexOf("CrateSettle.holdDurable(stashes)", pile);
+		int save = sites.indexOf("Stockpiles.saveWithWorldConfirmed(server);", hold);
+		int refused = sites.indexOf("stashes.keySet().forEach(CrateSettle::forgetDurable)", save);
 		int kill = sites.indexOf("WorldJournal.kill(\"FKC1\")", hold);
 		int commit = sites.indexOf("SiteJournal.undo(level, ids, group)", hold);
-		assertTrue(hold > 0 && save > hold && refused > save && kill > refused && commit > kill, "held, saved (a refusal undoes the hold), then committed");
+		assertTrue(pile > 0 && hold > pile && save > hold && refused > save && kill > refused && commit > kill, "held, saved (a refusal undoes the hold), then committed");
 		String fills = Files.readString(Path.of(site + "Fills.java"));
 		int at = fills.indexOf("public static void atStart(MinecraftServer srv) {");
 		assertTrue(fills.indexOf("Stockpiles.settlePendingCredits(srv);", at) - at < 120, "the pending credits settle before the custody write-back");
