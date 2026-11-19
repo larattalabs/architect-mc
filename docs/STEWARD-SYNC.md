@@ -170,6 +170,16 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - `RevisionView.removalStopCause` (feature `"revisionStopCause"`): a revision `UNDOING` after a stopped `undoRevision` carries its stage
   removal's `RemovalStopCause` (SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), as 8b's `RegionView`; null when not
   waiting. The `waiting` text is unchanged. Survives save and reload. CONTRACT "Slice RVC".
+### New for Steward (NEXT, slice LYW; 8bS-2)
+- `layoutWalls` (feature `"layoutWalls"`): `Regions.layout` of a plan/0 walled town now has its wall. `PartShape` gains `width`, `height`,
+  `wall`, `wallAt` (the 1.69.0 constructor stays). The wall is one shape of kind `connector.wall` (part = the plan part, so `PartBuild`
+  colours it): `ends` its line at the foot, a closed wall's last point its first again (each consecutive pair one straight run), `width` its
+  thickness, `height` its height. Gates are `connector.gate` (a named gate part's own answer, else the wall's listed gate, ends `[at]`); a
+  gatehouse's passage is `<lot>_passage` (ends front, back). `corners: tower` stubs are kind `tower` (`<wall>_tower_<n>`). Tower and gatehouse
+  lots stay `lot` with `wall` and `wallAt` (`corner`, `gate`, `run`). Routes carry `width`.
+- District roads: a plan/0 district's flat routes were already `route` shapes (its IR roads `route_d_<a>__<b>_<n>`); a route laid in stairs
+  or graded sections is now one `route` shape `route_d_<a>__<b>` (or `route_join`) from its graph edge and IR paths. Not covered: a bundled
+  program's wall (`walled_hill`, `sky_isle`: still one `tile` part, its ring op leaves no line in the IR). CONTRACT "Slice LYW".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

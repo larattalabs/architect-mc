@@ -58,6 +58,9 @@ public final class ApiRules {
 		"settlementChanged",
 		// (RVC, Steward's 8bS-1) RevisionView.removalStopCause: a revision's wait typed (a stopped undo's SAVE_REFUSED, PLAYER_IN_BOX, ...)
 		"revisionStopCause",
+		// (LYW) Regions.layout of a walled town: its wall (connector.wall, ends its line, width and height), gates, corner towers, the wall's
+		// lots (PartShape.wall/wallAt), and a district's connecting routes laid in stairs or graded sections
+		"layoutWalls",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 
