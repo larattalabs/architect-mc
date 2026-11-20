@@ -20,6 +20,7 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
+| v0.87.0 | 2026-11-20 | 1.71.0 | 0.76.0 | 26 |  | RC pending | unverified |
 | v0.86.0 | 2026-11-20 | 1.71.0 | 0.75.0 | 26 | `layoutRouteEdges` | RC pending | ok |
 | v0.85.0 | 2026-11-19 | 1.70.0 | 0.74.0 | 26 |  | RC passed | ok |
 | v0.84.0 | 2026-11-19 | 1.70.0 | 0.74.0 | 26 |  | RC passed | ok |
@@ -210,6 +211,11 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - A districts route laid from NEXT on never takes a piece id that is another route's id or begins one: `route_d_a__b`'s pieces skip
   `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So b's pieces no longer take b_1's ids (the
   RTE limit where one hid the other's route shape in `Regions.layout`), and a long first section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
+
+### New for Steward (NEXT, slice LYW3)
+- `Regions.layout` of a `mega_bench` (and so `mega_bench_forest`) region planned from NEXT on reports its ring wall: `wall` is
+  `connector.wall` (not `tile`) with gates `wall_g1`..`wall_g4` and no towers. Reporting walls now: `walled_hill`, `sky_isle`, `mega_bench`,
+  `mega_bench_forest`; `crater_works`'s rubble rim stays a `tile`. No API change. CONTRACT "Slice LYW3".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

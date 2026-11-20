@@ -1,5 +1,5 @@
 // (LYW2) A bundled program's ring wall in the IR: ring(..., {wall: true}) records `walls` (its line, thickness, height, top, gates and
-// towers) for Regions.layout, writes no other block; walled_hill and sky_isle opt in, crater_works's rim does not; the evaluator knows
+// towers) for Regions.layout, writes no other block; walled_hill, sky_isle and (LYW3) mega_bench opt in, crater_works's rim does not; the evaluator knows
 // the member in format 2.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,6 +38,20 @@ test('walled_hill and sky_isle record their ring wall in the IR: a closed line, 
   const sky = JSON.parse((await plan('sky_isle', 240)).irJson).walls[0];
   assert.equal(sky.top[1], sky.top[0] + 1);
   assert.equal(sky.gates[0].at[1], sky.towers[0].at[1] + 1, 'the gate at its threshold\'s feet');
+});
+
+// (LYW3) mega_bench's ring wall opts in too: 4 gates, no towers, its blocks unchanged (kit/test/region-golden.test.mjs: tiles, cells)
+test('mega_bench records its ring wall: a closed line, 4 gates and no towers', async () => {
+  const claim = { minX: -500, minZ: -500, maxX: 499, maxZ: 499, minY: -64, maxY: 319 };
+  const ir = JSON.parse((await planRegion({ programFile: path.join(KIT, 'regions', 'mega_bench.mjs'), survey: synthSurvey(claim, 'golden'), claim, node: 'golden', kitVersion: '0.11.0', params: { scale: 'light' } })).irJson);
+  assert.equal(ir.walls?.length, 1);
+  const w = ir.walls[0];
+  assert.equal(w.part, 'wall');
+  assert.equal(w.thickness, 4);
+  assert.equal(w.height, 11);
+  assert.equal(w.line.length, 63);
+  assert.deepEqual(w.gates.map((g) => [g.id, g.width, g.height]), [1, 2, 3, 4].map((i) => [`wall_g${i}`, 5, 5]));
+  assert.deepEqual(w.towers, []);
 });
 
 test('a ring without wall: true records nothing (crater_works\'s rim); the member is known to the evaluator', async () => {

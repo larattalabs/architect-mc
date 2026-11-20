@@ -5,7 +5,8 @@
 //
 // Claim: 1000x1000 (the centred 1000x1000 of a larger claim). Around the claim centre C:
 //   - crater: a parabolic bowl of radius 160, depth 28, rubble lining, centred at C + (-200, -200);
-//   - wall: a ring wall of radius 470, thickness 4, height 10, 4 gates (N, E, S, W); towers are phase 6b;
+//   - wall: a ring wall of radius 470, thickness 4, height 10, 4 gates (N, E, S, W); towers are phase 6b; (LYW3) recorded in the
+//     IR's `walls` (wall: true), so Regions.layout reports it as a wall with its gates, not a tile;
 //   - hills: 3 terraced hills of 5 levels (retaining walls, a stair between each pair of levels) in the NE, SE, SW;
 //   - plaza: an octagonal platform at C;
 //   - ways: ground roads from the 4 gates to the plaza and 4 district streets (4e roads), graded roads to the 3 hills,
@@ -110,9 +111,9 @@ export default function megaBench(ctx) {
     return Math.max(claim.minY + 2, Math.ceil(rimY - depth * (1 - t * t)));
   };
 
-  // ---- ground: the ring wall and its gates
+  // ---- ground: the ring wall and its gates ((LYW3) recorded as the IR's wall: Regions.layout's connector.wall and its gates)
   const gates = r.part('wall', { stage: 'ground' }).ring([cx, cz], WALL.r0, WALL.r1, {
-    height: WALL.height, gates: [0, 90, 180, 270].map((angle) => ({ angle, width: 5, height: 5 })),
+    height: WALL.height, gates: [0, 90, 180, 270].map((angle) => ({ angle, width: 5, height: 5 })), wall: true,
   });
 
   // ---- ground: the plaza

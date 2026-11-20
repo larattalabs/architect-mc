@@ -33594,3 +33594,14 @@ RTE's leftovers of the same class: a reader matched `<id>_` and took another own
 - Not fixed: compile.mjs `stampStreets` and grow.mjs `streetRuns` still read `route_st_<d>` by regex, not the tag (a following street's
   long-road groups); district ids where one is another's plus a part word (`b` and `b_street`: `b_street_w`) stay ambiguous.
 - Units: `kit/test/rte2.test.mjs`, `DistrictLandRte2Test` (shared IRs `kit/test/fixtures/rte2/land-irs.json`).
+
+### Slice LYW3: more bundled ring walls opt in (light; branch `slice/LYW3` off main b1359937; versions NEXT; recorded 2026-11-19)
+LYW2's leftover. No API member, feature or version added (`layoutWalls` covers it).
+- Survey: the bundled programs with a `ring` op are `walled_hill`, `sky_isle` (opted in by LYW2), `mega_bench` and `crater_works`
+  (`crater_toolbox`'s golden is crater_works). `mega_bench_forest` runs mega_bench's composition.
+- `mega_bench` opts in (`wall: true`): its ring is the region's defensive wall (structure, 10 high, 4 thick, gates N, E, S, W, no towers).
+  Its IR gains `walls` (63-corner line, thickness 4, height 11, 4 gates, `towers: []`); every other member except `programSha` is
+  byte-identical (full and light scales). `mega_bench_forest` follows (only `walls` changes; its programSha is its own file's).
+- `crater_works` stays out: its `rim` is a 2-high rubble lip round the crater with lanterns on it, not a wall.
+- Golden: `mega_bench.golden.json` `irSha` only (budget, cells, tile shas unchanged).
+- Units: `LayoutsWallTest` (mega_bench planned by the kit with node: the wall and 4 gates, no tower; a tile on main), `kit/test/lyw2.test.mjs`.
