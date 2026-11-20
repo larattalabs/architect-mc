@@ -1,6 +1,5 @@
 package dev.larattalabs.architect.mixin;
 
-import dev.larattalabs.architect.txn.TxnServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.DispenserBlock;
@@ -18,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class TxnHoldDispenserMixin {
 	@Inject(method = "dispenseFrom", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldDispense(ServerLevel level, BlockState state, BlockPos pos, CallbackInfo ci) {
-		if (TxnServer.boxHeld(level, pos)) {
+		if (dev.larattalabs.architect.site.Fills.heldBox(level, pos)) { // (T4 final round, SOFF2 P1 2) a waiting fill's containers too
 			ci.cancel();
 		}
 	}

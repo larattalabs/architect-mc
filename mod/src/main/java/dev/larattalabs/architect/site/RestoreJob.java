@@ -466,6 +466,16 @@ final class RestoreJob implements Placement.Job {
 			broken = inf.dimension() + " is not loaded";
 			return true;
 		}
+		if (legacyRoad()) {
+			String why = convertLegacyRoad(server, inf);
+			if (why != null) {
+				if (!why.equals(legacyWait)) {
+					dev.larattalabs.architect.Architect.LOGGER.warn("Removal of {}: its pre-T4 credit waits to become a removal stash: {}", siteId, why);
+				}
+				legacyWait = why;
+				return false;
+			}
+		}
 		try {
 			if (phase == PLAN) {
 				if (planner == null && !preflighted(server)) {
@@ -733,7 +743,42 @@ final class RestoreJob implements Placement.Job {
 	 * no removal stash): converted to a {@code removal.road} stash before it goes on.
 	 */
 	boolean legacyRoad() {
-		return false;
+		return credit != null && settle == null && REMOVE.equals(purpose) && (group == null || group.startsWith("u:remove-"));
+	}
+
+	/** (T4 final round) The legacy road's conversion waits (logged once). */
+	private transient @Nullable String legacyWait;
+
+	/**
+	 * (T4 final round, P1 2) A pre-T4 queued standalone road removal: its C29 credit becomes a {@code removal.road} stash (credited by the
+	 * txn after the restore, min(planned, found) not applied: a pre-T4 credit has no per-cell tally), saved confirmed with the ledger before
+	 * the job goes on; the job then carries the stash and no credit. Waits (null answer means done) while saving is off, a store failed to
+	 * load or the save is refused; never pays through C29.
+	 */
+	private @Nullable String convertLegacyRoad(MinecraftServer server, Infra inf) {
+		Groups.Credit c = java.util.Objects.requireNonNull(credit);
+		if (!SaveHold.admits(server)) {
+			return "saving is off";
+		}
+		String why = CrateSettle.notReady();
+		if (why != null) {
+			return why;
+		}
+		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), null, BlockPos.of(c.at()));
+		st.addProperty("legacyRoad", true);
+		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
+		CrateSettle.holdDurable(siteId, st);
+		try {
+			Stockpiles.saveWithWorldConfirmed(server);
+		} catch (IllegalStateException e) {
+			CrateSettle.forgetDurable(siteId);
+			return "its stash could not be saved (" + e.getMessage() + ")";
+		}
+		settle = st;
+		credit = null;
+		Placement.save(server, false); // the job carries its stash now (a start before this write converts it again, keyed: never twice)
+		dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: its pre-T4 credit {} is now a removal.road stash", siteId, c.key());
+		return null;
 	}
 
 	@Override

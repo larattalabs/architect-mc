@@ -1153,9 +1153,26 @@ public final class Fills {
 	 * finish; a survival site {@link #FILLING} whose ledger has no commit has any container holding exactly its declaration cleared
 	 * (the world saved ahead of the ledger: ours, uncharged); a custody whose site stands with no removal holding it goes back.
 	 */
+	/**
+	 * (T4 final round, SOFF2 P1 2) At a start with saving off ({@link #atStart} waits for the hold's release): every fill still FILLING holds
+	 * its containers as a waiting fill does (WAITING is not saved), so its billed, uncharged contents get no ordinary access meanwhile.
+	 */
+	public static void holdAtStart(MinecraftServer srv) {
+		for (Site s : Sites.all()) {
+			if (s.construction() == null || !FILLING.equals(phase(s))) {
+				continue;
+			}
+			Spec spec = of(srv, s);
+			if (spec != null) {
+				waitFor(s, containerCells(s, spec));
+			}
+		}
+	}
+
 	public static void atStart(MinecraftServer srv) {
 		Stockpiles.settlePendingCredits(srv); // (J2) a settled removal's pending credit books (custody included) before any write-back below
 		for (Site s : Sites.all()) {
+			waited(s.id()); // (T4 final round) a start's hold under saving off ends here: this pass decides the fill
 			String ph = phase(s);
 			if (ph == null || UNLOCKED.equals(ph)) {
 				continue;

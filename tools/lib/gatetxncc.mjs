@@ -1226,6 +1226,51 @@ export async function registerTCC(steps, h) {
         await roadFinished(tag, pr, after);
       }
     }
+    // T4-legacyroad (T4 final round, P1 2): a pre-T4 queued standalone road removal, fabricated offline from a paused one (its job's settle
+    // turned into C29's credit, its removal stash dropped, as a queue written before T4 has them); after the restart the job converts the
+    // credit into a removal.road stash before it goes on and pays it once (the unit FinalRoundT4Test is its red)
+    if (want('T4-legacyroad')) {
+      const tag = 'T4-legacyroad';
+      const owner = 'tcc:t4lroad';
+      const pr = await pileRoad(tag, owner);
+      if (pr) {
+        const { rid, rparts, before } = pr;
+        await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
+        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await wait(3000);
+        call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${tag}: halted with the removal paused before its first write (${json(rm).slice(0, 160)})`);
+        if (down) {
+          const qf = path.join(W.dir, 'architect-queue.json');
+          const sf = path.join(W.dir, 'architect', 'stockpiles.json');
+          const q = JSON.parse(fs.readFileSync(qf, 'utf8'));
+          const root = JSON.parse(fs.readFileSync(sf, 'utf8'));
+          const st = root.crateSettles?.[rid];
+          let made = false;
+          for (const j of q.jobs ?? []) {
+            if (j.siteId !== rid || !j.settle?.pileKey) continue;
+            j.credit = { owner, key: j.settle.pileKey, items: j.settle.refund ?? {}, at: j.settle.pos ?? 0 };
+            delete j.settle;
+            made = true;
+          }
+          if (made && st) {
+            delete root.crateSettles[rid];
+            fs.writeFileSync(sf, JSON.stringify(root, null, 2));
+            fs.writeFileSync(qf, JSON.stringify(q, null, 2));
+          }
+          check(made && !!st, `${tag}: the queued job turned pre-T4 offline (C29's credit ${json(st?.refund ?? null)}, no stash)`, { st });
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await roadGone(rid);
+          for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(3000);
+          const after = await rparts();
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, after);
+          await roadFinished(tag, pr, after);
+        }
+      }
+    }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the
     // PSVLC3 merge, whose preflight confirms the job's queue write before it plans; LR-3/LR-3s cover the road's resumed job. The majority
     // rule is TxnRemovalModelT4Test's 3a; the sweep's absence rule is T4-corrupt's.)

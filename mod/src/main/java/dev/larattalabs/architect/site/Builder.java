@@ -152,6 +152,7 @@ public final class Builder {
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			Fills.worldClosed(); // (SOFF2 fix round) no waiting fill carries into the next world
+			fillsHeldAtStart = false;
 			RUNS.clear();
 			PROGRESS.clear();
 			REFUNDED.clear();
@@ -1736,7 +1737,18 @@ public final class Builder {
 	}
 
 	/** (M5 FK; FK-b fix) {@link Fills#atStart} once, at the start of the first server tick: before any level (a hopper) ticks. */
+	/** (T4 final round) The FILLING fills' containers held at a start with saving off (once per world). */
+	private static boolean fillsHeldAtStart;
+
 	static void fillsAtStart(MinecraftServer srv) {
+		if (fkAtStart && !fillsHeldAtStart && !SaveHold.admits(srv)) {
+			fillsHeldAtStart = true;
+			try {
+				Fills.holdAtStart(srv); // (T4 final round, SOFF2 P1 2) until the release runs the start's fill pass below
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Holding the fills at start failed", e);
+			}
+		}
 		if (fkAtStart && SaveHold.admits(srv)) { // (slice SOFF) held while saving is off: the next tick after the release runs it
 			fkAtStart = false;
 			try {
@@ -1932,9 +1944,12 @@ public final class Builder {
 			final BlockState fnow = now;
 			final BlockPos fq = q;
 			boolean held = heldCell(level, p) || q != null && heldCell(level, q);
-			if (!payPut(purse, r.cost.get(i), j >= 0 ? r.cost.get(j) : List.of(), held, () -> {
+			if (!payPut(purse, s.id(), r.cost.get(i), j >= 0 ? r.cost.get(j) : List.of(), held, () -> {
+				if (!put(level, r, fi, p, true)) {
+					return false;
+				}
 				r.paidAgain(fi, fnow);
-				return put(level, r, fi, p, true);
+				return true;
 			}, j >= 0 ? () -> put(level, r, fj, fq, false) : null, p)) {
 				if (held) {
 					r.blockedSince.putIfAbsent(i, ticks);
@@ -2152,16 +2167,42 @@ public final class Builder {
 	 */
 	static boolean payPut(Purse purse, List<SurvivalItems.Cost> costI, List<SurvivalItems.Cost> costJ, boolean held, java.util.function.BooleanSupplier putI,
 		java.util.function.@Nullable BooleanSupplier putJ, BlockPos at) {
+		return payPut(purse, null, costI, costJ, held, putI, putJ, at);
+	}
+
+	/** {@link #payPut} for target {@code targetId}: a refused write's payment goes back out of its paid record (a stockpile's), not as new stock. */
+	static boolean payPut(Purse purse, @Nullable String targetId, List<SurvivalItems.Cost> costI, List<SurvivalItems.Cost> costJ, boolean held,
+		java.util.function.BooleanSupplier putI, java.util.function.@Nullable BooleanSupplier putJ, BlockPos at) {
+		java.util.function.Consumer<Map<String, Integer>> back = m -> {
+			if (targetId != null) {
+				purse.giveBackPaid(targetId, m, at);
+			} else {
+				purse.giveBack(m, at);
+			}
+		};
+		if (held) {
+			return false; // (T4 final round, P1 3) a held cell is neither paid nor written: it waits (checked before any billing)
+		}
 		List<SurvivalItems.Cost> both = new ArrayList<>(costI);
 		both.addAll(costJ);
 		if (!purse.pay(both)) {
 			return false;
 		}
-		putI.getAsBoolean();
-		if (putJ != null) {
-			putJ.getAsBoolean();
+		if (!putI.getAsBoolean()) {
+			// the world refused the write (a hold the check missed, another mod): nothing stands, so nothing is billed
+			back.accept(costMap(both));
+			return false;
+		}
+		if (putJ != null && !putJ.getAsBoolean()) {
+			back.accept(costMap(costJ)); // its pair not written: its part paid back
 		}
 		return true;
+	}
+
+	static Map<String, Integer> costMap(List<SurvivalItems.Cost> costs) {
+		Map<String, Integer> m = new java.util.TreeMap<>();
+		costs.forEach(c -> m.merge(c.item(), c.count(), Integer::sum));
+		return m;
 	}
 
 	/** (T4 final round) Whether a box hold covers {@code p}: an open txn's or a removal's (TxnServer), or a fill's waiting for its ledger. */
@@ -2172,7 +2213,9 @@ public final class Builder {
 	/** Writes queue cell {@code i} exactly as the instant placement did (state, block-entity NBT without inventories). */
 	static boolean put(ServerLevel level, Run r, int i, BlockPos p, boolean sound) {
 		BlockState t = r.target[i];
-		dev.larattalabs.architect.placed.Placed.set(level, p, t, Sites.FLAGS);
+		if (!dev.larattalabs.architect.placed.Placed.set(level, p, t, Sites.FLAGS) && !level.getBlockState(p).equals(t)) {
+			return false; // (T4 final round, P1 3) refused (a box hold): never marked built
+		}
 		CompoundTag tag = r.nbt[i];
 		if (tag != null) {
 			BlockEntity be = level.getBlockEntity(p);
@@ -3692,7 +3735,13 @@ public final class Builder {
 		RUNS.remove(s.id());
 		if (stockpiled) {
 			if (creditRefund(level, s.owner(), "delta:" + entry + ":" + s.id(), refunded, dropPos(s), null)) {
-				Stockpiles.saveCredit(srv); // (J1, N1's shape) the delta's construction is already written: its refund is saved with it now
+				try {
+					Stockpiles.saveCredit(srv); // (J1, N1's shape) the delta's construction is already written: its refund is saved with it now
+				} catch (IllegalStateException e) {
+					// (T4 final round, SOFF2 P2) refused (SaveRefused): the delta is applied and its keyed credit stays pending (the next confirmed save
+					// writes it); never thrown past the record, so the batch records the step's completion and its undo token
+					Architect.LOGGER.error("Construction delta of {}: its refund's save was refused ({}); the credit stays pending", s.id(), e.getMessage());
+				}
 			}
 		} else {
 			dropItems(level, crate != null ? cp.above() : dropPos(s), refunded, null);

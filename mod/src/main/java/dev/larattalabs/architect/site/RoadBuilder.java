@@ -246,6 +246,30 @@ public final class RoadBuilder {
 		BEFORE.remove(id);
 	}
 
+	/** (T4 final round, P1 3) A road's footprint: its queued cells and its refunded ones (what its removal's hold covers). */
+	static java.util.Set<BlockPos> footprint(Builder.@Nullable Run r, java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells) {
+		java.util.Set<BlockPos> out = new java.util.LinkedHashSet<>();
+		if (r != null) {
+			for (int i = 0; i < r.size(); i++) {
+				out.add(r.pos(i).immutable());
+			}
+		}
+		if (cells != null) {
+			cells.forEach(c -> out.add(BlockPos.of(c.pos())));
+		}
+		return out;
+	}
+
+	/** (T4 final round) {@link #footprint} of a road being removed, read without leaving its run registered. */
+	static java.util.Set<BlockPos> footprintOf(MinecraftServer srv, Infra i) {
+		boolean had = RUNS.containsKey(i.id());
+		Builder.Run r = run(srv, i);
+		if (!had) {
+			RUNS.remove(i.id());
+		}
+		return footprint(r, null);
+	}
+
 	static Builder.@Nullable Run run(MinecraftServer srv, Infra i) {
 		if (i.construction() == null) {
 			return null;
@@ -649,6 +673,7 @@ public final class RoadBuilder {
 			// once its restore is written (RestoreJob.credit), not before: a restore that breaks credits nothing
 			dev.larattalabs.architect.survival.Refunds.Tally pt = tallyOf(level, road, dropPlayerMatches(level, road)); // (J1) a player's matching block: theirs
 			Map<String, Integer> refund = pt.refund();
+			Builder.Run foot = run(srv, road); // (T4 final round) its footprint, for the removal's hold
 			Builder.Run r = RUNS.get(road.id());
 			if (r != null) {
 				Builder.sendClear(srv, r, false);
@@ -660,8 +685,8 @@ public final class RoadBuilder {
 			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
 			// (T4b fix round, finding 5) also a removal.road stash: its refund credited by the txn after its restore, its intent durable before
 			// the job is queued (a refused credit save never loses it). The legacy credit stays for the group removals (T4c)
-			return new Removing(new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong()), CrateSettle.pileRoadStash(road,
-				pile.owner(), creditKey(road), refund, pt.cells(), dropAt(road)));
+			return new Removing(new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong()), CrateSettle.withFootprint(
+				CrateSettle.pileRoadStash(road, pile.owner(), creditKey(road), refund, pt.cells(), dropAt(road)), footprint(foot, pt.cells())));
 		}
 		BlockPos at = c.crate() == null ? new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ()
 			+ road.box().maxZ()) / 2) : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
@@ -678,6 +703,7 @@ public final class RoadBuilder {
 			: refund.isEmpty() ? null : CrateSettle.roadRefundStash(road, at, refund);
 		if (settle != null) {
 			CrateSettle.withCells(settle, rt.cells(), road.box());
+			CrateSettle.withFootprint(settle, footprint(r, rt.cells())); // (T4 final round, P1 3) its hold: the road's cells, not its rectangle
 		}
 		if (r != null) {
 			Builder.sendClear(srv, r, false);

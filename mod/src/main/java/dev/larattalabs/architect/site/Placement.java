@@ -143,8 +143,10 @@ public final class Placement {
 		if (srv.getTickCount() < START_GRACE_TICKS) {
 			return;
 		}
-		if (!SaveHold.jobsAdmitted(srv)) {
-			return; // (slice SOFF) every job (placements, removals, restores, batches, groups) parks between steps while saving is off
+		if (!SaveHold.jobsAdmitted(srv) || !SaveHold.admits(srv) && anyLedgerJob()) {
+			// (slice SOFF) every job (placements, removals, restores, batches, groups) parks between steps while saving is off. (T4 final round)
+			// with no stockpile too when a queued job settles through the owed ledger or a removal stash (a crate-fed removal, a road's refund)
+			return;
 		}
 		long start = System.nanoTime();
 		long cpu0 = cpuNow();
@@ -436,6 +438,22 @@ public final class Placement {
 	static boolean inTakeUp(String siteId) {
 		Job j = job(siteId);
 		return j instanceof PlaceJob pj && pj.phase == PlaceJob.TAKE_UP || j instanceof InfraJob ij && ij.phase == InfraJob.TAKE_UP;
+	}
+
+	/** (T4 final round) Whether a queued job's settle, credit or take-up writes the ledger (owed or stock), so it parks while saving is off. */
+	static boolean anyLedgerJob() {
+		for (Job j : JOBS) {
+			if (j instanceof RestoreJob rj && (rj.settle != null || rj.credit != null || survivalPending(rj.siteId))
+				|| j instanceof PlaceJob pj && (pj.construction || pj.phase == PlaceJob.TAKE_UP) || j instanceof InfraJob ij && ij.phase == InfraJob.TAKE_UP) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean survivalPending(String id) {
+		Site p = Sites.pendingRecord(id);
+		return p != null && p.construction() != null;
 	}
 
 	/** Cancels a placing job by rolling its site back over ticks ({@code cancelBatch}). Server thread. */

@@ -192,6 +192,11 @@ public final class TxnServer {
 		if (srv != server || recovered) {
 			return;
 		}
+		if (core.anyOpen() && !dev.larattalabs.architect.site.SaveHold.admits(srv)) {
+			// (T4 final round) saving is off at the start: recovery parks (its resources held) until the hold's release, on a tick
+			Architect.LOGGER.warn("Txn: {} open txn(s): recovery parked while saving is off (their resources stay held)", core.open().size());
+			return;
+		}
 		recovered = true;
 		if (core.anyOpen()) {
 			Architect.LOGGER.info("Txn: recovering {} open txn(s) in the recovery slot (before the legacy reconciles)", core.open().size());
@@ -228,8 +233,14 @@ public final class TxnServer {
 				r.run();
 			}
 		}
+		if (core.anyOpen() && !dev.larattalabs.architect.site.SaveHold.admits(srv)) {
+			// (T4 final round) every open txn parks while saving is off (recovery and retries alike): a barrier would only be refused mid-way;
+			// their resources stay held. The menus over held boxes still close
+			closeHeldMenus(srv);
+			return;
+		}
 		if (!recovered) {
-			recovered = true; // no SERVER_STARTED (a test harness): recover now
+			recovered = true; // no SERVER_STARTED, or recovery parked at the start: recover now
 			if (core.anyOpen()) {
 				core.recover();
 			}
@@ -292,12 +303,15 @@ public final class TxnServer {
 		}
 		// (T4b fix round, N3) a removal's box, from its tally on (a durable stash) and while its txn is open: every writer but the removal's own
 		// (its restore, a txn adapter) is refused (players, pistons, explosions, fluids, other mods), as a held cell is
-		if (WRITER != null || level == null || level.isClientSide() || !CrateSettle.anyHeldBox() && core.holds().isEmpty()) {
+		if (level == null || level.isClientSide() || !CrateSettle.anyHeldBox() && core.holds().isEmpty()) {
 			return false;
 		}
 		String dim = level.dimension().identifier().toString();
-		return CrateSettle.stashBoxHeld(dim, pos.getX(), pos.getY(), pos.getZ()) || !CrateSettle.WRITING && RemovalTxn.boxHeld(dim, pos.getX(), pos.getY(),
-			pos.getZ());
+		// (T4 final round, P1 3) a txn adapter writing is exempt only from the hold of the removal its own txn settles; any other txn's adapter
+		// (another removal's, an adoption's, a crate move's) is refused there like any writer
+		String own = WRITER == null ? null : RemovalTxn.siteOf(WRITER);
+		return CrateSettle.stashBoxHeld(dim, pos.getX(), pos.getY(), pos.getZ(), own) || !CrateSettle.WRITING && RemovalTxn.boxHeld(dim, pos.getX(), pos
+			.getY(), pos.getZ(), WRITER);
 	}
 
 	/** The txn holding the cell, or null (no txn open, a client level, no hold there). The holder's own writes are not exempted here. */

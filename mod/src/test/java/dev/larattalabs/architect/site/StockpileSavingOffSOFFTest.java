@@ -156,7 +156,7 @@ class StockpileSavingOffSOFFTest {
 		String barrier = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/DurableBarrier.java"));
 		assertTrue(barrier.contains("SaveEvidence.ownRefusal(srv, mark)"), "(finding 4) the barrier's chunks step: its own save's evidence");
 		String placement = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Placement.java"));
-		assertTrue(placement.contains("if (!SaveHold.jobsAdmitted(srv)) {"), "every job parks while saving is off (a stockpile ledger standing)");
+		assertTrue(placement.contains("if (!SaveHold.jobsAdmitted(srv) || !SaveHold.admits(srv) && anyLedgerJob()) {"), "every job parks while saving is off (a stockpile ledger standing, or a job that writes the ledger: T4 final round)");
 		String builder = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
 		assertTrue(builder.contains("SERVER_STARTED.register(Stockpiles::reconcileAtStartHeld)"), "(SOFF2) the start's reconcile at the start, held");
 		String fc = StockpileSaveHFTest.body(fills, "static boolean step(");

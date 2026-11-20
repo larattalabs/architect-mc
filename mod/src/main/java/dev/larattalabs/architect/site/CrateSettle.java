@@ -178,6 +178,20 @@ public final class CrateSettle {
 		return stash;
 	}
 
+	/** (T4 final round, P1 3) {@code stash} told its road's footprint: the hold covers those cells, not the road's bounding rectangle. */
+	static JsonObject withFootprint(JsonObject stash, java.util.Collection<net.minecraft.core.BlockPos> cells) {
+		if (cells.isEmpty()) {
+			return stash; // no footprint read: the whole box stays held
+		}
+		com.google.gson.JsonArray h = new com.google.gson.JsonArray();
+		for (net.minecraft.core.BlockPos p : cells) {
+			h.add(p.asLong());
+		}
+		stash.add("hold", h);
+		boxesChanged();
+		return stash;
+	}
+
 	/** (T4b fix round) {@code stash} with its removal's box (the hold), unless it names one: a converted pre-T4 stash has none. */
 	static JsonObject withBox(JsonObject stash, dev.larattalabs.architect.placement.Anchors.Bounds box) {
 		if (!stash.has("box")) {
@@ -338,8 +352,9 @@ public final class CrateSettle {
 	}
 
 	/** Why a removal's txn may not act now: a store that failed to load (never read as "empty"), or the Sites check not run yet. */
-	static @Nullable String notReady() {
-		if (journalUnreadable() || Sites.loadFailed() || Stockpiles.loadFailed() || Placement.loadFailed()) {
+	public static @Nullable String notReady() {
+		if (journalUnreadable() || Sites.loadFailed() || Stockpiles.loadFailed() || Placement.loadFailed() || dev.larattalabs.architect.txn.TxnServer.core()
+			.loadFailed() != null) {
 			return "records unreadable"; // (T4b, finding 3b; Steward: "Architect's records didn't load; it waits")
 		}
 		return Sites.ready() ? null : "records not loaded yet";
@@ -505,13 +520,17 @@ public final class CrateSettle {
 	 * removal the writing txn adapter belongs to ({@code ""}: a txn that is no removal's; null: no txn writes now). Pure.
 	 */
 	static boolean heldFor(List<HeldBox> held, String dim, int x, int y, int z, @Nullable String writerSite) {
-		if (writerSite != null) {
-			return false;
-		}
 		for (HeldBox b : held) {
-			if (b.dim().equals(dim) && x >= b.x0() && y >= b.y0() && z >= b.z0() && x <= b.x1() && y <= b.y1() && z <= b.z1()) {
-				return true;
+			if (!b.dim().equals(dim) || x < b.x0() || y < b.y0() || z < b.z0() || x > b.x1() || y > b.y1() || z > b.z1()) {
+				continue;
 			}
+			if (b.cells() != null && !b.cells().contains(net.minecraft.core.BlockPos.asLong(x, y, z))) {
+				continue; // (T4 final round, P1 3) a CELL road holds its footprint, never the rest of its bounding rectangle
+			}
+			if (writerSite != null && writerSite.equals(b.site())) {
+				continue; // (P1 3) the adapter of the txn that owns this removal; any other txn's adapter is refused
+			}
+			return true;
 		}
 		return false;
 	}
@@ -528,7 +547,8 @@ public final class CrateSettle {
 	/** The durable removal stash that credits into {@code owner}'s pile, as "the removal of <id>", or null. */
 	static @Nullable String stashCrediting(String owner) {
 		for (var e : DURABLE.entrySet()) {
-			if (isPileStash(e.getValue()) && owner.equals(e.getValue().get("pile").getAsString())) {
+			// (T4 final round, P1 1) a stockpile site's or road's refund, or a crate-fed settle whose stock or refund credits the pile
+			if (e.getValue().has("pile") && owner.equals(e.getValue().get("pile").getAsString())) {
 				return "the removal of " + e.getKey();
 			}
 		}
@@ -542,10 +562,15 @@ public final class CrateSettle {
 
 	/** Whether {@code (x, y, z)} of {@code dim} lies in a durable removal stash's box, outside the removal's own writes. */
 	public static boolean stashBoxHeld(String dim, int x, int y, int z) {
+		return stashBoxHeld(dim, x, y, z, null);
+	}
+
+	/** {@link #stashBoxHeld} for a txn adapter writing: {@code writerSite}, its removal's site ({@code ""}: no removal's txn; null: no txn). */
+	public static boolean stashBoxHeld(String dim, int x, int y, int z, @Nullable String writerSite) {
 		if (WRITING) {
 			return false;
 		}
-		return heldFor(HELD, dim, x, y, z, null);
+		return heldFor(HELD, dim, x, y, z, writerSite);
 	}
 
 	/** Runs {@code r} as the removal's own write (the hold exempts it). Server thread. */
@@ -878,8 +903,9 @@ public final class CrateSettle {
 		List<dev.larattalabs.architect.txn.Effect.Builder> first = new java.util.ArrayList<>();
 		List<String> more = new java.util.ArrayList<>();
 		String dim = stash.get("dim").getAsString();
-		if (stash.get("box") instanceof com.google.gson.JsonArray bx && bx.size() == 6) {
-			// (T4b fix round, N3) the removal's box (a CELL road's too), held while its txn is open as from its tally on
+		if (stash.get("box") instanceof com.google.gson.JsonArray bx && bx.size() == 6 && !stash.has("hold")) {
+			// (T4b fix round, N3) the removal's box, held while its txn is open as from its tally on. (T4 final round, P1 3) a CELL road's
+			// footprint ("hold") is held by its durable stash alone, through its txn too: never its bounding rectangle
 			more.add(dev.larattalabs.architect.txn.RemovalTxn.box(dim, bx.get(0).getAsInt(), bx.get(1).getAsInt(), bx.get(2).getAsInt(), bx.get(3).getAsInt(), bx
 				.get(4).getAsInt(), bx.get(5).getAsInt()));
 		}

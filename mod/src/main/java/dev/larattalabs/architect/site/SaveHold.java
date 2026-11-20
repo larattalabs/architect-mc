@@ -168,6 +168,7 @@ public final class SaveHold {
 		if (!srv.isSameThread()) {
 			return null;
 		}
+		saveOffRefusal = null; // (T4 final round, SOFF2 P2) each call answers for itself: an earlier direct call's refusal is never this one's
 		if (state == State.OPEN) {
 			state = State.HELD;
 			holds++;

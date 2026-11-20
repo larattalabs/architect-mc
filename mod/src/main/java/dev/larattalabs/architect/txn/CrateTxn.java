@@ -152,6 +152,9 @@ public final class CrateTxn {
 		if (SETTLE.equals(kind) || !in.stock().isEmpty() || in.restore()) {
 			res.add(resource(in.dim(), in.pos()));
 		}
+		if (in.pile() != null && !res.contains("pile:" + in.pile())) {
+			res.add("pile:" + in.pile()); // (T4 final round, P1 1) its credit's pile held while it is open: no dissolve, no last-crate removal
+		}
 		TxnCore.Started s = c.begin(kind, in.key(), res, in.recipient());
 		if (s.status() == TxnCore.Begin.UNAVAILABLE) {
 			return new Answer(List.of(), Map.of(), null, "journal_unavailable: " + s.detail(), false);
@@ -191,7 +194,7 @@ public final class CrateTxn {
 		}
 		Map<String, Integer> given = new java.util.TreeMap<>(in.stock());
 		in.refund().forEach((k, v) -> given.merge(k, v, Integer::sum));
-		return new Answer(in.pile() != null ? List.of() : owedOf(t), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
+		return new Answer(owedOf(t), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
 	}
 
 	/** (T4b fix round, P2) The owed keys an entry's O effects created (an owe whose min found nothing creates none). */

@@ -92,8 +92,10 @@ public final class RemovalTxn {
 		public Probe probe(TxnEntry t, Effect e) {
 			String site = e.data().get("site").getAsString();
 			String group = e.data().get("group").getAsString();
-			if (CrateSettle.journalUnreadable()) {
-				return Probe.UNKNOWN; // (T4b fix round, finding 2) no journal read: its entries' absence is no evidence of a settled restore
+			if (CrateSettle.journalUnreadable() || CrateSettle.notReady() != null) {
+				// (T4b fix round, finding 2) no journal read: its entries' absence is no evidence of a settled restore. (T4 final round) nor while
+				// any record store is unread or failed (recovery runs before them): held, retried once they load
+				return Probe.UNKNOWN;
 			}
 			if (!CrateSettle.undoneExists(site, group)) {
 				// its undo group's entries are released only after this txn retires (or, for a removal settled before T4, once its restore read
@@ -228,6 +230,13 @@ public final class RemovalTxn {
 
 	/** (N3; the T4 final round's seam) Whether a W apply adds its {@code pre} found receipt to a chunk holding {@code receipts}. Pure. */
 	static boolean foundToAdd(java.util.Collection<String> receipts, String pre) {
+		// (T4 final round, P1 4) unique per (W effect, chunk): a replay over a chunk that kept its receipt appends none (it recorded what stood
+		// before the first write; the chunk was written since)
+		for (String r : receipts) {
+			if (r.startsWith(pre)) {
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -240,6 +249,7 @@ public final class RemovalTxn {
 				if (r.startsWith(pre)) {
 					any = true;
 					decode(r.substring(pre.length())).forEach((k, v) -> sum.merge(k, v, Integer::sum));
+					break; // (T4 final round, P1 4) one per chunk: a duplicate written before this fix counts once
 				}
 			}
 		}
@@ -315,6 +325,22 @@ public final class RemovalTxn {
 
 	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD);
 
+	/**
+	 * (T4 final round, P1 3) The site or road whose removal {@code t} settles ({@code ""} when {@code t} is no removal's txn): its W restore's
+	 * site, else its effects' {@code site}.
+	 */
+	static String siteOf(TxnEntry t) {
+		if (!t.kind.startsWith("removal.")) {
+			return "";
+		}
+		for (Effect e : t.effects) {
+			if (e.data().has("site")) {
+				return e.data().get("site").getAsString();
+			}
+		}
+		return "";
+	}
+
 	/** A removal box (N3): {@code rbox:<dim>@x0,y0,z0:x1,y1,z1}. While an open removal txn names one, no player breaks a block in it. */
 	public static String box(String dim, int x0, int y0, int z0, int x1, int y1, int z1) {
 		return "rbox:" + dim + "@" + x0 + "," + y0 + "," + z0 + ":" + x1 + "," + y1 + "," + z1;
@@ -322,12 +348,17 @@ public final class RemovalTxn {
 
 	/** Whether {@code pos} lies in a removal box an open (or retiring) removal txn names (N3's hold). O(open txns), none open: O(1). */
 	public static boolean boxHeld(String dim, int x, int y, int z) {
+		return boxHeld(dim, x, y, z, null);
+	}
+
+	/** {@link #boxHeld}, {@code writer}'s own removal box exempt (its adapters write there). */
+	public static boolean boxHeld(String dim, int x, int y, int z, @Nullable TxnEntry writer) {
 		TxnCore c = TxnServer.core();
 		if (c.holds().isEmpty()) {
 			return false;
 		}
 		for (TxnEntry t : c.open()) {
-			if (!t.kind.startsWith("removal.")) {
+			if (!t.kind.startsWith("removal.") || t == writer) {
 				continue;
 			}
 			for (String r : t.resources) {

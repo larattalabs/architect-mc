@@ -1162,7 +1162,8 @@ public final class Stockpiles {
 
 	/** (slice T3b) Refuses SITE_BUSY {@code held(other)} while an open txn holds the owner's pile (an adoption): dissolve, removeStockpileCrate. */
 	static void requirePileFree(String owner) throws Sites.SiteException {
-		String h = dev.larattalabs.architect.txn.TxnServer.heldWhy("pile:" + owner);
+		// (T4 final round, P1 1) the open txn's hold, or a durable removal stash crediting the pile (a removal pending past its commit)
+		String h = CrateSettle.pileHeld(owner);
 		if (h != null) {
 			throw new Sites.SiteException(Reason.SITE_BUSY, owner + "'s stockpile: an open transaction holds it (" + h + ")", "held(other)");
 		}
@@ -1738,9 +1739,11 @@ public final class Stockpiles {
 	 * as it was (pending): the next start resolves it again, and the credit's key keeps it once.
 	 */
 	static void settlePendingCredits(MinecraftServer srv) {
-		if (Sites.loadFailed() || CrateSettle.journalUnreadable()) {
-			// (T4b fix round, finding 4) its absence evidence (no site, no pending record) reads an empty registry: nothing is booked or dropped
-			Architect.LOGGER.warn("Stockpiles: the pending credits wait: the sites or the world journal did not load");
+		if (Sites.loadFailed() || CrateSettle.journalUnreadable() || Placement.loadFailed() || dev.larattalabs.architect.txn.TxnServer.core()
+			.loadFailed() != null) {
+			// (T4b fix round, finding 4) its absence evidence (no site, no pending record) reads an empty registry: nothing is booked or dropped.
+			// (T4 final round) nor while the queue file or txn.json failed to load (a queued job or an open txn may still own the credit)
+			Architect.LOGGER.warn("Stockpiles: the pending credits wait: the sites, the world journal, the queue file or txn.json did not load");
 			return;
 		}
 		boolean any = false;

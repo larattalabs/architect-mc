@@ -584,6 +584,37 @@ public final class InfraPlace {
 	 * one over ticks).
 	 */
 	static CompletableFuture<Sites.Removed> remove(ServerLevel level, String id, Sites.Covered covered) throws Sites.SiteException {
+		boolean had = CrateSettle.durable(id) != null;
+		try {
+			return remove0(level, id, covered).whenComplete((r, e) -> {
+				if (e != null) {
+					dropOrphanStash(level.getServer(), id, had);
+				}
+			});
+		} catch (Sites.SiteException | RuntimeException e) {
+			dropOrphanStash(level.getServer(), id, had);
+			throw e;
+		}
+	}
+
+	/**
+	 * (T4 final round, the review's gap) A removal refused after its stash was saved (a cascade or a handover refused before its job was queued)
+	 * leaves no stash behind: with no job for the road and the road still standing, the stash this call made goes (saved quietly; a refused save
+	 * leaves it for the start's sweep, which drops a standing road's stash).
+	 */
+	private static void dropOrphanStash(net.minecraft.server.MinecraftServer srv, String id, boolean had) {
+		if (had || CrateSettle.durable(id) == null || Placement.job(id) != null || Infras.get(id) == null) {
+			return;
+		}
+		CrateSettle.forgetDurable(id);
+		try {
+			Stockpiles.saveWithWorld(srv);
+		} catch (RuntimeException x) {
+			dev.larattalabs.architect.Architect.LOGGER.warn("Removal of {} refused: its stash's drop was not saved yet ({})", id, x.getMessage());
+		}
+	}
+
+	private static CompletableFuture<Sites.Removed> remove0(ServerLevel level, String id, Sites.Covered covered) throws Sites.SiteException {
 		Infra i = Infras.get(id);
 		if (i == null) {
 			throw new Sites.SiteException("No road or cell site " + id);
