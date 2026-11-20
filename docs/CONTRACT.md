@@ -33666,8 +33666,8 @@ carry only `architect_mc:street`). **Every IR a release before RTE4 saved reads 
   growth rounds): 132 cases, 408 effective IRs, each as its release wrote it. v0.88.0's readers' answers on every round (route ends and
   free ends, growPlan prefer extend, streetRuns, land) are what `kit/test/rte-compat.test.mjs` requires of this tree and
   `DistrictLandCompatTest` of the mod's land; each release's own readings are recorded where they differ (RTE2 and RTE3 on purpose).
-  Before the fix round the corpus found 82 mismatching (case, round, reader) entries in 24 cases (v0.86.0..v0.88.0 shore b/b_1, b/b_street,
-  quay/quay_1, b_1_g1/b: route ends and growPlan), none in v0.85.0's untagged IRs.
+  Before the fix round the corpus found 82 mismatching (case, round, reader) entries in 20 cases (v0.86.0..v0.88.0 shore b/b_1, b/b_street,
+  quay/quay_1, and v0.86.0's b_1_g1/b: route ends and growPlan), none in v0.85.0's untagged IRs.
 - Fixture moved: `kit/test/fixtures/gr/land.json` (its boundary growth's roads gain `architect_mc:district {id: quay}`, the revision's
   irSha; land unchanged). Goldens unchanged (`release-version --check`); `rte3-fixture --check`, `rte4-fixture --check` current.
 - Not fixed: parts carry no ext, so a part of b named like another district's (`b_props_lamp` beside district `b_props`) still reads by the
