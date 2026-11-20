@@ -140,6 +140,9 @@ final class RestoreJob implements Placement.Job {
 	transient final List<CompletableFuture<Sites.Removed>> futures = new ArrayList<>();
 	/** The infra record as it was taken down. */
 	transient @Nullable Infra infraDone;
+	/** (slice SOFF2) A road's refund as first credited (a retry after a refused credit save finds the key credited), and the refusals. */
+	transient Map<String, Integer> creditReturned = Map.of();
+	transient int creditRefusals;
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
@@ -567,22 +570,32 @@ final class RestoreJob implements Placement.Job {
 			}
 		}
 		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(cells.size(), 0, restore.holes());
-		infraDone = inf;
-		Map<String, Integer> returned = Map.of();
 		if (credit != null) {
 			// C29: the restore is written: the road's refunds go into the stockpile now (once per key; a resumed job finds it)
 			Stockpiles.Pile p = Stockpiles.get(credit.owner());
 			boolean already = p != null && p.ledger().credited(credit.key());
 			boolean booked = Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null);
 			if (!already) {
-				returned = credit.items();
+				creditReturned = credit.items(); // kept across a retry (the key is credited then)
 			}
-			if (booked) {
+			if (booked || already) {
 				// (J1, N1's shape) saved with the world (the restored chunks flushed) before the job ends and the queue file drops it: a crash
-				// after this finds the refund on disk; before it, the job resumes and credits the key again (the saved ledger lacks it)
-				Stockpiles.saveCredit(server);
+				// after this finds the refund on disk; before it, the job resumes and credits the key again (the saved ledger lacks it).
+				// (slice SOFF2, item 5) confirmed: a refused save (a level turned off inside it, a ledger write failing) keeps the job, its
+				// futures unresolved but alive, and retries next tick (held while saving is off); never infraDone before it, so Placement never
+				// drops the job as if its futures were completed
+				try {
+					Stockpiles.saveCreditConfirmed(server);
+				} catch (Stockpiles.SaveRefused e) {
+					if (creditRefusals++ == 0) {
+						dev.larattalabs.architect.Architect.LOGGER.error("Removing {}: its credit's save was refused ({}); the job waits and retries", inf.describe(),
+							e.getMessage());
+					}
+					return false;
+				}
 			}
 		}
+		Map<String, Integer> returned = creditReturned;
 		List<String> owedKeys = List.of();
 		if (settle != null) {
 			WorldJournal.kill("R4"); // (TEST, T2b last round) a road's restore written, its settle's intent not yet
@@ -604,6 +617,7 @@ final class RestoreJob implements Placement.Job {
 				returned = m;
 			}
 		}
+		infraDone = inf; // (SOFF2) only once its credit is confirmed and its settle done: never dropped as if its futures were completed
 		result = new Sites.Removed(null, returned, st.restored(), st.changed(), handed, List.of(), List.of(), owedKeys);
 		if (!ROLLBACK.equals(purpose)) {
 			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(server, inf, st.restored());

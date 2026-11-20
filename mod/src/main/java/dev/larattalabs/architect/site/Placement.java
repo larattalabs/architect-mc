@@ -428,13 +428,23 @@ public final class Placement {
 		save(srv, false);
 	}
 
+	/**
+	 * (T4 final round, SOFF2's take-up boundary) Whether {@code siteId}'s job is placed and booking its take-ups ({@link PlaceJob#TAKE_UP},
+	 * {@link InfraJob#TAKE_UP}, persisted with the queue): past the point of no rollback, so neither a cancel nor a direct remove may restore
+	 * its blocks while its take-ups' refund stays credited. Server thread.
+	 */
+	static boolean inTakeUp(String siteId) {
+		Job j = job(siteId);
+		return j instanceof PlaceJob pj && pj.phase == PlaceJob.TAKE_UP || j instanceof InfraJob ij && ij.phase == InfraJob.TAKE_UP;
+	}
+
 	/** Cancels a placing job by rolling its site back over ticks ({@code cancelBatch}). Server thread. */
 	static void rollBack(MinecraftServer srv, String siteId, String why) {
 		Job j = job(siteId);
 		if (!(j instanceof PlaceJob pj)) {
 			return;
 		}
-		if (pj.phase == PlaceJob.TAKE_UP) {
+		if (inTakeUp(siteId)) {
 			// (T4a fix round, finding 4.1) placed, its take-ups booking: past the point of no rollback (a cancel finds it done)
 			Architect.LOGGER.info("Placing {}: not rolled back ({}): it is placed, only its take-ups are being booked", siteId, why);
 			return;

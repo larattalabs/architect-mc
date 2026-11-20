@@ -227,6 +227,7 @@ public final class Stockpiles {
 	static void init() {
 		SaveEvidence.init(); // (slice SOFF) first: its BEFORE_SAVE starts each save's record
 		SaveHold.init(); // (slice SOFF) its START_SERVER_TICK before Builder's fillsAtStart
+		SaveTestHooks.init(); // (slice SOFF2, TEST) the soff-crash rows' hooks: nothing unarmed
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
 		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
 		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
@@ -357,7 +358,11 @@ public final class Stockpiles {
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
 		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> server.execute(() -> {
 			if (unsaved && server.isRunning() && savingOffCheck(server, false, "a logout's save") == null) { // (SOFF) quiet under /save-off
-				saveWithWorld(server);
+				try {
+					saveWithWorld(server);
+				} catch (SaveRefused e) {
+					Architect.LOGGER.error("Stockpiles: a logout's save was refused ({}); the ledger stays pending", e.getMessage()); // (SOFF2 fix round)
+				}
 			}
 		}));
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
@@ -1275,7 +1280,16 @@ public final class Stockpiles {
 			}
 		}
 		if (any) {
+			startSave(srv, "the start's crate repair");
+		}
+	}
+
+	/** (SOFF2 fix round) A save at the world's start: a refusal leaves the ledger pending (the periodic save, or the hold's release, retries). */
+	private static void startSave(MinecraftServer srv, String what) {
+		try {
 			saveWithWorld(srv);
+		} catch (SaveRefused e) {
+			Architect.LOGGER.error("Stockpiles: {}'s save was refused ({}); the ledger stays pending and is saved with the world later", what, e.getMessage());
 		}
 	}
 
@@ -1682,6 +1696,11 @@ public final class Stockpiles {
 
 	/** (J2, TEST kill point CS1) inside {@link #saveCredit}'s save: the players and the chunks on disk, the ledger not. */
 	private static boolean inCreditSave;
+
+	/** (SOFF2, TEST) inside {@link #saveCredit}'s save. */
+	static boolean inCreditSave() {
+		return inCreditSave;
+	}
 
 	/**
 	 * (J2, FK's durability leftover) A single-site removal's stockpile deconstructs: each credit held pending in its pile's ledger, saved with
@@ -2685,6 +2704,7 @@ public final class Stockpiles {
 					o.addProperty("savingOffRefusals", savingOffRefusals); // (SOFF)
 					o.add("hold", SaveHold.json()); // (SOFF)
 					o.add("lastSave", SaveEvidence.json());
+					o.add("testHooks", SaveTestHooks.json()); // (SOFF2, TEST)
 					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
@@ -2793,9 +2813,6 @@ public final class Stockpiles {
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
-					if (req.has("saveHold")) {
-						SaveHold.testOff = !req.get("saveHold").getAsBoolean(); // (SOFF, TEST) the saving-off hold off: as before SOFF
-					}
 					if (req.has("noSave")) {
 						// (SOFF, TEST) a level's saving flag set directly, as another mod would (no /save-off: no save first)
 						for (var e : req.getAsJsonObject("noSave").entrySet()) {
@@ -2806,6 +2823,7 @@ public final class Stockpiles {
 							}
 						}
 					}
+					SaveTestHooks.arm(srv, player, req); // (SOFF2, TEST) before the autosave below: a hook armed for it fires inside it
 					if (req.has("rawForceSave") && req.get("rawForceSave").getAsBoolean()) {
 						srv.saveAllChunks(true, true, true); // (SOFF, TEST) another mod's forced chunk save: no players
 					}
@@ -3225,7 +3243,7 @@ public final class Stockpiles {
 			}
 		}
 		if (any) {
-			saveWithWorld(srv); // (HF) as every explicit save: the players and the chunks with the ledger
+			startSave(srv, "the start's reconcile"); // (HF) as every explicit save: the players and the chunks with the ledger
 			Architect.LOGGER.info("Stockpiles: the reconcile after an unclean stop took {} ms ({} target(s))", String.format(java.util.Locale.ROOT, "%.1f",
 				(System.nanoTime() - t0) / 1e6), LAST_RECONCILE.size());
 		}
@@ -3526,13 +3544,14 @@ public final class Stockpiles {
 		explicitSave = true;
 		boolean wasTiming = SaveTiming.explicit;
 		SaveTiming.explicit = true;
+		long mark = SaveEvidence.mark(); // (SOFF2) this call's own frame is the next pushed
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave = false;
 			SaveTiming.explicit = wasTiming;
 		}
-		String skipped = SaveEvidence.chunksRefusal(srv); // (SOFF) its own save wrote every level
+		String skipped = SaveEvidence.ownRefusal(srv, mark); // (SOFF) its own save wrote every level
 		if (skipped != null) {
 			throw new IllegalStateException("Stockpiles: the world was not saved: " + skipped);
 		}
@@ -3634,12 +3653,71 @@ public final class Stockpiles {
 		saveWithWorld(srv);
 	}
 
+	/**
+	 * (slice SOFF2) A save with the world refused (saving off, a level skipped, a write not durable, the ledger not written): nothing that
+	 * depends on it may go on. The jobs that ride on it (a fill's commit, a removal's or a take-up's credit) catch it and wait to retry.
+	 */
+	public static final class SaveRefused extends IllegalStateException {
+		SaveRefused(String why) {
+			super(why);
+		}
+	}
+
+	/** (SOFF2) The start's reconcile running under the saving-off hold: its saves with the world are left pending, never thrown. */
+	private static boolean startHeld;
+
+	/**
+	 * (slice SOFF2, review finding 1) The start's reconcile ({@link #reconcileAtStart}), run at the start even when a level already has saving
+	 * off: always against the books the world was saved with. Deferred to the hold's release (SOFF) it ran after the release's barrier, whose
+	 * ledger write refreshes the books from the world first ({@link #refreshBooks}), so ahead and lost cells were missed. Under the hold its
+	 * charges and refunds stay in memory with the ledger pending (no ledger write is admitted while held): a crash before the release
+	 * reconciles again from the same saved books; the release's confirmed barrier (players, chunks, then the ledger) writes them. Server
+	 * thread.
+	 */
+	static void reconcileAtStartHeld(MinecraftServer srv) {
+		if (SaveHold.admits(srv)) {
+			reconcileAtStart(srv);
+			return;
+		}
+		startHeld = true;
+		try {
+			reconcileAtStart(srv);
+		} finally {
+			startHeld = false;
+		}
+		Architect.LOGGER.warn("Stockpiles: saving is off at the start ({}): the start's reconcile ran against the saved books; its save waits for the"
+			+ " hold's release (saving on and a confirmed save)", String.join(", ", levelsSavingOff(srv)));
+	}
+
+	/** (SOFF2) Whether the ledger in memory is on disk now (nothing pending), or the session never writes it (its load failed). */
+	static boolean savedOrOff() {
+		return loadFailed || !unsaved;
+	}
+
+	/**
+	 * (slice SOFF2, review finding 4 and item 5) A credit's save ({@link #saveCredit}) confirmed: when anything is pending, saved with the world;
+	 * then {@link SaveRefused} unless the ledger is on disk (a write that returned false included). A caller whose key is credited already (a
+	 * retry) calls it too: an in-memory credit is never taken as saved. TEST noCreditSave: as before (not saved, not refused).
+	 */
+	static void saveCreditConfirmed(MinecraftServer srv) {
+		if (testNoCreditSave) {
+			creditSaves++;
+			return;
+		}
+		if (unsaved && !loadFailed) {
+			saveCredit(srv);
+		}
+		if (!savedOrOff()) {
+			throw new SaveRefused("Stockpiles: the ledger was not saved (its write did not complete); the credit waits for a save");
+		}
+	}
+
 	static void saveWithWorld(MinecraftServer srv) {
 		boolean quiet = quietSave;
 		quietSave = false;
 		if (testRefuseSave && !quiet) {
 			// (DR-S, TEST dev.stockpile.ps refuseSave) as SS refuses an explicit save whose chunk writes are not durable: nothing written
-			throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
+			throw new SaveRefused("Stockpiles: the ledger was not saved: chunk writes not durable [TEST: dev.stockpile.ps refuseSave]");
 		}
 		if (loadFailed) {
 			refusedSave();
@@ -3651,10 +3729,10 @@ public final class Stockpiles {
 			// periodic save quietly, an explicit one by throwing (its caller keeps its intent: the ledger stays pending)
 			String off = savingOffCheck(srv, false, quiet ? "the periodic save" : "a save with the world");
 			if (off != null) {
-				if (quiet) {
-					return;
+				if (quiet || startHeld) {
+					return; // (SOFF2) the start's reconcile under the hold: its save stays pending; the release's barrier writes it
 				}
-				throw new IllegalStateException("Stockpiles: " + off);
+				throw new SaveRefused("Stockpiles: " + off);
 			}
 		}
 		long t0 = System.nanoTime();
@@ -3680,6 +3758,7 @@ public final class Stockpiles {
 			boolean wasExplicit = explicitSave(true);
 			boolean wasTiming = SaveTiming.explicit;
 			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
+			long mark = SaveEvidence.mark(); // (SOFF2) this call's own frame is the next pushed
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
@@ -3687,7 +3766,7 @@ public final class Stockpiles {
 				SaveTiming.explicit = wasTiming;
 			}
 			// (slice SOFF, review finding 4) its own save wrote every level (recorded while it ran): else nothing is published
-			String skipped = SaveEvidence.chunksRefusal(srv);
+			String skipped = SaveEvidence.ownRefusal(srv, mark);
 			if (skipped != null) {
 				savingOffRefusals++;
 				SaveEvidence.log(quiet ? "the periodic save" : "a save with the world", skipped);
@@ -3697,7 +3776,7 @@ public final class Stockpiles {
 				if (quiet) {
 					return;
 				}
-				throw new IllegalStateException("Stockpiles: the ledger was not saved: " + skipped);
+				throw new SaveRefused("Stockpiles: the ledger was not saved: " + skipped);
 			}
 			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
 			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
@@ -3710,7 +3789,7 @@ public final class Stockpiles {
 				if (quiet) {
 					return; // retried at the next periodic save; the ledger stays pending (unsaved)
 				}
-				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
+				throw new SaveRefused("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
 			}
 			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
 				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
@@ -3723,14 +3802,16 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 		}
-		boolean confirmed = save();
-		if (!confirmed && !quiet) {
-			// (T2b last round P1 1) a ledger write not confirmed (REFUSED or IN_DOUBT, an owed player or chunk save): an explicit save with the
-			// world throws as a chunk write not durable does, so no caller treats it as saved (the ledger stays pending; the next save writes it)
+		if (!save()) {
+			// (T2b last round P1 1; SOFF2) a ledger write not confirmed (REFUSED or IN_DOUBT, an owed player or chunk save, saving turned off inside
+			// the save): an explicit save with the world is refused, so no caller treats it as saved (the ledger stays pending; the next save writes it)
 			if (timed) {
 				logTiming(caller() + " REFUSED", t0, SaveTiming.stop());
 			}
-			throw new IllegalStateException("Stockpiles: the ledger was not saved: its write was not confirmed");
+			if (quiet) {
+				return;
+			}
+			throw new SaveRefused("Stockpiles: the ledger was not saved: its write was not confirmed (the log says why); it stays pending");
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
@@ -3826,13 +3907,14 @@ public final class Stockpiles {
 		boolean wasExplicit = explicitSave(true);
 		boolean wasTiming = SaveTiming.explicit;
 		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
+		long mark = SaveEvidence.mark(); // (SOFF2) this call's own frame is the next pushed
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave(wasExplicit); // restored, never reset
 			SaveTiming.explicit = wasTiming;
 		}
-		String skipped = SaveEvidence.chunksRefusal(srv);
+		String skipped = SaveEvidence.ownRefusal(srv, mark);
 		if (skipped != null) {
 			// (SOFF) payouts are held while saving is off (SaveHold); a level turned off inside this save is reported, the debit is on disk
 			Architect.LOGGER.error("Stockpiles: a payout's world save after its ledger: {}", skipped);
@@ -3914,6 +3996,10 @@ public final class Stockpiles {
 			// (slice T0 review P1-7) through the ledger's DurableFile: its store id and generation stay in the file. (T0 review 2 finding 6)
 			// forced like the barrier's write: an unforced replacement could leave a torn file over an acknowledged generation. Cost: one file
 			// and one folder force per ordinary save (the barrier's ledger step measured p50 8 ms on this machine)
+			if (SaveTestHooks.failLedgerWrite()) {
+				unsaved = true; // (SOFF2, TEST failLedgerWrites) as a write that failed: not saved, pending
+				throw new IOException("the ledger's write failed [TEST: dev.stockpile.ps failLedgerWrites]");
+			}
 			DurableFile df = ledger(f);
 			DurableFile.Result put = df.write(toJson(), df.request());
 			SaveTiming.at(SaveTiming.OTHER);
@@ -4008,6 +4094,9 @@ public final class Stockpiles {
 			refreshBooks(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are written", e);
+		}
+		if (SaveTestHooks.failLedgerWrite()) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger's write failed [TEST: dev.stockpile.ps failLedgerWrites]");
 		}
 		DurableFile df = ledger(f);
 		DurableFile.Result r = df.write(toJson(), df.request());

@@ -207,7 +207,7 @@ export async function registerPS(steps, h) {
    *   SD   a lot site, as built: kept
    * The periodic save off throughout (it bounds the loss to ~10 s; the credit's own save is what is measured).
    */
-  async function singlePart(out, name = 'G6B PS single', cases = [['RR0', 'road', true], ['RR', 'road', false], ['SD0', 'site', true]]) {
+  async function singlePart(out, name = 'G6B PS single', cases = [['RR0', 'road', true], ['RR', 'road', false], ['RRF', 'road', false, 'creditSaveOff'], ['SD0', 'site', true]]) {
     const W = await survivalWorld(name);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
     const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
@@ -223,7 +223,7 @@ export async function registerPS(steps, h) {
     const sites = ids.filter((id) => /^s\d/.test(id));
     log(`  single: targets ${json(ids)} (roads ${json(roads)}, sites ${json(sites)})`);
     const used = new Set();
-    for (const [tag, kind, noCreditSave] of cases) {
+    for (const [tag, kind, noCreditSave, mode] of cases) {
       const id = (kind === 'road' ? roads : sites).find((x) => !used.has(x));
       if (!id) { check(false, `${tag}: no ${kind} left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
       used.add(id);
@@ -232,12 +232,33 @@ export async function registerPS(steps, h) {
       await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const a0 = await audit();
-      const rm = await call('dev.pl.remove', { site: id, requester: G.OWNER, force: true }, 1_800_000).catch((e) => ({ removed: false, blockers: [String(e?.message ?? e)] }));
+      let rm, soff = null;
+      if (mode === 'creditSaveOff') {
+        // (slice SOFF2, TEST noSaveInCreditSave) the Nether's saving turned off inside the road's credit save (its restore written, its
+        // refund credited in memory): the save is refused; the job must stay (parked while held) and its future resolve after the release,
+        // never be dropped with the future unresolved
+        await ps({ noSaveInCreditSave: 'minecraft:the_nether' });
+        const pend = call('dev.pl.remove', { site: id, requester: G.OWNER, force: true }, 600_000).catch((e) => ({ removed: false, blockers: [String(e?.message ?? e)] }));
+        soff = { fired: 0 };
+        for (let i = 0; i < 120; i++) {
+          const sv = await saved();
+          if ((sv.testHooks?.creditSavesTurnedOff ?? 0) >= 1) { soff.fired = sv.testHooks.creditSavesTurnedOff; break; }
+          await L.sleep(1000);
+        }
+        await L.sleep(3000);
+        soff.hold = (await saved()).hold?.state;
+        await ps({ noSaveInCreditSave: null, noSave: { 'minecraft:the_nether': false } });
+        rm = await Promise.race([pend, L.sleep(180_000).then(() => ({ removed: false, blockers: ['the removal did not answer within 180 s of saving on (its future unresolved)'] }))]);
+        soff.answered = rm.removed === true;
+        check(soff.fired >= 1 && soff.hold === 'HELD' && soff.answered, `${tag}: a level's saving off inside ${id}'s credit save (hook fired ${soff.fired}; held ${soff.hold}): after saving on the removal answered (${rm.removed ? 'removed' : json(rm.blockers)})`, soff);
+      } else {
+        rm = await call('dev.pl.remove', { site: id, requester: G.OWNER, force: true }, 1_800_000).catch((e) => ({ removed: false, blockers: [String(e?.message ?? e)] }));
+      }
       await call('dev.wait', { ms: 12_000 }, 60_000); // the restored chunks' eager saves
       const a1 = await audit();
       const s1 = await saved();
       const refund = G.minus(backOf(a1), backOf(a0));
-      const n1 = { tag, id, noCreditSave, removed: rm.removed, blockers: rm.blockers, refund, refundUnits: sum(pos(refund)), ledgerSaves: s1.saves - s0.saves,
+      const n1 = { tag, id, noCreditSave, soff, removed: rm.removed, blockers: rm.blockers, refund, refundUnits: sum(pos(refund)), ledgerSaves: s1.saves - s0.saves,
         worldSaves: s1.worldSaves - s0.worldSaves, creditSaves: (s1.creditSaves ?? 0) - (s0.creditSaves ?? 0), lastWorldSaveMs: s1.lastWorldSaveMs, maxWorldSaveMs: s1.maxWorldSaveMs };
       check(rm.removed === true && n1.refundUnits > 0, `${tag}: ${id} removed on its own (${rm.removed ? 'removed' : json(rm.blockers)}); refunded ${n1.refundUnits} item(s) live; credit saves ${n1.creditSaves} (with the world ${n1.worldSaves})`, n1);
       W.at = [CX + 80, 60, CZ + 56];
@@ -250,6 +271,9 @@ export async function registerPS(steps, h) {
       log(`  ${tag}: refund live ${json(refund)}; after the restart vs before the halt ${json(d)} (lost ${n1.lossUnits}, minted ${n1.mintUnits})`);
       if (noCreditSave) {
         check(n1.mintUnits === 0 && (n1.lossUnits > 0 || n1.ledgerSaves > 0), `${tag}: before J1 the refund was lost on the crash: lost ${n1.lossUnits} of ${n1.refundUnits}, minted ${n1.mintUnits} (ledger saves since the baseline: ${n1.ledgerSaves})`, n1);
+      } else if (mode === 'creditSaveOff') {
+        // (SOFF2) its credit's own save was refused; the hold's release barrier wrote the ledger (a confirmed barrier, not a save with the world)
+        check(n1.lossUnits === 0 && n1.mintUnits === 0 && a2.identity !== false, `${tag}: the refund kept through the refused save and the release: the stock after the restart equals the stock before the halt (lost ${n1.lossUnits}, minted ${n1.mintUnits}; identity ${a2.identity})`, n1);
       } else {
         check(n1.creditSaves >= 1 && n1.worldSaves >= 1, `${tag}: the credit saved the ledger with the world (${n1.creditSaves} credit save(s); last ${Number(n1.lastWorldSaveMs).toFixed(1)} ms, max ${Number(n1.maxWorldSaveMs).toFixed(1)} ms)`, n1);
         check(n1.lossUnits === 0 && n1.mintUnits === 0 && a2.identity !== false, `${tag}: the refund kept: the stock after the restart equals the stock before the halt (lost ${n1.lossUnits}, minted ${n1.mintUnits}; identity ${a2.identity})`, n1);

@@ -123,8 +123,11 @@ public final class FillGuard {
 		return e;
 	}
 
-	/** Whether {@code st} is a provided stack in the declared container at {@code pos}. */
+	/** Whether {@code st} is a provided stack in the declared container at {@code pos}, or any stack of a fill waiting for its ledger. */
 	public static boolean guarded(@Nullable Level level, BlockPos pos, ItemStack st) {
+		if (Fills.anyWaiting() && !st.isEmpty() && Fills.waitingBox(level, pos)) {
+			return true; // (SOFF2 fix round, finding 2) billed items the saved ledger never charged
+		}
 		if (!(level instanceof ServerLevel sl) || !allowListed(st)) {
 			return false;
 		}
@@ -147,6 +150,12 @@ public final class FillGuard {
 
 	/** Whether the stack in slot {@code slot} of {@code c} is a guarded provided stack. */
 	public static boolean guardedSlot(Container c, int slot, ItemStack st) {
+		if (Fills.anyWaiting() && !st.isEmpty()) {
+			Cell w = resolve(c, slot);
+			if (w != null && Fills.waitingBox(w.be().getLevel(), w.be().getBlockPos())) {
+				return true; // (SOFF2 fix round, finding 2) a fill waiting for its ledger: every stack held
+			}
+		}
 		if (!allowListed(st)) {
 			return false;
 		}
@@ -233,7 +242,7 @@ public final class FillGuard {
 	 * txn is open.
 	 */
 	public static boolean txnHeld(Object wrapper) {
-		if (dev.larattalabs.architect.txn.TxnServer.core().holds().isEmpty()) {
+		if (dev.larattalabs.architect.txn.TxnServer.core().holds().isEmpty() && !Fills.anyWaiting()) {
 			return false;
 		}
 		try {
@@ -251,7 +260,8 @@ public final class FillGuard {
 				containerField = cf;
 			}
 			Object c = cf.get(storage);
-			return dev.larattalabs.architect.txn.TxnServer.containerHeld(c); // (T2a fix round) a cached double chest's compound too
+			return dev.larattalabs.architect.txn.TxnServer.containerHeld(c) // (T2a fix round) a cached double chest's compound too
+				|| c instanceof net.minecraft.world.level.block.entity.BlockEntity be && Fills.waitingBox(be.getLevel(), be.getBlockPos()); // (SOFF2) a waiting fill's too
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			Architect.LOGGER.error("txn hold guard for the Fabric Transfer API: {} (move refused while a txn is open)", e.toString());
 			return true;
@@ -259,7 +269,7 @@ public final class FillGuard {
 	}
 
 	public static boolean refusesExtract(Object wrapper, Item item) {
-		if (!providedItems().contains(item)) {
+		if (!providedItems().contains(item) && !Fills.anyWaiting()) {
 			return false;
 		}
 		Object[] cs = wrapperSlot(wrapper);

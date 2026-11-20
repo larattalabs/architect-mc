@@ -129,6 +129,7 @@ public final class Sites {
 	public static final class SiteException extends Exception {
 		private final Reason reason;
 		private final List<dev.larattalabs.architect.api.BuildHit> builds;
+		private final String detail;
 
 		public SiteException(String message) {
 			this(Reason.OTHER, message);
@@ -148,16 +149,15 @@ public final class Sites {
 			this(reason, message, List.of(), detail);
 		}
 
-		private SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
+		/** (slice SOFF2) With a stable sub-code for the API's {@code ArchitectRefused.detail()} / {@code Refusal.detail()}. */
+		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
 			this.detail = detail == null ? "" : detail;
 		}
 
-		private final String detail;
-
-		/** (slice T3b) The refusal's stable sub-code, {@code ""} when it has none. */
+		/** (slice T3b, SOFF2) The refusal's stable sub-code ({@code ""} when it has none): {@code saving_off:<dims>} for the saving-off hold. */
 		public String detail() {
 			return detail;
 		}
@@ -1654,6 +1654,12 @@ public final class Sites {
 				+ "/architect remove " + id + " forget drops the record and leaves the blocks");
 		}
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
+		if (Placement.inTakeUp(id)) {
+			// (T4 final round, SOFF2 P1 1) placed and booking its take-ups (persisted TAKE_UP): never aborted into a rollback that would restore the
+			// blocks it took up while their refund stays credited; removed once its take-ups are booked and saved
+			throw new SiteException(Reason.SITE_BUSY, id + " is placed and its take-ups are being booked (a save may be waiting); remove it once that is done",
+				"taking_up");
+		}
 		if (b.placing()) {
 			// Remove during placing cancels the job and restores the box (phase 4d): it was never placed
 			Placement.abort(server, id, "removed while it was being placed");

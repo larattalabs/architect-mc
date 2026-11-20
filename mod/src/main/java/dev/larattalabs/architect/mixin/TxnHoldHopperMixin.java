@@ -20,7 +20,7 @@ public abstract class TxnHoldHopperMixin {
 	@Inject(method = "getContainerAt(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/Container;", at = @At("HEAD"),
 		cancellable = true)
 	private static void architect$txnHeldAt(Level level, BlockPos pos, CallbackInfoReturnable<Container> cir) {
-		if (TxnServer.boxHeld(level, pos)) {
+		if (dev.larattalabs.architect.site.Fills.heldBox(level, pos)) {
 			cir.setReturnValue(null);
 		}
 	}
@@ -28,7 +28,7 @@ public abstract class TxnHoldHopperMixin {
 	@Inject(method = "getContainerAt(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;DDD)Lnet/minecraft/world/Container;",
 		at = @At("HEAD"), cancellable = true)
 	private static void architect$txnHeldAtXyz(Level level, BlockPos pos, BlockState state, double x, double y, double z, CallbackInfoReturnable<Container> cir) {
-		if (TxnServer.boxHeld(level, pos)) {
+		if (dev.larattalabs.architect.site.Fills.heldBox(level, pos)) {
 			cir.setReturnValue(null);
 		}
 	}

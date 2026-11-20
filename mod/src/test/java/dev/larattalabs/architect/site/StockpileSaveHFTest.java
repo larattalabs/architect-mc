@@ -45,7 +45,7 @@ class StockpileSaveHFTest {
 		assertTrue(players >= 0, "saveWithWorld saves the players (PlayerList.saveAll)");
 		assertTrue(chunks > players, "the players are saved before the chunks and the ledger");
 		assertTrue(code.contains("srv.saveAllChunks(true, true, false)"), "(N3) the chunks are flushed: on disk before the ledger is written");
-		int ledger = code.indexOf("save();", chunks);
+		int ledger = code.indexOf("if (!save()) {", chunks); // (SOFF2 fix round) a false save() refuses
 		assertTrue(ledger > chunks, "the ledger is written after the chunk save returns");
 		String all = src().replaceAll("//[^\n]*", "");
 		assertTrue(all.contains("if (explicitSave) {"), "the world's save (AFTER_SAVE since J1) leaves the ledger to the explicit save");

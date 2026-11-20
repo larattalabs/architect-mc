@@ -93,8 +93,13 @@ class TakeUpT4aTest {
 	void theTakeUpPhaseIsPastRollbackAndItsPlanIsDurableFirst() throws Exception {
 		String pl = read(SITE + "Placement.java");
 		String rb = StockpileSaveHFTest.body(pl, "static void rollBack(MinecraftServer srv, String siteId, String why)");
-		assertTrue(rb.indexOf("pj.phase == PlaceJob.TAKE_UP") >= 0 && rb.indexOf("pj.phase == PlaceJob.TAKE_UP") < rb.indexOf("JOBS.remove(j);"),
+		assertTrue(rb.indexOf("inTakeUp(siteId)") >= 0 && rb.indexOf("inTakeUp(siteId)") < rb.indexOf("JOBS.remove(j);"),
 			"a cancel never rolls back a job in TAKE_UP");
+		assertTrue(StockpileSaveHFTest.body(pl, "static boolean inTakeUp(String siteId)").contains("pj.phase == PlaceJob.TAKE_UP"), "TAKE_UP, persisted");
+		// (T4 final round, SOFF2 P1 1) a direct Remove goes through the same guard before Placement.abort's rollback
+		String si = read(SITE + "Sites.java");
+		int g = si.indexOf("if (Placement.inTakeUp(id)) {");
+		assertTrue(g > 0 && g < si.indexOf("Placement.abort(server, id, \"removed while it was being placed\");"), "a direct Remove refuses a job in TAKE_UP");
 		int resume = pl.indexOf("if (pj.phase == PlaceJob.TAKE_UP && level != null) {");
 		assertTrue(resume >= 0 && resume < pl.indexOf("if (!clean || level == null || !pj.resume(level)) {"), "an unclean start resumes TAKE_UP, never rolls it back");
 		assertTrue(pl.contains("!clean && ij.phase != InfraJob.TAKE_UP"), "nor an InfraJob's");

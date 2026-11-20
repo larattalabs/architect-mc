@@ -126,7 +126,7 @@ public final class Repairs {
 		ServerLifecycleEvents.BEFORE_SAVE.register((srv, flush, force) -> saveStartedAt = System.currentTimeMillis());
 		// registered after Stockpiles' AFTER_SAVE (which joins the chunk IO): the save's start time is the conservative bound
 		ServerLifecycleEvents.AFTER_SAVE.register((srv, flush, force) -> {
-			if (marksSave(SaveEvidence.chunksRefusal(srv))) {
+			if (marksSave(SaveEvidence.currentChunksRefusal(srv))) {
 				recordSave(srv);
 			}
 		});

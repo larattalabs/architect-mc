@@ -645,11 +645,13 @@ public final class Fills {
 			// (slice SOFF, review finding 2) an in-memory marker is not proof: a commit whose save was refused left it in memory only; the
 			// site advances only once the ledger holding it is confirmed on disk (else it waits, its locks locked)
 			if (!FILLED.equals(ph) && !Stockpiles.loadFailed() && (!SaveHold.admits(srv) || !Stockpiles.ledgerOnDisk(srv))) {
+				waitFor(s, containerCells(s, spec)); // (SOFF2 fix round, finding 2) its billed contents held while it waits
 				return false;
 			}
 			if (!FILLED.equals(ph)) {
 				s = setPhase(srv, s, FILLED);
 			}
+			waited(s.id());
 			unlock(srv, level, s, spec, r);
 			return true;
 		}
@@ -736,16 +738,87 @@ public final class Fills {
 			dev.larattalabs.architect.survival.Refunds.Tally.total(spec.billed()), spec.billed(), spec.provided());
 		WorldJournal.kill("FK2");
 		// (d) the commit: players, the chunks flushed, then the ledger with the marker and the charge
+		// (slice SOFF2, review finding 4; pre-existing on main) the commit is the ledger on disk: saveWithWorld's refusal and a ledger write that
+		// returned false (save()'s false, swallowed before) both leave the fill FILLING with its locks locked; the retry above saves again and
+		// completes it only once the ledger holding the marker and the charge is confirmed on disk
 		inCommit = true;
+		boolean onDisk;
 		try {
 			Stockpiles.saveWithWorld(srv);
+			onDisk = Stockpiles.savedOrOff();
+		} catch (Stockpiles.SaveRefused e) {
+			onDisk = false;
+			Architect.LOGGER.error("Construction site {}: the fill's commit was not saved ({}); it waits, locked, and retries", s.id(), e.getMessage());
 		} finally {
 			inCommit = false;
 		}
+		if (!onDisk) {
+			COMMITS_REFUSED++;
+			// (SOFF2 fix round, finding 2) its containers hold billed items the saved ledger never charged: every extraction refused (a player's
+			// menu, a break, an explosion, a hopper, the Transfer API: the box holds) until the commit is on disk
+			waitFor(s, cells);
+			return false;
+		}
 		s = setPhase(srv, s, FILLED);
+		waited(s.id());
 		WorldJournal.kill("FK4");
 		unlock(srv, level, s, spec, r);
 		return true;
+	}
+
+	/** (slice SOFF2, dev) fill commits whose ledger write was not confirmed (they waited, FILLING, and retried). */
+	static volatile int COMMITS_REFUSED;
+
+	/** (SOFF2 fix round) the fills waiting for their commit's ledger: their container cells by dimension (cell to site id). Server thread. */
+	private static final Map<String, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<String>> WAITING = new java.util.HashMap<>();
+
+	static void waitFor(Site s, List<BlockPos> cells) {
+		var m = WAITING.computeIfAbsent(s.dimension(), d -> new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
+		for (BlockPos p : cells) {
+			m.put(p.asLong(), s.id());
+		}
+		FillGuard.invalidate();
+	}
+
+	static void waited(String siteId) {
+		if (WAITING.isEmpty()) {
+			return;
+		}
+		WAITING.values().forEach(m -> m.values().removeIf(siteId::equals));
+		WAITING.values().removeIf(java.util.Map::isEmpty);
+	}
+
+	/** Whether any fill waits for its ledger (the guards' O(1) first check). */
+	public static boolean anyWaiting() {
+		return !WAITING.isEmpty();
+	}
+
+	/** Whether {@code pos} is a container of a fill waiting for its commit's ledger (its site still FILLING). */
+	public static boolean waitingBox(net.minecraft.world.level.@org.jspecify.annotations.Nullable Level level, BlockPos pos) {
+		if (WAITING.isEmpty() || !(level instanceof ServerLevel sl)) {
+			return false;
+		}
+		var m = WAITING.get(Sites.dimensionId(sl));
+		String id = m == null ? null : m.get(pos.asLong());
+		if (id == null) {
+			return false;
+		}
+		Site s = Sites.get(id);
+		if (s == null || !FILLING.equals(phase(s))) {
+			waited(id);
+			return false;
+		}
+		return true;
+	}
+
+	/** The box holds every writer honours: an open txn's, or a fill's waiting for its ledger. */
+	public static boolean heldBox(net.minecraft.world.level.@org.jspecify.annotations.Nullable Level level, BlockPos pos) {
+		return dev.larattalabs.architect.txn.TxnServer.boxHeld(level, pos) || waitingBox(level, pos);
+	}
+
+	/** (world stopped) nothing of it waits in the next. */
+	static void worldClosed() {
+		WAITING.clear();
 	}
 
 	/** Every lock cell back to its template state (with neighbour updates), then {@link #UNLOCKED}. Idempotent. */

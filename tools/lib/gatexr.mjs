@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000, hold = null } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000, hold = null, creditSaveOff = false, cancelParked = false } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -87,6 +87,39 @@ export async function registerXr(steps, h) {
       region = rr.region;
     } else region = await G.realise(ctx, c.sha, entries);
     out.region = region;
+    let watch = null;
+    if (creditSaveOff) {
+      // (slice SOFF2, TEST noSaveInCreditSave) the Nether's saving turned off from BEFORE_SAVE inside the first take-up's credit save (after
+      // its refund is credited in memory): the save is refused; the job must park (held), never roll back keeping the refund. Saving is
+      // then turned on again; after the release the build goes on
+      const fired0 = (await call('dev.stockpile.saved', {}, 60_000).catch(() => null))?.testHooks?.creditSavesTurnedOff ?? 0; // per JVM: an earlier case's count
+      await call('dev.stockpile.ps', { noSaveInCreditSave: 'minecraft:the_nether' }, 30_000);
+      out.creditSaveOff = { fired: 0 };
+      watch = (async () => {
+        for (let i = 0; i < 1800; i++) {
+          const sv = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
+          if ((sv?.testHooks?.creditSavesTurnedOff ?? 0) > fired0) {
+            out.creditSaveOff = { fired: sv.testHooks.creditSavesTurnedOff - fired0, hold: sv.hold?.state };
+            await L.sleep(4000);
+            const sv2 = await call('dev.stockpile.saved', {}, 60_000).catch(() => null);
+            out.creditSaveOff.heldAfter = sv2?.hold?.state;
+            if (cancelParked) {
+              // (SOFF2 fix round, finding 1) the parked lot's batch cancelled while held: a rollback would restore the paid blocks it took
+              // up while its refund stays credited; it must finish instead (committing)
+              const jobs = await call('dev.placement.jobs', {}, 30_000).catch(() => []);
+              const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && x.phase === 15 && x.batch);
+              out.cancel = { job: pj ?? null };
+              if (pj) out.cancel.answer = await L.cmd(`/apitest bcancel ${pj.batch}`).catch((e) => String(e?.message ?? e));
+              await L.sleep(3000);
+            }
+            await call('dev.stockpile.ps', { noSave: { 'minecraft:the_nether': false } }, 30_000);
+            if (out.cancel) out.cancel.at = Date.now();
+            return;
+          }
+          await L.sleep(2000);
+        }
+      })();
+    }
     if (midRemove) {
       // fed until the first retake (or the build), then removed mid-build: the refund of what stands, nothing given back twice
       // one feed wave at a time, the audit read before each: the removal starts as soon as `stopWhen` holds, before the next wave
@@ -107,33 +140,43 @@ export async function registerXr(steps, h) {
       const rs = await G.rsState(ctx, region);
       out.mid = { retaken: back, state: st?.view?.state, done: rs.build?.done ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
-      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: feedMs }).catch((e) => ({ error: String(e?.message ?? e), last: { st: { view: { state: 'NOT_BUILT' } } } }));
-      out.state = f.last?.st?.view?.state;
-      if (f.error) out.feedError = f.error.slice(0, 300);
-      if (refuseCredit) out.refuseLeft = (await call('dev.stockpile.ps', {}, 10_000).catch(() => ({}))).refuseCreditSaves;
-      if (hold) {
-        // (T4a fix round, findings 4.1 and the bounded wait) a job waiting in TAKE_UP (its credit saves refused), then cancelled or halted
-        const jobs = async () => (await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? [];
-        let waiting = null;
-        for (let i = 0; i < 60 && !waiting; i++) { waiting = (await jobs()).find((j) => j.takeUp === true || j.phase === 17) ?? null; if (!waiting) await L.sleep(1000); }
-        out.waiting = waiting;
-        out.placedWhileWaiting = out.state;
-        // (T4b fix round) a cancel waits for a periodic save first (the ledger with whatever is in memory); a halt is bare at once (the review:
-        // a wait before it let the world changes reach the disk)
-        if (hold === 'cancel') await L.sleep(20_000);
-        if (hold === 'cancel' && waiting?.batch) {
-          out.cancel = await L.cmd(`/apitest bcancel ${waiting.batch}`).catch((e) => ({ error: String(e) }));
-          await L.sleep(5000);
-          await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000);
-        } else if (hold === 'halt') {
-          call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
-          for (let i = 0; i < 45; i++) { await L.sleep(2000); const st = await call('dev.state', {}, 10_000).catch(() => null); if (st && st.inWorld === false) break; }
-          await L.openWorld(`G6B RS S gmc ${tag}`.slice(0, 60));
-          await L.sleep(3000);
+      if (creditSaveOff || cancelParked) {
+        const until = cancelParked ? () => !!out.cancel?.at && Date.now() > out.cancel.at + 45_000 : undefined;
+        const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: creditSaveOff ? 900_000 : 3_600_000, ...(until ? { until } : {}) });
+        out.state = f.last.st.view.state;
+      } else {
+        const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: feedMs }).catch((e) => ({ error: String(e?.message ?? e), last: { st: { view: { state: 'NOT_BUILT' } } } }));
+        out.state = f.last?.st?.view?.state;
+        if (f.error) out.feedError = f.error.slice(0, 300);
+        if (refuseCredit) out.refuseLeft = (await call('dev.stockpile.ps', {}, 10_000).catch(() => ({}))).refuseCreditSaves;
+        if (hold) {
+          // (T4a fix round, findings 4.1 and the bounded wait) a job waiting in TAKE_UP (its credit saves refused), then cancelled or halted
+          const jobs = async () => (await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? [];
+          let waiting = null;
+          for (let i = 0; i < 60 && !waiting; i++) { waiting = (await jobs()).find((j) => j.takeUp === true || j.phase === 17) ?? null; if (!waiting) await L.sleep(1000); }
+          out.waiting = waiting;
+          out.placedWhileWaiting = out.state;
+          // (T4b fix round) a cancel waits for a periodic save first (the ledger with whatever is in memory); a halt is bare at once (the review:
+          // a wait before it let the world changes reach the disk)
+          if (hold === 'cancel') await L.sleep(20_000);
+          if (hold === 'cancel' && waiting?.batch) {
+            out.cancel = await L.cmd(`/apitest bcancel ${waiting.batch}`).catch((e) => ({ error: String(e) }));
+            await L.sleep(5000);
+            await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000);
+          } else if (hold === 'halt') {
+            call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
+            for (let i = 0; i < 45; i++) { await L.sleep(2000); const st = await call('dev.state', {}, 10_000).catch(() => null); if (st && st.inWorld === false) break; }
+            await L.openWorld(`G6B RS S gmc ${tag}`.slice(0, 60));
+            await L.sleep(3000);
+          }
+          for (let i = 0; i < 60 && (await jobs()).length; i++) await L.sleep(1000);
+          out.jobsLeft = (await jobs()).length;
         }
-        for (let i = 0; i < 60 && (await jobs()).length; i++) await L.sleep(1000);
-        out.jobsLeft = (await jobs()).length;
       }
+    }
+    if (watch) {
+      await call('dev.stockpile.ps', { noSaveInCreditSave: null, noSave: { 'minecraft:the_nether': false } }, 30_000).catch(() => null);
+      await Promise.race([watch, L.sleep(5000)]);
     }
     out.built = await cons.point(midRemove ? 'mid-build' : 'built');
     const aud = await cons.parts();
@@ -239,6 +282,25 @@ export async function registerXr(steps, h) {
       check(r.removedOk && G.exact(r.removed), `${n}: Regions.remove, conservation exact after the removal, every item: ${json(r.removed.diff)}`);
       check(r.eflat === 0, `${n}: E-flat ${r.eflat} after the removal (the crates aside)`, r.eflatList);
       check(!r.items, `${n}: no item dropped (${r.items})`);
+    }
+    // (slice SOFF2) xr_demo again, a level's saving turned off inside its first take-up's credit save: parked, then built exactly
+    if (process.env.GATE_XR_SOFF !== 'none') {
+      const r = await one('prog:xr_demo', { creditSaveOff: true });
+      out.soff = { ...r, owRows: r.owRows?.slice(0, 40) };
+      const want = expectedBack(r.owRows);
+      check((r.creditSaveOff?.fired ?? 0) >= 1 && r.creditSaveOff?.heldAfter === 'HELD', `xr_demo (a level's saving off inside a take-up's credit save): the hook fired (${r.creditSaveOff?.fired}); held after it (${r.creditSaveOff?.heldAfter})`, r.creditSaveOff);
+      check(r.state === 'PLACED', `xr_demo (saving off inside a credit save): parked, then built after the release (${r.state}; never rolled back)`);
+      check(G.exact(r.built), `xr_demo (saving off inside a credit save): conservation exact after the build, every item: ${json(r.built.diff)} (identity ${r.built.identity})`);
+      check(G.same(r.retaken, want), `xr_demo (saving off inside a credit save): retaken = the overwritten paid cells' items: ${json(r.retaken)} vs ${json(want)}`);
+      check(r.removedOk && G.exact(r.removed), `xr_demo (saving off inside a credit save): removed, conservation exact: ${json(r.removed.diff)}`);
+    }
+    // (SOFF2 fix round) the same, and the parked lot's batch cancelled while held: never rolled back keeping the refund
+    if (process.env.GATE_XR_SOFF !== 'none') {
+      const r = await one('prog:xr_demo', { creditSaveOff: true, cancelParked: true });
+      out.soffCancel = { ...r, owRows: r.owRows?.slice(0, 40) };
+      check((r.creditSaveOff?.fired ?? 0) >= 1 && !!r.cancel?.job, `xr_demo (cancel while parked): the hook fired (${r.creditSaveOff?.fired}); the parked lot's batch cancelled (${json(r.cancel?.job)}; ${json(r.cancel?.answer)?.slice(0, 120)})`, r.cancel);
+      check(G.exact(r.built), `xr_demo (cancel while parked): conservation exact after the cancel and the release, every item: ${json(r.built.diff)} (identity ${r.built.identity}; the lot ${r.state})`);
+      check(r.removedOk && G.exact(r.removed), `xr_demo (cancel while parked): removed, conservation exact: ${json(r.removed.diff)}`);
     }
     // mid-build removals on xr_demo: after its first take-up (a target over a target, the street stage), and after its lots were put
     // down (their placement's take-ups credited, the pavement's 81 + 47 + 3 stone bricks back), the lots starved, not built

@@ -21,7 +21,7 @@ public abstract class TxnHoldBreakMixin {
 
 	@Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldBreak(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-		if (TxnServer.boxHeld(level, pos) || !level.isClientSide() && dev.larattalabs.architect.txn.RemovalTxn.boxHeld(level.dimension().identifier()
+		if (dev.larattalabs.architect.site.Fills.heldBox(level, pos) || !level.isClientSide() && dev.larattalabs.architect.txn.RemovalTxn.boxHeld(level.dimension().identifier()
 			.toString(), pos.getX(), pos.getY(), pos.getZ())) {
 			cir.setReturnValue(false); // (T4b, N3) nor a block in the box of an open removal txn: its planned refund stays true
 		}

@@ -1,77 +1,161 @@
 package dev.larattalabs.architect.site;
 
 import dev.larattalabs.architect.Architect;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
 
 /**
- * (slice SOFF, review findings 4 and 5) What one world save (one {@code saveAllChunks} call) actually wrote, recorded while it runs, never
- * read off the {@code noSave} flags afterwards: the levels it saved and the ones it skipped ({@code SaveEvidenceLevelMixin}, at each level's
- * save), and whether the players were saved with it (inside {@code saveEverything}, which saves them first, or the stop's save, which does
- * too). A ledger publisher that rides on a world save requires this evidence from that save: every level written, and for the world save's
- * callback the players too. A level flipped off and back on around a save, or another mod's {@code saveAllChunks(.., force)} (no players),
- * is then never taken for a coherent save. Server thread.
+ * (slice SOFF, review findings 4 and 5; slice SOFF2, per invocation) What each world save actually wrote, recorded while it runs, never read
+ * off the {@code noSave} flags afterwards. Every {@code saveAllChunks} call is a {@link Frame} of its own on a stack
+ * ({@code SaveEvidenceServerMixin}: pushed and popped around the whole method, an exception included, so a nested call never touches the outer
+ * one's record): the levels it wrote (each recorded when its save <b>returns</b>, {@code SaveEvidenceLevelMixin}) and the ones it skipped.
+ * Its players are saved with it only when it is the own chunk save of a {@code saveEverything} or the stop's {@code stopServer} whose
+ * {@code PlayerList.saveAll} has <b>completed</b> (no player save failing in it) before it started: a chunk save from a player-save hook, a
+ * stopping listener, a BEFORE_SAVE listener (nested) or another mod's raw {@code saveAllChunks(.., force)} never inherits that. A ledger
+ * publisher that rides on a world save requires its own save's frame: the world-save callback (AFTER_SAVE, inside the frame) the top frame,
+ * every level written and the players with it; an explicit caller the frame of the call it just made ({@link #mark}, {@link #ownRefusal}).
+ * Server thread.
  */
 public final class SaveEvidence {
 	private SaveEvidence() {
 	}
 
-	private static final List<String> SAVED = new ArrayList<>();
-	private static final List<String> SKIPPED = new ArrayList<>();
-	/** Depth of {@code saveEverything} calls (players saved first, then the chunks). */
-	private static int everything;
-	/** The server is stopping: vanilla's stop saves the players, turns saving on, then saves the chunks. */
-	private static boolean stopping;
-	/** (TEST) a dev hook's raw chunk save stands for an autosave: the players are taken as saved with it (behaviour as before SOFF). */
+	/** What a frame stands for. */
+	public enum Kind {
+		/** saveEverything (an autosave, /save-all): the players, then its own chunk save. */
+		EVERYTHING,
+		/** stopServer: the players, then (saving turned on) its own chunk save. */
+		STOP,
+		/** one saveAllChunks call. */
+		CHUNKS
+	}
+
+	/** One invocation's record. */
+	public static final class Frame {
+		final Kind kind;
+		final long id;
+		final List<String> saved = new ArrayList<>();
+		final List<String> skipped = new ArrayList<>();
+		/** EVERYTHING/STOP: its PlayerList.saveAll completed with no player save failing. CHUNKS: the players were saved with it. */
+		boolean players;
+		/** EVERYTHING/STOP: its own saveAllChunks call is starting (the next CHUNKS frame pushed is that call's). */
+		boolean ownChunkSave;
+		boolean completed;
+
+		Frame(Kind kind, long id) {
+			this.kind = kind;
+			this.id = id;
+		}
+	}
+
+	private static final ArrayDeque<Frame> STACK = new ArrayDeque<>();
+	private static long nextId = 1;
+	/** The last CHUNKS frame popped (an explicit caller's own, read right after its call). */
+	private static @Nullable Frame lastChunks;
+	/** (TEST) the next CHUNKS frame pushed stands for an autosave's: its players are taken as saved (dev hooks, as before SOFF). */
 	private static boolean testAssumePlayers;
-	/** The players were saved with the current save (fixed at its start). */
-	private static boolean playersWithIt;
 
 	static void init() {
-		ServerLifecycleEvents.BEFORE_SAVE.register((srv, flush, force) -> started());
-		ServerLifecycleEvents.SERVER_STOPPING.register(srv -> stopping = true);
-		ServerLifecycleEvents.SERVER_STARTING.register(srv -> {
-			stopping = false;
-			everything = 0;
-			SAVED.clear();
-			SKIPPED.clear();
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTING.register(srv -> {
+			STACK.clear();
+			lastChunks = null;
 		});
 	}
 
-	/** A tick's start: no save is running (a saveEverything that threw never leaves its depth set). */
+	/** A tick's start: no save is running (a frame still open here is a bug: logged, dropped). */
 	static void tickStart() {
-		everything = 0;
+		if (!STACK.isEmpty()) {
+			Architect.LOGGER.error("SaveEvidence: {} save frame(s) open at a tick's start; dropped", STACK.size());
+			STACK.clear();
+		}
 	}
 
-	/** saveAllChunks' head (BEFORE_SAVE): a new record. */
-	static void started() {
-		SAVED.clear();
-		SKIPPED.clear();
-		playersWithIt = everything > 0 || stopping || testAssumePlayers;
+	/** (SaveEvidenceServerMixin) A save method's start: its frame pushed. A CHUNKS frame takes its players from its direct parent's own save. */
+	public static Frame enter(Kind kind) {
+		Frame f = new Frame(kind, nextId++);
+		if (kind == Kind.CHUNKS) {
+			Frame parent = STACK.peek();
+			if (parent != null && parent.kind != Kind.CHUNKS && parent.ownChunkSave) {
+				f.players = parent.players;
+				parent.ownChunkSave = false; // only that one call: a later chunk save inside the same method inherits nothing
+			}
+			if (testAssumePlayers) {
+				testAssumePlayers = false;
+				f.players = true;
+			}
+		}
+		STACK.push(f);
+		return f;
 	}
 
-	/** (SaveEvidenceLevelMixin) a level's save starts: {@code skip} is vanilla's {@code noSave && !force}. */
-	public static void level(ServerLevel l, boolean skip) {
-		(skip ? SKIPPED : SAVED).add(l.dimension().identifier().toString());
+	/** (SaveEvidenceServerMixin) A save method's end, normal or exceptional: its frame (and anything left above it) popped. */
+	public static void exit(Frame f, boolean completed) {
+		while (!STACK.isEmpty()) {
+			Frame top = STACK.pop();
+			if (top == f) {
+				break;
+			}
+		}
+		f.completed = completed;
+		f.ownChunkSave = false;
+		if (f.kind == Kind.CHUNKS) {
+			lastChunks = f;
+		}
 	}
 
-	/** (SaveEvidenceServerMixin) saveEverything's head and return. */
-	public static void everything(boolean enter) {
-		everything = Math.max(0, everything + (enter ? 1 : -1));
+	/** (SaveEvidenceServerMixin) saveEverything's or stopServer's PlayerList.saveAll returned; {@code ok}: no player save failed in it. */
+	public static void playersSaved(Frame owner, boolean ok) {
+		owner.players = ok;
 	}
 
-	/** (TEST) {@code r} runs with its raw chunk save counted as an autosave's (the players taken as saved), as dev hooks did before SOFF. */
+	/** (SaveEvidenceServerMixin) saveEverything's or stopServer's own saveAllChunks call starts (its frame is the next pushed). */
+	public static void ownChunkSave(Frame owner) {
+		owner.ownChunkSave = true;
+	}
+
+	/** (SaveEvidenceLevelMixin) A level's save: skipped at its head ({@code noSave && !force}), written when it returns. */
+	public static void level(ServerLevel l, boolean skip, boolean returned) {
+		level(l.dimension().identifier().toString(), skip, returned);
+	}
+
+	static void level(String dim, boolean skip, boolean returned) {
+		Frame top = STACK.peek();
+		if (top == null || top.kind != Kind.CHUNKS) {
+			return; // a level's save outside a world save (a level's close): no frame's
+		}
+		if (skip && !returned) {
+			top.skipped.add(dim);
+		} else if (!skip && returned) {
+			top.saved.add(dim);
+		}
+	}
+
+	/** (SaveEvidenceServerMixin) The innermost frame open, or null. */
+	public static @Nullable Frame top() {
+		return STACK.peek();
+	}
+
+	/** Whether {@code f} is a saveEverything's or stopServer's frame (it owns a player save and its own chunk save). */
+	public static boolean owner(@Nullable Frame f) {
+		return f != null && f.kind != Kind.CHUNKS;
+	}
+
+	/** Whether any save is running now (a frame open). */
+	public static boolean saving() {
+		return !STACK.isEmpty();
+	}
+
+	/** (TEST) {@code r}'s own raw chunk save counted as an autosave's (the players taken as saved), as dev hooks did before SOFF. */
 	public static void asAutosave(Runnable r) {
-		boolean was = testAssumePlayers;
 		testAssumePlayers = true;
 		try {
 			r.run();
 		} finally {
-			testAssumePlayers = was;
+			testAssumePlayers = false;
 		}
 	}
 
@@ -87,19 +171,42 @@ public final class SaveEvidence {
 			return "the save wrote " + saved.size() + " of " + levels + " levels";
 		}
 		if (needPlayers && !players) {
-			return "the players were not saved with it (a chunk save alone)";
+			return "the players were not saved with it (a chunk save alone, or one started before the players' save completed)";
 		}
 		return null;
 	}
 
-	/** The last save's levels: why they are not all written, or null. Read inside or right after the save. */
-	static @Nullable String chunksRefusal(MinecraftServer srv) {
-		return incoherent(levels(srv), SAVED, SKIPPED, false, true);
+	/** The id the next frame pushed gets: an explicit caller takes it right before its own saveAllChunks call. */
+	static long mark() {
+		return nextId;
 	}
 
-	/** The world save's callback: why its save can't carry the ledger (a level not written, the players not saved), or null. */
+	/** (pure seam) A frame's refusal: none, or not this call's, or not completed, or incoherent. */
+	static @Nullable String refusal(@Nullable Frame f, long mark, int levels, boolean needPlayers) {
+		if (f == null || f.id != mark) {
+			return "no record of this save (its saveAllChunks call left no frame)";
+		}
+		if (!f.completed) {
+			return "the save did not complete";
+		}
+		return incoherent(levels, f.saved, f.skipped, needPlayers, f.players);
+	}
+
+	/** An explicit caller's own chunk save (the one it started after {@code mark}): why its levels are not all written, or null. */
+	static @Nullable String ownRefusal(MinecraftServer srv, long mark) {
+		return refusal(lastChunks, mark, levels(srv), false);
+	}
+
+	/** Inside a world save's callback (AFTER_SAVE: its frame on top): why its levels are not all written, or null. */
+	static @Nullable String currentChunksRefusal(MinecraftServer srv) {
+		Frame top = STACK.peek();
+		return top == null || top.kind != Kind.CHUNKS ? "no save running" : incoherent(levels(srv), top.saved, top.skipped, false, true);
+	}
+
+	/** The world save's callback: why its save can't carry the ledger (a level not written, the players not saved with it), or null. */
 	static @Nullable String worldSaveRefusal(MinecraftServer srv) {
-		return incoherent(levels(srv), SAVED, SKIPPED, true, playersWithIt);
+		Frame top = STACK.peek();
+		return top == null || top.kind != Kind.CHUNKS ? "no save running" : incoherent(levels(srv), top.saved, top.skipped, true, top.players);
 	}
 
 	private static int levels(MinecraftServer srv) {
@@ -110,16 +217,22 @@ public final class SaveEvidence {
 		return n;
 	}
 
-	/** (dev) the last save's record. */
+	/** (dev) the last chunk save's record and the frames open. */
 	static com.google.gson.JsonObject json() {
 		com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+		Frame f = lastChunks;
 		com.google.gson.JsonArray a = new com.google.gson.JsonArray();
-		SAVED.forEach(a::add);
 		com.google.gson.JsonArray b = new com.google.gson.JsonArray();
-		SKIPPED.forEach(b::add);
+		if (f != null) {
+			f.saved.forEach(a::add);
+			f.skipped.forEach(b::add);
+			o.addProperty("id", f.id);
+			o.addProperty("completed", f.completed);
+		}
 		o.add("saved", a);
 		o.add("skipped", b);
-		o.addProperty("playersWithIt", playersWithIt);
+		o.addProperty("playersWithIt", f != null && f.players);
+		o.addProperty("open", STACK.size());
 		return o;
 	}
 

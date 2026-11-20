@@ -601,8 +601,10 @@ final class PlaceJob implements Placement.Job {
 				return waitTakeUp(server, t, bk.why()); // (fix round, finding 4.4) an unreadable participant holds the booking: never done
 			}
 			takeUpBooked |= !bk.items().isEmpty();
-			if (takeUpBooked) {
-				Stockpiles.saveCredit(server); // (J1, N1's shape) the take-up's credit saved with the world before the job ends
+			if (takeUpBooked || bk.how() == RegionOverwrites.Booked.ALREADY) {
+				// (J1, N1's shape) the take-up's credit saved with the world before the job ends. (SOFF2) confirmed: a refused save (or an in-memory
+				// credit from a refused earlier save) throws Stockpiles.SaveRefused, caught below: the job waits in TAKE_UP and retries, never rolled back
+				Stockpiles.saveCreditConfirmed(server);
 			}
 		} catch (RuntimeException e) {
 			return waitTakeUp(server, t, e.getMessage());

@@ -53,7 +53,7 @@ class StockpileSaveJ1Test {
 
 		String rj = read(SITE + "RestoreJob.java");
 		int rc = rj.indexOf("boolean booked = Builder.creditRefund(");
-		int rs = rj.indexOf("Stockpiles.saveCredit(server);", rc);
+		int rs = rj.indexOf("Stockpiles.saveCreditConfirmed(server);", rc); // (SOFF2) saveCredit, confirmed
 		assertTrue(rc >= 0 && rs > rc && rs < rj.indexOf("phase = DONE;", rc), "a standalone road's restore credit is saved before the job ends");
 
 		// (slice T4a, finding 4) a put-down's take-ups are planned at its commit, booked once its record is placed, and saved by its job
@@ -62,7 +62,7 @@ class StockpileSaveJ1Test {
 		assertTrue(book.contains("credited(t.key())") && book.contains(".already()"), "a put-down's take-ups book once per key");
 		String pj = read(SITE + "PlaceJob.java");
 		String tu = StockpileSaveHFTest.body(pj, "private boolean takeUpStep(MinecraftServer server)");
-		assertTrue(tu.indexOf("Stockpiles.saveCredit(server);") > tu.indexOf("bookTakeUp("), "a lot's take-ups are saved once they book");
+		assertTrue(tu.indexOf("Stockpiles.saveCreditConfirmed(server);") > tu.indexOf("bookTakeUp("), "a lot's take-ups are saved once they book");
 
 		String g = read(SITE + "Groups.java");
 		assertTrue(g.contains("Stockpiles.saveCredit(server);"), "Groups.credit goes through saveCredit (PS)");

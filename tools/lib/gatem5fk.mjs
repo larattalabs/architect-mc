@@ -468,9 +468,44 @@ export async function registerFK(steps, h) {
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
-    await call('dev.journal.killAt', { point }, 10_000);
-    call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
-    if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    let waited = null;
+    if (point === 'FKL') {
+      // (slice SOFF2) every ledger write fails (TEST failLedgerWrites, as a full disk): the commit's save returns false. The fill must not
+      // advance (FILLED, unlocked) over a ledger not on disk: it waits FILLING, locked, retrying; then a bare halt
+      await call('dev.stockpile.ps', { failLedgerWrites: true }, 30_000);
+      await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000);
+      let s = null;
+      for (let i = 0; i < 12; i++) {
+        await L.sleep(1500);
+        s = await fk(site);
+        if (s.phase === 'FILLED' || s.phase === 'UNLOCKED') break;
+      }
+      const hk = (await call('dev.stockpile.saved', {}, 60_000)).testHooks ?? {};
+      waited = { phase: s?.phase, state: s?.state, lever: leverUnlocked(s ?? {}), writesFailed: hk.ledgerWritesFailed };
+      check(s?.phase === 'FILLING' && !leverUnlocked(s ?? {}) && (hk.ledgerWritesFailed ?? 0) >= 1, `${tag}: with the ledger write failing (${hk.ledgerWritesFailed} failed) the fill waits: phase ${s?.phase}, the lever ${leverUnlocked(s ?? {}) ? 'unlocked' : 'locked'} (never FILLED or unlocked over a ledger not on disk)`, waited);
+      // (SOFF2 fix round, finding 2) while it waits for its ledger, nothing billed leaves its containers: a player's menu take, a hopper
+      // pull from below, a Fabric Transfer API extraction (each probe puts back or aborts what it got)
+      const ex = [];
+      for (const c of (s?.containers ?? []).slice(0, 2)) {
+        const at = Array.isArray(c.at) ? c.at : String(c.at ?? '').split(',').map(Number);
+        if (at.length !== 3 || at.some((v) => !Number.isFinite(v))) continue;
+        c.at = at;
+        const it = Object.keys(c.holds ?? c.declared ?? {})[0] ?? 'minecraft:flint';
+        const tk = await call('dev.fk.take', { pos: c.at, slot: 0, click: 'pickup' }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const tr = await call('dev.fk.transfer', { pos: c.at, item: it, max: 64 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const pl = await call('dev.fk.pull', { pos: c.at, n: 10 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        ex.push({ at: c.at, item: it, carried: tk.carried ?? '', menu: tk.error ?? 'opened', extracted: tr.extracted ?? tr.error ?? null, pulled: pl.pulled ?? pl.error ?? null });
+      }
+      waited.extract = ex;
+      const leaked = ex.filter((x) => (x.carried && x.carried !== '') || (typeof x.extracted === 'number' && x.extracted > 0) || sum(x.pulled ?? {}) > 0);
+      check(ex.length > 0 && leaked.length === 0, `${tag}: while the fill waits for its ledger nothing billed leaves its containers (a menu take, a Transfer API extraction, a hopper pull from below): ${json(ex).slice(0, 400)}`, waited);
+      call('dev.stockpile.halt', {}, 10_000).catch(() => null);
+      if (!(await halt(tag))) { await L.leaveWorld(); return null; }
+    } else {
+      await call('dev.journal.killAt', { point }, 10_000);
+      call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
+      if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    }
     const S = savedLedger(W.name);
     const sitesFile = JSON.parse(fs.readFileSync(path.join(W.dir, 'architect-sites.json'), 'utf8'));
     const rec = JSON.stringify(sitesFile).match(/"architect_mc:fillState":\{"phase":"(\w+)"/)?.[1] ?? null;
@@ -484,7 +519,7 @@ export async function registerFK(steps, h) {
     const paidGain = only(G.minus(L2.paid?.[s.key] ?? {}, S.paid?.[s.key] ?? {}), FK);
     const stockS = only(G.minus(G.plus(S.delivered, S.returned), G.plus(S.consumed, G.plus(S.withdrawn, S.dropped))), FK);
     const stockF = only((await pile()).stock, FK);
-    const res = { saved: { phase: rec, marker: markerSaved, filledBefore: sum(only(G.minus(S.consumed, B.consumed), FK)) }, refed: f.fed, charged, paidGain, stockS, stockF, holds: s.containers?.map((c) => c.holds), phase: s.phase, state: s.state };
+    const res = { waited, saved: { phase: rec, marker: markerSaved, filledBefore: sum(only(G.minus(S.consumed, B.consumed), FK)) }, refed: f.fed, charged, paidGain, stockS, stockF, holds: s.containers?.map((c) => c.holds), phase: s.phase, state: s.state };
     out_log(tag, res);
     // exactly once against the saved state: with the commit on disk nothing more is charged; without it, the fill is charged once now
     const wantCharged = markerSaved ? {} : FILL;
@@ -741,6 +776,7 @@ export async function registerFK(steps, h) {
     await ensure();
     const out = {};
     for (const p of ['FK1', 'FK2', 'FK3', 'FK4']) out[p] = await fillCase(p);
+    out.FKL = await fillCase('FKL'); // (slice SOFF2) a ledger write failing at the commit: the fill waits; after a halt, once
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1 = await singleCase('CS1'); // (J2) a single site's credit save halted
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1o = await singleCase('CS1', { full: true }); // (OVF) the same into a full stockpile

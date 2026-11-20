@@ -34374,3 +34374,19 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   fk-crash, fkb-crash, lc3-seal, lc3-undo and x-resume. Gradle full 1753/0.
 - **Not shown red:** T4-pileroad and T4-2nd-b pass at the base too (finding 5's loss and the W-to-credit crash were not reproduced in game);
   5 rests on code and its unit.
+
+## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
+
+- The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
+  evidence frame; players count only for a save method's own chunk save after its player save completed. /save-off closes admission before
+  its barrier and is refused (saving stays on, the op told why) when the barrier fails. A fill commits FILLED only over a confirmed ledger and,
+  while it waits, its containers are held against every extraction. A road removal's and a take-up's credit save is confirmed (a refusal
+  parks the job); a lot past its credited take-ups is never rolled back by a cancel. `saveWithWorld` treats `save()`'s false as a refusal;
+  adoptCrates saves the ledger with the source crates still standing before it clears them (kill point SAC1b; the start repairs it).
+- **Steward (NEXT):** the hold's refusal carries `ArchitectRefused.detail()` / `Refusal.detail()` = `saving_off:<dims>` (comma-separated
+  dimension ids; the levels that were off while the hold waits for its confirmed save). `Reason` stays `NOT_ALLOWED`. STEWARD-SYNC.
+- Known risk (not fixed, review finding 4): another mod's hook that inserts into a crate from inside a normal autosave's BEFORE_SAVE (after
+  the players were saved) is admitted; its credit is published with that save while the saved player still holds the items (a crash before
+  the next player save mints them). Only /save-off's own barrier closes admission.
+- Residual: a crash between adoptCrates' two saves drops nothing of an over-capacity overflow (the ledger records the drop; the start's
+  repair clears the crate).

@@ -14,7 +14,8 @@ import org.jspecify.annotations.Nullable;
  * (slice SOFF) While any level has saving off ({@code /save-off}, {@code noSave}), Architect admits no operation that changes the stockpile
  * ledger or moves paid items: the world's chunks can't be saved with the ledger, so nothing is started and then refused. Held: crate inserts
  * (every ingress, every dimension: the ledger is shared), payouts, crate and stockpile changes, construction deltas, and the job ticks
- * (placements, removals and restores, feeding and fills, roads, repairs, revisions and region actions); the start's reconcile is deferred.
+ * (placements, removals and restores, feeding and fills, roads, repairs, revisions and region actions). (SOFF2) The start's reconcile is not
+ * deferred: it runs at the start against the books the world was saved with, its save left pending under the hold (Stockpiles#reconcileAtStartHeld).
  * <p>
  * The hold starts as soon as a level is seen with saving off and ends only once saving is on in every level <b>and</b> a confirmed save
  * barrier ({@link Stockpiles#durableBarrier}: players, chunks flushed and durable, then the ledger) has passed: a flag turning back on never
@@ -33,25 +34,19 @@ public final class SaveHold {
 	private static @Nullable String heldOver;
 	private static @Nullable String lastFailure;
 	private static long ticks, nextTry;
-	private static final List<Deferred> DEFERRED = new ArrayList<>();
 	/** (dev) holds begun, releases, release barriers refused, operations refused or parked while held. */
 	static volatile int holds, releases, releaseFailures, refused;
 	/** (dev) the barriers run at /save-off and the ones that did not pass. */
 	static volatile int savingOffBarriers, savingOffBarrierFailures;
 
-	private record Deferred(String what, Runnable run) {
-	}
-
 	public static void init() {
 		ServerTickEvents.START_SERVER_TICK.register(SaveHold::tick);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
-			testOff = false;
 			state = State.OPEN;
 			heldOver = null;
 			lastFailure = null;
 			ticks = 0;
 			nextTry = 0;
-			DEFERRED.clear();
 		});
 	}
 
@@ -118,23 +113,11 @@ public final class SaveHold {
 		Architect.LOGGER.info("Architect: saving is on again and a confirmed save passed (it was off in {}): held changes resume", heldOver);
 		heldOver = null;
 		lastFailure = null;
-		List<Deferred> run = new ArrayList<>(DEFERRED);
-		DEFERRED.clear();
-		for (Deferred d : run) {
-			try {
-				d.run().run();
-			} catch (RuntimeException e) {
-				Architect.LOGGER.error("Architect: {} (deferred while saving was off) failed", d.what(), e);
-			}
-		}
 	}
-
-	/** (TEST, dev.stockpile.ps saveHold) the hold off: rows that measure a crash's drift under /save-off (rs-crash item 11) as before SOFF. */
-	static volatile boolean testOff;
 
 	/** Whether an operation that changes the ledger or moves paid items may start now (no level with saving off, no hold pending). */
 	public static boolean admits(@Nullable MinecraftServer srv) {
-		if (srv == null || testOff) {
+		if (srv == null) {
 			return true;
 		}
 		List<String> off = Stockpiles.levelsSavingOff(srv);
@@ -165,36 +148,68 @@ public final class SaveHold {
 	public static void require(@Nullable MinecraftServer srv) throws Sites.SiteException {
 		String r = refusal(srv);
 		if (r != null) {
-			throw new Sites.SiteException(Reason.NOT_ALLOWED, r);
+			List<String> off = Stockpiles.levelsSavingOff(srv);
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, r, List.of(), detail(off.isEmpty() && heldOver != null ? List.of(heldOver.split(",\\s*")) : off));
 		}
 	}
 
-	/** Runs {@code r} now when admitted, else once the hold is released (before the held jobs resume). */
-	static void whenAdmitted(MinecraftServer srv, String what, Runnable r) {
-		if (admits(srv)) {
-			r.run();
-			return;
-		}
-		DEFERRED.add(new Deferred(what, r));
-		Architect.LOGGER.warn("Architect: {} deferred: saving is off; it runs once saving is on and a confirmed save passes", what);
+	/** (slice SOFF2, Steward's ask; NEXT) The hold's stable refusal sub-code: {@code saving_off:<dims>}, the dimension ids comma-separated. */
+	static String detail(List<String> dims) {
+		return "saving_off:" + String.join(",", dims);
 	}
 
 	/**
-	 * (SaveEvidenceServerMixin, vanilla's {@code setAutoSave(false)}: /save-off) Before the levels stop saving: pending ledger changes made
-	 * durable with the players and the chunks, so an operation admitted just before /save-off is on disk before the hold.
+	 * (SaveEvidenceServerMixin, vanilla's {@code setAutoSave(false)}: /save-off) Before the levels stop saving: (slice SOFF2, review finding 3)
+	 * admission closed first (HELD), so no transfer enters during the barrier's own save callbacks; then pending ledger changes made durable
+	 * with the players and the chunks, so an operation admitted just before /save-off is on disk before saving stops. A barrier that fails
+	 * keeps the hold (vanilla still turns saving off): logged as an error, released only by a confirmed barrier after /save-on.
 	 */
-	public static void beforeSavingOff(MinecraftServer srv) {
-		if (state != State.OPEN || !srv.isSameThread() || !Stockpiles.unsaved || !Stockpiles.levelsSavingOff(srv).isEmpty()) {
-			return;
+	public static @Nullable String beforeSavingOff(MinecraftServer srv) {
+		if (!srv.isSameThread()) {
+			return null;
+		}
+		if (state == State.OPEN) {
+			state = State.HELD;
+			holds++;
+			List<String> all = new ArrayList<>();
+			srv.getAllLevels().forEach(l -> all.add(l.dimension().identifier().toString()));
+			heldOver = String.join(", ", all);
+			Architect.LOGGER.warn("Architect: /save-off: stockpile and build changes are held from now until saving is on and a confirmed save passes");
+		}
+		if (!Stockpiles.unsaved || !Stockpiles.levelsSavingOff(srv).isEmpty()) {
+			return null;
 		}
 		savingOffBarriers++;
+		SaveTestHooks.inSavingOffBarrier = true; // (SOFF2, TEST) the depositInSavingOffBarrier hook's window
 		try {
 			Stockpiles.durableBarrier(srv);
 			Architect.LOGGER.info("Architect: /save-off: the stockpile ledger's pending changes saved with the players and the chunks first");
+			return null;
 		} catch (RuntimeException e) {
+			// (SOFF2 fix round, finding 3) the save-off itself refused (setAutoSave(false) cancelled: saving stays on), so the world's saves
+			// can still make the pending changes durable; held until a confirmed barrier passes
 			savingOffBarrierFailures++;
-			Architect.LOGGER.error("Architect: /save-off: the pending stockpile changes could not be saved first ({}); they stay pending", e.getMessage());
+			saveOffRefusals++;
+			lastFailure = e.getMessage();
+			Architect.LOGGER.error("Architect: /save-off refused: the pending stockpile changes could not be made durable first ({}); saving stays on and"
+				+ " Architect stays held until a confirmed save passes", e.getMessage());
+			String why = "/save-off refused: Architect could not make pending stock changes durable; " + e.getMessage();
+			saveOffRefusal = why;
+			return why;
+		} finally {
+			SaveTestHooks.inSavingOffBarrier = false;
 		}
+	}
+
+	/** (SOFF2 fix round) The last refused save-off's message, for /save-off's answer (taken once). */
+	private static @Nullable String saveOffRefusal;
+	static volatile int saveOffRefusals;
+
+	/** (SaveOffCommandMixin) The refusal of the save-off just attempted, or null; cleared. */
+	public static @Nullable String takeSaveOffRefusal() {
+		String w = saveOffRefusal;
+		saveOffRefusal = null;
+		return w;
 	}
 
 	static JsonObject json() {
@@ -206,10 +221,9 @@ public final class SaveHold {
 		o.addProperty("releases", releases);
 		o.addProperty("releaseFailures", releaseFailures);
 		o.addProperty("refused", refused);
-		o.addProperty("deferred", DEFERRED.size());
 		o.addProperty("savingOffBarriers", savingOffBarriers);
 		o.addProperty("savingOffBarrierFailures", savingOffBarrierFailures);
-		o.addProperty("testOff", testOff);
+		o.addProperty("saveOffRefusals", saveOffRefusals);
 		return o;
 	}
 }
