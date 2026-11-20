@@ -17,7 +17,10 @@
     "kit/designs/**",
     "kit/examples/**",
     "kit/lint/fixtures/drain-cases.json",
+    "kit/massings/**",
+    "kit/regions/**",
     "kit/render.mjs",
+    "kit/schemas/**",
     "kit/test/fixtures/af/cliff_face.json",
     "kit/test/fixtures/af/overhang.json",
     "kit/test/fixtures/af/rift_site.json",
@@ -66,6 +69,7 @@
     "kit/test/fixtures/vocab/vocc-designs.mjs",
     "kit/tools/delta-fixtures.mjs",
     "kit/tools/diff.mjs",
+    "kit/voxel_classes.json",
     "scenarios/goldens/crater_toolbox/ir.json",
     "scenarios/goldens/crossings_demo_flat/ir.json",
     "scenarios/goldens/districts_demo/ir.json",
@@ -3921,6 +3925,7 @@
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
+    "kit/schemas/**",
     "kit/test/fixtures/mp/specs.json"
    ],
    "verified": "20261023-114540-release mp-unit"
@@ -11320,6 +11325,7 @@
    "data": [
     "deno.json",
     "deno.jsonc",
+    "kit/schemas/**",
     "lerna.json",
     "package.json",
     "pnpm-workspace.yaml"
@@ -16531,6 +16537,7 @@
     "tools/lib/kit-reuse.mjs"
    ],
    "data": [
+    "kit/schemas/**",
     "kit/test/**",
     "tools/api-compat.mjs",
     "tools/lib/**",
@@ -113958,6 +113965,9 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/schemas/**"
    ]
   },
   "aq-ingame": {
@@ -133508,6 +133518,7 @@
    ],
    "data": [
     "kit/lint/fixtures/drain-cases.json",
+    "kit/schemas/**",
     "kit/test/fixtures/d3/parity.json",
     "kit/test/fixtures/gr/land.json",
     "kit/test/fixtures/rv/merge.json"

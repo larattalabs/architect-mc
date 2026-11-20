@@ -31,12 +31,8 @@ const STATIC = ['classes', 'roots', 'closure', 'globs', 'env', 'flags'];
 // `Path.of("..", "kit", "x", ...)`) must be under an `inputs.dir`/`inputs.files` of that block; a directory the test reads computed
 // names in (`Path.of("../kit/examples", id)`) passes when the block declares it, or files under it (the ones the test reads, as
 // RTE3's exact lists). Computed paths without a literal (KIT.resolve(id), a node child's own reads) stay the author's to declare.
-// Known gaps not yet declared, each a leftover (remove the line when it is declared):
-const GRADLE_TEST_UNDECLARED = [
-  'kit/massings', // MinLotSizeTest, BuildOrderGoldenTest
-  'kit/schemas', // ApiMPTest, ApiP0Test, PlanCatalogueTest
-  'kit/voxel_classes.json', // VoxelTableTest
-];
+// Known gaps not yet declared, each a leftover (remove the line when it is declared; empty since TI declared the last ones):
+const GRADLE_TEST_UNDECLARED = [];
 function gradleTestInputGaps(files) {
   const gradle = fs.readFileSync(path.join(SRC, 'mod', 'build.gradle'), 'utf8');
   const at = gradle.search(/^test \{/m);

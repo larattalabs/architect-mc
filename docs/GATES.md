@@ -448,8 +448,8 @@ evidence are not inputs.
 - a step has no entry;
 - (chore/TI) a literal kit/ or scenarios/ path a mod test names (`"../kit/x"`, `Path.of("..", "kit", ...)`) is not under an
   `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes when it, or files under it, are declared), so a
-  local or gate Gradle run could stay UP-TO-DATE on a stale PASS. The known gaps are listed in tools/step-inputs.mjs
-  (`GRADLE_TEST_UNDECLARED`). Computed paths and a node child's own reads stay the author's to declare.
+  local or gate Gradle run could stay UP-TO-DATE on a stale PASS. Known gaps would be listed in tools/step-inputs.mjs
+  (`GRADLE_TEST_UNDECLARED`, empty). Computed paths and a node child's own reads stay the author's to declare.
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.

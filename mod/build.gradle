@@ -215,6 +215,12 @@ test {
 	).withPropertyName("kitDeltaFixtureTools").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/designs").withPropertyName("kitDesigns").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/versions").withPropertyName("kitVersionFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) MinLotSizeTest and BuildOrderGoldenTest walk the kit massings beside the examples; ApiMPTest, ApiP0Test and PlanCatalogueTest read
+	// the kit schemas and the catalogue golden; VoxelTableTest the voxel class table; LayoutsWallTest plans kit/regions programs with node)
+	inputs.dir("../kit/massings").withPropertyName("kitMassings").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/schemas").withPropertyName("kitSchemas").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.files("../kit/voxel_classes.json").withPropertyName("kitVoxelClasses").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/regions").withPropertyName("kitRegions").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test
