@@ -12,7 +12,7 @@
 // Every coordinate is an integer cell; scores are integers; candidate scans run x then z; ties by scan order. No clock but
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
 import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
-import { growPlan, emitGrowth, growObstacles, stopSays } from '../region/grow.mjs';
+import { growPlan, emitGrowth, growObstacles, stopSays, followStreetOf } from '../region/grow.mjs';
 import { fieldDefs, emitFields } from '../region/field.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
@@ -966,7 +966,7 @@ const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), 
  */
 function stampStreets(r, c, zone, test) {
   for (const road of r.roads.slice(c.roads)) {
-    const d = test(road.id);
+    const d = test(road.id, road);
     if (d === false || d === null || d === undefined) continue;
     road.ext = { ...(road.ext ?? {}), 'architect_mc:street': { zone, ...(typeof d === 'string' ? { district: d } : {}) } };
   }
@@ -1507,7 +1507,13 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       zoneEmit.set(p.id, { L: { lots: layouts.flatMap((L) => L.lots), res: { bell: bell0 } }, districts: out, prefix: '' });
       // ((6c FL, S-FL-5) each district's street (V's, prefixed by its id) and a following district's street route, marked with the district)
       const dids = (z.ds ?? []).map((d) => d.id);
-      stampStreets(r, cp, p.id, (id) => dids.find((did) => new RegExp(`^(${escRe(did)}_street(_[we])?|route_st_${escRe(did)})(_\\d+)?$`).test(id)) ?? null);
+      // ((RTE3) a following street's piece by the route pass's record on it (its ext architect_mc:route edge route_st_<d>): a long road's groups
+      // route_st_<d>_<n>_<k> were unmarked, or marked b_1's when b's; the id regex only for an untagged piece (V's streets))
+      stampStreets(r, cp, p.id, (id, road) => {
+        const f = followStreetOf(road, dids);
+        if (f !== undefined) return f;
+        return dids.find((did) => new RegExp(`^(${escRe(did)}_street(_[we])?|route_st_${escRe(did)})(_\\d+)?$`).test(id)) ?? null;
+      });
       geom.set(p.id, { rect: z.rect, bell: bell0 });
       villages++;
       mark(p.id, addedSince(r, cp));

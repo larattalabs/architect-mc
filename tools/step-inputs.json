@@ -13,7 +13,47 @@
    "env": [],
    "eager": [],
    "data": [
+    "kit/test/fixtures/af/cliff_face.json",
+    "kit/test/fixtures/af/overhang.json",
+    "kit/test/fixtures/af/rift_site.json",
+    "kit/test/fixtures/af/trunk.json",
+    "kit/test/fixtures/d3/parity.json",
+    "kit/test/fixtures/gj/parity.json",
+    "kit/test/fixtures/gj/pg-parity.json",
+    "kit/test/fixtures/gr/land.json",
+    "kit/test/fixtures/mirror-fit.json",
+    "kit/test/fixtures/mirror-oracle.json",
+    "kit/test/fixtures/mp/specs.json",
+    "kit/test/fixtures/natural/conds.json",
+    "kit/test/fixtures/plan/bf/x01_hollow_mountain.json",
+    "kit/test/fixtures/plan/bf/x02_crater_lake.json",
+    "kit/test/fixtures/plan/bf/x03_island_hamlet.json",
+    "kit/test/fixtures/plan/cx/cx01_ravine.json",
+    "kit/test/fixtures/plan/valid/v04_rock_spire.json",
+    "kit/test/fixtures/plan/valid/v05_ice_spike.json",
+    "kit/test/fixtures/plan/valid/v06_terrace.json",
+    "kit/test/fixtures/plan/valid/v72_f3_grove.json",
     "kit/test/fixtures/rte2/land-irs.json",
+    "kit/test/fixtures/rte3/layout-ir.json",
+    "kit/test/fixtures/rv/merge.json",
+    "kit/test/fixtures/schem/corrupt.schem",
+    "kit/test/fixtures/schem/goldens.json",
+    "kit/test/fixtures/schem/old_dataversion.schem",
+    "kit/test/fixtures/schem/oversize.schem",
+    "kit/test/fixtures/schem/unknown_block.schem",
+    "kit/test/fixtures/schem/v2_hut.schem",
+    "kit/test/fixtures/schem/v3_hut.schem",
+    "kit/test/fixtures/site/cliff_face/site.json",
+    "kit/test/fixtures/site/grove/site.json",
+    "kit/test/fixtures/site/overhang/site.json",
+    "kit/test/fixtures/site/overhang/volume.bin",
+    "kit/test/fixtures/site/rift_site/site.json",
+    "kit/test/fixtures/site/rift_site/volume.bin",
+    "kit/test/fixtures/site/trunk/site.json",
+    "kit/test/fixtures/site/trunk/volume.bin",
+    "kit/test/fixtures/site/tunnel_hill/site.json",
+    "kit/test/fixtures/site/tunnel_hill/volume.bin",
+    "kit/test/fixtures/style-parity.json",
     "scenarios/goldens/crater_toolbox/ir.json",
     "scenarios/goldens/crossings_demo_flat/ir.json",
     "scenarios/goldens/districts_demo/ir.json",
@@ -220,6 +260,9 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/rte.test.mjs",
+    "kit/test/rte2.test.mjs",
+    "kit/test/rte3.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -611,6 +654,7 @@
     "kit/test/fixtures/regions/eval-worker.mjs",
     "kit/test/fixtures/regions/floating_island.golden.json",
     "kit/test/fixtures/regions/mega_bench.golden.json",
+    "kit/test/fixtures/rte2/land-irs.json",
     "kit/test/fixtures/rv/make-merge.mjs",
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/schem/make.mjs",
@@ -755,6 +799,9 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/rte.test.mjs",
+    "kit/test/rte2.test.mjs",
+    "kit/test/rte3.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -822,6 +869,7 @@
     "kit/tools/planimages.mjs",
     "kit/tools/preset-builds.mjs",
     "kit/tools/region.mjs",
+    "kit/tools/rte3-fixture.mjs",
     "kit/tools/site-brief.mjs",
     "kit/tools/site-fixtures.mjs",
     "kit/tools/slices.mjs",
@@ -1810,6 +1858,9 @@
     "kit/test/rp.test.mjs",
     "kit/test/rs-b.test.mjs",
     "kit/test/rs.test.mjs",
+    "kit/test/rte.test.mjs",
+    "kit/test/rte2.test.mjs",
+    "kit/test/rte3.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -3857,6 +3908,9 @@
     "tools/lib/ram-tmp.mjs",
     "tools/lib/src-gradle.mjs"
    ],
+   "data": [
+    "kit/test/fixtures/mp/specs.json"
+   ],
    "verified": "20261023-114540-release mp-unit"
   },
   "mp-ingame": {
@@ -4394,6 +4448,13 @@
    "data": [
     "deno.json",
     "deno.jsonc",
+    "kit/test/fixtures/schem/corrupt.schem",
+    "kit/test/fixtures/schem/goldens.json",
+    "kit/test/fixtures/schem/old_dataversion.schem",
+    "kit/test/fixtures/schem/oversize.schem",
+    "kit/test/fixtures/schem/unknown_block.schem",
+    "kit/test/fixtures/schem/v2_hut.schem",
+    "kit/test/fixtures/schem/v3_hut.schem",
     "lerna.json",
     "package.json",
     "pnpm-workspace.yaml"
@@ -52322,6 +52383,11 @@
     "tools/gate7agj.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/d3/parity.json",
+    "kit/test/fixtures/gj/parity.json",
+    "kit/test/fixtures/gj/pg-parity.json"
    ]
   },
   "gj-ingame": {
@@ -54439,6 +54505,11 @@
     "tools/gate7apg.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/d3/parity.json",
+    "kit/test/fixtures/gj/parity.json",
+    "kit/test/fixtures/gj/pg-parity.json"
    ]
   },
   "pg-ingame": {
@@ -94122,6 +94193,9 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/d3/parity.json"
    ]
   },
   "d3-ingame": {
@@ -106569,6 +106643,15 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/site/cliff_face/site.json",
+    "kit/test/fixtures/site/grove/site.json",
+    "kit/test/fixtures/site/overhang/site.json",
+    "kit/test/fixtures/site/rift_site/site.json",
+    "kit/test/fixtures/site/trunk/site.json",
+    "kit/test/fixtures/site/trunk/volume.bin",
+    "kit/test/fixtures/site/tunnel_hill/site.json"
    ]
   },
   "sl-ingame": {
@@ -116418,6 +116501,9 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/plan/cx/cx01_ravine.json"
    ]
   },
   "cx-ingame": {
@@ -125297,6 +125383,10 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/src-gradle.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/site/trunk/site.json",
+    "kit/test/fixtures/site/trunk/volume.bin"
    ]
   },
   "pl2-unit": {
@@ -130749,6 +130839,9 @@
    "eager": [
     "tools/gate6drv.mjs",
     "tools/lib/cpu-budget.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/rv/merge.json"
    ]
   },
   "rv-ingame": {
@@ -133393,6 +133486,11 @@
    "eager": [
     "tools/gate6dgr.mjs",
     "tools/lib/cpu-budget.mjs"
+   ],
+   "data": [
+    "kit/test/fixtures/d3/parity.json",
+    "kit/test/fixtures/gr/land.json",
+    "kit/test/fixtures/rv/merge.json"
    ]
   },
   "gr-town": {
@@ -159284,6 +159382,8 @@
    "data": [
     "deno.json",
     "deno.jsonc",
+    "kit/test/fixtures/mirror-fit.json",
+    "kit/test/fixtures/mirror-oracle.json",
     "lerna.json",
     "package.json",
     "pnpm-workspace.yaml"
