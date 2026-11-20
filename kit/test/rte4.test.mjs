@@ -187,10 +187,10 @@ test('the district tag only where an untagged reader misreads: districts b and b
   }
 });
 
-test('no fixture or scenario golden carries the district tag (their IRs are unchanged)', () => {
+test('no scenario golden carries the district tag (their IRs are unchanged); among the fixtures only rte4\'s and gr/land.json\'s boundary growth (its roads name quay)', () => {
   const hits = [];
   const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name.endsWith('.json') && fs.readFileSync(f, 'utf8').includes(DISTRICT)) hits.push(path.relative(KIT, f)); } };
   walk(path.join(KIT, 'test', 'fixtures'));
   walk(path.join(KIT, '..', 'scenarios', 'goldens'));
-  assert.deepEqual(hits, [path.join('test', 'fixtures', 'rte4', 'land-irs.json')]);
+  assert.deepEqual(hits.sort(), [path.join('test', 'fixtures', 'gr', 'land.json'), path.join('test', 'fixtures', 'rte4', 'land-irs.json')]);
 });
