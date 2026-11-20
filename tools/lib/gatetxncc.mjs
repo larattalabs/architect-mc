@@ -1160,7 +1160,7 @@ export async function registerTCC(steps, h) {
       await wait(2000);
       const before = await rparts();
       check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
-      return { rid, rparts, before, crate, pst, owner };
+      return { rid, rparts, before, crate, pst, owner, rbox };
     };
     // (T4 final round) the road removed for good: no record, no paid block standing, its refund credited into the stockpile (stock = before's
     // stock + the paid blocks that stood), nothing owed or dropped
@@ -1358,8 +1358,9 @@ export async function registerTCC(steps, h) {
         for (let i = 0; i < 90; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
         await call('dev.stockpile.pause', { site, paused: true }, 60_000);
         const items = Object.keys(bom);
+        const mid = [Math.floor((box[0] + box[3]) / 2), box[1], Math.floor((box[2] + box[5]) / 2)];
         const sparts = async () => {
-          const near = await call('dev.items.near', { pos: box.slice(0, 3), radius: 20 }, 30_000);
+          const near = await call('dev.items.near', { pos: mid, radius: 32 }, 30_000);
           const p = { stock: pick((await pst()).stock ?? {}, items), placed: pick(await standing(site, items), items), owed: {}, ground: pick(near.items ?? {}, items),
             inventory: pick(near.inventory ?? {}, items), states: { [site]: (await siteState(site))?.state ?? null } };
           p.total = [p.stock, p.placed, p.ground, p.inventory].reduce((x, y) => G.plus(x, y), {});
@@ -1378,7 +1379,9 @@ export async function registerTCC(steps, h) {
           if (items.includes(id.includes(':') ? id : `minecraft:${id}`)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; break; }
         }
         const br = at ? await call('dev.pt.breaks', { at: [at], placer: 'T4RMiner' }, 60_000).catch((e) => ({ error: String(e) })) : { error: 'no paid cell' };
-        rowLog(tag, `a player broke ${at} while the stage's undo waited after its tally: ${json(br)}`);
+        await wait(1000);
+        const drop = at ? (await call('dev.items.near', { pos: at, radius: 3 }, 30_000)).items ?? {} : {};
+        rowLog(tag, `a player broke ${at} while the stage's undo waited after its tally: ${json(br)}; dropped near it ${json(drop)}`);
         await call('dev.removal.pause', { site: `group:${bv.group}`, off: true }, 10_000);
         let res = null;
         for (let i = 0; i < 240 && pend?.pending; i++) { const r = await api(`get ${pend.pending}`); if (r && r.value) { res = r.value; break; } await L.sleep(500); }
@@ -1434,11 +1437,9 @@ export async function registerTCC(steps, h) {
       await L.tp(...W.at);
       if (v === 'fail') await ps({ failLedgerOnly: 1000 }); // before the grace ends: the conversion's confirmed save is refused
       if (v === 'fail') await wait(14_000); // the grace over: the conversion tried and refused
-      const rv = await roadState(rid);
-      const mm = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
       let at = null;
-      if (mm) {
-        const b = mm.slice(1, 7).map(Number);
+      if (pr.rbox) {
+        const b = pr.rbox; // read while the road stood (it is pending now: no longer listed)
         for (const [k2, s2] of (await cellsOf(b)).entries()) {
           const id = String(s2).replace(/\[.*$/, '');
           if (Object.keys(before.placed).includes(id.includes(':') ? id : `minecraft:${id}`)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; break; }
