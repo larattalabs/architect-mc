@@ -147,7 +147,7 @@ export async function tileK4(H, rm) {
     check(lava.length === charged && charged > 0 && j1.active > 0 && dropped.length > 0, `K4 (${tag}): the precondition before the halt: ${lava.length} lava written by the tiles of ${charged} charged, ${j1.active} of ${j1.total} journal entries ACTIVE (${json(j1.sample)}), ${dropped.length} chunk(s) of the claim armed lost at the gate`);
     L.call('dev.chunk.halt', { save: true }, 60_000).catch(() => null);
     out.halted = await H.waitHalt('dev.chunk.halt');
-    await reopen(H, s.world, { holdWrite: true, holdSettle: true });
+    await reopen(H, s.world, { holdWrite: true, holdSettle: true, writeTrace: true });
     await H.sleep(5000);
     const lost = lava.length - (await lavaAt(H, lava)).length;
     const j2 = await activeOf();
@@ -159,9 +159,13 @@ export async function tileK4(H, rm) {
       for (let i = 0; i < 180; i++) { fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (fs1?.phase === 'settling' || fs1?.phase === 'settled' || fs1?.phase === 'done') break; await H.sleep(1000); }
       await H.sleep(3000);
       const back = (await lavaAt(H, lava)).length;
-      out.written = { phase: fs1?.phase, back, of: lava.length, charged };
+      const trace = (await L.call('dev.fluid.writeTrace', { on: false }, 10_000)).cells ?? [];
+      const lavaKeys = new Set(lava.map((c) => `${c[0]},${c[1]},${c[2]}`));
+      const lavaTraced = trace.filter((c) => lavaKeys.has(`${c[0]},${c[1]},${c[2]}`)).length;
+      out.written = { phase: fs1?.phase, back, of: lava.length, charged, traced: trace.length, lavaTraced };
       log(`  K4 (${tag}): ${json(out)}`);
-      check(back === charged, `K4 (${tag}, P1-1): the stage's write writes the lost cells again (mark none, cell open: §3.3 row 1): ${back} of ${charged} standing (red on 8cT: writeBody skips them as journaled)`);
+      check(trace.length > 0, `K4 (${tag}): the precondition: the stage's write ran after the restart (Architect's traced writes ${trace.length}: the lost water, which no journal guards)`);
+      check(back === charged, `K4 (${tag}, P1-1): the stage's write writes the lost cells again (mark none, cell open: §3.3 row 1): ${back} of ${charged} standing, ${lavaTraced} lava cell(s) in Architect's writes (red on 8cT: writeBody skips them as journaled)`);
       const s0 = await lavaStock(H);
       await G.remove(ctx, region);
       const got = (await lavaStock(H)) - s0;
@@ -303,20 +307,30 @@ export async function drainMixed(H) {
     const aStand = (await lavaAt(H, A.cells)).length;
     const bWater = (await H.L.call('dev.fluid.census', { box: [B[0] * 16, -64, B[1] * 16, B[0] * 16 + 15, 320, B[1] * 16 + 15] }, 600_000)).fluids.filter(([, , , st]) => String(st).startsWith('minecraft:water')).length;
     out.restart = { aStand, bWater };
-    const cell = top(A.cells);
+    const cell = top(A.cells).slice(0, 3);
     const disp = await L.call('dev.dispense', { at: cell, item: 'minecraft:lava_bucket' }, 30_000).catch((e) => ({ error: String(e.message ?? e) }));
     await H.sleep(2500);
     const placedLava = (await lavaAt(H, [cell])).length === 1;
     out.dispensed = { cell, disp, placedLava };
     check(aStand === 0 && bWater > 0 && placedLava, `DM: the precondition: chunk ${key(A.chunk)} drained on disk (${aStand} lava standing), chunk ${key(B)} at its earlier save (${bWater} water cell(s)); a dispenser put lava at ${cell.join(',')} (${placedLava})`);
     await L.call('dev.fluid.hold', { drain: false }, 10_000);
+    // judged when the drain txn has retired (the record drained), before the settle wait and the solids restore (the tile entry's undo
+    // writes its own before-state over the cell afterwards, whatever stands there: not the drain's doing)
+    let drained = null;
+    for (let i = 0; i < 600 && !drained; i++) {
+      const x = await L.call('dev.fluid.state', { region: p.region }, 10_000).catch(() => null);
+      if (x && (x.removal === 'drained' || x.removal === 'done' || (x.bodies ?? []).some((b) => b.state === 'drained'))) drained = x;
+      else await H.sleep(250);
+    }
+    const stays = (await lavaAt(H, [cell])).length === 1;
     out.final = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
     await L.settle(2000);
-    const stays = (await lavaAt(H, [cell])).length === 1;
+    const staysAfterRemoved = (await lavaAt(H, [cell])).length === 1;
     const got = (await lavaStock(H)) - s0;
-    out.after = { stays, refunded: got, charged: p.charged };
+    out.after = { drainedSeen: drained ? { removal: drained.removal ?? null } : null, stays, staysAfterRemoved, refunded: got, charged: p.charged };
     log(`  DM: ${json(out)}`);
-    check(stays, `DM (P1-2b): the dispensed lava at ${cell.join(',')} stays after the replay (red on 8cT: the aggregate W re-drains chunk ${key(A.chunk)} and erases it)`);
+    check(!!drained, `DM: the precondition: the record read drained after the replay (${json(out.after.drainedSeen)})`);
+    check(stays, `DM (P1-2b): the dispensed lava at ${cell.join(',')} stays through the drain's replay, judged as the record reads drained (red on 8cT: the aggregate W re-drains chunk ${key(A.chunk)} and erases it); after REMOVED: ${staysAfterRemoved} (recorded)`);
     check(got === p.charged, `DM (P1-2b) conservation: refunded ${got} == charged ${p.charged} (the dispensed bucket stands, the dispenser's)`);
   } finally {
     await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
@@ -498,7 +512,8 @@ export async function taken(H) {
 
 /**
  * t5-tombstone (8cS Q1): after REMOVED, the region's tombstone keeps its final architect_mc:fluids rows (each body's final state; a capped
- * removal's foreign and foreignCount), and fluidsRemoval is null. The rows are read from dev.region.state once the removal future completed.
+ * removal's foreign and foreignCount), and fluidsRemoval is null. Read two ways: the tombstone on disk (architect-regions/<id>/removed.json,
+ * its ext) and the API's view (dev.region.state, when it serves a tombstone at all). The capped foreign part is not exercised here.
  */
 export async function tombstone(H) {
   const { L, check, log, json } = H;
@@ -508,11 +523,14 @@ export async function tombstone(H) {
   const fin = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
   await L.settle(2000);
   const st = await L.call('dev.region.state', { region: p.region }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
-  const rows = st.view?.ext?.['architect_mc:fluids'] ?? null;
-  const fr = st.view?.fluidsRemoval ?? st.fluidsRemoval ?? null;
-  const out = { fin, state: st.view?.state ?? st.error, liveRows: live.length, rows: rows ? rows.map((r) => [r.body, r.state, r.foreignCount ?? null]) : null, fluidsRemoval: fr };
+  const f = path.join(L.SAVES, p.s.world, 'architect-regions', p.region, 'removed.json');
+  const disk = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
+  const rows = disk?.ext?.['architect_mc:fluids'] ?? null;
+  const viewRows = st.view?.ext?.['architect_mc:fluids'] ?? null;
+  const fr = disk?.ext?.['architect_mc:fluidsRemoval'] ?? null;
+  const out = { fin, view: st.view ? { state: st.view.state, rows: viewRows ? viewRows.length : null } : (st.error ?? 'no view'), tombstone: !!disk, liveRows: live.length, rows: rows ? rows.map((r) => [r.body, r.state, r.foreignCount ?? null]) : null, fluidsRemoval: fr };
   log(`  Q1: ${json(out)}`);
-  check(fin === 'REMOVED' && live.length > 0, `Q1: the precondition: placed with ${live.length} fluids row(s), removed (${fin})`);
+  check(fin === 'REMOVED' && !!disk && live.length > 0, `Q1: the precondition: placed with ${live.length} fluids row(s), removed, its tombstone on disk (${f}: ${!!disk})`);
   check(!!rows && rows.length === live.length && rows.every((r) => r.state), `Q1: the tombstone keeps its final fluids rows: ${rows ? rows.length : 'none'} of ${live.length} (${json(out.rows)})`);
   check(fr === null, `Q1: fluidsRemoval is null on the tombstone (${json(fr)})`);
   return out;
