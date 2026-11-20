@@ -328,7 +328,8 @@ export async function drainMixed(H) {
 // ------------------------------------------------------------------ P1-2c: money before the barrier
 
 /**
- * t5-scoop-barrier (P1-2c, N4). Placed, saved; removed and halted bare at TX:fluid.drain:barrier:effects. On 8cT the drain txn's pile.scoop
+ * t5-scoop-barrier (P1-2c, N4). Placed, saved; the pit's chunk armed lost (dev.chunk.drop: no later save reaches it); removed and halted
+ * bare at TX:fluid.drain:barrier:effects. On 8cT the drain txn's pile.scoop
  * has applied by then (the ledger saved at once) while the drained chunks are not on disk: the restart finds the lava standing and the
  * refund in the pile. With the drain held, the player buckets a restored source; released. Conservation: refunded + the player's 1 ==
  * charged (red on 8cT: the scoop already paid every cell, the restored source is taken as well: +1). On T5F the scoop is its own txn, not
@@ -341,7 +342,11 @@ export async function scoopBarrier(H) {
   check(p.lava.length === p.charged && p.charged > 0, `SB: the precondition: placed, ${p.lava.length} lava of ${p.charged} charged`);
   const s0 = await lavaStock(H);
   let bucket = null;
+  const C = byChunk(p.lava)[0];
   try {
+    // the pit's chunk never saved after the placed save (8cT's ledger write and its other saves would otherwise flush it): the drain's
+    // chunk is the one the barrier has not covered yet when the scoop's L is already durable
+    if (C) await L.call('dev.chunk.drop', { chunks: [C.chunk] }, 10_000);
     await L.call('dev.journal.killAt', { point: 'TX:fluid.drain:barrier:effects' }, 10_000);
     L.call('dev.region.remove', { region: p.region, requester: H.G.OWNER }, 3_600_000).catch(() => null);
     out.halted = await H.waitHalt('TX:fluid.drain:barrier:effects');
@@ -357,6 +362,7 @@ export async function scoopBarrier(H) {
     await L.settle(2000);
   } finally {
     await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
+    await L.call('dev.chunk.drop', { off: true }, 10_000).catch(() => null);
   }
   const got = (await lavaStock(H)) - s0;
   const taken = bucket?.hand === 'minecraft:lava_bucket' ? 1 : 0;
