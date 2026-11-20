@@ -34414,6 +34414,40 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - Cargo keys `cargo:<target>@<placedAt>:<cell>`; wither and dragon breaks honour the seal and holds; TEST `dev.removal.failAfterCustody`
   (FKC0). Units `T4cGroupsTest` (4); api-compat --baselines 8/8.
 
+### Slice T4R as built (the T4 batch's four surviving P1s and the missing T4c scope; strict; versions NEXT)
+
+- **R1 `removal.group`:** one txn per group or stage removal (`GroupTxn`, key `group:<id>[/stage]@<undoGroup>`), begun once its undo committed,
+  from the stashes the queue's confirmed pre-save holds. Per paid member: W `site.restore` (it waits for, then receipts, the group's own
+  write), a member barrier (`TxnCore.BARRIER`, run when anything was applied since the last), its L/O/settle (min of its W), a member
+  barrier; then the shared crate, `group.done` (waits for the removal's end) and the event payload. A member leaves `r.sites` only once its
+  last barrier passed; a held barrier ends the call `held(decided)`, kept and retried. Members a queued removal or an open group txn owns
+  are never judged by the Sites check's threshold. Stockpile sites, roads (tallied cells) and gate mechanisms are pile stashes; pre-T4R
+  `decCredit` converts at load; the `convertible` exclusion is gone. `anyLedgerJob` parks group removals. Group writes run as the txn's holder.
+- **R2:** a legacy road's footprint is held from the queue's load (`CrateSettle.holdOnly`, before the start grace); a refused conversion save
+  keeps the stash, the hold and the old credit; the converted stash carries found cells (its tally, or its undone restore once committed).
+- **R3:** `Sites.get` (API) returns a decided, unsettled site or road with status `removing`, reason `BuildStatus.HELD_DECIDED`;
+  `Sites.loadHealthy()` is false when the sites, queue, stockpiles or txn file failed to load.
+- **R4:** a removal txn's result rebuilds `given`, `refund` (credited, pile-only refunds included), restore counts, hand-down and cascade
+  from the entry; road recovery fires REMOVAL_FINISHED; a group's event is its txn's payload (at least once, after a restart too); a region
+  removal fires one event, kind `region`.
+- **R5:** a player holder's data-bearing stack is taken and owed whole (`removal.cargo`, owed reason `cargo`, `OwedLedger.Entry.stack`,
+  collected back exactly, never credited by id); design containers unchanged. **R6:** `/architect removal resume` removed. **R7:** an
+  unrelated held removal never blocks a crate removal (its own crate and the last crate still refuse).
+- **Rows** (hooks commit 3febf6ef + 521d9c1d, rows fixed in later `T4R rows` commits; red = a0ab7efc + those, worktree removed after):
+  units red on base: T4R-group-model (the as-built group path's counterexample at GQ: planks 4 minted; base TxnCore has no member
+  barrier), T4R-health (Placement failed to load: loadHealthy true), T4R-finish-replay (result `{"owed":[]}`), T4R-no-resume
+  (resumeRemoval present), T4R-cargo-data (cargoOf null). e2e red on base (`t4r-crash`, gate-runs-T4Rred): T4R-group-crash (owed 27 while
+  18 paid blocks stand), T4R-stage-convert (refund 53 with one paid block broken and kept by its player: one minted), T4R-legacyroad-fail
+  and -window (the mine goes through, gravel 15/14 = 13), T4R-visible (lookup null), T4R-wnf-complete (restored 0), T4R-finish-road (no
+  event), T4R-finish-crash (no event after GE), T4R-region-kind (group + region), T4R-crate-unrelated (refused), T4R-health (queue,
+  stockpiles, txn: loadHealthy true). T4R-nojournal is green on base too (its fix predates T4R): kept as a regression row. All green on
+  HEAD; gate `change` (gate-runs-T4R/20261120-190415-change) 62/63, dr-survival's DR4b adapted to R1 (credited, not pending), re-run
+  PASS 95/0 (`20261120-215821-change`); final red run `gate-runs-T4Rred/20261120-215621-t4r` (18 red).
+- **Deviations:** R3's visibility is at the API (`SitesImpl.get`, not `Sites.get`/`list`); R5 is unit-proven only (no survival-region cargo
+  e2e); T4R-region-kind fakes a region by a batch ext. **Leftovers:** a large paid group's txn probes every effect each held tick (perf);
+  global `CrateSettle.WRITING` still exempts every stash hold for a single removal's own writes; Placement.java:942 InfraJob extras on an
+  unclean start; gatem5fk.mjs:494 probe errors; a pre-T4 road job that restored cells before the upgrade under-refunds them (never mints).
+
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
 - The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
