@@ -1373,10 +1373,11 @@ export async function registerTCC(steps, h) {
         await call('dev.removal.pause', { site: `group:${bv.group}` }, 10_000);
         const pend = await api(`sundo ${bv.group} s1`).catch((e) => ({ error: String(e) }));
         await wait(4000);
-        let at = null;
+        let at = null, brokenItem = null;
         for (const [k2, st] of (await cellsOf(box)).entries()) {
           const id = String(st).replace(/\[.*$/, '');
-          if (items.includes(id.includes(':') ? id : `minecraft:${id}`)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; break; }
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          if (items.includes(full)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; brokenItem = full; break; }
         }
         const br = at ? await call('dev.pt.breaks', { at: [at], placer: 'T4RMiner' }, 60_000).catch((e) => ({ error: String(e) })) : { error: 'no paid cell' };
         await wait(1000);
@@ -1387,6 +1388,11 @@ export async function registerTCC(steps, h) {
         for (let i = 0; i < 240 && pend?.pending; i++) { const r = await api(`get ${pend.pending}`); if (r && r.value) { res = r.value; break; } await L.sleep(500); }
         await wait(4000);
         const after = await sparts();
+        if ((br.broken ?? 0) > 0 && sum(drop) === 0 && brokenItem) {
+          // the breaking player (dev.pt.breaks' fake player) keeps the block's item: counted as its inventory
+          after.inventory = G.plus(after.inventory, { [brokenItem]: 1 });
+          after.total = G.plus(after.total, { [brokenItem]: 1 });
+        }
         R[tag] = { removal: res, break: br, before, after };
         rowLog(tag, `undo ${json(res).slice(0, 200)}; before ${json(before.total)} after ${json(after.total)}`);
         judgeT4(tag, { tag, removal: res, break: br, txn: await txn() }, before, after);
