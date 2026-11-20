@@ -75,10 +75,11 @@ test('streetRouteEnds, tagged: each district\'s own ends, a grown end its growth
   assert.ok(routeEndsMain(u, 'b').free.includes('route_st_b_1_1_g1_end'), 'the legacy reading kept');
 });
 
-test('streetRouteEnds, tagged: district quay never takes quayside\'s street (startsWith route_st_quay)', async () => {
+test('streetRouteEnds, tagged (no-regression; v0.88.0 read this plan the same): district quay beside quayside keeps only its own ends', async () => {
   const { eff } = await shorePair('quay', 'quayside');
   const mine = endsOf(eff, 'quay');
   assert.ok([...mine.ends, ...mine.free].every((id) => /^quay_s\d+$/.test(id)), JSON.stringify(mine));
+  assert.deepEqual(mine, routeEndsMain(eff, 'quay'), 'quayside\'s grown end route_st_quayside_1_g1_end never matched v0.88.0\'s end rule either');
 });
 
 test('streetRouteEnds, untagged: exactly v0.88.0\'s reader on every IR in the kit fixtures and scenario goldens (route tags removed), every district', () => {

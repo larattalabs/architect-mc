@@ -33650,7 +33650,8 @@ RTE3's two leftovers. No API member, record or feature. Untagged IRs (regions pl
   `architect_mc:street.district` (else `architect_mc:band.district`) d; a grown end `<newRoad>_end` likewise; `<d>_s<k>` as before. A path
   or end no record names, and every end of an untagged district, read by v0.88.0's id rule (`route_st_<d>_..._g<n>_end`,
   `startsWith('route_st_<d>')`). Was: district b's boundary extension started at b_1's grown end `route_st_b_1_1_g1_end` (a real plan of
-  two following districts on one shore), and `quay` read `quayside`'s street edges. `ends` feeds the extension's direction too.
+  two following districts on one shore). `ends` feeds the extension's direction too. (The loose `startsWith('route_st_<d>')` would also
+  take `quayside`'s edges for `quay` where one met quay's end; no plan seen, and a quay/quayside plan reads as v0.88.0 did.)
 - Districts pass: where one district id (of the full list) is another's plus `_` and a letter-led word (land.mjs `districtIdsShadow`:
   `b` and `b_street`, `b` and `b_props`; never `b` and `b_1`), each district's roads laid in its emission carry ext
   `architect_mc:district: {id}` (IR only). land.mjs `districtOfRoad` = `DistrictLand.districtOfRoad`: a road's district is its tag's

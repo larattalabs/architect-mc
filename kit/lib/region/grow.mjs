@@ -140,7 +140,7 @@ function adjacency(graph) {
  * flag (`architect_mc:street.district`, else `architect_mc:band.district`) its pieces (`<newRoad>`, groups `<newRoad>_<k>`) carry. Read so
  * when the district's street pieces carry its route tag; a path or end no record names, and every end of a district whose street is
  * untagged (a region planned before RTE), read by id exactly as v0.88.0: `route_st_<d>_..._g<n>_end`, `startsWith('route_st_<d>')`, so
- * district b took b_1's grown end `route_st_b_1_1_g1_end` (and `quay` would take `quayside`'s), kept for those regions.)
+ * district b took b_1's grown end `route_st_b_1_1_g1_end`, kept for those regions.)
  */
 export function streetRouteEnds(eff, district) {
   const nodes = eff.graph?.nodes ?? [];
