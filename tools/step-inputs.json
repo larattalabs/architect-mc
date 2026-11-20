@@ -13,6 +13,7 @@
    "env": [],
    "eager": [],
    "data": [
+    "kit/test/fixtures/rte2/land-irs.json",
     "scenarios/goldens/crater_toolbox/ir.json",
     "scenarios/goldens/crossings_demo_flat/ir.json",
     "scenarios/goldens/districts_demo/ir.json",

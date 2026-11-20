@@ -2019,11 +2019,16 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         }
         // a route pass's part is shared by its connectors (their legs' cells are told apart in finish.mjs by the edge's roads and paths)
         for (const x of r.parts.slice(cp.parts)) partOf[x.id] = `routes:${group.map((l) => l.conn.id).filter((v, i, a) => a.indexOf(v) === i).join(',')}`;
-        // each leg's roads, paths and graph edge are its connector's (route_<edge>, route_<edge>_<n>)
+        // each leg's roads, paths and graph edge are its connector's: ((RTE2) the pass's own record of the leg's edge and its gate edge
+        // `<edge>_g` (their roads, paths and graph edges route_<edge>), never an id prefix: `route_c0l1_` began the gate leg's `route_c0l1_g_<n>`)
         const ad = addedSince(r, cp);
+        const added = new Set([...ad.roads.map((x) => `road:${x}`), ...ad.paths.map((x) => `path:${x}`), ...ad.edges.map((x) => `edge:${x}`)]);
         for (let i = 0; i < group.length; i++) {
-          const pre = `route_${edges[i].id}`;
-          for (const id of [...ad.roads.map((x) => `road:${x}`), ...ad.paths.map((x) => `path:${x}`), ...ad.edges.map((x) => `edge:${x}`)]) if (id.slice(id.indexOf(':') + 1) === pre || id.slice(id.indexOf(':') + 1).startsWith(`${pre}_`)) partOf[id] = group[i].conn.id;
+          for (const eid of [edges[i].id, `${edges[i].id}_g`]) {
+            const m = metaEdges.get(eid);
+            if (!m) continue;
+            for (const id of [...(m.roads ?? []).map((x) => `road:${x}`), ...(m.paths ?? []).map((x) => `path:${x}`), `edge:route_${eid}`]) if (added.has(id)) partOf[id] = group[i].conn.id;
+          }
         }
         group = [];
         break;

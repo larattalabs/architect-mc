@@ -33574,3 +33574,23 @@ LYW2's deferred route dedup, on an explicit edge instead of piece ids. Feature `
   road's group `route_d_a__b_1_1` and b_1's ordinary first road `route_d_a__b_1_1`.
 - (v0.86.0 review P1) A route whose id a still-listed road holds is not drawn, so its pieces are not folded either (fixed point).
 - Units: `LayoutsWallTest`, `DistrictLandTest`, `kit/test/rte.test.mjs`, `ApiRulesTest`.
+
+### Slice RTE2: ownership from records, not id prefixes (normal; branch `slice/RTE2` off main b1359937; versions NEXT; recorded 2026-11-19)
+RTE's leftovers of the same class: a reader matched `<id>_` and took another owner's pieces. No API member, record or feature.
+- `architect_mc:land` (land.mjs `districtOfId` = `DistrictLand.districtOfId`): a part, lot (its `part`) or road is the district whose id
+  is the longest it extends (`b_1_pads` is `b_1`'s, was `b`'s too); a following street piece is the district its ext
+  `architect_mc:route.edge` names (`route_st_<id>`), untagged the longest district with a `route_st_<id>` graph edge. The join's district
+  and a grown part's district (`rv<n>_<d>_`) likewise. A join piece: tagged `route_join`/`route_join_in`, or untagged `route_join_<n>`,
+  `route_join_<n>_<k>` (a long road's groups were `extra`).
+- Route pass (`tagEdges`, the districts pass only): a piece number n is skipped when `<rid>_<n>` is another edge's id of the pass or
+  begins one (next character not a digit). Edge `route_d_a__b` beside `route_d_a__b_1` numbers 2, 3, ...: both RTE limits are gone for new
+  plans (b's road piece hid b_1's route shape; b's long first road's group `route_d_a__b_1_1` refused the plan, "road id used twice").
+  Untagged passes number as before. Regions planned before keep their ids and RTE's limits.
+- compile.mjs: a connector leg's roads, paths and graph edges are its connector's from the pass's record of the leg's edge and its gate
+  edge `<edge>_g`, not `startsWith('route_<edge>_')` (latent: both legs are the same connector's, so `partOf` is unchanged).
+- grow.mjs: a boundary growth's street flags (`architect_mc:street`, `architect_mc:band`) go on the pieces its road returned (a long
+  ground road's groups too, which lost both), merged into their ext (a graded path's ext was replaced).
+- Goldens unchanged (no golden has prefix-sharing district or edge ids); `kit/test/fixtures/{d3,gr}` parity unchanged.
+- Not fixed: compile.mjs `stampStreets` and grow.mjs `streetRuns` still read `route_st_<d>` by regex, not the tag (a following street's
+  long-road groups); district ids where one is another's plus a part word (`b` and `b_street`: `b_street_w`) stay ambiguous.
+- Units: `kit/test/rte2.test.mjs`, `DistrictLandRte2Test` (shared IRs `kit/test/fixtures/rte2/land-irs.json`).

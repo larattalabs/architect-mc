@@ -28,7 +28,8 @@ public final class DistrictLand {
 	public static final String EXT_LAND = "architect_mc:land";
 
 	private static final Pattern JOIN_PATH = Pattern.compile("^route_join_\\d+[lg]?$");
-	private static final Pattern JOIN_ROAD = Pattern.compile("^route_join_\\d+$");
+	/** (RTE2) An untagged join road: section n, a long road's group {@code <n>_<k>} included. */
+	private static final Pattern JOIN_ROAD = Pattern.compile("^route_join_\\d+(_\\d+)?$");
 	private static final Pattern ROUTE_PATH = Pattern.compile("^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\\d+[lg]?$");
 	private static final Pattern ROUTE_ROAD = Pattern.compile("^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\\d+$");
 	/** (RTE) A route id read with its last {@code _<n>} as a road group's piece: {@code d_<a>__<b>} and n. */
@@ -90,10 +91,9 @@ public final class DistrictLand {
 						switch (fam) {
 							case "parts" -> {
 								opsCols(x, c);
-								for (String d : dids) {
-									if (str(x, "id").startsWith("rv" + rid + "_" + d + "_")) {
-										dd.add(d);
-									}
+								String gd = districtOfId(str(x, "id"), dids, "rv" + rid + "_");
+								if (gd != null) {
+									dd.add(gd);
 								}
 							}
 							case "lots" -> boxCols(x.getAsJsonObject("box"), c);
@@ -136,35 +136,51 @@ public final class DistrictLand {
 		Cols claimed = new Cols();
 		List<String> ids = new ArrayList<>();
 		for (JsonElement de : ds) {
+			String id = BesideReach.str(de.getAsJsonObject(), "id");
+			if (id != null) {
+				ids.add(id);
+			}
+		}
+		// (RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
+		// district's street piece the district whose street edge it names, untagged the longest district with a street edge in the graph
+		java.util.Set<String> stEdges = new java.util.HashSet<>();
+		if (ir.get("graph") instanceof JsonObject g0 && g0.get("edges") instanceof JsonArray es0) {
+			for (JsonElement ee : es0) {
+				String eid = ee instanceof JsonObject e ? BesideReach.str(e, "id") : null;
+				if (eid != null && eid.startsWith("route_st_")) {
+					stEdges.add(eid);
+				}
+			}
+		}
+		List<String> stIds = ids.stream().filter(id -> stEdges.isEmpty() || stEdges.contains("route_st_" + id)).toList();
+		for (JsonElement de : ds) {
 			JsonObject d = de.getAsJsonObject();
 			String id = BesideReach.str(d, "id");
 			if (id == null) {
 				continue;
 			}
-			ids.add(id);
-			String pre = id + "_";
 			Cols c = new Cols();
 			for (JsonElement pe : parts) {
 				JsonObject p = pe.getAsJsonObject();
-				if (str(p, "id").startsWith(pre)) {
+				if (id.equals(districtOfId(str(p, "id"), ids, ""))) {
 					opsCols(p, c);
 				}
 			}
 			for (JsonElement le : lots) {
 				JsonObject l = le.getAsJsonObject();
-				if (str(l, "part").startsWith(pre)) {
+				if (id.equals(districtOfId(str(l, "part"), ids, ""))) {
 					boxCols(l.getAsJsonObject("box"), c);
 				}
 			}
 			for (JsonElement re : roads) {
 				JsonObject rd = re.getAsJsonObject();
-				if (str(rd, "id").startsWith(pre) || str(rd, "id").startsWith("route_st_" + id + "_")) {
+				if (id.equals(districtOfId(str(rd, "id"), ids, "")) || str(rd, "id").startsWith("route_st_") && id.equals(streetOf(rd, ids, stIds))) {
 					roadCols(rd, c);
 				}
 			}
 			for (JsonElement pe : paths) {
 				JsonObject p = pe.getAsJsonObject();
-				if (str(p, "id").startsWith("route_st_" + id + "_") && p.get("box") instanceof JsonObject b) {
+				if (str(p, "id").startsWith("route_st_") && id.equals(streetOf(p, ids, stIds)) && p.get("box") instanceof JsonObject b) {
 					boxCols(b, c);
 				}
 			}
@@ -198,14 +214,15 @@ public final class DistrictLand {
 			join.addRuns(reach.getAsJsonArray("runs"));
 		}
 		if (jp == null) {
+			// (RTE2) a join piece: one naming the join's edge (route_join, route_join_in), else an untagged id, a long road's groups included
 			for (JsonElement pe : paths) {
 				JsonObject p = pe.getAsJsonObject();
-				if (JOIN_PATH.matcher(str(p, "id")).matches() && p.get("box") instanceof JsonObject b) {
+				if (isJoin(p, JOIN_PATH) && p.get("box") instanceof JsonObject b) {
 					boxCols(b, join);
 				}
 			}
 			for (JsonElement re : roads) {
-				if (JOIN_ROAD.matcher(str(re.getAsJsonObject(), "id")).matches()) {
+				if (isJoin(re.getAsJsonObject(), JOIN_ROAD)) {
 					roadCols(re.getAsJsonObject(), join);
 				}
 			}
@@ -224,13 +241,7 @@ public final class DistrictLand {
 				}
 			}
 			String from = jd == null ? "" : str(jd, "from").split("\\.")[0];
-			String district = null;
-			for (String id : ids) {
-				if (from.startsWith(id + "_")) {
-					district = id;
-					break;
-				}
-			}
+			String district = districtOfId(from, ids, "");
 			JsonObject extra = new JsonObject();
 			if (district == null) {
 				extra.add("district", com.google.gson.JsonNull.INSTANCE);
@@ -468,6 +479,37 @@ public final class DistrictLand {
 			}
 		}
 		return m.group(1);
+	}
+
+	/**
+	 * (RTE2) The district {@code id} names ({@code <pre><d>_<word>}): the longest of {@code ids} it extends past {@code pre}, or null
+	 * ({@code b_1_pads} is b_1's, not b's). As land.mjs districtOfId.
+	 */
+	static @Nullable String districtOfId(String id, List<String> ids, String pre) {
+		String best = null;
+		for (String d : ids) {
+			if (d != null && id.startsWith(pre + d + "_") && (best == null || d.length() > best.length())) {
+				best = d;
+			}
+		}
+		return best;
+	}
+
+	/** (RTE2) A following street piece's district: the one whose street edge it names; untagged, the longest with a street edge. */
+	private static @Nullable String streetOf(JsonObject x, List<String> ids, List<String> stIds) {
+		if (x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()) {
+			String edge = e.getAsString();
+			return edge.startsWith("route_st_") && ids.contains(edge.substring("route_st_".length())) ? edge.substring("route_st_".length()) : null;
+		}
+		return districtOfId(str(x, "id"), stIds, "route_st_");
+	}
+
+	/** (RTE2) A join piece: tagged, its edge the join's (route_join, route_join_in); untagged, its id read by {@code re}. */
+	private static boolean isJoin(JsonObject x, Pattern re) {
+		if (x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()) {
+			return "route_join".equals(e.getAsString()) || "route_join_in".equals(e.getAsString());
+		}
+		return re.matcher(str(x, "id")).matches();
 	}
 
 	private static String str(JsonObject o, String k) {

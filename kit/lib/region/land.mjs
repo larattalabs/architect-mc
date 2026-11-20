@@ -35,6 +35,16 @@ function roadCols(rd, into) {
   }
 }
 const ids0 = (ir) => (ir.params?.spec?.districts ?? ir.params?.districts ?? []).map((d) => d.id);
+/**
+ * (RTE2) The district `id` names (`<d>_<word>`: `b_1_pads` is b_1's, not b's): the longest of `ids` that `id` extends past `pre`, or null.
+ * A district's own ids go on with a word (pads, lanes, street_w, props_lamp, retain), never a digit, so the longest is exact unless one
+ * district's id is another's plus a word of those (`b_street`).
+ */
+export function districtOfId(id, ids, pre = '') {
+  let best = null;
+  for (const d of ids) if (typeof d === 'string' && String(id).startsWith(`${pre}${d}_`) && (best === null || d.length > best.length)) best = d;
+  return best;
+}
 const boxCols = (b, into) => { for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) into.add(k2(x, z)); };
 const rectOfKeys = (keys) => {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
@@ -60,7 +70,7 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   const grownBy = new Map(); // rid -> {cols: Set, district, mask?}
   if (v2) {
     const g = (rid) => { if (!grownBy.has(rid)) grownBy.set(rid, { cols: new Set(), districts: new Set(), bands: [] }); return grownBy.get(rid); };
-    for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); for (const d of ids0(ir)) if (p.id.startsWith(`rv${p.rid}_${d}_`)) q.districts.add(d); }
+    for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); const d = districtOfId(p.id, ids0(ir), `rv${p.rid}_`); if (d) q.districts.add(d); }
     for (const l of ir.lots ?? []) if (ridOf(l)) { const q = g(l.rid); boxCols(l.box, q.cols); }
     for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs)) q.bands.push(b); }
   }
@@ -82,15 +92,25 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   };
   // ---- the districts (placed: a part or a lot of theirs in the IR)
   const ids = ds.map((d) => d.id).filter((id) => typeof id === 'string');
+  // ((RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
+  // district's street piece the district whose street edge it names (ext architect_mc:route.edge `route_st_<id>`), untagged the longest
+  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group))
+  const stEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id).filter((e) => typeof e === 'string' && e.startsWith('route_st_')));
+  const stIds = ids.filter((id) => !stEdges.size || stEdges.has(`route_st_${id}`));
+  const streetOf = (x) => {
+    const t = x.ext?.[ROUTE_EXT]?.edge;
+    if (typeof t === 'string') return t.startsWith('route_st_') && ids.includes(t.slice('route_st_'.length)) ? t.slice('route_st_'.length) : null;
+    return districtOfId(x.id, stIds, 'route_st_');
+  };
   for (const d of ds) {
-    const pre = `${d.id}_`;
+    const mine = (id) => districtOfId(id, ids) === d.id;
     const cols = new Set();
-    for (const p of ir.parts ?? []) if (p.id.startsWith(pre)) for (const op of p.ops ?? []) opCols(op, cols);
-    for (const l of ir.lots ?? []) if (String(l.part ?? '').startsWith(pre)) boxCols(l.box, cols);
-    for (const rd of ir.roads ?? []) if (rd.id.startsWith(pre)) roadCols(rd, cols);
+    for (const p of ir.parts ?? []) if (mine(p.id)) for (const op of p.ops ?? []) opCols(op, cols);
+    for (const l of ir.lots ?? []) if (mine(String(l.part ?? ''))) boxCols(l.box, cols);
+    for (const rd of ir.roads ?? []) if (mine(rd.id)) roadCols(rd, cols);
     // a following district's street (`route_st_<id>`) is inside its mask
-    for (const pa of ir.paths ?? []) if (pa.id.startsWith(`route_st_${d.id}_`) && pa.box) boxCols(pa.box, cols);
-    for (const rd of ir.roads ?? []) if (rd.id.startsWith(`route_st_${d.id}_`)) roadCols(rd, cols);
+    for (const pa of ir.paths ?? []) if (pa.box && pa.id.startsWith('route_st_') && streetOf(pa) === d.id) boxCols(pa.box, cols);
+    for (const rd of ir.roads ?? []) if (rd.id.startsWith('route_st_') && streetOf(rd) === d.id) roadCols(rd, cols);
     if (!cols.size) continue;
     if (d.follow) push('district', d.id, cols, { shape: 'mask' });
     else {
@@ -104,14 +124,17 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   if (jp) for (const op of jp.ops ?? []) opCols(op, join);
   for (const k of runKeys(ir.reach?.runs ?? [])) join.add(k);
   if (!jp) {
-    for (const pa of ir.paths ?? []) if (/^route_join_\d+[lg]?$/.test(pa.id) && pa.box) boxCols(pa.box, join);
-    for (const rd of ir.roads ?? []) if (/^route_join_\d+$/.test(rd.id)) roadCols(rd, join);
+    // ((RTE2) a join piece: one naming the join's edge (route_join, a gate join's route_join_in), else an untagged id, a long road's groups
+    // `route_join_<n>_<k>` included)
+    const joinTag = (x) => { const t = x.ext?.[ROUTE_EXT]?.edge; return typeof t === 'string' ? t === 'route_join' || t === 'route_join_in' : null; };
+    for (const pa of ir.paths ?? []) if ((joinTag(pa) ?? /^route_join_\d+[lg]?$/.test(pa.id)) && pa.box) boxCols(pa.box, join);
+    for (const rd of ir.roads ?? []) if (joinTag(rd) ?? /^route_join_\d+(_\d+)?$/.test(rd.id)) roadCols(rd, join);
   }
   if (join.size) {
     const ext = (ir.graph?.edges ?? []).find((e) => e.id === 'join_external');
     const jd = (ir.graph?.edges ?? []).find((e) => e.id === 'route_join');
     const from = jd ? String(jd.from).split('.')[0] : '';
-    const district = ids.find((id) => from.startsWith(`${id}_`)) ?? null;
+    const district = districtOfId(from, ids);
     // ((7a GJ, §5) through a gate: the junction it ends at (the gate junction's `then`) and the gate it crosses (`via`))
     const jk = ext?.junction?.kind === 'gate' ? ext.junction.then?.kind ?? null : ext?.junction?.kind;
     push('join', 'join', join, { district, junction: jk ?? (ext ? 'end' : null), ...(ext?.via ? { via: ext.via } : {}) });

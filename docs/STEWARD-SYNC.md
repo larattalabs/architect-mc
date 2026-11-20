@@ -200,6 +200,16 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   was missing. A route laid as roads only keeps its pieces listed alone. A region planned before keeps v0.83.0's shapes (pieces listed
   twice). `architect_mc:land`'s route parts follow the same edges; for a region planned before, a recomputed land record (a GR
   revision) reads a long road's group `route_d_a__b_3_1` as `d_a__b`'s, where it made a bogus route part `d_a__b_3`. CONTRACT "Slice RTE".
+### New for Steward (NEXT, slice RTE2)
+- `architect_mc:land` with districts whose ids share a prefix (`b` and `b_1`): each `district` part now holds only its own parts, lots,
+  roads and following street (by the longest district id, and a street piece by the edge it names, `route_st_<id>`); district `b` no
+  longer absorbs `b_1`'s. A join road's long groups (`route_join_<n>_<k>`) are in the `join` part (were `extra`), and the join's
+  `district` is the longest id its start names (was the first listed: `b` for `b_1`'s join). A grown part's `district` names one district
+  (was `b,b_1`). No API or record change, no new feature: plans without such ids are byte-identical. A region planned before reads the same
+  way when its land is recomputed (a GR revision); untagged street pieces go to the longest district with a street edge.
+- A districts route laid from NEXT on never takes a piece id that is another route's id or begins one: `route_d_a__b`'s pieces skip
+  `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So `Regions.layout` draws both routes, and a long first
+  section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

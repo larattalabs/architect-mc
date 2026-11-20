@@ -692,10 +692,11 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     const pts = X.path.filter((_, i) => i === 0 || i === X.path.length - 1 || i % 8 === 0).map(([x, , z]) => [x, null, z]);
     const fixture = fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
     const made = street.road(pts, { width: 3, surface: 'path', lanterns: true, mode: 'ground', id: X.newRoad, lamp: roadLamp(fixture) });
-    const rd = r.roads.find((q) => q.id === X.newRoad);
-    if (rd) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
-    else r.paths.filter((q) => q.id.startsWith(X.newRoad)).forEach((q) => { q.ext = { 'architect_mc:band': { district: X.district, runs: X.mask } }; });
-    void made;
+    // ((RTE2) the pieces this road laid, by the ids it returned (a long ground road's groups <newRoad>_<k> too; graded, its path), their ext
+    // merged: never another piece read by an id prefix, never a flag dropped)
+    const ids = new Set(made?.ids ?? []);
+    for (const rd of r.roads) if (ids.has(rd.id)) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
+    for (const q of r.paths) if (ids.has(q.id)) q.ext = { ...(q.ext ?? {}), 'architect_mc:band': { district: X.district, runs: X.mask } };
     roads.push(X.newRoad);
     const ext = lotsOut.filter((l) => l.slot.kind === 'extension').sort((a, b) => a.slot.u - b.slot.u);
     const lanesB = lanes;

@@ -567,6 +567,16 @@ export class Region {
       return top;
     };
     const ownParts = new Map();
+    // ((RTE2) a tagged pass's piece numbers skip any n whose id `<rid>_<n>` is another edge's id or begins one (`<rid>_<n>_...`, `<rid>_<n>l`):
+    // edge route_d_a__b never lays route_d_a__b_1 (edge route_d_a__b_1's id; its groups were b_1's first road's id). Gaps in n are harmless:
+    // readers order pieces by n. Untagged passes number 1, 2, ... as before)
+    const passRids = it.tagEdges ? edges.map((x) => `route_${x.id}`) : [];
+    const nextN = (rid, n) => {
+      for (let k = n + 1; ; k++) {
+        const id = `${rid}_${k}`;
+        if (!passRids.some((o) => o !== rid && o.startsWith(id) && !/[0-9]/.test(o.charAt(id.length)))) return k;
+      }
+    };
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
@@ -608,7 +618,7 @@ export class Region {
       const fpOf = (si) => ec.bySeg[si].filter((o) => !taken.has(`${o.x},${o.z}`)).map((o) => [o.x, o.z, o.y, o.edge]);
       d.segments.forEach((g, si) => {
         const cells = d.path.slice(g.from, g.to + 1);
-        n++;
+        n = nextN(rid, n);
         if (g.shared) return; // an earlier edge's cells: built by it
         // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only; (6c T3) so are a
         // bridge's span and a tunnel's bore, but the route writes a bridge's far landing (the segment's last cell: on the walk's fill it is

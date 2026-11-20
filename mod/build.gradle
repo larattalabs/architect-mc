@@ -144,6 +144,8 @@ test {
 		"../scenarios/goldens/s7/ir.json",
 		"../scenarios/goldens/s7/survey.bin",
 	).withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
+	// (RTE2) DistrictLandRte2Test's IRs, shared with kit/test/rte2.test.mjs
+	inputs.files("../kit/test/fixtures/rte2/land-irs.json").withPropertyName("rte2LandIrs").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test
