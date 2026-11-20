@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { emitGrowth, followStreetOf, streetRuns } from '../lib/region/grow.mjs';
+import { emitGrowth, followStreetOf, growPlan, streetRuns } from '../lib/region/grow.mjs';
+import { mergeEffective, revisionStanding } from '../lib/region/revise.mjs';
+import { surveyApi } from '../lib/region/survey.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
 import { region } from '../lib/region/program.mjs';
@@ -75,6 +77,26 @@ test('streetRuns, untagged: a district whose own id ends in _g<n> (quay_g1) keep
   assert.deepEqual(streetRuns({ roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.district), ['quay_g1']);
   // (quay's grown street beside: no district quay_g1, so its _g1 stem is a growth, never a follow run)
   assert.deepEqual(streetRuns({ params: plan(['quay']), roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.road), []);
+});
+
+test('growPlan, untagged legacy IR (the v0.88.0 reviewer\'s case): district quay_g1 grows 3 frontage lots on its street route_st_quay_g1_1, as origin/main (v0.88.0: NO_ROOM, no standing street)', async () => {
+  // (a following district quay_g1 along a shore (water x 90..99), planned by the bundled districts program, its route tags stripped: a
+  // region planned before RTE; origin/main placed quay_g1_3, _4, _5 as frontage on its one street run, no extension)
+  const c = makeColumns(0, 0, 192, 192, 1), claim = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 }, d = 'quay_g1';
+  for (let z = 0; z < 192; z++) for (let x = 0; x < 192; x++) { const i = x + z * 192, w = x >= 90 && x < 100; c.ground[i] = 64; c.height[i] = 64; c.floor[i] = w ? 61 : 64; c.flags[i] = w ? 1 : 0; }
+  const q = await planRegion({ programFile: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'regions', 'districts.mjs'), params: { spec: { districts: [{ id: d, size: [64, 24], follow: { shore: {} }, lots: 2 }] }, lamps: false }, survey: c, claim, seed: '1' });
+  const eff = mergeEffective(q.ir);
+  eff.kitVersion = '0.74.0';
+  for (const rd of [...eff.roads, ...eff.paths]) if (rd.ext) delete rd.ext[ROUTE];
+  assert.deepEqual(eff.roads.filter((x) => x.id.startsWith('route_st_')).map((x) => x.id), ['route_st_quay_g1_1'], 'its legacy street, untagged');
+  const standing = revisionStanding({ id: 'rg3', claim: [0, 0, 191, 191], effective: eff, held: { runs: [], town: [], terrain: [] } });
+  let p = null, err = null;
+  try { p = growPlan({ eff, standing, survey: surveyApi(c, claim), grow: { district: d, lots: 3 }, rid: 1 }); } catch (e) { err = e.message; }
+  assert.equal(err, null, 'never NO_ROOM');
+  assert.deepEqual(p.lots.map((l) => l.spec.id), ['quay_g1_3', 'quay_g1_4', 'quay_g1_5']);
+  assert.ok(p.lots.every((l) => l.slot.kind === 'frontage' && l.slot.street === 'route_st_quay_g1_1'), JSON.stringify(p.lots.map((l) => l.slot)));
+  assert.equal(p.extension, null);
+  assert.deepEqual(streetRuns(eff).map((r) => [r.road, r.district, r.follow]), [['route_st_quay_g1_1', d, true]]);
 });
 
 // ---- item 2: a grouped growth street's graph identity
