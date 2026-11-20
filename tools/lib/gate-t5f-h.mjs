@@ -3,6 +3,7 @@
 // T5Fa hooks commit for the contract's reason).
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { CLAIM, OWNER, crashAt, freshFlat, planDemo, removeWait } from './gate6ch-core.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -143,14 +144,15 @@ export async function killProgress(ctx) {
   const d = await planDemo(ctx, { lava: true });
   const logFile = path.join(L.GAME_DIR, 'logs', 'latest.log');
   const mark = fs.existsSync(logFile) ? fs.statSync(logFile).size : 0;
+  const t0 = Date.now();
   await crashAt(ctx, world, 'TX:fluid.write:place+save', async () => { await L.realise(d.p.planId); });
   // the halted JVM's log: a restart may have rotated latest.log; read the newest logs that mention the point
   const dir = path.join(L.GAME_DIR, 'logs');
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.log') || f.endsWith('.log.gz')).map((f) => path.join(dir, f)) : [];
   let lines = [];
   for (const f of files) {
-    if (f.endsWith('.gz')) continue;
-    const t = fs.readFileSync(f, 'utf8');
+    if (fs.statSync(f).mtimeMs < t0 - 5000) continue; // this row's logs only (a restart rotates latest.log into a .gz)
+    const t = f.endsWith('.gz') ? zlib.gunzipSync(fs.readFileSync(f)).toString('utf8') : fs.readFileSync(f, 'utf8');
     lines.push(...t.split('\n').filter((x) => x.includes('kill point TX:fluid.write:place+save')));
   }
   void mark;
