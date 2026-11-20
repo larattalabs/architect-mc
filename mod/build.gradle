@@ -131,6 +131,15 @@ test {
 	inputs.dir("../kit/lib").withPropertyName("kitLib").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.files("../kit/test/terrain-order-cells.mjs", "../kit/test/plan-helpers.mjs").withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/plan").withPropertyName("kitPlanFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// the scenario goldens the tests read: S7's and route_demo's (S3's) survey through plan-helpers' goldenSurvey, S7's IR in
+	// LayoutsTest/ApiDTest, districts_demo's IR in LayoutsWallTest (the same files as unit-mod's data in tools/step-inputs.json)
+	inputs.files(
+		"../scenarios/goldens/districts_demo/ir.json",
+		"../scenarios/goldens/route_demo/ir.json",
+		"../scenarios/goldens/route_demo/survey.bin",
+		"../scenarios/goldens/s7/ir.json",
+		"../scenarios/goldens/s7/survey.bin",
+	).withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test
