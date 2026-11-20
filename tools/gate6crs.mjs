@@ -18,6 +18,7 @@
 //     df        (rs-df)                 slice DF: fluids.json refused in survival (rs03_water), FL1r+save, conservation and the charge once
 //     t8a       (8ct-a)                 slice 8cTa row A: tile-written lava, never forced, one taken: the refund + taken == charged
 //     t8b       (8ct-b)                 slice 8cTa row B: FLc+save, the charge settled at the start, never written, removed: refunded
+//     t5k4 t5k4rm t5dh t5fl5 t5dm t5sb t5gb t5s3a t5s3b t5tk t5q1   slice T5Fa: T5F's failing-first rows on rs03 (tools/lib/gate-t5f-rs.mjs)
 //     toggle    (rs-toggle)             item 18 (fix/survival-off-storm): /architect survival off mid-build: 0 chunks generated or charged
 //                                       outside claim + 2, a forceloaded chunk not charged, built in its mode as its twin, E-flat 0
 //     report                            REPORT.md over the step JSONs
@@ -1207,6 +1208,22 @@ async function seenRow(tag, held) {
   return out;
 }
 steps.t9s1 = async () => { await ensure(); return seenRow('rs03t9s1', false); };
+
+// ------------------------------------------------------------------ (slice T5Fa) T5F's failing-first rows (tools/lib/gate-t5f-rs.mjs)
+const T5 = await import('./lib/gate-t5f-rs.mjs');
+const H5 = () => ({ ctx, G, L, check, log, json, sleep, cmd, entriesOf, rsTilesWritten, waitHalt, LAVA });
+steps.t5k4 = async () => { await ensure(); return T5.tileK4(H5(), false); };
+steps.t5k4rm = async () => { await ensure(); return T5.tileK4(H5(), true); };
+steps.t5dh = async () => { await ensure(); return T5.drainHold(H5()); };
+steps.t5fl5 = async () => { await ensure(); return T5.drainFl5(H5()); };
+steps.t5dm = async () => { await ensure(); return T5.drainMixed(H5()); };
+steps.t5sb = async () => { await ensure(); return T5.scoopBarrier(H5()); };
+steps.t5gb = async () => { await ensure(); return T5.grateBroken(H5()); };
+steps.t5s3a = async () => { await ensure(); return T5.s3a(H5()); };
+steps.t5s3b = async () => { await ensure(); return T5.s3b(H5()); };
+steps.t5tk = async () => { await ensure(); return T5.taken(H5()); };
+steps.t5q1 = async () => { await ensure(); return T5.tombstone(H5()); };
+
 steps.t9s2 = async () => { await ensure(); return seenRow('rs03t9s2', true); };
 
 /**
