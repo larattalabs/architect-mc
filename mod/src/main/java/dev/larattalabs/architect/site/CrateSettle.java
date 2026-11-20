@@ -756,7 +756,13 @@ public final class CrateSettle {
 	 * when its removal was a single removal (not a group's or a stage's undo, whose decCredit stays legacy until T4c).
 	 */
 	static boolean convertible(JsonObject stash, @Nullable String group) {
-		return !stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-");
+		if (!stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-")) {
+			return true;
+		}
+		// (slice T4c) a group's or stage's pre-T4 pending credit converts too, unless its queued group removal still carries the member (that
+		// removal writes the member's restore, then books its decCredit once: converting it as well would book it twice, DR4b). Orphaned (the
+		// queue lost it), it becomes the member's removal.site stash: its W restore from the group's undo first, then the credit
+		return !stash.has("site") || !Groups.carries(stash.get("site").getAsString());
 	}
 
 	/** The durable stash of {@code siteId}'s removal, or null. */
@@ -1021,6 +1027,9 @@ public final class CrateSettle {
 		}
 		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)
 		Architect.LOGGER.info("crate.settle of removed {} at a restart: owed {}, given {}", siteId, s.owed(), s.given());
+		// (slice T4c) the held, decided removal finished by itself (this session or after a restart): REMOVAL_FINISHED with its result
+		dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), s.owed().isEmpty() ? Map.copyOf(s.given()) : Map.of(), 0,
+			0, Map.of(), List.of(), List.of(), List.copyOf(s.owed())));
 	}
 
 	/**

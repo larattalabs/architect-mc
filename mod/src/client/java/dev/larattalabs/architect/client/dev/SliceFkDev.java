@@ -448,6 +448,15 @@ public final class SliceFkDev {
 					return dev.larattalabs.architect.site.RemovalSeal.stateJson();
 				});
 			});
+		DevBridge.register("dev.removal.failAfterCustody", 10_000, "{n?: 1} - (slice T4c, Steward's FKC0) TEST: the next n group or stage removals abort "
+			+ "right after their custody is taken and saved: the custody given back, saved, the removal ended NOT_STARTED (kill point FKC0 after the "
+			+ "give-back's save) -> armed", (req, mc) -> {
+				int n = req.has("n") ? req.get("n").getAsInt() : 1;
+				dev.larattalabs.architect.site.Groups.FAIL_AFTER_CUSTODY.set(n);
+				com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+				o.addProperty("armed", n);
+				return java.util.concurrent.CompletableFuture.completedFuture(o);
+			});
 		DevBridge.register("dev.removal.undoStage", 3_600_000, "{site} - (slice LC, kept by LC3) TEST: undoes the stage holding site as a region revision "
 			+ "undoes its own stage (Groups.undoStage, ownStage), the later placed stages first -> {removed, blockers, refund}", (req, mc) -> {
 				String site = Fields.of(req).nonBlank("site");

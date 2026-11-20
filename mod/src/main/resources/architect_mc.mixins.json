@@ -35,6 +35,8 @@
 		"SaveEvidenceLevelMixin",
 		"SaveEvidenceServerMixin",
 		"SaveOffCommandMixin",
+		"SealDragonMixin",
+		"SealWitherMixin",
 		"SaveTestPlayerListMixin",
 		"SaveTimingLevelMixin",
 		"SaveTimingMixin",

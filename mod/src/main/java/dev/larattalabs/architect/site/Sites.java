@@ -271,6 +271,7 @@ public final class Sites {
 					Architect.LOGGER.error("Region adoptions could not be recovered at the world's start", e);
 				}
 			}
+			Groups.CARRIED_AT_START = Placement.removalCarried(server); // (slice T4c) what a queued group removal carries (its credits too)
 			reconcile(server, Placement.jobSites(server));
 			ready = true; // (T4b) a removal txn's W restore may write from here on (the records and the journal read, the check done)
 			SiteDeltas.atStart(server);
@@ -2072,6 +2073,7 @@ public final class Sites {
 		Removed r = new Removed(b, Map.copyOf(returned), stats.restored(), stats.changed(), handed, cascaded, notes, List.copyOf(settled.owed()));
 		if (event && settled.done()) { // (T4b fix round, P2) a held settle is not removed yet (it finishes by itself)
 			ApiEvents.removed(server, r);
+			ApiEvents.removalFinished(id, r); // (slice T4c) one path for consumers: a held one fires when it finishes (CrateSettle.resumeNow)
 		}
 		return r;
 	}

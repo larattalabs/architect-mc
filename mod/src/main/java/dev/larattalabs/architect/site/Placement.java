@@ -966,6 +966,40 @@ public final class Placement {
 	 * The sites whose undo groups and PLACING entries the world-start settle must leave alone: those with a job in the queue
 	 * file that resumes or rolls back (after a crash, a placement that never got its record is not one: K2 releases it).
 	 */
+	/**
+	 * (slice T4c) Read from the queue file at the sites check (before Groups loads it): every site a queued group or stage removal carries (its
+	 * members left, its undo's and plan's sites, its current one, its decCredit's keys). Unreadable: every site counts as carried (nothing is
+	 * converted then; the legacy path waits as before).
+	 */
+	static java.util.@Nullable Set<String> removalCarried(MinecraftServer srv) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		Path f = file(srv);
+		if (!Files.exists(f)) {
+			return out;
+		}
+		try {
+			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			for (JsonElement e : root.has("removals") ? root.getAsJsonArray("removals") : new JsonArray()) {
+				JsonObject o = e.getAsJsonObject();
+				for (String k : new String[] {"sites", "undoSites", "plannedSites"}) {
+					if (o.get(k) instanceof JsonArray a) {
+						a.forEach(x -> out.add(x.getAsString()));
+					}
+				}
+				if (o.has("current")) {
+					out.add(o.get("current").getAsString());
+				}
+				if (o.get("credit") instanceof JsonObject c) {
+					out.addAll(c.keySet());
+				}
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Could not read {}'s removals for the sites check", f, e);
+			return null;
+		}
+	}
+
 	static java.util.Set<String> jobSites(MinecraftServer srv) {
 		java.util.Set<String> out = new java.util.HashSet<>();
 		Path f = file(srv);

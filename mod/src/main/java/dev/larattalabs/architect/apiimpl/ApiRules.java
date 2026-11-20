@@ -49,6 +49,8 @@ public final class ApiRules {
 		"maxBillPerLot",
 		// (slice T2b) Sites.owed, collectOwed, creditOwedToStock, SiteEvents.OWED_CHANGED (owed collectibles, never a drop)
 		"owed",
+		// (slice T4c) SiteEvents.REMOVAL_FINISHED: a removal's end (a held decided one's later end too), with its full result
+		"removal_finished",
 		// (S-DRS-1) RegionView.removalStopCause and SiteGroup.removalStop/removalStopCause: a removal's stop typed (SAVE_REFUSED, PLAYER_IN_BOX, ...)
 		"removalStopCause",
 		// (8b BS) BuildStatus on SiteView, LotState (with its box), PartBuild and ItemEvent; the typed ext homes (part, lot, revision,

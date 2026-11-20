@@ -1764,12 +1764,23 @@ public final class Revisions {
 					continue; // undone already, or it never placed anything
 				}
 				UNDO_INFLIGHT.add(opId);
+				Integer revOf = null; // (slice T4c) the revision whose undo removes this stage: REMOVAL_FINISHED names it
+				for (Rev rv : rec.revisions) {
+					if (rv.stages.contains(st)) {
+						revOf = rv.rid;
+					}
+				}
 				CompletableFuture<dev.larattalabs.architect.site.Groups.Removed> f = dev.larattalabs.architect.site.Groups.undoStage(s, rec.groupId, st, false,
-					dev.larattalabs.architect.site.Sites.Covered.KEEP, true);
+					dev.larattalabs.architect.site.Sites.Covered.KEEP, true, revOf);
 				f.whenComplete((res, ex) -> s.execute(() -> {
 					UNDO_INFLIGHT.remove(opId);
 					JsonObject cur = readUndo(l, opId);
 					if (cur == null) {
+						return;
+					}
+					Throwable cx = ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+					if (cx instanceof dev.larattalabs.architect.api.ArchitectRefused ar && "held(decided)".equals(ar.detail())) {
+						// (slice T4c) the stage's undo is decided and held: it finishes by itself; this driver waits for it (stageRemovalRunning)
 						return;
 					}
 					boolean removed = ex == null && res.removed() && !failNextUndoStage;

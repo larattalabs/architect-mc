@@ -312,6 +312,17 @@ public interface SiteEvents {
 	});
 
 	/**
+	 * (slice T4c) A removal finished ({@link RemovalFinished}): a site, road or cell site, a group or a stage of it (with the revision whose
+	 * undo removed it), or a region. Fires for a removal answered at once and for a decided one that answered {@code SITE_BUSY held(decided)}
+	 * and finished by itself later; at least once (again after a restart), so listeners stay idempotent. Server thread. Since NEXT; feature
+	 * {@code removal_finished}.
+	 */
+	Event<RemovalFinishedListener> REMOVAL_FINISHED = EventFactory.createArrayBacked(RemovalFinishedListener.class, ls -> f -> {
+		for (RemovalFinishedListener l : ls) {
+			Guard.run(() -> l.onFinished(f), "REMOVAL_FINISHED");
+		}
+	});
+	/**
 	 * (8b EV, feature {@code "settlementChanged"}) Something an owner's settlement screens show changed: re-read it. A signal with no data
 	 * ({@code region} names the region when the change is one region's, else null). It fires on edges, never on progress counts: a
 	 * {@link BuildStatus} edge of one of the owner's targets; a region's state, actions, revision or layout change; an ext change Steward
@@ -355,6 +366,12 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface RegionPlanProgress {
 		void onPhase(@org.jspecify.annotations.Nullable String planId, String phase);
+	}
+
+	/** (slice T4c) {@link #REMOVAL_FINISHED}'s listener. Since NEXT. */
+	@FunctionalInterface
+	interface RemovalFinishedListener {
+		void onFinished(RemovalFinished finished);
 	}
 
 	/** (slice T2b) {@link #OWED_CHANGED}'s listener. Since NEXT. */

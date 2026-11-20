@@ -70,6 +70,26 @@ public final class ApiEvents {
 			new RemoveResult(true, List.of(), Views.items(r.returned()), 0, 0, java.util.Map.of(), List.of(), r.owed())));
 	}
 
+	/** (slice T4c) A removal finished (REMOVAL_FINISHED): a site's, road's or cell site's ({@code Sites.Removed}). */
+	public static void removalFinished(String id, Sites.Removed r) {
+		finished(new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.SITE, id, null, null, SitesImpl.result(r)));
+	}
+
+	/** (slice T4c) A group's or a stage's removal finished (removed); a region's id when the group is a region's. */
+	public static void removalFinished(String group, @org.jspecify.annotations.Nullable String stage, @org.jspecify.annotations.Nullable Integer revisionId,
+		dev.larattalabs.architect.site.Groups.Removed r) {
+		RemoveResult res = new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed());
+		finished(new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.GROUP, group, stage, revisionId, res));
+		String region = stage == null ? Views.regionOfGroupPublic(group) : null;
+		if (region != null) {
+			finished(new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.REGION, region, null, null, res));
+		}
+	}
+
+	private static void finished(dev.larattalabs.architect.api.RemovalFinished f) {
+		guard("REMOVAL_FINISHED", () -> SiteEvents.REMOVAL_FINISHED.invoker().onFinished(f));
+	}
+
 	/** A site moved to another version of its entry (phase 5b: an apply or a revert; SITE_UPDATED, wired with API 1.7.0). */
 	public static void siteUpdated(MinecraftServer server, dev.larattalabs.architect.site.SiteDeltas.Result r) {
 		if (r.before() != null && r.after() != null) {

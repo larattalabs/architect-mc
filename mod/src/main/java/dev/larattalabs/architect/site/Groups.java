@@ -52,6 +52,12 @@ public final class Groups {
 		/** (T2b last round, group report P2) the owed keys its settles wrote (listed apart from the refund; this session's). */
 		final List<String> owed = new ArrayList<>();
 		final List<CompletableFuture<Removed>> futures = new ArrayList<>();
+		/** (slice T4c) The region revision whose undo removes this stage, or null; persisted. */
+		@Nullable Integer revisionId;
+		/** (slice T4c) Its call answered held(decided) (decided, not done): it retries by itself and fires REMOVAL_FINISHED when done. */
+		boolean heldDecided;
+		/** (slice T4c) The tick of its next retry while held, and the wait before it (doubling). */
+		transient long retryAt, backoff;
 		/** Phase 4e: the undo group once planned (one undo over the sites), the sites it covers, and what it handed down. */
 		@Nullable String undo;
 		final List<String> undoSites = new ArrayList<>();
@@ -144,6 +150,12 @@ public final class Groups {
 			if (stage != null) {
 				o.addProperty("stage", stage);
 			}
+			if (revisionId != null) {
+				o.addProperty("revisionId", revisionId); // (slice T4c)
+			}
+			if (heldDecided) {
+				o.addProperty("heldDecided", true);
+			}
 			JsonArray s = new JsonArray();
 			sites.forEach(s::add);
 			o.add("sites", s);
@@ -226,6 +238,8 @@ public final class Groups {
 				o.has("requester") ? o.get("requester").getAsString() : null, o.get("force").getAsBoolean());
 			o.getAsJsonArray("sites").forEach(e -> r.sites.add(e.getAsString()));
 			r.started = o.get("started").getAsBoolean();
+			r.revisionId = o.has("revisionId") ? o.get("revisionId").getAsInt() : null; // (slice T4c)
+			r.heldDecided = o.has("heldDecided") && o.get("heldDecided").getAsBoolean();
 			r.covered = o.has("covered") ? Sites.Covered.valueOf(o.get("covered").getAsString()) : Sites.Covered.KEEP;
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
@@ -610,10 +624,35 @@ public final class Groups {
 	}
 
 	/** (6d RV) Whether a removal of this group's stage {@code stage} is in progress (running, not stalled). */
+	/** (slice T4c) Whether a queued (running or stalled) group or stage removal carries {@code siteId}: its member, its credit or its undo. */
+	/** (slice T4c) The queue file's carried sites read at the sites check (before Groups loads); null: unreadable (every site carried). */
+	static java.util.@Nullable Set<String> CARRIED_AT_START = java.util.Set.of();
+
+	static boolean carries(String siteId) {
+		java.util.Set<String> atStart = CARRIED_AT_START;
+		if (atStart == null || atStart.contains(siteId)) {
+			return true;
+		}
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				if (r.decCredit.containsKey(siteId) || r.sites.contains(siteId) || r.undoSites.contains(siteId) || r.plannedSites.contains(siteId) || siteId
+					.equals(r.current)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	public static boolean stageRemovalRunning(String groupId, String stage) {
 		for (Removal r : REMOVALS) {
 			if (r.group.equals(groupId) && stage.equals(r.stage)) {
 				return true;
+			}
+		}
+		for (Removal r : STALLED) {
+			if (r.heldDecided && r.group.equals(groupId) && stage.equals(r.stage)) {
+				return true; // (slice T4c) held (decided): it goes on by itself; the revision's undo waits for it
 			}
 		}
 		return false;
@@ -810,6 +849,12 @@ public final class Groups {
 	 */
 	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force, Sites.Covered covered,
 		boolean ownStage) {
+		return undoStage(server, groupId, stage, force, covered, ownStage, null);
+	}
+
+	/** (slice T4c) {@link #undoStage} for a region revision's undo ({@code revisionId}): REMOVAL_FINISHED names the revision. */
+	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force, Sites.Covered covered,
+		boolean ownStage, @Nullable Integer revisionId) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
@@ -856,6 +901,7 @@ public final class Groups {
 		Removal r = new Removal(groupId, stage, null, true);
 		r.covered = covered;
 		r.started = true;
+		r.revisionId = revisionId;
 		List<String> sites = new ArrayList<>(g.stages().get(i).sites());
 		java.util.Collections.reverse(sites);
 		r.sites.addAll(sites);
@@ -964,8 +1010,21 @@ public final class Groups {
 		}
 	}
 
+	/** (slice T4c, TEST dev.removal.failAfterCustody) The next n group or stage removals abort right after their custody is taken and saved. */
+	public static final java.util.concurrent.atomic.AtomicInteger FAIL_AFTER_CUSTODY = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** (slice T4c) Ticks between a held decided removal's retries (1 s), doubling to {@link #HELD_RETRY_MAX} (20 s). */
+	static final long HELD_RETRY = 20, HELD_RETRY_MAX = 400;
+
 	static void tick(MinecraftServer server, long deadline) {
 		tick++;
+		// (slice T4c) a held decided removal (its undo committed) retries by itself: STALLED becomes held, never left to an operator's resume
+		for (Removal r : List.copyOf(STALLED)) {
+			if (r.heldDecided && tick >= r.retryAt && REMOVALS.stream().noneMatch(x -> x.group.equals(r.group))) {
+				Architect.LOGGER.info("Removal of group {}{}: held (decided), retried", r.group, r.stage == null ? "" : " stage " + r.stage);
+				resume(r, new CompletableFuture<>()); // its end retries again (held) or finishes it (REMOVAL_FINISHED)
+			}
+		}
 		for (Removal r : List.copyOf(REMOVALS)) {
 			if (System.nanoTime() >= deadline && r != REMOVALS.get(0)) {
 				break;
@@ -1438,6 +1497,20 @@ public final class Groups {
 				return;
 			}
 			dev.larattalabs.architect.journal.WorldJournal.kill("FKC1"); // (TEST) the custody saved, the undo's world write not yet
+			if (FAIL_AFTER_CUSTODY.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+				// (slice T4c, TEST dev.removal.failAfterCustody; Steward's FKC0) aborted right after its custody: given back, saved, ended (nothing
+				// of it decided: NOT_STARTED, its targets stand)
+				for (String back : ids) {
+					Site b = Sites.get(back);
+					if (b != null) {
+						Fills.writeBack(level, b);
+					}
+				}
+				probe(() -> Stockpiles.saveWithWorld(server));
+				dev.larattalabs.architect.journal.WorldJournal.kill("FKC0"); // (TEST) the abort's custody given back and saved
+				end(server, r, Removed.saveRefused(r.group, "TEST: dev.removal.failAfterCustody", Map.copyOf(r.refund)));
+				return;
+			}
 		}
 		// refunds against the stacks before the undo is planned (rule 7)
 		List<Infra> dropLater = new ArrayList<>();
@@ -2008,9 +2081,13 @@ public final class Groups {
 		return any;
 	}
 
-	/** (fix round, GPT P1 4) A player holder's credit key: {@code cargo:<target>:<cell>}. */
-	static String cargoKey(String targetId, long cell) {
-		return Stockpiles.CARGO_PREFIX + targetId + ":" + cell;
+	/**
+	 * (fix round, GPT P1 4) A player holder's credit key: {@code cargo:<target>@<placedAt>:<cell>}. (slice T4c, PL-gpt2 3) The target's placement
+	 * is in it, so a target id placed again (a region realised again, its tile ids reused) never finds an earlier removal's key credited and
+	 * loses its holder's contents; a retry of the same removal finds its own key (one credit).
+	 */
+	static String cargoKey(String targetId, long placedAt, long cell) {
+		return Stockpiles.CARGO_PREFIX + targetId + "@" + placedAt + ":" + cell;
 	}
 
 	/**
@@ -2054,7 +2131,7 @@ public final class Groups {
 				return "a player's container at " + net.minecraft.core.BlockPos.of(c).toShortString() + " in " + id
 					+ " holds items with their own data (named, enchanted or filled): take them out, then remove again";
 			}
-			String key = cargoKey(inf.id(), c);
+			String key = cargoKey(inf.id(), inf.placedAt(), c);
 			r.cargo.putIfAbsent(key, new Credit(pile.owner(), key, Map.copyOf(items), c));
 		}
 		return null;
@@ -2123,6 +2200,9 @@ public final class Groups {
 		Removed result = !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given.restored(),
 			given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given;
 		REMOVALS.remove(r);
+		// (slice T4c) once its undo committed (the decision), a group's or stage's removal never answers PARTIAL: it is held(decided), kept and
+		// retried by itself (Groups.tick), and REMOVAL_FINISHED fires once it is removed
+		boolean decided = !result.removed() && r.undo != null;
 		dropCargoPending(r); // (fix round) holders never replaced keep their contents
 		if (r.worldPending) {
 			r.barrierAt = 0;
@@ -2156,7 +2236,7 @@ public final class Groups {
 			} else {
 				UNTOUCHED.remove(r.group);
 			}
-			Stop stop = stopOf(result, untouched);
+			Stop stop = decided ? null : stopOf(result, untouched); // (slice T4c) never PARTIAL once decided
 			if (stop == null) {
 				LAST_STOP.remove(r.group);
 			} else {
@@ -2166,7 +2246,10 @@ public final class Groups {
 			signalEnd(eg == null ? null : eg.owner(), r.group);
 		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
-		if (stallsAtEnd(r, result.removed())) {
+		r.heldDecided = decided;
+		r.backoff = decided ? (r.backoff == 0 ? HELD_RETRY : Math.min(r.backoff * 2, HELD_RETRY_MAX)) : 0;
+		r.retryAt = decided ? tick + r.backoff : 0;
+		if (decided || stallsAtEnd(r, result.removed())) {
 			STALLED.add(r); // (6c X, C22) restorations are still pending, or (v0.77.0 fix a2) a crate's stock is carried: the retry resumes them
 			if (r.undo == null) {
 				Architect.LOGGER.warn("Removal of group {}: ended before its undo holding a crate's stock {}; it stays stalled (the stock saved with it) "
@@ -2174,7 +2257,7 @@ public final class Groups {
 			}
 		}
 		long t0 = System.nanoTime();
-		SiteGroupRec g = Sites.group(r.group);
+		SiteGroupRec g = decided ? null : Sites.group(r.group); // (slice T4c) held: its group stays as it is until it finishes
 		if (g != null) {
 			if (r.stage != null) {
 				if (result.removed()) {
@@ -2204,10 +2287,25 @@ public final class Groups {
 		Architect.LOGGER.info("{} {} of group {}: {}{}", r.stage == null ? "Removal" : "Undo of stage " + r.stage, result.removed() ? "done" : "stopped",
 			r.group, result.removed() ? "all sites restored" : String.join("; ", result.blockers()), result.refund().isEmpty() ? "" : "; refund "
 				+ result.refund());
+		if (decided) {
+			// (slice T4c) held(decided): the call fails SITE_BUSY held(decided); the removal goes on by itself (no region end, no PARTIAL)
+			String why = "held(decided) " + (r.stage == null ? "the removal of group " + r.group : "the undo of stage " + r.stage + " of group " + r.group)
+				+ ": it finishes by itself (" + String.join("; ", result.blockers()) + ")";
+			Architect.LOGGER.warn("{}", why);
+			r.futures.forEach(f -> f.completeExceptionally(new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.SITE_BUSY,
+				why, "held(decided)")));
+			r.futures.clear();
+			Placement.lap("end:futures", t0);
+			return;
+		}
 		if (r.stage == null) {
 			groupEnded(r.group, result); // (C23) before the futures: a resumed removal has none
 		}
 		r.futures.forEach(f -> f.complete(result));
+		if (result.removed()) {
+			// (slice T4c) one path for consumers: every finished group or stage removal, a held decided one's later end included
+			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(r.group, r.stage, r.revisionId, result);
+		}
 		Placement.lap("end:futures", t0);
 	}
 

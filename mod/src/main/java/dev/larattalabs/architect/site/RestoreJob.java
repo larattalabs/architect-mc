@@ -640,6 +640,9 @@ final class RestoreJob implements Placement.Job {
 		phase = DONE;
 		done = true;
 		futures.forEach(f -> f.complete(result));
+		if (REMOVE.equals(purpose) && (group == null || group.startsWith("u:remove-"))) {
+			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, result); // (slice T4c) a road's or cell site's removal finished
+		}
 		return true;
 	}
 
