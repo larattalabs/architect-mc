@@ -3,6 +3,7 @@ package dev.larattalabs.architect.region;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import dev.larattalabs.architect.region.BesideReach.Cols;
 import java.util.ArrayList;
 import java.util.List;
@@ -99,13 +100,17 @@ public final class DistrictLand {
 							case "lots" -> boxCols(x.getAsJsonObject("box"), c);
 							default -> {
 								roadCols(x, c);
-								if (x.get("ext") instanceof JsonObject ex && ex.get("architect_mc:street") instanceof JsonObject f && f.get("district") instanceof JsonElement d
-									&& d.isJsonPrimitive()) {
+								if (x.get("ext") instanceof JsonObject ex && ex.get("architect_mc:street") instanceof JsonObject f && f.get("district") instanceof JsonPrimitive d
+									&& d.isString()) { // ((RTE3) a string, as land.mjs)
 									dd.add(d.getAsString());
 								}
-								if (x.get("ext") instanceof JsonObject ex2 && ex2.get("architect_mc:band") instanceof JsonObject b && b.get("district") instanceof JsonElement bd
-									&& bd.isJsonPrimitive() && b.get("runs") instanceof JsonArray) {
-									grownBands.computeIfAbsent(rid, k -> new ArrayList<>()).add(b);
+								if (x.get("ext") instanceof JsonObject ex2 && ex2.get("architect_mc:band") instanceof JsonObject b && b.get("district") instanceof JsonPrimitive bd
+									&& bd.isString() && b.get("runs") instanceof JsonArray) {
+									// ((RTE3) once per revision: a grouped growth street's groups carry the same band, as land.mjs)
+									List<JsonObject> bs = grownBands.computeIfAbsent(rid, k -> new ArrayList<>());
+									if (bs.stream().noneMatch(o -> o.get("district").equals(b.get("district")) && o.get("runs").equals(b.get("runs")))) {
+										bs.add(b);
+									}
 								}
 							}
 						}
@@ -464,8 +469,8 @@ public final class DistrictLand {
 	 * land.mjs.
 	 */
 	static @Nullable String routeOf(JsonObject x, Pattern re, boolean group, java.util.Set<String> graphEdges) {
-		if (x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()) {
-			String edge = e.getAsString();
+		String edge = tagEdge(x);
+		if (edge != null) {
 			return edge.startsWith("route_d_") ? edge.substring("route_".length()) : null;
 		}
 		Matcher m = re.matcher(str(x, "id"));
@@ -497,8 +502,8 @@ public final class DistrictLand {
 
 	/** (RTE2) A following street piece's district: the one whose street edge it names; untagged, the longest with a street edge. */
 	private static @Nullable String streetOf(JsonObject x, List<String> ids, List<String> stIds) {
-		if (x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()) {
-			String edge = e.getAsString();
+		String edge = tagEdge(x);
+		if (edge != null) {
 			return edge.startsWith("route_st_") && ids.contains(edge.substring("route_st_".length())) ? edge.substring("route_st_".length()) : null;
 		}
 		return districtOfId(str(x, "id"), stIds, "route_st_");
@@ -506,10 +511,20 @@ public final class DistrictLand {
 
 	/** (RTE2) A join piece: tagged, its edge the join's (route_join, route_join_in); untagged, its id read by {@code re}. */
 	private static boolean isJoin(JsonObject x, Pattern re) {
-		if (x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()) {
-			return "route_join".equals(e.getAsString()) || "route_join_in".equals(e.getAsString());
+		String edge = tagEdge(x);
+		if (edge != null) {
+			return "route_join".equals(edge) || "route_join_in".equals(edge);
 		}
 		return re.matcher(str(x, "id")).matches();
+	}
+
+	/**
+	 * (RTE3) The edge a route piece's tag names (ext {@code architect_mc:route.edge}), only when it is a string, or null: a malformed tag
+	 * ({@code false}, {@code 17}) reads as untagged, as land.mjs's {@code typeof edge === 'string'} (was taken as its text, "false").
+	 */
+	static @Nullable String tagEdge(JsonObject x) {
+		return x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonPrimitive e && e.isString()
+			? e.getAsString() : null;
 	}
 
 	private static String str(JsonObject o, String k) {

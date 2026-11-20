@@ -144,8 +144,56 @@ test {
 		"../scenarios/goldens/s7/ir.json",
 		"../scenarios/goldens/s7/survey.bin",
 	).withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
-	// (RTE2) DistrictLandRte2Test's IRs, shared with kit/test/rte2.test.mjs
-	inputs.files("../kit/test/fixtures/rte2/land-irs.json").withPropertyName("rte2LandIrs").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((RTE3) every kit test fixture a mod test reads itself, exact files (the same files as the steps' data in tools/step-inputs.json):
+	// DistrictLandTest d3/, DistrictLandGrTest gr/, GateJoinTest gj/, RevisionsTest rv/, DistrictLandRte2Test rte2/ (RTE2), LayoutsRte3Test
+	// and DistrictLandRte3Test rte3/, MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, SchematicTest schem/, ApiAFTest af/ and site/,
+	// Api7bFTest, ApiSLTest and SupportOrderFixtureTest site/ (also on the classpath through the bundled kit copy), MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
+	// RoadTerrainNaturalTest natural/, ApiCXTest and TerrainOrderTest's named plan fixtures (also under kitPlanFixtures above))
+	inputs.files(
+		"../kit/test/fixtures/af/cliff_face.json",
+		"../kit/test/fixtures/af/overhang.json",
+		"../kit/test/fixtures/af/rift_site.json",
+		"../kit/test/fixtures/af/trunk.json",
+		"../kit/test/fixtures/d3/parity.json",
+		"../kit/test/fixtures/gj/parity.json",
+		"../kit/test/fixtures/gj/pg-parity.json",
+		"../kit/test/fixtures/gr/land.json",
+		"../kit/test/fixtures/mirror-fit.json",
+		"../kit/test/fixtures/mirror-oracle.json",
+		"../kit/test/fixtures/mp/specs.json",
+		"../kit/test/fixtures/natural/conds.json",
+		"../kit/test/fixtures/plan/bf/x01_hollow_mountain.json",
+		"../kit/test/fixtures/plan/bf/x02_crater_lake.json",
+		"../kit/test/fixtures/plan/bf/x03_island_hamlet.json",
+		"../kit/test/fixtures/plan/cx/cx01_ravine.json",
+		"../kit/test/fixtures/plan/valid/v04_rock_spire.json",
+		"../kit/test/fixtures/plan/valid/v05_ice_spike.json",
+		"../kit/test/fixtures/plan/valid/v06_terrace.json",
+		"../kit/test/fixtures/plan/valid/v72_f3_grove.json",
+		"../kit/test/fixtures/rte2/land-irs.json",
+		"../kit/test/fixtures/rte3/land-irs.json",
+		"../kit/test/fixtures/rte3/layout-ir.json",
+		"../kit/test/fixtures/rv/merge.json",
+		"../kit/test/fixtures/schem/corrupt.schem",
+		"../kit/test/fixtures/schem/goldens.json",
+		"../kit/test/fixtures/schem/old_dataversion.schem",
+		"../kit/test/fixtures/schem/oversize.schem",
+		"../kit/test/fixtures/schem/unknown_block.schem",
+		"../kit/test/fixtures/schem/v2_hut.schem",
+		"../kit/test/fixtures/schem/v3_hut.schem",
+		"../kit/test/fixtures/site/cliff_face/site.json",
+		"../kit/test/fixtures/site/cliff_face/volume.bin",
+		"../kit/test/fixtures/site/grove/site.json",
+		"../kit/test/fixtures/site/overhang/site.json",
+		"../kit/test/fixtures/site/overhang/volume.bin",
+		"../kit/test/fixtures/site/rift_site/site.json",
+		"../kit/test/fixtures/site/rift_site/volume.bin",
+		"../kit/test/fixtures/site/trunk/site.json",
+		"../kit/test/fixtures/site/trunk/volume.bin",
+		"../kit/test/fixtures/site/tunnel_hill/site.json",
+		"../kit/test/fixtures/site/tunnel_hill/volume.bin",
+		"../kit/test/fixtures/style-parity.json",
+	).withPropertyName("kitTestFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test

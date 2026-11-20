@@ -171,6 +171,9 @@ class LayoutsWallTest {
 	 * (LYW3) A bundled program's IR, planned by the kit with node (kit plan.mjs over the golden synth survey of a 1000-wide claim, as
 	 * kit/test/region-golden.test.mjs plans mega_bench); aborts when node is not on the PATH.
 	 */
+	/** How long the kit may plan (seconds). */
+	static final long PLAN_TIMEOUT_S = 120;
+
 	private static JsonObject plannedIr(String program, String params) throws Exception {
 		Path kit = Path.of("..", "kit").toAbsolutePath().normalize();
 		String js = "import { planRegion } from '" + kit.resolve("lib/region/plan.mjs").toUri() + "'; import { synthSurvey } from '"
@@ -185,9 +188,23 @@ class LayoutsWallTest {
 			org.junit.jupiter.api.Assumptions.abort("node is not on the PATH: " + e.getMessage());
 			return null;
 		}
-		String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-		assertTrue(p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0, "the kit planned " + program);
-		return JsonParser.parseString(out).getAsJsonObject();
+		// ((RTE3, v0.87.0 review P3) the output drained on another thread, so the timed wait bounds the run: a reading thread blocked on a hung
+		// node no longer holds the test past it; on timeout the process is destroyed)
+		Process proc = p;
+		java.util.concurrent.CompletableFuture<String> out = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+			try {
+				return new String(proc.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+			} catch (java.io.IOException e) {
+				throw new java.io.UncheckedIOException(e);
+			}
+		});
+		boolean done = p.waitFor(PLAN_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS);
+		if (!done) {
+			p.destroyForcibly();
+			out.cancel(true);
+		}
+		assertTrue(done && p.exitValue() == 0, "the kit planned " + program + (done ? "" : " (timed out after " + PLAN_TIMEOUT_S + " s)"));
+		return JsonParser.parseString(out.get(30, java.util.concurrent.TimeUnit.SECONDS)).getAsJsonObject();
 	}
 
 	@Test

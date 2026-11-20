@@ -33605,3 +33605,30 @@ LYW2's leftover. No API member, feature or version added (`layoutWalls` covers i
 - `crater_works` stays out: its `rim` is a 2-high rubble lip round the crater with lanterns on it, not a wall.
 - Golden: `mega_bench.golden.json` `irSha` only (budget, cells, tile shas unchanged).
 - Units: `LayoutsWallTest` (mega_bench planned by the kit with node: the wall and 4 gates, no tower; a tile on main), `kit/test/lyw2.test.mjs`.
+
+### Slice RTE3: RTE2's leftovers and the v0.87.0 review's follow-ups (normal; branch `slice/RTE3` off `slice/RTE2` 29bdce94, `release/v0.87.0` merged in; versions NEXT; recorded 2026-11-19)
+No API member, record or feature.
+- grow.mjs `followStreetOf`: a street piece's following district from the route pass's record on it (ext `architect_mc:route.edge`
+  `route_st_<d>`); another edge's tag: no street; untagged: the caller's id fallback. compile.mjs `stampStreets` and grow.mjs `streetRuns`
+  use it, the regex only for untagged pieces: a long road's groups `route_st_<d>_<n>_<k>` were district `<d>_<n>` (streetRuns) or
+  unmarked or `<d>_<n>`'s (stampStreets). Untagged, a boundary growth's street (its `architect_mc:band`, or a `_g<n>` stem) is never a follow
+  run, grouped or not. Latent: no plan in the kit suite lays a following street (length <= 256) past 4e's 2048-cell or 256-point caps.
+- A grouped growth street's graph keeps the base `newRoad` (node `ref`, edge `path`, `<newRoad>_end`): the graph names the street, as the
+  route pass's edge `route_<edge>` names its pieces' stem and a following street's chain `route_st_<d>`; growPlan's free-end reader matches
+  that path (`_g<n>$`), and `BesideJoin.road` reports a street, not a group. emitGrowth's returned `roads` now lists the groups laid (was
+  the base id, no road's).
+- Test inputs: every kit test fixture a mod test reads itself is a declared input of the Gradle `test` task (`kitTestFixtures`, 43 exact
+  files) and data of `unit-mod` and of each step whose Java tests read it (d3-unit, gj-unit, pg-unit, gr-unit, rv-unit, 0b-unit, sch-unit,
+  mp-unit, sl-unit, lp-unit, cx-unit) in tools/step-inputs.json (rebuilt: unit-kit's roots gain rte, rte2, rte3). Both were already covered indirectly (the test classpath
+  carries the kit's copy in `architect-sidecar/`, and gate-cache's `gradle` class holds `kit/**`); the entries name them exactly.
+- `LayoutsRte3Test` on `kit/test/fixtures/rte3/layout-ir.json` (kit/tools/rte3-fixture.mjs, checked current by rte3.test.mjs): edge
+  `d_a__b` beside `d_a__b_1`, b's pieces 2, 3 (a stair), 4; each route drawn whole from only its own pieces, in order, either edge order.
+- (v0.87.0 review P2) land.mjs and `DistrictLand`: a revision's band once (a grouped growth street's groups carry the same band; it made two
+  equal `district` parts). Flags stay on every group.
+- (v0.87.0 review P3) `DistrictLand.tagEdge` (and `Layouts.edgeOf`, the street and band districts): a tag's edge counts only as a string,
+  as land.mjs; `false` or `17` was taken as its text.
+- (v0.87.0 review P3) `LayoutsWallTest.plannedIr` drains node's output on another thread; the 120 s wait bounds the run and destroys it.
+- Goldens unchanged.
+- Not fixed: district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
+  `startsWith('route_st_<d>')`) still reads ids by prefix, so district `b`'s ends could take `b_1`'s grown street edges (no plan seen).
+- Units: `kit/test/rte3.test.mjs`, `LayoutsRte3Test`, `DistrictLandRte3Test` (`kit/test/fixtures/rte3/land-irs.json`).

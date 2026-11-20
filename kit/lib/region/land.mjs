@@ -68,11 +68,12 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   const v2 = revised || (Array.isArray(ir.revisions) && ir.revisions.length > 0);
   const ridOf = (x) => (Number.isInteger(x?.rid) && x.rid > 0 ? x.rid : 0);
   const grownBy = new Map(); // rid -> {cols: Set, district, mask?}
+  // ((RTE3) a band once per revision: a grouped growth street stamps the same band on each of its groups, which made two equal district parts)
   if (v2) {
     const g = (rid) => { if (!grownBy.has(rid)) grownBy.set(rid, { cols: new Set(), districts: new Set(), bands: [] }); return grownBy.get(rid); };
     for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); const d = districtOfId(p.id, ids0(ir), `rv${p.rid}_`); if (d) q.districts.add(d); }
     for (const l of ir.lots ?? []) if (ridOf(l)) { const q = g(l.rid); boxCols(l.box, q.cols); }
-    for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs)) q.bands.push(b); }
+    for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs) && !q.bands.some((o) => o.district === b.district && JSON.stringify(o.runs) === JSON.stringify(b.runs))) q.bands.push(b); }
   }
   ir = v2 ? { ...ir, parts: (ir.parts ?? []).filter((p) => !ridOf(p)), lots: (ir.lots ?? []).filter((l) => !ridOf(l)), roads: (ir.roads ?? []).filter((x) => !ridOf(x)) } : ir;
   const partById = new Map((ir.parts ?? []).map((p) => [p.id, p]));
