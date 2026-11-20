@@ -469,7 +469,7 @@ export async function registerFK(steps, h) {
     await cmd('/save-all flush').catch(() => null);
     const B = savedLedger(W.name);
     let waited = null;
-    if (point === 'FKL') {
+    if (point === 'FKL' || point === 'FKLH') {
       // (slice SOFF2) every ledger write fails (TEST failLedgerWrites, as a full disk): the commit's save returns false. The fill must not
       // advance (FILLED, unlocked) over a ledger not on disk: it waits FILLING, locked, retrying; then a bare halt
       await call('dev.stockpile.ps', { failLedgerWrites: true }, 30_000);
@@ -499,6 +499,7 @@ export async function registerFK(steps, h) {
       waited.extract = ex;
       const leaked = ex.filter((x) => (x.carried && x.carried !== '') || (typeof x.extracted === 'number' && x.extracted > 0) || sum(x.pulled ?? {}) > 0);
       check(ex.length > 0 && leaked.length === 0, `${tag}: while the fill waits for its ledger nothing billed leaves its containers (a menu take, a Transfer API extraction, a hopper pull from below): ${json(ex).slice(0, 400)}`, waited);
+      if (point === 'FKLH') await call('dev.stockpile.ps', { savingOffAtStart: true }, 30_000); // (T4 final round) the restart with saving off
       call('dev.stockpile.halt', {}, 10_000).catch(() => null);
       if (!(await halt(tag))) { await L.leaveWorld(); return null; }
     } else {
@@ -512,6 +513,29 @@ export async function registerFK(steps, h) {
     const markerSaved = (S?.filled ?? []).some((k) => k.startsWith(`site:${site}@`));
     log(`  ${tag}: saved: phase ${rec}, marker ${markerSaved}, consumed of the fill ${json(only(G.minus(S.consumed, B.consumed), FK))}`);
     await restart(W.name);
+    if (point === 'FKLH') {
+      // (T4 final round, SOFF2 P1 2) restarted with every level's saving off: the fill is still FILLING (its commit not on disk) and its start
+      // cleanup waits for the hold's release; its billed contents must stay held meanwhile (16ffd653: WAITING was memory-only, so a restart
+      // gave them ordinary access), then /save-on and the fill ends once
+      const sv = await call('dev.stockpile.saved', {}, 60_000).catch(() => ({}));
+      const s0 = await fk(site);
+      const ex = [];
+      for (const c of (s0?.containers ?? []).slice(0, 2)) {
+        const at = Array.isArray(c.at) ? c.at : String(c.at ?? '').split(',').map(Number);
+        if (at.length !== 3 || at.some((v) => !Number.isFinite(v))) continue;
+        const it = Object.keys(c.holds ?? c.declared ?? {})[0] ?? 'minecraft:flint';
+        const tk = await call('dev.fk.take', { pos: at, slot: 0, click: 'pickup' }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const tr = await call('dev.fk.transfer', { pos: at, item: it, max: 64 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        const pl = await call('dev.fk.pull', { pos: at, n: 10 }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+        ex.push({ at, item: it, holds: c.holds, carried: tk.carried ?? '', menu: tk.error ?? 'opened', extracted: tr.extracted ?? tr.error ?? null, pulled: pl.pulled ?? pl.error ?? null });
+      }
+      const leaked = ex.filter((x) => (x.carried && x.carried !== '') || (typeof x.extracted === 'number' && x.extracted > 0) || sum(x.pulled ?? {}) > 0);
+      const restarted = { hold: sv.hold?.state, startsOff: sv.testHooks?.startsOff, phase: s0?.phase, extract: ex };
+      out_log(`${tag}-restart`, restarted);
+      check(sv.hold?.state === 'HELD' && s0?.phase === 'FILLING', `${tag}: restarted with saving off: held (${sv.hold?.state}), the fill still FILLING (${s0?.phase})`, restarted);
+      check(ex.length > 0 && leaked.length === 0, `${tag}: after the restart under the hold nothing billed leaves the fill's containers (a menu take, a Transfer API extraction, a hopper pull): ${json(ex).slice(0, 400)}`, restarted);
+      await cmd('/save-on').catch(() => null);
+    }
     const f = await filled(site, { ms: 300_000 });
     const s = f.s;
     const L2 = (await pile()).ledger;
@@ -776,6 +800,7 @@ export async function registerFK(steps, h) {
     await ensure();
     const out = {};
     for (const p of ['FK1', 'FK2', 'FK3', 'FK4']) out[p] = await fillCase(p);
+    out.FKLH = await fillCase('FKLH'); // (T4 final round, SOFF2 P1 2) FKL restarted with saving off: the waiting fill's contents stay held
     out.FKL = await fillCase('FKL'); // (slice SOFF2) a ledger write failing at the commit: the fill waits; after a halt, once
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
     if (process.env.GATE_FK_ONLY !== 'fill') out.CS1 = await singleCase('CS1'); // (J2) a single site's credit save halted

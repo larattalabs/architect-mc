@@ -728,6 +728,14 @@ final class RestoreJob implements Placement.Job {
 		return j;
 	}
 
+	/**
+	 * (T4 final round's seam) Whether this job is a pre-T4 standalone road removal whose refund rides on C29's direct credit ({@link #credit},
+	 * no removal stash): converted to a {@code removal.road} stash before it goes on.
+	 */
+	boolean legacyRoad() {
+		return false;
+	}
+
 	@Override
 	public String toString() {
 		return "RestoreJob[" + purpose + " " + siteId + (group == null ? "" : " " + group) + "]";

@@ -132,10 +132,13 @@ public final class RemovalTxn {
 			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group));
 			String k = restoredKey(t, e);
 			String tag = foundTag(site, group);
+			String pre = e.key(t.id) + "@found=";
 			for (LevelChunk ch : cs) {
 				// (N3) what of its refunded cells stood here before the first write, receipted for this txn: its refunds pay min(planned, found)
-				java.util.Map<String, Integer> f = entry(ch, tag);
-				TestMove.addReceipt(ch, e.key(t.id) + "@found=" + encode(f == null ? java.util.Map.of() : f));
+				if (foundToAdd(TestMove.receipts(ch), pre)) {
+					java.util.Map<String, Integer> f = entry(ch, tag);
+					TestMove.addReceipt(ch, pre + encode(f == null ? java.util.Map.of() : f));
+				}
 				TestMove.addReceipt(ch, k); // the same tick as its cells: the chunk's save holds both
 			}
 		}
@@ -216,11 +219,24 @@ public final class RemovalTxn {
 		if (cs == null) {
 			throw new IllegalStateException("a chunk of its restore is not loaded");
 		}
-		String pre = w.key(t.id) + "@found=";
+		java.util.List<java.util.Collection<String>> per = new java.util.ArrayList<>();
+		for (LevelChunk ch : cs) {
+			per.add(TestMove.receipts(ch));
+		}
+		return sumFound(per, w.key(t.id) + "@found=");
+	}
+
+	/** (N3; the T4 final round's seam) Whether a W apply adds its {@code pre} found receipt to a chunk holding {@code receipts}. Pure. */
+	static boolean foundToAdd(java.util.Collection<String> receipts, String pre) {
+		return true;
+	}
+
+	/** (N3; the T4 final round's seam) The found amounts of one W effect over its chunks' receipts, or null when none recorded any. Pure. */
+	static java.util.@Nullable Map<String, Integer> sumFound(java.util.List<? extends java.util.Collection<String>> perChunk, String pre) {
 		java.util.Map<String, Integer> sum = new java.util.TreeMap<>();
 		boolean any = false;
-		for (LevelChunk ch : cs) {
-			for (String r : TestMove.receipts(ch)) {
+		for (java.util.Collection<String> rs : perChunk) {
+			for (String r : rs) {
 				if (r.startsWith(pre)) {
 					any = true;
 					decode(r.substring(pre.length())).forEach((k, v) -> sum.merge(k, v, Integer::sum));

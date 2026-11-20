@@ -466,8 +466,11 @@ public final class CrateSettle {
 
 	// ------------------------------------------------------------------ (T4b fix round, N3) the removal's hold, from the tally on
 
-	/** A durable stash's box: no block in it changes but by its removal (and the txns' own adapters) while the stash is durable. */
-	private record HeldBox(String dim, int x0, int y0, int z0, int x1, int y1, int z1) {
+	/**
+	 * A durable stash's box: no block in it changes but by its removal (and the txns' own adapters) while the stash is durable. {@code site}:
+	 * the removal's site or road; {@code cells}: (T4 final round) a CELL road's footprint (null: the whole box).
+	 */
+	record HeldBox(String dim, int x0, int y0, int z0, int x1, int y1, int z1, String site, it.unimi.dsi.fastutil.longs.@Nullable LongSet cells) {
 	}
 
 	private static volatile List<HeldBox> HELD = List.of();
@@ -475,14 +478,42 @@ public final class CrateSettle {
 	public static volatile boolean WRITING;
 
 	static void boxesChanged() {
+		HELD = heldOf(DURABLE.values());
+	}
+
+	/** (T4 final round's seam) The holds of {@code stashes}: each one's box, its site, its footprint ("hold": cell longs) when it names one. Pure. */
+	static List<HeldBox> heldOf(java.util.Collection<JsonObject> stashes) {
 		List<HeldBox> out = new java.util.ArrayList<>();
-		for (JsonObject st : DURABLE.values()) {
+		for (JsonObject st : stashes) {
 			if (st.get("box") instanceof com.google.gson.JsonArray b && b.size() == 6 && st.has("dim")) {
+				it.unimi.dsi.fastutil.longs.LongSet cells = null;
+				if (st.get("hold") instanceof com.google.gson.JsonArray h) {
+					cells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+					for (com.google.gson.JsonElement e : h) {
+						cells.add(e.getAsLong());
+					}
+				}
 				out.add(new HeldBox(st.get("dim").getAsString(), b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4)
-					.getAsInt(), b.get(5).getAsInt()));
+					.getAsInt(), b.get(5).getAsInt(), st.has("site") ? st.get("site").getAsString() : "", cells));
 			}
 		}
-		HELD = List.copyOf(out);
+		return List.copyOf(out);
+	}
+
+	/**
+	 * (T4 final round's seam) Whether {@code (x, y, z)} of {@code dim} is held by one of {@code held} for a writer: {@code writerSite}, the
+	 * removal the writing txn adapter belongs to ({@code ""}: a txn that is no removal's; null: no txn writes now). Pure.
+	 */
+	static boolean heldFor(List<HeldBox> held, String dim, int x, int y, int z, @Nullable String writerSite) {
+		if (writerSite != null) {
+			return false;
+		}
+		for (HeldBox b : held) {
+			if (b.dim().equals(dim) && x >= b.x0() && y >= b.y0() && z >= b.z0() && x <= b.x1() && y <= b.y1() && z <= b.z1()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -514,12 +545,7 @@ public final class CrateSettle {
 		if (WRITING) {
 			return false;
 		}
-		for (HeldBox b : HELD) {
-			if (b.dim().equals(dim) && x >= b.x0() && y >= b.y0() && z >= b.z0() && x <= b.x1() && y <= b.y1() && z <= b.z1()) {
-				return true;
-			}
-		}
-		return false;
+		return heldFor(HELD, dim, x, y, z, null);
 	}
 
 	/** Runs {@code r} as the removal's own write (the hold exempts it). Server thread. */

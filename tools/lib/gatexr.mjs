@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000, hold = null, creditSaveOff = false, cancelParked = false } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0, refuseCredit = 0, feedMs = 3_600_000, hold = null, creditSaveOff = false, cancelParked = false, removeParked = false } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -107,13 +107,25 @@ export async function registerXr(steps, h) {
               // (SOFF2 fix round, finding 1) the parked lot's batch cancelled while held: a rollback would restore the paid blocks it took
               // up while its refund stays credited; it must finish instead (committing)
               const jobs = await call('dev.placement.jobs', {}, 30_000).catch(() => []);
-              const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && x.phase === 15 && x.batch);
+              // (T4 merge) parked at SOFF2's AFTER_COMMIT (15) or T4a's persisted TAKE_UP (17)
+              const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && (x.phase === 15 || x.takeUp === true) && x.batch);
               out.cancel = { job: pj ?? null };
               if (pj) out.cancel.answer = await L.cmd(`/apitest bcancel ${pj.batch}`).catch((e) => String(e?.message ?? e));
               await L.sleep(3000);
             }
+            if (removeParked) {
+              // (T4 final round, SOFF2 P1 1) the parked lot removed directly (Sites.remove): on SOFF2 it aborts the job and restores the blocks it
+              // took up while their refund stays credited; past its take-up it must be refused (SITE_BUSY taking_up), then it finishes
+              const jobs = await call('dev.placement.jobs', {}, 30_000).catch(() => []);
+              const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && (x.phase === 15 || x.takeUp === true) && x.site);
+              out.remove = { job: pj ?? null };
+              if (pj) out.remove.answer = await L.cmd(`/apitest remove ${pj.site} - noforce`).catch((e) => String(e?.message ?? e));
+              await L.sleep(5000);
+              out.remove.jobAfter = ((await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? []).find((x) => x.site === pj?.site) ?? null;
+            }
             await call('dev.stockpile.ps', { noSave: { 'minecraft:the_nether': false } }, 30_000);
             if (out.cancel) out.cancel.at = Date.now();
+            if (out.remove) out.remove.at = Date.now();
             return;
           }
           await L.sleep(2000);
@@ -301,6 +313,15 @@ export async function registerXr(steps, h) {
       check((r.creditSaveOff?.fired ?? 0) >= 1 && !!r.cancel?.job, `xr_demo (cancel while parked): the hook fired (${r.creditSaveOff?.fired}); the parked lot's batch cancelled (${json(r.cancel?.job)}; ${json(r.cancel?.answer)?.slice(0, 120)})`, r.cancel);
       check(G.exact(r.built), `xr_demo (cancel while parked): conservation exact after the cancel and the release, every item: ${json(r.built.diff)} (identity ${r.built.identity}; the lot ${r.state})`);
       check(r.removedOk && G.exact(r.removed), `xr_demo (cancel while parked): removed, conservation exact: ${json(r.removed.diff)}`);
+    }
+    // (T4 final round, SOFF2 P1 1) the same, and the parked lot removed directly while held: refused past its take-up, then built exactly
+    if (process.env.GATE_XR_SOFF !== 'none' && process.env.GATE_XR_SOFF_REMOVE !== 'none') {
+      const r = await one('prog:xr_demo', { creditSaveOff: true, removeParked: true });
+      out.soffRemove = { ...r, owRows: r.owRows?.slice(0, 40) };
+      check((r.creditSaveOff?.fired ?? 0) >= 1 && !!r.remove?.job, `xr_demo (remove while parked): the hook fired (${r.creditSaveOff?.fired}); the parked lot found (${json(r.remove?.job)})`, r.remove);
+      check(/taking_up|take-ups are being booked/.test(String(json(r.remove?.answer))), `xr_demo (remove while parked): the direct Remove refused past the take-up (${String(json(r.remove?.answer)).slice(0, 160)})`, r.remove);
+      check(G.exact(r.built), `xr_demo (remove while parked): conservation exact after the release, every item: ${json(r.built.diff)} (identity ${r.built.identity}; the lot ${r.state})`);
+      check(r.removedOk && G.exact(r.removed), `xr_demo (remove while parked): removed, conservation exact: ${json(r.removed.diff)}`);
     }
     // mid-build removals on xr_demo: after its first take-up (a target over a target, the street stage), and after its lots were put
     // down (their placement's take-ups credited, the pavement's 81 + 47 + 3 stone bricks back), the lots starved, not built

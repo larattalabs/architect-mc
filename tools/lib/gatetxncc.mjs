@@ -1110,58 +1110,74 @@ export async function registerTCC(steps, h) {
         }
       }
     }
-    // T4-pileroad (fix round, finding 5): a stockpile's road removed with its credit save refused, then the game halted unsaved: its refund
-    // intent is the removal.road stash (durable before the job), paid exactly once after the restart (the base: the refund lost)
-    if (want('T4-pileroad')) {
-      const tag = 'T4-pileroad';
-      const owner = 'tcc:t4road';
+    // A stockpile's construction road, about half paid and built, every target paused (T4-pileroad, T4-lastcrate)
+    const pileRoad = async (tag, owner) => {
       const at = slot();
       k += 2;
       const y = gy + 1, X = at[0], Z = at[2] + 20;
       await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 30} ${y - 1} ${Z + 3} minecraft:stone`);
       W.at = [X + 10, y + 1, Z + 6];
       await L.tp(...W.at);
-      await call('dev.stockpile.create', { owner, crates: [[X + 10, y, Z - 8]] }, 120_000).catch((e) => ({ refused: String(e) }));
+      const crate = [X + 10, y, Z - 8];
+      await call('dev.stockpile.create', { owner, crates: [crate] }, 120_000).catch((e) => ({ refused: String(e) }));
       const road = { points: [[X, y, Z], [X + 26, y, Z]], width: 1, mode: 'AUTO' };
       const bid = await later(`bqueue ${json({ id: `tcct4pr${Date.now() % 100000}`, proximity: false, owner, autoApprove: true, items: [{ key: 'r1', road }] })}`, 120_000);
       let bv;
       for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
       const rid = bv?.items?.[0]?.site;
       check(!!rid, `${tag}: a construction road fed from the stockpile of ${owner} (${rid})`, bv);
-      if (rid) {
-        const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
-        for (let i = 0; i < 60; i++) { const rv0 = await roadState(rid).catch(() => null); if (rv0 && !/plac/i.test(String(rv0.state))) break; await L.sleep(1000); }
-        await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
-        const bill = (await api(`stock ${bv.group}`).catch(() => ({}))).outstandingBySite?.[rid] ?? {};
-        const half = {};
-        for (const [kk, v] of Object.entries(bill)) half[kk] = Math.max(1, Math.floor(v / 2));
-        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: half, exact: true }, 120_000).catch(() => null);
-        await call('dev.stockpile.pause', { site: rid, paused: false }, 60_000).catch(() => null);
-        for (let i = 0; i < 60; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
-        await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
-        const items = Object.keys(bill);
-        const rv = await roadState(rid);
-        const mm = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
-        const rbox = mm ? mm.slice(1, 7).map(Number) : [X - 1, y - 1, Z - 2, X + 27, y + 1, Z + 2];
-        const rparts = async () => {
-          const placed = {};
-          for (const st of (await cellsOf(rbox)).values()) {
-            const id = String(st).replace(/\[.*$/, '');
-            const full = id.includes(':') ? id : `minecraft:${id}`;
-            if (items.includes(full)) placed[full] = (placed[full] ?? 0) + 1;
-          }
-          const near = await call('dev.items.near', { pos: W.at, radius: 24 }, 30_000);
-          const mine = {};
-          for (const e of (await owedAll()).owed ?? []) if (e.site === rid) for (const [k2, v] of Object.entries(e.items ?? {})) mine[k2] = (mine[k2] ?? 0) + v;
-          const p = { stock: pick((await pst()).stock ?? {}, items), placed, owed: pick(mine, items), ground: pick(near.items ?? {}, items), inventory: {},
-            states: { [rid]: (await roadState(rid))?.state ?? null } };
-          p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
-          return p;
-        };
-        await cmd('/save-all flush').catch(() => null);
-        await wait(2000);
-        const before = await rparts();
-        check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
+      if (!rid) return null;
+      const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+      for (let i = 0; i < 60; i++) { const rv0 = await roadState(rid).catch(() => null); if (rv0 && !/plac/i.test(String(rv0.state))) break; await L.sleep(1000); }
+      await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
+      const bill = (await api(`stock ${bv.group}`).catch(() => ({}))).outstandingBySite?.[rid] ?? {};
+      const half = {};
+      for (const [kk, v] of Object.entries(bill)) half[kk] = Math.max(1, Math.floor(v / 2));
+      await call('dev.crate.insert', { site: `stockpile:${owner}`, items: half, exact: true }, 120_000).catch(() => null);
+      await call('dev.stockpile.pause', { site: rid, paused: false }, 60_000).catch(() => null);
+      for (let i = 0; i < 60; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
+      await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
+      const items = Object.keys(bill);
+      const rv = await roadState(rid);
+      const mm = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
+      const rbox = mm ? mm.slice(1, 7).map(Number) : [X - 1, y - 1, Z - 2, X + 27, y + 1, Z + 2];
+      const rparts = async () => {
+        const placed = {};
+        for (const st of (await cellsOf(rbox)).values()) {
+          const id = String(st).replace(/\[.*$/, '');
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          if (items.includes(full)) placed[full] = (placed[full] ?? 0) + 1;
+        }
+        const near = await call('dev.items.near', { pos: W.at, radius: 24 }, 30_000);
+        const mine = {};
+        for (const e of (await owedAll()).owed ?? []) if (e.site === rid) for (const [k2, v] of Object.entries(e.items ?? {})) mine[k2] = (mine[k2] ?? 0) + v;
+        const p = { stock: pick((await pst()).stock ?? {}, items), placed, owed: pick(mine, items), ground: pick(near.items ?? {}, items), inventory: {},
+          states: { [rid]: (await roadState(rid))?.state ?? null } };
+        p.total = [p.stock, p.placed, p.owed, p.ground].reduce((a, b) => G.plus(a, b), {});
+        return p;
+      };
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await rparts();
+      check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
+      return { rid, rparts, before, crate, pst };
+    };
+    // (T4 final round) the road removed for good: no record, no paid block standing, its refund credited into the stockpile (stock = before's
+    // stock + the paid blocks that stood), nothing owed or dropped
+    const roadFinished = async (tag, pr, after) => {
+      check(!(await roadState(pr.rid).catch(() => null)), `${tag}: ${pr.rid} removed (no record left; the review's green run ended BUILDING)`, after.states);
+      check(sum(after.placed) === 0, `${tag}: no paid block of ${pr.rid} stands (${json(after.placed)})`, after);
+      check(G.same(after.stock, G.plus(pr.before.stock, pr.before.placed)), `${tag}: its refund credited into the stockpile: ${json(after.stock)} = ${json(G.plus(pr.before.stock, pr.before.placed))}`, after);
+    };
+    const roadGone = async (rid, s = 120) => { for (let i = 0; i < s && (await roadState(rid).catch(() => null)); i++) await L.sleep(1000); };
+    // T4-pileroad (fix round, finding 5): a stockpile's road removed with its credit save refused, then the game halted unsaved: its refund
+    // intent is the removal.road stash (durable before the job), paid exactly once after the restart (the base: the refund lost). (T4 final
+    // round) judged only once the road is removed for good: REMOVED, no paid block standing, the refund credited
+    if (want('T4-pileroad')) {
+      const tag = 'T4-pileroad';
+      const pr = await pileRoad(tag, 'tcc:t4road');
+      if (pr) {
+        const { rid, rparts, before } = pr;
         // the job queued and paused before its first write (its stash saved), then every ledger write failing (its chunks flush, its ledger
         // does not: the review's case), then the job runs and the game halts unsaved
         await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
@@ -1176,10 +1192,38 @@ export async function registerTCC(steps, h) {
         if (down) {
           await L.openWorld(name);
           await L.tp(...W.at);
-          for (let i = 0; i < 30 && (await roadState(rid)); i++) await L.sleep(1000);
+          await roadGone(rid);
+          for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
           await wait(5000);
-          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, await rparts());
+          const after = await rparts();
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, after);
+          await roadFinished(tag, pr, after);
         }
+      }
+    }
+    // T4-lastcrate (T4 final round, P1 1): a stockpile road's removal paused after its commit (its refund stash durable, the road pending, so
+    // nothing of the pile builds); removing the pile's last crate must be refused while the stash credits into it (the base: the pile ends
+    // and its refund has no pile to go to); then the removal finishes, the refund credited into the same pile
+    if (want('T4-lastcrate')) {
+      const tag = 'T4-lastcrate';
+      const owner = 'tcc:t4last';
+      const pr = await pileRoad(tag, owner);
+      if (pr) {
+        const { rid, rparts, before, crate, pst } = pr;
+        await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
+        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await wait(3000);
+        const rc = await call('dev.stockpile.removecrate', { owner, pos: crate, force: true }, 60_000).catch((e) => ({ error: String(e?.message ?? e).slice(0, 200) }));
+        const ps1 = await pst();
+        R[tag] = { removal: rm, removeCrate: rc, pile: ps1 };
+        check(!rc.removed && (ps1.crates ?? []).length === 1, `${tag}: the last crate's removal refused while the removal's stash credits into the pile (${json(rc).slice(0, 200)})`, rc);
+        await call('dev.removal.pause', { site: rid, off: true }, 10_000);
+        await roadGone(rid);
+        for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+        await wait(3000);
+        const after = await rparts();
+        judgeT4(tag, { tag, removal: rm, removeCrate: rc, txn: await txn() }, { ...before }, after);
+        await roadFinished(tag, pr, after);
       }
     }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the

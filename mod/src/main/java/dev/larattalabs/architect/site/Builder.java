@@ -1928,18 +1928,18 @@ public final class Builder {
 				r.blockedSince.putIfAbsent(i, ticks);
 				continue;
 			}
-			List<SurvivalItems.Cost> both = r.cost.get(i);
-			if (j >= 0) {
-				both = new ArrayList<>(both);
-				both.addAll(r.cost.get(j));
-			}
-			if (!purse.pay(both)) {
+			final int fi = i, fj = j;
+			final BlockState fnow = now;
+			final BlockPos fq = q;
+			boolean held = heldCell(level, p) || q != null && heldCell(level, q);
+			if (!payPut(purse, r.cost.get(i), j >= 0 ? r.cost.get(j) : List.of(), held, () -> {
+				r.paidAgain(fi, fnow);
+				return put(level, r, fi, p, true);
+			}, j >= 0 ? () -> put(level, r, fj, fq, false) : null, p)) {
+				if (held) {
+					r.blockedSince.putIfAbsent(i, ticks);
+				}
 				continue; // (T2b final check P1-1) not paid (a held crate): nothing placed, the cell waits
-			}
-			r.paidAgain(i, now);
-			put(level, r, i, p, true);
-			if (j >= 0) {
-				put(level, r, j, q, false);
 			}
 			// a cell finish placed free, mined since and now paid for: it is refundable again
 			if (free.get(i) || j >= 0 && free.get(j)) {
@@ -2146,8 +2146,31 @@ public final class Builder {
 		return r.target[i].getBlock() instanceof VegetationBlock && !r.target[i].canSurvive(level, p);
 	}
 
+	/**
+	 * (T4 final round's seam) One cell's (and its swap pair's) payment and write: {@code held}, a box hold over a cell (a removal's, an open
+	 * txn's, a waiting fill's); {@code putI}/{@code putJ} write the cells and answer whether the write went in. Returns whether it was placed.
+	 */
+	static boolean payPut(Purse purse, List<SurvivalItems.Cost> costI, List<SurvivalItems.Cost> costJ, boolean held, java.util.function.BooleanSupplier putI,
+		java.util.function.@Nullable BooleanSupplier putJ, BlockPos at) {
+		List<SurvivalItems.Cost> both = new ArrayList<>(costI);
+		both.addAll(costJ);
+		if (!purse.pay(both)) {
+			return false;
+		}
+		putI.getAsBoolean();
+		if (putJ != null) {
+			putJ.getAsBoolean();
+		}
+		return true;
+	}
+
+	/** (T4 final round) Whether a box hold covers {@code p}: an open txn's or a removal's (TxnServer), or a fill's waiting for its ledger. */
+	static boolean heldCell(ServerLevel level, BlockPos p) {
+		return Fills.heldBox(level, p);
+	}
+
 	/** Writes queue cell {@code i} exactly as the instant placement did (state, block-entity NBT without inventories). */
-	static void put(ServerLevel level, Run r, int i, BlockPos p, boolean sound) {
+	static boolean put(ServerLevel level, Run r, int i, BlockPos p, boolean sound) {
 		BlockState t = r.target[i];
 		dev.larattalabs.architect.placed.Placed.set(level, p, t, Sites.FLAGS);
 		CompoundTag tag = r.nbt[i];
@@ -2169,6 +2192,7 @@ public final class Builder {
 			level.playSound(null, p, st.getPlaceSound(), SoundSource.BLOCKS, (st.getVolume() + 1.0f) / 2.0f * 0.35f, st.getPitch() * 0.8f);
 		}
 		r.markBuilt(i, true);
+		return true;
 	}
 
 	/**

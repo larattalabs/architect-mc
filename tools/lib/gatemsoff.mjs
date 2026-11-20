@@ -394,6 +394,31 @@ export async function registerSOFF(steps, h) {
       await ps({ noPeriodic: false });
     }
 
+    // ---------------------------------------------------------------- (T4 final round, SOFF2 P2) Y2: a refused direct setAutoSave(false)
+    // another mod's setAutoSave(false) (no command) refused by a failing barrier, then the ledger writable again and released; a later /save-off
+    // command that succeeds must answer as vanilla's, never the earlier call's stale refusal (16ffd653: the stale error after saving went off)
+    {
+      await ps({ noPeriodic: true });
+      const n = { tag: 'Y2' };
+      await ps({ failLedgerWrites: true, markUnsaved: true });
+      await ps({ setAutoSaveOff: true });
+      const s1 = await saved();
+      n.direct = { levelsOff: s1.testHooks?.levelsOff, hold: s1.hold?.state, refusals: s1.hold?.saveOffRefusals };
+      await ps({ failLedgerWrites: false });
+      let s2;
+      for (let i = 0; i < 20; i++) { s2 = await saved(); if (s2.hold?.state === 'OPEN') break; await L.sleep(1000); }
+      n.released = s2?.hold?.state;
+      n.answer = await cmd('/save-off').then((r) => json(r ?? null), (e) => `error: ${String(e?.message ?? e)}`);
+      const s3 = await saved();
+      n.levelsOffAfter = s3.testHooks?.levelsOff;
+      out.Y2 = n;
+      check(Array.isArray(n.direct.levelsOff) && n.direct.levelsOff.length === 0 && n.released === 'OPEN', `Y2: the direct setAutoSave(false) refused by its failing barrier (off: ${json(n.direct.levelsOff)}), then released (${n.released})`, n);
+      check(Array.isArray(n.levelsOffAfter) && n.levelsOffAfter.length > 0 && !/refused|could not make/i.test(String(n.answer)), `Y2: the later /save-off went through and answered as vanilla (off: ${json(n.levelsOffAfter)}; answer ${String(n.answer).slice(0, 200)}), not the stale refusal`, n);
+      await cmd('/save-on').catch(() => null);
+      for (let i = 0; i < 20; i++) { if ((await saved()).hold?.state === 'OPEN') break; await L.sleep(1000); }
+      await ps({ noPeriodic: false });
+    }
+
     // ---------------------------------------------------------------- (SOFF2) S: the start with saving off after an unclean stop
     {
       // paused: what they lack delivered and saved (the baseline); then unpaused: the cells they build next are on no saved ledger

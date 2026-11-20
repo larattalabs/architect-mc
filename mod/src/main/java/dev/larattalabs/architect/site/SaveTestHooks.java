@@ -97,14 +97,22 @@ public final class SaveTestHooks {
 		if (req.has("markUnsaved") && req.get("markUnsaved").getAsBoolean()) {
 			Stockpiles.unsaved = true; // (TEST) a pending ledger change: /save-off's barrier runs
 		}
+		if (req.has("setAutoSaveOff") && req.get("setAutoSaveOff").getAsBoolean()) {
+			// (T4 final round, SOFF2 P2, TEST) another mod's direct setAutoSave(false) (no /save-off command): its barrier may refuse it
+			autoSaveOffAnswer = srv.setAutoSave(false);
+		}
 		if (req.has("rawSaveIn")) {
 			rawSaveIn = req.get("rawSaveIn").isJsonNull() ? null : req.get("rawSaveIn").getAsString();
 			haltAfter = req.has("haltAfter") && req.get("haltAfter").getAsBoolean();
 		}
 	}
 
+	/** (TEST setAutoSaveOff) what the last direct setAutoSave(false) answered. */
+	static volatile boolean autoSaveOffAnswer;
+
 	static JsonObject json() {
 		JsonObject o = new JsonObject();
+		o.addProperty("autoSaveOffAnswer", autoSaveOffAnswer);
 		o.addProperty("startsOff", startsOff);
 		o.addProperty("failLedgerWrites", failLedgerWrites);
 		o.addProperty("ledgerWritesFailed", ledgerWritesFailed);
