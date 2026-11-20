@@ -33641,3 +33641,25 @@ No API member, record or feature.
 - Not fixed: untagged growth pieces read by id as v0.87.0 (above); district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
   `startsWith('route_st_<d>')`) still reads ids by prefix, so district `b`'s ends could take `b_1`'s grown street edges (no plan seen).
 - Units: `kit/test/rte3.test.mjs`, `LayoutsRte3Test`, `DistrictLandRte3Test` (`kit/test/fixtures/rte3/land-irs.json`).
+
+### Slice RTE4: the free-end reader and b beside b_street (light; branch `slice/RTE4` off main 30f2a9b4; versions NEXT; recorded 2026-11-20)
+RTE3's two leftovers. No API member, record or feature. Untagged IRs (regions planned before RTE, and before RTE4 for item 2) read as v0.88.0.
+- grow.mjs `streetRouteEnds(eff, d)` (was inline in extendBoundary): a following district's route ends and free ends from the records.
+  When d's street pieces carry its route tag (`architect_mc:route.edge` `route_st_<d>`): an edge is d's when its path is a route edge
+  whose pieces name it (`route_st_<d>` exactly) or a growth's `<newRoad>` (`_g<n>`) whose pieces (`<newRoad>`, groups `<newRoad>_<k>`) carry
+  `architect_mc:street.district` (else `architect_mc:band.district`) d; a grown end `<newRoad>_end` likewise; `<d>_s<k>` as before. A path
+  or end no record names, and every end of an untagged district, read by v0.88.0's id rule (`route_st_<d>_..._g<n>_end`,
+  `startsWith('route_st_<d>')`). Was: district b's boundary extension started at b_1's grown end `route_st_b_1_1_g1_end` (a real plan of
+  two following districts on one shore), and `quay` read `quayside`'s street edges. `ends` feeds the extension's direction too.
+- Districts pass: where one district id (of the full list) is another's plus `_` and a letter-led word (land.mjs `districtIdsShadow`:
+  `b` and `b_street`, `b` and `b_props`; never `b` and `b_1`), each district's roads laid in its emission carry ext
+  `architect_mc:district: {id}` (IR only). land.mjs `districtOfRoad` = `DistrictLand.districtOfRoad`: a road's district is its tag's
+  (a string naming a district; other ids: nobody's), else the longest id as RTE2; a malformed tag (`17`, `false`) reads as untagged.
+  grow.mjs `districtOfRoad` (streetRuns) reads the tag after `architect_mc:street` and before the `street_` regex. Was: b's street roads
+  `b_street_w`, `b_street_e` were b_street's land (1411 cells, now 408), and b_street's own street `b_street_street_*` was b's in
+  streetRuns, so growing b_street refused NO_ROOM "no standing street" (v0.87.0 review P2).
+- Goldens and fixtures unchanged (no golden or fixture has such ids; `rte3-fixture --check` current; only `kit/test/fixtures/rte4/` carries the tag).
+- Not fixed: parts carry no ext, so a part of b named like another district's (`b_props_lamp` beside district `b_props`) still reads by the
+  longest id; grow.mjs emitGrowth's junction stops (`n.id.startsWith('<d>_s')`, also `b_street_s1`); graph node ids (the join's `from`) carry no tag.
+- Units: `kit/test/rte4.test.mjs` (v0.88.0's free-end reader as the untagged oracle over every fixture and golden IR), `DistrictLandRte4Test`
+  (`kit/test/fixtures/rte4/land-irs.json`, `kit/tools/rte4-fixture.mjs`; a `kitTestFixtures` input and unit-mod data).

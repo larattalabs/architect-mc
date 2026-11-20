@@ -227,6 +227,13 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   `connector.wall` (not `tile`) with gates `wall_g1`..`wall_g4` and no towers. Reporting walls now: `walled_hill`, `sky_isle`, `mega_bench`,
   `mega_bench_forest`; `crater_works`'s rubble rim stays a `tile`. No API change. CONTRACT "Slice LYW3".
 
+### New for Steward (NEXT, slice RTE4)
+- A districts region planned from NEXT on whose district ids include one that is another's plus a word (`b` and `b_street`) carries
+  `architect_mc:district: {id}` on each district's roads in its IR (IR only, as `architect_mc:route`; other plans are byte-identical).
+  `architect_mc:land` then gives `b_street`'s part only its own roads (b's `b_street_w`, `b_street_e` were in it). A region planned before
+  reads as before. GR growth of a following district never continues from another district's grown street end (b from b_1's), and a
+  district `b_street` grows on its own street. No API, record or feature change. CONTRACT "Slice RTE4".
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.
