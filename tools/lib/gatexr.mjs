@@ -189,6 +189,17 @@ export async function registerXr(steps, h) {
             out.cancel = await L.cmd(`/apitest bcancel ${waiting.batch}`).catch((e) => ({ error: String(e) }));
             await L.sleep(5000);
             await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000);
+          } else if (hold === 'remove' && waiting?.site) {
+            // (T4 final round, SOFF2 P1 1) the waiting lot removed directly (Sites.remove), saving on: refused SITE_BUSY taking_up past its
+            // take-up (never aborted into a rollback that keeps the credit); then the refusals end and it finishes
+            const q = async (a) => { const r = await L.cmd(`/apitest ${a}`).catch(() => null); try { return JSON.parse(r?.messages?.[0] ?? 'null'); } catch { return null; } };
+            const pd = await q(`remove ${waiting.site} ${G.OWNER} noforce`);
+            out.remove = { answer: pd };
+            for (let i = 0; i < 20 && pd?.pending; i++) {
+              const r = await q(`get ${pd.pending}`);
+              if (r && r.value !== undefined && r.value !== null) { out.remove.answer = r.value; break; }
+              await L.sleep(500);
+            }
           } else if (hold === 'halt') {
             call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
             for (let i = 0; i < 45; i++) { await L.sleep(2000); const st = await call('dev.state', {}, 10_000).catch(() => null); if (st && st.inWorld === false) break; }
@@ -280,7 +291,7 @@ export async function registerXr(steps, h) {
     await L.leaveWorld().catch(() => null);
     const n = process.env.GATE_XR_REFUSE ?? 'prog:xr_demo';
     const out = {};
-    for (const mode of (process.env.GATE_XR_HOLD ?? 'cancel,halt').split(',')) {
+    for (const mode of (process.env.GATE_XR_HOLD ?? 'cancel,halt,remove').split(',')) {
       const r = await one(n, { refuseCredit: 100_000, feedMs: 600_000, hold: mode });
       const want = expectedBack(r.owRows);
       out[mode] = { ...r, owRows: r.owRows?.slice(0, 40), want };
@@ -289,6 +300,9 @@ export async function registerXr(steps, h) {
       check(G.exact(r.built), `${mode}: conservation exact after the ${mode}, every item: ${json(r.built?.diff)} (identity ${r.built?.identity})`);
       check(r.removedOk && G.exact(r.removed), `${mode}: Regions.remove, conservation exact after the removal: ${json(r.removed?.diff)}`);
       check(!r.items, `${mode}: no item dropped (${r.items})`);
+      if (mode === 'remove') {
+        check(r.remove?.answer?.removed === false && /taking_up|take-upsarebeingbooked/.test(String(json(r.remove?.answer)).replace(/\s+/g, '')), `remove: the waiting lot's direct Remove refused past its take-up (${json(r.remove?.answer).slice(0, 200)})`, r.remove);
+      }
     }
     return out;
   };
@@ -335,7 +349,8 @@ export async function registerXr(steps, h) {
       const r = await one('prog:xr_demo', { creditSaveOff: true, removeParked: true });
       out.soffRemove = { ...r, owRows: r.owRows?.slice(0, 40) };
       check((r.creditSaveOff?.fired ?? 0) >= 1 && !!r.remove?.job, `xr_demo (remove while parked): the hook fired (${r.creditSaveOff?.fired}); the parked lot found (${json(r.remove?.job)})`, r.remove);
-      check(/taking_up|take-ups are being booked/.test(String(json(r.remove?.answer))), `xr_demo (remove while parked): the direct Remove refused past the take-up (${String(json(r.remove?.answer)).slice(0, 160)})`, r.remove);
+      // refused (removed false) by the saving-off hold or, once saving is on, by the take-up guard; 16ffd653 aborted it and rolled the lot back
+      check(r.remove?.answer?.removed === false && /taking_up|take-upsarebeingbooked|savingisoff/i.test(String(json(r.remove?.answer)).replace(/\s+/g, '')), `xr_demo (remove while parked): the direct Remove refused (${String(json(r.remove?.answer)).slice(0, 160)})`, r.remove);
       check(G.exact(r.built), `xr_demo (remove while parked): conservation exact after the release, every item: ${json(r.built.diff)} (identity ${r.built.identity}; the lot ${r.state})`);
       check(r.removedOk && G.exact(r.removed), `xr_demo (remove while parked): removed, conservation exact: ${json(r.removed.diff)}`);
     }
