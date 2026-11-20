@@ -34448,6 +34448,24 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   global `CrateSettle.WRITING` still exempts every stash hold for a single removal's own writes; Placement.java:942 InfraJob extras on an
   unclean start; gatem5fk.mjs:494 probe errors; a pre-T4 road job that restored cells before the upgrade under-refunds them (never mints).
 
+### Slice T4R fix round as built (the early review of df7b6afa: NOT SAFE, six P1s; one round)
+
+- **P1-1:** `removal.group` is journal-decided: its D `group.undo` probes the committed undo (APPLIED: adopted, never aborted; UNKNOWN while
+  the journal can't be read: held); `memberDone` counts a retired txn only when it committed. **P1-2:** the member barrier's debt is the
+  entry's (`TxnEntry.dirty`, set by every apply, cleared only by a passed barrier), never reset per redo.
+- **P1-3:** a pre-T4R group credit converted at load is held from the load (`CrateSettle.holdOnly`, the member's box) and gets found cells
+  from its journal cells at its txn's begin. **P1-4:** a legacy credit's found cells (`CrateSettle.legacyCells`) count a cell standing or
+  already restored by its old job (owed too), never one a player changed. **P1-5:** cargo owed keys are `cargo:tx-n/i:<source>`.
+- **P1-6:** the group's restore/kept counts and hand-down are computed from its planned work before the pre-save; handed, handedAll,
+  cascade and the cargo owed keys are saved with the queue (planned too: R2q); a single removal's stash carries `fin` (restored, kept,
+  hand-down, cascade) from its commit, which its txn keeps; the events use them. **P2:** `Sites.list` lists held decided removals;
+  RVU1 at a revision stage txn's decision, RVU2 at its effects barrier; `CrateSettle.WRITING` is the writer's own sites. **P3:** comment.
+- **Rows** (hooks/rows abb6e8b5 + later rows fixes; red = df7b6afa + those): units `T4RFixCoreTest` P1-1 (decider `txn`) and P1-2
+  (after three refused drives `durableThrough` true, credit applied), `T4RLegacyFound` P1-3/P1-4 and `T4RResultPersist` P1-6 (no seam/field
+  on the base); e2e T4R-legacygroup (base: the mine goes through, one minted), T4R-cargo-key (base: the second stack lost), the list check
+  in T4R-visible; all green on HEAD. T4R-legacyroad-partial is green on the base too (the earlier job's found receipts cover it in game; a
+  true pre-T4 world has none): a regression row, the unit is P1-4's red. The cargo recover variant is green on both.
+
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
 - The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
