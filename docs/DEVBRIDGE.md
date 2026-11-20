@@ -853,3 +853,8 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   txn writes the restore, W, and holds on a failure).
 - (slice T4b fix round, TEST) `dev.stockpile.ps {failLedgerOnly: n}`: the next n writes of the stockpile ledger fail (a save with the world
   flushes its chunks, then its ledger write is not confirmed; a barrier's ledger write is refused); the queue file and txn.json still write.
+  (T4 merge) `failLedgerWrites` keeps both meanings: a count is T2b's (`DurableFile` refusals), a boolean SOFF2's switch.
+- (T4 final round, TEST) `dev.stockpile.ps {setAutoSaveOff: true}`: another mod's direct `setAutoSave(false)` (no `/save-off` command); its
+  answer in `dev.stockpile.saved` `testHooks.autoSaveOffAnswer` (soff-crash Y2).
+- (slice T4c, TEST; Steward's FKC0) `dev.removal.failAfterCustody {n?: 1}`: the next n group or stage removals abort right after their
+  custody is taken and saved: given back, saved, ended NOT_STARTED; kill point `FKC0` after the give-back's save (`dev.journal.killAt`).
