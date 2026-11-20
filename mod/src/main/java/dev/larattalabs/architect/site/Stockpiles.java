@@ -3708,8 +3708,8 @@ public final class Stockpiles {
 			creditSaves++;
 			return;
 		}
-		if (unsaved && !loadFailed) {
-			saveCredit(srv);
+		if (unsaved && !loadFailed || TEST_REFUSE_CREDIT_SAVES.get() > 0) {
+			saveCredit(srv); // (T4 final round, TEST refuseCreditSaves) an armed refusal refuses a confirmation too, ledger on disk or not
 		}
 		if (!savedOrOff()) {
 			throw new SaveRefused("Stockpiles: the ledger was not saved (its write did not complete); the credit waits for a save");
