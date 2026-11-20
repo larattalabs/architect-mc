@@ -395,7 +395,7 @@ export async function grateBroken(H) {
     const broke = [];
     for (const c of pick) broke.push(await L.call('dev.player.break', { at: c }, 30_000));
     const held = broke.reduce((a, b) => a + (b.collected?.['minecraft:iron_bars'] ?? 0), 0);
-    out.broke = { cells: pick, held };
+    out.broke = { cells: pick, held, answers: broke.map((b) => ({ broken: b.broken, wouldDrop: b.wouldDrop, after: b.after, collected: b.collected })) };
     check(bars.length >= 2 && chargedBars > 0 && held === 2, `GB: the precondition: the tiles wrote ${bars.length} bar(s) (${chargedBars} charged); the player broke 2 and holds ${held}`);
     await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
     let fs1 = null;
