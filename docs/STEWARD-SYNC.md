@@ -208,8 +208,8 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   (was `b,b_1`). No API or record change, no new feature: plans without such ids are byte-identical. A region planned before reads the same
   way when its land is recomputed (a GR revision); untagged street pieces go to the longest district with a street edge.
 - A districts route laid from NEXT on never takes a piece id that is another route's id or begins one: `route_d_a__b`'s pieces skip
-  `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So `Regions.layout` draws both routes, and a long first
-  section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
+  `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So b's pieces no longer take b_1's ids (the
+  RTE limit where one hid the other's route shape in `Regions.layout`), and a long first section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
