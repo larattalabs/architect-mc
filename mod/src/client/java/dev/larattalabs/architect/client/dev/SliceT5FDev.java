@@ -272,6 +272,34 @@ public final class SliceT5FDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.blocks.find", 60_000, "{box: [x0,y0,z0,x1,y1,z1], block: id} - (T5Fa) every cell of the box (at most 2M cells) whose "
+			+ "block is that block -> {cells: [[x,y,z]]}", (req, mc) -> {
+				JsonArray b = req.getAsJsonArray("box");
+				int[] v = new int[6];
+				for (int i = 0; i < 6; i++) {
+					v[i] = b.get(i).getAsInt();
+				}
+				if ((long) (v[3] - v[0] + 1) * (v[4] - v[1] + 1) * (v[5] - v[2] + 1) > 2_000_000L) {
+					throw new DevBridge.DevException("dev.blocks.find: the box is over 2M cells");
+				}
+				var block = BuiltInRegistries.BLOCK.getValue(Identifier.parse(req.get("block").getAsString()));
+				return ServerTasks.callAsPlayer((level, player) -> {
+					JsonArray cells = new JsonArray();
+					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+					for (int x = v[0]; x <= v[3]; x++) {
+						for (int z = v[2]; z <= v[5]; z++) {
+							for (int y = v[1]; y <= v[4]; y++) {
+								if (level.getBlockState(m.set(x, y, z)).is(block)) {
+									cells.add(arr(m));
+								}
+							}
+						}
+					}
+					JsonObject o = new JsonObject();
+					o.add("cells", cells);
+					return o;
+				});
+			});
 		DevBridge.register("dev.txn.kinds", 10_000, "{} - (T5Fa) the txn kinds registered in the core (the rows probe for kinds not built yet) -> "
 			+ "{kinds: [name]}", (req, mc) -> ServerTasks.callOnServer(s -> {
 				JsonObject o = new JsonObject();
