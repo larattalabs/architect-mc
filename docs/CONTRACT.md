@@ -34375,6 +34375,44 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - **Not shown red:** T4-pileroad and T4-2nd-b pass at the base too (finding 5's loss and the W-to-credit crash were not reproduced in game);
   5 rests on code and its unit.
 
+### Slice T4 final round as built (the GPT check of 8b742e1d: NOT SAFE; Noah's one targeted round; T3b and SOFF2 merged)
+
+- **Merges:** origin/slice/T3b d751ebe2 (pile.adopt; TxnCore keeps both alias kinds and the pause). origin/slice/SOFF2 16ffd653, SOFF2's
+  hand-ordered adoptCrates and clearJoinedCrate dropped for T3b's txn, its transient takeUpStarted for T4a's persisted TAKE_UP
+  (`Placement.inTakeUp` guards a cancel and a direct Remove, which refuses SITE_BUSY `taking_up` before `Placement.abort`); the rest kept.
+  `failLedgerWrites` keeps both meanings (a count: T2b's; a boolean: SOFF2's).
+- **(a) P1 1:** `requirePileFree` reads `CrateSettle.pileHeld` (an open txn's `pile:`, or a durable stash naming the pile, crate-fed too);
+  `CrateTxn.settle` holds `pile:<owner>`; owed keys from the O effects (P2). **(b) P1 2:** a pre-T4 queued standalone road job converts its
+  C29 credit into a `removal.road` stash, saved confirmed, before it goes on (no per-cell N3 cap for it). **(c) P1 3:** `Builder.payPut`
+  checks the hold before billing; a refused write is paid back out of the paid record, never built; a road stash holds its footprint
+  (`hold`), no rbox; only the owning removal's adapter is exempt (`RemovalTxn.siteOf`). **(d) P1 4:** one found receipt per (W, chunk).
+- **Gaps:** open txns park while saving is off; ledger jobs park with no stockpile; pending credits and the W probe wait on a failed queue
+  file or txn.json; a removal refused after its stash was saved drops the stash. **SOFF2:** dispenser/dropper/crafter honour a waiting fill;
+  FILLING fills held at a start with saving off; no stale save-off refusal; a delta's refused credit save stays pending.
+- **Red then green** (red worktrees, local, removed after: A = 8b742e1d + rows 5167fef6, B = 16ffd653 + rows bc0b2c5b):
+  units `RemovalFoundFinalT4Test` (2) and `FinalRoundT4Test` (5) red at 9ddb3570 (the seams with 8b742e1d's behaviour), green since c5060e8d;
+  T4-lastcrate red on A (`gate-runs-T4red/20261120-013249`: the last crate removed, the pile ended, the refund owed instead of credited);
+  xr-survival "remove while parked" red on B (`gate-runs-T4redB/20261120-015555`: removed, +47 stone_bricks); soff-crash Y2 red on B (the
+  stale refusal after saving went off); fk-crash FKLH red on B (`…/20261120-012431`: 18 flint taken from a FILLING fill after a restart
+  under the hold). T4-pileroad is green on A once asked as the road's owner (the review's row was refused as not the owner's and never
+  removed its road); T4-legacyroad's red is the unit.
+- **Rows adapted to the merged contract:** ps-crash RRF (the hook fires in the removal txn's refund barrier), dfg-defer SAC1b (pile.adopt's
+  decided point), x-resume (b) (a failure after the decision finishes REMOVED, never PARTIAL), DR4b tolerant of a converted hall.
+- **Not built:** the full `removal.group` txn (the queue down to a cursor, entry-held credits) of §3; group roads' C29 credit (it waits on a
+  refused save since SOFF2, keyed); per-cell N3 for converted legacy roads.
+
+### Slice T4c as built (on the final round; strict; versions NEXT)
+
+- `SiteEvents.REMOVAL_FINISHED` / `RemovalFinished(kind, id, stage, revisionId, result)` (feature `removal_finished`): at every finished
+  removal (site, road or cell site, group or stage, region), and when a held decided one finishes by itself (also after a restart).
+- Once its undo committed a group or stage removal never answers PARTIAL: SITE_BUSY `held(decided)`, queued (`heldDecided`, persisted),
+  retried by itself (1 s doubling to 20 s); a revision's undo waits for it and passes its rid.
+- Group/stage pre-T4 credit conversion: built, then backed out (dr-survival DR4b/DR8: the converted member's txn restored it and booked
+  the credit, but its pending record stayed STUCK); those credits stay legacy as at T4b. Also: a group member's refused credit save waits
+  (it was thrown out of the Placement tick each tick); t4-xr-hold keeps periodic saves off and `refuseCreditSaves` refuses confirmations.
+- Cargo keys `cargo:<target>@<placedAt>:<cell>`; wither and dragon breaks honour the seal and holds; TEST `dev.removal.failAfterCustody`
+  (FKC0). Units `T4cGroupsTest` (4); api-compat --baselines 8/8.
+
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
 - The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
