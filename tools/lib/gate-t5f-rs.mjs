@@ -104,13 +104,14 @@ async function reopen(H, world, flags = null) {
 // ------------------------------------------------------------------ P1-1: the tile's ACTIVE without its chunk
 
 /**
- * t5-tile-k4 / t5-tile-k4-rm (P1-1). rs03 in survival; a save at the fluids gate (dev.fluid.saveAtGate: every earlier stage on disk); the
- * tiles write the lava, the write held (journal ACTIVE for the tiles). Then chunk B's snapshot is lost (dev.chunk.drop) and the rest saved
- * and halted (dev.chunk.halt save): the on-disk state of a bare crash at the fluids tile's K4 (ACTIVE durable, the chunk not), reached
- * without arming K4 (global: it would halt at the first tile of any stage; a fluids-only K4 alias needs InfraJob, a T4 file).
- * Restart with the write held: the precondition (B's lava absent, the tiles' entries ACTIVE). Then `rm` false: the write runs and must
- * write B's cells (red: RegionFluids writeBody skips them as journaled); `rm` true: removed before the write, the refund must include B's
- * paid cells as u (red: the scoop refunds an absent charged cell only when the journal says unwritten).
+ * t5-tile-k4 / t5-tile-k4-rm (P1-1). rs03 in survival. At the fluids gate (dev.fluid.saveAtGate {drop}) every chunk is saved and the
+ * claim's chunks are armed as lost: from then on the fluids stage's writes there never reach disk (every barrier still acknowledged). The
+ * tiles write the lava, the write held; the tiles' journal entries go ACTIVE (durable). Then a save and a halt (dev.chunk.halt save): the
+ * on-disk state of a crash at the fluids tile's K4 with its chunk lost (ACTIVE durable, the cells not), reached without arming K4 (global:
+ * it halts at the first tile of any stage; a fluids-only alias needs InfraJob, a T4 file).
+ * Restart with the write held (t5f-test-flags.json): the precondition (the lava absent, ACTIVE entries). Then `rm` false: the write runs
+ * and must write the lost cells (red on 8cT: writeBody skips them as journaled); `rm` true: removed before the write, the refund must
+ * include the lost paid cells as u (red on 8cT: the scoop refunds an absent charged cell only when the journal says unwritten).
  */
 export async function tileK4(H, rm) {
   const { ctx, G, L, check, log, json } = H;
@@ -118,49 +119,58 @@ export async function tileK4(H, rm) {
   const out = {};
   const fx = G.fixture(ctx, 'rs03_water');
   const entries = H.entriesOf(fx);
-  await L.call('dev.fluid.saveAtGate', {}, 10_000);
   try {
-    const w = await H.rsTilesWritten(tag, fx, entries);
-    const charged = (await G.rsState(ctx, w.region)).record?.charged?.['minecraft:lava_bucket'] ?? 0;
-    const groups = byChunk(w.lava);
-    const B = groups.at(-1);
-    out.split = groups.map((g) => [key(g.chunk), g.cells.length]);
-    const js = await L.call('dev.journal.state', {}, 60_000);
-    const mine = (e) => String(e.site).includes(w.region) || String(e.group ?? '').includes(w.region);
-    const active = (js.entries ?? []).filter((e) => mine(e) && e.status === 'ACTIVE').length;
-    out.journalSample = (js.entries ?? []).filter(mine).slice(-3).map((e) => [e.site, e.group, e.kind, e.status]);
-    out.pre = { lava: w.lava.length, charged, active, split: out.split };
-    check(!!B && w.lava.length === charged && charged > 0 && active > 0, `K4 (${tag}): the precondition before the halt: ${w.lava.length} lava written by the tiles of ${charged} charged, ${active} entr(y/ies) of the region ACTIVE (${json(out.journalSample)}), per chunk ${json(out.split)}`);
-    if (!B) return out;
-    await L.call('dev.chunk.drop', { chunks: [B.chunk] }, 10_000);
+    const s = await G.site(ctx, tag, fx);
+    if (Object.keys(entries).length) await G.designs(ctx);
+    const box = G.boxOf(s.W);
+    const k = await G.check(ctx, tag, s);
+    await G.pile(ctx, s, 4);
+    await L.call('dev.fluid.saveAtGate', { drop: [box[0], box[2], box[3], box[5]] }, 10_000);
+    await L.call('dev.fluid.hold', { write: true }, 10_000);
+    const region = await G.realise(ctx, k.check.artifactSha, entries);
+    let writing = null;
+    await G.feed(ctx, region, { fraction: 1, timeoutMs: 2_400_000, until: (st) => !!writing || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+      extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.phase === 'writing') writing = x; return {}; } });
+    let lava = [], last = -1, stable = 0;
+    for (let i = 0; i < 120 && stable < 3; i++) {
+      const c = await L.call('dev.fluid.census', { box }, 600_000);
+      lava = c.fluids.filter(([, , , st]) => H.LAVA(st));
+      stable = lava.length > 0 && lava.length === last ? stable + 1 : 0;
+      last = lava.length;
+      await H.sleep(5000);
+    }
+    const charged = (await G.rsState(ctx, region)).record?.charged?.['minecraft:lava_bucket'] ?? 0;
+    const activeOf = async () => { const js = await L.call('dev.journal.state', {}, 60_000); const es = js.entries ?? []; return { active: es.filter((e) => e.status === 'ACTIVE').length, total: es.length, sample: es.slice(-3).map((e) => [e.site, e.group ?? null, e.kind, e.status]) }; };
+    const j1 = await activeOf();
+    const dropped = (await L.call('dev.chunk.drop', { chunks: [] }, 10_000)).dropped ?? [];
+    out.pre = { lava: lava.length, charged, journal: j1, dropped: dropped.length, split: byChunk(lava).map((g) => [key(g.chunk), g.cells.length]) };
+    check(lava.length === charged && charged > 0 && j1.active > 0 && dropped.length > 0, `K4 (${tag}): the precondition before the halt: ${lava.length} lava written by the tiles of ${charged} charged, ${j1.active} of ${j1.total} journal entries ACTIVE (${json(j1.sample)}), ${dropped.length} chunk(s) of the claim armed lost at the gate`);
     L.call('dev.chunk.halt', { save: true }, 60_000).catch(() => null);
     out.halted = await H.waitHalt('dev.chunk.halt');
-    await reopen(H, w.s.world, { holdWrite: true, holdSettle: true });
+    await reopen(H, s.world, { holdWrite: true, holdSettle: true });
     await H.sleep(5000);
-    const lost = B.cells.length - (await lavaAt(H, B.cells)).length;
-    const js2 = await L.call('dev.journal.state', {}, 60_000);
-    const active2 = (js2.entries ?? []).filter((e) => mine(e) && e.status === 'ACTIVE').length;
-    out.restart = { lost, of: B.cells.length, active: active2 };
-    check(lost === B.cells.length && active2 > 0, `K4 (${tag}): the precondition after the restart: chunk ${key(B.chunk)}'s ${lost} of ${B.cells.length} lava cell(s) lost with its snapshot, ${active2} fluids tile entr(y/ies) still ACTIVE (the journal apart from the chunk)`);
+    const lost = lava.length - (await lavaAt(H, lava)).length;
+    const j2 = await activeOf();
+    out.restart = { lost, of: lava.length, journal: j2 };
+    check(lost === lava.length && j2.active > 0, `K4 (${tag}): the precondition after the restart: ${lost} of ${lava.length} lava cell(s) lost with their chunks' snapshots, ${j2.active} journal entries still ACTIVE (the journal apart from the chunk)`);
     if (!rm) {
       await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
       let fs1 = null;
-      for (let i = 0; i < 180; i++) { fs1 = await L.call('dev.fluid.state', { region: w.region }, 10_000).catch(() => null); if (fs1?.phase === 'settling' || fs1?.phase === 'settled' || fs1?.phase === 'done') break; await H.sleep(1000); }
+      for (let i = 0; i < 180; i++) { fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (fs1?.phase === 'settling' || fs1?.phase === 'settled' || fs1?.phase === 'done') break; await H.sleep(1000); }
       await H.sleep(3000);
-      const back = (await lavaAt(H, B.cells)).length;
-      const all = (await lavaAt(H, w.lava)).length;
-      out.written = { phase: fs1?.phase, back, of: B.cells.length, all, charged };
+      const back = (await lavaAt(H, lava)).length;
+      out.written = { phase: fs1?.phase, back, of: lava.length, charged };
       log(`  K4 (${tag}): ${json(out)}`);
-      check(back === B.cells.length && all === charged, `K4 (${tag}, P1-1): the stage's write writes chunk ${key(B.chunk)}'s lost cells again (mark none, cell open: §3.3 row 1): ${back} of ${B.cells.length} written, ${all} of ${charged} standing (red on 8cT: writeBody skips them as journaled)`);
+      check(back === charged, `K4 (${tag}, P1-1): the stage's write writes the lost cells again (mark none, cell open: §3.3 row 1): ${back} of ${charged} standing (red on 8cT: writeBody skips them as journaled)`);
       const s0 = await lavaStock(H);
-      await G.remove(ctx, w.region);
+      await G.remove(ctx, region);
       const got = (await lavaStock(H)) - s0;
       out.refund = got;
-      check(got === charged, `K4 (${tag}) conservation: removed after the write: refunded ${got} of ${charged} charged (every paid cell standing, then scooped)`);
+      check(got === charged, `K4 (${tag}) conservation: removed after the write: refunded ${got} of ${charged} charged`);
     } else {
-      const standing = (await lavaAt(H, w.lava)).length;
+      const standing = (await lavaAt(H, lava)).length;
       const s0 = await lavaStock(H);
-      await G.remove(ctx, w.region);
+      await G.remove(ctx, region);
       const got = (await lavaStock(H)) - s0;
       out.removed = { standing, refunded: got, charged, lost };
       log(`  K4 (${tag}): ${json(out)}`);
