@@ -192,6 +192,8 @@ export async function registerXr(steps, h) {
             await L.openWorld(`G6B RS S gmc ${tag}`.slice(0, 60));
             await L.sleep(3000);
           }
+          // (T4 final round) the refusals never outlive the hold case (a cancel that found no batch left them armed into the region's removal)
+          await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000).catch(() => null);
           for (let i = 0; i < 60 && (await jobs()).length; i++) await L.sleep(1000);
           out.jobsLeft = (await jobs()).length;
         }

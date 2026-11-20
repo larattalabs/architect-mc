@@ -52,6 +52,9 @@ public final class Groups {
 		/** (T2b last round, group report P2) the owed keys its settles wrote (listed apart from the refund; this session's). */
 		final List<String> owed = new ArrayList<>();
 		final List<CompletableFuture<Removed>> futures = new ArrayList<>();
+		/** (T4 final round) A member whose credit's save was refused: it stays until a confirmed save (retried); in memory (a restart resumes it). */
+		transient @Nullable String creditWait;
+		transient long creditRetryAt;
 		/** (slice T4c) The region revision whose undo removes this stage, or null; persisted. */
 		@Nullable Integer revisionId;
 		/** (slice T4c) Its call answered held(decided) (decided, not done): it retries by itself and fires REMOVAL_FINISHED when done. */
@@ -1052,6 +1055,20 @@ public final class Groups {
 	 * things in a box stop the removal before anything is written.
 	 */
 	private static void tick(MinecraftServer server, Removal r) {
+		if (r.creditWait != null) {
+			if (tick < r.creditRetryAt) {
+				return;
+			}
+			try {
+				Stockpiles.saveCreditConfirmed(server); // (T4 final round) the waiting member's credit on disk first
+			} catch (IllegalStateException e) {
+				r.creditRetryAt = tick + 100;
+				return;
+			}
+			r.sites.remove(r.creditWait);
+			written.add(r.creditWait);
+			r.creditWait = null;
+		}
 		if (r.current != null) {
 			if (Placement.job(r.current) != null) {
 				return; // a restore job runs (Placement); removed() moves on
@@ -2029,7 +2046,16 @@ public final class Groups {
 					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
 					return;
 				}
-				credit(server, r, job.siteId); // 6c Y: a stockpile road's refunds, once its restore is written
+				try {
+					credit(server, r, job.siteId); // 6c Y: a stockpile road's refunds, once its restore is written
+				} catch (IllegalStateException e) {
+					// (T4 final round, SOFF2's rule) its credit's save was refused (SaveRefused): booked once in memory (keyed), never thrown out of
+					// the Placement tick (that stalled every job, each tick); the member stays in the removal until a confirmed save, retried
+					r.creditWait = job.siteId;
+					r.creditRetryAt = tick + 100;
+					Architect.LOGGER.error("Removing group {}: {}'s credit save was refused ({}); it waits and retries", r.group, job.siteId, e.getMessage());
+					return;
+				}
 				r.sites.remove(job.siteId);
 				written.add(job.siteId);
 				return;
