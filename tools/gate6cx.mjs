@@ -555,25 +555,18 @@ steps.resume = async () => {
       await call('dev.undo.failRestore', { skip: -1 });
       await slowOn(false);
       out.b.stopped = { state: v.state };
-      check(v.state === 'PARTIAL', `resume (b): the resumed removal that failed ends the region PARTIAL, as an uninterrupted failure does (${v.state})`);
+      // (slice T4c, Steward's decision 8) a removal decided before the failure never ends PARTIAL: held(decided), it retries by itself and
+      // finishes; the region and its group end REMOVED and the world equals the pre-placement snapshot (before T4c: PARTIAL, ACTIVE, a retry)
+      check(v.state === 'REMOVED', `resume (b): the resumed removal that failed after its decision is held and finishes by itself: REMOVED, never PARTIAL (${v.state})`);
       const gv = await api(`sgroup ${g}`);
-      check(gv?.state === 'ACTIVE', `resume (b): its group is ACTIVE again (${gv?.state})`);
+      check(gv?.state === 'REMOVED', `resume (b): its group is REMOVED (${gv?.state})`);
       await settle(3000);
-      check((await api(`rget ${region}`))?.state === 'PARTIAL', 'resume (b): and it stays PARTIAL');
-      const hMid = await hashBox(min, max);
-      check(hMid !== h0, 'resume (b): the world differs from the pre-placement snapshot after the failure (the control)');
-      // the gap X noted: a reload between the injected failure and its retry
-      await restart(W);
-      const v2 = await api(`rget ${region}`);
-      check(v2?.state === 'PARTIAL', `resume (b): PARTIAL survives a reload before the retry (${v2?.state})`);
-      const r2 = await call('dev.region.remove', { region }, 3_600_000);
-      await settle(5000);
       const h1 = await hashBox(min, max);
-      out.b.retry = { removed: r2.removed, blockers: r2.blockers, equal: h1 === h0 };
-      check(!(r2.removed && h1 !== h0), 'resume (b): never removed=true over a world diff');
-      check(r2.removed === true && h1 === h0, `resume (b): the retry after the reload finishes the stalled restoration: removed=true, world hash equal (${r2.removed}; ${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+      out.b.end = { group: gv?.state, equal: h1 === h0 };
+      check(h1 === h0, `resume (b): the world hash equals the pre-placement one (${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+      await restart(W);
       const v3 = await api(`rget ${region}`);
-      check(v3?.state === 'REMOVED' && v3.removedAt > 0, `resume (b): Regions.get shows REMOVED with its time (${v3?.state}, ${v3?.removedAt})`);
+      check(v3?.state === 'REMOVED' && v3.removedAt > 0, `resume (b): after a reload Regions.get shows REMOVED with its time (${v3?.state}, ${v3?.removedAt})`);
     }
     // ---- (c) two restarts mid-removal
     {
