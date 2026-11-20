@@ -129,7 +129,13 @@ test {
 	// (8a ST) tests that run the kit with node (TerrainOrderTest's kit/test/terrain-order-cells.mjs, PlanCatalogueTest, the delta kit test):
 	// the kit and its plan fixtures are their inputs, so a kit change never leaves the test task UP-TO-DATE on a stale PASS
 	inputs.dir("../kit/lib").withPropertyName("kitLib").withPathSensitivity(PathSensitivity.RELATIVE)
-	inputs.files("../kit/test/terrain-order-cells.mjs", "../kit/test/plan-helpers.mjs").withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) plan-helpers' fixtureLotBlocks imports the VOC-c designs, which import the VOC ones: in the helpers' closure)
+	inputs.files(
+		"../kit/test/terrain-order-cells.mjs",
+		"../kit/test/plan-helpers.mjs",
+		"../kit/test/fixtures/vocab/vocc-designs.mjs",
+		"../kit/test/fixtures/vocab/voc-designs.mjs",
+	).withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/plan").withPropertyName("kitPlanFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	// the scenario goldens the tests read: S7's and route_demo's (S3's) survey through plan-helpers' goldenSurvey, S7's IR in
 	// LayoutsTest/ApiDTest, districts_demo's IR in LayoutsWallTest, and crossings_demo_flat's, forms_demo's and crater_toolbox's IRs in
@@ -194,6 +200,21 @@ test {
 		"../kit/test/fixtures/site/tunnel_hill/volume.bin",
 		"../kit/test/fixtures/style-parity.json",
 	).withPropertyName("kitTestFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) the kit files outside kit/lib and kit/test/fixtures a mod test reads, missed by RTE3's list; the same paths as unit-mod's data
+	// in tools/step-inputs.json; `node tools/step-inputs.mjs check` holds every literal kit path under src/test/java to this block):
+	// RegionFluidsLintTest the lint's drain cases; SchematicTest, StyleSwapTest, SidecarJsonTest, MinLotSizeTest, MassingPredictionTest,
+	// BuildOrderGoldenTest and SupportOrderFixtureTest the kit examples; TemplateDeltaKitEqualityTest runs kit/tools/delta-fixtures.mjs,
+	// which reads kit/build.mjs, kit/render.mjs, kit/tools/diff.mjs, every kit/designs source and the tavern version sources
+	inputs.files("../kit/lint/fixtures/drain-cases.json").withPropertyName("kitLintFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/examples").withPropertyName("kitExamples").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.files(
+		"../kit/build.mjs",
+		"../kit/render.mjs",
+		"../kit/tools/delta-fixtures.mjs",
+		"../kit/tools/diff.mjs",
+	).withPropertyName("kitDeltaFixtureTools").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/designs").withPropertyName("kitDesigns").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/versions").withPropertyName("kitVersionFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test

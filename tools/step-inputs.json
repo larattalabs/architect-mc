@@ -13,6 +13,11 @@
    "env": [],
    "eager": [],
    "data": [
+    "kit/build.mjs",
+    "kit/designs/**",
+    "kit/examples/**",
+    "kit/lint/fixtures/drain-cases.json",
+    "kit/render.mjs",
     "kit/test/fixtures/af/cliff_face.json",
     "kit/test/fixtures/af/overhang.json",
     "kit/test/fixtures/af/rift_site.json",
@@ -56,6 +61,11 @@
     "kit/test/fixtures/site/tunnel_hill/site.json",
     "kit/test/fixtures/site/tunnel_hill/volume.bin",
     "kit/test/fixtures/style-parity.json",
+    "kit/test/fixtures/versions/**",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/tools/delta-fixtures.mjs",
+    "kit/tools/diff.mjs",
     "scenarios/goldens/crater_toolbox/ir.json",
     "scenarios/goldens/crossings_demo_flat/ir.json",
     "scenarios/goldens/districts_demo/ir.json",
@@ -4450,6 +4460,7 @@
    "data": [
     "deno.json",
     "deno.jsonc",
+    "kit/examples/**",
     "kit/test/fixtures/schem/corrupt.schem",
     "kit/test/fixtures/schem/goldens.json",
     "kit/test/fixtures/schem/old_dataversion.schem",
@@ -79519,7 +79530,10 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261103-093331-slice p3-lint"
+   "verified": "20261103-093331-slice p3-lint",
+   "data": [
+    "kit/lint/fixtures/drain-cases.json"
+   ]
   },
   "p3-lint-long": {
    "classes": [
@@ -122629,7 +122643,9 @@
     "scenarios/s2_ice_spikes.json",
     "scenarios/s3_monastery.json",
     "scenarios/s5_treehouses.json",
-    "scenarios/s6_cave_city.json"
+    "scenarios/s6_cave_city.json",
+    "scenarios/styles/g7cbr_s2_outpost.json",
+    "scenarios/styles/g7cbr_s3_monastery.json"
    ],
    "verified": "20261114-212845-change br-unit"
   },
@@ -130843,6 +130859,7 @@
     "tools/lib/cpu-budget.mjs"
    ],
    "data": [
+    "kit/lint/fixtures/drain-cases.json",
     "kit/test/fixtures/rv/merge.json"
    ]
   },
@@ -133490,6 +133507,7 @@
     "tools/lib/cpu-budget.mjs"
    ],
    "data": [
+    "kit/lint/fixtures/drain-cases.json",
     "kit/test/fixtures/d3/parity.json",
     "kit/test/fixtures/gr/land.json",
     "kit/test/fixtures/rv/merge.json"

@@ -445,7 +445,11 @@ evidence are not inputs.
 **The check** (CI, `node tools/step-inputs.mjs check`) rebuilds the static part at HEAD and fails when:
 - a step's closure reaches a file outside its recorded set (a driver gained an import);
 - a step's classes, roots or the environment variables its closure reads differ from the recorded ones;
-- a step has no entry.
+- a step has no entry;
+- (chore/TI) a literal kit/ or scenarios/ path a mod test names (`"../kit/x"`, `Path.of("..", "kit", ...)`) is not under an
+  `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes when it, or files under it, are declared), so a
+  local or gate Gradle run could stay UP-TO-DATE on a stale PASS. The known gaps are listed in tools/step-inputs.mjs
+  (`GRADLE_TEST_UNDECLARED`). Computed paths and a node child's own reads stay the author's to declare.
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.
