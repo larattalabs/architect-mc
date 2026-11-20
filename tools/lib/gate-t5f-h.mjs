@@ -105,7 +105,9 @@ export async function forceLost(ctx) {
     out.halted = await waitDown(ctx);
     check(out.halted, 'FZ: the precondition: TX:fluid.write:apply:1 reached (the R durable) and the JVM halted bare');
     if (!out.halted) return out;
-    await L.call('dev.fluid.forceTrace', { on: true }, 10_000); // the new JVM, before the world opens: the replay's passes
+    // the new JVM, before the world opens (its recovery replays the write txn): the replay's forced passes traced (FluidTestFlags)
+    fs.mkdirSync(path.join(L.GAME_DIR, 'architect'), { recursive: true });
+    fs.writeFileSync(path.join(L.GAME_DIR, 'architect', 't5f-test-flags.json'), JSON.stringify({ forceTrace: true }));
     await L.openWorld(world);
     await L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
     let fs1 = null;
