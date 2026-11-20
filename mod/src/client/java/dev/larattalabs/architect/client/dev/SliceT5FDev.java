@@ -238,10 +238,13 @@ public final class SliceT5FDev {
 						}
 						e.discard();
 					}
-					if (broken && got.size() == 0) {
+					if (broken) {
 						// the world's rules spawn no block drops (exact rules: doTileDrops off): the player gets what the break would have dropped
 						for (ItemStack s : would) {
 							String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
+							if (got.has(id)) {
+								continue; // dropped for real, picked up above
+							}
 							got.addProperty(id, (got.has(id) ? got.get(id).getAsInt() : 0) + s.getCount());
 							if (!player.getInventory().add(s.copy())) {
 								throw new IllegalStateException("the player's inventory is full");
@@ -250,6 +253,8 @@ public final class SliceT5FDev {
 					}
 					JsonObject o = new JsonObject();
 					o.addProperty("broken", broken);
+					o.addProperty("wouldDrop", would.size());
+					o.addProperty("after", level.getBlockState(at).toString());
 					o.add("collected", got);
 					return o;
 				});
