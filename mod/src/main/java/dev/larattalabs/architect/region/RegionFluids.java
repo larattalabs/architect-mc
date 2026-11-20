@@ -260,6 +260,16 @@ public final class RegionFluids {
 	static final int CENSUS_EVERY = 5;
 	/** (8cT last round) TEST, DevBridge {@code dev.fluid.hold {drain}}: a removal's or lot's drain W refuses (held) while on. Default off. */
 	public static volatile boolean holdDrain;
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.writeTrace}: while non-null, every body cell {@link #writeBody} writes (a source, ice, a
+	 * grate's bars) is added here: the rows assert Architect's own write, not the cell (vanilla may refill water itself). Default null: off.
+	 */
+	public static volatile java.util.@Nullable Set<Long> writeTrace;
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.forceTrace}: while non-null, every {@link #forceBody} call adds {@code <body>@<gameTime>}
+	 * here: the forced ticks a write (or its replay) scheduled. Default null: off.
+	 */
+	public static volatile java.util.@Nullable List<String> forceTrace;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
 	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's write step (the forced tick, an ordered course's wave) is not run. Default off. */
@@ -1888,6 +1898,10 @@ public final class RegionFluids {
 			if (open && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 				written++;
+				java.util.Set<Long> wt = writeTrace;
+				if (wt != null) {
+					wt.add(p); // (T5Fa TEST) dev.fluid.writeTrace
+				}
 			}
 		}
 		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already); a bed cell's stays as the tiles
@@ -1927,6 +1941,10 @@ public final class RegionFluids {
 	 * outside the body get the fluid tick as any source's.
 	 */
 	static int forceBody(ServerLevel level, Body b) {
+		java.util.List<String> ft = forceTrace;
+		if (ft != null) {
+			ft.add(b.id + "@" + level.getGameTime()); // (T5Fa TEST) dev.fluid.forceTrace
+		}
 		int n = 0;
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		Fluid f = b.source();

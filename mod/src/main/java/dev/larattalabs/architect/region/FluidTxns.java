@@ -42,6 +42,25 @@ public final class FluidTxns {
 	public static final String DRAIN = "fluid.drain";
 	public static final String WRITE = "fluid.write";
 
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.holdChunk}: while non-null ({@code {x, z}}), a removal drain's W apply throws (the txn holds)
+	 * when it reaches that chunk: on the 8cT drain inside its seen loop (the chunks before it already carry their seen receipts), on T5F at
+	 * that chunk's own (body, chunk) W. {@link #holdChunkBefore} answers the chunks done before the throw. Default null: off.
+	 */
+	public static volatile int @Nullable [] holdChunk;
+	/** (slice T5Fa) TEST: the chunks ({@code "x,z"}) whose drain evidence was saved before the last {@link #holdChunk} throw, in order. */
+	public static final java.util.List<String> holdChunkBefore = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+	/** (slice T5Fa) TEST seam: throws when {@code ch} is the held chunk (see {@link #holdChunk}). */
+	static void holdAt(LevelChunk ch, java.util.List<String> before) {
+		int[] h = holdChunk;
+		if (h != null && ch.getPos().x() == h[0] && ch.getPos().z() == h[1]) {
+			holdChunkBefore.clear();
+			holdChunkBefore.addAll(before);
+			throw new IllegalStateException("TEST: dev.fluid.holdChunk " + h[0] + "," + h[1]);
+		}
+	}
+
 	/** Registers both kinds (TxnServer, at load). */
 	public static void register(TxnCore c) {
 		c.register(CHARGE_KIND);
@@ -515,12 +534,20 @@ public final class FluidTxns {
 				// (8cT last round, #2) what the drain sees, per chunk, saved with that chunk before its first write: a chunk whose drain writes reached
 				// disk carries what it saw; a chunk whose snapshot was lost is seen again as it stands (a scan that can't read the journal holds)
 				String group = e.data().get("group").getAsString();
+				List<String> seenBefore = new ArrayList<>();
 				for (LevelChunk ch : chunks) {
+					holdAt(ch, seenBefore); // (T5Fa TEST) dev.fluid.holdChunk: the chunks before it keep their seen receipts
+					seenBefore.add(ch.getPos().x() + "," + ch.getPos().z());
 					if (seenOf(ch, k0) == null) {
 						int cx = ch.getPos().x(), cz = ch.getPos().z();
 						int[] seen = RegionFluids.scoopPlan(level, l, st, group, p -> BlockPos.getX(p) >> 4 == cx && BlockPos.getZ(p) >> 4 == cz);
 						TestMove.addReceiptTo(ch, k0 + "@seen=" + seen[0] + "," + seen[1]);
 					}
+				}
+			}
+			if (!l.rec().survival()) {
+				for (LevelChunk ch : chunks) {
+					holdAt(ch, List.of()); // (T5Fa TEST) dev.fluid.holdChunk, a creative record's drain (no seen loop)
 				}
 			}
 			int n = RegionFluids.removalDrainWrites(level, l, st, e.data().get("group").getAsString(), e.data().get("flowing").getAsInt() == 1);
