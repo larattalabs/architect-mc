@@ -316,8 +316,9 @@ class FluidsT5FRedTest {
 	void q1_tombstoneKeepsTheFinalFluidsRows() {
 		guard();
 		// (Q1) a REMOVED tombstone keeps its last architect_mc:fluids rows, frozen as the removal's last txn wrote done (a capped removal's
-		// foreign and foreignCount included); fluidsRemoval goes null, the rows do not. On dc814bb1 the tombstone's ext has no rows (row
-		// t5-tombstone: rows null after REMOVED). The seam: the rows frozen into the record at done, before the tombstone is written.
+		// foreign and foreignCount included); fluidsRemoval goes null, the rows do not. On dc814bb1 the tombstone (removed.json) keeps rows,
+		// but stale: every body still reads its placement state (settled), never the removal's (row t5-tombstone). The seam: the rows
+		// re-reported and frozen into the record at done, before the tombstone is written.
 		method(RegionFluids.class, "freezeRows", "Q1: the final rows written into the record's ext at the removal's done (the tombstone keeps them)",
 			RegionsImpl.Live.class, RegionFluids.Regional.class);
 	}

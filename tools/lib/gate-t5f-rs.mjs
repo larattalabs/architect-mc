@@ -513,7 +513,8 @@ export async function taken(H) {
 /**
  * t5-tombstone (8cS Q1): after REMOVED, the region's tombstone keeps its final architect_mc:fluids rows (each body's final state; a capped
  * removal's foreign and foreignCount), and fluidsRemoval is null. Read two ways: the tombstone on disk (architect-regions/<id>/removed.json,
- * its ext) and the API's view (dev.region.state, when it serves a tombstone at all). The capped foreign part is not exercised here.
+ * its ext) and the API's view (dev.region.state, when it serves a tombstone at all: on dc814bb1 it does not). On dc814bb1 the rows are
+ * kept but stale (the placement's `settled`, never the removal's final states). The capped foreign part is not exercised here.
  */
 export async function tombstone(H) {
   const { L, check, log, json } = H;
@@ -532,6 +533,8 @@ export async function tombstone(H) {
   log(`  Q1: ${json(out)}`);
   check(fin === 'REMOVED' && !!disk && live.length > 0, `Q1: the precondition: placed with ${live.length} fluids row(s), removed, its tombstone on disk (${f}: ${!!disk})`);
   check(!!rows && rows.length === live.length && rows.every((r) => r.state), `Q1: the tombstone keeps its final fluids rows: ${rows ? rows.length : 'none'} of ${live.length} (${json(out.rows)})`);
+  const stale = (rows ?? []).filter((r) => r.state === 'settled' || r.state === 'written' || r.state === 'pending');
+  check(!!rows && stale.length === 0, `Q1: the rows are the removal's final truth, frozen at its done (each body drained, none still reads its placement state): ${stale.length} of ${rows ? rows.length : 0} still read ${json([...new Set(stale.map((r) => r.state))])}`);
   check(fr === null, `Q1: fluidsRemoval is null on the tombstone (${json(fr)})`);
   return out;
 }
