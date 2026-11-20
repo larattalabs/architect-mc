@@ -1274,7 +1274,7 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
   rules (complete, this tree, every file with tests and no failure: no stale PASS). Fewer files: run here, never wait. A re-run
   that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that speed rule 6 [2] re-runs.
   **Load-scaled timeouts:** `gate-chains.json` `timeoutLoadScale.steps` (unit-kit, -sidecar, -scope) spend `min(1, ref / load1)` of
-  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (speed rule 12 [10]'s spirit: bounded, recorded as
+  their timeout per wall minute (ref: the machine's cores since GRA, `"ref": "cores"`; before, `slots.load.max1` >= 72), capped at 2x wall (speed rule 12 [10]'s spirit: bounded, recorded as
   `timeoutLoadScale` in `summary.json`). Load, not CPU time: node --test children exit and Gradle's daemon is outside the group, so
   `ps` under-counts (`tools/lib/load-timeout.mjs`; tests `kit/test/gate-load-timeout.test.mjs`, `gate-kit-producer.test.mjs`).
 
@@ -2872,7 +2872,11 @@ what follows the speed rules (the earlier per-slice verifier text is in docs/arc
    10 min), at most the configured `timeoutMin`, with at least 5 samples) or the configured one (see "Gate speed").
    - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the shard's run-worktree processes are stopped (gradle
      and its daemon/workers, the client JVM, the sidecar, vitest, the client scripts, matched by their paths in that worktree).
-     Nothing else is touched. Stray apitest jars are removed from `mods/`.
+     Nothing else is touched. Stray apitest jars are removed from `mods/`. A TIMEOUT is never a pass. The runner records what it knew
+     at the kill (`summary.json` `timeout`: elapsed wall seconds, the limit and its source, load 1/5/15 then, a load-scaled step's
+     budget account) and prints it as one line in runner.log (`TIMEOUT: killed at its timeout after 15m17s wall (limit 15 min, ...);
+     load at the kill ...; a TIMEOUT, not a test FAIL`), in the table's key numbers and under "Not passing", where the log tail is
+     labelled "last output before the kill" (GRA).
    - **After any step that doesn't pass**, that shard's client is stopped. Its next step starts a fresh one.
    - **Verdicts.** PASS means exit 0, no `FAIL` lines, and at least one `ok` line. Unit tests use parsed counts instead.
    - **Failures.** The run continues past a failure, unless the step is `stopOnFail`. A step with `after` is skipped if that
@@ -3090,3 +3094,32 @@ Gate infra 2 plus the gate-runner leftovers GR-a; tooling, two mod minors, no AP
   (rule 10 bounds unchanged). **junit-reuse** takes `Class.method` patterns (globs; fails closed). **j3's split** compares every mod.
 - **A32**: a hopper is no anchor (`Builder.anchorState`); `removeScaffold` returns false on a failed take-down and `complete` leaves the
   site BUILDING, retried every 200 ticks. CLI units: api-baselines-build, plan-catalogue-diff, step-inputs, api-compat (kit/test/tool-clis).
+
+### Slice GRA as built
+
+Gate-runner leftovers after v0.86.0; tooling only, units only (speed rule 11). Each item was checked against origin/main 30f2a9b4
+first.
+- **Load-aware unit-suite timeouts.** v0.86.0's change gate (`gate-runs/20261119-140508-change`) killed unit-sidecar at 15m17s, mean
+  load 36 (23-54), 37 of 76 files done, no hang: files took 9-11 min each under that load. Seven unit-sidecar TIMEOUTs at 15:00-15:31
+  are in the history next to PASSes up to 14m51s. Two causes compounded:
+  1. GR-b's load scale used rule 10's start gate (72) as its ref, so at load 21-41 on 18 cores (CPU 1.2-2.3x oversubscribed) a wall
+     minute still spent a full budget minute. `timeoutLoadScale.ref` is now `"cores"` (`machineCores`, `GATE_CPU_CORES` overrides);
+     a config without `ref` keeps the old max(72, max1). The 2x wall cap is unchanged, so a real hang still ends.
+  2. unit-sidecar's configured 15 min capped its history timeout: p90 713 s makes 2 x p90 = 24 min. `timeoutMin` 15 -> 30 (as
+     fb-unit: a ceiling, the history picks the limit), `estMin` 0.65 -> 7 (p50 409 s). Both fields are outside the definition hash,
+     so history and cache keys do not move. Bound now: about 24 min at load <= 18, at most 48 wall minutes under any load.
+  The task's "unit-kit 20 min" was already 40 (GI2). Tests: `kit/test/gate-load-timeout.test.mjs` (ref cores, the v0.86.0 replay:
+  ref 72 spends all 15 min, ref 18 about half; the hang bound; the timeout record).
+- **A TIMEOUT reads as one** (`timeoutRecord` / `timeoutNote` in `tools/lib/load-timeout.mjs`): see "TIMEOUT" above.
+- **api-compat on an offline lane (951 MISSING): already fixed by GI2.** The CP run (`gate-runs-cp/20261115-023346-change`, head
+  a548f142) predates GI2 (bd3b6fcf). Since then api-compat has run on o1/o2/o3 (r075, r076, r077, r079, 20261119-115010) with every
+  member check ok, through `GATE_UNIT_MOD_RUN` and `tools/lib/api-classes.mjs`. Its remaining 2 FAILs in those runs are the newest
+  release's baseline jars missing under the main checkout's `artifacts/api-baselines/` (`api-baselines-build.mjs build vX`), not
+  the lane. No scheduler change.
+- **co-compose's sidecar restarts: already fixed by GI2** (the devserver probe re-probes a slow sidecar for 20 s and keeps its own
+  live one, see GI2 above). The two STOP_THEN_START restarts are in `gate-runs-cp/20261115-040728-change` (head before GI2); no client
+  log since 2026-11-16 has one. Not re-observed in game: co-compose has not run since. Its 30-min `TimeoutException` on that run
+  (design d109 requested after the second restart, d111 at 30 min) has no proven cause; a leftover for the next co-compose run.
+- **gitleaks false positives in CONTRACT.md: already allowlisted** (0534a07d, `.gitleaks.toml`, scoped to generic-api-key, the file
+  and `^6b-scenario-s1\W?$`). Checked: default rules alone report exactly the 4 CONTRACT.md hits; with the repo config 0, history and
+  tree; a planted fake `api_key = "..."` line and a `apijars = 6b-scenario-s1<suffix>` lookalike in a scratch copy are both caught.
