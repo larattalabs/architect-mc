@@ -139,9 +139,11 @@ class StockpileEmptyPendingDCTest {
 	@Test
 	void everyRoadCreditGoesThroughCreditRefund() throws Exception {
 		String g = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Groups.java");
-		String gc = StockpileSaveHFTest.body(g, "private static void credit(MinecraftServer server, Removal r, String id)");
-		assertTrue(gc.contains("Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);"), "a group member's credit");
-		assertFalse(gc.contains("dropPending"), "Groups.credit leaves the pending credit to the credit rule");
+		// (slice T4R, R1) a group member's credit is its removal.group txn's pile.refund (CrateSettle.bookRefund -> Stockpiles.credit, which
+		// drops the pending credit by the credit rule), never a direct Groups.credit
+		assertFalse(g.contains("private static void credit(MinecraftServer server, Removal r, String id)"), "no direct group member credit");
+		String cs = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "CrateSettle.java");
+		assertTrue(cs.contains("Stockpiles.credit(srv, p, key, new TreeMap<>(items), at);"), "a group member's credit goes through Stockpiles.credit");
 		String rj = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "RestoreJob.java");
 		assertTrue(rj.contains("Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null)"), "a single road's");
 		String b = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Builder.java");

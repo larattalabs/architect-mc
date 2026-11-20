@@ -687,14 +687,22 @@ public final class Stockpiles {
 	 */
 	public static CrateRemoval removeCrate(MinecraftServer srv, String owner, BlockPos at, boolean force) throws Sites.SiteException {
 		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
-		requirePileFree(owner);
 		Pile p = get(owner);
 		if (p == null) {
+			requirePileFree(owner);
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
 		CrateRec c = p.crates.stream().filter(x -> x.pos().equals(at)).findFirst().orElse(null);
 		if (c == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, at.toShortString() + " is not a crate of the stockpile of " + owner);
+		}
+		// (slice T4R, R7, Steward 5(b)) a removal txn holding the pile never blocks an unrelated crate's removal: refused only when that txn
+		// holds this very crate, or this is the pile's last crate (the removal credits the pile; checked below). Any other kind holding the
+		// pile (an adoption, a crate move) still refuses every crate removal
+		String why = dev.larattalabs.architect.txn.TxnServer.crateRemovalRefusal("pile:" + owner, dev.larattalabs.architect.txn.CrateTxn.resource(
+			p.dimension, at), p.crates.size() == 1);
+		if (why != null) {
+			throw new Sites.SiteException(Reason.SITE_BUSY, owner + "'s stockpile: an open transaction holds it (" + why + ")", "held(other)");
 		}
 		ServerLevel level = Sites.levelOf(srv, p.dimension);
 		if (level == null || !level.isLoaded(at)) {

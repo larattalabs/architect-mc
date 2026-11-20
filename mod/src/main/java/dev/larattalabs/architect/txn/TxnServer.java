@@ -72,6 +72,7 @@ public final class TxnServer {
 		c.register(CrateTxn.SETTLE_KIND); // (slice T2b part 2b)
 		c.register(RemovalTxn.SITE_KIND); // (slice T4b)
 		c.register(RemovalTxn.ROAD_KIND);
+		c.register(RemovalTxn.GROUP_KIND); // (slice T4R)
 		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
 	}
 
@@ -130,6 +131,7 @@ public final class TxnServer {
 			DELIVERED.clear();
 			QUEUED.clear();
 			core = emptyCore("no world loaded");
+			dev.larattalabs.architect.site.Sites.txnLoaded(false);
 			DurableBarrier.clearAfterOk();
 			dev.larattalabs.architect.site.PileAdopt.worldClosed(); // (T3b final check P2-3)
 		});
@@ -179,6 +181,7 @@ public final class TxnServer {
 		file = new DurableFile("txn", p); // a loaded generation counts only after its re-force (T0)
 		c.load(doc, failure);
 		core = c;
+		dev.larattalabs.architect.site.Sites.txnLoaded(c.loadFailed() != null); // (slice T4R) loadHealthy counts the txn file
 		if (c.loadFailed() != null) {
 			Architect.LOGGER.error("Txn: {} - every txn operation is refused this session (the file is kept for ops)", c.loadFailed());
 		} else if (c.anyOpen()) {
@@ -444,6 +447,24 @@ public final class TxnServer {
 		return t == null ? null : Holds.other(t, resource);
 	}
 
+	/**
+	 * (slice T4R, R7, Steward 5(b)) Why a stockpile crate's removal is refused by an open txn, or null. {@code pile}: the pile's resource;
+	 * {@code crate}: the crate's own resource; {@code last}: it is the pile's last crate. A removal txn refuses it only when it holds that crate
+	 * or (the last crate) it holds the pile it credits; any other kind holding the pile refuses it as before. Server thread.
+	 */
+	public static @Nullable String crateRemovalRefusal(String pile, String crate, boolean last) {
+		TxnCore c = core;
+		if (c.holds().isEmpty()) {
+			return null;
+		}
+		TxnEntry holder = c.holds().holder(pile);
+		if (holder != null && (!holder.kind.startsWith("removal.") || last)) {
+			return Holds.other(holder, pile);
+		}
+		TxnEntry own = c.holds().holder(crate);
+		return own == null ? null : Holds.other(own, crate);
+	}
+
 	// ------------------------------------------------------------------ the env
 
 	static final class GameEnv implements TxnEnv {
@@ -539,6 +560,11 @@ public final class TxnServer {
 			String line = t.id + " " + event + (replayed ? " (replayed)" : "") + " " + payload;
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
+				if ("removal_finished".equals(event)) {
+					// (slice T4R, P1-4) a group's or stage's removal finished: its one REMOVAL_FINISHED, built from the payload captured at planning and
+					// the result its effects left (the credits, the owed keys); delivered at least once (re-fired after recovery until delivered)
+					dev.larattalabs.architect.apiimpl.ApiEvents.finishedNow(RemovalTxn.finished(t, payload));
+				}
 				if ("stockpile_changed".equals(event) && payload.has("owner")) {
 					// (slice T3b fix round, GPT P2-4; final check P2-2) the txn's persisted payload marks the pile changed: Stockpiles' own limiter
 					// fires STOCKPILE_CHANGED (at least once, at most once per 20 ticks, never doubled with the ledger's own change)

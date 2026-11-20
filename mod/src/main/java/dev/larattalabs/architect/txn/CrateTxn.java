@@ -90,7 +90,11 @@ public final class CrateTxn {
 	}
 
 	/** What a settle answered: owed keys, what it gave back (owed or credited), a hold's detail, a refusal. */
-	public record Answer(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused, boolean replayed) {
+	public record Answer(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused, boolean replayed,
+		com.google.gson.@Nullable JsonObject result) {
+		public Answer(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused, boolean replayed) {
+			this(owed, given, held, refused, replayed, null);
+		}
 	}
 
 	/** The pure plan of a settle (R-1): its effects in order. The seam {@code CrateSettlePlanTest} drives. */
@@ -121,6 +125,20 @@ public final class CrateTxn {
 		return out;
 	}
 
+	/**
+	 * (slice T4R, R1) {@link #plan(Settle, int)} for a group member inside its {@code removal.group} txn: the take never a prepare effect (the
+	 * group's decision is its committed undo), the refund capped by W effect {@code w} only when {@code minOf}.
+	 */
+	public static List<Effect.Builder> planOf(Settle in, int w, boolean minOf) {
+		List<Effect.Builder> out = plan(in, Math.max(w, 0));
+		if (!minOf) {
+			for (Effect.Builder b : out) {
+				b.dropData("minOf");
+			}
+		}
+		return out;
+	}
+
 	static Effect.Builder book(Settle in, String key, Map<String, Integer> items, String reason) {
 		if (in.pile() != null) {
 			return Effect.of(PILE_CREDIT, EffectClass.L).items(items).move(Effect.TRANSIT, "stock").data("owner", in.pile()).data("key", key);
@@ -147,6 +165,12 @@ public final class CrateTxn {
 	 * besides the crate (the removal's box). The crate is held only when the settle takes from it or restores it.
 	 */
 	public static Answer settle(Settle in, String kind, List<Effect.Builder> first, List<Effect.Builder> last, List<String> more) {
+		return settle(in, kind, first, last, more, null);
+	}
+
+	/** (slice T4R, P1-4) {@link #settle}, with {@code fin}: the removal's restore counts, kept as its {@code removal_result} payload. */
+	public static Answer settle(Settle in, String kind, List<Effect.Builder> first, List<Effect.Builder> last, List<String> more,
+		com.google.gson.@Nullable JsonObject fin) {
 		TxnCore c = TxnServer.core();
 		List<String> res = new java.util.ArrayList<>(more);
 		if (SETTLE.equals(kind) || !in.stock().isEmpty() || in.restore()) {
@@ -160,8 +184,10 @@ public final class CrateTxn {
 			return new Answer(List.of(), Map.of(), null, "journal_unavailable: " + s.detail(), false);
 		}
 		if (s.status() == TxnCore.Begin.REPLAYED) {
-			// (T4b fix round, P2) the owed keys its committed result saved, never rebuilt from this call's input (its crate may be gone now)
-			return new Answer(owedOf(s.done() == null ? null : s.done().result(), in), Map.of(), null, null, true);
+			// (T4b fix round, P2) the owed keys its committed result saved, never rebuilt from this call's input (its crate may be gone now).
+			// (slice T4R, P1-4) what it gave, from the same cached result (never an empty map)
+			com.google.gson.JsonObject done = s.done() == null ? null : s.done().result();
+			return new Answer(owedOf(done, in), itemsOf(done, "given"), null, null, true, done);
 		}
 		if (s.status() == TxnCore.Begin.ATTACHED) {
 			return new Answer(owedOf(java.util.Objects.requireNonNull(s.entry())), Map.of(), s.detail() != null ? s.detail() : "attached", null, true);
@@ -179,6 +205,9 @@ public final class CrateTxn {
 		for (Effect.Builder b : last) {
 			c.plan(t, b);
 		}
+		if (fin != null) {
+			c.payload(t, "removal_result", fin);
+		}
 		dev.larattalabs.architect.site.DurableFile.Outcome p = c.persist(t);
 		if (p == dev.larattalabs.architect.site.DurableFile.Outcome.REFUSED) {
 			return new Answer(List.of(), Map.of(), null, "journal_unavailable: txn.json " + p, false);
@@ -192,9 +221,9 @@ public final class CrateTxn {
 			String reason = why == null || why.isJsonNull() ? "?" : why.isJsonPrimitive() ? why.getAsString() : why.toString();
 			return new Answer(List.of(), Map.of(), st == TxnCore.Status.HELD || t.held() != null ? "abort held: " + Holds.decided(t) : null, "aborted: " + reason, false);
 		}
-		Map<String, Integer> given = new java.util.TreeMap<>(in.stock());
-		in.refund().forEach((k, v) -> given.merge(k, v, Integer::sum));
-		return new Answer(owedOf(t), given, st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false);
+		// (slice T4R, P1-4) what its effects paid (after the min; a pile-only refund included), from the entry
+		com.google.gson.JsonObject out = resultOf(t);
+		return new Answer(owedOf(t), itemsOf(out, "given"), st == TxnCore.Status.HELD || t.held() != null ? Holds.decided(t) : null, null, false, out);
 	}
 
 	/** (T4b fix round, P2) The owed keys an entry's O effects created (an owe whose min found nothing creates none). */
@@ -218,13 +247,66 @@ public final class CrateTxn {
 		return owedOf(in);
 	}
 
-	/** A settle's result: the owed keys it created (replayed from the cache, never rebuilt). */
+	/**
+	 * A settle's result: the owed keys it created (replayed from the cache, never rebuilt). (slice T4R, P1-4) Complete from the entry alone:
+	 * {@code given} every amount its L and O effects paid (after the min), {@code refund} the credited (L) part (a pile-only refund
+	 * included), and the restore's counts, hand-down and cascade from its {@code removal_result} / {@code removal_finished} payload.
+	 */
 	static com.google.gson.JsonObject resultOf(TxnEntry t) {
 		com.google.gson.JsonObject r = new com.google.gson.JsonObject();
 		JsonArray a = new JsonArray();
 		owedOf(t).forEach(a::add);
 		r.add("owed", a);
+		java.util.Map<String, Integer> given = new java.util.TreeMap<>();
+		java.util.Map<String, Integer> refund = new java.util.TreeMap<>();
+		for (Effect e : t.effects) {
+			boolean l = PILE_CREDIT.equals(e.op()) || RemovalTxn.PILE_REFUND.equals(e.op());
+			if (!l && !OWE.equals(e.op())) {
+				continue;
+			}
+			java.util.Map<String, Integer> m;
+			try {
+				m = RemovalTxn.amount(t, e);
+			} catch (RuntimeException x) {
+				m = e.items(); // a chunk not readable now: the planned amount (never more than planned)
+			}
+			m.forEach((k, v) -> given.merge(k, v, Integer::sum));
+			if (l) {
+				m.forEach((k, v) -> refund.merge(k, v, Integer::sum));
+			}
+		}
+		r.add("given", counts(given));
+		r.add("refund", counts(refund));
+		com.google.gson.JsonObject fin = t.payloads.get("removal_result") instanceof com.google.gson.JsonObject x ? x : t.payloads.get(
+			"removal_finished") instanceof com.google.gson.JsonObject y ? y : null;
+		if (fin != null) {
+			for (String k : new String[] {"restored", "kept", "handed", "cascaded", "drops"}) {
+				if (fin.has(k)) {
+					r.add(k, fin.get(k).deepCopy());
+				}
+			}
+		}
 		return r;
+	}
+
+	/** (slice T4R) {@link #resultOf} for an open entry (a group's progress so far). */
+	public static com.google.gson.JsonObject resultNow(TxnEntry t) {
+		return resultOf(t);
+	}
+
+	static com.google.gson.JsonObject counts(java.util.Map<String, Integer> m) {
+		com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+		m.forEach(o::addProperty);
+		return o;
+	}
+
+	/** (slice T4R) Items from a result's {@code key} object (given, refund, drops). */
+	public static java.util.Map<String, Integer> itemsOf(com.google.gson.@Nullable JsonObject result, String key) {
+		java.util.Map<String, Integer> m = new java.util.TreeMap<>();
+		if (result != null && result.get(key) instanceof com.google.gson.JsonObject o) {
+			o.entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return m;
 	}
 
 	static List<String> owedOf(Settle in) {

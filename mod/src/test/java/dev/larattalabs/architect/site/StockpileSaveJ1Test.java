@@ -65,7 +65,8 @@ class StockpileSaveJ1Test {
 		assertTrue(tu.indexOf("Stockpiles.saveCreditConfirmed(server);") > tu.indexOf("bookTakeUp("), "a lot's take-ups are saved once they book");
 
 		String g = read(SITE + "Groups.java");
-		assertTrue(g.contains("Stockpiles.saveCredit(server);"), "Groups.credit goes through saveCredit (PS)");
+		// (slice T4R, R1) a group member's credit is published by its removal.group txn's member barrier (players, chunks, then the ledger)
+		assertTrue(read("src/main/java/dev/larattalabs/architect/txn/TxnCore.java").contains("TxnEnv.Barrier mb = env.barrier();"), "a group member's credit is published by its member barrier");
 	}
 
 	@Test
@@ -99,7 +100,7 @@ class StockpileSaveJ1Test {
 		assertTrue(rb.contains("tallyOf(level, road, dropPlayerMatches(level, road))"), "a standalone road's refund leaves them out"); // (T4b fix round: per cell)
 		String g = read(SITE + "Groups.java");
 		int m = g.indexOf("RoadBuilder.dropPlayerMatches(level, inf, false)"); // (DR-S) found for the tally, dropped after the credits' save
-		assertTrue(m >= 0 && m < g.indexOf("RoadBuilder.refundOf(level, inf, dropped)"), "a group's road refund leaves them out");
+		assertTrue(m >= 0 && m < g.indexOf("RoadBuilder.tallyOf(level, inf, dropped)"), "a group's road refund leaves them out");
 	}
 
 	@Test

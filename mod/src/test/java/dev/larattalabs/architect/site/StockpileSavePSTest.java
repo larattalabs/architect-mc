@@ -165,11 +165,11 @@ class StockpileSavePSTest {
 		assertTrue(save.contains("if (loadFailed)"), "save() refuses");
 
 		String g = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Groups.java")).replaceAll("//[^\n]*", "");
-		String credit = StockpileSaveHFTest.body(g, "private static void credit(MinecraftServer server, Removal r, String id)");
-		int booked = credit.indexOf("Builder.creditRefund(");
-		int saved = credit.indexOf("Stockpiles.saveCredit(server);"); // (J1) saveCredit: saveWithWorld unless the TEST switch
-		assertTrue(booked >= 0 && saved > booked, "N1: a booked refund credit is saved with the world right after it");
-		assertTrue(credit.substring(booked, saved).contains("if (!already)"), "only when it booked (once per key)");
+		// (slice T4R, R1) N1 for a group member: its credit is a removal.group txn effect, keyed (once per key), published by the member barrier
+		// right after it (players, chunks, then the ledger) before the member leaves the removal's list
+		String core = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/txn/TxnCore.java"));
+		assertTrue(core.contains("public static final String BARRIER = \"txn.barrier\";") && core.contains("TxnEnv.Barrier mb = env.barrier();"), "N1: member barriers");
+		assertTrue(g.contains("GroupTxn.memberDone(r, id0)"), "a member leaves the list only once its settle is durable");
 
 		String pl = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Placement.java")).replaceAll("//[^\n]*", "");
 		String psave = StockpileSaveHFTest.body(pl, "static long save(MinecraftServer srv, boolean clean)"); // (PSV) answers its generation

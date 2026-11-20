@@ -53,6 +53,11 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 	public static final String NOT_LOADED = "not_loaded";
 	public static final String OCCUPIED = "occupied";
 	public static final String PLAYER_IN_BOX = "player_in_box";
+	/**
+	 * The reason of a {@link #REMOVING} status whose removal is decided and held (its txn finishes it by itself, then the site is absent; a
+	 * {@code REMOVAL_FINISHED} follows). Since NEXT.
+	 */
+	public static final String HELD_DECIDED = "held(decided)";
 
 	/**
 	 * The precedence when several hold, highest first, a strict order (documented and pinned by a table test): a removal, a failure, a

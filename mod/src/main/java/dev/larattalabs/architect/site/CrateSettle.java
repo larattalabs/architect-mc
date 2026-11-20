@@ -220,6 +220,105 @@ public final class CrateSettle {
 		return withCells(o, cells, road.box());
 	}
 
+	/**
+	 * (slice T4R, R1) A group member's stockpile credit (a gate mechanism's charge, a pre-T4R queue's {@code decCredit}) as a pile stash:
+	 * credited by the group's txn after the member's W. {@code cells} null: no per-cell min (the planned amounts stand).
+	 */
+	static JsonObject pileCreditStash(String site, String dim, String owner, String key, Map<String, Integer> refund, BlockPos at,
+		java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells, dev.larattalabs.architect.placement.Anchors.@Nullable Bounds box) {
+		JsonObject o = new JsonObject();
+		o.addProperty("key", "pile-refund:" + key);
+		o.addProperty("dim", dim);
+		o.addProperty("pos", at.asLong());
+		o.addProperty("recipient", owner);
+		o.addProperty("pile", owner);
+		o.addProperty("site", site);
+		o.addProperty("pileKey", key);
+		o.add("refund", Builder.counts(refund));
+		if (box == null) {
+			if (cells != null) {
+				withCells(o, cells, new dev.larattalabs.architect.placement.Anchors.Bounds(0, 0, 0, 0, 0, 0));
+				o.remove("box");
+			}
+			return o;
+		}
+		return withCells(o, cells, box);
+	}
+
+	/**
+	 * (slice T4R, R1) Plans one group member's settle into its {@code removal.group} txn, after that member's W effect {@code w} (-1: none,
+	 * its restore already settled): the same effects {@link #settle} runs alone (its crate's stock read now, under the txn's hold from its
+	 * begin; its refunds paying min(planned, found by w); its crate cell restored and its entry released; or a stockpile's refund), each
+	 * tagged with {@code member}. {@code res}: the crates and piles it holds. Server thread.
+	 */
+	static List<dev.larattalabs.architect.txn.Effect.Builder> planInto(ServerLevel level, JsonObject stash, int w, String member, java.util.Set<String> res) {
+		List<dev.larattalabs.architect.txn.Effect.Builder> out = new java.util.ArrayList<>();
+		String key = stash.get("key").getAsString();
+		String dim = stash.get("dim").getAsString();
+		BlockPos pos = posOf(stash);
+		String recipient = stash.get("recipient").getAsString();
+		String site = stash.has("site") ? stash.get("site").getAsString() : null;
+		String region = stash.has("region") ? stash.get("region").getAsString() : null;
+		if (isPileStash(stash)) {
+			String owner = stash.get("pile").getAsString();
+			String pk = stash.get("pileKey").getAsString();
+			Stockpiles.Pile p = Stockpiles.get(owner);
+			Map<String, Integer> refund = refundOf(stash);
+			if (p == null) {
+				if (!refund.isEmpty()) { // its pile gone: owed to its owner, never dropped
+					dev.larattalabs.architect.txn.Effect.Builder ow = dev.larattalabs.architect.txn.Effect.of(CrateTxn.OWE, dev.larattalabs.architect.txn.EffectClass.O)
+						.items(refund).move("world", "owed").data("key", key).data("recipient", owner).data("dim", dim).data("pos", posJsonOf(pos)).data("reason",
+							OwedLedger.GROUP_REFUND);
+					if (site != null) {
+						ow.data("site", site);
+					}
+					out.add(w >= 0 ? ow.data("minOf", w) : ow);
+				}
+			} else {
+				res.add("pile:" + owner);
+				if (!p.ledger.credited(pk)) {
+					dev.larattalabs.architect.txn.Effect.Builder pr = dev.larattalabs.architect.txn.RemovalTxn.pileRefund(owner, pk, refund, pos);
+					out.add(w >= 0 ? pr.data("minOf", w) : pr);
+				}
+			}
+			out.forEach(b -> b.member(member));
+			return out;
+		}
+		String pile = stash.has("pile") ? stash.get("pile").getAsString() : null;
+		if (pile != null && Stockpiles.get(pile) == null) {
+			pile = null; // dissolved since: owed instead
+		}
+		Map<String, Integer> refund = refundOf(stash);
+		boolean crate = false;
+		if (hasCrate(stash)) {
+			String owner = stash.get("crateOwner").getAsString();
+			if (level.getBlockEntity(pos) instanceof CrateBlockEntity be && owner.equals(be.siteId())) {
+				Map<String, Integer> stock = be.ledger().heldStock();
+				if (stash.has("sharedGroup")) {
+					SiteGroupRec sg = Sites.group(stash.get("sharedGroup").getAsString());
+					if (sg != null) {
+						Sites.putGroup(level.getServer(), sg.withDelivered(be.ledger().delivered()));
+					}
+				}
+				out.addAll(CrateTxn.planOf(new CrateTxn.Settle(key, dim, pos, stock, refund, recipient, pile, site, region, stash.get("state").getAsString(), stash.has(
+					"nbt") ? stash.get("nbt").getAsString() : null, owner, true), Math.max(w, 0), w >= 0));
+				res.add(CrateTxn.resource(dim, pos));
+				crate = true;
+			} else if (!(level.getBlockEntity(pos) instanceof CrateBlockEntity)) {
+				releaseJournal(owner); // no crate stands there: its entry goes (idempotent)
+			}
+		}
+		if (!crate && !refund.isEmpty()) {
+			out.addAll(CrateTxn.planOf(new CrateTxn.Settle(key, dim, pos, Map.of(), refund, recipient, pile, site, region, null, null, null, false), Math.max(w,
+				0), w >= 0));
+		}
+		if (pile != null && !out.isEmpty()) {
+			res.add("pile:" + pile);
+		}
+		out.forEach(b -> b.member(member));
+		return out;
+	}
+
 	/** Whether {@code stash} is a stockpile site's refund ({@link #pileStash}). */
 	static boolean isPileStash(@Nullable JsonObject stash) {
 		return stash != null && stash.has("pileKey");
@@ -242,6 +341,11 @@ public final class CrateSettle {
 			}
 		}
 		return group;
+	}
+
+	/** (slice T4R, R1) Whether a group's removal still has to write {@code site}'s restore in undo group {@code group} itself (its W waits). */
+	public static boolean writeWaits(String site, String group) {
+		return Groups.writes(site, group);
 	}
 
 	/** (T4b fix round, finding 2) Whether the world journal can't be read now: its entries' absence then proves nothing (hold). */
@@ -421,6 +525,9 @@ public final class CrateSettle {
 		if (p == null) {
 			throw new IllegalStateException(owner + " has no stockpile now");
 		}
+		if (!p.ledger.custody(key).isEmpty() && !p.ledger.credited(key)) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("FKC2"); // (TEST, Steward's alias) the member's W done, its custody's credit not yet
+		}
 		if (items.isEmpty() && p.ledger.custody(key).isEmpty()) {
 			Stockpiles.creditOfNothing(p, key);
 			p.ledger.credit(key, new TreeMap<>(), Stockpiles.capacity(srv, p), Stockpiles::maxStack); // the probe's key: booked once
@@ -493,7 +600,31 @@ public final class CrateSettle {
 	public static volatile boolean WRITING;
 
 	static void boxesChanged() {
-		HELD = heldOf(DURABLE.values());
+		List<JsonObject> all = new java.util.ArrayList<>(DURABLE.values());
+		all.addAll(HOLD_ONLY.values());
+		HELD = heldOf(all);
+	}
+
+	/**
+	 * (slice T4R, R2) Holds kept in memory only, from the queue's load on: a pre-T4 queued road removal's footprint before (and while) its
+	 * conversion's stash is saved, so no player mines a paid block of it inside the start grace or while that save is refused.
+	 */
+	private static final Map<String, JsonObject> HOLD_ONLY = new TreeMap<>();
+
+	static void holdOnly(String id, JsonObject stash) {
+		HOLD_ONLY.put(id, stash.deepCopy());
+		boxesChanged();
+	}
+
+	static void forgetHoldOnly(String id) {
+		if (HOLD_ONLY.remove(id) != null) {
+			boxesChanged();
+		}
+	}
+
+	static void clearHoldOnly() {
+		HOLD_ONLY.clear();
+		boxesChanged();
 	}
 
 	/** (T4 final round's seam) The holds of {@code stashes}: each one's box, its site, its footprint ("hold": cell longs) when it names one. Pure. */
@@ -756,9 +887,10 @@ public final class CrateSettle {
 	 * when its removal was a single removal (not a group's or a stage's undo, whose decCredit stays legacy until T4c).
 	 */
 	static boolean convertible(JsonObject stash, @Nullable String group) {
-		// (slice T4c, tried and backed out) a group's or stage's credit stays legacy: converted at the start, its member's txn restored it and
-		// booked the credit, but its pending record stayed (dr-survival DR4b/DR8: STUCK after the settle). Its own conversion needs Groups' side
-		return !stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-");
+		// (slice T4R, R1) a group's or stage's credit converts like a single removal's. One its group's removal still owns (queued, or its
+		// removal.group txn open) is that removal's (converted from its decCredit, credited by its txn after its W) and never reaches here
+		// (Sites.reconcile skips owned members first); one no removal owns any more is a single removal.site txn's: W from its undo, then paid
+		return true;
 	}
 
 
@@ -821,8 +953,21 @@ public final class CrateSettle {
 	}
 
 	/** The result of one settle: owed keys (for {@code RemoveResult.owed()}), what it gave back, whether it is held (retry) or refused. */
-	record Settled(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused) {
-		static final Settled NONE = new Settled(List.of(), Map.of(), null, null);
+	record Settled(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused, @Nullable JsonObject result) {
+		static final Settled NONE = new Settled(List.of(), Map.of(), null, null, null);
+
+		Settled(List<String> owed, Map<String, Integer> given, @Nullable String held, @Nullable String refused) {
+			this(owed, given, held, refused, null);
+		}
+
+		/** (slice T4R) The credited part (L) of what it paid: {@code refund} of its txn's result, else what it gave when nothing is owed. */
+		Map<String, Integer> credited() {
+			return result != null && result.has("refund") ? CrateTxn.itemsOf(result, "refund") : owed.isEmpty() ? given : Map.of();
+		}
+
+		int restored() {
+			return result != null && result.has("restored") ? result.get("restored").getAsInt() : 0;
+		}
 
 		boolean done() {
 			return held == null;
@@ -888,8 +1033,13 @@ public final class CrateSettle {
 	 * (a group removal's member, T4c's) settles as T2b did.
 	 */
 	record Removal(String kind, List<dev.larattalabs.architect.txn.Effect.Builder> first, List<dev.larattalabs.architect.txn.Effect.Builder> last,
-		List<String> more, @Nullable String held) {
-		static final Removal LEGACY = new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), null);
+		List<String> more, @Nullable String held, @Nullable JsonObject fin) {
+		static final Removal LEGACY = new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), null, null);
+
+		Removal(String kind, List<dev.larattalabs.architect.txn.Effect.Builder> first, List<dev.larattalabs.architect.txn.Effect.Builder> last,
+			List<String> more, @Nullable String held) {
+			this(kind, first, last, more, held, null);
+		}
 	}
 
 	static Removal removalOf(ServerLevel level, JsonObject stash) {
@@ -913,11 +1063,16 @@ public final class CrateSettle {
 				.get(4).getAsInt(), bx.get(5).getAsInt()));
 		}
 		com.google.gson.JsonArray cells = stash.get("cells") instanceof com.google.gson.JsonArray ca ? ca : null;
+		JsonObject fin = null;
 		if (group != null && undoneExists(site, group)) {
 			try {
 				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group, cells), cells));
+				SiteJournal.Restore r0 = SiteJournal.restore(level, site, group);
+				fin = new JsonObject(); // (slice T4R, P1-4) its restore's count, kept with the txn: a replayed or recovered result reports it
+				fin.addProperty("restored", r0.cells().size());
+				fin.addProperty("kept", 0);
 				if (more.isEmpty()) {
-					SiteJournal.Restore r = SiteJournal.restore(level, site, group);
+					SiteJournal.Restore r = r0;
 					dev.larattalabs.architect.placement.Anchors.Bounds b = r.box();
 					if (b != null) {
 						more.add(dev.larattalabs.architect.txn.RemovalTxn.box(dim, b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()));
@@ -954,7 +1109,7 @@ public final class CrateSettle {
 				}
 			}
 		}
-		return new Removal(kind, first, last, more, null);
+		return new Removal(kind, first, last, more, null, fin);
 	}
 
 	static Settled run(CrateTxn.Settle in) {
@@ -967,7 +1122,7 @@ public final class CrateSettle {
 		}
 		CrateTxn.Answer a;
 		try {
-			a = CrateTxn.settle(in, rm.kind(), rm.first(), rm.last(), rm.more());
+			a = CrateTxn.settle(in, rm.kind(), rm.first(), rm.last(), rm.more(), rm.fin());
 		} finally {
 			refundPublished();
 		}
@@ -980,7 +1135,7 @@ public final class CrateSettle {
 		if (a.refused() != null) {
 			Architect.LOGGER.warn("crate.settle {}: refused ({}): the crate stays as it stands, its stock in it", in.key(), a.refused());
 		}
-		return new Settled(a.owed(), a.given(), a.held(), a.refused());
+		return new Settled(a.owed(), a.given(), a.held(), a.refused(), a.result());
 	}
 
 	// ------------------------------------------------------------------ a single removal's settle at a restart (its pending record)
@@ -1022,11 +1177,15 @@ public final class CrateSettle {
 			resumeLater(srv, siteId); // held: next tick (the crate keeps its stock)
 			return;
 		}
-		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)
 		Architect.LOGGER.info("crate.settle of removed {} at a restart: owed {}, given {}", siteId, s.owed(), s.given());
-		// (slice T4c) the held, decided removal finished by itself (this session or after a restart): REMOVAL_FINISHED with its result
-		dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), s.owed().isEmpty() ? Map.copyOf(s.given()) : Map.of(), 0,
-			0, Map.of(), List.of(), List.of(), List.copyOf(s.owed())));
+		if (!st.has("removalGroup")) {
+			// (slice T4c) the held, decided removal finished by itself (this session or after a restart): REMOVAL_FINISHED with its result.
+			// (slice T4R, P1-4) the full result from its txn (the credited refund, the restore's count; a replay's from its cached result),
+			// fired before its stash is forgotten: a crash before the event leaves the stash, and the replay fires it again (at least once)
+			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), Map.copyOf(s.credited()), s.restored(), 0, Map.of(),
+				List.of(), List.of(), List.copyOf(s.owed())));
+		}
+		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)
 	}
 
 	/**
@@ -1065,13 +1224,21 @@ public final class CrateSettle {
 			}
 			return;
 		}
+		Infra gone = Infras.pending(roadId);
+		Architect.LOGGER.info("removal.road of {} at a restart: owed {}, given {}", roadId, s.owed(), s.given());
+		// (slice T4R, P1-4) a recovered road's removal finished: REMOVAL_FINISHED with its refund, before its stash and record go (a crash
+		// before it replays the settle, which fires it again)
+		dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(roadId, new Sites.Removed(null, Map.copyOf(s.credited()), s.restored(), 0, Map.of(),
+			List.of(), List.of(), List.copyOf(s.owed())));
 		forgetDurable(roadId);
 		// its restore is on disk (the txn's barrier came before its retirement): its undone entries go, then its pending record
 		List<String> ids = SiteJournal.entries(roadId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.UNDONE)
 			.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList();
 		SiteJournal.releaseGroup(ids);
 		Infras.drop(srv, roadId);
-		Architect.LOGGER.info("removal.road of {} at a restart: owed {}, given {}", roadId, s.owed(), s.given());
+		if (gone == null) {
+			Architect.LOGGER.warn("removal.road of {}: no pending record at its end", roadId);
+		}
 	}
 
 	// ------------------------------------------------------------------ the hooks the adapters reach (server thread)

@@ -26,6 +26,14 @@ public final class RemovalTxn {
 	}
 
 	public static final String SITE = "removal.site", ROAD = "removal.road";
+	/**
+	 * (slice T4R, R1) A group's or stage's removal: one txn per removal call (N1), keyed {@code group:<id>[/stage]@<undoGroup>}, begun once its
+	 * undo committed (the journal's undo group is the decision). Per paid member: its W {@link #RESTORE}, a member barrier, its L/O/settle
+	 * (minOf its W), a member barrier; then the group's shared crate; then {@link #GROUP_DONE}, which waits for the group's own end.
+	 */
+	public static final String GROUP = "removal.group";
+	/** (slice T4R) The R effect that waits until the group's removal ended (its queue entry gone): only then the txn finishes and fires its event. */
+	public static final String GROUP_DONE = "group.done";
 	/** The W effect: the removed site's committed restore. Data {@code dim}, {@code site}, {@code group}, {@code chunks} ([[cx, cz], ...]). */
 	public static final String RESTORE = "site.restore";
 	/**
@@ -128,6 +136,11 @@ public final class RemovalTxn {
 			}
 			String site = e.data().get("site").getAsString();
 			String group = e.data().get("group").getAsString();
+			if (CrateSettle.writeWaits(site, group)) {
+				// (slice T4R, R1) a group member its group's removal still writes (over ticks, one member at a time): the W waits for that write and
+				// only receipts it, never writes ahead of the group (nor a whole region in one tick)
+				throw new IllegalStateException("waits for its group's write");
+			}
 			if (e.data().get("cells") instanceof JsonArray a) {
 				recordFound(level, site, group, a); // (T4b fix round, N3) before any write: kept where recorded already (never re-read after it)
 			}
@@ -290,6 +303,36 @@ public final class RemovalTxn {
 		}
 	};
 
+	/** (slice T4R) {@link #GROUP_DONE}: applied (a no-op) once its group's removal ended; while the removal runs it waits. */
+	static final TxnKind.Adapter GROUP_DONER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("group") ? null : "group is required";
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return dev.larattalabs.architect.site.Groups.liveRemoval(t.key) ? Probe.ABSENT : Probe.APPLIED;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			if (dev.larattalabs.architect.site.Groups.liveRemoval(t.key)) {
+				throw new IllegalStateException("waits for its group's removal to end");
+			}
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("never a prepare effect");
+		}
+
+		@Override
+		public String where(TxnEntry t, Effect e) {
+			return "the removal of group " + e.data().get("group").getAsString();
+		}
+	};
+
 	static TxnKind kind(String name) {
 		return new TxnKind() {
 			@Override
@@ -307,6 +350,7 @@ public final class RemovalTxn {
 				return switch (e.op()) {
 					case RESTORE -> RESTORER;
 					case PILE_REFUND -> PILE_REFUNDER;
+					case GROUP_DONE -> GROUP_DONER;
 					case CrateTxn.TAKE -> CrateTxn.ADAPTER;
 					case CrateTxn.RESTORE -> CrateTxn.RESTORE_ADAPTER;
 					case CrateTxn.RELEASE -> CrateTxn.RELEASER;
@@ -323,7 +367,7 @@ public final class RemovalTxn {
 		};
 	}
 
-	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD);
+	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD), GROUP_KIND = kind(GROUP);
 
 	/**
 	 * (T4 final round, P1 3) The site or road whose removal {@code t} settles ({@code ""} when {@code t} is no removal's txn): its W restore's
@@ -339,6 +383,28 @@ public final class RemovalTxn {
 			}
 		}
 		return "";
+	}
+
+	/** (slice T4R, P1-4) A group's REMOVAL_FINISHED from its txn's payload and result: kind region or group (never both), the full result. */
+	static dev.larattalabs.architect.api.RemovalFinished finished(TxnEntry t, com.google.gson.JsonObject p) {
+		com.google.gson.JsonObject res = t.result != null && t.result.has("refund") ? t.result : CrateTxn.resultOf(t);
+		java.util.Map<String, Integer> refund = CrateTxn.itemsOf(p, "drops");
+		CrateTxn.itemsOf(res, "refund").forEach((k, v) -> refund.merge(k, v, Integer::sum));
+		java.util.Map<String, Integer> handed = CrateTxn.itemsOf(p, "handed");
+		java.util.List<String> cascaded = new java.util.ArrayList<>();
+		if (p.get("cascaded") instanceof JsonArray c) {
+			c.forEach(x -> cascaded.add(x.getAsString()));
+		}
+		java.util.List<String> owed = new java.util.ArrayList<>();
+		if (res.get("owed") instanceof JsonArray o) {
+			o.forEach(x -> owed.add(x.getAsString()));
+		}
+		dev.larattalabs.architect.api.RemoveResult rr = new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(
+			refund), p.has("restored") ? p.get("restored").getAsInt() : 0, p.has("kept") ? p.get("kept").getAsInt() : 0, handed, cascaded, owed);
+		String stage = p.has("stage") ? p.get("stage").getAsString() : null;
+		Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
+		String region = p.has("region") ? p.get("region").getAsString() : null;
+		return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, rr);
 	}
 
 	/** A removal box (N3): {@code rbox:<dim>@x0,y0,z0:x1,y1,z1}. While an open removal txn names one, no player breaks a block in it. */

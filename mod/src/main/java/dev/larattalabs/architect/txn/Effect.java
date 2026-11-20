@@ -144,6 +144,12 @@ public record Effect(int i, String op, EffectClass cls, boolean prepare, Map<Str
 			return this;
 		}
 
+		/** (slice T4R) Removes a data field set earlier (a group member's settle planned without a min). */
+		public Builder dropData(String k) {
+			data.remove(k);
+			return this;
+		}
+
 		Effect build(int i) {
 			return new Effect(i, op, cls, prepare, items, from, to, member, data);
 		}

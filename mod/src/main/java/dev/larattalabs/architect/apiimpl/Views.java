@@ -52,6 +52,16 @@ public final class Views {
 	}
 
 	/** A site as the API sees it; {@code server} null = no progress counts. */
+	/** (slice T4R, R3) {@code v} as a decided removal not yet settled: status removing, reason held(decided). */
+	public static SiteView removingHeld(SiteView v) {
+		dev.larattalabs.architect.api.BuildStatus st = new dev.larattalabs.architect.api.BuildStatus(dev.larattalabs.architect.api.BuildStatus.REMOVING,
+			dev.larattalabs.architect.api.BuildStatus.HELD_DECIDED, null, java.util.Map.of(), 0, 0L, "being removed (held, decided): it finishes by itself",
+			v.revision(), null);
+		return new SiteView(v.id(), v.blueprintId(), v.owner(), v.ext(), v.box(), v.restoreBox(), v.rotation(), v.dimension(), v.state(), v.built(), v.queued(),
+			v.group(), v.batchId(), v.itemKey(), v.kind(), v.policy(), v.covers(), v.coveredBy(), v.version(), v.headVersion(), v.deviations(), v.updating(),
+			v.region(), v.siteWait(), st, v.part(), v.lot(), v.revision());
+	}
+
 	public static SiteView site(@Nullable MinecraftServer server, Site s) {
 		int[] p = server == null || s.construction() == null ? new int[] {0, 0} : Builder.progress(server, s);
 		if (s.placing()) {

@@ -39,25 +39,10 @@ final class RepairCommands {
 			repair.then(Commands.literal("log").executes(ctx -> log(ctx, null)).then(Commands.argument("planId", StringArgumentType.word()).executes(
 				ctx -> log(ctx, StringArgumentType.getString(ctx, "planId")))));
 			scopesWithConfirm(repair);
-			// (slice PSVLC3 fix round, GPT P1 3) the ops way out of a stalled removal another stalled removal of its group blocks
-			var removal = Commands.literal("removal").requires(RepairCommands::ops).then(Commands.literal("resume").then(Commands.argument("group",
-				StringArgumentType.word()).executes(ctx -> resumeRemoval(ctx, null)).then(Commands.argument("stage", StringArgumentType.word()).executes(
-					ctx -> resumeRemoval(ctx, StringArgumentType.getString(ctx, "stage"))))));
-			dispatcher.register(Commands.literal("architect").then(diagnose).then(repair).then(removal));
+			// (slice T4R, N7) /architect removal resume is gone: a held, decided removal retries by itself, and /architect txn resolve is the
+			// only ops path
+			dispatcher.register(Commands.literal("architect").then(diagnose).then(repair));
 		});
-	}
-
-	/** {@code /architect removal resume <group> [stage]}: {@link Groups#resumeStalled}. */
-	private static int resumeRemoval(CommandContext<CommandSourceStack> ctx, @Nullable String stage) {
-		String group = StringArgumentType.getString(ctx, "group");
-		String no = Groups.resumeStalled(ctx.getSource().getServer(), group, stage);
-		if (no != null) {
-			ctx.getSource().sendFailure(Component.literal(no));
-			return 0;
-		}
-		ctx.getSource().sendSuccess(() -> Component.literal("Resumed the stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage
-			+ " of group " + group)), true);
-		return 1;
 	}
 
 	static boolean ops(CommandSourceStack src) {

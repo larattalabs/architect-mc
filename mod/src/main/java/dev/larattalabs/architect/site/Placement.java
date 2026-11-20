@@ -442,6 +442,9 @@ public final class Placement {
 
 	/** (T4 final round) Whether a queued job's settle, credit or take-up writes the ledger (owed or stock), so it parks while saving is off. */
 	static boolean anyLedgerJob() {
+		if (Groups.anyLedgerRemoval()) {
+			return true; // (slice T4R, R1) a group or stage removal that settles through the ledger, a construction-only one too (no pile)
+		}
 		for (Job j : JOBS) {
 			if (j instanceof RestoreJob rj && (rj.settle != null || rj.credit != null || survivalPending(rj.siteId))
 				|| j instanceof PlaceJob pj && (pj.construction || pj.phase == PlaceJob.TAKE_UP) || j instanceof InfraJob ij && ij.phase == InfraJob.TAKE_UP) {
@@ -837,6 +840,17 @@ public final class Placement {
 					resume(srv, e.getAsJsonObject(), clean);
 				} catch (RuntimeException ex) {
 					Architect.LOGGER.warn("Could not resume a placement job {}", e, ex);
+				}
+			}
+		}
+		// (slice T4R, R2) a pre-T4 queued road removal's footprint held from now on (before the start grace ends, before its conversion)
+		CrateSettle.clearHoldOnly();
+		for (Job j : JOBS) {
+			if (j instanceof RestoreJob rj && rj.legacyRoad()) {
+				try {
+					rj.holdLegacy(srv);
+				} catch (RuntimeException ex) {
+					Architect.LOGGER.warn("Could not hold the pre-T4 road removal {}", rj.siteId, ex);
 				}
 			}
 		}

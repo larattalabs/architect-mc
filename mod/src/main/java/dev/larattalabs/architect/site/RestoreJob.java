@@ -148,7 +148,16 @@ final class RestoreJob implements Placement.Job {
 	public boolean step(MinecraftServer server, long deadline) {
 		long t0 = System.nanoTime();
 		int p0 = phase;
-		boolean r = step0(server, deadline);
+		boolean r;
+		dev.larattalabs.architect.txn.TxnEntry own = Groups.txnOf(group);
+		if (own != null) {
+			// (slice T4R, R1) a group member's restore is its removal.group txn's own write: the boxes that txn holds accept it
+			boolean[] out = new boolean[1];
+			dev.larattalabs.architect.txn.TxnServer.asHolder(own, () -> out[0] = step0(server, deadline));
+			r = out[0];
+		} else {
+			r = step0(server, deadline);
+		}
 		if (Sites.Trace.ON) {
 			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} restore {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase,
 				(System.nanoTime() - t0) / 1e6, r ? " done" : "");
@@ -557,10 +566,10 @@ final class RestoreJob implements Placement.Job {
 		if (RemovalSeal.paused(siteId, cellCursor)) {
 			return false; // (TEST, slice LC3) dev.removal.pause
 		}
-		if (settle != null && settle.has("road") && group != null) {
+		if ((settle != null && settle.has("road") || found != null) && group != null) {
 			// (T4b fix round, N3) what of its refunded cells stands before its first write, recorded in their chunks (kept where recorded
-			// already): its removal txn's W receipts it, and its refunds pay min(planned, found)
-			CrateSettle.recordFound(level, siteId, group, settle);
+			// already): its removal txn's W receipts it, and its refunds pay min(planned, found). (slice T4R) a group's paid road too ({@link #found})
+			CrateSettle.recordFound(level, siteId, group, settle != null && settle.has("road") ? settle : found);
 		}
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
@@ -749,6 +758,24 @@ final class RestoreJob implements Placement.Job {
 		return credit != null && settle == null && REMOVE.equals(purpose) && (group == null || group.startsWith("u:remove-"));
 	}
 
+	/** (slice T4R, R1) A group's paid road member: its stash (its refunded cells), for the found receipts before its first write. Not saved. */
+	transient @Nullable JsonObject found;
+
+	/**
+	 * (slice T4R, R2) From the queue's load (before Placement's start grace ends and before any conversion): a pre-T4 road removal's footprint
+	 * held in memory, so no player mines a paid block of it before its conversion's stash is durable.
+	 */
+	void holdLegacy(MinecraftServer server) {
+		Infra inf = Infras.get(siteId) != null ? Infras.get(siteId) : Infras.pending(siteId);
+		if (inf == null || credit == null) {
+			return;
+		}
+		JsonObject st = CrateSettle.pileRoadStash(inf, credit.owner(), credit.key(), credit.items(), null, BlockPos.of(credit.at()));
+		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
+		CrateSettle.holdOnly(siteId, st);
+		dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: a pre-T4 road removal: its footprint held from the queue's load", siteId);
+	}
+
 	/** (T4 final round) The legacy road's conversion waits (logged once). */
 	private transient @Nullable String legacyWait;
 
@@ -767,16 +794,26 @@ final class RestoreJob implements Placement.Job {
 		if (why != null) {
 			return why;
 		}
-		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), null, BlockPos.of(c.at()));
+		// (slice T4R, R2) the converted credit carries found-cells evidence: the road's paid cells standing now (held since the queue loaded),
+		// so its refund pays min(the pre-T4 credit, what its W finds standing) per chunk
+		ServerLevel level = Sites.levelOf(server, inf.dimension());
+		java.util.Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells = level == null ? null : RoadBuilder.tallyOf(level, inf, RoadBuilder
+			.dropPlayerMatches(level, inf, false)).cells();
+		if (cells == null) {
+			return inf.dimension() + " is not loaded";
+		}
+		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), cells, BlockPos.of(c.at()));
 		st.addProperty("legacyRoad", true);
 		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
 		CrateSettle.holdDurable(siteId, st);
 		try {
 			Stockpiles.saveWithWorldConfirmed(server);
 		} catch (IllegalStateException e) {
-			CrateSettle.forgetDurable(siteId);
+			// (slice T4R, R2) a refused save keeps the stash and its hold (in memory, with the queue's load-time hold) and the old credit: retried,
+			// never paid through C29, never a mine of a paid block meanwhile
 			return "its stash could not be saved (" + e.getMessage() + ")";
 		}
+		CrateSettle.forgetHoldOnly(siteId);
 		settle = st;
 		credit = null;
 		Placement.save(server, false); // the job carries its stash now (a start before this write converts it again, keyed: never twice)

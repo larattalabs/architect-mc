@@ -32,6 +32,36 @@ public final class TxnCore {
 	/** {@code txn.json}'s format; a newer one is a load failure for txns (§3.8). */
 	public static final int FORMAT = 1;
 	public static final String FILE = "txn.json";
+	/**
+	 * (slice T4R, TXN §3 "barrier covering every W chunk of member m") A member barrier: an effect the core runs itself. On the forward pass
+	 * (after the decision) it runs the env's barrier when any effect was applied since the previous one, and holds the txn when that barrier
+	 * is refused; its probe is always APPLIED (it changes nothing). A {@code removal.group} plans one after each member's W effects and one
+	 * after its L/O/settle, so a member is paid only once its restore is on disk and is durable before the next member goes on.
+	 */
+	public static final String BARRIER = "txn.barrier";
+
+	private static final TxnKind.Adapter BARRIER_ADAPTER = new TxnKind.Adapter() {
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return Probe.APPLIED;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+		}
+	};
+
+	/** The adapter for {@code e}: the core's own for {@link #BARRIER}, else its kind's. */
+	static TxnKind.@Nullable Adapter adapterOf(TxnKind k, Effect e) {
+		return BARRIER.equals(e.op()) ? BARRIER_ADAPTER : k.adapter(e);
+	}
+
+	/** Effects applied by this core (a member barrier runs only over applies since the previous one). */
+	private long applies;
 
 	/** TEST seams: TxnCrashModel's naive variants (each reproduces one reviewed counterexample). Production uses the defaults. */
 	public static final class Options {
@@ -215,7 +245,7 @@ public final class TxnCore {
 				throw new TxnEntry.Invalid(id + ": decider " + t.decider + " is not the kind's " + k.decider());
 			}
 			for (Effect f : t.effects) {
-				TxnKind.Adapter a = k.adapter(f);
+				TxnKind.Adapter a = adapterOf(k, f);
 				if (a == null) {
 					throw new TxnEntry.Invalid(id + ": no adapter for " + f.op());
 				}
@@ -343,7 +373,7 @@ public final class TxnCore {
 			throw new IllegalStateException(t.id + ": a journal-decided kind plans its D effect");
 		}
 		for (Effect f : t.effects) {
-			TxnKind.Adapter a = Objects.requireNonNull(k).adapter(f);
+			TxnKind.Adapter a = adapterOf(Objects.requireNonNull(k), f);
 			if (a == null) {
 				throw new IllegalStateException(t.id + ": no adapter for " + f.op());
 			}
@@ -572,7 +602,7 @@ public final class TxnCore {
 			}
 			if (p == Probe.ABSENT) {
 				try {
-					Objects.requireNonNull(k.adapter(e)).apply(t, e);
+					Objects.requireNonNull(adapterOf(k, e)).apply(t, e);
 				} catch (RuntimeException ex) {
 					t.result.addProperty("refused", "effect " + e.i() + ": " + ex.getMessage());
 					return beginAbort(k, t); // a prepare effect refused: abort before the decision
@@ -602,8 +632,23 @@ public final class TxnCore {
 		if (written != null && !compensate(k, t, written)) {
 			return false;
 		}
+		long mark = applies;
 		for (Effect e : t.effects) {
 			if (e.prepare() && !opt.redoPrepare || e.cls() == EffectClass.D || written != null && e.member() != null && !written.contains(e.member())) {
+				continue;
+			}
+			if (BARRIER.equals(e.op())) {
+				// (slice T4R) a member barrier: what was applied since the previous one made durable before anything after it
+				if (applies != mark) {
+					TxnEnv.Barrier mb = env.barrier();
+					kill(t, "barrier:member");
+					if (!mb.ok()) {
+						hold(t, "barrier refused: " + mb.reason(), null); // after the decision: never compensated, retried
+						return false;
+					}
+					mark = applies;
+				}
+				t.passed = Math.max(t.passed, e.i());
 				continue;
 			}
 			if (!applyIfAbsent(k, t, e)) {
@@ -641,7 +686,7 @@ public final class TxnCore {
 			}
 			if (p == Probe.APPLIED) {
 				try {
-					Objects.requireNonNull(k.adapter(e)).compensate(t, e);
+					Objects.requireNonNull(adapterOf(k, e)).compensate(t, e);
 				} catch (RuntimeException ex) {
 					hold(t, "compensation of effect " + e.i() + " refused: " + ex.getMessage(), where(k, t, e));
 					return false;
@@ -695,11 +740,12 @@ public final class TxnCore {
 			return false;
 		}
 		try {
-			Objects.requireNonNull(k.adapter(e)).apply(t, e);
+			Objects.requireNonNull(adapterOf(k, e)).apply(t, e);
 		} catch (RuntimeException ex) {
 			hold(t, "effect " + e.i() + " refused: " + ex.getMessage(), where(k, t, e));
 			return false;
 		}
+		applies++;
 		kill(t, "apply:" + e.i());
 		return true;
 	}
@@ -746,14 +792,14 @@ public final class TxnCore {
 
 	private Probe probe(TxnKind k, TxnEntry t, Effect e) {
 		try {
-			return Objects.requireNonNull(k.adapter(e)).probe(t, e);
+			return Objects.requireNonNull(adapterOf(k, e)).probe(t, e);
 		} catch (RuntimeException ex) {
 			return Probe.UNKNOWN;
 		}
 	}
 
 	private static String where(TxnKind k, TxnEntry t, Effect e) {
-		TxnKind.Adapter a = k.adapter(e);
+		TxnKind.Adapter a = adapterOf(k, e);
 		try {
 			return a == null ? e.op() : a.where(t, e);
 		} catch (RuntimeException ex) {

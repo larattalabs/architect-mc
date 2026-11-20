@@ -79,11 +79,24 @@ public final class ApiEvents {
 	public static void removalFinished(String group, @org.jspecify.annotations.Nullable String stage, @org.jspecify.annotations.Nullable Integer revisionId,
 		dev.larattalabs.architect.site.Groups.Removed r) {
 		RemoveResult res = new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed());
-		finished(new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.GROUP, group, stage, revisionId, res));
 		String region = stage == null ? Views.regionOfGroupPublic(group) : null;
-		if (region != null) {
-			finished(new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.REGION, region, null, null, res));
-		}
+		finished(finishedOf(group, stage, revisionId, region, res));
+	}
+
+	/**
+	 * (slice T4R, P1-4) The one REMOVAL_FINISHED of a group's or stage's removal: kind {@code region} (its id the region's) when it removes a
+	 * whole region's group, else kind {@code group} (an undoRevision's stage carries its {@code revisionId}). Never both. Pure.
+	 */
+	public static dev.larattalabs.architect.api.RemovalFinished finishedOf(String group, @org.jspecify.annotations.Nullable String stage,
+		@org.jspecify.annotations.Nullable Integer revisionId, @org.jspecify.annotations.Nullable String region, RemoveResult res) {
+		return region != null && stage == null ? new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.REGION,
+			region, null, null, res) : new dev.larattalabs.architect.api.RemovalFinished(dev.larattalabs.architect.api.RemovalFinished.GROUP, group, stage,
+				revisionId, res);
+	}
+
+	/** (slice T4R) Fires one REMOVAL_FINISHED (a txn's payload at its delivery, or a removal with no txn). */
+	public static void finishedNow(dev.larattalabs.architect.api.RemovalFinished f) {
+		finished(f);
 	}
 
 	private static void finished(dev.larattalabs.architect.api.RemovalFinished f) {

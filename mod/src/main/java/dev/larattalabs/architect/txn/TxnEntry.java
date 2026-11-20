@@ -50,6 +50,14 @@ public final class TxnEntry {
 	@Nullable String held;
 	/** The resource its hold names ({@code chunk x,z}, {@code player <name>}), or null. */
 	@Nullable String heldAt;
+	/** (slice T4R) The highest member barrier ({@link TxnCore#BARRIER}) a drive passed this session: every effect before it is durable. */
+	int passed = -1;
+
+	/** (slice T4R) Whether every effect up to {@code i} is durable: a member barrier at or after it was passed, or its effects are done. */
+	public boolean durableThrough(int i) {
+		return passed >= i || phase == Phase.EFFECTS_DONE || phase == Phase.RETIRING;
+	}
+
 	/** (slice T3b, TEST dev.txn.pauseAt) The point its drive stopped at, held open until the pause is cleared; null when not paused. */
 	@Nullable String paused;
 

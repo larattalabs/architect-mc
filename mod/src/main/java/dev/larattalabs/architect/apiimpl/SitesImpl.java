@@ -115,7 +115,18 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			return Optional.of(Views.site(server, s));
 		}
 		dev.larattalabs.architect.site.Infra i = dev.larattalabs.architect.site.Infras.get(siteId);
-		return i == null ? Optional.empty() : Optional.of(Views.infra(i));
+		if (i != null) {
+			return Optional.of(Views.infra(i));
+		}
+		// (slice T4R, R3) a decided removal not yet settled stays listed: status removing, held(decided), until its txn retires
+		Object held = Sites.decidedRemoval(siteId);
+		if (held instanceof Site ps) {
+			return Optional.of(Views.removingHeld(Views.site(server, ps)));
+		}
+		if (held instanceof dev.larattalabs.architect.site.Infra pi) {
+			return Optional.of(Views.removingHeld(Views.infra(pi)));
+		}
+		return Optional.empty();
 	}
 
 	/** Runs on the server thread: now when already there, else queued. */

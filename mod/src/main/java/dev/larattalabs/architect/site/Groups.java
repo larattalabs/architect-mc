@@ -52,9 +52,6 @@ public final class Groups {
 		/** (T2b last round, group report P2) the owed keys its settles wrote (listed apart from the refund; this session's). */
 		final List<String> owed = new ArrayList<>();
 		final List<CompletableFuture<Removed>> futures = new ArrayList<>();
-		/** (T4 final round) A member whose credit's save was refused: it stays until a confirmed save (retried); in memory (a restart resumes it). */
-		transient @Nullable String creditWait;
-		transient long creditRetryAt;
 		/** (slice T4c) The region revision whose undo removes this stage, or null; persisted. */
 		@Nullable Integer revisionId;
 		/** (slice T4c) Its call answered held(decided) (decided, not done): it retries by itself and fires REMOVAL_FINISHED when done. */
@@ -139,6 +136,14 @@ public final class Groups {
 		final Map<String, JsonObject> decSettle = new LinkedHashMap<>();
 		/** (T2b part 2b) The group's shared crate's settle (its stock), once every member is written; null when none or done. */
 		@Nullable JsonObject crateSettle;
+		/**
+		 * (slice T4R, R1) Its {@code removal.group} txn once begun (this session: begun, attached after a restart), and whether it was found
+		 * retired already. Not saved: its key ({@link GroupTxn#key}) finds it again.
+		 */
+		transient dev.larattalabs.architect.txn.@Nullable TxnEntry gtx;
+		transient boolean gtxDone;
+		/** (slice T4R) Why its txn waits to begin (logged once). */
+		transient @Nullable String gtxWait;
 
 		Removal(String group, @Nullable String stage, @Nullable String requester, boolean force) {
 			this.group = group;
@@ -298,6 +303,20 @@ public final class Groups {
 			if (o.has("credit")) {
 				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
 			}
+			if (r.undo != null || r.planned != null) {
+				// (slice T4R, R1) a pre-T4R queue's member credits (decCredit, a held J2 credit beside it) converted like a single removal's: a pile
+				// stash its removal.group txn credits once the member's W is done (keyed: a credit booked already is never booked again)
+				for (var e : new ArrayList<>(r.decCredit.entrySet())) {
+					Credit c = e.getValue();
+					if (!r.decSettle.containsKey(e.getKey())) {
+						JsonObject st = CrateSettle.pileCreditStash(e.getKey(), dimensionOf(e.getKey()), c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null,
+							null);
+						st.addProperty("legacy", true);
+						r.decSettle.put(e.getKey(), st);
+					}
+					r.decCredit.remove(e.getKey());
+				}
+			}
 			return r;
 		}
 
@@ -325,34 +344,6 @@ public final class Groups {
 			Map<String, Integer> items = new TreeMap<>();
 			o.getAsJsonObject("items").entrySet().forEach(i -> items.put(i.getKey(), i.getValue().getAsInt()));
 			return new Credit(o.get("owner").getAsString(), o.get("key").getAsString(), items, o.get("at").getAsLong());
-		}
-	}
-
-	/** 6c Y: credits a member's stockpile refunds (once per key); what was credited joins the removal's refund. */
-	private static void credit(MinecraftServer server, Removal r, String id) {
-		Credit c = r.decCredit.get(id);
-		if (c == null) {
-			return;
-		}
-		Stockpiles.Pile p = Stockpiles.get(c.owner());
-		ServerLevel level = p != null ? Sites.levelOf(server, p.dimension()) : Sites.levelOf(server, dimensionOf(id));
-		if (level == null) {
-			return;
-		}
-		boolean already = p != null && p.ledger().credited(c.key());
-		Map<String, Integer> held = p == null ? Map.of() : p.ledger().custody(c.key()); // (M5 FK) the declared containers' contents
-		if (!held.isEmpty() && !already) {
-			dev.larattalabs.architect.journal.WorldJournal.kill("FKC2"); // (TEST) the restore written, the custody's credit not yet
-		}
-		Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);
-		if (!already) {
-			c.items().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
-			held.forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
-			// (slice PS, audit N1) the credit is saved with the world (players, the restored chunks flushed, the ledger) before the caller
-			// drops the member from the saved removal (and end() drops the removal, its decCredit with it): a crash after that point finds the
-			// refund in the saved ledger, never the building gone and its refund gone. Before it, the removal resumes and credits the key
-			// again (once per key: the saved ledger hasn't it).
-			Stockpiles.saveCredit(server);
 		}
 	}
 
@@ -468,30 +459,6 @@ public final class Groups {
 				return "the undo of stage " + x.stage + " of group " + group + " is in progress; remove the group once it ends";
 			}
 		}
-		return null;
-	}
-
-	/**
-	 * (fix round, GPT P1 3) The ops way out of a stalled removal that another stalled removal of its group blocks (only a queue file from
-	 * before this admission rule can hold two): resumes the named one as a retry does, past {@link #stalledRefusal}. Answers why not, or null
-	 * when it was resumed. Server thread.
-	 */
-	public static @Nullable String resumeStalled(MinecraftServer server, String group, @Nullable String stage) {
-		if (Placement.loadFailed()) {
-			return UNRECORDABLE;
-		}
-		for (Removal r : REMOVALS) {
-			if (r.group.equals(group)) {
-				return "a removal of group " + group + " is in progress";
-			}
-		}
-		Removal st = stalled(group, stage);
-		if (st == null) {
-			return "no stalled " + (stage == null ? "removal of group " + group : "undo of stage " + stage + " of group " + group);
-		}
-		Architect.LOGGER.warn("Removal of group {}{}: resumed by an operator", group, stage == null ? "" : " stage " + stage);
-		resume(st, new CompletableFuture<>());
-		Placement.save(server, false);
 		return null;
 	}
 
@@ -1035,20 +1002,6 @@ public final class Groups {
 	 * things in a box stop the removal before anything is written.
 	 */
 	private static void tick(MinecraftServer server, Removal r) {
-		if (r.creditWait != null) {
-			if (tick < r.creditRetryAt) {
-				return;
-			}
-			try {
-				Stockpiles.saveCreditConfirmed(server); // (T4 final round) the waiting member's credit on disk first
-			} catch (IllegalStateException e) {
-				r.creditRetryAt = tick + 100;
-				return;
-			}
-			r.sites.remove(r.creditWait);
-			written.add(r.creditWait);
-			r.creditWait = null;
-		}
 		if (r.current != null) {
 			if (Placement.job(r.current) != null) {
 				return; // a restore job runs (Placement); removed() moves on
@@ -1059,10 +1012,13 @@ public final class Groups {
 					.size() - 1)) ? r.handed : Map.of()));
 				return;
 			}
-			credit(server, r, r.current); // 6c Y: its restore was written (before a load): credited now, once per key
-			r.sites.remove(r.current);
-			written.add(r.current);
-			r.current = null;
+			if (GroupTxn.planned(r, r.current)) {
+				r.current = null; // (slice T4R) a paid member stays until its settle is durable: the head of the list goes on with it (its W)
+			} else {
+				r.sites.remove(r.current);
+				written.add(r.current);
+				r.current = null;
+			}
 		}
 		if (!r.started) {
 			// the group's running batches are cancelled first (their placing items roll back)
@@ -1127,48 +1083,92 @@ public final class Groups {
 		} else {
 			pendAll(server, r); // after a load: the records go pending if they did not yet (R3)
 		}
-		// (T2b part 2b) the crate.settle of each member written: before the next member (held: this tick ends, retried next)
-		if (!settleWritten(server, r)) {
+		// (slice T4R, R1) the decision is durable: the removal.group txn holds every paid member's W, its settle and the shared crate's
+		String gw = GroupTxn.ensure(server, r);
+		if (gw != null) {
+			if (!gw.equals(r.gtxWait)) {
+				Architect.LOGGER.warn("Removal of group {}: its removal.group txn waits to begin: {}", r.group, gw);
+			}
+			r.gtxWait = gw;
+			r.nextCheck = tick + 20;
 			return;
 		}
-		// R4: the writes, last placed first
-		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null
-			&& Infras.pending(r.sites.get(0)) == null)) {
-			if (r.undoSites.contains(r.sites.get(0))) {
-				credit(server, r, r.sites.get(0)); // 6c Y: written before a load (its record is gone): credited now, once per key
+		r.gtxWait = null;
+		// R4: the writes, last placed first. A member leaves the list only once its settle is durable (its txn's member barrier passed), so the
+		// saved list is never ahead of a held settle
+		while (!r.sites.isEmpty()) {
+			String id0 = r.sites.get(0);
+			boolean paid = r.undoSites.contains(id0) && GroupTxn.planned(r, id0);
+			if (paid && GroupTxn.memberDone(r, id0)) {
+				r.sites.remove(0);
+				r.decSettle.remove(id0);
+				written.add(id0);
+				continue;
 			}
-			r.sites.remove(0);
-		}
-		if (r.sites.isEmpty() && r.crateSettle != null) {
-			// (T2b part 2b) every member written: the group's shared crate settles (its stock), then its cell and its entry
-			ServerLevel cl = Sites.levelOf(server, r.crateSettle.get("dim").getAsString());
-			CrateSettle.Settled st = cl == null ? CrateSettle.Settled.NONE : CrateSettle.settle(cl, r.crateSettle);
-			if (!st.done()) {
-				return;
+			if (!paid && (!r.undoSites.contains(id0) || Sites.pendingRecord(id0) == null && Sites.get(id0) == null && Infras.pending(id0) == null)) {
+				r.sites.remove(0);
+				continue;
 			}
-			if (st.owed().isEmpty()) {
-				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
-			}
-			r.owed.addAll(st.owed());
-			r.crateSettle = null;
-			Placement.save(server, false);
+			break;
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells,
-				null, List.copyOf(r.owed)));
+			// every member settled: the shared crate (planned last in the txn) settles too before the removal ends
+			String held = GroupTxn.drive(r);
+			if (!GroupTxn.memberDone(r, GroupTxn.crateMember(r.group))) {
+				if (held != null) {
+					end(server, r, new Removed(false, List.of(held), Map.copyOf(r.refund)));
+				}
+				return;
+			}
+			Map<String, Integer> refund = new TreeMap<>(r.refund);
+			GroupTxn.credited(r).forEach((k, v) -> refund.merge(k, v, Integer::sum)); // credited only: owed is listed apart
+			List<String> owed = new ArrayList<>(r.owed);
+			GroupTxn.owed(r).forEach(k -> {
+				if (!owed.contains(k)) {
+					owed.add(k);
+				}
+			});
+			end(server, r, new Removed(true, List.of(), refund, r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells, null, owed));
 			return;
 		}
 		String id = r.sites.get(0);
+		boolean paid = GroupTxn.planned(r, id);
+		if (paid && written(id)) {
+			// written (this session), its settle not durable yet: the txn goes on (a refused barrier holds it: held(decided), retried)
+			String held = GroupTxn.drive(r);
+			if (GroupTxn.memberDone(r, id)) {
+				r.sites.remove(0);
+				r.decSettle.remove(id);
+				Placement.save(server, false);
+			} else if (held != null) {
+				end(server, r, new Removed(false, List.of(held), Map.copyOf(r.refund)));
+			}
+			return;
+		}
 		Site s = Sites.pendingRecord(id);
 		if (s == null && Infras.pending(id) != null) {
 			// a road or cell site of the group: its cells over ticks
 			r.current = id;
-			Placement.add(server, RestoreJob.writing(id, r.undo, Map.of()));
+			RestoreJob job = RestoreJob.writing(id, r.undo, Map.of());
+			job.found = r.decSettle.get(id); // (slice T4R) a paid road: what of its cells stands before its first write, for its W's min
+			Placement.add(server, job);
 			killAfterAMember(r);
 			return;
 		}
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
 		if (s == null || level == null) {
+			if (paid) {
+				// its record is gone (nothing for the group to write from): its W writes its restore from the journal itself, then it settles
+				String held = GroupTxn.drive(r);
+				if (GroupTxn.memberDone(r, id)) {
+					r.sites.remove(0);
+					r.decSettle.remove(id);
+					Placement.save(server, false);
+				} else if (held != null) {
+					end(server, r, new Removed(false, List.of(held), Map.copyOf(r.refund)));
+				}
+				return;
+			}
 			r.sites.remove(0);
 			return;
 		}
@@ -1178,59 +1178,53 @@ public final class Groups {
 			// a construction site deconstructs at once (its refunds were tallied before the undo, rule 7), one per tick
 			Map<String, Integer> items = r.decItems.getOrDefault(id, Map.of());
 			long[] at = r.decAt.get(id);
+			JsonObject stash = r.decSettle.get(id);
 			try {
 				if (r.sites.size() < r.undoSites.size()) {
 					dev.larattalabs.architect.journal.WorldJournal.kill("GM"); // (TEST, T2b txn-crash-crate) an earlier member written, this one not yet
 				}
-				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
-				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
-				credit(server, r, id); // 6c Y: its stockpile refunds, once its restore is written (once per key)
+				// (slice T4R, N3) what of its refunded cells stands before the write, recorded in their chunks (its W's min); the write as the txn's
+				// own (its box is held by it)
+				CrateSettle.recordFound(level, id, r.undo, stash);
+				Sites.Removed[] done = new Sites.Removed[1];
+				Sites.SiteException[] fail = new Sites.SiteException[1];
+				Runnable write = () -> {
+					try {
+						done[0] = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
+					} catch (Sites.SiteException e) {
+						fail[0] = e;
+					}
+				};
+				if (r.gtx != null) {
+					dev.larattalabs.architect.txn.TxnServer.asHolder(r.gtx, write);
+				} else {
+					write.run();
+				}
+				if (fail[0] != null) {
+					throw fail[0];
+				}
+				done[0].returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+				CrateSettle.markRestored(id, r.undo); // its W receipts this write (in memory: its chunks and its receipts saved together)
 			} catch (Sites.SiteException e) {
 				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
 				return;
 			}
-			r.sites.remove(0);
 			written.add(id);
-			settleWritten(server, r); // (T2b part 2b) its crate.settle now (held: next tick, before the next member)
+			String held = paid ? GroupTxn.drive(r) : null;
+			if (!paid || GroupTxn.memberDone(r, id)) {
+				r.sites.remove(0);
+				r.decSettle.remove(id);
+			}
 			Placement.save(server, false);
+			if (held != null) {
+				end(server, r, new Removed(false, List.of(held), Map.copyOf(r.refund))); // held(decided): kept, retried by itself
+			}
 			killAfterQueueSave();
 			return;
 		}
 		r.current = id;
 		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
 		killAfterAMember(r);
-	}
-
-	/**
-	 * (T2b part 2b) Runs the crate.settle of every member already written (not in {@code r.sites}): its own crate's stock and its refunds,
-	 * keyed (a replay after a restart never settles twice). False when one is held: the removal waits (the crate keeps its stock).
-	 */
-	private static boolean settleWritten(MinecraftServer server, Removal r) {
-		boolean changed = false;
-		for (var it = r.decSettle.entrySet().iterator(); it.hasNext();) {
-			var e = it.next();
-			if (r.sites.contains(e.getKey())) {
-				continue;
-			}
-			ServerLevel level = Sites.levelOf(server, e.getValue().get("dim").getAsString());
-			CrateSettle.Settled st = level == null ? CrateSettle.Settled.NONE : CrateSettle.settle(level, e.getValue());
-			if (!st.done()) {
-				if (changed) {
-					Placement.save(server, false);
-				}
-				return false;
-			}
-			if (st.owed().isEmpty()) {
-				st.given().forEach((k, v) -> r.refund.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
-			}
-			r.owed.addAll(st.owed());
-			it.remove();
-			changed = true;
-		}
-		if (changed) {
-			Placement.save(server, false);
-		}
-		return true;
 	}
 
 	/**
@@ -1532,11 +1526,11 @@ public final class Groups {
 				Builder.Deconstruction d = Builder.prepareDeconstruct(level, s);
 				r.decItems.put(id, Map.copyOf(d.all()));
 				r.decAt.put(id, new long[] {d.at().asLong()});
-				if (d.settle() != null) {
-					r.decSettle.put(id, d.settle()); // (T2b part 2b) its crate's stock and its refunds: settled once its restore is written
-				}
-				if (d.stockpile() != null) {
-					r.decCredit.put(id, new Credit(d.stockpile(), d.key(), Map.copyOf(d.credit()), d.at().asLong()));
+				// (slice T4R, R1) its settle: a stockpile's site's refund as a pile stash (its cells tallied: min(planned, found by its W)), else its
+				// crate's (T2b part 2b): either one credited or owed by the group's removal.group txn after this member's W, never as a held credit
+				JsonObject st = d.stockpile() != null ? CrateSettle.pileStash(s, d) : d.settle();
+				if (st != null) {
+					r.decSettle.put(id, st);
 				}
 				continue;
 			}
@@ -1544,7 +1538,8 @@ public final class Groups {
 			// (7a GM-a2) a survival region's gate mechanism: what of its charge stands, credited once its restore is written
 			Credit mc = inf == null ? null : MechCharges.refund(level, inf);
 			if (mc != null) {
-				r.decCredit.put(id, mc);
+				// (slice T4R, R1) credited by the group's txn after the mechanism's W (no per-cell tally: its planned charge)
+				r.decSettle.put(id, CrateSettle.pileCreditStash(id, inf.dimension(), mc.owner(), mc.key(), mc.items(), BlockPos.of(mc.at()), null, inf.box()));
 				continue;
 			}
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
@@ -1580,9 +1575,11 @@ public final class Groups {
 						dropped.addAll(shadow);
 					}
 				}
-				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written
-				r.decCredit.put(id, new Credit(pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(RoadBuilder.refundOf(level, inf, dropped)), RoadBuilder.dropAt(inf)
-					.asLong()));
+				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written. (slice T4R, R1) by the
+				// group's txn after the road's W, its cells tallied (min(planned, found))
+				dev.larattalabs.architect.survival.Refunds.Tally rt = RoadBuilder.tallyOf(level, inf, dropped);
+				r.decSettle.put(id, CrateSettle.pileCreditStash(id, inf.dimension(), pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(rt.refund()), RoadBuilder
+					.dropAt(inf), rt.cells(), inf.box()));
 				RegionTargets.leaving(level.getServer(), inf);
 			}
 		}
@@ -1995,6 +1992,130 @@ public final class Groups {
 		return i != null ? i.dimension() : Site.OVERWORLD;
 	}
 
+	/** (slice T4R, R1) Whether a group's removal for txn {@code key} is still in the queue (running or held): its {@code group.done} waits. */
+	public static boolean liveRemoval(@Nullable String key) {
+		if (key == null) {
+			return false;
+		}
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				if (r.undo != null && key.equals(GroupTxn.key(r.group, r.stage, r.undo))) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (slice T4R, R1) Whether a queued group removal of undo group {@code group} still writes {@code site}'s restore itself (it is in its
+	 * remaining list, not written this session, and its record is there to write from): the member's W waits for that write.
+	 */
+	static boolean writes(String site, String group) {
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				if (group.equals(r.undo) && r.sites.contains(site) && !written(site) && (Sites.pendingRecord(site) != null || Infras.pending(site) != null
+					|| Sites.get(site) != null)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (slice T4R, R1) The paid group members a queued removal or an open {@code removal.group} txn owns, as {@code site|undoGroup}, read at the
+	 * Sites check (before the queue loads: from the queue file itself, and from the txn file loaded at SERVER_STARTING). Such a member is never
+	 * judged by the start's threshold: its group writes it again and its txn's W redoes its restore from the retained undo entries. Null
+	 * when the queue file can't be read (nothing of a group's undo group is judged then).
+	 */
+	static @Nullable Set<String> ownedAtStart(MinecraftServer srv) {
+		Set<String> out = new HashSet<>();
+		for (dev.larattalabs.architect.txn.TxnEntry t : dev.larattalabs.architect.txn.TxnServer.core().open()) {
+			if (!dev.larattalabs.architect.txn.RemovalTxn.GROUP.equals(t.kind)) {
+				continue;
+			}
+			for (dev.larattalabs.architect.txn.Effect e : t.effects()) {
+				if (dev.larattalabs.architect.txn.RemovalTxn.RESTORE.equals(e.op())) {
+					out.add(e.data().get("site").getAsString() + "|" + e.data().get("group").getAsString());
+				}
+			}
+		}
+		java.nio.file.Path f = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(Placement.FILE);
+		if (!java.nio.file.Files.isRegularFile(f)) {
+			return out;
+		}
+		try {
+			JsonObject root = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8))
+				.getAsJsonObject();
+			if (root.get("removals") instanceof JsonArray a) {
+				for (JsonElement e : a) {
+					JsonObject o = e.getAsJsonObject();
+					for (String g : new String[] {o.has("undo") ? o.get("undo").getAsString() : null, o.has("planned") ? o.get("planned").getAsString() : null}) {
+						if (g == null) {
+							continue;
+						}
+						for (String k : new String[] {"settle", "credit"}) {
+							if (o.get(k) instanceof JsonObject m) {
+								m.keySet().forEach(id -> out.add(id + "|" + g));
+							}
+						}
+					}
+				}
+			}
+			return out;
+		} catch (java.io.IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Sites check: {} could not be read ({}): no group member's removal is judged at this start", f, e.toString());
+			return null;
+		}
+	}
+
+	/**
+	 * (slice T4R, R3) Whether {@code id} is a member of a decided group or stage removal not yet settled: in its remaining list after its
+	 * undo committed (running or held), or planned in its open txn and not durable yet.
+	 */
+	public static boolean decidedMember(String id) {
+		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
+			for (Removal r : l) {
+				if (r.undo != null && (r.sites.contains(id) && r.undoSites.contains(id) || GroupTxn.planned(r, id) && !GroupTxn.memberDone(r, id))) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** (slice T4R) The open removal.group txn of the queued removal writing undo group {@code undo}, or null. */
+	static dev.larattalabs.architect.txn.@Nullable TxnEntry txnOf(@Nullable String undo) {
+		if (undo == null || REMOVALS.isEmpty()) {
+			return null;
+		}
+		for (Removal r : REMOVALS) {
+			if (undo.equals(r.undo)) {
+				return r.gtx;
+			}
+		}
+		return null;
+	}
+
+	/** (slice T4R) Whether {@code site} in undo group {@code group} is owned by a group's removal ({@code owned} null: the queue unreadable). */
+	static boolean ownsAtStart(@Nullable Set<String> owned, String site, String group) {
+		if (owned == null) {
+			return group.startsWith("u:group-") || group.startsWith("u:stage-");
+		}
+		return owned.contains(site + "|" + group);
+	}
+
+	/** (slice T4R) Whether a queued group or stage removal has a paid member (it settles through the ledger): it parks while saving is off. */
+	static boolean anyLedgerRemoval() {
+		for (Removal r : REMOVALS) {
+			if (r.gtx != null || !r.decSettle.isEmpty() || survival(r)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Whether a removal in progress takes this site down (it can't be layered over meanwhile). */
 	static boolean removing(String siteId) {
 		for (Removal r : REMOVALS) {
@@ -2041,18 +2162,14 @@ public final class Groups {
 					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
 					return;
 				}
-				try {
-					credit(server, r, job.siteId); // 6c Y: a stockpile road's refunds, once its restore is written
-				} catch (IllegalStateException e) {
-					// (T4 final round, SOFF2's rule) its credit's save was refused (SaveRefused): booked once in memory (keyed), never thrown out of
-					// the Placement tick (that stalled every job, each tick); the member stays in the removal until a confirmed save, retried
-					r.creditWait = job.siteId;
-					r.creditRetryAt = tick + 100;
-					Architect.LOGGER.error("Removing group {}: {}'s credit save was refused ({}); it waits and retries", r.group, job.siteId, e.getMessage());
+				written.add(job.siteId);
+				if (GroupTxn.planned(r, job.siteId)) {
+					// (slice T4R, R1) a paid road or mechanism: its W receipts this write; its credit is the txn's (the next tick drives it), and it
+					// leaves the list only once that is durable
+					CrateSettle.markRestored(job.siteId, r.undo);
 					return;
 				}
 				r.sites.remove(job.siteId);
-				written.add(job.siteId);
 				return;
 			}
 		}
@@ -2328,9 +2445,14 @@ public final class Groups {
 			groupEnded(r.group, result); // (C23) before the futures: a resumed removal has none
 		}
 		r.futures.forEach(f -> f.complete(result));
-		if (result.removed()) {
-			// (slice T4c) one path for consumers: every finished group or stage removal, a held decided one's later end included
+		if (result.removed() && r.gtx == null && !r.gtxDone) {
+			// (slice T4c) one path for consumers: every finished group or stage removal, a held decided one's later end included. (slice T4R)
+			// only a removal with no txn (nothing decided: nothing of it to recover) fires it here
 			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(r.group, r.stage, r.revisionId, result);
+		} else if (result.removed() && r.gtx != null) {
+			// (slice T4R, P1-4) its txn's group.done may apply now (the removal left the queue, saved above): EFFECTS_DONE fires its one
+			// REMOVAL_FINISHED from the txn's payload, persisted with it (a crash before the delivery fires it after the restart)
+			dev.larattalabs.architect.txn.TxnServer.core().drive(r.gtx);
 		}
 		Placement.lap("end:futures", t0);
 	}

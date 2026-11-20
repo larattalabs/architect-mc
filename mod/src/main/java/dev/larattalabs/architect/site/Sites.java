@@ -308,9 +308,37 @@ public final class Sites {
 		return loadFailed;
 	}
 
-	/** (BC, Steward GE ask) A world is running and its sites store loaded cleanly ({@link dev.larattalabs.architect.api.Sites#loadHealthy}). */
+	/**
+	 * (slice T4R, R3; the T4c answer 2) A site or road whose removal is decided and not yet settled (its durable stash, or a group's
+	 * removal's member not yet settled): its pending record (a {@link Site} or an {@link Infra}), else null. The API lists it with status
+	 * removing and held(decided) until its txn retires: absence always means removed and settled. Server thread.
+	 */
+	public static @Nullable Object decidedRemoval(String id) {
+		boolean decided = CrateSettle.durable(id) != null || Groups.decidedMember(id);
+		if (!decided) {
+			return null;
+		}
+		Site p = pendingRecord(id);
+		if (p != null) {
+			return p;
+		}
+		return Infras.pending(id);
+	}
+
+	/** (slice T4R) The txn file failed to load this session (set by TxnServer as it loads; Sites never reads TxnServer for it). */
+	private static volatile boolean txnLoadFailed;
+
+	public static void txnLoaded(boolean failed) {
+		txnLoadFailed = failed;
+	}
+
+	/**
+	 * (BC, Steward GE ask) A world is running and its stores loaded cleanly ({@link dev.larattalabs.architect.api.Sites#loadHealthy}). (slice
+	 * T4R, P1-3, Changes §7) every participant store: the sites file, the queue, the stockpiles and the txn file; any that failed to load holds
+	 * every removal, so absence means nothing while this is false.
+	 */
 	public static boolean loadHealthy() {
-		return worldDir != null && !loadFailed;
+		return worldDir != null && !loadFailed && !Placement.loadFailed() && !Stockpiles.loadFailed() && !txnLoadFailed;
 	}
 
 	// ------------------------------------------------------------------ reads
@@ -3336,6 +3364,8 @@ public final class Sites {
 		// (T4b) the durable stashes, read from the ledger file (the stockpiles load after this check); null: unreadable, so no committed
 		// construction removal is judged at this start
 		Map<String, JsonObject> early = CrateSettle.durableAtStart(server);
+		// (slice T4R, R1) the paid members a group's removal owns (its queue entry, its removal.group txn): never judged by the threshold here
+		Set<String> owned = Groups.ownedAtStart(server);
 		// K6: the undo committed (R2) before the record went pending (R3): the record follows the journal, then the evidence decides
 		for (Site b : List.copyOf(map.values())) {
 			if (b.placing() || jobSites.contains(b.id()) || pendingIds.contains(b.id()) || SiteJournal.active(b.id()).stream().anyMatch(m -> !m.kind()
@@ -3347,6 +3377,16 @@ public final class Sites {
 				if (m.status() == Journal.Status.UNDONE && m.undoGroup() != null) {
 					at = Math.max(at, m.undoneAt());
 				}
+			}
+			String latest = CrateSettle.latestUndone(b.id());
+			if (at != Long.MIN_VALUE && latest != null && Groups.ownsAtStart(owned, b.id(), latest)) {
+				// (slice T4R, R1) a paid member its group's removal owns: its record follows the journal, nothing is settled or judged here
+				map.remove(b.id());
+				pending.add(new Site.Pending(b, at, "removed"));
+				pendingIds.add(b.id());
+				changed = true;
+				Architect.LOGGER.info("Sites check: {}'s group removal owns its committed undo; its removal.group txn restores and settles it", b.id());
+				continue;
 			}
 			if (at != Long.MIN_VALUE) {
 				map.remove(b.id());
@@ -3429,6 +3469,11 @@ public final class Sites {
 					at = m.undoneAt();
 					group = m.undoGroup();
 				}
+			}
+			if (group != null && Groups.ownsAtStart(owned, gone.id(), group)) {
+				// (slice T4R, R1) owned by its group's removal: kept pending with its entries, never released or brought back by the threshold
+				report(gone.id(), false, "removed " + gone.id() + ": its group's removal owns it; its removal.group txn restores and settles it");
+				continue;
 			}
 			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
 			if (stashOf != null && p.settle() == null && !CrateSettle.convertible(stashOf, group)) {
@@ -3561,6 +3606,10 @@ public final class Sites {
 			if (jobSites.contains(gone.id())) {
 				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before it is settled");
 				continue;
+			}
+			if (Groups.ownsAtStart(owned, gone.id(), group)) {
+				report(gone.id(), false, "removed " + gone.id() + ": its group's removal owns it; its removal.group txn restores and settles it");
+				continue; // (slice T4R, R1)
 			}
 			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null && CrateSettle.convertible(early.get(gone.id()),
 				group)) {
