@@ -145,7 +145,8 @@ public final class SaveTestHooks {
 
 	private static void beforeSave(MinecraftServer srv) {
 		String dim = noSaveInCreditSave;
-		if (dim != null && Stockpiles.inCreditSave()) {
+		// (T4 merge) a removal txn's refund barrier is a stockpile road's credit save since T4b (no C29 saveCredit): the hook fires there too
+		if (dim != null && (Stockpiles.inCreditSave() || CrateSettle.refundPublishing())) {
 			noSaveInCreditSave = null;
 			for (ServerLevel l : srv.getAllLevels()) {
 				if (l.dimension().identifier().toString().equals(dim)) {
