@@ -158,9 +158,25 @@ public final class SliceT5FDev {
 				}
 				return CompletableFuture.completedFuture(o);
 			});
-		DevBridge.register("dev.fluid.saveAtGate", 10_000, "{} - (T5Fa) TEST: once, at the next fluids gate (before its containment check, before "
-			+ "the charge and before any fluids tile writes), every chunk is saved (flushed) -> {armed}", (req, mc) -> {
-				RegionFluids.beforeCheck = level -> level.getServer().saveAllChunks(true, true, true);
+		DevBridge.register("dev.fluid.saveAtGate", 10_000, "{drop?: [x0,z0,x1,z1] (blocks)} - (T5Fa) TEST: once, at the next fluids gate (before its "
+			+ "containment check, before the charge and before any fluids tile writes), every chunk is saved (flushed); with drop, every chunk of that "
+			+ "box is then armed as dev.chunk.drop (the fluids stage's writes there never reach disk: a later halt finds them lost) -> {armed}", (req, mc) -> {
+				int[] drop = null;
+				if (req.has("drop")) {
+					JsonArray d = req.getAsJsonArray("drop");
+					drop = new int[] {d.get(0).getAsInt(), d.get(1).getAsInt(), d.get(2).getAsInt(), d.get(3).getAsInt()};
+				}
+				int[] dr = drop;
+				RegionFluids.beforeCheck = level -> {
+					level.getServer().saveAllChunks(true, true, true);
+					if (dr != null) {
+						for (int cx = dr[0] >> 4; cx <= dr[2] >> 4; cx++) {
+							for (int cz = dr[1] >> 4; cz <= dr[3] >> 4; cz++) {
+								ChunkDebt.TEST_DROP.add(cx + "," + cz);
+							}
+						}
+					}
+				};
 				JsonObject o = new JsonObject();
 				o.addProperty("armed", true);
 				return CompletableFuture.completedFuture(o);
