@@ -33568,7 +33568,9 @@ LYW2's deferred route dedup, on an explicit edge instead of piece ids. Feature `
   the map first, so a route whose edge id is another route's piece id (`route_d_a__b_1`) is built in either edge order. Untagged: v0.83.0.
 - `architect_mc:land` (land.mjs = `DistrictLand`): a route part is the edge a piece names; an untagged road read as an edge the graph lacks
   is a group (`route_d_a__b_3_1` is `d_a__b`'s, was a bogus `d_a__b_3`; also for regions planned before, when their land is recomputed).
-- Goldens: `s3` `irSha` only (55 pieces tagged; tile shas, cells unchanged); `kit/test/fixtures/gr/land.json` (embedded IR tags, irSha).
+- Goldens: `s3` and `districts_demo` (kit 0.28.0 kept) `irSha` only (55 and 14 pieces tagged; tile shas, cells unchanged); `kit/test/fixtures/gr/land.json` (embedded IR tags, irSha).
 - Not fixed (an id separator change): a roads-only route's piece id equal to another edge's id still hides that route (one part id); two
-  edges laying the same road id refuse the plan ("road id used twice", read from code, needs very long first sections on both).
+  edges laying the same road id refuse the plan ("road id used twice", read from code): one grouped section is enough, b's long first
+  road's group `route_d_a__b_1_1` and b_1's ordinary first road `route_d_a__b_1_1`.
+- (v0.86.0 review P1) A route whose id a still-listed road holds is not drawn, so its pieces are not folded either (fixed point).
 - Units: `LayoutsWallTest`, `DistrictLandTest`, `kit/test/rte.test.mjs`, `ApiRulesTest`.

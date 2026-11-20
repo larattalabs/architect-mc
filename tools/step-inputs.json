@@ -13,7 +13,10 @@
    "env": [],
    "eager": [],
    "data": [
+    "scenarios/goldens/crater_toolbox/ir.json",
+    "scenarios/goldens/crossings_demo_flat/ir.json",
     "scenarios/goldens/districts_demo/ir.json",
+    "scenarios/goldens/forms_demo/ir.json",
     "scenarios/goldens/route_demo/ir.json",
     "scenarios/goldens/route_demo/survey.bin",
     "scenarios/goldens/s7/ir.json",

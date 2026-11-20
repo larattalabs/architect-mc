@@ -267,6 +267,27 @@ class LayoutsWallTest {
 	}
 
 	@Test
+	void aMixedRouteWhoseIdARoadsOnlyRoutesPieceHoldsKeepsItsPiecesAlone() {
+		// (RTE, v0.86.0 review P1) b's route is roads only and its first road is route_d_a__b_1, b_1's edge id: b_1's mixed route can't be
+		// drawn (one part id), so its pieces are not folded away either; nothing is lost and the tagged IR shows what the untagged one shows
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[40,64,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_1_2\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":64,\"maxZ\":50}%s}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[20,64,0]],\"width\":3%s},{\"id\":\"route_d_a__b_2\",\"points\":[[20,64,0],[39,64,0]],\"width\":3%s},"
+			+ "{\"id\":\"route_d_a__b_1_1\",\"points\":[[0,64,1],[0,64,39]],\"width\":3%s},{\"id\":\"route_d_a__b_1_3\",\"points\":[[0,64,51],[0,64,89]],\"width\":3%s}]}";
+		String tagged = String.format(ir, tag("route_d_a__b_1"), tag("route_d_a__b"), tag("route_d_a__b"), tag("route_d_a__b_1"), tag("route_d_a__b_1"));
+		String untagged = String.format(ir, "", "", "", "", "");
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> t = shapesOf(tagged, reversed), u = shapesOf(untagged, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b_1", "route_d_a__b_2", "route_d_a__b_1_1", "route_d_a__b_1_3"), t.keySet(),
+				"every road piece still shown (reversed=" + reversed + ")");
+			assertEquals(u, t, "tagged shows what untagged shows (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(1, 64, 0), new BlockPos(20, 64, 0)), t.get("route_d_a__b_1").ends(), "the id is b's road piece");
+		}
+	}
+
+	@Test
 	void theOldConstructorsStillWork() {
 		var s = new PartShape("p", "tile", null, new BoundingBox(0, 0, 0, 1, 1, 1), List.of(), 0, null, List.of());
 		assertEquals(0, s.width());
