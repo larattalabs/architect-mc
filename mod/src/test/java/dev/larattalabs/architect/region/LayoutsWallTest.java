@@ -196,6 +196,76 @@ class LayoutsWallTest {
 		}
 	}
 
+	/** (RTE) A route piece tagged with the edge the kit built it for ({@code ext.architect_mc:route.edge}). */
+	private static String tag(String edge) {
+		return ",\"ext\":{\"architect_mc:route\":{\"edge\":\"" + edge + "\"}}";
+	}
+
+	private static Map<String, PartShape> shapesOf(String ir, boolean reversed) {
+		JsonObject o = JsonParser.parseString(ir).getAsJsonObject();
+		if (reversed) {
+			var es = o.getAsJsonObject("graph").getAsJsonArray("edges");
+			es.add(es.remove(0));
+		}
+		return Layouts.shapes(o, List.of(), -64, 319, id -> 0).stream().collect(Collectors.toMap(PartShape::part, x -> x));
+	}
+
+	@Test
+	void aTaggedPieceFoldsIntoItsRecordedEdgeOnlyAndIsNotListedTwice() {
+		// (RTE; the v0.84.0 fix-check's case) b's first section is a long road in two groups (route_d_a__b_1_1, _1_2); b_1 has only a stair
+		// section (route_d_a__b_1_3). Ids alone would hand b's groups to b_1 (longest edge); the recorded edge keeps them b's
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,70,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_3\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":70,\"maxZ\":50}" + tag("route_d_a__b_1") + "}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1_1\",\"points\":[[1,64,0],[10,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"points\":[[10,64,0],[19,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_3\",\"points\":[[31,74,0],[59,80,0]],\"width\":3" + tag("route_d_a__b") + "}]}";
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> m = shapesOf(ir, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "one route per edge, no piece listed alone (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(10, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0),
+				new BlockPos(31, 74, 0), new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's groups stay b's, in order");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 45), new BlockPos(0, 70, 90)), m.get("route_d_a__b_1").ends(),
+				"b_1's route is only its own stair section");
+		}
+	}
+
+	@Test
+	void aMixedRouteWhoseEdgeIdIsAnotherEdgesPieceIdIsStillBuilt() {
+		// (RTE; the v0.83.0 known issue) b's first road piece is route_d_a__b_1, which is b_1's edge id: b_1's mixed route used to be skipped
+		// because that id was already taken by b's piece shape. With pieces folded by their recorded edge, both routes appear
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":64,\"maxZ\":50}" + tag("route_d_a__b_1") + "}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[19,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_3\",\"points\":[[31,74,0],[59,80,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_1\",\"points\":[[0,64,1],[0,64,39]],\"width\":3" + tag("route_d_a__b_1") + "},"
+			+ "{\"id\":\"route_d_a__b_1_3\",\"points\":[[0,64,51],[0,64,89]],\"width\":3" + tag("route_d_a__b_1") + "}]}";
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> m = shapesOf(ir, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "both routes, no piece listed alone (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0),
+				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends());
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1), new BlockPos(0, 64, 39), new BlockPos(0, 64, 45), new BlockPos(0, 64, 51),
+				new BlockPos(0, 64, 89), new BlockPos(0, 64, 90)), m.get("route_d_a__b_1").ends(), "b_1's mixed route, built from its own pieces");
+		}
+	}
+
+	@Test
+	void aTaggedRoadsOnlyRouteKeepsItsPiecesAlone() {
+		// (RTE) a district route laid as roads only has no route shape of its own: its tagged pieces stay listed, as before
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[40,64,0]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3}]},\"paths\":[],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1_1\",\"points\":[[1,64,0],[20,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"points\":[[20,64,0],[39,64,0]],\"width\":3" + tag("route_d_a__b") + "}]}";
+		Map<String, PartShape> m = shapesOf(ir, false);
+		assertEquals(java.util.Set.of("route_d_a__b_1_1", "route_d_a__b_1_2"), m.keySet());
+	}
+
 	@Test
 	void theOldConstructorsStillWork() {
 		var s = new PartShape("p", "tile", null, new BoundingBox(0, 0, 0, 1, 1, 1), List.of(), 0, null, List.of());

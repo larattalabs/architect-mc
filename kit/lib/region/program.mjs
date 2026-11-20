@@ -55,6 +55,8 @@ import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOff
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
 export const PART_ID = /^[a-z][a-z0-9_]{0,47}$/;
+/** (RTE) The ext key a route piece (road or path) names its graph edge under, `{edge}`, when the route pass is asked (`tagEdges`). */
+export const ROUTE_EXT = 'architect_mc:route';
 export const LOT_ID = /^[a-z][a-z0-9_]{0,47}$/;
 export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 export const ANCHOR_NAME = /^[a-z][a-z0-9_]{0,31}$/;
@@ -410,7 +412,8 @@ export class Region {
    * (`ctx.keepOut`, so the IR records it) and the intent's own `keepOut`. Each routed edge becomes ordinary primitives in the
    * path part `part`: 4e ground roads where the route lies on the surveyed ground, graded columns where it cuts or fills, stair
    * flights, hairpin landings and ladder columns; plus a graph edge (`movers`, `segments`). A route writing into keep-out refuses
-   * the plan (KEEP_OUT). Returns `{edges, data}` (the pass's data, with `ms`).
+   * the plan (KEEP_OUT). `tagEdges` (RTE): each piece carries ext `architect_mc:route: {edge}` (its graph edge's id). Returns
+   * `{edges, data}` (the pass's data, with `ms`).
    */
   _route(intent = {}) {
     const it = { ...intent };
@@ -582,6 +585,8 @@ export class Region {
       if (d.gates) rec.gates = d.gates; // (7a K1) the gates the edge crossed (only when the plan has walls)
       let n = 0;
       const ladderSegs = [];
+      // ((RTE) where this edge's roads and paths start, to stamp its pieces with their edge below)
+      const roads0 = this.roads.length, paths0 = this.paths.length;
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
       // ((6c D3) an edge with a `lead` meets its junction square on: no column behind the junction cell (the street's end column, a verge)
       // is its; absent: as before)
@@ -654,6 +659,12 @@ export class Region {
       });
       // the ladders last (after the walk runs' cuts and fills at their feet)
       d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
+      // ((RTE) `tagEdges`: each road and path this edge laid names its graph edge in ext `architect_mc:route: {edge}`; piece ids alone are
+      // ambiguous (route_d_a__b_1_1: edge route_d_a__b's piece 1 group 1, or route_d_a__b_1's piece 1). Absent: untagged, as before)
+      if (it.tagEdges) {
+        const mine = new Set([...rec.roads, ...rec.paths]);
+        for (const x of [...this.roads.slice(roads0), ...this.paths.slice(paths0)]) if (mine.has(x.id)) x.ext = { ...(x.ext ?? {}), [ROUTE_EXT]: { edge: rid } };
+      }
       for (const o of ec.cols) if (!d.segments[o.seg].shared) taken.add(`${o.x},${o.z}`);
       // ((6c D3) a framed edge records the columns it wrote: its reach)
       if (e.d3.frame) rec.written = keyRuns([...written].filter(([, id]) => id === e.id).map(([k]) => k));

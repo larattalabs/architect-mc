@@ -136,10 +136,12 @@ public final class Layouts {
 				out.put(lot, new PartShape(s.part(), s.kind(), s.stage(), s.box(), s.ends(), s.revision(), s.lot(), s.targets(), s.width(), s.height(), wa[0], wa[1]));
 			}
 		});
+		// ((RTE) a road piece that names its district route's edge, when that route is drawn whole (it has a section), is shown there only)
+		java.util.Set<String> folded = foldedRoads(ir);
 		if (ir.get("roads") instanceof JsonArray rs) {
 			for (JsonElement e : rs) {
 				if (e instanceof JsonObject rd && rd.get("points") instanceof JsonArray pts && StatusViews.str(rd, "id") != null && !out.containsKey(StatusViews.str(rd,
-					"id"))) {
+					"id")) && !folded.contains(StatusViews.str(rd, "id"))) {
 					List<BlockPos> line = new ArrayList<>();
 					for (JsonElement q : pts) {
 						JsonArray a = q.getAsJsonArray();
@@ -336,15 +338,98 @@ public final class Layouts {
 	/** (LYW) A district's connecting route's edge id: the districts pass's {@code route_d_<a>__<b>} and its joins. */
 	private static final java.util.regex.Pattern DISTRICT_ROUTE = java.util.regex.Pattern.compile("route_(d_[a-z0-9_]+|join|join_in)");
 
+	/** (RTE) The ext key a route piece names its graph edge under ({@code {edge}}; kit program.mjs ROUTE_EXT). */
+	static final String ROUTE_EXT = DistrictLand.ROUTE_EXT;
+	/** (RTE) A tagged piece's id after its edge's {@code <edge>_}: section n, a landing {@code <n>l}, or a long road's group {@code <n>_<k>}. */
+	private static final java.util.regex.Pattern PIECE_SUFFIX = java.util.regex.Pattern.compile("(\\d+)(?:(l)|_(\\d+))?");
+
+	/** (RTE) The graph edge a route piece names (ext {@code architect_mc:route.edge}), or null: an untagged piece (an IR before RTE). */
+	static @Nullable String edgeOf(JsonObject x) {
+		return x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()
+			? e.getAsString() : null;
+	}
+
+	/**
+	 * (RTE) A piece's place in edge {@code id}'s route, or null when it is not that edge's. A tagged piece is the edge it names (its order
+	 * from the suffix: n, a landing at n + 0.5, a road group k at n + k / 1000); an untagged one is read from its id as v0.83.0 did
+	 * ({@code <id>_<n>}, {@code <id>_<n>l}).
+	 */
+	private static @Nullable Double pieceOrder(String id, java.util.regex.Pattern legacy, JsonObject x) {
+		String pid = StatusViews.str(x, "id");
+		if (pid == null) {
+			return null;
+		}
+		String edge = edgeOf(x);
+		java.util.regex.Matcher m;
+		if (edge != null) {
+			if (!edge.equals(id) || !pid.startsWith(id + "_") || !(m = PIECE_SUFFIX.matcher(pid.substring(id.length() + 1))).matches()) {
+				return null;
+			}
+			return Integer.parseInt(m.group(1)) + (m.group(2) != null ? 0.5 : 0) + (m.group(3) != null ? Integer.parseInt(m.group(3)) / 1000.0 : 0);
+		}
+		return (m = legacy.matcher(pid)).matches() ? Integer.parseInt(m.group(1)) + (m.group(2).isEmpty() ? 0 : 0.5) : null;
+	}
+
+	/** (RTE) The district route edges drawn whole: each districts-pass graph edge (its id its path) with a section in the IR's paths. */
+	private static List<JsonObject> wholeRoutes(JsonObject ir) {
+		List<JsonObject> out = new ArrayList<>();
+		if (!(ir.get("graph") instanceof JsonObject gr) || !(gr.get("edges") instanceof JsonArray es) || !(ir.get("paths") instanceof JsonArray paths)) {
+			return out;
+		}
+		for (JsonElement e : es) {
+			if (!(e instanceof JsonObject ed)) {
+				continue;
+			}
+			String id = StatusViews.str(ed, "id");
+			if (id == null || !id.equals(StatusViews.str(ed, "path")) || !DISTRICT_ROUTE.matcher(id).matches()) {
+				continue;
+			}
+			java.util.regex.Pattern legacy = legacyPiece(id);
+			for (JsonElement q : paths) {
+				if (q instanceof JsonObject ps && ps.get("box") instanceof JsonObject bx && bx.get("minX") != null && pieceOrder(id, legacy, ps) != null) {
+					out.add(ed);
+					break;
+				}
+			}
+		}
+		return out;
+	}
+
+	private static java.util.regex.Pattern legacyPiece(String id) {
+		return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + "_(\\d+)(l?)");
+	}
+
+	/**
+	 * (RTE, pure) The road pieces folded into a district route drawn whole that are not listed again on their own: only those naming their
+	 * edge (an untagged IR's pieces stay listed twice, as v0.83.0: their ids are ambiguous between edges).
+	 */
+	static java.util.Set<String> foldedRoads(JsonObject ir) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		if (!(ir.get("roads") instanceof JsonArray rs)) {
+			return out;
+		}
+		java.util.Set<String> whole = new java.util.HashSet<>();
+		wholeRoutes(ir).forEach(ed -> whole.add(StatusViews.str(ed, "id")));
+		for (JsonElement q : rs) {
+			if (q instanceof JsonObject rd && rd.get("points") instanceof JsonArray && edgeOf(rd) != null && whole.contains(edgeOf(rd)) && pieceOrder(edgeOf(rd),
+				legacyPiece(edgeOf(rd)), rd) != null) {
+				out.add(StatusViews.str(rd, "id"));
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * (LYW, pure) A district's connecting routes that the IR's roads don't already show whole: each graph edge of the districts pass
 	 * ({@link #DISTRICT_ROUTE}, its id its path) with at least one stair, graded or ladder section in the IR's {@code paths}
 	 * ({@code <path>_<n>}, {@code <path>_<n>l}): kind {@code route}, its ends the edge's from node, each section in order (a road piece's
 	 * points, a path section's box centre) and its to node; its box the union; its width the edge's. A route laid as roads only is already
-	 * there (its roads, kind route).
+	 * there (its roads, kind route). (RTE) A piece naming its edge ({@link #ROUTE_EXT}) is that edge's only, a long road's groups
+	 * ({@code <path>_<n>_<k>}) included, and is not listed again on its own ({@link #foldedRoads}); an untagged piece is read from its id,
+	 * as v0.83.0.
 	 */
 	static void districtRoutes(JsonObject ir, Map<String, PartShape> out, int y0, int y1) {
-		if (!(ir.get("graph") instanceof JsonObject gr) || !(gr.get("edges") instanceof JsonArray es) || !(ir.get("paths") instanceof JsonArray paths)) {
+		if (!(ir.get("graph") instanceof JsonObject gr) || !(ir.get("paths") instanceof JsonArray paths)) {
 			return;
 		}
 		Map<String, BlockPos> nodeAt = new LinkedHashMap<>();
@@ -355,44 +440,34 @@ public final class Layouts {
 				}
 			}
 		}
-		for (JsonElement e : es) {
-			if (!(e instanceof JsonObject ed)) {
-				continue;
-			}
+		for (JsonObject ed : wholeRoutes(ir)) {
 			String id = StatusViews.str(ed, "id");
-			if (id == null || !id.equals(StatusViews.str(ed, "path")) || !DISTRICT_ROUTE.matcher(id).matches() || out.containsKey(id)) {
+			if (out.containsKey(id)) {
 				continue;
 			}
-			java.util.regex.Pattern piece = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(id) + "_(\\d+)(l?)");
+			java.util.regex.Pattern legacy = legacyPiece(id);
 			java.util.TreeMap<Double, List<BlockPos>> pieces = new java.util.TreeMap<>();
 			int[] b = null;
-			boolean section = false;
 			for (JsonElement q : paths) {
-				java.util.regex.Matcher m;
-				if (q instanceof JsonObject ps && StatusViews.str(ps, "id") != null && (m = piece.matcher(StatusViews.str(ps, "id"))).matches() && ps
-					.get("box") instanceof JsonObject bx && bx.get("minX") != null) {
+				Double k;
+				if (q instanceof JsonObject ps && ps.get("box") instanceof JsonObject bx && bx.get("minX") != null && (k = pieceOrder(id, legacy, ps)) != null) {
 					int[] r = {bx.get("minX").getAsInt(), num(bx, "minY", y0), bx.get("minZ").getAsInt(), bx.get("maxX").getAsInt(), num(bx, "maxY", y1), bx.get(
 						"maxZ").getAsInt()};
-					pieces.put(Integer.parseInt(m.group(1)) + (m.group(2).isEmpty() ? 0 : 0.5), List.of(new BlockPos((r[0] + r[3]) / 2, r[1], (r[2] + r[5]) / 2)));
+					pieces.put(k, List.of(new BlockPos((r[0] + r[3]) / 2, r[1], (r[2] + r[5]) / 2)));
 					b = union(b, r);
-					section = true;
 				}
-			}
-			if (!section) {
-				continue;
 			}
 			int w = ed.get("width") != null && ed.get("width").isJsonPrimitive() ? ed.get("width").getAsInt() : 3;
 			if (ir.get("roads") instanceof JsonArray rs) {
 				for (JsonElement q : rs) {
-					java.util.regex.Matcher m;
-					if (q instanceof JsonObject rd && StatusViews.str(rd, "id") != null && (m = piece.matcher(StatusViews.str(rd, "id"))).matches() && rd
-						.get("points") instanceof JsonArray pts) {
+					Double k;
+					if (q instanceof JsonObject rd && rd.get("points") instanceof JsonArray pts && (k = pieceOrder(id, legacy, rd)) != null) {
 						List<BlockPos> line = new ArrayList<>();
 						for (JsonElement pt : pts) {
 							JsonArray a = pt.getAsJsonArray();
 							line.add(pos(a, y0));
 						}
-						pieces.put(Integer.parseInt(m.group(1)) + (m.group(2).isEmpty() ? 0 : 0.5), line);
+						pieces.put(k, line);
 						BoundingBox rb = boxOf(line, w / 2, y0, y1);
 						if (rb != null) {
 							b = union(b, new int[] {rb.minX(), line.stream().mapToInt(BlockPos::getY).min().orElse(y0), rb.minZ(), rb.maxX(), line.stream().mapToInt(

@@ -10,6 +10,8 @@
 // and a reach plan's reach. A seam-step join's graded runs are read from their path boxes (the IR keeps no per-path column list there).
 import { keyRuns, runKeys } from './beside.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
+/** (RTE) program.mjs ROUTE_EXT: the ext key a route piece names its graph edge under. */
+const ROUTE_EXT = 'architect_mc:route';
 
 /** The record's version (6d's grown parts move it to 2, §11). */
 export const LAND_V = 1;
@@ -115,9 +117,22 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
     push('join', 'join', join, { district, junction: jk ?? (ext ? 'end' : null), ...(ext?.via ? { via: ext.via } : {}) });
   }
   // ---- the routes between districts (route_d_<a>__<b>_<n>)
+  // ((RTE) a piece's route is the edge it names (ext architect_mc:route.edge, the districts pass's pieces since RTE). An untagged piece's
+  // id is read as before (route_d_<a>__<b>_<n>), except that a road read so as an edge the graph lacks is a long road's group
+  // (route_d_<a>__<b>_<n>_<k>): route_d_a__b_3_1 is d_a__b's, not a route d_a__b_3. Untagged ids stay ambiguous when both edges exist)
   const routes = new Map();
-  for (const pa of ir.paths ?? []) { const m = /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+[lg]?$/.exec(pa.id); if (m && pa.box) { if (!routes.has(m[1])) routes.set(m[1], new Set()); boxCols(pa.box, routes.get(m[1])); } }
-  for (const rd of ir.roads ?? []) { const m = /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/.exec(rd.id); if (m) { if (!routes.has(m[1])) routes.set(m[1], new Set()); roadCols(rd, routes.get(m[1])); } }
+  const graphEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id));
+  const routeOf = (x, re, group) => {
+    const t = x.ext?.[ROUTE_EXT]?.edge;
+    if (typeof t === 'string') return /^route_d_/.test(t) ? t.slice('route_'.length) : null;
+    const m = re.exec(x.id);
+    if (!m) return null;
+    if (group && graphEdges.size && !graphEdges.has(`route_${m[1]}`)) { const g = /^(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/.exec(m[1]); if (g && graphEdges.has(`route_${g[1]}`)) return g[1]; }
+    return m[1];
+  };
+  const addRoute = (id, f) => { if (!id) return; if (!routes.has(id)) routes.set(id, new Set()); f(routes.get(id)); };
+  for (const pa of ir.paths ?? []) if (pa.box) addRoute(routeOf(pa, /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+[lg]?$/, false), (c) => boxCols(pa.box, c));
+  for (const rd of ir.roads ?? []) addRoute(routeOf(rd, /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/, true), (c) => roadCols(rd, c));
   for (const id of [...routes.keys()].sort()) push('route', id, routes.get(id));
   // ---- an outpost's corridor, exactly architect_mc:corridor's runs
   for (const id of Object.keys(ir.corridor ?? {}).sort()) {

@@ -190,6 +190,14 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   stays a `tile`. A district route laid partly as roads still lists each road piece both alone and inside its `route_d_<a>__<b>`
   shape, as in v0.83.0: route-piece dedup is deferred until the kit records each piece's edge explicitly.
   CONTRACT "Slice LYW2".
+### New for Steward (NEXT, slice RTE)
+- `layoutRouteEdges` (feature `"layoutRouteEdges"`): in a districts region planned from NEXT on, each road and path piece of a district
+  route names its graph edge in its IR ext, `architect_mc:route: {edge: "route_d_<a>__<b>"}` (IR only: a road's batch item ext still
+  carries only `architect_mc:street`). `Regions.layout` then lists each road piece of a route drawn whole (one with a stair or
+  graded section) once, inside its `route_d_<a>__<b>` shape and not also alone; folds in only that edge's own pieces, a long road's
+  groups (`<edge>_<n>_<k>`) included; and draws a route whose edge id equals another route's road piece id (districts `b` and `b_1`), which
+  was missing. A route laid as roads only keeps its pieces listed alone. A region planned before keeps v0.83.0's shapes (pieces listed
+  twice). `architect_mc:land`'s route parts follow the same edges. CONTRACT "Slice RTE".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
