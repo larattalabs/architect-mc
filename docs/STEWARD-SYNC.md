@@ -188,7 +188,7 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - `Regions.layout` of a `walled_hill` or `sky_isle` region (planned from NEXT on) has its wall: the `wall` part is kind `connector.wall` (not
   `tile`), with its gate `wall_g1` (`connector.gate`) and towers `wall_tower_<n>` (kind `tower`, `wallAt: run`). A region planned before
   stays a `tile`. A district route laid partly as roads still lists each road piece both alone and inside its `route_d_<a>__<b>`
-  shape, as in v0.83.0: route-piece dedup is deferred until the kit records each piece's edge explicitly.
+  shape, as in v0.83.0: route-piece dedup is deferred until the kit records each piece's edge explicitly. (Done in RTE, below.)
   CONTRACT "Slice LYW2".
 ### New for Steward (NEXT, slice RTE)
 - `layoutRouteEdges` (feature `"layoutRouteEdges"`): in a districts region planned from NEXT on, each road and path piece of a district
@@ -197,7 +197,8 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   graded section) once, inside its `route_d_<a>__<b>` shape and not also alone; folds in only that edge's own pieces, a long road's
   groups (`<edge>_<n>_<k>`) included; and draws a route whose edge id equals another route's road piece id (districts `b` and `b_1`), which
   was missing. A route laid as roads only keeps its pieces listed alone. A region planned before keeps v0.83.0's shapes (pieces listed
-  twice). `architect_mc:land`'s route parts follow the same edges. CONTRACT "Slice RTE".
+  twice). `architect_mc:land`'s route parts follow the same edges; for a region planned before, a recomputed land record (a GR
+  revision) reads a long road's group `route_d_a__b_3_1` as `d_a__b`'s, where it made a bogus route part `d_a__b_3`. CONTRACT "Slice RTE".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code

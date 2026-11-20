@@ -33556,27 +33556,19 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - Mixed routes: unchanged from v0.83.0. A district route with stair or graded sections and road pieces lists each road piece twice (its
   own `route` shape from `ir.roads`, and folded into the edge's one route). Route-piece dedup is deferred until the kit records each
   piece's edge explicitly: piece ids alone are ambiguous (`route_d_a__b_1_1` is edge `route_d_a__b` group 1 of piece 1, or edge
-  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review).
+  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review). Done in slice RTE (below).
 - Units: `LayoutsWallTest` (a bundled ring wall; districts b and b_1 lose no road piece), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).
 
 
 ### Slice RTE: route pieces name their edge (light; branch `slice/RTE` off main bceb5a7c; versions NEXT; recorded 2026-11-19)
-The v0.84.0 review's route dedup, done on an explicit edge instead of piece ids. Feature `layoutRouteEdges` (no API member or record).
-- Kit: the route pass takes `tagEdges`; the districts pass sets it. Each road and path piece the pass lays for an edge (its `rec.roads`
-  and `rec.paths`: sections `<edge>_<n>`, landings `<edge>_<n>l`, stairs, ladders, graded roads, a long road's groups `<edge>_<n>_<k>`)
-  gets ext `architect_mc:route: {edge}`, the graph edge's id. A segment shared with an earlier edge stays that edge's. Other route passes
-  (connectors, `route_demo`, compiled plan legs) are untagged, so their IRs are byte-identical.
-- `Layouts`: a district route drawn whole (a section in `paths`) folds in each piece that names it (ordered n, landing n + 0.5, group
-  n + k / 1000) and its road pieces are no longer listed alone; a piece naming another edge is never read as this edge's. Because folded
-  pieces leave the map first, a route whose edge id is another route's piece id (`route_d_a__b_1`: b's piece 1 and b_1's edge) is now
-  built, in either edge order. An untagged IR (planned before) is read exactly as v0.83.0.
-- `architect_mc:land` (land.mjs and `DistrictLand`, equal): a route part is the edge a piece names. An untagged road whose id reads as an
-  edge the graph lacks is read as a group: `route_d_a__b_3_1` is `d_a__b`'s (was a bogus route `d_a__b_3`). Untagged ids stay ambiguous
-  when both readings are real edges.
-- Goldens: `scenarios/goldens/s3` (`irSha` only: 55 pieces tagged; tile shas and cells unchanged) and `kit/test/fixtures/gr/land.json`
-  (its embedded IRs' tags and `irSha`; the land records unchanged).
-- Not fixed (namespace, not ownership): a roads-only route's piece id that equals another edge's id (b roads-only, its piece
-  `route_d_a__b_1`, and b_1 mixed) still hides b_1's route, as both are one part id; and two edges laying the same road id
-  (b's long first road `route_d_a__b_1_1` and b_1's first road) refuse the plan ("road id used twice"). Both need an id separator change.
-- Units: `LayoutsWallTest` (the fix-check's grouped-road case, the colliding edge id, roads-only kept; the legacy b/b_1 test unchanged),
-  `DistrictLandTest` (two route cases equal to `kit/test/rte.test.mjs`), `kit/test/rte.test.mjs`, `ApiRulesTest`.
+LYW2's deferred route dedup, on an explicit edge instead of piece ids. Feature `layoutRouteEdges` (no API member or record).
+- Kit: the route pass takes `tagEdges` (the districts pass sets it): each road and path piece it lays for an edge (`rec.roads`/`rec.paths`,
+  a long road's groups `<edge>_<n>_<k>` included) gets ext `architect_mc:route: {edge}`. Other route passes stay untagged (IRs unchanged).
+- `Layouts`: a district route drawn whole folds in only the pieces naming it, and its road pieces are not listed alone; folded pieces leave
+  the map first, so a route whose edge id is another route's piece id (`route_d_a__b_1`) is built in either edge order. Untagged: v0.83.0.
+- `architect_mc:land` (land.mjs = `DistrictLand`): a route part is the edge a piece names; an untagged road read as an edge the graph lacks
+  is a group (`route_d_a__b_3_1` is `d_a__b`'s, was a bogus `d_a__b_3`; also for regions planned before, when their land is recomputed).
+- Goldens: `s3` `irSha` only (55 pieces tagged; tile shas, cells unchanged); `kit/test/fixtures/gr/land.json` (embedded IR tags, irSha).
+- Not fixed (an id separator change): a roads-only route's piece id equal to another edge's id still hides that route (one part id); two
+  edges laying the same road id refuse the plan ("road id used twice", read from code, needs very long first sections on both).
+- Units: `LayoutsWallTest`, `DistrictLandTest`, `kit/test/rte.test.mjs`, `ApiRulesTest`.
