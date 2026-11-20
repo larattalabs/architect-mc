@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gradleTestInputGaps } from './lib/gradle-test-inputs.mjs';
 import { parentOf } from './lib/step-split.mjs';
 import { buildStatic, checkTrace, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace, workingFiles } from './lib/step-inputs.mjs';
 
@@ -26,47 +27,12 @@ const conf = loadConf(SRC);
 const KEEP = ['data', 'derived', 'fingerprint', 'notes', 'verified'];
 const STATIC = ['classes', 'roots', 'closure', 'globs', 'env', 'flags'];
 
-// (TI) The kit and scenario files the mod's Java tests read are inputs of mod/build.gradle's `test` task (8a ST, chore/TF, RTE3), so
-// an edit to one never leaves the task UP-TO-DATE on a stale PASS. A literal path a test names (`"../kit/x"`, `"kit/x"`,
-// `Path.of("..", "kit", "x", ...)`) must be under an `inputs.dir`/`inputs.files` of that block; a directory the test reads computed
-// names in (`Path.of("../kit/examples", id)`) passes when the block declares it, or files under it (the ones the test reads, as
-// RTE3's exact lists). Computed paths without a literal (KIT.resolve(id), a node child's own reads) stay the author's to declare.
-// Known gaps not yet declared, each a leftover (remove the line when it is declared; empty since TI declared the last ones):
+// (TI) Known gaps in mod/build.gradle's test inputs not yet declared (tools/lib/gradle-test-inputs.mjs), each a leftover (remove the
+// line when it is declared; empty since TI declared the last ones):
 const GRADLE_TEST_UNDECLARED = [];
-function gradleTestInputGaps(files) {
-  const gradle = fs.readFileSync(path.join(SRC, 'mod', 'build.gradle'), 'utf8');
-  const at = gradle.search(/^test \{/m);
-  if (at < 0) return ['mod/build.gradle: no `test {` block'];
-  let depth = 0;
-  let end = at;
-  for (let i = gradle.indexOf('{', at); i < gradle.length; i++) {
-    if (gradle[i] === '{') depth++;
-    else if (gradle[i] === '}' && --depth === 0) {
-      end = i;
-      break;
-    }
-  }
-  const declared = [];
-  for (const m of gradle.slice(at, end).matchAll(/inputs\.(?:dir|files)\(([^)]*)\)/g)) for (const q of m[1].matchAll(/"\.\.\/([^"]+)"/g)) declared.push(q[1].replace(/\/$/, ''));
-  const covered = (p) => declared.some((d) => p === d || p.startsWith(`${d}/`));
-  const named = new Map();
-  for (const f of files) {
-    if (!f.startsWith('mod/src/test/java/') || !f.endsWith('.java')) continue;
-    const text = fs.readFileSync(path.join(SRC, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const found = [];
-    for (const m of text.matchAll(/"(?:\.\.\/)?((?:kit|scenarios)\/[\w./-]*)"/g)) found.push(m[1]);
-    for (const m of text.matchAll(/Paths?\.(?:of|get)\(\s*"\.\."((?:\s*,\s*"[\w.-]+")+)/g)) found.push([...m[1].matchAll(/"([\w.-]+)"/g)].map((x) => x[1]).join('/'));
-    for (let p of found) {
-      p = p.replace(/\/+$/, '');
-      if (!/^(kit|scenarios)\//.test(p)) continue;
-      const under = [...files].filter((t) => t.startsWith(`${p}/`));
-      if (!files.has(p) && !under.length) continue; // not a repo path (a name in a message, a generated file)
-      if (covered(p) || declared.some((d) => d.startsWith(`${p}/`)) || GRADLE_TEST_UNDECLARED.some((k) => p === k || p.startsWith(`${k}/`))) continue;
-      if (!named.has(p)) named.set(p, new Set());
-      named.get(p).add(path.basename(f, '.java'));
-    }
-  }
-  return [...named].sort().map(([p, by]) => `mod/build.gradle: ${p} (read by ${[...by].join(', ')}) is no input of the test task: declare it there (and in unit-mod's data in tools/step-inputs.json)`);
+function gradleTestGaps(files) {
+  const sources = [...files].filter((f) => f.startsWith('mod/src/test/java/') && f.endsWith('.java')).map((f) => [f, fs.readFileSync(path.join(SRC, f), 'utf8')]);
+  return gradleTestInputGaps(fs.readFileSync(path.join(SRC, 'mod', 'build.gradle'), 'utf8'), sources, files, GRADLE_TEST_UNDECLARED);
 }
 
 function rebuilt(old) {
@@ -133,7 +99,7 @@ if (cmd === 'build') {
       if (JSON.stringify(rec.flags ?? {}) !== JSON.stringify(now.flags ?? {})) bad.push(`${id}: recorded flags differ from a rebuild's`);
     }
     for (const id of Object.keys(map.steps)) if (!cfg.steps[id]) bad.push(`${id}: in the map but not in gate-chains.json`);
-    bad.push(...gradleTestInputGaps(files));
+    bad.push(...gradleTestGaps(files));
   }
   if (bad.length) {
     console.error(`step-inputs check: ${bad.length} problem(s)\n${bad.map((b) => `  ${b}`).join('\n')}`);

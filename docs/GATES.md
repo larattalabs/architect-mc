@@ -447,7 +447,8 @@ evidence are not inputs.
 - a step's classes, roots or the environment variables its closure reads differ from the recorded ones;
 - a step has no entry;
 - (chore/TI) a literal kit/ or scenarios/ path a mod test names (`"../kit/x"`, `Path.of("..", "kit", ...)`) is not under an
-  `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes when it, or files under it, are declared), so a
+  `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes only by an `inputs.dir` of it or a parent, never by
+  single files under it: v0.89.0 review P3; tools/lib/gradle-test-inputs.mjs, kit/test/gradle-test-inputs.test.mjs), so a
   local or gate Gradle run could stay UP-TO-DATE on a stale PASS. Known gaps would be listed in tools/step-inputs.mjs
   (`GRADLE_TEST_UNDECLARED`, empty). Computed paths and a node child's own reads stay the author's to declare.
 
