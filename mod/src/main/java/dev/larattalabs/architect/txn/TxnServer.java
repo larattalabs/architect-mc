@@ -73,6 +73,7 @@ public final class TxnServer {
 		c.register(RemovalTxn.SITE_KIND); // (slice T4b)
 		c.register(RemovalTxn.ROAD_KIND);
 		c.register(RemovalTxn.GROUP_KIND); // (slice T4R)
+		c.register(CargoTxn.KIND_DEF); // (slice T4R, R5)
 		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
 	}
 

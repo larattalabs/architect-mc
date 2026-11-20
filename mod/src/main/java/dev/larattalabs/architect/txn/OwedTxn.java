@@ -135,7 +135,8 @@ public final class OwedTxn {
 				// (fix round, GPT P1-2) a dead player's inventory goes at respawn (keepInventory off) while the receipt would stay: never given
 				throw new IllegalStateException("the player is dead or not in a world: held until alive");
 			}
-			if (!fits(p.getInventory(), e.items())) {
+			boolean whole = e.data().has("stack");
+			if (whole ? p.getInventory().getFreeSlot() < 0 : !fits(p.getInventory(), e.items())) {
 				throw new IllegalStateException("no room in the player's inventory"); // held until there is room; nothing given in part
 			}
 			Inventory inv = p.getInventory();
@@ -149,7 +150,15 @@ public final class OwedTxn {
 			// (T2b final check P1-3) in a finally: an exception out of the give or the save path takes them back too
 			String why = "the give or the player's save threw";
 			try {
-				e.items().forEach((k, n) -> give(inv, TestMove.item(k), n));
+				if (whole) {
+					ItemStack exact = CargoTxn.decode(TxnServer.server(), e.data().get("stack").getAsString()); // (slice T4R, R5) the stack as it was
+					if (exact.isEmpty() || inv.getFreeSlot() < 0) {
+						throw new IllegalStateException("the owed stack can't be read or has no slot");
+					}
+					inv.setItem(inv.getFreeSlot(), exact);
+				} else {
+					e.items().forEach((k, n) -> give(inv, TestMove.item(k), n));
+				}
 				List<String> r = new ArrayList<>(was);
 				r.add(e.key(t.id));
 				while (r.size() > 256) {
@@ -333,6 +342,17 @@ public final class OwedTxn {
 		if (s.status() != TxnCore.Begin.NEW) {
 			return held(s.detail() != null ? s.detail() : s.status().name());
 		}
+		if (e.stack() != null) {
+			// (slice T4R, R5) a stack with its own data: given whole, exactly as it was (into an empty slot), or not at all
+			if (to.getInventory().getFreeSlot() < 0) {
+				return new Answer("DONE", Map.of(), e.items(), false, null, "inventory full");
+			}
+			TxnEntry t = s.entry();
+			c.plan(t, Effect.of("owed.debit", EffectClass.L).items(e.items()).move("owed", Effect.TRANSIT).data("key", key));
+			c.plan(t, Effect.of("owed.give", EffectClass.P).items(e.items()).move(Effect.TRANSIT, "player").data("player", to.getUUID().toString()).data("stack",
+				e.stack()));
+			return drive(c, t, key, recipient, e.items());
+		}
 		Map<String, Integer> fit = fitting(to.getInventory(), e.items()); // planned in the same call as its apply: the inventory can't change between
 		if (fit.isEmpty()) {
 			return new Answer("DONE", Map.of(), e.items(), false, null, "inventory full");
@@ -351,6 +371,9 @@ public final class OwedTxn {
 		}
 		if (!Stockpiles.hasPile(owner)) {
 			return refused("no_stockpile: " + owner + " has no stockpile");
+		}
+		if (e.stack() != null) {
+			return refused("owed_stack: " + key + " is an item with its own data: it is collected whole, never credited by id"); // (slice T4R, R5)
 		}
 		TxnCore c = TxnServer.core();
 		TxnCore.Started s = c.begin(CREDIT, null, List.of("owed:" + key), owner);

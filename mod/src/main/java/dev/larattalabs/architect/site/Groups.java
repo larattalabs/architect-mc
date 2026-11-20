@@ -116,6 +116,8 @@ public final class Groups {
 		 * entities. A crash between: the start's settle books it when the holder is gone, drops it when the holder still holds its items.
 		 */
 		final transient Map<String, Credit> cargo = new LinkedHashMap<>();
+		/** (slice T4R, R5) The data-bearing stacks of the player holders (owed whole by a {@code removal.cargo} txn before the holders are replaced). */
+		final transient List<dev.larattalabs.architect.txn.CargoTxn.Stack> cargoData = new ArrayList<>();
 		/** (fix round) The holders of {@link #cargo} were replaced (their contents only in the pending credits now). */
 		transient boolean cargoApplied;
 		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
@@ -1470,6 +1472,7 @@ public final class Groups {
 		if (!r.cargoApplied) {
 			r.cargo.clear(); // (fix round) found again below, per region target (a replan after the holders were replaced keeps their cargo)
 		}
+		r.cargoData.clear();
 		// (M5 FK) a filled site's declared containers: their contents into the ledger's custody in this tick (the credit is fixed now; the
 		// undo writes them ticks later), then saved with the world; cargo found now ends the removal unwritten, the custody given back
 		boolean custody = false;
@@ -1609,6 +1612,23 @@ public final class Groups {
 					}
 				}
 				end(server, r, Removed.saveRefused(r.group, e.getMessage(), Map.copyOf(r.refund)));
+				return;
+			}
+		}
+		if (!r.cargoData.isEmpty()) {
+			// (slice T4R, R5) the data-bearing stacks owed whole (taken out of their holders and owed, in one txn) before any holder is replaced
+			String why = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo:" + r.group + (r.stage == null ? "" : "/" + r.stage) + "@" + System.currentTimeMillis(),
+				List.copyOf(r.cargoData));
+			if (why != null && !why.startsWith("held(decided)")) {
+				dropPending(r);
+				dropCargoPending(r);
+				for (String back : ids) {
+					Site b = Sites.get(back);
+					if (b != null && Fills.phase(b) != null) {
+						Fills.writeBack(level, b);
+					}
+				}
+				end(server, r, Removed.saveRefused(r.group, "a player's items with their own data could not be owed now (" + why + ")", Map.copyOf(r.refund)));
 				return;
 			}
 		}
@@ -2232,7 +2252,7 @@ public final class Groups {
 	 * (pure; fix round) The items a player holder's contents credit by id, or null when a stack carries its own data (a name, an enchantment,
 	 * a filled shulker box): crediting it by id would lose that data.
 	 */
-	static @Nullable Map<String, Integer> cargoItems(List<net.minecraft.world.item.ItemStack> contents) {
+	static Map<String, Integer> cargoItems(List<net.minecraft.world.item.ItemStack> contents) {
 		List<Stack> l = new ArrayList<>();
 		for (net.minecraft.world.item.ItemStack st : contents) {
 			l.add(new Stack(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), !st.getComponentsPatch().isEmpty()));
@@ -2244,14 +2264,16 @@ public final class Groups {
 	record Stack(String item, int count, boolean ownData) {
 	}
 
-	/** (pure) {@link #cargoItems} over {@link Stack}s. */
-	static @Nullable Map<String, Integer> cargoOf(List<Stack> contents) {
+	/**
+	 * (pure) {@link #cargoItems} over {@link Stack}s. (slice T4R, R5, N6) never null: the plain stacks by id; a stack with its own data is left
+	 * out (it becomes an O {@code cargo} entry, owed whole: {@link dev.larattalabs.architect.txn.CargoTxn}).
+	 */
+	static Map<String, Integer> cargoOf(List<Stack> contents) {
 		Map<String, Integer> m = new TreeMap<>();
 		for (Stack st : contents) {
-			if (st.ownData()) {
-				return null;
+			if (!st.ownData()) {
+				m.merge(st.item(), st.count(), Integer::sum);
 			}
-			m.merge(st.item(), st.count(), Integer::sum);
 		}
 		return m;
 	}
@@ -2260,17 +2282,29 @@ public final class Groups {
 	private static @Nullable String findCargo(ServerLevel level, Removal r, String id, Infra inf, Stockpiles.Pile pile,
 		it.unimi.dsi.fastutil.longs.LongSet cells) {
 		for (long c : cells) {
-			List<net.minecraft.world.item.ItemStack> st = Builder.holderContents(level.getBlockEntity(net.minecraft.core.BlockPos.of(c)));
+			net.minecraft.core.BlockPos at = net.minecraft.core.BlockPos.of(c);
+			var be = level.getBlockEntity(at);
+			List<net.minecraft.world.item.ItemStack> st = Builder.holderContents(be);
 			if (st.isEmpty()) {
 				continue;
 			}
-			Map<String, Integer> items = cargoItems(st);
-			if (items == null) {
-				return "a player's container at " + net.minecraft.core.BlockPos.of(c).toShortString() + " in " + id
+			String key = cargoKey(inf.id(), inf.placedAt(), c);
+			if (be instanceof net.minecraft.world.Container box) {
+				// (slice T4R, R5, N6) a stack with its own data: owed whole (an O cargo entry) before the holder is replaced, never a refusal
+				for (int i = 0; i < box.getContainerSize(); i++) {
+					net.minecraft.world.item.ItemStack x = box.getItem(i);
+					if (!x.isEmpty() && !x.getComponentsPatch().isEmpty()) {
+						r.cargoData.add(new dev.larattalabs.architect.txn.CargoTxn.Stack(key + "#" + i, pile.owner(), inf.dimension(), at, i, x.copy(), id));
+					}
+				}
+			} else if (st.stream().anyMatch(x -> !x.getComponentsPatch().isEmpty())) {
+				return "a player's container at " + at.toShortString() + " in " + id
 					+ " holds items with their own data (named, enchanted or filled): take them out, then remove again";
 			}
-			String key = cargoKey(inf.id(), inf.placedAt(), c);
-			r.cargo.putIfAbsent(key, new Credit(pile.owner(), key, Map.copyOf(items), c));
+			Map<String, Integer> items = cargoItems(st);
+			if (!items.isEmpty()) {
+				r.cargo.putIfAbsent(key, new Credit(pile.owner(), key, Map.copyOf(items), c));
+			}
 		}
 		return null;
 	}

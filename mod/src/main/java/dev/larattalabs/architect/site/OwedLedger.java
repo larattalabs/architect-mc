@@ -32,13 +32,19 @@ public final class OwedLedger {
 
 	/** One entry. Items by id, as the pile ledger keeps them. */
 	public record Entry(String key, String recipient, String dimension, int x, int y, int z, Map<String, Integer> items, String reason, long tick, long wall,
-		@Nullable String site, @Nullable String region) {
+		@Nullable String site, @Nullable String region, @Nullable String stack) {
 		public Entry {
 			items = Collections.unmodifiableMap(new TreeMap<>(items));
 		}
 
+		/** The entry of items by id alone (no stack of its own). */
+		public Entry(String key, String recipient, String dimension, int x, int y, int z, Map<String, Integer> items, String reason, long tick, long wall,
+			@Nullable String site, @Nullable String region) {
+			this(key, recipient, dimension, x, y, z, items, reason, tick, wall, site, region, null);
+		}
+
 		Entry with(Map<String, Integer> left) {
-			return new Entry(key, recipient, dimension, x, y, z, left, reason, tick, wall, site, region);
+			return new Entry(key, recipient, dimension, x, y, z, left, reason, tick, wall, site, region, stack);
 		}
 
 		JsonObject toJson() {
@@ -63,6 +69,9 @@ public final class OwedLedger {
 			if (region != null) {
 				o.addProperty("region", region);
 			}
+			if (stack != null) {
+				o.addProperty("stack", stack); // (slice T4R, R5) a stack with its own data, owed whole
+			}
 			return o;
 		}
 
@@ -72,12 +81,15 @@ public final class OwedLedger {
 			o.getAsJsonObject("items").entrySet().forEach(e -> it.put(e.getKey(), e.getValue().getAsInt()));
 			return new Entry(o.get("key").getAsString(), o.get("recipient").getAsString(), o.get("dimension").getAsString(), at.get(0).getAsInt(),
 				at.get(1).getAsInt(), at.get(2).getAsInt(), it, o.get("reason").getAsString(), o.get("tick").getAsLong(), o.get("wall").getAsLong(),
-				o.has("site") ? o.get("site").getAsString() : null, o.has("region") ? o.get("region").getAsString() : null);
+				o.has("site") ? o.get("site").getAsString() : null, o.has("region") ? o.get("region").getAsString() : null, o.has("stack") ? o.get("stack")
+					.getAsString() : null);
 		}
 	}
 
 	/** The reasons (stable API values). */
 	public static final String CRATE_SETTLE = "crate_settle", CRATE_PUTBACK = "crate_putback", GROUP_REFUND = "group_refund";
+	/** (slice T4R, R5) A player holder's stack with its own data in a removed region target: owed whole ({@link Entry#stack}). */
+	public static final String CARGO = "cargo";
 
 	static final int BOUND = 4096;
 	private static final LinkedHashMap<String, Entry> ENTRIES = new LinkedHashMap<>();

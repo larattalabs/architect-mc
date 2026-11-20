@@ -167,8 +167,9 @@ class StalledRemovalPSVLC3Test {
 		// (fix round, GPT P1 4) a holder's contents are credited by item id; a stack with its own data (a name, an enchantment) would lose it
 		assertEquals(Map.of("minecraft:diamond", 5), Groups.cargoOf(List.of(new Groups.Stack("minecraft:diamond", 3, false), new Groups.Stack(
 			"minecraft:diamond", 2, false))));
-		assertNull(Groups.cargoOf(List.of(new Groups.Stack("minecraft:diamond", 3, false), new Groups.Stack("minecraft:diamond_sword", 1, true))),
-			"the removal ends instead, the holder as it is");
+		// (slice T4R, R5, N6) the data stack is never credited by id: it is left out here and owed whole (an O cargo entry), never a refusal
+		assertEquals(Map.of("minecraft:diamond", 3), Groups.cargoOf(List.of(new Groups.Stack("minecraft:diamond", 3, false), new Groups.Stack(
+			"minecraft:diamond_sword", 1, true))), "the data stack is left out of the by-id credit");
 	}
 
 	// ------------------------------------------------------------------ P1 3

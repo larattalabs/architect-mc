@@ -440,7 +440,7 @@ public final class CrateTxn {
 			}
 			var entry = new dev.larattalabs.architect.site.OwedLedger.Entry(d.get("key").getAsString(), d.get("recipient").getAsString(), d.get("dim")
 				.getAsString(), p.getX(), p.getY(), p.getZ(), items, d.get("reason").getAsString(), tick, System.currentTimeMillis(), d.has("site") ? d
-					.get("site").getAsString() : null, d.has("region") ? d.get("region").getAsString() : null);
+					.get("site").getAsString() : null, d.has("region") ? d.get("region").getAsString() : null, d.has("stack") ? d.get("stack").getAsString() : null);
 			dev.larattalabs.architect.site.OwedLedger.owe(entry, e.key(t.id));
 			dev.larattalabs.architect.site.Stockpiles.owedChanged();
 			OwedTxn.changed(entry);
