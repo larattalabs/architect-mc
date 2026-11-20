@@ -85,28 +85,16 @@ export function followStreetOf(rd, dids = null) {
  */
 export function streetRuns(eff) {
   const out = [];
-  let known = null; // ((v0.88.0 review P2) the districts the IR records, read once, only for an untagged following street)
   for (const rd of eff.roads ?? []) {
     const flagged = !!rd.ext?.['architect_mc:street'];
     if (!flagged && !isStreetId(rd.id)) continue;
     // (§5, GR-b) a following district's street, `route_st_<d>_<n>` (a T2 route): frontage on its straight runs, no §4 extension
-    // ((RTE3) its district from the piece's route tag (a long road's groups `route_st_<d>_<n>_<k>` were read as district `<d>_<n>`); a piece
-    // tagged with another edge is a route. Untagged (IRs before RTE): the id, as before, except a boundary growth's street, never a follow
-    // run (as its ungrouped `route_st_quay_1_g1` was not): its band record; or ((v0.88.0 review P2) by recorded ownership) an id district
-    // with a `_g<n>` stem (`route_st_quay_1_g1_1` read as `quay_1_g1`) that no district of the plan or of a street flag has, and, when the IR
-    // records no districts at all, only a revision's piece (`rid`): district `quay_g1`'s own `route_st_quay_g1_1` stays its street)
+    // ((RTE3) a tagged piece (ext architect_mc:route) reads its district from the tag (a long road's groups `route_st_<d>_<n>_<k>` were read
+    // as district `<d>_<n>`); a piece tagged with another edge is a route. An untagged piece (a growth's, a region planned before RTE) reads
+    // exactly as v0.87.0 did, by its id, on the same path, so a legacy IR reads as it always has (the coordinator's call, v0.88.0 fix check))
     const tagged = followStreetOf(rd);
     if (tagged === null) continue;
-    let fd = tagged;
-    if (fd === undefined && !rd.ext?.['architect_mc:band']) {
-      const m = /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
-      if (m) {
-        known ??= new Set([...zoneDistricts(eff).values()].flatMap((x) => [...x]).concat((eff.params?.spec?.districts ?? eff.params?.districts ?? []).map((x) => x?.id)));
-        const grown = !known.has(m[1]) && /_g\d+$/.test(m[1]) && (known.size > 0 || (Number.isInteger(rd.rid) && rd.rid > 0));
-        if (!grown) fd = m[1];
-      }
-    }
-    const fm = fd ? [null, fd] : null;
+    const fm = tagged !== undefined ? [null, tagged] : /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
     if (!fm && (/^(route_)?st_/.test(rd.id) || /^route_/.test(rd.id))) continue;
     const pts = rd.points ?? [];
     for (let i = 0; i + 1 < pts.length; i++) {

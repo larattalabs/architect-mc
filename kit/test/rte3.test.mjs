@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { emitGrowth, followStreetOf, growPlan, streetRuns } from '../lib/region/grow.mjs';
+import { emitGrowth, followStreetOf, growPlan, streetRuns, MIN_RUN } from '../lib/region/grow.mjs';
+import { toLocal } from '../lib/region/village.mjs';
+import { isStreetId } from '../lib/region/beside.mjs';
 import { mergeEffective, revisionStanding } from '../lib/region/revise.mjs';
 import { surveyApi } from '../lib/region/survey.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
@@ -53,30 +55,86 @@ test('streetRuns, tagged: a following street\'s long-road groups route_st_<d>_<n
   ]), { route_st_b_1_1_2: 'follow b_1', route_st_b_2_1: 'follow b', route_st_quay_1_1: 'follow quay', route_st_quay_1_2: 'follow quay' });
 });
 
-test('streetRuns, untagged: an IR before RTE reads the id as before; a grouped growth street (route_st_quay_1_g1_1) is no follow run, as its ungrouped id is not', () => {
+// ---- (the coordinator's call, v0.88.0 fix check) untagged pieces read exactly as origin/main's streetRuns: the oracle below is main's
+// function (v0.87.0, grow.mjs streetRuns and districtOfRoad, copied verbatim); a tagged piece reads its route tag
+
+function districtOfRoadMain(rd) {
+  const f = rd.ext?.['architect_mc:street'];
+  if (f && typeof f.district === 'string') return f.district;
+  const m = /^(.*?)_?street_[a-z0-9_]*$/.exec(rd.id);
+  return m && m[1] ? m[1] : null;
+}
+function streetRunsMain(eff) {
+  const out = [];
+  for (const rd of eff.roads ?? []) {
+    const flagged = !!rd.ext?.['architect_mc:street'];
+    if (!flagged && !isStreetId(rd.id)) continue;
+    const fm = /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
+    if (!fm && (/^(route_)?st_/.test(rd.id) || /^route_/.test(rd.id))) continue;
+    const pts = rd.points ?? [];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      let o;
+      if (a[2] === b[2] && a[0] !== b[0]) o = 'ew'; else if (a[0] === b[0] && a[2] !== b[2]) o = 'ns'; else continue;
+      const [ua, c] = toLocal(o, a[0], a[2]), [ub] = toLocal(o, b[0], b[2]);
+      const u0 = Math.min(ua, ub), u1 = Math.max(ua, ub);
+      if (u1 - u0 + 1 < MIN_RUN && pts.length > 2) continue;
+      if (fm && u1 - u0 + 1 < MIN_RUN) continue;
+      const d = fm ? fm[1] : districtOfRoadMain(rd);
+      out.push({ road: rd.id, seg: i, o, c, u0, u1, y: a[1] ?? b[1] ?? null, width: rd.width ?? 3, lanterns: rd.lanterns !== false, lamp: rd.lamp ?? null, surface: rd.surface ?? null,
+        ext: rd.ext ?? null, district: d, prefix: d ? `${d}_` : '', twoPoint: pts.length === 2 && !fm, follow: !!fm, grown: Number.isInteger(rd.rid) && rd.rid > 0 });
+    }
+  }
+  return out.sort((p, q) => (p.road < q.road ? -1 : p.road > q.road ? 1 : p.seg - q.seg));
+}
+/** An IR with every route tag removed (untagged, as a region planned before RTE). */
+const untag = (ir) => { const o = JSON.parse(JSON.stringify(ir)); for (const x of [...(o.roads ?? []), ...(o.paths ?? [])]) if (x.ext) delete x.ext[ROUTE]; return o; };
+
+test('streetRuns, untagged: exactly origin/main\'s output, grouped growth pieces (band or not, rid or not) and _g<n> district ids included', () => {
   const band = { 'architect_mc:street': { zone: 'quay', district: 'quay' }, 'architect_mc:band': { district: 'quay', runs: [[0, 0, 15, 0]] } };
-  const r = runsOf([
-    road('route_st_quay_1', 0, { 'architect_mc:street': { zone: 'quay', district: 'quay' } }),
-    road('route_st_b_1_1', 2),
-    road('route_st_quay_1_g1', 4, band),
-    road('route_st_quay_1_g1_1', 8, band), road('route_st_quay_1_g1_2', 12, band),
-    // (an RTE2-era growth's groups that lost their band: a revision's piece (rid) with a _g<n> stem, no district of that id)
-    { ...road('route_st_quay_1_g2_1', 16), rid: 2 },
-  ]);
-  assert.deepEqual(r, { route_st_b_1_1: 'follow b_1', route_st_quay_1: 'follow quay' });
+  const plan = (ids) => ({ spec: { districts: ids.map((id) => ({ id })) } });
+  const cases = [
+    { roads: [road('route_st_quay_1', 0, { 'architect_mc:street': { zone: 'quay', district: 'quay' } }), road('route_st_b_1_1', 2), road('route_st_quay_1_g1', 4, band),
+      road('route_st_quay_1_g1_1', 8, band), road('route_st_quay_1_g1_2', 12, band), { ...road('route_st_quay_1_g2_1', 16), rid: 2 }] },
+    { params: plan(['quay_g1']), roads: [road('route_st_quay_g1_1', 0, { 'architect_mc:street': { zone: 'z', district: 'quay_g1' } })] },
+    { params: plan(['quay']), roads: [road('route_st_quay_g1_1', 0)] },
+    { roads: [road('route_st_quay_g1_1', 0)] },
+  ];
+  for (const eff of cases) assert.deepEqual(streetRuns(eff), streetRunsMain(eff), JSON.stringify(eff.roads.map((x) => x.id)));
 });
 
-test('streetRuns, untagged: a district whose own id ends in _g<n> (quay_g1) keeps its street; a _g<n> stem is a growth only when no district has that id (v0.88.0 review P2)', () => {
-  const plan = (ids) => ({ plan: { zones: [{ id: 'z', program: { districts: ids.map((id) => ({ id })) } }] } });
-  const legacy = (d) => road(`route_st_${d}_1`, 0, { 'architect_mc:street': { zone: 'z', district: d } });
-  // (the plan's districts list names quay_g1; its legacy street, untagged, flagged by the old stampStreets)
-  assert.deepEqual(Object.fromEntries(streetRuns({ params: plan(['quay_g1']), roads: [legacy('quay_g1')] }).map((r) => [r.road, `${r.follow} ${r.district}`])), { route_st_quay_g1_1: 'true quay_g1' });
-  // (unflagged: the plan's list alone)
-  assert.deepEqual(streetRuns({ params: plan(['quay_g1']), roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.district), ['quay_g1']);
-  // (no plan record, no rid: as before RTE3, the id's district)
-  assert.deepEqual(streetRuns({ roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.district), ['quay_g1']);
-  // (quay's grown street beside: no district quay_g1, so its _g1 stem is a growth, never a follow run)
-  assert.deepEqual(streetRuns({ params: plan(['quay']), roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.road), []);
+test('streetRuns, untagged: the v0.88.0 fix check\'s collision (quay\'s bandless grouped growth route_st_quay_1_g2_1, rid 2, beside a district quay_1_g2) reads as origin/main reads it', () => {
+  // (an RTE2-era growth's groups: no band, no flag (they lost both), rid 2 from the effective merge; the plan records quay and quay_1_g2.
+  // main's id rule reads them as quay_1_g2's following street; untagged, RTE3 changes nothing, so it reads the same, whatever that is)
+  const g = (id, z) => ({ ...road(id, z, null, 64), rid: 2 });
+  const eff = { params: { spec: { districts: [{ id: 'quay' }, { id: 'quay_1_g2' }] } }, roads: [g('route_st_quay_1_g2_1', 60), g('route_st_quay_1_g2_2', 61)] };
+  assert.deepEqual(streetRuns(eff), streetRunsMain(eff));
+  assert.deepEqual([...new Set(streetRunsMain(eff).map((r) => `${r.road} ${r.district} ${r.follow}`))], ['route_st_quay_1_g2_1 quay_1_g2 true', 'route_st_quay_1_g2_2 quay_1_g2 true'], 'main\'s reading');
+});
+
+test('streetRuns, untagged: equal to origin/main\'s on every IR in the kit fixtures and scenario goldens, their route tags removed', () => {
+  const KIT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name.endsWith('.json')) files.push(f); } };
+  walk(path.join(KIT, 'test', 'fixtures'));
+  walk(path.join(KIT, '..', 'scenarios', 'goldens'));
+  // (every object with a roads array of road records, at any depth: IRs, effective IRs, embedded fixture IRs)
+  const irs = [];
+  const find = (o, where) => {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o.roads) && o.roads.length && o.roads.every((r) => r && typeof r.id === 'string' && Array.isArray(r.points))) irs.push([where, o]);
+    for (const [k, v] of Object.entries(o)) if (v && typeof v === 'object') find(v, `${where}.${k}`);
+  };
+  for (const f of files) { let j; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; } find(j, path.relative(KIT, f)); }
+  assert.ok(irs.length >= 20, `IRs found: ${irs.length}`);
+  let streets = 0;
+  for (const [where, ir] of irs) {
+    const u = untag(ir);
+    const want = streetRunsMain(u);
+    streets += want.length;
+    assert.deepEqual(streetRuns(u), want, where);
+  }
+  assert.ok(streets > 0);
 });
 
 test('growPlan, untagged legacy IR (the v0.88.0 reviewer\'s case): district quay_g1 grows 3 frontage lots on its street route_st_quay_g1_1, as origin/main (v0.88.0: NO_ROOM, no standing street)', async () => {
@@ -95,6 +153,7 @@ test('growPlan, untagged legacy IR (the v0.88.0 reviewer\'s case): district quay
   assert.equal(err, null, 'never NO_ROOM');
   assert.deepEqual(p.lots.map((l) => l.spec.id), ['quay_g1_3', 'quay_g1_4', 'quay_g1_5']);
   assert.ok(p.lots.every((l) => l.slot.kind === 'frontage' && l.slot.street === 'route_st_quay_g1_1'), JSON.stringify(p.lots.map((l) => l.slot)));
+  assert.deepEqual(p.lots.map((l) => l.slot.u), [67, 125, 113], 'main\'s frontage positions');
   assert.equal(p.extension, null);
   assert.deepEqual(streetRuns(eff).map((r) => [r.road, r.district, r.follow]), [['route_st_quay_g1_1', d, true]]);
 });
