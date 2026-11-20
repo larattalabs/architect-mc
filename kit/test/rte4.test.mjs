@@ -38,7 +38,8 @@ function routeEndsMain(eff, district) {
   return { ends: routeEnds.map((n) => n.id), free: free.map((n) => n.id) };
 }
 const arr = (a) => (Array.isArray(a) ? a : []);
-const untagRoutes = (ir) => { const o = JSON.parse(JSON.stringify(ir)); for (const x of [...arr(o.roads), ...arr(o.paths)]) if (x?.ext) delete x.ext[ROUTE]; return o; };
+/** An IR without the RTE records (route tags; (fix round) and the district tags RTE4's growths write): as a release before RTE saved it. */
+const untagRoutes = (ir) => { const o = JSON.parse(JSON.stringify(ir)); for (const x of [...arr(o.roads), ...arr(o.paths)]) if (x?.ext) { delete x.ext[ROUTE]; delete x.ext[DISTRICT]; } return o; };
 const endsOf = (eff, d) => { const r = grow.streetRouteEnds(eff, d); return { ends: r.ends.map((n) => n.id), free: r.free.map((n) => n.id) }; };
 
 /** Following districts `a` and `b` on one shore (water x 90..99), planned by the bundled districts program; `b` grown once along its boundary. */
@@ -65,7 +66,7 @@ test('growPlan: district b\'s boundary extension never starts at b_1\'s grown en
   assert.deepEqual(p.lots.map((l) => l.spec.id), ['b_3', 'b_4']);
 });
 
-test('streetRouteEnds, tagged: each district\'s own ends, a grown end its growth\'s (b: b_s0, b_s1; b_1: its ends and its grown end)', async () => {
+test('streetRouteEnds, recorded: each district\'s own ends, a grown end its growth\'s (its pieces name b_1) (b: b_s0, b_s1; b_1: its ends and its grown end)', async () => {
   const { eff } = await shorePair('b', 'b_1');
   assert.deepEqual(endsOf(eff, 'b'), { ends: ['b_s0', 'b_s1'], free: ['b_s1'] });
   assert.deepEqual(endsOf(eff, 'b_1'), { ends: ['b_1_s0', 'b_1_s1', 'route_st_b_1_1_g1_end'], free: ['route_st_b_1_1_g1_end'] });
@@ -142,23 +143,54 @@ test('streetRuns and growPlan, b and b_street: b_street\'s street b_street_stree
   assert.deepEqual([...new Set(grow.streetRuns(u).map((r) => r.district))], ['b']);
 });
 
-test('the district tag is written only where one id is another\'s plus a word: districts b and b_1 (a digit), and a lone district, stay untagged', async () => {
-  assert.equal(land.districtIdsShadow(['b', 'b_street']), true);
-  assert.equal(land.districtIdsShadow(['b', 'b_props']), true);
-  assert.equal(land.districtIdsShadow(['b', 'b_1']), false);
-  assert.equal(land.districtIdsShadow(['b', 'b_1', 'bx', 'a']), false);
-  assert.equal(land.districtIdsShadow(['quay_g1']), false);
-  const W = 160, c = makeColumns(0, 0, W, W, 1);
-  c.ground.fill(64); c.height.fill(64); c.floor.fill(62); c.flags.fill(0);
-  const ds = ['b', 'b_1'].map((id) => ({ id, size: [40, 40], lots: 1, shared: 'square' }));
-  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), survey: c, claim: { minX: 0, minZ: 0, maxX: W - 1, maxZ: W - 1, minY: -64, maxY: 319 }, params: { spec: { districts: ds } }, seed: '7' });
-  assert.ok(p.ir.roads.length > 0 && p.ir.roads.every((r) => !r.ext?.[DISTRICT]), 'no district tag');
+test('untaggedMisreads: a road the longest id or the street rule gives another district (b_street_w beside b_street; a lone b_street\'s b_street_street_w); b / b_1 and a lone b read right', () => {
+  const o = (id, district) => ({ id, district });
+  assert.equal(land.untaggedMisreads([o('b_street_w', 'b'), o('b_street_street_w', 'b_street')], ['b', 'b_street']), true);
+  assert.equal(land.untaggedMisreads([o('b_street_street_w', 'b_street')], ['b_street']), true);
+  assert.equal(land.untaggedMisreads([o('b_street_street_w', 'b_street'), o('c_street_w', 'c')], ['b_street', 'c']), true);
+  assert.equal(land.untaggedMisreads([o('b_street_w', 'b'), o('b_1_street_w', 'b_1')], ['b', 'b_1']), false);
+  assert.equal(land.untaggedMisreads([o('quay_g1_street_e', 'quay_g1')], ['quay_g1']), false);
+  assert.equal(land.untaggedMisreads([o('b_street_w', 'b')], ['b']), false);
 });
 
-test('no fixture or scenario golden carries the district tag (their IRs are unchanged)', () => {
+/** A districts plan of V districts `ids` (40 x 40, one lot, a square) on flat 160 x 160 land, seed 7, its effective IR and a growth's plan per district. */
+async function flatPlan(ids) {
+  const W = 160, claim = { minX: 0, minZ: 0, maxX: W - 1, maxZ: W - 1, minY: -64, maxY: 319 };
+  const c = makeColumns(0, 0, W, W, 1);
+  c.ground.fill(64); c.height.fill(64); c.floor.fill(62); c.flags.fill(0);
+  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), survey: c, claim, params: { spec: { districts: ids.map((id) => ({ id, size: [40, 40], lots: 1, shared: 'square' })) } }, seed: '7' });
+  const eff = mergeEffective(p.ir);
+  const st = revisionStanding({ id: 'r', claim: [0, 0, W - 1, W - 1], effective: eff, held: { runs: [], town: [], terrain: [] } });
+  const grows = Object.fromEntries(ids.map((d) => { try { return [d, grow.growPlan({ eff, standing: st, survey: surveyApi(c, claim), grow: { district: d, lots: 1 }, rid: 1 }).lots.map((l) => l.slot.street)]; } catch (e) { return [d, e.message.split(':').slice(0, 2).join(':')]; } }));
+  return { ir: p.ir, eff, grows };
+}
+
+test('(v0.89.0 review P2-2) a lone district b_street: its roads are tagged, its street is its own, it grows on it (was NO_ROOM "no standing street")', async () => {
+  const { ir, eff, grows } = await flatPlan(['b_street']);
+  assert.deepEqual(Object.fromEntries(ir.roads.map((r) => [r.id, r.ext?.[DISTRICT]?.id ?? null])), { b_street_street_w: 'b_street', b_street_street_e: 'b_street' });
+  assert.deepEqual([...new Set(grow.streetRuns(eff).map((r) => r.district))], ['b_street']);
+  assert.ok(Array.isArray(grows.b_street) && grows.b_street.every((st) => st.startsWith('b_street_street_')), JSON.stringify(grows));
+});
+
+test('(v0.89.0 review P2-2) b_street beside c: both districts\' roads tagged; b_street grows on its own street, c on its', async () => {
+  const { ir, eff, grows } = await flatPlan(['b_street', 'c']);
+  assert.ok(ir.roads.filter((r) => !r.id.startsWith('route_')).every((r) => r.ext?.[DISTRICT]?.id === (r.id.startsWith('c_') ? 'c' : 'b_street')), JSON.stringify(ir.roads.map((r) => [r.id, r.ext])));
+  assert.deepEqual(Object.fromEntries(grow.streetRuns(eff).map((r) => [r.road, r.district])), Object.fromEntries(ir.roads.filter((r) => !r.id.startsWith('route_')).map((r) => [r.id, r.id.startsWith('c_') ? 'c' : 'b_street'])));
+  assert.ok(Array.isArray(grows.b_street) && grows.b_street.every((st) => st.startsWith('b_street_street_')), JSON.stringify(grows));
+  assert.ok(Array.isArray(grows.c) && grows.c.every((st) => st.startsWith('c_street_')), JSON.stringify(grows));
+});
+
+test('the district tag only where an untagged reader misreads: districts b and b_1, a lone b, and c beside d stay untagged (their IRs unchanged)', async () => {
+  for (const ids of [['b', 'b_1'], ['b'], ['c', 'd']]) {
+    const { ir } = await flatPlan(ids);
+    assert.ok(ir.roads.length > 0 && ir.roads.every((r) => !r.ext?.[DISTRICT]), `${ids}: no district tag`);
+  }
+});
+
+test('no scenario golden carries the district tag (their IRs are unchanged); among the fixtures only rte4\'s and gr/land.json\'s boundary growth (its roads name quay)', () => {
   const hits = [];
   const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name.endsWith('.json') && fs.readFileSync(f, 'utf8').includes(DISTRICT)) hits.push(path.relative(KIT, f)); } };
   walk(path.join(KIT, 'test', 'fixtures'));
   walk(path.join(KIT, '..', 'scenarios', 'goldens'));
-  assert.deepEqual(hits, [path.join('test', 'fixtures', 'rte4', 'land-irs.json')]);
+  assert.deepEqual(hits.sort(), [path.join('test', 'fixtures', 'gr', 'land.json'), path.join('test', 'fixtures', 'rte4', 'land-irs.json')]);
 });
