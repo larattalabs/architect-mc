@@ -215,13 +215,16 @@ public final class SliceT5FDev {
 				});
 			});
 		DevBridge.register("dev.player.break", 30_000, "{at: [x,y,z]} - (T5Fa) TEST: the player (survival) breaks the block there with an iron "
-			+ "pickaxe (a real destroyBlock: its drops), then picks the drops up into the inventory -> {broken, collected: {item: n}}", (req, mc) -> {
+			+ "pickaxe (a real destroyBlock: its drops), then picks the drops up into the inventory (with block drops off, the drops the break would make) -> {broken, collected: {item: n}}", (req, mc) -> {
 				BlockPos at = pos(req.getAsJsonArray("at"));
 				return ServerTasks.callAsPlayer((level, player) -> {
 					ItemStack held = player.getMainHandItem().copy();
 					GameType was = player.gameMode.getGameModeForPlayer();
 					player.setGameMode(GameType.SURVIVAL); // a real survival break, with drops (the headless bot spectates)
-					player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_PICKAXE));
+					ItemStack tool = new ItemStack(Items.IRON_PICKAXE);
+					player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+					var state = level.getBlockState(at);
+					List<ItemStack> would = net.minecraft.world.level.block.Block.getDrops(state, level, at, level.getBlockEntity(at), player, tool);
 					boolean broken = player.gameMode.destroyBlock(at);
 					player.setItemInHand(InteractionHand.MAIN_HAND, held);
 					player.setGameMode(was);
@@ -234,6 +237,16 @@ public final class SliceT5FDev {
 							throw new IllegalStateException("the player's inventory is full");
 						}
 						e.discard();
+					}
+					if (broken && got.size() == 0) {
+						// the world's rules spawn no block drops (exact rules: doTileDrops off): the player gets what the break would have dropped
+						for (ItemStack s : would) {
+							String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
+							got.addProperty(id, (got.has(id) ? got.get(id).getAsInt() : 0) + s.getCount());
+							if (!player.getInventory().add(s.copy())) {
+								throw new IllegalStateException("the player's inventory is full");
+							}
+						}
 					}
 					JsonObject o = new JsonObject();
 					o.addProperty("broken", broken);
