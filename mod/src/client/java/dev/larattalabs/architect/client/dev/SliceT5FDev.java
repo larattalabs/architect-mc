@@ -27,6 +27,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
@@ -180,16 +181,20 @@ public final class SliceT5FDev {
 							throw new DevBridge.DevException("dev.player.bucket: the player's inventory is full");
 						}
 					}
+					GameType was = player.gameMode.getGameModeForPlayer();
+					player.setGameMode(GameType.SURVIVAL); // a real survival use (the headless bot spectates)
 					player.teleportTo(level, at.getX() + 0.5, at.getY() + 1.0, at.getZ() + 0.5, Set.of(), yr, 90f, false);
 					ItemStack st = player.getMainHandItem();
 					InteractionResult r = player.gameMode.useItem(player, level, st, InteractionHand.MAIN_HAND);
 					player.teleportTo(level, x0, y0, z0, Set.of(), yr, xr, false);
+					String usedIn = player.gameMode.getGameModeForPlayer().getName();
+					player.setGameMode(was);
 					JsonObject o = new JsonObject();
 					o.addProperty("result", String.valueOf(r));
 					o.addProperty("cell", level.getBlockState(at).toString());
 					o.addProperty("hand", BuiltInRegistries.ITEM.getKey(player.getMainHandItem().getItem()).toString());
 					o.addProperty("mintedBucket", minted);
-					o.addProperty("gameMode", player.gameMode.getGameModeForPlayer().getName());
+					o.addProperty("gameMode", usedIn);
 					return o;
 				});
 			});
@@ -198,9 +203,12 @@ public final class SliceT5FDev {
 				BlockPos at = pos(req.getAsJsonArray("at"));
 				return ServerTasks.callAsPlayer((level, player) -> {
 					ItemStack held = player.getMainHandItem().copy();
+					GameType was = player.gameMode.getGameModeForPlayer();
+					player.setGameMode(GameType.SURVIVAL); // a real survival break, with drops (the headless bot spectates)
 					player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_PICKAXE));
 					boolean broken = player.gameMode.destroyBlock(at);
 					player.setItemInHand(InteractionHand.MAIN_HAND, held);
+					player.setGameMode(was);
 					JsonObject got = new JsonObject();
 					for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, new AABB(at).inflate(2.0))) {
 						ItemStack s = e.getItem().copy();
@@ -272,15 +280,15 @@ public final class SliceT5FDev {
 					return o;
 				});
 			});
-		DevBridge.register("dev.blocks.find", 60_000, "{box: [x0,y0,z0,x1,y1,z1], block: id} - (T5Fa) every cell of the box (at most 2M cells) whose "
+		DevBridge.register("dev.blocks.find", 60_000, "{box: [x0,y0,z0,x1,y1,z1], block: id} - (T5Fa) every cell of the box (at most 64M cells; loaded chunks only) whose "
 			+ "block is that block -> {cells: [[x,y,z]]}", (req, mc) -> {
 				JsonArray b = req.getAsJsonArray("box");
 				int[] v = new int[6];
 				for (int i = 0; i < 6; i++) {
 					v[i] = b.get(i).getAsInt();
 				}
-				if ((long) (v[3] - v[0] + 1) * (v[4] - v[1] + 1) * (v[5] - v[2] + 1) > 2_000_000L) {
-					throw new DevBridge.DevException("dev.blocks.find: the box is over 2M cells");
+				if ((long) (v[3] - v[0] + 1) * (v[4] - v[1] + 1) * (v[5] - v[2] + 1) > 64_000_000L) {
+					throw new DevBridge.DevException("dev.blocks.find: the box is over 64M cells");
 				}
 				var block = BuiltInRegistries.BLOCK.getValue(Identifier.parse(req.get("block").getAsString()));
 				return ServerTasks.callAsPlayer((level, player) -> {
@@ -288,8 +296,12 @@ public final class SliceT5FDev {
 					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 					for (int x = v[0]; x <= v[3]; x++) {
 						for (int z = v[2]; z <= v[5]; z++) {
+							LevelChunk ch = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
+							if (ch == null) {
+								continue;
+							}
 							for (int y = v[1]; y <= v[4]; y++) {
-								if (level.getBlockState(m.set(x, y, z)).is(block)) {
+								if (ch.getBlockState(m.set(x, y, z)).is(block)) {
 									cells.add(arr(m));
 								}
 							}
