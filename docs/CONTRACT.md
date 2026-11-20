@@ -33574,3 +33574,15 @@ LYW2's deferred route dedup, on an explicit edge instead of piece ids. Feature `
   road's group `route_d_a__b_1_1` and b_1's ordinary first road `route_d_a__b_1_1`.
 - (v0.86.0 review P1) A route whose id a still-listed road holds is not drawn, so its pieces are not folded either (fixed point).
 - Units: `LayoutsWallTest`, `DistrictLandTest`, `kit/test/rte.test.mjs`, `ApiRulesTest`.
+
+
+### Slice LYW3: more bundled ring walls opt in (light; branch `slice/LYW3` off main b1359937; versions NEXT; recorded 2026-11-19)
+LYW2's leftover. No API member, feature or version added (`layoutWalls` covers it).
+- Survey: the bundled programs with a `ring` op are `walled_hill`, `sky_isle` (opted in by LYW2), `mega_bench` and `crater_works`
+  (`crater_toolbox`'s golden is crater_works). `mega_bench_forest` runs mega_bench's composition.
+- `mega_bench` opts in (`wall: true`): its ring is the region's defensive wall (structure, 10 high, 4 thick, gates N, E, S, W, no towers).
+  Its IR gains `walls` (63-corner line, thickness 4, height 11, 4 gates, `towers: []`); every other member except `programSha` is
+  byte-identical (full and light scales). `mega_bench_forest` follows (only `walls` changes; its programSha is its own file's).
+- `crater_works` stays out: its `rim` is a 2-high rubble lip round the crater with lanterns on it, not a wall.
+- Golden: `mega_bench.golden.json` `irSha` only (budget, cells, tile shas unchanged).
+- Units: `LayoutsWallTest` (mega_bench planned by the kit with node: the wall and 4 gates, no tower; a tile on main), `kit/test/lyw2.test.mjs`.

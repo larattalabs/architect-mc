@@ -201,6 +201,11 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   twice). `architect_mc:land`'s route parts follow the same edges; for a region planned before, a recomputed land record (a GR
   revision) reads a long road's group `route_d_a__b_3_1` as `d_a__b`'s, where it made a bogus route part `d_a__b_3`. CONTRACT "Slice RTE".
 
+### New for Steward (NEXT, slice LYW3)
+- `Regions.layout` of a `mega_bench` (and so `mega_bench_forest`) region planned from NEXT on reports its ring wall: `wall` is
+  `connector.wall` (not `tile`) with gates `wall_g1`..`wall_g4` and no towers. Reporting walls now: `walled_hill`, `sky_isle`, `mega_bench`,
+  `mega_bench_forest`; `crater_works`'s rubble rim stays a `tile`. No API change. CONTRACT "Slice LYW3".
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.

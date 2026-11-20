@@ -167,6 +167,57 @@ class LayoutsWallTest {
 		assertEquals(s, Layouts.shapes(JsonParser.parseString(RING_IR).getAsJsonObject(), List.of(), -64, 319, id -> 0), "deterministic");
 	}
 
+	/**
+	 * (LYW3) A bundled program's IR, planned by the kit with node (kit plan.mjs over the golden synth survey of a 1000-wide claim, as
+	 * kit/test/region-golden.test.mjs plans mega_bench); aborts when node is not on the PATH.
+	 */
+	private static JsonObject plannedIr(String program, String params) throws Exception {
+		Path kit = Path.of("..", "kit").toAbsolutePath().normalize();
+		String js = "import { planRegion } from '" + kit.resolve("lib/region/plan.mjs").toUri() + "'; import { synthSurvey } from '"
+			+ kit.resolve("lib/region/synth.mjs").toUri() + "'; const claim = {minX: -500, minZ: -500, maxX: 499, maxZ: 499, minY: -64, maxY: 319};"
+			+ " const p = await planRegion({programFile: " + new com.google.gson.JsonPrimitive(kit.resolve("regions/" + program + ".mjs").toString())
+			+ ", survey: synthSurvey(claim, 'golden'), claim, node: 'golden', kitVersion: '0.11.0', params: " + params + "});"
+			+ " process.stdout.write(p.irJson);";
+		Process p;
+		try {
+			p = new ProcessBuilder("node", "--input-type=module", "-e", js).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+		} catch (java.io.IOException e) {
+			org.junit.jupiter.api.Assumptions.abort("node is not on the PATH: " + e.getMessage());
+			return null;
+		}
+		String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+		assertTrue(p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0, "the kit planned " + program);
+		return JsonParser.parseString(out).getAsJsonObject();
+	}
+
+	@Test
+	void megaBenchsRingWallIsAWallWithItsFourGates() throws Exception {
+		// (LYW3) mega_bench's ring (radius 470, 4 thick, 10 high, gates N, E, S, W; no towers) opts in: its `wall` part is the wall, not a tile.
+		// The light scale (the same ring) keeps the plan quick; mega_bench_forest is mega_bench's composition, so it reports the same wall
+		List<PartShape> s = Layouts.shapes(plannedIr("mega_bench", "{scale: 'light'}"), List.of(), -64, 319, id -> 0);
+		Map<String, PartShape> m = byId(s);
+		PartShape w = m.get("wall");
+		assertEquals("connector.wall", w.kind(), "the ring wall's part is its wall, not a tile");
+		assertEquals("ground", w.stage());
+		assertEquals(4, w.width(), "its thickness");
+		assertEquals(11, w.height(), "height 10 plus its footing");
+		assertEquals("wall", w.wall());
+		assertEquals(64, w.ends().size(), "63 corners, closed back to the first");
+		assertEquals(w.ends().get(0), w.ends().get(63));
+		assertTrue(w.box().minX() <= -469 && w.box().maxX() >= 469 && w.box().minZ() <= -469 && w.box().maxZ() >= 469, "round the whole claim");
+		List<PartShape> gates = s.stream().filter(x -> "connector.gate".equals(x.kind())).toList();
+		assertEquals(List.of("wall_g1", "wall_g2", "wall_g3", "wall_g4"), gates.stream().map(PartShape::part).toList());
+		for (PartShape g : gates) {
+			assertEquals("gate", g.wallAt());
+			assertEquals("wall", g.wall());
+			assertEquals(5, g.width());
+			assertEquals(5, g.height());
+		}
+		assertEquals(List.of(0, 470), List.of(gates.get(1).ends().get(0).getZ(), gates.get(1).ends().get(0).getX()), "the east gate on the line");
+		assertTrue(s.stream().noneMatch(x -> "tower".equals(x.kind())), "no towers (mega_bench has none)");
+		assertTrue(s.stream().filter(x -> "tile".equals(x.kind())).noneMatch(x -> x.part().equals("wall")));
+	}
+
 	@Test
 	void aDistrictWhoseIdExtendsAnothersLosesNoRoadPiece() {
 		// districts b and b_1: road ids like route_d_a__b_1_1 are ambiguous between b's and b_1's pieces, and the IR names no edge per piece,
