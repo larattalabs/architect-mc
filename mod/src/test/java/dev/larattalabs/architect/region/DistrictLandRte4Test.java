@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
  */
 class DistrictLandRte4Test {
 	static final Path IRS = Path.of("../kit/test/fixtures/rte4/land-irs.json");
+	/** The tag (DistrictLand.DISTRICT_EXT), spelled out: the test compiles against v0.88.0, where the reader is missing. */
+	static final String TAG = "architect_mc:district";
 
 	private static JsonObject ir() throws Exception {
 		return JsonParser.parseString(Files.readString(IRS)).getAsJsonObject().getAsJsonObject("bStreet");
@@ -29,7 +31,7 @@ class DistrictLandRte4Test {
 		JsonObject o = ir();
 		for (JsonElement e : o.getAsJsonArray("roads")) {
 			JsonObject r = e.getAsJsonObject();
-			if (r.get("ext") instanceof JsonObject ex && ex.has(DistrictLand.DISTRICT_EXT)) {
+			if (r.get("ext") instanceof JsonObject ex && ex.has(TAG)) {
 				f.accept(ex);
 				if (ex.size() == 0) {
 					r.remove("ext");
@@ -56,15 +58,15 @@ class DistrictLandRte4Test {
 	@Test
 	void untaggedAndMalformedReadByIdAsBefore() throws Exception {
 		Map<String, String> legacy = Map.of("district:b", "408", "district:b_street", "1411", "route:d_b__b_street", "185");
-		assertEquals(legacy, summary(DistrictLand.of(retag(ex -> ex.remove(DistrictLand.DISTRICT_EXT)), null, null)));
+		assertEquals(legacy, summary(DistrictLand.of(retag(ex -> ex.remove(TAG)), null, null)));
 		assertEquals(legacy, summary(DistrictLand.of(retag(ex -> {
 			JsonObject t = new JsonObject();
-			if ("b".equals(ex.getAsJsonObject(DistrictLand.DISTRICT_EXT).get("id").getAsString())) {
+			if ("b".equals(ex.getAsJsonObject(TAG).get("id").getAsString())) {
 				t.addProperty("id", 17);
 			} else {
 				t.addProperty("id", false);
 			}
-			ex.add(DistrictLand.DISTRICT_EXT, t);
+			ex.add(TAG, t);
 		}), null, null)));
 	}
 
@@ -73,7 +75,7 @@ class DistrictLandRte4Test {
 		assertEquals(Map.of("district:b", "408", "district:b_street", "408", "route:d_b__b_street", "185"), summary(DistrictLand.of(retag(ex -> {
 			JsonObject t = new JsonObject();
 			t.addProperty("id", "c");
-			ex.add(DistrictLand.DISTRICT_EXT, t);
+			ex.add(TAG, t);
 		}), null, null)));
 	}
 }
