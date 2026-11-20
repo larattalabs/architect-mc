@@ -225,7 +225,8 @@ public final class SliceT5FDev {
 					player.setItemInHand(InteractionHand.MAIN_HAND, tool);
 					var state = level.getBlockState(at);
 					List<ItemStack> would = net.minecraft.world.level.block.Block.getDrops(state, level, at, level.getBlockEntity(at), player, tool);
-					boolean broken = player.gameMode.destroyBlock(at);
+					boolean said = player.gameMode.destroyBlock(at);
+					boolean broken = said || !level.getBlockState(at).is(state.getBlock()); // (a waterlogged block answers false, its water left)
 					player.setItemInHand(InteractionHand.MAIN_HAND, held);
 					player.setGameMode(was);
 					JsonObject got = new JsonObject();
