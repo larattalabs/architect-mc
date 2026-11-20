@@ -446,14 +446,17 @@ export async function registerDRS(steps, h) {
       if (!(await haltAS1(tag))) return out;
       const S = saved();
       const missing = keys.filter((k) => !S.pendingCredit?.[k] && !(S.credited ?? []).includes(k));
-      check(missing.length === 0 && !!S.pendingCredit?.[hkey], `${tag}: on disk every member's credit is pending or credited (decCredit's durable record; missing ${json(missing)}); the hall's ${hkey} pending (${sum(S.pendingCredit?.[hkey]?.items)})`, { pend: Object.keys(S.pendingCredit ?? {}), credited: S.credited });
+      // (slice T4R, R1) a group member's credit is its removal.group txn's, booked after its W and member barrier: credited on disk, never a
+      // held J2 pending credit (a pre-T4R queue's pending one is converted by the group's txn)
+      const hallCredited = (S.credited ?? []).includes(hkey);
+      check(missing.length === 0 && (!!S.pendingCredit?.[hkey] || hallCredited), `${tag}: on disk every member's credit is pending or credited (missing ${json(missing)}); the hall's ${hkey} ${hallCredited ? 'credited by its removal.group txn' : `pending (${sum(S.pendingCredit?.[hkey]?.items)})`}`, { pend: Object.keys(S.pendingCredit ?? {}), credited: S.credited });
       const s1 = await restart(tag);
       await L.settle(5000);
       let atStart = await pile();
       // (slice T4c) the hall's pre-T4 pending credit converts at the start when no queued group removal carries it (the region's removal ended):
       // its removal.site txn writes the lost cells from the undo entries, then books the credit once; else (before T4c) it stays stuck for repair
       for (let i = 0; i < 30 && atStart.ledger?.pendingCredit?.[hkey]; i++) { await L.settle(1000); atStart = await pile(); }
-      const converted = !atStart.ledger?.pendingCredit?.[hkey];
+      const converted = !!S.pendingCredit?.[hkey] && !atStart.ledger?.pendingCredit?.[hkey]; // (T4R) credited before the halt: the repair case
       const others = keys.filter((k) => (converted || k !== hkey) && S.pendingCredit?.[k]);
       const bookedAtStart = G.minus(back(atStart.ledger), back(S));
       check(others.every((k) => !atStart.ledger?.pendingCredit?.[k]) && G.same(bookedAtStart, pendSum(S, others)), `${tag}: the members settled at the start booked their pending credits (${others.length} keys, ${sum(bookedAtStart)} units = ${sum(pendSum(S, others))} pending on disk${converted ? '; the hall\'s converted: restored by its removal txn, then credited' : ''})`, { bookedAtStart, others });
