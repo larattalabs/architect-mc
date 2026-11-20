@@ -1143,6 +1143,7 @@ public final class Stockpiles {
 	 * cleared, each keyed and recovered from the intent. A crate it can't read is deferred, untouched. Server thread.
 	 */
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
+		SaveHold.require(srv); // (slice SOFF) held while saving is off: refused before anything changes
 		adoptResult(srv, owner);
 		return java.util.Objects.requireNonNull(get(owner));
 	}
