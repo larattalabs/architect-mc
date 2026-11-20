@@ -17,6 +17,7 @@ import { COND, ROUTE_EXT } from './program.mjs';
 import { STREET_RULES, PAD_MAX, toWorld, toLocal, frontOf, rectWorld, surfaceOps, lane } from './village.mjs';
 import { columnProblem, standingClasses, ridPrefix } from './revise.mjs';
 import { isStreetId, runKeys } from './beside.mjs';
+import { DISTRICT_EXT } from './land.mjs';
 import { fixtureFor, fixtureCells, roadLamp } from './fixtures.mjs';
 import { traceBoundary, normalAt } from './boundary.mjs';
 import { followLots, smoothLine, maskRuns, FOLLOW_PAD } from './followEmit.mjs';
@@ -44,10 +45,16 @@ const rectKeys = (r, into = new Set()) => { for (let z = r[1]; z <= r[3]; z++) f
 const orderOf = (s) => (s.placement === 'central' ? 0 : s.landmark ? 1 : s.placement === 'edge' ? 3 : 2);
 const ID = /^[a-z][a-z0-9_]{0,47}$/;
 
-/** The district a street road belongs to: its `architect_mc:street` flag's, else the prefix before `street_` (`east_street_w` -> east). */
+/**
+ * The district a street road belongs to: its `architect_mc:street` flag's, else ((RTE4) the districts pass's record on it, ext
+ * `architect_mc:district {id}`: district b_street's `b_street_street_w` read as b's by the id), else the prefix before `street_`
+ * (`east_street_w` -> east).
+ */
 function districtOfRoad(rd) {
   const f = rd.ext?.['architect_mc:street'];
   if (f && typeof f.district === 'string') return f.district;
+  const t = rd.ext?.[DISTRICT_EXT]?.id;
+  if (typeof t === 'string') return t;
   const m = /^(.*?)_?street_[a-z0-9_]*$/.exec(rd.id);
   return m && m[1] ? m[1] : null;
 }
@@ -122,6 +129,58 @@ function adjacency(graph) {
     add(a, e, b); add(b, e, a);
   }
   return adj;
+}
+
+/**
+ * (§5) A following district's route ends, for its boundary extension: `{ends, free}`. `ends`: the street's own (`<d>_s<k>`) and an earlier
+ * boundary growth's new end (`<newRoad>_end`); `free`: those terminal (one edge, `along` edges aside) on edges all the street's own (no
+ * join, no other route; a grown end has only its own edge; a standing end an earlier growth continued from is not free).
+ * ((RTE4) Whose an end or an edge is comes from the records: the street's own edge is `route_st_<d>` (the route pass's edge, which its
+ * pieces name in ext architect_mc:route), a growth's edge (path `<newRoad>`, `_g<n>`) and end (`<newRoad>_end`) are the district's whose
+ * flag (`architect_mc:street.district`, else `architect_mc:band.district`) its pieces (`<newRoad>`, groups `<newRoad>_<k>`) carry. Read so
+ * when the district's street pieces carry its route tag; a path or end no record names, and every end of a district whose street is
+ * untagged (a region planned before RTE), read by id exactly as v0.88.0: `route_st_<d>_..._g<n>_end`, `startsWith('route_st_<d>')`, so
+ * district b took b_1's grown end `route_st_b_1_1_g1_end` (and `quay` would take `quayside`'s), kept for those regions.)
+ */
+export function streetRouteEnds(eff, district) {
+  const nodes = eff.graph?.nodes ?? [];
+  const adj = adjacency(eff.graph);
+  const legacyEnd = new RegExp(`^(${district}_s\\d+|route_st_${district}_[a-z0-9_]*_g\\d+_end)$`);
+  const legacyPath = (p) => p.startsWith(`route_st_${district}`);
+  const pieces = [...(eff.roads ?? []), ...(eff.paths ?? [])];
+  const own = `route_st_${district}`;
+  const tagged = pieces.some((x) => x?.ext?.[ROUTE_EXT]?.edge === own);
+  // (a path's district from the records, or undefined: a route pass edge `route_st_<x>` its pieces name; a growth's `<newRoad>` by its flag)
+  const ownerOf = (p) => {
+    if (p.startsWith('route_st_') && pieces.some((x) => x?.ext?.[ROUTE_EXT]?.edge === p)) return p.slice('route_st_'.length);
+    if (!/_g\d+$/.test(p)) return undefined;
+    const pre = `${p}_`;
+    for (const x of pieces) {
+      if (typeof x?.id !== 'string' || (x.id !== p && !(x.id.startsWith(pre) && /^\d+$/.test(x.id.slice(pre.length))))) continue;
+      const d = x.ext?.['architect_mc:street']?.district ?? x.ext?.['architect_mc:band']?.district;
+      if (typeof d === 'string') return d;
+    }
+    return undefined;
+  };
+  const pathOk = (p) => {
+    if (!tagged) return legacyPath(p);
+    const o = ownerOf(p);
+    return o !== undefined ? o === district : legacyPath(p);
+  };
+  const endOk = (id) => {
+    if (!tagged) return legacyEnd.test(id);
+    if (new RegExp(`^${district}_s\\d+$`).test(id)) return true;
+    const m = /^(.+_g\d+)_end$/.exec(id);
+    const o = m ? ownerOf(m[1]) : undefined;
+    return o !== undefined ? o === district : legacyEnd.test(id);
+  };
+  const ends = nodes.filter((n) => n.kind === 'junction' && endOk(n.id) && Array.isArray(n.at));
+  const free = ends.filter((n) => {
+    const es = (adj.get(n.id) ?? []).filter(({ edge }) => !edge.along);
+    if (!es.length || es.some(({ edge }) => edge.external || !pathOk(String(edge.path ?? '')))) return false;
+    return /_g\d+_end$/.test(n.id) ? es.length === 1 : !es.some(({ edge }) => /_g\d+$/.test(String(edge.path ?? '')));
+  });
+  return { ends, free };
 }
 
 /** The plaza node of a run (its district's `<d>_plaza`, the town's `plaza`), or null. */
@@ -519,17 +578,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     const cols = survey.columns;
     if (!cols) return why('boundary');
     const c = eff.claim;
-    // the route's ends: the street's own (`<d>_s<k>`) and an earlier boundary growth's new end (`route_st_<d>_..._g<n>_end`)
-    const endRe = new RegExp(`^(${district}_s\\d+|route_st_${district}_[a-z0-9_]*_g\\d+_end)$`);
-    const routeEnds = (eff.graph?.nodes ?? []).filter((n) => n.kind === 'junction' && endRe.test(n.id) && Array.isArray(n.at));
-    const adj = adjacency(eff.graph);
-    // a free route end: terminal (one edge, `along` edges aside), that edge the street's own (no join, no other route)
-    // (every edge the street's own; a grown end has only its own edge; a standing end an earlier growth continued from is not free)
-    const free = routeEnds.filter((n) => {
-      const es = (adj.get(n.id) ?? []).filter(({ edge }) => !edge.along);
-      if (!es.length || es.some(({ edge }) => edge.external || !String(edge.path ?? '').startsWith(`route_st_${district}`))) return false;
-      return /_g\d+_end$/.test(n.id) ? es.length === 1 : !es.some(({ edge }) => /_g\d+$/.test(String(edge.path ?? '')));
-    });
+    const { ends: routeEnds, free } = streetRouteEnds(eff, district);
     if (!free.length) return why('boundary');
     const [length, depth] = followD.size ?? [64, 24];
     const t = traceBoundary(cols, c, followD.follow, { near: [free[0].at[0], free[0].at[2]], minLength: 16 });

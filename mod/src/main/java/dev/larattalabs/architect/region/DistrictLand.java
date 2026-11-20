@@ -37,6 +37,8 @@ public final class DistrictLand {
 	private static final Pattern ROUTE_GROUP = Pattern.compile("^(d_[a-z0-9_]+?__[a-z0-9_]+?)_\\d+$");
 	/** (RTE) The ext key a route piece names its graph edge under (kit program.mjs ROUTE_EXT). Since 1.71.0. */
 	public static final String ROUTE_EXT = "architect_mc:route";
+	/** (RTE4) The ext key a district's own road names its district under, {@code {id}} (kit land.mjs DISTRICT_EXT). */
+	static final String DISTRICT_EXT = "architect_mc:district";
 
 	private DistrictLand() {
 	}
@@ -147,7 +149,8 @@ public final class DistrictLand {
 			}
 		}
 		// (RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
-		// district's street piece the district whose street edge it names, untagged the longest district with a street edge in the graph
+		// district's street piece the district whose street edge it names, untagged the longest district with a street edge in the graph;
+		// (RTE4) a road tagged with its district (architect_mc:district, where one id is another's plus a word) is that district's
 		java.util.Set<String> stEdges = new java.util.HashSet<>();
 		if (ir.get("graph") instanceof JsonObject g0 && g0.get("edges") instanceof JsonArray es0) {
 			for (JsonElement ee : es0) {
@@ -179,7 +182,7 @@ public final class DistrictLand {
 			}
 			for (JsonElement re : roads) {
 				JsonObject rd = re.getAsJsonObject();
-				if (id.equals(districtOfId(str(rd, "id"), ids, "")) || str(rd, "id").startsWith("route_st_") && id.equals(streetOf(rd, ids, stIds))) {
+				if (id.equals(districtOfRoad(rd, ids)) || str(rd, "id").startsWith("route_st_") && id.equals(streetOf(rd, ids, stIds))) {
 					roadCols(rd, c);
 				}
 			}
@@ -498,6 +501,18 @@ public final class DistrictLand {
 			}
 		}
 		return best;
+	}
+
+	/**
+	 * (RTE4) A road's district: the one its ext {@code architect_mc:district.id} names (a string; an id {@code ids} lacks: none), written by
+	 * the districts pass where one district id is another's plus a word ({@code b} and {@code b_street}: b's {@code b_street_w}); untagged,
+	 * the longest district id it names, as before. As land.mjs districtOfRoad.
+	 */
+	static @Nullable String districtOfRoad(JsonObject rd, List<String> ids) {
+		if (rd.get("ext") instanceof JsonObject ex && ex.get(DISTRICT_EXT) instanceof JsonObject t && t.get("id") instanceof JsonPrimitive d && d.isString()) {
+			return ids.contains(d.getAsString()) ? d.getAsString() : null;
+		}
+		return districtOfId(str(rd, "id"), ids, "");
 	}
 
 	/** (RTE2) A following street piece's district: the one whose street edge it names; untagged, the longest with a street edge. */
