@@ -137,7 +137,7 @@ public final class Layouts {
 			}
 		});
 		// ((RTE) a road piece that names its district route's edge, when that route is drawn whole (it has a section), is shown there only)
-		java.util.Set<String> folded = foldedRoads(ir);
+		java.util.Set<String> folded = foldedRoads(ir, out.keySet());
 		if (ir.get("roads") instanceof JsonArray rs) {
 			for (JsonElement e : rs) {
 				if (e instanceof JsonObject rd && rd.get("points") instanceof JsonArray pts && StatusViews.str(rd, "id") != null && !out.containsKey(StatusViews.str(rd,
@@ -401,23 +401,40 @@ public final class Layouts {
 
 	/**
 	 * (RTE, pure) The road pieces folded into a district route drawn whole that are not listed again on their own: only those naming their
-	 * edge (an untagged IR's pieces stay listed twice, as v0.83.0: their ids are ambiguous between edges).
+	 * edge (an untagged IR's pieces stay listed twice, as v0.83.0: their ids are ambiguous between edges), and only for a route whose own
+	 * shape is drawn: its id not in {@code taken} nor a road that stays listed.
 	 */
-	static java.util.Set<String> foldedRoads(JsonObject ir) {
+	static java.util.Set<String> foldedRoads(JsonObject ir, java.util.Set<String> taken) {
 		java.util.Set<String> out = new java.util.HashSet<>();
 		if (!(ir.get("roads") instanceof JsonArray rs)) {
 			return out;
 		}
+		// (v0.86.0 review P1) a route's pieces fold only when its own shape is drawn: an id already taken (a lot, an answer's part) or held by
+		// a road that stays listed (an untagged piece, a roads-only route's piece) skips the route, so its pieces stay listed. Folding only
+		// frees ids, so the routes that can't be drawn are found by repeating until none drops out
 		java.util.Set<String> whole = new java.util.HashSet<>();
 		wholeRoutes(ir).forEach(ed -> whole.add(StatusViews.str(ed, "id")));
-		for (JsonElement q : rs) {
-			if (q instanceof JsonObject rd && rd.get("points") instanceof JsonArray && edgeOf(rd) != null && whole.contains(edgeOf(rd)) && pieceOrder(edgeOf(rd),
-				legacyPiece(edgeOf(rd)), rd) != null) {
-				out.add(StatusViews.str(rd, "id"));
+		whole.removeAll(taken);
+		while (true) {
+			out.clear();
+			java.util.Set<String> listed = new java.util.HashSet<>();
+			for (JsonElement q : rs) {
+				if (!(q instanceof JsonObject rd) || !(rd.get("points") instanceof JsonArray) || StatusViews.str(rd, "id") == null) {
+					continue;
+				}
+				String e = edgeOf(rd);
+				if (e != null && whole.contains(e) && pieceOrder(e, legacyPiece(e), rd) != null) {
+					out.add(StatusViews.str(rd, "id"));
+				} else {
+					listed.add(StatusViews.str(rd, "id"));
+				}
+			}
+			if (!whole.removeIf(listed::contains)) {
+				return out;
 			}
 		}
-		return out;
 	}
+
 
 	/**
 	 * (LYW, pure) A district's connecting routes that the IR's roads don't already show whole: each graph edge of the districts pass
