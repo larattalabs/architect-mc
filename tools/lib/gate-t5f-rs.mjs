@@ -375,9 +375,10 @@ export async function scoopBarrier(H) {
 // ------------------------------------------------------------------ P2-a: the grate's bars
 
 /**
- * t5-grate-broken (P2-a, A). The tiles wrote the grate (the write held); the player breaks 2 bars (a real break with an iron pickaxe: the
- * bars in their inventory); released. The bars are not written again, and the removal's refund excludes them (red on 8cT: writeBody's
- * journal guard covers only bars the journal says the tiles wrote; a broken bar's cell is open and rewritten).
+ * t5-grate-broken (P2-a, A; a REGRESSION row, green on dc814bb1: rule 5). The tiles wrote the grate (the write held); the player breaks 2
+ * bars (a real break with an iron pickaxe: the bars in their inventory); released. The bars are not written again, and the removal's
+ * refund excludes them. The contract expected red ("writeBody's guard covers only journaled bars"), but rs03's bars are the tiles' and so
+ * journaled: 8cT's guard holds here. The grate case the journal gets wrong (ACTIVE, the chunk lost) is t5-tile-k4's for the lava.
  */
 export async function grateBroken(H) {
   const { ctx, G, L, check, log, json } = H;
@@ -403,7 +404,7 @@ export async function grateBroken(H) {
     const now = (await L.call('dev.blocks.find', { box: w.box, block: 'minecraft:iron_bars' }, 60_000)).cells ?? [];
     const rewritten = pick.filter((c) => now.some((q) => q[0] === c[0] && q[1] === c[1] && q[2] === c[2])).length;
     out.after = { phase: fs1?.phase, rewritten };
-    check(rewritten === 0, `GB (P2-a): the broken bars are never written again: ${rewritten} of 2 rewritten (red on 8cT: the open rule rewrites them)`);
+    check(rewritten === 0, `GB (P2-a): the broken bars are never written again: ${rewritten} of 2 rewritten (a regression: 8cT's journal guard covers the tiles' bars)`);
     const b0 = await barsStock(H);
     await G.remove(ctx, w.region);
     const got = (await barsStock(H)) - b0;

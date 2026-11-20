@@ -58,7 +58,7 @@ export async function waterBucket(ctx) {
     await sleep(3000);
     const empty = !(await sourcesOf(ctx, [cell])).length;
     out.pre = { cell, bucket: b, empty, pondCells: pond.cells.length };
-    check(/SUCCESS|CONSUME/.test(String(b?.result)) && empty, `WB: the precondition: the tiles wrote the pond, the player bucketed the edge source ${cell.join(',')} (${b?.result}, ${b?.gameMode}); it stays empty with the write held (${empty})`);
+    check(/success|consume/i.test(String(b?.result)) && empty, `WB: the precondition: the tiles wrote the pond, the player bucketed the edge source ${cell.join(',')} (${b?.result}, ${b?.gameMode}); it stays empty with the write held (${empty})`);
     await L.call('dev.fluid.hold', { write: false }, 10_000);
     let fs1 = null;
     for (let i = 0; i < 180; i++) { fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); const pb = (fs1?.bodies ?? []).find((x) => x.id === pond.id); if (pb && pb.state !== 'pending' && pb.state !== 'checked') break; await sleep(1000); }
@@ -78,9 +78,10 @@ export async function waterBucket(ctx) {
 }
 
 /**
- * t5-force-lost (P2-b). h_core_demo: the tiles write the bodies (the write held), every chunk saved; released with TX:fluid.write:apply:1
- * armed (bare): the write txn's R (fluid.written) durable through DurableFile, its forced ticks scheduled in memory only, the chunks not
- * saved. The restart (forced passes traced, dev.fluid.forceTrace, armed in the new JVM before the world opens) replays the txn: the forced
+ * t5-force-lost (P2-b). h_core_demo: the tiles write the bodies (the write held), every chunk saved; the bodies' chunks armed lost
+ * (dev.chunk.drop); released with TX:fluid.write:barrier:effects armed (bare): the write txn's R (fluid.written) durable through
+ * DurableFile, its forced ticks scheduled in memory only, the chunks not on disk (a halt at apply:1 is too early on 8cT: the R's save is
+ * not durable yet and the replay re-runs it). The restart (forced passes traced, dev.fluid.forceTrace, armed in the new JVM before the world opens) replays the txn: the forced
  * ticks come back with each chunk's W (red on 8cT: the W is redone, the R's probe reads APPLIED and is skipped, nothing forces: forceBody
  * never runs). A trace, not the settle, is the target, so the still pond is a valid body here (the contract's flowing body would also read
  * its predicted levels; recorded, not judged).
@@ -100,11 +101,14 @@ export async function forceLost(ctx) {
     await L.call('dev.stockpile.save', {}, 300_000).catch(() => null);
     await L.cmd('/save-all flush');
     await sleep(1500);
-    await L.call('dev.fluid.forceTrace', { on: true }, 10_000);
-    await L.call('dev.journal.killAt', { point: 'TX:fluid.write:apply:1' }, 10_000);
+    // the bodies' chunks never reach disk from here (the barrier still acknowledged): at TX:fluid.write:barrier:effects the R is durable
+    // (fluids.json through DurableFile), the chunks are not
+    const chunks = [...new Map(d.bodies.flatMap((b) => [...b.cells, ...b.shell]).map((c) => [`${c[0] >> 4},${c[2] >> 4}`, [c[0] >> 4, c[2] >> 4]])).values()];
+    await L.call('dev.chunk.drop', { chunks }, 10_000);
+    await L.call('dev.journal.killAt', { point: 'TX:fluid.write:barrier:effects' }, 10_000);
     await L.call('dev.fluid.hold', { write: false }, 10_000);
     out.halted = await waitDown(ctx);
-    check(out.halted, 'FZ: the precondition: TX:fluid.write:apply:1 reached (the R durable) and the JVM halted bare');
+    check(out.halted, `FZ: the precondition: TX:fluid.write:barrier:effects reached and the JVM halted bare (the bodies' ${chunks.length} chunk(s) kept off disk)`);
     if (!out.halted) return out;
     // the new JVM, before the world opens (its recovery replays the write txn): the replay's forced passes traced (FluidTestFlags)
     fs.mkdirSync(path.join(L.GAME_DIR, 'architect'), { recursive: true });
@@ -118,13 +122,15 @@ export async function forceLost(ctx) {
     const rec = path.join(L.SAVES, world, 'architect-regions', region, 'fluids.json');
     const disk = fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, 'utf8')) : {};
     const fs2 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
-    out.after = { writeTxnOnDisk: !!disk.writeTxn || (disk.bodies ?? []).some?.((b) => b.writeTxn), phase: fs2?.phase, bodies: (fs2?.bodies ?? []).map((b) => [b.id, b.state]), forced };
+    out.after = { writeTxnOnDisk: Object.values(disk.bodies ?? {}).some((b) => !!b?.writeTxn), phase: fs2?.phase, bodies: (fs2?.bodies ?? []).map((b) => [b.id, b.state]), forced };
     log(`  FZ: ${json(out)}`);
+    check(out.after.writeTxnOnDisk, `FZ: the precondition: the R (fluid.written: writeTxn) durable in fluids.json after the restart (${out.after.writeTxnOnDisk})`);
     check(forced.some((f) => f.startsWith(`${pond.id}@`)), `FZ (P2-b): the replay forces ${pond.id} again (the ticks with its chunk's W): forced passes ${json(forced)} (red on 8cT: the R skipped, none)`);
   } finally {
     await L.call('dev.fluid.hold', { write: false }, 10_000).catch(() => null);
     await L.call('dev.fluid.forceTrace', { on: false }, 10_000).catch(() => null);
     await L.call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+    await L.call('dev.chunk.drop', { off: true }, 10_000).catch(() => null);
     if (region) await removeWait(ctx, region).catch(() => null);
     await L.leaveWorld().catch(() => null);
   }
