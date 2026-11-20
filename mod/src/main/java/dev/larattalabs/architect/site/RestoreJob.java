@@ -776,6 +776,34 @@ final class RestoreJob implements Placement.Job {
 		dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: a pre-T4 road removal: its footprint held from the queue's load", siteId);
 	}
 
+	/**
+	 * (slice T4R, R2) A pre-T4 road's paid cells standing now, as found-cells evidence: its run's tally while its entries are active (the job
+	 * not committed yet); once its undo committed (no run: its entries are UNDONE), each cell its restore writes back where the block standing
+	 * is not that cell's before, counted as the block's own item (a road's paid cells are its blocks: gravel, stone, slabs).
+	 */
+	java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> legacyCells(ServerLevel level, Infra inf) {
+		if (group == null || SiteJournal.undone(siteId, group).isEmpty()) {
+			return RoadBuilder.tallyOf(level, inf, RoadBuilder.dropPlayerMatches(level, inf, false)).cells();
+		}
+		List<dev.larattalabs.architect.survival.Refunds.Cell> out = new ArrayList<>();
+		try {
+			for (SiteJournal.CellWrite w : SiteJournal.restore(level, siteId, group).cells()) {
+				BlockPos p = BlockPos.of(w.pos());
+				net.minecraft.world.level.block.state.BlockState now = level.getBlockState(p);
+				String id = Builder.blockId(now);
+				String before = w.value().state().getStringOr("Name", "minecraft:air");
+				if (now.isAir() || id.equals(before)) {
+					continue;
+				}
+				String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(now.getBlock().asItem()).toString();
+				out.add(new dev.larattalabs.architect.survival.Refunds.Cell(w.pos(), id, Map.of(item, 1)));
+			}
+		} catch (Sites.SiteException e) {
+			return null;
+		}
+		return out;
+	}
+
 	/** (T4 final round) The legacy road's conversion waits (logged once). */
 	private transient @Nullable String legacyWait;
 
@@ -797,10 +825,12 @@ final class RestoreJob implements Placement.Job {
 		// (slice T4R, R2) the converted credit carries found-cells evidence: the road's paid cells standing now (held since the queue loaded),
 		// so its refund pays min(the pre-T4 credit, what its W finds standing) per chunk
 		ServerLevel level = Sites.levelOf(server, inf.dimension());
-		java.util.Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells = level == null ? null : RoadBuilder.tallyOf(level, inf, RoadBuilder
-			.dropPlayerMatches(level, inf, false)).cells();
-		if (cells == null) {
+		if (level == null) {
 			return inf.dimension() + " is not loaded";
+		}
+		java.util.Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells = legacyCells(level, inf);
+		if (cells == null) {
+			return "its restore can't be read for its found cells";
 		}
 		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), cells, BlockPos.of(c.at()));
 		st.addProperty("legacyRoad", true);

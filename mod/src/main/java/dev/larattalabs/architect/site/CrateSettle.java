@@ -1069,7 +1069,11 @@ public final class CrateSettle {
 				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group, cells), cells));
 				SiteJournal.Restore r0 = SiteJournal.restore(level, site, group);
 				fin = new JsonObject(); // (slice T4R, P1-4) its restore's count, kept with the txn: a replayed or recovered result reports it
-				fin.addProperty("restored", r0.cells().size());
+				int written = 0;
+				for (dev.larattalabs.architect.journal.JournalStore.Meta m : SiteJournal.undone(site, group)) {
+					written += m.cells(); // the cells its entries wrote: what its restore puts back (a BOX site's template included)
+				}
+				fin.addProperty("restored", Math.max(written, r0.cells().size()));
 				fin.addProperty("kept", 0);
 				if (more.isEmpty()) {
 					SiteJournal.Restore r = r0;
