@@ -63,6 +63,7 @@ public final class FluidTxns {
 
 	/** Registers both kinds (TxnServer, at load). */
 	public static void register(TxnCore c) {
+		FluidTestFlags.applyAtLoad(); // (T5Fa TEST, dev environments only) holds armed before a crash row's restart
 		c.register(CHARGE_KIND);
 		c.register(DRAIN_KIND);
 		c.register(WRITE_KIND);
