@@ -1160,7 +1160,7 @@ export async function registerTCC(steps, h) {
       await wait(2000);
       const before = await rparts();
       check(sum(before.placed) > 0, `${tag}: ${rid} paid for ${sum(before.placed)} cell(s) from the stockpile`, before);
-      return { rid, rparts, before, crate, pst };
+      return { rid, rparts, before, crate, pst, owner };
     };
     // (T4 final round) the road removed for good: no record, no paid block standing, its refund credited into the stockpile (stock = before's
     // stock + the paid blocks that stood), nothing owed or dropped
@@ -1168,6 +1168,13 @@ export async function registerTCC(steps, h) {
       check(!(await roadState(pr.rid).catch(() => null)), `${tag}: ${pr.rid} removed (no record left; the review's green run ended BUILDING)`, after.states);
       check(sum(after.placed) === 0, `${tag}: no paid block of ${pr.rid} stands (${json(after.placed)})`, after);
       check(G.same(after.stock, G.plus(pr.before.stock, pr.before.placed)), `${tag}: its refund credited into the stockpile: ${json(after.stock)} = ${json(G.plus(pr.before.stock, pr.before.placed))}`, after);
+    };
+    /** (T4 final round) The removal's job queued (the row's precondition: the review's T4-pileroad never removed its road, refused as not its owner's). */
+    const removalQueued = async (tag, rid, rm) => {
+      let j = null;
+      for (let i = 0; i < 10 && !j; i++) { j = ((await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? []).find((x) => x.site === rid) ?? null; if (!j) await L.sleep(500); }
+      check(!!j, `${tag}: the removal of ${rid} queued (${json(j)}; ${json(rm).slice(0, 160)})`, { j, rm });
+      return j;
     };
     const roadGone = async (rid, s = 120) => { for (let i = 0; i < s && (await roadState(rid).catch(() => null)); i++) await L.sleep(1000); };
     // T4-pileroad (fix round, finding 5): a stockpile's road removed with its credit save refused, then the game halted unsaved: its refund
@@ -1181,7 +1188,8 @@ export async function registerTCC(steps, h) {
         // the job queued and paused before its first write (its stash saved), then every ledger write failing (its chunks flush, its ledger
         // does not: the review's case), then the job runs and the game halts unsaved
         await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
-        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        const rm = await api(`remove ${rid} ${pr.owner} noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await removalQueued(tag, rid, rm);
         await wait(2000);
         await ps({ failLedgerOnly: 1000 }); // the ledger's writes only (the queue file and txn.json still write)
         await call('dev.removal.pause', { site: rid, off: true }, 10_000);
@@ -1211,7 +1219,8 @@ export async function registerTCC(steps, h) {
       if (pr) {
         const { rid, rparts, before, crate, pst } = pr;
         await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
-        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        const rm = await api(`remove ${rid} ${pr.owner} noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await removalQueued(tag, rid, rm);
         await wait(3000);
         const rc = await call('dev.stockpile.removecrate', { owner, pos: crate, force: true }, 60_000).catch((e) => ({ error: String(e?.message ?? e).slice(0, 200) }));
         const ps1 = await pst();
@@ -1236,7 +1245,8 @@ export async function registerTCC(steps, h) {
       if (pr) {
         const { rid, rparts, before } = pr;
         await call('dev.removal.pause', { site: rid, after: 0 }, 10_000);
-        const rm = await api(`remove ${rid} - noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        const rm = await api(`remove ${rid} ${pr.owner} noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await removalQueued(tag, rid, rm);
         await wait(3000);
         call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
         const down = await haltWait();
