@@ -12,6 +12,13 @@
    "dynamic": [],
    "env": [],
    "eager": [],
+   "data": [
+    "scenarios/goldens/districts_demo/ir.json",
+    "scenarios/goldens/route_demo/ir.json",
+    "scenarios/goldens/route_demo/survey.bin",
+    "scenarios/goldens/s7/ir.json",
+    "scenarios/goldens/s7/survey.bin"
+   ],
    "verified": "20261113-100918-change unit-mod"
   },
   "umt": {
