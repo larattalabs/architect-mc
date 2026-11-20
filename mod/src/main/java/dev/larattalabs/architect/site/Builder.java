@@ -1927,6 +1927,13 @@ public final class Builder {
 					continue;
 				}
 			}
+			// (T4 final round, P1 3) a box hold over the cell or its pair: nothing billed (no swap refund, no retill, no payment) and nothing
+			// written; the cell waits. Checked before any of them
+			boolean held = heldCell(level, p) || q != null && heldCell(level, q);
+			if (held) {
+				r.blockedSince.putIfAbsent(i, ticks);
+				continue;
+			}
 			r.blockedSince.remove(i);
 			if (swapNow) {
 				refundSwap(level, s, r, i, free, purse);
@@ -1943,18 +1950,14 @@ public final class Builder {
 			final int fi = i, fj = j;
 			final BlockState fnow = now;
 			final BlockPos fq = q;
-			boolean held = heldCell(level, p) || q != null && heldCell(level, q);
-			if (!payPut(purse, s.id(), r.cost.get(i), j >= 0 ? r.cost.get(j) : List.of(), held, () -> {
+			if (!payPut(purse, s.id(), r.cost.get(i), j >= 0 ? r.cost.get(j) : List.of(), false, () -> {
 				if (!put(level, r, fi, p, true)) {
 					return false;
 				}
 				r.paidAgain(fi, fnow);
 				return true;
 			}, j >= 0 ? () -> put(level, r, fj, fq, false) : null, p)) {
-				if (held) {
-					r.blockedSince.putIfAbsent(i, ticks);
-				}
-				continue; // (T2b final check P1-1) not paid (a held crate): nothing placed, the cell waits
+				continue; // (T2b final check P1-1) not paid (a held crate), or its write refused (paid back): nothing placed, the cell waits
 			}
 			// a cell finish placed free, mined since and now paid for: it is refundable again
 			if (free.get(i) || j >= 0 && free.get(j)) {
@@ -2745,7 +2748,9 @@ public final class Builder {
 					}
 					continue;
 				}
-				put(level, r, i, p, false);
+				if (!put(level, r, i, p, false)) {
+					continue; // (T4 final round) refused (a box hold): not built, not counted
+				}
 				free.set(i);
 				placed++;
 			}

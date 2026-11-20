@@ -1269,8 +1269,19 @@ export async function registerTCC(steps, h) {
             fs.writeFileSync(sf, JSON.stringify(root, null, 2));
             fs.writeFileSync(qf, JSON.stringify(q, null, 2));
           }
-          fs.rmSync(path.join(W.dir, 'architect', 'dev-removal-pause.json'), { force: true }); // the pause is kept across a restart: not this one
           check(made && !!st, `${tag}: the queued job turned pre-T4 offline (C29's credit ${json(st?.refund ?? null)}, no stash)`, { st });
+          // the pause is kept across the restart (its file): the job resumes paused before its first write (HEAD converts it first, the stash
+          // saved). Then the review's fault: the ledger's writes fail (its chunks flush), the job runs, the game halts unsaved. The base pays
+          // through C29's credit, whose refused save drops the job: the refund lost
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await wait(3000);
+          await ps({ failLedgerOnly: 1000 });
+          await call('dev.removal.pause', { site: rid, off: true }, 10_000);
+          await wait(5000);
+          call('dev.txn.halt', { save: false }, 10_000).catch(() => null);
+          const down2 = await haltWait();
+          check(down2, `${tag}: halted unsaved after the job ran with the ledger's writes failing`);
           await L.openWorld(name);
           await L.tp(...W.at);
           await roadGone(rid);

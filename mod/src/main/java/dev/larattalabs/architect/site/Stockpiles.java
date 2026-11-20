@@ -701,6 +701,13 @@ public final class Stockpiles {
 			throw new Sites.SiteException(Reason.NOT_LOADED, "the crate " + at.toShortString() + " is not loaded");
 		}
 		boolean last = p.crates.size() == 1;
+		String credits = last ? CrateSettle.stashCrediting(owner) : null;
+		if (credits != null) {
+			// (T4 final round, P1 1) the last crate would end the pile while a removal's durable stash (its refund, past its commit) is to be credited
+			// into it: refused (an open txn's pile: hold refuses every crate above). Steward 5(b): no other crate removal, insert or draw is refused
+			throw new Sites.SiteException(Reason.SITE_BUSY, owner + "'s stockpile: its last crate stays while " + credits + " is to credit its refund there",
+				"held(other)");
+		}
 		if (last && anyBuilding(p)) {
 			return new CrateRemoval(false, Map.of(), "the last crate of " + owner + " can't go while its targets build (force doesn't override it)", false);
 		}
@@ -1162,8 +1169,7 @@ public final class Stockpiles {
 
 	/** (slice T3b) Refuses SITE_BUSY {@code held(other)} while an open txn holds the owner's pile (an adoption): dissolve, removeStockpileCrate. */
 	static void requirePileFree(String owner) throws Sites.SiteException {
-		// (T4 final round, P1 1) the open txn's hold, or a durable removal stash crediting the pile (a removal pending past its commit)
-		String h = CrateSettle.pileHeld(owner);
+		String h = dev.larattalabs.architect.txn.TxnServer.heldWhy("pile:" + owner);
 		if (h != null) {
 			throw new Sites.SiteException(Reason.SITE_BUSY, owner + "'s stockpile: an open transaction holds it (" + h + ")", "held(other)");
 		}
