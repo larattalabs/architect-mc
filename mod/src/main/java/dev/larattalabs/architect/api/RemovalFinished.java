@@ -7,6 +7,9 @@ import org.jspecify.annotations.Nullable;
  * answered at once and for a decided one whose call answered {@code SITE_BUSY held(decided)} and that finished by itself later (after a
  * restart too). At least once: listeners stay idempotent.
  *
+ * (slice T4R) One logical completion per removal: a whole region's removal fires one event of kind {@code "region"} (never a {@code "group"}
+ * one beside it); a group's or stage's is persisted with its txn and fired again after a restart until delivered.
+ *
  * @param kind       {@code "site"} (a site, a road or a cell site), {@code "group"} (a whole group or one stage of it) or {@code "region"}
  * @param id         the site's, road's, group's or region's id
  * @param stage      the stage undone, for a stage's removal; else null

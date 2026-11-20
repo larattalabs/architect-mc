@@ -33,6 +33,12 @@ public interface Sites {
 		return list(owner);
 	}
 
+	/**
+	 * A site, road or cell site by id. Since NEXT (slice T4R): a site or road whose removal is decided and not yet settled (its call answered
+	 * {@code SITE_BUSY held(decided)}, or its group's removal still settles it) is returned with status {@link BuildStatus#REMOVING} and reason
+	 * {@link BuildStatus#HELD_DECIDED} until its removal's txn retires; absence then means removed and settled (while {@link #loadHealthy()}
+	 * is true).
+	 */
 	Optional<SiteView> get(String siteId);
 
 	/**
@@ -573,7 +579,8 @@ public interface Sites {
 	 * (BC, Steward GE ask) Whether the world sites store loaded cleanly: a world is running and its sites file was read (or there was none
 	 * yet). False before a world starts, after it stops, and when the file exists but could not be read (then no sites are loaded and placing
 	 * is refused): a consumer must not read "no Architect sites" as "none stand" unless this is true. Any thread. Feature
-	 * {@code "sitesLoadHealthy"}. Since 1.60.0.
+	 * {@code "sitesLoadHealthy"}. Since 1.60.0. Since NEXT (slice T4R): false too when any store a removal settles through failed to load
+	 * (the queue file, the stockpiles file, the txn file): every removal is held then, and absence means nothing.
 	 */
 	default boolean loadHealthy() {
 		throw new UnsupportedOperationException("Sites.loadHealthy needs Architect API 1.60.0");

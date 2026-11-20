@@ -16,7 +16,8 @@ import org.jspecify.annotations.Nullable;
  * @param reason null unless {@code state} is {@link #WAITING} or {@link #FAILED} (a batch item's wait with no typed cause, such as
  *               {@code PLAN_STALE} or {@code JOURNAL_UNAVAILABLE}, is {@code waiting} with a null reason: never guessed): {@link #MATERIALS}, {@link #BILL_CAP},
  *               {@link #FILL_BLOCKED}, {@link #TXN_HELD}, {@link #TERRAIN}, {@link #STAGE}, {@link #APPROVAL}, {@link #NOT_LOADED},
- *               {@link #OCCUPIED}, {@link #PLAYER_IN_BOX}, or (state failed) {@code failed:<Reason>}; appended only
+ *               {@link #OCCUPIED}, {@link #PLAYER_IN_BOX}, or (state failed) {@code failed:<Reason>}; (Since NEXT) {@link #HELD_DECIDED} with state
+ *               {@link #REMOVING}: a decided removal that finishes by itself; appended only
  * @param waitsOn always a typed id, never text: for {@link #TERRAIN} the part whose staged terrain it waits on; for {@link #STAGE} the
  *                target (site, road or item key) it waits for; for {@link #BILL_CAP}, {@link #MATERIALS}, {@link #FILL_BLOCKED} and
  *                {@link #TXN_HELD} the target itself; otherwise null
