@@ -36,6 +36,7 @@
     "kit/test/fixtures/rte2/land-irs.json",
     "kit/test/fixtures/rte3/land-irs.json",
     "kit/test/fixtures/rte3/layout-ir.json",
+    "kit/test/fixtures/rte4/land-irs.json",
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/schem/corrupt.schem",
     "kit/test/fixtures/schem/goldens.json",
