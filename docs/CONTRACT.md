@@ -34381,10 +34381,10 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   hand-ordered adoptCrates and clearJoinedCrate dropped for T3b's txn, its transient takeUpStarted for T4a's persisted TAKE_UP
   (`Placement.inTakeUp` guards a cancel and a direct Remove, which refuses SITE_BUSY `taking_up` before `Placement.abort`); the rest kept.
   `failLedgerWrites` keeps both meanings (a count: T2b's; a boolean: SOFF2's).
-- **(a) P1 1:** `requirePileFree` reads `CrateSettle.pileHeld` (an open txn's `pile:`, or a durable stash naming the pile, crate-fed too);
+- **(a) P1 1:** removeStockpileCrate refuses the last crate while a durable stash names the pile (crate-fed too); dissolve reads `pileHeld`;
   `CrateTxn.settle` holds `pile:<owner>`; owed keys from the O effects (P2). **(b) P1 2:** a pre-T4 queued standalone road job converts its
   C29 credit into a `removal.road` stash, saved confirmed, before it goes on (no per-cell N3 cap for it). **(c) P1 3:** `Builder.payPut`
-  checks the hold before billing; a refused write is paid back out of the paid record, never built; a road stash holds its footprint
+  checks the hold before billing (a swap's refund and a retill included); a refused write is paid back out of the paid record, never built; a road stash holds its footprint
   (`hold`), no rbox; only the owning removal's adapter is exempt (`RemovalTxn.siteOf`). **(d) P1 4:** one found receipt per (W, chunk).
 - **Gaps:** open txns park while saving is off; ledger jobs park with no stockpile; pending credits and the W probe wait on a failed queue
   file or txn.json; a removal refused after its stash was saved drops the stash. **SOFF2:** dispenser/dropper/crafter honour a waiting fill;
@@ -34395,7 +34395,8 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   xr-survival "remove while parked" red on B (`gate-runs-T4redB/20261120-015555`: removed, +47 stone_bricks); soff-crash Y2 red on B (the
   stale refusal after saving went off); fk-crash FKLH red on B (`…/20261120-012431`: 18 flint taken from a FILLING fill after a restart
   under the hold). T4-pileroad is green on A once asked as the road's owner (the review's row was refused as not the owner's and never
-  removed its road); T4-legacyroad's red is the unit.
+  removed its road); T4-legacyroad red on 8b742e1d + rows (`gate-runs-T4red/20261120-073423`: the ledger's writes failing, C29's credit
+  lost, 13 gravel), green on HEAD.
 - **Rows adapted to the merged contract:** ps-crash RRF (the hook fires in the removal txn's refund barrier), dfg-defer SAC1b (pile.adopt's
   decided point), x-resume (b) (a failure after the decision finishes REMOVED, never PARTIAL), DR4b tolerant of a converted hall.
 - **Not built:** the full `removal.group` txn (the queue down to a cursor, entry-held credits) of §3; group roads' C29 credit (it waits on a
