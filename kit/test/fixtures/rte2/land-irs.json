@@ -1,0 +1,665 @@
+{
+ "note": "(RTE2) Hand-written districts IRs for districtLand (kit/test/rte2.test.mjs) and DistrictLand (DistrictLandRte2Test): districts b and b_1, whose ids share the prefix b_.",
+ "tagged": {
+  "params": {
+   "spec": {
+    "districts": [
+     {
+      "id": "a"
+     },
+     {
+      "id": "b",
+      "follow": {
+       "shore": {}
+      }
+     },
+     {
+      "id": "b_1",
+      "follow": {
+       "shore": {}
+      }
+     }
+    ]
+   }
+  },
+  "parts": [
+   {
+    "id": "a_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 0,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 4,
+       "maxY": 64,
+       "maxZ": 4
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 10,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 12,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 21,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_lanes",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 2,
+       "maxX": 20,
+       "maxY": 64,
+       "maxZ": 2
+      }
+     }
+    ]
+   }
+  ],
+  "lots": [
+   {
+    "id": "house_1",
+    "part": "b_1_pads",
+    "box": {
+     "minX": 20,
+     "minY": 64,
+     "minZ": 0,
+     "maxX": 21,
+     "maxY": 70,
+     "maxZ": 0
+    }
+   }
+  ],
+  "roads": [
+   {
+    "id": "b_1_street_w",
+    "points": [
+     [
+      30,
+      64,
+      0
+     ],
+     [
+      32,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_st_b_1_1",
+    "points": [
+     [
+      40,
+      64,
+      0
+     ],
+     [
+      41,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_st_b"
+     }
+    }
+   },
+   {
+    "id": "route_st_b_1_2",
+    "points": [
+     [
+      50,
+      64,
+      0
+     ],
+     [
+      51,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_st_b_1"
+     }
+    }
+   },
+   {
+    "id": "route_join_1_1",
+    "points": [
+     [
+      60,
+      64,
+      0
+     ],
+     [
+      61,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_join_1_2",
+    "points": [
+     [
+      62,
+      64,
+      0
+     ],
+     [
+      63,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_join"
+     }
+    }
+   }
+  ],
+  "paths": [],
+  "graph": {
+   "nodes": [],
+   "edges": [
+    {
+     "id": "route_st_b",
+     "path": "route_st_b"
+    },
+    {
+     "id": "route_st_b_1",
+     "path": "route_st_b_1"
+    },
+    {
+     "id": "route_join",
+     "from": "b_1_s0.route",
+     "to": "t.route",
+     "path": "route_join"
+    }
+   ]
+  }
+ },
+ "untagged": {
+  "params": {
+   "spec": {
+    "districts": [
+     {
+      "id": "a"
+     },
+     {
+      "id": "b",
+      "follow": {
+       "shore": {}
+      }
+     },
+     {
+      "id": "b_1",
+      "follow": {
+       "shore": {}
+      }
+     }
+    ]
+   }
+  },
+  "parts": [
+   {
+    "id": "a_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 0,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 4,
+       "maxY": 64,
+       "maxZ": 4
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 10,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 12,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 21,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_lanes",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 2,
+       "maxX": 20,
+       "maxY": 64,
+       "maxZ": 2
+      }
+     }
+    ]
+   }
+  ],
+  "lots": [
+   {
+    "id": "house_1",
+    "part": "b_1_pads",
+    "box": {
+     "minX": 20,
+     "minY": 64,
+     "minZ": 0,
+     "maxX": 21,
+     "maxY": 70,
+     "maxZ": 0
+    }
+   }
+  ],
+  "roads": [
+   {
+    "id": "b_1_street_w",
+    "points": [
+     [
+      30,
+      64,
+      0
+     ],
+     [
+      32,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_st_b_1_1",
+    "points": [
+     [
+      40,
+      64,
+      0
+     ],
+     [
+      41,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_st_b_1_2",
+    "points": [
+     [
+      50,
+      64,
+      0
+     ],
+     [
+      51,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_join_1_1",
+    "points": [
+     [
+      60,
+      64,
+      0
+     ],
+     [
+      61,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_join_1_2",
+    "points": [
+     [
+      62,
+      64,
+      0
+     ],
+     [
+      63,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   }
+  ],
+  "paths": [],
+  "graph": {
+   "nodes": [],
+   "edges": [
+    {
+     "id": "route_st_b",
+     "path": "route_st_b"
+    },
+    {
+     "id": "route_st_b_1",
+     "path": "route_st_b_1"
+    },
+    {
+     "id": "route_join",
+     "from": "b_1_s0.route",
+     "to": "t.route",
+     "path": "route_join"
+    }
+   ]
+  }
+ },
+ "grown": {
+  "params": {
+   "spec": {
+    "districts": [
+     {
+      "id": "a"
+     },
+     {
+      "id": "b",
+      "follow": {
+       "shore": {}
+      }
+     },
+     {
+      "id": "b_1",
+      "follow": {
+       "shore": {}
+      }
+     }
+    ]
+   }
+  },
+  "parts": [
+   {
+    "id": "a_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 0,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 4,
+       "maxY": 64,
+       "maxZ": 4
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 10,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 12,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_pads",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 21,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   },
+   {
+    "id": "b_1_lanes",
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 20,
+       "minY": 64,
+       "minZ": 2,
+       "maxX": 20,
+       "maxY": 64,
+       "maxZ": 2
+      }
+     }
+    ]
+   },
+   {
+    "id": "rv1_b_1_pads",
+    "rid": 1,
+    "ops": [
+     {
+      "op": "fill",
+      "bounds": {
+       "minX": 70,
+       "minY": 64,
+       "minZ": 0,
+       "maxX": 70,
+       "maxY": 64,
+       "maxZ": 0
+      }
+     }
+    ]
+   }
+  ],
+  "lots": [
+   {
+    "id": "house_1",
+    "part": "b_1_pads",
+    "box": {
+     "minX": 20,
+     "minY": 64,
+     "minZ": 0,
+     "maxX": 21,
+     "maxY": 70,
+     "maxZ": 0
+    }
+   }
+  ],
+  "roads": [
+   {
+    "id": "b_1_street_w",
+    "points": [
+     [
+      30,
+      64,
+      0
+     ],
+     [
+      32,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_st_b_1_1",
+    "points": [
+     [
+      40,
+      64,
+      0
+     ],
+     [
+      41,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_st_b"
+     }
+    }
+   },
+   {
+    "id": "route_st_b_1_2",
+    "points": [
+     [
+      50,
+      64,
+      0
+     ],
+     [
+      51,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_st_b_1"
+     }
+    }
+   },
+   {
+    "id": "route_join_1_1",
+    "points": [
+     [
+      60,
+      64,
+      0
+     ],
+     [
+      61,
+      64,
+      0
+     ]
+    ],
+    "width": 1
+   },
+   {
+    "id": "route_join_1_2",
+    "points": [
+     [
+      62,
+      64,
+      0
+     ],
+     [
+      63,
+      64,
+      0
+     ]
+    ],
+    "width": 1,
+    "ext": {
+     "architect_mc:route": {
+      "edge": "route_join"
+     }
+    }
+   }
+  ],
+  "paths": [],
+  "graph": {
+   "nodes": [],
+   "edges": [
+    {
+     "id": "route_st_b",
+     "path": "route_st_b"
+    },
+    {
+     "id": "route_st_b_1",
+     "path": "route_st_b_1"
+    },
+    {
+     "id": "route_join",
+     "from": "b_1_s0.route",
+     "to": "t.route",
+     "path": "route_join"
+    }
+   ]
+  }
+ }
+}

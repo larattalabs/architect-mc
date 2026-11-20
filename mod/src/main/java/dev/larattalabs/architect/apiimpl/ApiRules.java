@@ -65,6 +65,10 @@ public final class ApiRules {
 		// (LYW) Regions.layout of a walled town: its wall (connector.wall, ends its line, width and height), gates, corner towers, the wall's
 		// lots (PartShape.wall/wallAt), and a district's connecting routes laid in stairs or graded sections
 		"layoutWalls",
+		// (RTE) Regions.layout of a districts region planned since RTE: a district route drawn whole lists each of its road pieces once (in
+		// the route, not also alone), only its own pieces (by the edge each piece names), and a route whose edge id is another route's piece
+		// id is still drawn; a region planned before keeps v0.83.0's shapes
+		"layoutRouteEdges",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 

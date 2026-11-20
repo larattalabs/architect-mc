@@ -13,7 +13,7 @@
 // plus a verge each side). A frontage lot stands with its front edge on `v = c + s (2 + 1 + L)` (L = FRONT_LANE, the lane's length): its pad's
 // batter (PAD_MAX) then stays off the verge row, and its lane (L cells) ends on the row next to the verge, never on it. An extension's lots
 // stand as V's do (their front on the new verge row: the new street is the growth's own).
-import { COND } from './program.mjs';
+import { COND, ROUTE_EXT } from './program.mjs';
 import { STREET_RULES, PAD_MAX, toWorld, toLocal, frontOf, rectWorld, surfaceOps, lane } from './village.mjs';
 import { columnProblem, standingClasses, ridPrefix } from './revise.mjs';
 import { isStreetId, runKeys } from './beside.mjs';
@@ -65,6 +65,20 @@ export function zoneDistricts(eff) {
 }
 
 /**
+ * (RTE3) The following district a street piece is the street of, from the route pass's record on it (ext `architect_mc:route.edge`
+ * `route_st_<d>`, never its id: `route_st_b_1_2` is b's piece 1 group 2 or b_1's piece 2): `d` (null when `dids` is given and lacks it);
+ * a piece tagged with any other edge is no street (null); an untagged piece (a growth's, a region planned before RTE) undefined, for the
+ * caller's id fallback.
+ */
+export function followStreetOf(rd, dids = null) {
+  const t = rd?.ext?.[ROUTE_EXT]?.edge;
+  if (typeof t !== 'string') return undefined;
+  if (!t.startsWith('route_st_')) return null;
+  const d = t.slice('route_st_'.length);
+  return !dids || dids.includes(d) ? d : null;
+}
+
+/**
  * The standing street runs of an effective IR: every straight, axis-aligned segment of a street road (flagged `architect_mc:street`, or the
  * `street_` stem; never a route or a following street `st_`), at least MIN_RUN long. `{road, seg, o, c, u0, u1, y, width, lanterns, lamp,
  * surface, ext, district, prefix, twoPoint, grown}` (`o` 'ew' when the run is along x). Sorted by road id, then segment.
@@ -75,7 +89,12 @@ export function streetRuns(eff) {
     const flagged = !!rd.ext?.['architect_mc:street'];
     if (!flagged && !isStreetId(rd.id)) continue;
     // (§5, GR-b) a following district's street, `route_st_<d>_<n>` (a T2 route): frontage on its straight runs, no §4 extension
-    const fm = /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
+    // ((RTE3) a tagged piece (ext architect_mc:route) reads its district from the tag (a long road's groups `route_st_<d>_<n>_<k>` were read
+    // as district `<d>_<n>`); a piece tagged with another edge is a route. An untagged piece (a growth's, a region planned before RTE) reads
+    // exactly as v0.87.0 did, by its id, on the same path, so a legacy IR reads as it always has (the coordinator's call, v0.88.0 fix check))
+    const tagged = followStreetOf(rd);
+    if (tagged === null) continue;
+    const fm = tagged !== undefined ? [null, tagged] : /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
     if (!fm && (/^(route_)?st_/.test(rd.id) || /^route_/.test(rd.id))) continue;
     const pts = rd.points ?? [];
     for (let i = 0; i + 1 < pts.length; i++) {
@@ -692,11 +711,16 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     const pts = X.path.filter((_, i) => i === 0 || i === X.path.length - 1 || i % 8 === 0).map(([x, , z]) => [x, null, z]);
     const fixture = fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
     const made = street.road(pts, { width: 3, surface: 'path', lanterns: true, mode: 'ground', id: X.newRoad, lamp: roadLamp(fixture) });
-    const rd = r.roads.find((q) => q.id === X.newRoad);
-    if (rd) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
-    else r.paths.filter((q) => q.id.startsWith(X.newRoad)).forEach((q) => { q.ext = { 'architect_mc:band': { district: X.district, runs: X.mask } }; });
-    void made;
-    roads.push(X.newRoad);
+    // ((RTE2) the pieces this road laid, by the ids it returned (a long ground road's groups <newRoad>_<k> too; graded, its path), their ext
+    // merged: never another piece read by an id prefix, never a flag dropped)
+    const ids = new Set(made?.ids ?? []);
+    for (const rd of r.roads) if (ids.has(rd.id)) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
+    for (const q of r.paths) if (ids.has(q.id)) q.ext = { ...(q.ext ?? {}), 'architect_mc:band': { district: X.district, runs: X.mask } };
+    // ((RTE3) the record lists the pieces laid (a long road's groups <newRoad>_<k>, was the base newRoad no road has). The graph below keeps
+    // the base newRoad as the street's identity (node ref, edge path), as the route pass's edge route_<edge> names its pieces' stem
+    // route_<edge>_<n> and a following street's chain route_st_<d>: one street, one name, whatever 4e's groups; growPlan's free-end reader
+    // matches that path (`_g<n>$`) and the end node `<newRoad>_end`, and BesideJoin.road reports the street, not a group)
+    roads.push(...(ids.size ? [...ids] : [X.newRoad]));
     const ext = lotsOut.filter((l) => l.slot.kind === 'extension').sort((a, b) => a.slot.u - b.slot.u);
     const lanesB = lanes;
     for (const l of ext) surfaceOps(lanesB, l.laneCells.map((c) => [c[0], c[1], c[2]]), 'path');

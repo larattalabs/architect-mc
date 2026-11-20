@@ -10,6 +10,8 @@
 // and a reach plan's reach. A seam-step join's graded runs are read from their path boxes (the IR keeps no per-path column list there).
 import { keyRuns, runKeys } from './beside.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
+/** (RTE) program.mjs ROUTE_EXT: the ext key a route piece names its graph edge under. */
+const ROUTE_EXT = 'architect_mc:route';
 
 /** The record's version (6d's grown parts move it to 2, §11). */
 export const LAND_V = 1;
@@ -33,6 +35,16 @@ function roadCols(rd, into) {
   }
 }
 const ids0 = (ir) => (ir.params?.spec?.districts ?? ir.params?.districts ?? []).map((d) => d.id);
+/**
+ * (RTE2) The district `id` names (`<d>_<word>`: `b_1_pads` is b_1's, not b's): the longest of `ids` that `id` extends past `pre`, or null.
+ * A district's own ids go on with a word (pads, lanes, street_w, props_lamp, retain), never a digit, so the longest is exact unless one
+ * district's id is another's plus a word of those (`b_street`).
+ */
+export function districtOfId(id, ids, pre = '') {
+  let best = null;
+  for (const d of ids) if (typeof d === 'string' && String(id).startsWith(`${pre}${d}_`) && (best === null || d.length > best.length)) best = d;
+  return best;
+}
 const boxCols = (b, into) => { for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) into.add(k2(x, z)); };
 const rectOfKeys = (keys) => {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
@@ -56,11 +68,12 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   const v2 = revised || (Array.isArray(ir.revisions) && ir.revisions.length > 0);
   const ridOf = (x) => (Number.isInteger(x?.rid) && x.rid > 0 ? x.rid : 0);
   const grownBy = new Map(); // rid -> {cols: Set, district, mask?}
+  // ((RTE3) a band once per revision: a grouped growth street stamps the same band on each of its groups, which made two equal district parts)
   if (v2) {
     const g = (rid) => { if (!grownBy.has(rid)) grownBy.set(rid, { cols: new Set(), districts: new Set(), bands: [] }); return grownBy.get(rid); };
-    for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); for (const d of ids0(ir)) if (p.id.startsWith(`rv${p.rid}_${d}_`)) q.districts.add(d); }
+    for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); const d = districtOfId(p.id, ids0(ir), `rv${p.rid}_`); if (d) q.districts.add(d); }
     for (const l of ir.lots ?? []) if (ridOf(l)) { const q = g(l.rid); boxCols(l.box, q.cols); }
-    for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs)) q.bands.push(b); }
+    for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs) && !q.bands.some((o) => o.district === b.district && JSON.stringify(o.runs) === JSON.stringify(b.runs))) q.bands.push(b); }
   }
   ir = v2 ? { ...ir, parts: (ir.parts ?? []).filter((p) => !ridOf(p)), lots: (ir.lots ?? []).filter((l) => !ridOf(l)), roads: (ir.roads ?? []).filter((x) => !ridOf(x)) } : ir;
   const partById = new Map((ir.parts ?? []).map((p) => [p.id, p]));
@@ -80,15 +93,25 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   };
   // ---- the districts (placed: a part or a lot of theirs in the IR)
   const ids = ds.map((d) => d.id).filter((id) => typeof id === 'string');
+  // ((RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
+  // district's street piece the district whose street edge it names (ext architect_mc:route.edge `route_st_<id>`), untagged the longest
+  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group))
+  const stEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id).filter((e) => typeof e === 'string' && e.startsWith('route_st_')));
+  const stIds = ids.filter((id) => !stEdges.size || stEdges.has(`route_st_${id}`));
+  const streetOf = (x) => {
+    const t = x.ext?.[ROUTE_EXT]?.edge;
+    if (typeof t === 'string') return t.startsWith('route_st_') && ids.includes(t.slice('route_st_'.length)) ? t.slice('route_st_'.length) : null;
+    return districtOfId(x.id, stIds, 'route_st_');
+  };
   for (const d of ds) {
-    const pre = `${d.id}_`;
+    const mine = (id) => districtOfId(id, ids) === d.id;
     const cols = new Set();
-    for (const p of ir.parts ?? []) if (p.id.startsWith(pre)) for (const op of p.ops ?? []) opCols(op, cols);
-    for (const l of ir.lots ?? []) if (String(l.part ?? '').startsWith(pre)) boxCols(l.box, cols);
-    for (const rd of ir.roads ?? []) if (rd.id.startsWith(pre)) roadCols(rd, cols);
+    for (const p of ir.parts ?? []) if (mine(p.id)) for (const op of p.ops ?? []) opCols(op, cols);
+    for (const l of ir.lots ?? []) if (mine(String(l.part ?? ''))) boxCols(l.box, cols);
+    for (const rd of ir.roads ?? []) if (mine(rd.id)) roadCols(rd, cols);
     // a following district's street (`route_st_<id>`) is inside its mask
-    for (const pa of ir.paths ?? []) if (pa.id.startsWith(`route_st_${d.id}_`) && pa.box) boxCols(pa.box, cols);
-    for (const rd of ir.roads ?? []) if (rd.id.startsWith(`route_st_${d.id}_`)) roadCols(rd, cols);
+    for (const pa of ir.paths ?? []) if (pa.box && pa.id.startsWith('route_st_') && streetOf(pa) === d.id) boxCols(pa.box, cols);
+    for (const rd of ir.roads ?? []) if (rd.id.startsWith('route_st_') && streetOf(rd) === d.id) roadCols(rd, cols);
     if (!cols.size) continue;
     if (d.follow) push('district', d.id, cols, { shape: 'mask' });
     else {
@@ -102,22 +125,38 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   if (jp) for (const op of jp.ops ?? []) opCols(op, join);
   for (const k of runKeys(ir.reach?.runs ?? [])) join.add(k);
   if (!jp) {
-    for (const pa of ir.paths ?? []) if (/^route_join_\d+[lg]?$/.test(pa.id) && pa.box) boxCols(pa.box, join);
-    for (const rd of ir.roads ?? []) if (/^route_join_\d+$/.test(rd.id)) roadCols(rd, join);
+    // ((RTE2) a join piece: one naming the join's edge (route_join, a gate join's route_join_in), else an untagged id, a long road's groups
+    // `route_join_<n>_<k>` included)
+    const joinTag = (x) => { const t = x.ext?.[ROUTE_EXT]?.edge; return typeof t === 'string' ? t === 'route_join' || t === 'route_join_in' : null; };
+    for (const pa of ir.paths ?? []) if ((joinTag(pa) ?? /^route_join_\d+[lg]?$/.test(pa.id)) && pa.box) boxCols(pa.box, join);
+    for (const rd of ir.roads ?? []) if (joinTag(rd) ?? /^route_join_\d+(_\d+)?$/.test(rd.id)) roadCols(rd, join);
   }
   if (join.size) {
     const ext = (ir.graph?.edges ?? []).find((e) => e.id === 'join_external');
     const jd = (ir.graph?.edges ?? []).find((e) => e.id === 'route_join');
     const from = jd ? String(jd.from).split('.')[0] : '';
-    const district = ids.find((id) => from.startsWith(`${id}_`)) ?? null;
+    const district = districtOfId(from, ids);
     // ((7a GJ, §5) through a gate: the junction it ends at (the gate junction's `then`) and the gate it crosses (`via`))
     const jk = ext?.junction?.kind === 'gate' ? ext.junction.then?.kind ?? null : ext?.junction?.kind;
     push('join', 'join', join, { district, junction: jk ?? (ext ? 'end' : null), ...(ext?.via ? { via: ext.via } : {}) });
   }
   // ---- the routes between districts (route_d_<a>__<b>_<n>)
+  // ((RTE) a piece's route is the edge it names (ext architect_mc:route.edge, the districts pass's pieces since RTE). An untagged piece's
+  // id is read as before (route_d_<a>__<b>_<n>), except that a road read so as an edge the graph lacks is a long road's group
+  // (route_d_<a>__<b>_<n>_<k>): route_d_a__b_3_1 is d_a__b's, not a route d_a__b_3. Untagged ids stay ambiguous when both edges exist)
   const routes = new Map();
-  for (const pa of ir.paths ?? []) { const m = /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+[lg]?$/.exec(pa.id); if (m && pa.box) { if (!routes.has(m[1])) routes.set(m[1], new Set()); boxCols(pa.box, routes.get(m[1])); } }
-  for (const rd of ir.roads ?? []) { const m = /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/.exec(rd.id); if (m) { if (!routes.has(m[1])) routes.set(m[1], new Set()); roadCols(rd, routes.get(m[1])); } }
+  const graphEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id));
+  const routeOf = (x, re, group) => {
+    const t = x.ext?.[ROUTE_EXT]?.edge;
+    if (typeof t === 'string') return /^route_d_/.test(t) ? t.slice('route_'.length) : null;
+    const m = re.exec(x.id);
+    if (!m) return null;
+    if (group && graphEdges.size && !graphEdges.has(`route_${m[1]}`)) { const g = /^(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/.exec(m[1]); if (g && graphEdges.has(`route_${g[1]}`)) return g[1]; }
+    return m[1];
+  };
+  const addRoute = (id, f) => { if (!id) return; if (!routes.has(id)) routes.set(id, new Set()); f(routes.get(id)); };
+  for (const pa of ir.paths ?? []) if (pa.box) addRoute(routeOf(pa, /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+[lg]?$/, false), (c) => boxCols(pa.box, c));
+  for (const rd of ir.roads ?? []) addRoute(routeOf(rd, /^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\d+$/, true), (c) => roadCols(rd, c));
   for (const id of [...routes.keys()].sort()) push('route', id, routes.get(id));
   // ---- an outpost's corridor, exactly architect_mc:corridor's runs
   for (const id of Object.keys(ir.corridor ?? {}).sort()) {

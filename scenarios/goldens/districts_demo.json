@@ -3,7 +3,7 @@
  "version": 0,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/districts_demo/ (planned offline over route_demo's golden survey of S3's pinned claim, the scenario's seed)",
  "fromRun": "kit (D1 builder, offline)",
- "irSha": "eb9aba67018b035175541430d853857c24246f7cb2be350524940a49173a5ba6",
+ "irSha": "56ae4d92c745545285daa41771fd5fe55077870a91e2be67ff5acb973d617047",
  "kitVersion": "0.28.0",
  "cells": 20053,
  "tiles": {

@@ -34346,7 +34346,7 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - Mixed routes: unchanged from v0.83.0. A district route with stair or graded sections and road pieces lists each road piece twice (its
   own `route` shape from `ir.roads`, and folded into the edge's one route). Route-piece dedup is deferred until the kit records each
   piece's edge explicitly: piece ids alone are ambiguous (`route_d_a__b_1_1` is edge `route_d_a__b` group 1 of piece 1, or edge
-  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review).
+  `route_d_a__b_1` piece 1), so deduping by id could drop or move another district's road (v0.84.0 review). Done in slice RTE (below).
 - Units: `LayoutsWallTest` (a bundled ring wall; districts b and b_1 lose no road piece), `kit/test/lyw2.test.mjs`, `region-6b` (goldens).
 
 ### Slice T4b fix round as built (the GPT review of 50c4a15f: NOT SAFE; one round)
@@ -34429,3 +34429,85 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   the next player save mints them). Only /save-off's own barrier closes admission.
 - Residual: a crash between adoptCrates' two saves drops nothing of an over-capacity overflow (the ledger records the drop; the start's
   repair clears the crate).
+
+### Slice RTE: route pieces name their edge (light; branch `slice/RTE` off main bceb5a7c; versions NEXT; recorded 2026-11-19)
+LYW2's deferred route dedup, on an explicit edge instead of piece ids. Feature `layoutRouteEdges` (no API member or record).
+- Kit: the route pass takes `tagEdges` (the districts pass sets it): each road and path piece it lays for an edge (`rec.roads`/`rec.paths`,
+  a long road's groups `<edge>_<n>_<k>` included) gets ext `architect_mc:route: {edge}`. Other route passes stay untagged (IRs unchanged).
+- `Layouts`: a district route drawn whole folds in only the pieces naming it, and its road pieces are not listed alone; folded pieces leave
+  the map first, so a route whose edge id is another route's piece id (`route_d_a__b_1`) is built in either edge order. Untagged: v0.83.0.
+- `architect_mc:land` (land.mjs = `DistrictLand`): a route part is the edge a piece names; an untagged road read as an edge the graph lacks
+  is a group (`route_d_a__b_3_1` is `d_a__b`'s, was a bogus `d_a__b_3`; also for regions planned before, when their land is recomputed).
+- Goldens: `s3` and `districts_demo` (kit 0.28.0 kept) `irSha` only (55 and 14 pieces tagged; tile shas, cells unchanged); `kit/test/fixtures/gr/land.json` (embedded IR tags, irSha).
+- Not fixed (an id separator change): a roads-only route's piece id equal to another edge's id still hides that route (one part id); two
+  edges laying the same road id refuse the plan ("road id used twice", read from code): one grouped section is enough, b's long first
+  road's group `route_d_a__b_1_1` and b_1's ordinary first road `route_d_a__b_1_1`.
+- (v0.86.0 review P1) A route whose id a still-listed road holds is not drawn, so its pieces are not folded either (fixed point).
+- Units: `LayoutsWallTest`, `DistrictLandTest`, `kit/test/rte.test.mjs`, `ApiRulesTest`.
+
+### Slice RTE2: ownership from records, not id prefixes (normal; branch `slice/RTE2` off main b1359937; versions NEXT; recorded 2026-11-19)
+RTE's leftovers of the same class: a reader matched `<id>_` and took another owner's pieces. No API member, record or feature.
+- `architect_mc:land` (land.mjs `districtOfId` = `DistrictLand.districtOfId`): a part, lot (its `part`) or road is the district whose id
+  is the longest it extends (`b_1_pads` is `b_1`'s, was `b`'s too); a following street piece is the district its ext
+  `architect_mc:route.edge` names (`route_st_<id>`), untagged the longest district with a `route_st_<id>` graph edge. The join's district
+  and a grown part's district (`rv<n>_<d>_`) likewise. A join piece: tagged `route_join`/`route_join_in`, or untagged `route_join_<n>`,
+  `route_join_<n>_<k>` (a long road's groups were `extra`).
+- Route pass (`tagEdges`, the districts pass only): a piece number n is skipped when `<rid>_<n>` is another edge's id of the pass or
+  begins one (next character not a digit). Edge `route_d_a__b` beside `route_d_a__b_1` numbers 2, 3, ...: both RTE limits are gone for new
+  plans (b's road piece hid b_1's route shape; b's long first road's group `route_d_a__b_1_1` refused the plan, "road id used twice").
+  Untagged passes number as before. Regions planned before keep their ids and RTE's limits.
+- compile.mjs: a connector leg's roads, paths and graph edges are its connector's from the pass's record of the leg's edge and its gate
+  edge `<edge>_g`, not `startsWith('route_<edge>_')` (latent: both legs are the same connector's, so `partOf` is unchanged).
+- grow.mjs: a boundary growth's street flags (`architect_mc:street`, `architect_mc:band`) go on the pieces its road returned (a long
+  ground road's groups too, which lost both), merged into their ext (a graded path's ext was replaced).
+- Goldens unchanged (no golden has prefix-sharing district or edge ids); `kit/test/fixtures/{d3,gr}` parity unchanged.
+- Not fixed: compile.mjs `stampStreets` and grow.mjs `streetRuns` still read `route_st_<d>` by regex, not the tag (a following street's
+  long-road groups); district ids where one is another's plus a part word (`b` and `b_street`: `b_street_w`) stay ambiguous.
+- Units: `kit/test/rte2.test.mjs`, `DistrictLandRte2Test` (shared IRs `kit/test/fixtures/rte2/land-irs.json`).
+
+### Slice LYW3: more bundled ring walls opt in (light; branch `slice/LYW3` off main b1359937; versions NEXT; recorded 2026-11-19)
+LYW2's leftover. No API member, feature or version added (`layoutWalls` covers it).
+- Survey: the bundled programs with a `ring` op are `walled_hill`, `sky_isle` (opted in by LYW2), `mega_bench` and `crater_works`
+  (`crater_toolbox`'s golden is crater_works). `mega_bench_forest` runs mega_bench's composition.
+- `mega_bench` opts in (`wall: true`): its ring is the region's defensive wall (structure, 10 high, 4 thick, gates N, E, S, W, no towers).
+  Its IR gains `walls` (63-corner line, thickness 4, height 11, 4 gates, `towers: []`); every other member except `programSha` is
+  byte-identical (full and light scales). `mega_bench_forest` follows (only `walls` changes; its programSha is its own file's).
+- `crater_works` stays out: its `rim` is a 2-high rubble lip round the crater with lanterns on it, not a wall.
+- Golden: `mega_bench.golden.json` `irSha` only (budget, cells, tile shas unchanged).
+- Units: `LayoutsWallTest` (mega_bench planned by the kit with node: the wall and 4 gates, no tower; a tile on main), `kit/test/lyw2.test.mjs`.
+
+### Slice RTE3: RTE2's leftovers and the v0.87.0 review's follow-ups (normal; branch `slice/RTE3` off `slice/RTE2` 29bdce94, `release/v0.87.0` merged in; versions NEXT; recorded 2026-11-19)
+No API member, record or feature.
+- grow.mjs `followStreetOf`: a street piece's following district from the route pass's record on it (ext `architect_mc:route.edge`
+  `route_st_<d>`); another edge's tag: no street; untagged: the caller's id fallback. compile.mjs `stampStreets` and grow.mjs `streetRuns`
+  use it, the regex only for untagged pieces: a long road's groups `route_st_<d>_<n>_<k>` were district `<d>_<n>` (streetRuns) or
+  unmarked or `<d>_<n>`'s (stampStreets). **The untagged rule (the coordinator's call, v0.88.0 fix check):** an untagged piece (a growth's,
+  a region planned before RTE) reads exactly as v0.87.0's streetRuns and stampStreets read it, on the same code path (its id, `route_st_<d>_<n>`
+  by the lazy regex); no district list, band, `rid` or `_g<n>` heuristic. The tag is read only on a tagged piece. So an untagged grouped
+  growth piece reads as v0.87.0 reads it (`route_st_quay_1_g1_1` is a follow run of district `quay_1_g1`, a district that may not exist), and
+  district `quay_g1` keeps its street. rte3.test.mjs holds v0.87.0's streetRuns as an oracle and checks equality on hand cases and on every
+  IR in kit/test/fixtures and scenarios/goldens with route tags removed (27 IRs). Latent: no plan in the kit suite lays a following street (length <= 256) past 4e's 2048-cell or 256-point caps.
+- A grouped growth street's graph keeps the base `newRoad` (node `ref`, edge `path`, `<newRoad>_end`): the graph names the street, as the
+  route pass's edge `route_<edge>` names its pieces' stem and a following street's chain `route_st_<d>`; growPlan's free-end reader matches
+  that path (`_g<n>$`), and `BesideJoin.road` reports a street, not a group. emitGrowth's returned `roads` now lists the groups laid (was
+  the base id, no road's).
+- Test inputs: every kit test fixture a mod test reads itself is a declared input of the Gradle `test` task (`kitTestFixtures`, 43 exact
+  files) and data of `unit-mod` and of each step whose Java tests read it (d3-unit, gj-unit, pg-unit, gr-unit, rv-unit, 0b-unit, sch-unit,
+  mp-unit, sl-unit, lp-unit, cx-unit) in tools/step-inputs.json (rebuilt: unit-kit's roots gain rte, rte2, rte3). Both were already covered indirectly (the test classpath
+  carries the kit's copy in `architect-sidecar/`, and gate-cache's `gradle` class holds `kit/**`); the entries name them exactly.
+- `LayoutsRte3Test` on `kit/test/fixtures/rte3/layout-ir.json` (kit/tools/rte3-fixture.mjs, checked current by rte3.test.mjs): edge
+  `d_a__b` beside `d_a__b_1`, b's pieces 2, 3 (a stair), 4; each route drawn whole from only its own pieces, in order, either edge order.
+- (v0.87.0 review P2) land.mjs and `DistrictLand`: a revision's band once (a grouped growth street's groups carry the same band; it made two
+  equal `district` parts). Flags stay on every group.
+- (v0.87.0 review P3) `DistrictLand.tagEdge` (and `Layouts.edgeOf`, the street and band districts): a tag's edge counts only as a string,
+  as land.mjs; `false` or `17` was taken as its text.
+- (v0.87.0 review P3) `LayoutsWallTest.plannedIr` drains node's output on another thread; the 120 s wait bounds the run and destroys it.
+- (v0.88.0 review P2, fix check) RTE3's earlier untagged heuristics are gone: the `_g<n>` suffix (06517317: district `quay_g1` lost its
+  street, NO_ROOM) and the district list (790be359: a recorded district `quay_1_g2` and quay's bandless grouped growth `route_st_quay_1_g2_1`).
+  Both cases now read as v0.87.0: `quay_g1` grows `quay_g1_3`, `_4`, `_5` at frontage u 67, 125, 113; `route_st_quay_1_g2_1` is read as
+  district `quay_1_g2`'s following street, as v0.87.0 reads it (a v0.87.0 limit of untagged ids, kept: only a tag tells growth pieces apart).
+  Only streetRuns had a suffix rule; stampStreets and land never did.
+- Goldens unchanged.
+- Not fixed: untagged growth pieces read by id as v0.87.0 (above); district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
+  `startsWith('route_st_<d>')`) still reads ids by prefix, so district `b`'s ends could take `b_1`'s grown street edges (no plan seen).
+- Units: `kit/test/rte3.test.mjs`, `LayoutsRte3Test`, `DistrictLandRte3Test` (`kit/test/fixtures/rte3/land-irs.json`).

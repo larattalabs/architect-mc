@@ -12,6 +12,7 @@ import { loadConfig } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
 import { FEATURES, MAX_RESULT_BYTES } from '../src/protocol.js';
 import { CLOSE_BAD_PROTOCOL, NO_COMMON_PROTOCOL, SidecarServer } from '../src/server.js';
+import type { RunOutcome } from '../src/sidecar.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
@@ -66,9 +67,48 @@ async function hello(port: number, opts: { protocols?: number[]; client?: string
   return c;
 }
 
+/**
+ * The sim designer with a latch: after holdNext(), the next design run takes its pool slot and then waits until released, so
+ * a test can keep a design running for as long as it needs instead of racing the sim's 20 ms steps.
+ */
+class GatedSimDesigner extends SimDesigner {
+  private gate: { started: (id: string) => void; opened: Promise<void> } | undefined;
+  private openers = new Set<() => void>();
+
+  /** Hold the next design run: `started` resolves with its id once it holds its slot; `release` lets it run. */
+  holdNext(): { started: Promise<string>; release: () => void } {
+    let started!: (id: string) => void;
+    let release!: () => void;
+    const startedP = new Promise<string>((r) => (started = r));
+    const opened = new Promise<void>((r) => (release = r));
+    const open = () => {
+      this.openers.delete(open);
+      release();
+    };
+    this.openers.add(open);
+    this.gate = { started, opened };
+    return { started: startedP, release: open };
+  }
+
+  /** Release every held run (test cleanup). */
+  releaseAll(): void {
+    this.gate = undefined;
+    for (const o of [...this.openers]) o();
+  }
+
+  override run(id: string): Promise<RunOutcome> {
+    const g = this.gate;
+    if (!g) return super.run(id);
+    this.gate = undefined;
+    g.started(id);
+    return g.opened.then(() => super.run(id));
+  }
+}
+
 interface Env {
   root: string;
   sc: Sidecar;
+  designer: GatedSimDesigner;
   server: SidecarServer;
   port: number;
   /** stop this sidecar (state saved), as a restart would */
@@ -88,10 +128,12 @@ async function startEnv(root: string, port = 0, beforeStart?: (sc: Sidecar) => v
   const server = new SidecarServer(sc, { host: '127.0.0.1', port, token: TOKEN, validateOutbound: true, log: sc.log });
   await server.start();
   beforeStart?.(sc);
-  await sc.start(new SimDesigner(sc, 20));
+  const designer = new GatedSimDesigner(sc, 20);
+  await sc.start(designer);
   return {
     root,
     sc,
+    designer,
     server,
     port: server.port,
     stop: async () => {
@@ -121,6 +163,13 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
   afterAll(async () => {
     await env.stop();
     rmrf(env.root);
+  });
+  // the tests share one sidecar with one design-pool slot: whatever a test leaves running (a failed test's held design or
+  // unanswered agent job) is ended here, so the next test starts with the slot free instead of queueing behind it
+  afterEach(async () => {
+    env.designer.releaseAll();
+    for (const j of env.sc.jobs.book.active()) env.sc.jobs.cancel(j.id);
+    await until(() => !env.sc.pool.runningKeys().some((k) => k.startsWith('job:') || k.startsWith('design:')), 30_000);
   });
 
   it('negotiation: [1, 2] -> protocol 2 with features and jobs; an unknown set is refused', async () => {
@@ -354,17 +403,29 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
 
   it('an agent job waits for a running design (they share one slot) and starts when the design ends', async () => {
     const c = await hello(env.port, { protocols: [1, 2] });
+    // the design holds the one slot until the test releases it (no race with the sim's 20 ms steps)
+    const held = env.designer.holdNext();
     c.send({ type: 'design.request', id: 'd', request: request({ name: 'Slot Holder' }) });
     const designId = (await c.ack('d')).result.designId as string;
-    await until(() => env.sc.designs.get(designId)!.status === 'designing');
+    expect(await held.started).toBe(designId);
+    expect(env.sc.pool.isRunning(`design:${designId}`)).toBe(true);
     const jobId = await runJob(c, 'r', { kind: 'agent', prompt: 'x', tools: [tool('after')] });
+    expect(env.sc.pool.isWaiting(`job:${jobId}`)).toBe(true);
     // a structured job does not wait for the slot
     const sId = await runJob(c, 's', { kind: 'structured', prompt: 'x', schema: { type: 'object', properties: { a: { type: 'string' } } } });
-    await jobDone(c, sId);
-    expect(['designing', 'checking', 'rendering']).toContain(env.sc.designs.get(designId)!.status);
+    expect((await jobDone(c, sId)).status).toBe('done');
+    expect(env.sc.pool.isRunning(`design:${designId}`)).toBe(true);
     expect(env.sc.jobs.book.get(jobId)!.status).toBe('queued');
+    expect(c.msgs.some((m) => m.type === 'job.tool.call' && m.jobId === jobId)).toBe(false);
+    held.release();
     const call = await c.next((m) => m.type === 'job.tool.call' && m.jobId === jobId, 20_000);
     expect(env.sc.designs.get(designId)!.status).toBe('done');
+    // the design ran (designing) with the job still queued: every running upsert of the design comes before the job's start
+    const at = (pred: (m: Msg) => boolean) => c.msgs.findIndex(pred);
+    const jobStarted = at((m) => m.type === 'job.upsert' && m.job.id === jobId && m.job.status !== 'queued');
+    const designRan = c.msgs.map((m, i) => (m.type === 'design.upsert' && m.design.id === designId && ['designing', 'checking', 'rendering'].includes(m.design.status) ? i : -1)).filter((i) => i >= 0);
+    expect(designRan.length).toBeGreaterThan(0);
+    expect(jobStarted).toBeGreaterThan(Math.max(...designRan));
     c.send({ type: 'job.tool.result', jobId, callId: call.callId, result: 'ok' });
     expect((await jobDone(c, jobId)).status).toBe('done');
     c.ws.close();

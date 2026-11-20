@@ -55,6 +55,8 @@ import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOff
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
 export const PART_ID = /^[a-z][a-z0-9_]{0,47}$/;
+/** (RTE) The ext key a route piece (road or path) names its graph edge under, `{edge}`, when the route pass is asked (`tagEdges`). */
+export const ROUTE_EXT = 'architect_mc:route';
 export const LOT_ID = /^[a-z][a-z0-9_]{0,47}$/;
 export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 export const ANCHOR_NAME = /^[a-z][a-z0-9_]{0,31}$/;
@@ -410,7 +412,8 @@ export class Region {
    * (`ctx.keepOut`, so the IR records it) and the intent's own `keepOut`. Each routed edge becomes ordinary primitives in the
    * path part `part`: 4e ground roads where the route lies on the surveyed ground, graded columns where it cuts or fills, stair
    * flights, hairpin landings and ladder columns; plus a graph edge (`movers`, `segments`). A route writing into keep-out refuses
-   * the plan (KEEP_OUT). Returns `{edges, data}` (the pass's data, with `ms`).
+   * the plan (KEEP_OUT). `tagEdges` (RTE): each piece carries ext `architect_mc:route: {edge}` (its graph edge's id). Returns
+   * `{edges, data}` (the pass's data, with `ms`).
    */
   _route(intent = {}) {
     const it = { ...intent };
@@ -564,6 +567,16 @@ export class Region {
       return top;
     };
     const ownParts = new Map();
+    // ((RTE2) a tagged pass's piece numbers skip any n whose id `<rid>_<n>` is another edge's id or begins one (`<rid>_<n>_...`, `<rid>_<n>l`):
+    // edge route_d_a__b never lays route_d_a__b_1 (edge route_d_a__b_1's id; its groups were b_1's first road's id). Gaps in n are harmless:
+    // readers order pieces by n. Untagged passes number 1, 2, ... as before)
+    const passRids = it.tagEdges ? edges.map((x) => `route_${x.id}`) : [];
+    const nextN = (rid, n) => {
+      for (let k = n + 1; ; k++) {
+        const id = `${rid}_${k}`;
+        if (!passRids.some((o) => o !== rid && o.startsWith(id) && !/[0-9]/.test(o.charAt(id.length)))) return k;
+      }
+    };
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
@@ -582,6 +595,8 @@ export class Region {
       if (d.gates) rec.gates = d.gates; // (7a K1) the gates the edge crossed (only when the plan has walls)
       let n = 0;
       const ladderSegs = [];
+      // ((RTE) where this edge's roads and paths start, to stamp its pieces with their edge below)
+      const roads0 = this.roads.length, paths0 = this.paths.length;
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
       // ((6c D3) an edge with a `lead` meets its junction square on: no column behind the junction cell (the street's end column, a verge)
       // is its; absent: as before)
@@ -603,7 +618,7 @@ export class Region {
       const fpOf = (si) => ec.bySeg[si].filter((o) => !taken.has(`${o.x},${o.z}`)).map((o) => [o.x, o.z, o.y, o.edge]);
       d.segments.forEach((g, si) => {
         const cells = d.path.slice(g.from, g.to + 1);
-        n++;
+        n = nextN(rid, n);
         if (g.shared) return; // an earlier edge's cells: built by it
         // (7a K1) a rope span is the links stage's (its deck, rails and posts); the route writes its approaches only; (6c T3) so are a
         // bridge's span and a tunnel's bore, but the route writes a bridge's far landing (the segment's last cell: on the walk's fill it is
@@ -654,6 +669,12 @@ export class Region {
       });
       // the ladders last (after the walk runs' cuts and fills at their feet)
       d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
+      // ((RTE) `tagEdges`: each road and path this edge laid names its graph edge in ext `architect_mc:route: {edge}`; piece ids alone are
+      // ambiguous (route_d_a__b_1_1: edge route_d_a__b's piece 1 group 1, or route_d_a__b_1's piece 1). Absent: untagged, as before)
+      if (it.tagEdges) {
+        const mine = new Set([...rec.roads, ...rec.paths]);
+        for (const x of [...this.roads.slice(roads0), ...this.paths.slice(paths0)]) if (mine.has(x.id)) x.ext = { ...(x.ext ?? {}), [ROUTE_EXT]: { edge: rid } };
+      }
       for (const o of ec.cols) if (!d.segments[o.seg].shared) taken.add(`${o.x},${o.z}`);
       // ((6c D3) a framed edge records the columns it wrote: its reach)
       if (e.d3.frame) rec.written = keyRuns([...written].filter(([, id]) => id === e.id).map(([k]) => k));

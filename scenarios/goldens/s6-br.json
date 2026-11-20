@@ -3,8 +3,8 @@
  "version": 1,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s6-br/ (7c BR: the plan of the scenario's one-line brief through Regions.compose, s6_cave_city {})",
  "fromRun": "20261114-215819",
- "irSha": "307d43aabb1f6af43dc988e3faa989dd9596a49f26d2c8bdf8ef7aff9f08dea3",
- "kitVersion": "0.74.0",
+ "irSha": "b8f3628ea4e4af58bd3a68c3b2fd9ef8841067fd51cf69280bf950406e78c0fb",
+ "kitVersion": "0.77.0",
  "cells": 612,
  "tiles": {
   "ground|path|58,-27": "e6f124cd2301fa0dc17c8c90d67b00758bf4a4a19456d8ddfa40244ad1da8877",

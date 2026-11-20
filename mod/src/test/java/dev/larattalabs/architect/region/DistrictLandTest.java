@@ -50,6 +50,38 @@ class DistrictLandTest {
 		assertNull(BesideReach.standing("rg9", new int[] {0, 0, 95, 95}, ir).get("walls"));
 	}
 
+	/** (RTE) The route parts' cells by id (kit/test/rte.test.mjs's two districtLand cases, the same numbers). */
+	private static java.util.Map<String, Integer> routeCells(String roads, String paths) {
+		JsonObject ir = JsonParser.parseString("{\"params\":{\"spec\":{\"districts\":[{\"id\":\"a\"},{\"id\":\"b\"},{\"id\":\"b_1\"}]}},\"parts\":[],\"lots\":[],"
+			+ "\"roads\":[" + roads + "],\"paths\":[" + paths + "],\"graph\":{\"nodes\":[],\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\"},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\"}]}}").getAsJsonObject();
+		java.util.Map<String, Integer> out = new java.util.TreeMap<>();
+		for (JsonElement e : DistrictLand.of(ir, null, null).getAsJsonArray("parts")) {
+			if ("route".equals(e.getAsJsonObject().get("kind").getAsString())) {
+				out.put(e.getAsJsonObject().get("id").getAsString(), e.getAsJsonObject().get("cells").getAsInt());
+			}
+		}
+		return out;
+	}
+
+	private static String road(String id, int x0, int x1, String edge) {
+		return "{\"id\":\"" + id + "\",\"points\":[[" + x0 + ",64,0],[" + x1 + ",64,0]],\"width\":1"
+			+ (edge == null ? "" : ",\"ext\":{\"architect_mc:route\":{\"edge\":\"" + edge + "\"}}") + "}";
+	}
+
+	@Test
+	void anUntaggedLongRoadsGroupsAreTheirEdgesRoute() {
+		assertEquals(java.util.Map.of("d_a__b", 90), routeCells(road("route_d_a__b_1", 0, 9, null) + "," + road("route_d_a__b_3_1", 20, 29, null) + ","
+			+ road("route_d_a__b_3_2", 30, 39, null), ""));
+	}
+
+	@Test
+	void aTaggedPieceIsItsRecordedEdgesRoute() {
+		assertEquals(java.util.Map.of("d_a__b", 60, "d_a__b_1", 5), routeCells(road("route_d_a__b_1_1", 0, 9, "route_d_a__b") + ","
+			+ road("route_d_a__b_1_2", 10, 19, "route_d_a__b"), "{\"id\":\"route_d_a__b_1_3\",\"box\":{\"minX\":0,\"minY\":64,\"minZ\":10,\"maxX\":0,"
+			+ "\"maxY\":70,\"maxZ\":14},\"ext\":{\"architect_mc:route\":{\"edge\":\"route_d_a__b_1\"}}}"));
+	}
+
 	@Test
 	void landEqualsTheKits() throws Exception {
 		JsonArray ds = fixture().getAsJsonArray("districts");

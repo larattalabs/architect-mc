@@ -167,6 +167,74 @@ class LayoutsWallTest {
 		assertEquals(s, Layouts.shapes(JsonParser.parseString(RING_IR).getAsJsonObject(), List.of(), -64, 319, id -> 0), "deterministic");
 	}
 
+	/**
+	 * (LYW3) A bundled program's IR, planned by the kit with node (kit plan.mjs over the golden synth survey of a 1000-wide claim, as
+	 * kit/test/region-golden.test.mjs plans mega_bench); aborts when node is not on the PATH.
+	 */
+	/** How long the kit may plan (seconds). */
+	static final long PLAN_TIMEOUT_S = 120;
+
+	private static JsonObject plannedIr(String program, String params) throws Exception {
+		Path kit = Path.of("..", "kit").toAbsolutePath().normalize();
+		String js = "import { planRegion } from '" + kit.resolve("lib/region/plan.mjs").toUri() + "'; import { synthSurvey } from '"
+			+ kit.resolve("lib/region/synth.mjs").toUri() + "'; const claim = {minX: -500, minZ: -500, maxX: 499, maxZ: 499, minY: -64, maxY: 319};"
+			+ " const p = await planRegion({programFile: " + new com.google.gson.JsonPrimitive(kit.resolve("regions/" + program + ".mjs").toString())
+			+ ", survey: synthSurvey(claim, 'golden'), claim, node: 'golden', kitVersion: '0.11.0', params: " + params + "});"
+			+ " process.stdout.write(p.irJson);";
+		Process p;
+		try {
+			p = new ProcessBuilder("node", "--input-type=module", "-e", js).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+		} catch (java.io.IOException e) {
+			org.junit.jupiter.api.Assumptions.abort("node is not on the PATH: " + e.getMessage());
+			return null;
+		}
+		// ((RTE3, v0.87.0 review P3) the output drained on another thread, so the timed wait bounds the run: a reading thread blocked on a hung
+		// node no longer holds the test past it; on timeout the process is destroyed)
+		Process proc = p;
+		java.util.concurrent.CompletableFuture<String> out = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+			try {
+				return new String(proc.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+			} catch (java.io.IOException e) {
+				throw new java.io.UncheckedIOException(e);
+			}
+		});
+		boolean done = p.waitFor(PLAN_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS);
+		if (!done) {
+			p.destroyForcibly();
+			out.cancel(true);
+		}
+		assertTrue(done && p.exitValue() == 0, "the kit planned " + program + (done ? "" : " (timed out after " + PLAN_TIMEOUT_S + " s)"));
+		return JsonParser.parseString(out.get(30, java.util.concurrent.TimeUnit.SECONDS)).getAsJsonObject();
+	}
+
+	@Test
+	void megaBenchsRingWallIsAWallWithItsFourGates() throws Exception {
+		// (LYW3) mega_bench's ring (radius 470, 4 thick, 10 high, gates N, E, S, W; no towers) opts in: its `wall` part is the wall, not a tile.
+		// The light scale (the same ring) keeps the plan quick; mega_bench_forest is mega_bench's composition, so it reports the same wall
+		List<PartShape> s = Layouts.shapes(plannedIr("mega_bench", "{scale: 'light'}"), List.of(), -64, 319, id -> 0);
+		Map<String, PartShape> m = byId(s);
+		PartShape w = m.get("wall");
+		assertEquals("connector.wall", w.kind(), "the ring wall's part is its wall, not a tile");
+		assertEquals("ground", w.stage());
+		assertEquals(4, w.width(), "its thickness");
+		assertEquals(11, w.height(), "height 10 plus its footing");
+		assertEquals("wall", w.wall());
+		assertEquals(64, w.ends().size(), "63 corners, closed back to the first");
+		assertEquals(w.ends().get(0), w.ends().get(63));
+		assertTrue(w.box().minX() <= -469 && w.box().maxX() >= 469 && w.box().minZ() <= -469 && w.box().maxZ() >= 469, "round the whole claim");
+		List<PartShape> gates = s.stream().filter(x -> "connector.gate".equals(x.kind())).toList();
+		assertEquals(List.of("wall_g1", "wall_g2", "wall_g3", "wall_g4"), gates.stream().map(PartShape::part).toList());
+		for (PartShape g : gates) {
+			assertEquals("gate", g.wallAt());
+			assertEquals("wall", g.wall());
+			assertEquals(5, g.width());
+			assertEquals(5, g.height());
+		}
+		assertEquals(List.of(0, 470), List.of(gates.get(1).ends().get(0).getZ(), gates.get(1).ends().get(0).getX()), "the east gate on the line");
+		assertTrue(s.stream().noneMatch(x -> "tower".equals(x.kind())), "no towers (mega_bench has none)");
+		assertTrue(s.stream().filter(x -> "tile".equals(x.kind())).noneMatch(x -> x.part().equals("wall")));
+	}
+
 	@Test
 	void aDistrictWhoseIdExtendsAnothersLosesNoRoadPiece() {
 		// districts b and b_1: road ids like route_d_a__b_1_1 are ambiguous between b's and b_1's pieces, and the IR names no edge per piece,
@@ -193,6 +261,97 @@ class LayoutsWallTest {
 			assertEquals(List.of(new BlockPos(0, 64, 1), new BlockPos(0, 64, 39)), m.get("route_d_a__b_1_1").ends());
 			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0),
 				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's route folds in only b's pieces, none of b_1's");
+		}
+	}
+
+	/** (RTE) A route piece tagged with the edge the kit built it for ({@code ext.architect_mc:route.edge}). */
+	private static String tag(String edge) {
+		return ",\"ext\":{\"architect_mc:route\":{\"edge\":\"" + edge + "\"}}";
+	}
+
+	private static Map<String, PartShape> shapesOf(String ir, boolean reversed) {
+		JsonObject o = JsonParser.parseString(ir).getAsJsonObject();
+		if (reversed) {
+			var es = o.getAsJsonObject("graph").getAsJsonArray("edges");
+			es.add(es.remove(0));
+		}
+		return Layouts.shapes(o, List.of(), -64, 319, id -> 0).stream().collect(Collectors.toMap(PartShape::part, x -> x));
+	}
+
+	@Test
+	void aTaggedPieceFoldsIntoItsRecordedEdgeOnlyAndIsNotListedTwice() {
+		// (RTE; the v0.84.0 fix-check's case) b's first section is a long road in two groups (route_d_a__b_1_1, _1_2); b_1 has only a stair
+		// section (route_d_a__b_1_3). Ids alone would hand b's groups to b_1 (longest edge); the recorded edge keeps them b's
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,70,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_3\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":70,\"maxZ\":50}" + tag("route_d_a__b_1") + "}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1_1\",\"points\":[[1,64,0],[10,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"points\":[[10,64,0],[19,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_3\",\"points\":[[31,74,0],[59,80,0]],\"width\":3" + tag("route_d_a__b") + "}]}";
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> m = shapesOf(ir, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "one route per edge, no piece listed alone (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(10, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0),
+				new BlockPos(31, 74, 0), new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends(), "b's groups stay b's, in order");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 45), new BlockPos(0, 70, 90)), m.get("route_d_a__b_1").ends(),
+				"b_1's route is only its own stair section");
+		}
+	}
+
+	@Test
+	void aMixedRouteWhoseEdgeIdIsAnotherEdgesPieceIdIsStillBuilt() {
+		// (RTE; the v0.83.0 known issue) b's first road piece is route_d_a__b_1, which is b_1's edge id: b_1's mixed route used to be skipped
+		// because that id was already taken by b's piece shape. With pieces folded by their recorded edge, both routes appear
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[60,80,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_2\",\"box\":{\"minX\":20,\"minY\":64,\"minZ\":-1,\"maxX\":30,\"maxY\":74,\"maxZ\":1}" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":64,\"maxZ\":50}" + tag("route_d_a__b_1") + "}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[19,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_3\",\"points\":[[31,74,0],[59,80,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_1\",\"points\":[[0,64,1],[0,64,39]],\"width\":3" + tag("route_d_a__b_1") + "},"
+			+ "{\"id\":\"route_d_a__b_1_3\",\"points\":[[0,64,51],[0,64,89]],\"width\":3" + tag("route_d_a__b_1") + "}]}";
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> m = shapesOf(ir, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b", "route_d_a__b_1"), m.keySet(), "both routes, no piece listed alone (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), new BlockPos(19, 64, 0), new BlockPos(25, 64, 0), new BlockPos(31, 74, 0),
+				new BlockPos(59, 80, 0), new BlockPos(60, 80, 0)), m.get("route_d_a__b").ends());
+			assertEquals(List.of(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1), new BlockPos(0, 64, 39), new BlockPos(0, 64, 45), new BlockPos(0, 64, 51),
+				new BlockPos(0, 64, 89), new BlockPos(0, 64, 90)), m.get("route_d_a__b_1").ends(), "b_1's mixed route, built from its own pieces");
+		}
+	}
+
+	@Test
+	void aTaggedRoadsOnlyRouteKeepsItsPiecesAlone() {
+		// (RTE) a district route laid as roads only has no route shape of its own: its tagged pieces stay listed, as before
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[40,64,0]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3}]},\"paths\":[],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1_1\",\"points\":[[1,64,0],[20,64,0]],\"width\":3" + tag("route_d_a__b") + "},"
+			+ "{\"id\":\"route_d_a__b_1_2\",\"points\":[[20,64,0],[39,64,0]],\"width\":3" + tag("route_d_a__b") + "}]}";
+		Map<String, PartShape> m = shapesOf(ir, false);
+		assertEquals(java.util.Set.of("route_d_a__b_1_1", "route_d_a__b_1_2"), m.keySet());
+	}
+
+	@Test
+	void aMixedRouteWhoseIdARoadsOnlyRoutesPieceHoldsKeepsItsPiecesAlone() {
+		// (RTE, v0.86.0 review P1) b's route is roads only and its first road is route_d_a__b_1, b_1's edge id: b_1's mixed route can't be
+		// drawn (one part id), so its pieces are not folded away either; nothing is lost and the tagged IR shows what the untagged one shows
+		String ir = "{\"graph\":{\"nodes\":[{\"id\":\"a_s0\",\"at\":[0,64,0]},{\"id\":\"b_s0\",\"at\":[40,64,0]},{\"id\":\"b_1_s0\",\"at\":[0,64,90]}],"
+			+ "\"edges\":[{\"id\":\"route_d_a__b\",\"path\":\"route_d_a__b\",\"from\":\"a_s0.route\",\"to\":\"b_s0.route\",\"width\":3},"
+			+ "{\"id\":\"route_d_a__b_1\",\"path\":\"route_d_a__b_1\",\"from\":\"a_s0.route\",\"to\":\"b_1_s0.route\",\"width\":3}]},"
+			+ "\"paths\":[{\"id\":\"route_d_a__b_1_2\",\"box\":{\"minX\":-1,\"minY\":64,\"minZ\":40,\"maxX\":1,\"maxY\":64,\"maxZ\":50}%s}],"
+			+ "\"roads\":[{\"id\":\"route_d_a__b_1\",\"points\":[[1,64,0],[20,64,0]],\"width\":3%s},{\"id\":\"route_d_a__b_2\",\"points\":[[20,64,0],[39,64,0]],\"width\":3%s},"
+			+ "{\"id\":\"route_d_a__b_1_1\",\"points\":[[0,64,1],[0,64,39]],\"width\":3%s},{\"id\":\"route_d_a__b_1_3\",\"points\":[[0,64,51],[0,64,89]],\"width\":3%s}]}";
+		String tagged = String.format(ir, tag("route_d_a__b_1"), tag("route_d_a__b"), tag("route_d_a__b"), tag("route_d_a__b_1"), tag("route_d_a__b_1"));
+		String untagged = String.format(ir, "", "", "", "", "");
+		for (boolean reversed : new boolean[] {false, true}) {
+			Map<String, PartShape> t = shapesOf(tagged, reversed), u = shapesOf(untagged, reversed);
+			assertEquals(java.util.Set.of("route_d_a__b_1", "route_d_a__b_2", "route_d_a__b_1_1", "route_d_a__b_1_3"), t.keySet(),
+				"every road piece still shown (reversed=" + reversed + ")");
+			assertEquals(u, t, "tagged shows what untagged shows (reversed=" + reversed + ")");
+			assertEquals(List.of(new BlockPos(1, 64, 0), new BlockPos(20, 64, 0)), t.get("route_d_a__b_1").ends(), "the id is b's road piece");
 		}
 	}
 
