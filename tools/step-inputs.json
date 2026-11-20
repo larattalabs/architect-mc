@@ -34,6 +34,7 @@
     "kit/test/fixtures/plan/valid/v06_terrace.json",
     "kit/test/fixtures/plan/valid/v72_f3_grove.json",
     "kit/test/fixtures/rte2/land-irs.json",
+    "kit/test/fixtures/rte3/land-irs.json",
     "kit/test/fixtures/rte3/layout-ir.json",
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/schem/corrupt.schem",

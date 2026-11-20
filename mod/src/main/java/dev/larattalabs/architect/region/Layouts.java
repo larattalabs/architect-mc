@@ -345,8 +345,7 @@ public final class Layouts {
 
 	/** (RTE) The graph edge a route piece names (ext {@code architect_mc:route.edge}), or null: an untagged piece (an IR before RTE). */
 	static @Nullable String edgeOf(JsonObject x) {
-		return x.get("ext") instanceof JsonObject ex && ex.get(ROUTE_EXT) instanceof JsonObject t && t.get("edge") instanceof JsonElement e && e.isJsonPrimitive()
-			? e.getAsString() : null;
+		return DistrictLand.tagEdge(x); // ((RTE3) a string edge only, as the kit reads it)
 	}
 
 	/**

@@ -8,6 +8,21 @@ import { emitGrowth, followStreetOf, streetRuns } from '../lib/region/grow.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
 import { region } from '../lib/region/program.mjs';
+import { districtLand } from '../lib/region/land.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const LAND = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'rte3', 'land-irs.json'), 'utf8'));
+/** `kind:id[@revision]` -> cells (a join's or a grown part's: "cells district"), every part listed (a duplicate shows as a second key). */
+function summary(land) {
+  const out = {};
+  for (const p of land.parts) {
+    let k = `${p.kind}:${p.id}${p.revision ? `@${p.revision}` : ''}`;
+    while (k in out) k += '+';
+    out[k] = p.kind === 'join' || p.kind === 'grown' ? `${p.cells} ${p.district}` : p.cells;
+  }
+  return out;
+}
 
 const ROUTE = 'architect_mc:route';
 
@@ -87,6 +102,20 @@ test('a boundary growth\'s street laid as groups: its record lists the groups la
   for (const e of mine) assert.equal(e.path, newRoad, e.id);
   for (const n of p.ir.graph.nodes.filter((q) => q.id.startsWith(`${newRoad}_`))) assert.equal(n.ref, newRoad, n.id);
   assert.ok(p.ir.graph.nodes.some((q) => q.id === `${newRoad}_end`));
+  // ((v0.87.0 review P2, item 5) through land recomputation, as the effective IR carries the revision: one band, one district part)
+  const eff = { ...p.ir, params: { spec: { districts: [{ id: 'quay', follow: { shore: {} } }] } }, roads: p.ir.roads.map((x) => (laid.includes(x.id) ? { ...x, rid: 1 } : x)) };
+  const parts = districtLand(eff, null, { revised: true }).parts.filter((q) => q.kind === 'district' && q.id === 'quay' && q.revision === 1);
+  assert.equal(parts.length, 1, 'the grouped street\'s band is one district part (was one per group)');
+});
+
+// ---- items 5 and 6 (the v0.87.0 review): land's bands once per revision; a malformed route tag reads as untagged (DistrictLandRte3Test)
+
+test('districtLand, grown by a grouped street: its groups\' one band is one district part, revision 1 (was two equal parts)', () => {
+  assert.deepEqual(summary(districtLand(LAND.grownGrouped, null, { revised: true })), { 'district:quay@1': 16, 'grown:rv1@1': '311 quay' });
+});
+
+test('districtLand, malformed route tags (edge false, edge 17): read as untagged, the same land as rte2\'s untagged IR', () => {
+  assert.deepEqual(summary(districtLand(LAND.malformed)), { 'district:a': 25, 'district:b': 3, 'district:b_1': 24, 'join:join': '12 b_1' });
 });
 
 // ---- item 4: the renumbered IR the mod's LayoutsRte3Test reads (Regions.layout on it)

@@ -211,6 +211,15 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - A districts route laid from NEXT on never takes a piece id that is another route's id or begins one: `route_d_a__b`'s pieces skip
   `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So b's pieces no longer take b_1's ids (the
   RTE limit where one hid the other's route shape in `Regions.layout`), and a long first section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
+### New for Steward (NEXT, slice RTE3)
+- `architect_mc:land` recomputed for a GR revision whose boundary growth street was laid as several groups lists its band once: one
+  `district` part (`shape: mask`, that `revision`) where it listed one equal part per group. Union and inside counts are unchanged; a reader
+  that summed `district` parts no longer counts the band twice.
+- A route piece whose `architect_mc:route.edge` is not a string (`false`, `17`) reads as untagged in the mod (`architect_mc:land`,
+  `Regions.layout`), as the kit always did; the kit never writes such tags.
+- No API, record or feature change. A following street's long-road groups (`route_st_<d>_<n>_<k>`) now carry `architect_mc:street`
+  with district `d` (were unmarked, or marked with `<d>_<n>`): no plan reaches such a group today (a following street is at most 256
+  long, under 4e's caps), so no IR changes. CONTRACT "Slice RTE3".
 
 ### New for Steward (NEXT, slice LYW3)
 - `Regions.layout` of a `mega_bench` (and so `mega_bench_forest`) region planned from NEXT on reports its ring wall: `wall` is
