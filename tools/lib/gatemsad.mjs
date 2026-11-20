@@ -1100,7 +1100,9 @@ export async function registerSAD(steps, h) {
     // standing): the start's repair clears the joined crate once (its stock the stockpile's), clears both references; then B finds it done
     {
       const b = await baseline('DFG SAC1b');
-      await call('dev.journal.killAt', { point: 'SAC1b' }, 10_000);
+      // (T4 merge) SOFF2's hand-ordered adoption (and its SAC1b) gave way to T3b's pile.adopt txn: the same window is its decided point (the
+      // ledger's adoption on disk, the crate standing); recovery rolls it forward once
+      await call('dev.journal.killAt', { point: 'TX:pile.adopt:decided' }, 10_000);
       const Ld = await halt('DFG SAC1b', W, b, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp: true });
       if (Ld) {
         const pS = await pile();
