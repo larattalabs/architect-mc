@@ -139,27 +139,13 @@ test {
 	inputs.dir("../kit/test/fixtures/plan").withPropertyName("kitPlanFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	// the scenario goldens the tests read: S7's and route_demo's (S3's) survey through plan-helpers' goldenSurvey, S7's IR in
 	// LayoutsTest/ApiDTest, districts_demo's IR in LayoutsWallTest, and crossings_demo_flat's, forms_demo's and crater_toolbox's IRs in
-	// LayoutsTest.everyGoldenHasAShape (the same files as unit-mod's data in tools/step-inputs.json)
-	inputs.files(
-		"../scenarios/goldens/crater_toolbox/ir.json",
-		"../scenarios/goldens/crossings_demo_flat/ir.json",
-		"../scenarios/goldens/districts_demo/ir.json",
-		"../scenarios/goldens/forms_demo/ir.json",
-		"../scenarios/goldens/route_demo/ir.json",
-		"../scenarios/goldens/route_demo/survey.bin",
-		"../scenarios/goldens/s7/ir.json",
-		"../scenarios/goldens/s7/survey.bin",
-	).withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
+	// LayoutsTest.everyGoldenHasAShape; ((TI, v0.89.0 review P3) the whole directory: LayoutsTest's golden(id) names files in it by id)
+	inputs.dir("../scenarios/goldens").withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
 	// ((RTE3) every kit test fixture a mod test reads itself, exact files (the same files as the steps' data in tools/step-inputs.json):
 	// DistrictLandTest d3/, DistrictLandGrTest gr/, GateJoinTest gj/, RevisionsTest rv/, DistrictLandRte2Test rte2/ (RTE2), LayoutsRte3Test
-	// and DistrictLandRte3Test rte3/, MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, SchematicTest schem/, ApiAFTest af/ and site/,
-	// Api7bFTest, ApiSLTest and SupportOrderFixtureTest site/ (also on the classpath through the bundled kit copy), MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
+	// and DistrictLandRte3Test rte3/, MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
 	// RoadTerrainNaturalTest natural/, ApiCXTest and TerrainOrderTest's named plan fixtures (also under kitPlanFixtures above))
 	inputs.files(
-		"../kit/test/fixtures/af/cliff_face.json",
-		"../kit/test/fixtures/af/overhang.json",
-		"../kit/test/fixtures/af/rift_site.json",
-		"../kit/test/fixtures/af/trunk.json",
 		"../kit/test/fixtures/d3/parity.json",
 		"../kit/test/fixtures/gj/parity.json",
 		"../kit/test/fixtures/gj/pg-parity.json",
@@ -180,26 +166,13 @@ test {
 		"../kit/test/fixtures/rte3/land-irs.json",
 		"../kit/test/fixtures/rte3/layout-ir.json",
 		"../kit/test/fixtures/rv/merge.json",
-		"../kit/test/fixtures/schem/corrupt.schem",
-		"../kit/test/fixtures/schem/goldens.json",
-		"../kit/test/fixtures/schem/old_dataversion.schem",
-		"../kit/test/fixtures/schem/oversize.schem",
-		"../kit/test/fixtures/schem/unknown_block.schem",
-		"../kit/test/fixtures/schem/v2_hut.schem",
-		"../kit/test/fixtures/schem/v3_hut.schem",
-		"../kit/test/fixtures/site/cliff_face/site.json",
-		"../kit/test/fixtures/site/cliff_face/volume.bin",
-		"../kit/test/fixtures/site/grove/site.json",
-		"../kit/test/fixtures/site/overhang/site.json",
-		"../kit/test/fixtures/site/overhang/volume.bin",
-		"../kit/test/fixtures/site/rift_site/site.json",
-		"../kit/test/fixtures/site/rift_site/volume.bin",
-		"../kit/test/fixtures/site/trunk/site.json",
-		"../kit/test/fixtures/site/trunk/volume.bin",
-		"../kit/test/fixtures/site/tunnel_hill/site.json",
-		"../kit/test/fixtures/site/tunnel_hill/volume.bin",
 		"../kit/test/fixtures/style-parity.json",
 	).withPropertyName("kitTestFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI, v0.89.0 review P3) the fixture directories the tests read computed names in, whole: af/ (ApiAFTest), schem/ (SchematicTest),
+	// site/ (Api7bFTest, ApiAFTest, ApiSLTest, SupportOrderFixtureTest); the scenario goldens above likewise (LayoutsTest's golden(id)))
+	inputs.dir("../kit/test/fixtures/af").withPropertyName("kitAfFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/schem").withPropertyName("kitSchemFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/site").withPropertyName("kitSiteFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	// ((TI) the kit files outside kit/lib and kit/test/fixtures a mod test reads, missed by RTE3's list; the same paths as unit-mod's data
 	// in tools/step-inputs.json; `node tools/step-inputs.mjs check` holds every literal kit path under src/test/java to this block):
 	// RegionFluidsLintTest the lint's drain cases; SchematicTest, StyleSwapTest, SidecarJsonTest, MinLotSizeTest, MassingPredictionTest,
