@@ -2780,8 +2780,9 @@ public final class Stockpiles {
 					if (req.has("failQueueWrites")) {
 						Placement.TEST_FAIL_WRITES = req.get("failQueueWrites").getAsBoolean(); // (T2b last round, TEST)
 					}
-					if (req.has("failLedgerWrites")) {
-						DurableFile.FAIL_BEFORE_RENAME.set(req.get("failLedgerWrites").getAsInt()); // (T2b last round, TEST) the next durable writes fail
+					if (req.has("failLedgerWrites") && req.get("failLedgerWrites").getAsJsonPrimitive().isNumber()) {
+						// (T2b last round, TEST) a count: the next durable writes fail. (T4 merge) a boolean is SOFF2's switch (SaveTestHooks)
+						DurableFile.FAIL_BEFORE_RENAME.set(req.get("failLedgerWrites").getAsInt());
 					}
 					if (req.has("refuseSave")) {
 						testRefuseSave = req.get("refuseSave").getAsBoolean(); // (DR-S)

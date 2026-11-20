@@ -83,8 +83,8 @@ public final class SaveTestHooks {
 				throw new java.io.UncheckedIOException(e);
 			}
 		}
-		if (req.has("failLedgerWrites")) {
-			failLedgerWrites = req.get("failLedgerWrites").getAsBoolean();
+		if (req.has("failLedgerWrites") && req.get("failLedgerWrites").getAsJsonPrimitive().isBoolean()) {
+			failLedgerWrites = req.get("failLedgerWrites").getAsBoolean(); // (T4 merge) a count is T2b's (DurableFile.FAIL_BEFORE_RENAME)
 		}
 		if (req.has("noSaveInCreditSave")) {
 			noSaveInCreditSave = req.get("noSaveInCreditSave").isJsonNull() ? null : req.get("noSaveInCreditSave").getAsString();
