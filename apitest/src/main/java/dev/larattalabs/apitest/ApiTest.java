@@ -75,6 +75,15 @@ public class ApiTest implements ModInitializer {
 			o.add("result", removeJson(r));
 			event("SITE_REMOVED", o);
 		});
+		SiteEvents.REMOVAL_FINISHED.register(f -> { // (slice T4R hooks) every REMOVAL_FINISHED, for the T4R rows
+			JsonObject o = new JsonObject();
+			o.addProperty("kind", f.kind());
+			o.addProperty("id", f.id());
+			o.addProperty("stage", f.stage());
+			o.addProperty("revisionId", f.revisionId());
+			o.add("result", removeJson(f.result()));
+			event("REMOVAL_FINISHED", o);
+		});
 		SiteEvents.SITE_MOVED.register((a, b) -> event("SITE_MOVED", site(b)));
 		SiteEvents.PLACE_FAILED.register((r, why) -> {
 			JsonObject o = new JsonObject();
@@ -427,6 +436,19 @@ public class ApiTest implements ModInitializer {
 					java.util.Locale.ROOT)) : null;
 				return later("remove:" + a[1] + ":" + a[2] + ":" + a[3], api.sites(server).remove(a[1], new RemoveOptions(a[3].equals("force"), requester,
 					covered)).thenApply(ApiTest::removeJson));
+			}
+			case "site": { // (slice T4R hooks) site <id>: Sites.get through the API (a held, decided removal's site included), or null
+				return api.sites(server).get(a[1]).map(v -> {
+					JsonObject o = site(v);
+					o.addProperty("statusState", v.status().state());
+					o.addProperty("statusReason", v.status().reason());
+					return (JsonElement) o;
+				}).orElse(com.google.gson.JsonNull.INSTANCE);
+			}
+			case "health": { // (slice T4R hooks) Sites.loadHealthy through the API
+				JsonObject o = new JsonObject();
+				o.addProperty("loadHealthy", api.sites(server).loadHealthy());
+				return o;
 			}
 			case "sites": {
 				JsonObject o = new JsonObject();

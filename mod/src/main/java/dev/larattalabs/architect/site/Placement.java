@@ -140,7 +140,7 @@ public final class Placement {
 		server = srv;
 		RemovalSeal.observe(); // (LC3 fix 2) what ended since the last check lingers sealed until its generation is written
 		saveIfDue(srv); // (slice PSV) a failed queue write's retry; an undo waiting on its pre-save, and (LC3 fix 2) a lingering seal, wait on it
-		if (srv.getTickCount() < START_GRACE_TICKS) {
+		if (srv.getTickCount() < Math.max(START_GRACE_TICKS, DevStart.startGrace())) { // (TEST, slice T4R hooks) dev-start.json startGrace widens it
 			return;
 		}
 		if (!SaveHold.jobsAdmitted(srv) || !SaveHold.admits(srv) && anyLedgerJob()) {

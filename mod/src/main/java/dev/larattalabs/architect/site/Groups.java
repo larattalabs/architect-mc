@@ -1193,6 +1193,7 @@ public final class Groups {
 			written.add(id);
 			settleWritten(server, r); // (T2b part 2b) its crate.settle now (held: next tick, before the next member)
 			Placement.save(server, false);
+			killAfterQueueSave();
 			return;
 		}
 		r.current = id;
@@ -1242,6 +1243,17 @@ public final class Groups {
 		}
 	}
 
+	/**
+	 * (TEST, slice T4R hooks: T4R-group-crash) Kill point GQ: a construction member's restore written (in memory) and its settle tried, the
+	 * queue save after it confirmed on disk, the chunks not saved: a bare crash there.
+	 */
+	private static void killAfterQueueSave() {
+		if ("GQ".equals(dev.larattalabs.architect.journal.WorldJournal.armed())) {
+			Placement.flushSaves();
+			dev.larattalabs.architect.journal.WorldJournal.kill("GQ");
+		}
+	}
+
 	/** Sites whose undo writes were done in this session (a reload writes again only those not done). */
 	private static final java.util.Set<String> written = new java.util.HashSet<>();
 
@@ -1266,6 +1278,9 @@ public final class Groups {
 	/** R1-R2 of a group undo: checks every member, tallies construction refunds, plans and submits one commit. */
 	private static void plan(MinecraftServer server, Removal r) {
 		if (r.planner != null) {
+			if (RemovalSeal.paused("group:" + r.group, 0)) {
+				return; // (TEST, slice T4R hooks: dev.removal.pause {site: "group:<id>"}) the refunds tallied, the undo not yet planned
+			}
 			// R1 over ticks (a large group plans per section; phase 4e budget)
 			try {
 				if (r.txn == null && !r.planner.step(Placement.deadline())) {
@@ -2289,6 +2304,11 @@ public final class Groups {
 		t0 = System.nanoTime();
 		Placement.save(server, false);
 		Placement.lap("end:save", t0);
+		if (result.removed() && "GE".equals(dev.larattalabs.architect.journal.WorldJournal.armed())) {
+			// (TEST, slice T4R hooks: T4R-finish-crash) kill point GE: the finished removal's queue save on disk, its REMOVAL_FINISHED not delivered
+			Placement.flushSaves();
+			dev.larattalabs.architect.journal.WorldJournal.kill("GE");
+		}
 		t0 = System.nanoTime();
 		Architect.LOGGER.info("{} {} of group {}: {}{}", r.stage == null ? "Removal" : "Undo of stage " + r.stage, result.removed() ? "done" : "stopped",
 			r.group, result.removed() ? "all sites restored" : String.join("; ", result.blockers()), result.refund().isEmpty() ? "" : "; refund "
