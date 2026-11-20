@@ -33611,9 +33611,12 @@ No API member, record or feature.
 - grow.mjs `followStreetOf`: a street piece's following district from the route pass's record on it (ext `architect_mc:route.edge`
   `route_st_<d>`); another edge's tag: no street; untagged: the caller's id fallback. compile.mjs `stampStreets` and grow.mjs `streetRuns`
   use it, the regex only for untagged pieces: a long road's groups `route_st_<d>_<n>_<k>` were district `<d>_<n>` (streetRuns) or
-  unmarked or `<d>_<n>`'s (stampStreets). Untagged, a boundary growth's street (its `architect_mc:band`; or (v0.88.0 review P2) an id district with a `_g<n>` stem that no
-  district of the plan's list or a street flag has, and with no districts recorded only a revision's piece, `rid`) is never a follow
-  run, grouped or not. Latent: no plan in the kit suite lays a following street (length <= 256) past 4e's 2048-cell or 256-point caps.
+  unmarked or `<d>_<n>`'s (stampStreets). **The untagged rule (the coordinator's call, v0.88.0 fix check):** an untagged piece (a growth's,
+  a region planned before RTE) reads exactly as v0.87.0's streetRuns and stampStreets read it, on the same code path (its id, `route_st_<d>_<n>`
+  by the lazy regex); no district list, band, `rid` or `_g<n>` heuristic. The tag is read only on a tagged piece. So an untagged grouped
+  growth piece reads as v0.87.0 reads it (`route_st_quay_1_g1_1` is a follow run of district `quay_1_g1`, a district that may not exist), and
+  district `quay_g1` keeps its street. rte3.test.mjs holds v0.87.0's streetRuns as an oracle and checks equality on hand cases and on every
+  IR in kit/test/fixtures and scenarios/goldens with route tags removed (27 IRs). Latent: no plan in the kit suite lays a following street (length <= 256) past 4e's 2048-cell or 256-point caps.
 - A grouped growth street's graph keeps the base `newRoad` (node `ref`, edge `path`, `<newRoad>_end`): the graph names the street, as the
   route pass's edge `route_<edge>` names its pieces' stem and a following street's chain `route_st_<d>`; growPlan's free-end reader matches
   that path (`_g<n>$`), and `BesideJoin.road` reports a street, not a group. emitGrowth's returned `roads` now lists the groups laid (was
@@ -33629,9 +33632,12 @@ No API member, record or feature.
 - (v0.87.0 review P3) `DistrictLand.tagEdge` (and `Layouts.edgeOf`, the street and band districts): a tag's edge counts only as a string,
   as land.mjs; `false` or `17` was taken as its text.
 - (v0.87.0 review P3) `LayoutsWallTest.plannedIr` drains node's output on another thread; the 120 s wait bounds the run and destroys it.
-- (v0.88.0 review P2) a district whose own id ends in `_g<n>` (`quay_g1`) keeps its untagged legacy street `route_st_quay_g1_1` (v0.88.0's
-  RTE3 read it as a growth: NO_ROOM, no standing street). Only streetRuns used the suffix; stampStreets and land never did.
+- (v0.88.0 review P2, fix check) RTE3's earlier untagged heuristics are gone: the `_g<n>` suffix (06517317: district `quay_g1` lost its
+  street, NO_ROOM) and the district list (790be359: a recorded district `quay_1_g2` and quay's bandless grouped growth `route_st_quay_1_g2_1`).
+  Both cases now read as v0.87.0: `quay_g1` grows `quay_g1_3`, `_4`, `_5` at frontage u 67, 125, 113; `route_st_quay_1_g2_1` is read as
+  district `quay_1_g2`'s following street, as v0.87.0 reads it (a v0.87.0 limit of untagged ids, kept: only a tag tells growth pieces apart).
+  Only streetRuns had a suffix rule; stampStreets and land never did.
 - Goldens unchanged.
-- Not fixed: district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
+- Not fixed: untagged growth pieces read by id as v0.87.0 (above); district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
   `startsWith('route_st_<d>')`) still reads ids by prefix, so district `b`'s ends could take `b_1`'s grown street edges (no plan seen).
 - Units: `kit/test/rte3.test.mjs`, `LayoutsRte3Test`, `DistrictLandRte3Test` (`kit/test/fixtures/rte3/land-irs.json`).
