@@ -119,7 +119,18 @@ export async function registerXr(steps, h) {
               const jobs = await call('dev.placement.jobs', {}, 30_000).catch(() => []);
               const pj = (Array.isArray(jobs) ? jobs : jobs.jobs ?? []).find((x) => x.kind === 'place' && (x.phase === 15 || x.takeUp === true) && x.site);
               out.remove = { job: pj ?? null };
-              if (pj) out.remove.answer = await L.cmd(`/apitest remove ${pj.site} - noforce`).catch((e) => String(e?.message ?? e));
+              if (pj) {
+                // asked as the region's owner (a '-' requester is refused by the owner rule, on any base), the answer awaited (apitest get)
+                const q = async (a) => { const r = await L.cmd(`/apitest ${a}`).catch(() => null); try { return JSON.parse(r?.messages?.[0] ?? 'null'); } catch { return null; } };
+                const pd = await q(`remove ${pj.site} ${G.OWNER} noforce`);
+                out.remove.answer = pd;
+                for (let i = 0; i < 20 && pd?.pending; i++) {
+                  const r = await q(`get ${pd.pending}`);
+                  if (r && r.value !== undefined && r.value !== null) { out.remove.answer = r.value; break; }
+                  if (r && r.error) { out.remove.answer = r; break; }
+                  await L.sleep(500);
+                }
+              }
               await L.sleep(5000);
               out.remove.jobAfter = ((await call('dev.placement.jobs', {}, 30_000).catch(() => ({ jobs: [] }))).jobs ?? []).find((x) => x.site === pj?.site) ?? null;
             }
