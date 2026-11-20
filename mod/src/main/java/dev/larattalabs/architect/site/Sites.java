@@ -271,7 +271,6 @@ public final class Sites {
 					Architect.LOGGER.error("Region adoptions could not be recovered at the world's start", e);
 				}
 			}
-			Groups.CARRIED_AT_START = Placement.removalCarried(server); // (slice T4c) what a queued group removal carries (its credits too)
 			reconcile(server, Placement.jobSites(server));
 			ready = true; // (T4b) a removal txn's W restore may write from here on (the records and the journal read, the check done)
 			SiteDeltas.atStart(server);

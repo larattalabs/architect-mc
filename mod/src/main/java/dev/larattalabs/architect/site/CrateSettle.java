@@ -756,14 +756,11 @@ public final class CrateSettle {
 	 * when its removal was a single removal (not a group's or a stage's undo, whose decCredit stays legacy until T4c).
 	 */
 	static boolean convertible(JsonObject stash, @Nullable String group) {
-		if (!stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-")) {
-			return true;
-		}
-		// (slice T4c) a group's or stage's pre-T4 pending credit converts too, unless its queued group removal still carries the member (that
-		// removal writes the member's restore, then books its decCredit once: converting it as well would book it twice, DR4b). Orphaned (the
-		// queue lost it), it becomes the member's removal.site stash: its W restore from the group's undo first, then the credit
-		return !stash.has("site") || !Groups.carries(stash.get("site").getAsString());
+		// (slice T4c, tried and backed out) a group's or stage's credit stays legacy: converted at the start, its member's txn restored it and
+		// booked the credit, but its pending record stayed (dr-survival DR4b/DR8: STUCK after the settle). Its own conversion needs Groups' side
+		return !stash.has("legacy") || group == null || !group.startsWith("u:group-") && !group.startsWith("u:stage-");
 	}
+
 
 	/** The durable stash of {@code siteId}'s removal, or null. */
 	static @Nullable JsonObject durable(String siteId) {

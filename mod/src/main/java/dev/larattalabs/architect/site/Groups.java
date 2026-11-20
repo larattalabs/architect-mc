@@ -627,26 +627,6 @@ public final class Groups {
 	}
 
 	/** (6d RV) Whether a removal of this group's stage {@code stage} is in progress (running, not stalled). */
-	/** (slice T4c) Whether a queued (running or stalled) group or stage removal carries {@code siteId}: its member, its credit or its undo. */
-	/** (slice T4c) The queue file's carried sites read at the sites check (before Groups loads); null: unreadable (every site carried). */
-	static java.util.@Nullable Set<String> CARRIED_AT_START = java.util.Set.of();
-
-	static boolean carries(String siteId) {
-		java.util.Set<String> atStart = CARRIED_AT_START;
-		if (atStart == null || atStart.contains(siteId)) {
-			return true;
-		}
-		for (List<Removal> l : List.of(REMOVALS, STALLED)) {
-			for (Removal r : l) {
-				if (r.decCredit.containsKey(siteId) || r.sites.contains(siteId) || r.undoSites.contains(siteId) || r.plannedSites.contains(siteId) || siteId
-					.equals(r.current)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
 	public static boolean stageRemovalRunning(String groupId, String stage) {
 		for (Removal r : REMOVALS) {
 			if (r.group.equals(groupId) && stage.equals(r.stage)) {
