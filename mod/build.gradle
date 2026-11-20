@@ -147,7 +147,7 @@ test {
 	// ((RTE3) every kit test fixture a mod test reads itself, exact files (the same files as the steps' data in tools/step-inputs.json):
 	// DistrictLandTest d3/, DistrictLandGrTest gr/, GateJoinTest gj/, RevisionsTest rv/, DistrictLandRte2Test rte2/ (RTE2), LayoutsRte3Test
 	// and DistrictLandRte3Test rte3/, MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, SchematicTest schem/, ApiAFTest af/ and site/,
-	// Api7bFTest, ApiSLTest and SupportOrderFixtureTest site/, MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
+	// Api7bFTest, ApiSLTest and SupportOrderFixtureTest site/ (also on the classpath through the bundled kit copy), MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
 	// RoadTerrainNaturalTest natural/, ApiCXTest and TerrainOrderTest's named plan fixtures (also under kitPlanFixtures above))
 	inputs.files(
 		"../kit/test/fixtures/af/cliff_face.json",
@@ -182,6 +182,7 @@ test {
 		"../kit/test/fixtures/schem/v2_hut.schem",
 		"../kit/test/fixtures/schem/v3_hut.schem",
 		"../kit/test/fixtures/site/cliff_face/site.json",
+		"../kit/test/fixtures/site/cliff_face/volume.bin",
 		"../kit/test/fixtures/site/grove/site.json",
 		"../kit/test/fixtures/site/overhang/site.json",
 		"../kit/test/fixtures/site/overhang/volume.bin",

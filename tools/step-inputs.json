@@ -45,6 +45,7 @@
     "kit/test/fixtures/schem/v2_hut.schem",
     "kit/test/fixtures/schem/v3_hut.schem",
     "kit/test/fixtures/site/cliff_face/site.json",
+    "kit/test/fixtures/site/cliff_face/volume.bin",
     "kit/test/fixtures/site/grove/site.json",
     "kit/test/fixtures/site/overhang/site.json",
     "kit/test/fixtures/site/overhang/volume.bin",
