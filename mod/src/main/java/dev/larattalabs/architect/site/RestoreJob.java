@@ -572,7 +572,10 @@ final class RestoreJob implements Placement.Job {
 			CrateSettle.recordFound(level, siteId, group, settle != null && settle.has("road") ? settle : found);
 		}
 		while (cellCursor < cells.size()) {
-			int to = Math.min(cells.size(), cellCursor + 64);
+			if (cellCursor > from && RemovalSeal.paused(siteId, cellCursor)) {
+				return false; // (TEST, slice T4R hooks: dev.removal.pause {after: n}) a road's restore paused after its first n cells, one by one
+			}
+			int to = Math.min(cells.size(), cellCursor + RemovalSeal.sliceFor(siteId, 64));
 			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);
 			CrateSettle.WRITING = true; // (T4b fix round, N3) the removal's own writes in its held box
 			try {

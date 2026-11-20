@@ -1488,6 +1488,9 @@ export async function registerTCC(steps, h) {
           await wait(8000);
           const v1 = await api(`site ${site}`).catch((e) => ({ error: String(e) }));
           rowLog(tag, `held: lookup ${json(v1).slice(0, 300)}`);
+          const listed = ((await api('sites').catch(() => ({ all: [] }))).all ?? []).some((x) => x.id === site);
+          rowLog(tag, `held: listed ${listed}`);
+          check(listed, `${tag}: (fix round, R3's P2) the held, decided site stays listed too (Sites.list)`);
           check(v1 && v1.id === site && v1.statusState === 'removing' && /held\(decided\)/.test(String(v1.statusReason)),
             `${tag}: a held, decided removal's site is returned by lookup with status removing and held(decided) (${json(v1 && { state: v1.statusState, reason: v1.statusReason })})`, v1);
           await L.leaveWorld();
@@ -1640,6 +1643,187 @@ export async function registerTCC(steps, h) {
         await k6Row(tag, [site], site, cp, items, { point: 'K6', expectHeld: true,
           after: () => { fs.copyFileSync(jf, jf + '.t4keep'); fs.writeFileSync(jf, '{ not json'); },
           reopenAfter: () => { fs.copyFileSync(jf + '.t4keep', jf); } });
+      }
+    }
+    // ================================================================ (slice T4R fix round) rows for the early review's P1s
+    const minerKept = (br, drop, item) => ((br?.broken ?? 0) > 0 && sum(drop) === 0 && item ? { [item]: 1 } : {});
+    // T4R-cargo-key (P1-5, P2 coverage): a data-bearing stack owed whole through the removal.cargo txn, collected back exactly; the same holder
+    // slot refilled and owed again under the same source key must make a new collectible (the base: its owe probes APPLIED on the ended key,
+    // the second stack lost); a crash right after a take (before its owe) gives the stack back at recovery
+    if (want('T4R-cargo-key')) {
+      const tag = 'T4R-cargo-key';
+      const sp = slot();
+      const pos = [sp[0], gy + 1, sp[2]];
+      W.at = [pos[0] + 2, gy + 2, pos[2] + 2];
+      await L.tp(...W.at);
+      const rec = 'tcc:t4rcargo';
+      const key = `cargo:t4rtarget@1:${pos.join(',')}#0`;
+      const put = (name) => cmd(`/item replace block ${pos.join(' ')} container.0 with minecraft:diamond_sword[custom_name="${name}"]`);
+      const inv = async () => String(((await cmd('/data get entity @p Inventory').catch(() => ({ messages: [] }))).messages ?? []).join(' '));
+      const slot0 = async () => String(((await cmd(`/data get block ${pos.join(' ')} Items`).catch(() => ({ messages: [] }))).messages ?? []).join(' '));
+      const mine = async () => ((await owedAll()).owed ?? []).filter((e) => e.recipient === rec);
+      await cmd(`/setblock ${pos.join(' ')} minecraft:chest`);
+      const collectAll = async () => { for (const e of await mine()) await call('dev.owed.collect', { recipient: rec, key: e.key }, 120_000).catch((x) => ({ error: String(x) })); };
+      await put('Excalibur');
+      const o1 = await call('dev.cargo.owe', { pos, slot: 0, recipient: rec, key }, 30_000).catch((e) => ({ error: String(e) }));
+      const e1 = await mine();
+      await collectAll();
+      const i1 = await inv();
+      await put('Durendal');
+      const o2 = await call('dev.cargo.owe', { pos, slot: 0, recipient: rec, key }, 30_000).catch((e) => ({ error: String(e) }));
+      const e2 = await mine();
+      await collectAll();
+      const i2 = await inv();
+      const s2 = await slot0();
+      R[tag] = { o1, e1, o2, e2 };
+      rowLog(tag, `first owe ${json(o1).slice(0, 200)}; entries ${json(e1.map((e) => e.key))}; second owe ${json(o2).slice(0, 200)}; entries ${json(e2.map((e) => e.key))}`);
+      check(/Excalibur/.test(i1), `${tag}: the first data-bearing stack owed whole and collected back exactly (Excalibur in the player's inventory)`, { i1: i1.slice(0, 300) });
+      check(e2.length >= 1 && /Durendal/.test(i2) && !/Durendal/.test(s2), `${tag}: the same slot refilled and owed under the same source key makes a new collectible, collected back exactly (entries ${json(e2.map((e) => e.key))}; Durendal ${/Durendal/.test(i2) ? 'in the inventory' : 'LOST'})`, { e2, i2: i2.slice(0, 300), s2 });
+      // recover: halted right after the take (its owe not applied), the world again: recovery gives the stack back (undecided: compensated)
+      await put('Joyeuse');
+      await cmd('/save-all flush').catch(() => null);
+      await call('dev.journal.killAt', { point: 'TX:removal.cargo:apply:0' }, 10_000);
+      call('dev.cargo.owe', { pos, slot: 0, recipient: rec, key: `${key}-r` }, 30_000).catch(() => null);
+      const down = await haltWait();
+      check(down, `${tag}: halted right after the cargo take`);
+      if (down) {
+        await L.openWorld(name);
+        await L.tp(...W.at);
+        for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+        await wait(2000);
+        const s3 = await slot0();
+        const e3 = (await mine()).filter((e) => e.key.includes('-r') || true);
+        rowLog(tag, `after the restart: slot ${s3.slice(0, 200)}; owed ${json(e3.map((e) => e.key))}`);
+        check(/Joyeuse/.test(s3) || e3.length > 0, `${tag}: recovery keeps the stack: back in its slot (compensated) or owed (${/Joyeuse/.test(s3) ? 'back in the slot' : json(e3.map((e) => e.key))})`, { s3: s3.slice(0, 300), e3 });
+      } else {
+        await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+      }
+    }
+    // T4R-legacygroup (P1-3): a pre-T4R group removal (its member's credit a queued decCredit, no cells) halted at K6; at the start, inside a
+    // widened start grace, a player mines a paid block of the member: refused (held from the queue's load); the removal finishes exact. The
+    // base: the mine goes through and the uncapped conversion refunds the mined block too (one minted)
+    if (want('T4R-legacygroup')) {
+      const tag = 'T4R-legacygroup';
+      const owner = 'tcc:t4rlgrp';
+      const sp = slot();
+      await call('dev.stockpile.create', { owner, crates: [[sp[0], sp[1], sp[2]]] }, 120_000).catch((e) => ({ refused: String(e) }));
+      const g = await grouped(tag, 1, owner);
+      const site = g.sites[0];
+      if (site) {
+        for (let i = 0; i < 60; i++) { if ((await siteState(site))?.state === 'building') break; await L.sleep(1000); }
+        const box = await boxOf(site);
+        await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+        const bom = (await siteState(site))?.bom ?? {};
+        const part = {};
+        for (const [kk, v] of Object.entries(bom)) { const n = Math.floor(v * 0.3); if (n > 0) part[kk] = n; }
+        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: part, exact: true }, 120_000).catch(() => null);
+        await call('dev.stockpile.pause', { site, paused: false }, 60_000);
+        const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+        for (let i = 0; i < 90; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
+        await call('dev.stockpile.pause', { site, paused: true }, 60_000);
+        const items = Object.keys(bom);
+        const mid = [Math.floor((box[0] + box[3]) / 2), box[1], Math.floor((box[2] + box[5]) / 2)];
+        const gparts = async () => {
+          const near = await call('dev.items.near', { pos: mid, radius: 32 }, 30_000);
+          const p = { stock: pick((await pst()).stock ?? {}, items), placed: pick(await standing(site, items), items), owed: {}, ground: pick(near.items ?? {}, items),
+            inventory: {}, states: { [site]: (await siteState(site))?.state ?? null } };
+          p.total = [p.stock, p.placed, p.ground].reduce((x, y) => G.plus(x, y), {});
+          return p;
+        };
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await gparts();
+        let at = null, item = null;
+        for (const [k2, st] of (await cellsOf(box)).entries()) {
+          const id = String(st).replace(/\[.*$/, '');
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          if (items.includes(full)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; item = full; break; }
+        }
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        const m = await api(`sgremove ${g.group}`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: halted at K6 (the group's undo committed, its member not written) (${json(m).slice(0, 120)})`);
+        if (down) {
+          const qf = path.join(W.dir, 'architect-queue.json');
+          const q = JSON.parse(fs.readFileSync(qf, 'utf8'));
+          let made = false;
+          for (const r of q.removals ?? []) {
+            for (const [id, st] of Object.entries(r.settle ?? {})) {
+              if (!st?.pileKey) continue;
+              r.credit = r.credit ?? {};
+              r.credit[id] = { owner, key: st.pileKey, items: st.refund ?? {}, at: st.pos ?? 0 };
+              delete r.settle[id];
+              made = true;
+            }
+          }
+          fs.writeFileSync(qf, JSON.stringify(q, null, 2));
+          check(made, `${tag}: the queued group removal turned pre-T4R offline (its member's settle a decCredit, no cells)`);
+          const arch = path.join(W.dir, 'architect');
+          fs.mkdirSync(arch, { recursive: true });
+          fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ startGrace: 1200 }));
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          const br = at ? await call('dev.pt.breaks', { at: [at], placer: 'T4RMiner' }, 60_000).catch((e) => ({ error: String(e) })) : { error: 'no paid cell' };
+          await wait(1000);
+          const drop = at ? (await call('dev.items.near', { pos: at, radius: 3 }, 30_000)).items ?? {} : {};
+          rowLog(tag, `a player mined ${at} inside the start grace: ${json(br)}; dropped ${json(drop)}`);
+          for (let i = 0; i < 120 && (await siteState(site)); i++) await L.sleep(1000);
+          for (let i = 0; i < 60 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(4000);
+          const after = await gparts();
+          const kept = minerKept(br, drop, item);
+          after.total = G.plus(after.total, kept);
+          check((br.broken ?? 0) === 0, `${tag}: the mine of the member's paid block is refused (held from the queue's load) (${json(br)})`, br);
+          judgeT4(tag, { tag, removal: m, break: br, minerKept: kept, txn: await txn() }, before, after);
+        } else {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        }
+      }
+    }
+    // T4R-legacyroad-partial (P1-4): a pre-T4 road removal whose job restored (and saved) some of its cells before the upgrade: converted, its
+    // refund is the whole credit (the restored cells are owed too). The base: capped by the cells still standing (the restored ones lost)
+    if (want('T4R-legacyroad-partial')) {
+      const tag = 'T4R-legacyroad-partial';
+      const owner = 'tcc:t4rlrp';
+      const pr = await pileRoad(tag, owner);
+      if (pr) {
+        const { rid, rparts, before } = pr;
+        await call('dev.removal.pause', { site: rid, after: 8 }, 10_000);
+        const rm = await api(`remove ${rid} ${pr.owner} noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await removalQueued(tag, rid, rm);
+        await wait(5000);
+        const mid0 = await rparts();
+        call('dev.txn.halt', { save: true }, 10_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${tag}: halted (+save) with the road's restore paused after 8 cells (${sum(mid0.placed)} paid cell(s) left standing of ${sum(before.placed)})`);
+        if (down) {
+          const qf = path.join(W.dir, 'architect-queue.json');
+          const sf = path.join(W.dir, 'architect', 'stockpiles.json');
+          const q = JSON.parse(fs.readFileSync(qf, 'utf8'));
+          const root = JSON.parse(fs.readFileSync(sf, 'utf8'));
+          const st = root.crateSettles?.[rid];
+          let made = false;
+          for (const j of q.jobs ?? []) {
+            if (j.siteId !== rid || !j.settle?.pileKey) continue;
+            j.credit = { owner, key: j.settle.pileKey, items: j.settle.refund ?? {}, at: j.settle.pos ?? 0 };
+            delete j.settle;
+            made = true;
+          }
+          if (made && st) {
+            delete root.crateSettles[rid];
+            fs.writeFileSync(sf, JSON.stringify(root, null, 2));
+            fs.writeFileSync(qf, JSON.stringify(q, null, 2));
+          }
+          try { fs.unlinkSync(path.join(W.dir, 'architect', 'dev-removal-pause.json')); } catch { /* none */ }
+          check(made && !!st, `${tag}: the queued job turned pre-T4 offline (C29's credit ${json(st?.refund ?? null)}, no stash)`, { st });
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await roadGone(rid);
+          for (let i = 0; i < 40 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(4000);
+          const after = await rparts();
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, after);
+        }
       }
     }
     // T4R-health (P1-3, Changes §7): each participant store unreadable at a start makes Sites.loadHealthy() false (sites, queue, stockpiles,
