@@ -8,13 +8,13 @@
 //   outside   union minus the town's claim (the land Steward owns); inside: union in the town's claim (the join's reach, any seam cells)
 // Written columns: every op's columns (`columns` ops' cells, `bounds` ops' rects), the lots' boxes, the road items' width plus their verge,
 // and a reach plan's reach. A seam-step join's graded runs are read from their path boxes (the IR keeps no per-path column list there).
-import { keyRuns, runKeys } from './beside.mjs';
+import { isStreetId, keyRuns, runKeys } from './beside.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 /** (RTE) program.mjs ROUTE_EXT: the ext key a route piece names its graph edge under. */
 const ROUTE_EXT = 'architect_mc:route';
 /**
  * (RTE4) The ext key a district's own road names its district under, `{id}`: written by the districts pass only where one district id is
- * another's plus `_` and a word (`b` and `b_street`, districtIdsShadow), where the id cannot say whose `b_street_w` is.
+ * another's plus a word (`b` and `b_street`) or a road's id otherwise reads as another district's (a lone `b_street`): untaggedMisreads.
  */
 export const DISTRICT_EXT = 'architect_mc:district';
 
@@ -51,13 +51,18 @@ export function districtOfId(id, ids, pre = '') {
   return best;
 }
 /**
- * (RTE4) Whether some district id is another's plus `_` and a letter-led word (`b` and `b_street`, `b` and `b_props`): then an id such as
- * `b_street_w` (b's street road) reads as the longer district's, and the districts pass records each district's roads (DISTRICT_EXT).
- * A digit after the `_` (`b` and `b_1`) is not: a district's own ids go on with a word, so the longest id reads them exactly (RTE2).
+ * (RTE4) Whether the untagged readers would give any of a districts plan's own roads (`owned`: [{id, district}], each road and the
+ * district whose emission laid it) another district than its own: architect_mc:land's longest district id (`b_street_w`, b's street road,
+ * beside district b_street), or streetRuns's street rule (the part before `street_`: a lone district b_street's `b_street_street_w` reads
+ * as b's). Then the districts pass records every district's roads (DISTRICT_EXT); a plan whose roads read right stays untagged.
  */
-export function districtIdsShadow(ids) {
-  const s = ids.filter((d) => typeof d === 'string');
-  return s.some((a) => s.some((b) => b.length > a.length + 1 && b.startsWith(`${a}_`) && /^[a-z]/.test(b.slice(a.length + 1))));
+export function untaggedMisreads(owned, ids) {
+  for (const { id, district } of owned) {
+    if (districtOfId(id, ids) !== district) return true;
+    // (grow.mjs streetRuns on an untagged, unflagged road: a street id not a route's reads its district from the part before `street_`)
+    if (isStreetId(id) && !/^(route_)?st_/.test(id)) { const m = /^(.*?)_?street_[a-z0-9_]*$/.exec(id); if ((m && m[1] ? m[1] : null) !== district) return true; }
+  }
+  return false;
 }
 /**
  * (RTE4) A road's district: the one its DISTRICT_EXT tag names (a string id; one `ids` lacks: none), else, untagged (every plan without

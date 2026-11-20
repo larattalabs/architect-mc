@@ -135,12 +135,11 @@ function adjacency(graph) {
  * (§5) A following district's route ends, for its boundary extension: `{ends, free}`. `ends`: the street's own (`<d>_s<k>`) and an earlier
  * boundary growth's new end (`<newRoad>_end`); `free`: those terminal (one edge, `along` edges aside) on edges all the street's own (no
  * join, no other route; a grown end has only its own edge; a standing end an earlier growth continued from is not free).
- * ((RTE4) Whose an end or an edge is comes from the records: the street's own edge is `route_st_<d>` (the route pass's edge, which its
- * pieces name in ext architect_mc:route), a growth's edge (path `<newRoad>`, `_g<n>`) and end (`<newRoad>_end`) are the district's whose
- * flag (`architect_mc:street.district`, else `architect_mc:band.district`) its pieces (`<newRoad>`, groups `<newRoad>_<k>`) carry. Read so
- * when the district's street pieces carry its route tag; a path or end no record names, and every end of a district whose street is
- * untagged (a region planned before RTE), read by id exactly as v0.88.0: `route_st_<d>_..._g<n>_end`, `startsWith('route_st_<d>')`, so
- * district b took b_1's grown end `route_st_b_1_1_g1_end`, kept for those regions.)
+ * ((RTE4) A boundary growth laid from RTE4 on records its district on its street's pieces (ext architect_mc:district {id}, emitGrowth):
+ * its edges (`<newRoad>#<k>`, `<newRoad>#end`, path `<newRoad>`) and its end (`<newRoad>_end`, ref `<newRoad>`) are that district's,
+ * whatever the ids say. Everything else, and every IR a release before RTE4 saved (none carries that record; kit/test/fixtures/rte-compat
+ * holds v0.85.0..v0.88.0's), reads by id exactly as v0.88.0: ends `<d>_s<k>` and `route_st_<d>_..._g<n>_end`, edges whose path
+ * `startsWith('route_st_<d>')`, so district b took b_1's grown end `route_st_b_1_1_g1_end` there, and keeps it.)
  */
 export function streetRouteEnds(eff, district) {
   const nodes = eff.graph?.nodes ?? [];
@@ -148,36 +147,30 @@ export function streetRouteEnds(eff, district) {
   const legacyEnd = new RegExp(`^(${district}_s\\d+|route_st_${district}_[a-z0-9_]*_g\\d+_end)$`);
   const legacyPath = (p) => p.startsWith(`route_st_${district}`);
   const pieces = [...(eff.roads ?? []), ...(eff.paths ?? [])];
-  const own = `route_st_${district}`;
-  const tagged = pieces.some((x) => x?.ext?.[ROUTE_EXT]?.edge === own);
-  // (a path's district from the records, or undefined: a route pass edge `route_st_<x>` its pieces name; a growth's `<newRoad>` by its flag)
-  const ownerOf = (p) => {
-    if (p.startsWith('route_st_') && pieces.some((x) => x?.ext?.[ROUTE_EXT]?.edge === p)) return p.slice('route_st_'.length);
-    if (!/_g\d+$/.test(p)) return undefined;
+  // (a growth street's district, from the record its pieces carry (`<newRoad>`, groups `<newRoad>_<k>`), or undefined)
+  const grownBy = (p) => {
     const pre = `${p}_`;
     for (const x of pieces) {
       if (typeof x?.id !== 'string' || (x.id !== p && !(x.id.startsWith(pre) && /^\d+$/.test(x.id.slice(pre.length))))) continue;
-      const d = x.ext?.['architect_mc:street']?.district ?? x.ext?.['architect_mc:band']?.district;
+      const d = x.ext?.[DISTRICT_EXT]?.id;
       if (typeof d === 'string') return d;
     }
     return undefined;
   };
-  const pathOk = (p) => {
-    if (!tagged) return legacyPath(p);
-    const o = ownerOf(p);
+  const edgeOk = (e) => {
+    const p = String(e.path ?? '');
+    const o = /_g\d+$/.test(p) && String(e.id ?? '').startsWith(`${p}#`) ? grownBy(p) : undefined;
     return o !== undefined ? o === district : legacyPath(p);
   };
-  const endOk = (id) => {
-    if (!tagged) return legacyEnd.test(id);
-    if (new RegExp(`^${district}_s\\d+$`).test(id)) return true;
-    const m = /^(.+_g\d+)_end$/.exec(id);
-    const o = m ? ownerOf(m[1]) : undefined;
-    return o !== undefined ? o === district : legacyEnd.test(id);
+  const endOk = (n) => {
+    const m = /^(.+_g\d+)_end$/.exec(n.id);
+    const o = m && n.ref === m[1] ? grownBy(m[1]) : undefined;
+    return o !== undefined ? o === district : legacyEnd.test(n.id);
   };
-  const ends = nodes.filter((n) => n.kind === 'junction' && endOk(n.id) && Array.isArray(n.at));
+  const ends = nodes.filter((n) => n.kind === 'junction' && endOk(n) && Array.isArray(n.at));
   const free = ends.filter((n) => {
     const es = (adj.get(n.id) ?? []).filter(({ edge }) => !edge.along);
-    if (!es.length || es.some(({ edge }) => edge.external || !pathOk(String(edge.path ?? '')))) return false;
+    if (!es.length || es.some(({ edge }) => edge.external || !edgeOk(edge))) return false;
     return /_g\d+_end$/.test(n.id) ? es.length === 1 : !es.some(({ edge }) => /_g\d+$/.test(String(edge.path ?? '')));
   });
   return { ends, free };
@@ -763,8 +756,10 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     // ((RTE2) the pieces this road laid, by the ids it returned (a long ground road's groups <newRoad>_<k> too; graded, its path), their ext
     // merged: never another piece read by an id prefix, never a flag dropped)
     const ids = new Set(made?.ids ?? []);
-    for (const rd of r.roads) if (ids.has(rd.id)) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
-    for (const q of r.paths) if (ids.has(q.id)) q.ext = { ...(q.ext ?? {}), 'architect_mc:band': { district: X.district, runs: X.mask } };
+    // ((RTE4) and the district on each piece, ext architect_mc:district {id}: streetRouteEnds reads this growth's edges and end by it)
+    const own = typeof X.district === 'string' ? { [DISTRICT_EXT]: { id: X.district } } : {};
+    for (const rd of r.roads) if (ids.has(rd.id)) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask }, ...own };
+    for (const q of r.paths) if (ids.has(q.id)) q.ext = { ...(q.ext ?? {}), 'architect_mc:band': { district: X.district, runs: X.mask }, ...own };
     // ((RTE3) the record lists the pieces laid (a long road's groups <newRoad>_<k>, was the base newRoad no road has). The graph below keeps
     // the base newRoad as the street's identity (node ref, edge path), as the route pass's edge route_<edge> names its pieces' stem
     // route_<edge>_<n> and a following street's chain route_st_<d>: one street, one name, whatever 4e's groups; growPlan's free-end reader

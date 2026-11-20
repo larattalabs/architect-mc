@@ -18,7 +18,7 @@ import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
-import { DISTRICT_EXT, districtIdsShadow } from './land.mjs';
+import { DISTRICT_EXT, untaggedMisreads } from './land.mjs';
 import { edgeColumns, footprintOf } from './passes/route.mjs';
 import { LEAD, chooseReach, reachFor } from './reach.mjs';
 import { aroundOf, gateMeta } from './gateJoin.mjs';
@@ -479,15 +479,16 @@ export function emitDistricts(r, intent = {}) {
   if (!placedNow.length) throw new Error(`NO_ROOM: no district could be placed (${unplaced.map((u) => `${u.id}: ${u.reason}`).join(', ')})`);
   const reserved = new Set(), laneCells = [];
   const layouts = {}, followOut = {};
-  // ((RTE4) where one district id is another's plus a word (b and b_street), each district's own roads name it (ext DISTRICT_EXT {id}):
-  // b's street road b_street_w reads as district b_street's by its id. Every other plan is untagged, its IR unchanged)
-  const tagDistricts = districtIdsShadow(ds.map((d) => d.id));
-  const tagRoads = (d, roads0) => { if (tagDistricts) for (const x of r.roads.slice(roads0)) x.ext = { ...(x.ext ?? {}), [DISTRICT_EXT]: { id: d.id } }; };
+  // ((RTE4) where the untagged readers would give a district's road to another district (b's street road b_street_w beside district
+  // b_street; a lone district b_street's b_street_street_w, read as b's street), every district's roads name it (ext DISTRICT_EXT {id}).
+  // Every other plan is untagged, its IR unchanged)
+  const owned = [];
   for (const d of placedNow) {
     const roads0 = r.roads.length;
     emitOne(d);
-    tagRoads(d, roads0);
+    for (const x of r.roads.slice(roads0)) owned.push({ x, id: x.id, district: d.id });
   }
+  if (untaggedMisreads(owned, ds.map((d) => d.id))) for (const o of owned) o.x.ext = { ...(o.x.ext ?? {}), [DISTRICT_EXT]: { id: o.district } };
   function emitOne(d) {
     if (follows.has(d.id)) {
       const f = follows.get(d.id);
