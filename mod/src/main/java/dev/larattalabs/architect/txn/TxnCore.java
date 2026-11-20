@@ -60,8 +60,6 @@ public final class TxnCore {
 		return BARRIER.equals(e.op()) ? BARRIER_ADAPTER : k.adapter(e);
 	}
 
-	/** Effects applied by this core (a member barrier runs only over applies since the previous one). */
-	private long applies;
 
 	/** TEST seams: TxnCrashModel's naive variants (each reproduces one reviewed counterexample). Production uses the defaults. */
 	public static final class Options {
@@ -632,21 +630,22 @@ public final class TxnCore {
 		if (written != null && !compensate(k, t, written)) {
 			return false;
 		}
-		long mark = applies;
 		for (Effect e : t.effects) {
 			if (e.prepare() && !opt.redoPrepare || e.cls() == EffectClass.D || written != null && e.member() != null && !written.contains(e.member())) {
 				continue;
 			}
 			if (BARRIER.equals(e.op())) {
-				// (slice T4R) a member barrier: what was applied since the previous one made durable before anything after it
-				if (applies != mark) {
+				// (slice T4R) a member barrier: what was applied since the previous passed barrier (in any drive of this session: a refused
+				// barrier leaves it owed, whatever redos come after) made durable before anything after it. (fix round, P1-2) the debt is the
+				// entry's, never this drive's: an effect applied earlier and only probed APPLIED now still needs its barrier
+				if (t.dirty) {
 					TxnEnv.Barrier mb = env.barrier();
 					kill(t, "barrier:member");
 					if (!mb.ok()) {
 						hold(t, "barrier refused: " + mb.reason(), null); // after the decision: never compensated, retried
 						return false;
 					}
-					mark = applies;
+					t.dirty = false;
 				}
 				t.passed = Math.max(t.passed, e.i());
 				continue;
@@ -661,6 +660,7 @@ public final class TxnCore {
 			hold(t, "barrier refused: " + b.reason(), null); // after the decision: never compensated, retried
 			return false;
 		}
+		t.dirty = false;
 		t.awaits.clear();
 		t.awaits.addAll(b.awaits());
 		t.result = k.result(t);
@@ -745,7 +745,7 @@ public final class TxnCore {
 			hold(t, "effect " + e.i() + " refused: " + ex.getMessage(), where(k, t, e));
 			return false;
 		}
-		applies++;
+		t.dirty = true; // (slice T4R fix round, P1-2) a member barrier owed until one passes
 		kill(t, "apply:" + e.i());
 		return true;
 	}

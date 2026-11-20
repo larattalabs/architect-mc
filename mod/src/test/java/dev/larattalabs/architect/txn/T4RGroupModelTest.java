@@ -167,7 +167,13 @@ class T4RGroupModelTest {
 						.getKey()));
 					w.core.plan(t, Effect.of("txn.barrier", EffectClass.R).member(e.getKey()));
 				}
+				// (fix round, P2 coverage) B's chunk write fails once: its member barrier is refused, the txn held; then the live retries drive it
+				// again (each a full drive from the entry), and nothing of B is paid before a barrier published its W
+				w.serializeFails.add(chunk("b"));
 				run(w, t);
+				for (int i = 0; i < 2 && w.core.get(t.id) != null; i++) {
+					w.core.drive(t);
+				}
 				setRemaining(w, List.of());
 				w.store("queue").save();
 			}

@@ -325,6 +325,22 @@ public final class Sites {
 		return Infras.pending(id);
 	}
 
+	/** (slice T4R fix round, R3's P2) Every decided, unsettled site or road ({@link #decidedRemoval}): listed as removing, held(decided). */
+	public static List<Object> decidedRemovals() {
+		List<Object> out = new ArrayList<>();
+		for (Site p : pendingSites()) {
+			if (get(p.id()) == null && decidedRemoval(p.id()) != null) {
+				out.add(p);
+			}
+		}
+		for (Infra i : Infras.pendingAll()) {
+			if (Infras.get(i.id()) == null && decidedRemoval(i.id()) != null) {
+				out.add(i);
+			}
+		}
+		return out;
+	}
+
 	/** (slice T4R) The txn file failed to load this session (set by TxnServer as it loads; Sites never reads TxnServer for it). */
 	private static volatile boolean txnLoadFailed;
 
@@ -1814,6 +1830,33 @@ public final class Sites {
 		SiteJournal.await(undone.commit(), "the removal of " + id);
 		tr.mark("commit");
 		WorldJournal.kill("K6");
+		// (slice T4R fix round, P1-6) each stash told its removal's result parts (the restore's counts; the removed site's hand-down and
+		// cascade): its txn keeps them with its result, so a recovered or replayed removal reports them as this call would have
+		Map<String, Integer> handedAll = handedBySite(undone.work());
+		for (Site x : all) {
+			JsonObject st = stashes.get(x.id());
+			if (st == null) {
+				continue;
+			}
+			Journal.Stats xs = statsOf(undone.work(), x.id());
+			JsonObject fin = new JsonObject();
+			fin.addProperty("restored", xs.restored());
+			fin.addProperty("kept", xs.changed());
+			JsonObject h = new JsonObject();
+			if (x.id().equals(id)) {
+				handedAll.forEach(h::addProperty);
+			}
+			fin.add("handed", h);
+			com.google.gson.JsonArray ca = new com.google.gson.JsonArray();
+			if (x.id().equals(id)) {
+				cascade.forEach(ca::add);
+			}
+			fin.add("cascaded", ca);
+			st.add("fin", fin);
+			if (CrateSettle.durable(x.id()) != null) {
+				CrateSettle.holdDurable(x.id(), st); // its durable copy too (published with the next ledger save)
+			}
+		}
 		// R3: the records pending (with the crate.settle each owes: a restart before it settles it from there)
 		for (Site x : all) {
 			markPending(server, x, "removed", stashes.get(x.id()));
@@ -1824,8 +1867,10 @@ public final class Sites {
 			}
 		}
 		// R4: the writes, top first (the cascade is ordered top-down); (T4b fix round, N3) as the removal's own writes (its boxes are held)
-		boolean writingWas = CrateSettle.WRITING;
-		CrateSettle.WRITING = true;
+		java.util.Set<String> writingWas = CrateSettle.WRITING;
+		java.util.Set<String> own = new java.util.HashSet<>(cascade);
+		all.forEach(x -> own.add(x.id()));
+		CrateSettle.WRITING = java.util.Set.copyOf(own); // (slice T4R fix round) this removal's own sites only
 		try {
 			return writeRemoval(level, server, id, all, cascade, decs, stashes, undone, group, drops, force, tr);
 		} finally {

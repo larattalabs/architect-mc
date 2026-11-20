@@ -40,6 +40,11 @@ public final class CargoTxn {
 			ItemStack.EMPTY);
 	}
 
+	/** (slice T4R fix round, P1-5) A cargo stack's owed key: unique per txn and effect ({@code tx-n/i}), its source after it. */
+	public static String oweKey(String txnId, int effect, String source) {
+		return "cargo:" + txnId + "/" + effect + ":" + source;
+	}
+
 	static String itemId(ItemStack st) {
 		return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString();
 	}
@@ -49,6 +54,15 @@ public final class CargoTxn {
 	 * before anything changed, or held after the decision: then its stacks are owed by recovery, never lost). Server thread.
 	 */
 	public static @Nullable String owe(ServerLevel level, String key, List<Stack> stacks) {
+		return owe(level, key, stacks, new java.util.ArrayList<>());
+	}
+
+	/**
+	 * {@link #owe}, adding the owed keys it creates to {@code owedKeys}. (slice T4R fix round, P1-5) Each owed key is the txn's and the
+	 * effect's ({@code cargo:tx-n/i:<source>}), never the holder's slot alone: a later take from the same slot is a new entry, never a probe
+	 * of an earlier (ended) one.
+	 */
+	public static @Nullable String owe(ServerLevel level, String key, List<Stack> stacks, List<String> owedKeys) {
 		if (stacks.isEmpty()) {
 			return null;
 		}
@@ -74,7 +88,9 @@ public final class CargoTxn {
 			String enc = encode(level, s.stack());
 			c.plan(t, Effect.of(TAKE, EffectClass.B).prepare().items(items).move("holder", Effect.TRANSIT).data("dim", dim).data("pos", CrateTxn.posJson(s
 				.pos())).data("slot", s.slot()).data("stack", enc));
-			Effect.Builder ow = Effect.of(CrateTxn.OWE, EffectClass.O).items(items).move(Effect.TRANSIT, "owed").data("key", s.key()).data("recipient", s
+			String owedKey = oweKey(t.id, t.effects.size(), s.key());
+			owedKeys.add(owedKey);
+			Effect.Builder ow = Effect.of(CrateTxn.OWE, EffectClass.O).items(items).move(Effect.TRANSIT, "owed").data("key", owedKey).data("recipient", s
 				.recipient()).data("dim", dim).data("pos", CrateTxn.posJson(s.pos())).data("reason", dev.larattalabs.architect.site.OwedLedger.CARGO).data(
 					"stack", enc);
 			if (s.site() != null) {

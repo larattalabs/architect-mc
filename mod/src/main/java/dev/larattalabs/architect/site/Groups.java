@@ -116,6 +116,10 @@ public final class Groups {
 		 * entities. A crash between: the start's settle books it when the holder is gone, drops it when the holder still holds its items.
 		 */
 		final transient Map<String, Credit> cargo = new LinkedHashMap<>();
+		/** (slice T4R fix round, P1-6) The owed keys its data cargo created (removal.cargo): in its result; saved with the queue. */
+		final List<String> cargoOwed = new ArrayList<>();
+		/** (slice T4R fix round, P1-6) The undo's work planned once (its stats saved with the pre-save, before the commit). Not saved. */
+		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoWork plannedWork;
 		/** (slice T4R, R5) The data-bearing stacks of the player holders (owed whole by a {@code removal.cargo} txn before the holders are replaced). */
 		final transient List<dev.larattalabs.architect.txn.CargoTxn.Stack> cargoData = new ArrayList<>();
 		/** (fix round) The holders of {@link #cargo} were replaced (their contents only in the pending credits now). */
@@ -195,11 +199,25 @@ public final class Groups {
 				JsonArray us = new JsonArray();
 				undoSites.forEach(us::add);
 				o.add("undoSites", us);
-				JsonObject h = new JsonObject();
-				handed.forEach(h::addProperty);
-				o.add("handed", h);
-				o.addProperty("restoredCells", restoredCells);
-				o.addProperty("keptCells", keptCells);
+			}
+			// (slice T4R fix round, P1-6) the result's parts, planned before the commit too (R2q: a stop between the commit and the next save)
+			JsonObject h = new JsonObject();
+			handed.forEach(h::addProperty);
+			o.add("handed", h);
+			JsonObject ha = new JsonObject();
+			handedAll.forEach(ha::addProperty);
+			o.add("handedAll", ha);
+			o.addProperty("restoredCells", restoredCells);
+			o.addProperty("keptCells", keptCells);
+			if (!cascaded.isEmpty()) {
+				JsonArray ca = new JsonArray();
+				cascaded.forEach(ca::add);
+				o.add("cascaded", ca);
+			}
+			if (!cargoOwed.isEmpty()) {
+				JsonArray co = new JsonArray();
+				cargoOwed.forEach(co::add);
+				o.add("cargoOwed", co);
 			}
 			if (!decItems.isEmpty()) {
 				JsonObject d = new JsonObject();
@@ -258,12 +276,23 @@ public final class Groups {
 				r.planned = o.get("planned").getAsString();
 				o.getAsJsonArray("plannedSites").forEach(e -> r.plannedSites.add(e.getAsString()));
 			}
+			if (o.get("handed") instanceof JsonObject hd) {
+				hd.entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			if (o.get("handedAll") instanceof JsonObject ha) {
+				ha.entrySet().forEach(e -> r.handedAll.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
+			r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
+			if (o.get("cascaded") instanceof JsonArray ca) {
+				ca.forEach(e -> r.cascaded.add(e.getAsString()));
+			}
+			if (o.get("cargoOwed") instanceof JsonArray co) {
+				co.forEach(e -> r.cargoOwed.add(e.getAsString()));
+			}
 			if (o.has("undo")) {
 				r.undo = o.get("undo").getAsString();
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
-				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
-				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
-				r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
 				if (!undoCommitted(r.undo)) {
 					// (F4) a queue file naming an undo group the journal never got (written before toJson saved a pending commit as planned):
 					// as planned, so the journal decides (resumeCommitted: planned again)
@@ -272,10 +301,7 @@ public final class Groups {
 					r.plannedSites.clear();
 					r.plannedSites.addAll(r.undoSites);
 					r.undo = null;
-					r.undoSites.clear();
-					r.handed = new TreeMap<>();
-					r.restoredCells = 0;
-					r.keptCells = 0;
+					r.undoSites.clear(); // (slice T4R fix round, P1-6) its result's parts kept: the journal decides, the counts stay the plan's
 				}
 			}
 			if (o.has("decStock")) {
@@ -1125,6 +1151,11 @@ public final class Groups {
 			Map<String, Integer> refund = new TreeMap<>(r.refund);
 			GroupTxn.credited(r).forEach((k, v) -> refund.merge(k, v, Integer::sum)); // credited only: owed is listed apart
 			List<String> owed = new ArrayList<>(r.owed);
+			r.cargoOwed.forEach(k -> {
+				if (!owed.contains(k)) {
+					owed.add(k); // (fix round, P1-6) its data cargo's owed keys
+				}
+			});
 			GroupTxn.owed(r).forEach(k -> {
 				if (!owed.contains(k)) {
 					owed.add(k);
@@ -1299,6 +1330,9 @@ public final class Groups {
 						});
 						return;
 					}
+					if (r.txn.isDone() && !r.txn.isCompletedExceptionally()) {
+						planStats(r, (dev.larattalabs.architect.journal.WorldJournal.UndoWork) r.txn.join()[0]); // (fix round, P1-6) before the pre-save
+					}
 					if (!r.txn.isDone() || !preSaved(server, r)) {
 						if (r.preSave == Placement.NOT_SAVED) {
 							endUnrecorded(server, r);
@@ -1328,6 +1362,10 @@ public final class Groups {
 						return;
 					}
 				} else {
+					if (r.plannedWork == null) {
+						r.plannedWork = r.planner.work(); // (fix round, P1-6) planned once: its stats saved with the pre-save, before the commit
+						planStats(r, r.plannedWork);
+					}
 					if (!preSaved(server, r)) {
 						if (r.preSave == Placement.NOT_SAVED) {
 							endUnrecorded(server, r);
@@ -1335,7 +1373,8 @@ public final class Groups {
 						return;
 					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
-					u = SiteJournal.submitUndo(r.planner.work());
+					u = SiteJournal.submitUndo(r.plannedWork);
+					r.plannedWork = null;
 				}
 				r.planner = null;
 				committed(server, r, u);
@@ -1618,7 +1657,7 @@ public final class Groups {
 		if (!r.cargoData.isEmpty()) {
 			// (slice T4R, R5) the data-bearing stacks owed whole (taken out of their holders and owed, in one txn) before any holder is replaced
 			String why = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo:" + r.group + (r.stage == null ? "" : "/" + r.stage) + "@" + System.currentTimeMillis(),
-				List.copyOf(r.cargoData));
+				List.copyOf(r.cargoData), r.cargoOwed);
 			if (why != null && !why.startsWith("held(decided)")) {
 				dropPending(r);
 				dropCargoPending(r);
@@ -1746,6 +1785,7 @@ public final class Groups {
 			+ "write is confirmed", r.group);
 		r.planner = null;
 		r.txn = null;
+		r.plannedWork = null;
 		r.planGroup = null; // (planIds kept: end() gives back the custody held for them)
 		r.planned = null;
 		r.plannedSites.clear();
@@ -1936,8 +1976,7 @@ public final class Groups {
 				RemovalSeal.changed();
 			}
 		}
-		r.handed = new TreeMap<>();
-		r.handedAll = new TreeMap<>();
+		// (slice T4R fix round, P1-6) the hand-down and the counts planned before the commit (saved with the pre-save) are kept
 		retakeStanding(server, r);
 		Placement.save(server, false);
 		Architect.LOGGER.info("Removal of group {}: its undo {} was committed before the stop; the removal resumes its writes", r.group, g);
@@ -1977,6 +2016,14 @@ public final class Groups {
 		}
 	}
 
+	/** (slice T4R fix round, P1-6) The undo's result parts from its planned work, before the commit: saved with the pre-save. */
+	static void planStats(Removal r, dev.larattalabs.architect.journal.WorldJournal.UndoWork w) {
+		r.handed = new TreeMap<>(Sites.handedBySite(w));
+		r.handedAll = new TreeMap<>(r.handed);
+		r.restoredCells = w.plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
+		r.keptCells = w.plan().stats().values().stream().mapToInt(Journal.Stats::changed).sum();
+	}
+
 	/** R2 submitted: the removal waits for its commit, then marks the records pending and writes. */
 	private static void committed(MinecraftServer server, Removal r, SiteJournal.Undone u) {
 		r.planned = null;
@@ -2010,6 +2057,11 @@ public final class Groups {
 		}
 		Infra i = Infras.get(id);
 		return i != null ? i.dimension() : Site.OVERWORLD;
+	}
+
+	/** (slice T4R fix round, P1-1) Whether undo group {@code undo} reached the world journal (any entry of it). */
+	public static boolean undoInJournal(String undo) {
+		return Removal.undoCommitted(undo);
 	}
 
 	/** (slice T4R, R1) Whether a group's removal for txn {@code key} is still in the queue (running or held): its {@code group.done} waits. */
@@ -2544,6 +2596,7 @@ public final class Groups {
 		for (JsonElement e : a) {
 			try {
 				Removal rm = Removal.fromJson(e.getAsJsonObject());
+				holdLegacy(rm);
 				writeAgainIn(rm);
 				(e.getAsJsonObject().has("stalled") ? STALLED : REMOVALS).add(rm);
 			} catch (RuntimeException ex) {
@@ -2551,6 +2604,33 @@ public final class Groups {
 			}
 		}
 		writeAgainDone();
+	}
+
+	/**
+	 * (slice T4R fix round, P1-3) A pre-T4R queue's converted member credits: each member's box held from the queue's load (before the start
+	 * grace ends and before its removal.group txn begins, whose own box holds take over), so no player mines a paid block it credits.
+	 */
+	static void holdLegacy(Removal r) {
+		for (var e : r.decSettle.entrySet()) {
+			if (!e.getValue().has("legacy")) {
+				continue;
+			}
+			dev.larattalabs.architect.placement.Anchors.Bounds box = boxOf(e.getKey());
+			if (box != null) {
+				CrateSettle.withBox(e.getValue(), box);
+				CrateSettle.holdOnly(e.getKey(), e.getValue());
+			}
+		}
+	}
+
+	/** A member's box: its record's (standing or pending) restore box, or its road's. */
+	static dev.larattalabs.architect.placement.Anchors.@Nullable Bounds boxOf(String id) {
+		Site m = Sites.pendingRecord(id) != null ? Sites.pendingRecord(id) : Sites.get(id);
+		if (m != null) {
+			return m.restoreBox();
+		}
+		Infra inf = Infras.pending(id) != null ? Infras.pending(id) : Infras.get(id);
+		return inf == null ? null : inf.box();
 	}
 
 	/** The queue loaded: the members to write again are taken (UMT calls it after its own load). */

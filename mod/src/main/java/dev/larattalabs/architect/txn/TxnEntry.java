@@ -50,6 +50,12 @@ public final class TxnEntry {
 	@Nullable String held;
 	/** The resource its hold names ({@code chunk x,z}, {@code player <name>}), or null. */
 	@Nullable String heldAt;
+	/**
+	 * (slice T4R fix round, P1-2) An effect was applied this session since the last barrier that passed: the next member barrier must run
+	 * (a refused one stays owed across drives). False after a restart: what loads is what is on disk.
+	 */
+	boolean dirty;
+
 	/** (slice T4R) The highest member barrier ({@link TxnCore#BARRIER}) a drive passed this session: every effect before it is durable. */
 	int passed = -1;
 

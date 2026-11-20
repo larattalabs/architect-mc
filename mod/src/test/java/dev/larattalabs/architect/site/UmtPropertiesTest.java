@@ -456,7 +456,8 @@ class UmtPropertiesTest {
 				} else {
 					assertEquals(null, r.undo, "an undo group the journal never got is not resumed as committed");
 					assertEquals(undo, r.planned, "it is kept as planned: the load asks the journal (resumeCommitted: planned again)");
-					assertTrue(r.undoSites.isEmpty() && r.handed.isEmpty() && r.restoredCells == 0);
+					// (slice T4R fix round, P1-6) its result's parts are the plan's (saved with the pre-save): kept for the resumed removal's result
+					assertTrue(r.undoSites.isEmpty() && r.handed.equals(Map.of(s.id, 3)) && r.restoredCells == 7, "kept: " + r.undoSites + " " + r.handed + " " + r.restoredCells);
 					assertEquals(List.of(s.id), r.sites, "its sites stay to be removed");
 				}
 			}

@@ -71,6 +71,17 @@ final class GroupTxn {
 		res.add("site:group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
 		for (String id : order) {
 			JsonObject st = r.decSettle.get(id);
+			if (st.has("legacy") && !st.has("cells")) {
+				// (fix round, P1-3) a pre-T4R member credit: its found evidence from its journal cells (held since the queue loaded), so its refund
+				// pays min(the credit, what its W finds): a paid block a player took is not paid, one already restored is
+				ServerLevel lv = Sites.levelOf(server, st.get("dim").getAsString());
+				java.util.List<dev.larattalabs.architect.survival.Refunds.Cell> cells = lv == null ? null : CrateSettle.legacyCells(lv, id, r.undo);
+				dev.larattalabs.architect.placement.Anchors.Bounds box = Groups.boxOf(id);
+				if (cells == null || box == null) {
+					return "the journal cells of " + id + "'s pre-T4R credit can't be read";
+				}
+				CrateSettle.withCells(st, cells, box);
+			}
 			if (st.get("box") instanceof JsonArray b && b.size() == 6) {
 				res.add(RemovalTxn.box(st.get("dim").getAsString(), b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4)
 					.getAsInt(), b.get(5).getAsInt()));
@@ -105,6 +116,8 @@ final class GroupTxn {
 				break;
 		}
 		TxnEntry t = s.entry();
+		// (fix round, P1-1) its decision is the committed journal undo: the txn adopts it and never aborts (a refused barrier holds it)
+		c.plan(t, RemovalTxn.undoDecision(r.undo));
 		for (String id : order) {
 			JsonObject st = r.decSettle.get(id);
 			ServerLevel level = Sites.levelOf(server, st.get("dim").getAsString());
@@ -144,6 +157,7 @@ final class GroupTxn {
 		}
 		r.gtx = t;
 		r.crateSettle = null; // planned in the txn now (its key there): never settled apart
+		order.forEach(CrateSettle::forgetHoldOnly); // (fix round, P1-3) the txn's own box holds take over from the load-time ones
 		Architect.LOGGER.info("Removal of group {}{}: removal.group {} begun over {} paid member(s) (undo {})", r.group, r.stage == null ? "" : " stage "
 			+ r.stage, t.id, order.size(), r.undo);
 		return null;
@@ -184,6 +198,9 @@ final class GroupTxn {
 		Map<String, Integer> drops = new TreeMap<>();
 		r.decItems.values().forEach(m -> m.forEach((k, v) -> drops.merge(k, v, Integer::sum)));
 		o.add("drops", Builder.counts(drops));
+		JsonArray ow = new JsonArray(); // (fix round, P1-6) its data cargo's owed keys (a separate removal.cargo txn's)
+		r.cargoOwed.forEach(ow::add);
+		o.add("owed", ow);
 		return o;
 	}
 
@@ -197,7 +214,8 @@ final class GroupTxn {
 			return false;
 		}
 		if (TxnServer.core().get(t.id) == null) {
-			return true; // retired
+			// retired: done only when it committed (fix round, P1-1: never read a missing entry as settled)
+			return TxnServer.core().cache().committed(t.key) != null;
 		}
 		int last = -1;
 		for (Effect e : t.effects()) {
@@ -225,7 +243,15 @@ final class GroupTxn {
 	/** Drives {@code r}'s txn as far as it can go now; why it is held for anything but waiting on the group's own writes, or null. */
 	static @Nullable String drive(Groups.Removal r) {
 		TxnEntry t = r.gtx;
-		if (t == null || TxnServer.core().get(t.id) == null) {
+		if (t == null) {
+			return null;
+		}
+		if (TxnServer.core().get(t.id) == null) {
+			if (TxnServer.core().cache().committed(t.key) == null) {
+				// (fix round, P1-1) retired without a commit (it can't since its journal decision; kept as a guard): begun again
+				r.gtx = null;
+				return "its removal.group txn ended without its commit: begun again";
+			}
 			return null;
 		}
 		TxnServer.core().drive(t);

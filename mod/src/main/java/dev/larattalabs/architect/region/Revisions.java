@@ -1542,7 +1542,7 @@ public final class Revisions {
 		rec.busy = "undoing " + opId;
 		rec.manifest = "rev/op-" + opId + ".json";
 		RegionsImpl.save(l);
-		WorldJournal.kill("RVU1"); // the commit point: the manifest and region.json saved, nothing drained or removed
+		// (slice T4R fix round) RVU1 is the stage removal txn's decision now (RemovalTxn.GROUP_KIND.alias, Steward's changes §1)
 		CompletableFuture<dev.larattalabs.architect.api.RemoveResult> f = new CompletableFuture<>();
 		UNDO_FUTURES.computeIfAbsent(opId, k -> new ArrayList<>()).add(f);
 		Architect.LOGGER.info("Region {}: undo {} to position {} (revisions {}, stages {})", regionId, opId, toPosition, rids, stages);
@@ -1735,7 +1735,7 @@ public final class Revisions {
 			}
 			op.addProperty("phase", "remove");
 			writeUndo(l, op);
-			WorldJournal.kill("RVU2"); // drained, nothing removed
+			// (slice T4R fix round) RVU2 is the stage removal txn's effects barrier now (after its decision), never before D
 			phase = "remove";
 		}
 		if (phase.equals("remove") || phase.equals("removed")) {

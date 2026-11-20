@@ -303,6 +303,51 @@ public final class RemovalTxn {
 		}
 	};
 
+	/**
+	 * (slice T4R fix round, P1-1) The D effect of a {@code removal.group}: its decision is the group's journal undo, committed before the txn
+	 * begins. Its probe reads the journal (APPLIED once the undo group is in it; UNKNOWN while the journal can't be read), so the txn adopts the
+	 * commit and never aborts: a refused barrier holds it, retried. It is never applied here.
+	 */
+	public static final String UNDO = "group.undo";
+
+	/** (TEST seam) Whether undo group {@code g} reached the world journal. */
+	static java.util.function.Predicate<String> UNDO_COMMITTED = dev.larattalabs.architect.site.Groups::undoInJournal;
+
+	/** (slice T4R fix round, P1-1) {@link #UNDO} for undo group {@code undo}. */
+	public static Effect.Builder undoDecision(String undo) {
+		return Effect.of(UNDO, EffectClass.D).data("group", undo);
+	}
+
+	static final TxnKind.Adapter UNDO_DECIDER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("group") ? null : "group is required";
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			if (UNDO_COMMITTED.test(e.data().get("group").getAsString())) {
+				return Probe.APPLIED;
+			}
+			return CrateSettle.journalUnreadable() ? Probe.UNKNOWN : Probe.ABSENT;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			throw new IllegalStateException("the group's undo commits in the world journal, never here: held until it reads committed");
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("a decision is never compensated");
+		}
+
+		@Override
+		public String where(TxnEntry t, Effect e) {
+			return "the world journal's undo group " + e.data().get("group").getAsString();
+		}
+	};
+
 	/** (slice T4R) {@link #GROUP_DONE}: applied (a no-op) once its group's removal ended; while the removal runs it waits. */
 	static final TxnKind.Adapter GROUP_DONER = new TxnKind.Adapter() {
 		@Override
@@ -351,6 +396,7 @@ public final class RemovalTxn {
 					case RESTORE -> RESTORER;
 					case PILE_REFUND -> PILE_REFUNDER;
 					case GROUP_DONE -> GROUP_DONER;
+					case UNDO -> UNDO_DECIDER;
 					case CrateTxn.TAKE -> CrateTxn.ADAPTER;
 					case CrateTxn.RESTORE -> CrateTxn.RESTORE_ADAPTER;
 					case CrateTxn.RELEASE -> CrateTxn.RELEASER;
@@ -367,7 +413,53 @@ public final class RemovalTxn {
 		};
 	}
 
-	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD), GROUP_KIND = kind(GROUP);
+	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD);
+
+	/** (slice T4R fix round, P1-1) {@code removal.group}: decided by its committed journal undo ({@link #UNDO}), never by its own file. */
+	public static final TxnKind GROUP_KIND = new TxnKind() {
+		final TxnKind base = kind(GROUP);
+
+		@Override
+		public String name() {
+			return GROUP;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public String decider() {
+			return "journal";
+		}
+
+		/**
+		 * (slice T4R fix round, Steward's changes §1) A revision undo's stage removal answers Steward's aliases at its txn's points: RVU1 at its
+		 * decision (the committed undo adopted: D applied and recorded), RVU2 at its effects' barrier (the region drained, every member written
+		 * and settled, still after D, before its event and retirement). Both finish after a restart (the txn recovers forward).
+		 */
+		@Override
+		public @Nullable String alias(TxnEntry t, String step) {
+			if (!(t.payloads.get("removal_finished") instanceof com.google.gson.JsonObject p) || !p.has("revisionId")) {
+				return null;
+			}
+			if ("decided".equals(step)) {
+				return "RVU1";
+			}
+			return "barrier:effects".equals(step) ? "RVU2" : null;
+		}
+
+		@Override
+		public TxnKind.Adapter adapter(Effect e) {
+			return base.adapter(e);
+		}
+
+		@Override
+		public com.google.gson.JsonObject result(TxnEntry t) {
+			return base.result(t);
+		}
+	};
 
 	/**
 	 * (T4 final round, P1 3) The site or road whose removal {@code t} settles ({@code ""} when {@code t} is no removal's txn): its W restore's
@@ -399,12 +491,33 @@ public final class RemovalTxn {
 		if (res.get("owed") instanceof JsonArray o) {
 			o.forEach(x -> owed.add(x.getAsString()));
 		}
+		if (p.get("owed") instanceof JsonArray po) {
+			po.forEach(x -> {
+				if (!owed.contains(x.getAsString())) {
+					owed.add(x.getAsString()); // (fix round, P1-6) its data cargo's owed keys
+				}
+			});
+		}
 		dev.larattalabs.architect.api.RemoveResult rr = new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(
 			refund), p.has("restored") ? p.get("restored").getAsInt() : 0, p.has("kept") ? p.get("kept").getAsInt() : 0, handed, cascaded, owed);
 		String stage = p.has("stage") ? p.get("stage").getAsString() : null;
 		Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
 		String region = p.has("region") ? p.get("region").getAsString() : null;
 		return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, rr);
+	}
+
+	/** (slice T4R fix round) Whether {@code t} removes a site whose own removal writes now ({@link CrateSettle#WRITING}): its boxes accept it. */
+	static boolean writingOwn(TxnEntry t) {
+		java.util.Set<String> w = CrateSettle.WRITING;
+		if (w.isEmpty()) {
+			return false;
+		}
+		for (Effect e : t.effects) {
+			if (e.data().has("site") && w.contains(e.data().get("site").getAsString())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** A removal box (N3): {@code rbox:<dim>@x0,y0,z0:x1,y1,z1}. While an open removal txn names one, no player breaks a block in it. */
@@ -424,7 +537,7 @@ public final class RemovalTxn {
 			return false;
 		}
 		for (TxnEntry t : c.open()) {
-			if (!t.kind.startsWith("removal.") || t == writer) {
+			if (!t.kind.startsWith("removal.") || t == writer || writingOwn(t)) {
 				continue;
 			}
 			for (String r : t.resources) {

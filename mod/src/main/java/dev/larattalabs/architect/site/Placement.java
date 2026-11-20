@@ -797,6 +797,7 @@ public final class Placement {
 	private static void load(MinecraftServer srv) {
 		server = srv;
 		JOBS.clear();
+		CrateSettle.clearHoldOnly(); // (slice T4R) the load-time holds are this world's, set below (group legacy credits, legacy roads)
 		loadFailed = false;
 		refusedLogged = false;
 		saveWanted = false; // (LC3 fix 2) a new world: no retry carried over
@@ -844,7 +845,6 @@ public final class Placement {
 			}
 		}
 		// (slice T4R, R2) a pre-T4 queued road removal's footprint held from now on (before the start grace ends, before its conversion)
-		CrateSettle.clearHoldOnly();
 		for (Job j : JOBS) {
 			if (j instanceof RestoreJob rj && rj.legacyRoad()) {
 				try {

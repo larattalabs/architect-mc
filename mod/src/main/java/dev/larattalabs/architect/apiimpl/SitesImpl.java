@@ -93,6 +93,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	public List<SiteView> list() {
 		List<SiteView> out = new ArrayList<>(Sites.all().stream().map(s -> Views.site(server, s)).toList());
 		dev.larattalabs.architect.site.Infras.all().forEach(i -> out.add(Views.infra(i)));
+		// (slice T4R fix round, R3) a decided removal not yet settled stays listed: status removing, held(decided), until its txn retires
+		for (Object held : Sites.decidedRemovals()) {
+			out.add(Views.removingHeld(held instanceof Site ps ? Views.site(server, ps) : Views.infra((dev.larattalabs.architect.site.Infra) held)));
+		}
 		return out;
 	}
 

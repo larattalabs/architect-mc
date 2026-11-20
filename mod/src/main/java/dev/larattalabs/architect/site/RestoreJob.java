@@ -577,11 +577,12 @@ final class RestoreJob implements Placement.Job {
 			}
 			int to = Math.min(cells.size(), cellCursor + RemovalSeal.sliceFor(siteId, 64));
 			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);
-			CrateSettle.WRITING = true; // (T4b fix round, N3) the removal's own writes in its held box
+			java.util.Set<String> writingWas = CrateSettle.WRITING;
+			CrateSettle.WRITING = java.util.Set.of(siteId); // (T4b fix round, N3) the removal's own writes in its held box (T4R: its box only)
 			try {
 				restore.writing(level, () -> SiteJournal.writeCells(level, part));
 			} finally {
-				CrateSettle.WRITING = false;
+				CrateSettle.WRITING = writingWas;
 			}
 			cellCursor = to;
 			if (cellCursor > from) {
@@ -780,31 +781,11 @@ final class RestoreJob implements Placement.Job {
 	}
 
 	/**
-	 * (slice T4R, R2) A pre-T4 road's paid cells standing now, as found-cells evidence: its run's tally while its entries are active (the job
-	 * not committed yet); once its undo committed (no run: its entries are UNDONE), each cell its restore writes back where the block standing
-	 * is not that cell's before, counted as the block's own item (a road's paid cells are its blocks: gravel, stone, slabs).
+	 * (slice T4R, R2; fix round P1-4) A pre-T4 road's found-cells evidence from its journal cells: those standing, and those its job already
+	 * restored before the upgrade (owed too), never a cell a player changed ({@link CrateSettle#legacyCells}). Null: unreadable.
 	 */
 	java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> legacyCells(ServerLevel level, Infra inf) {
-		if (group == null || SiteJournal.undone(siteId, group).isEmpty()) {
-			return RoadBuilder.tallyOf(level, inf, RoadBuilder.dropPlayerMatches(level, inf, false)).cells();
-		}
-		List<dev.larattalabs.architect.survival.Refunds.Cell> out = new ArrayList<>();
-		try {
-			for (SiteJournal.CellWrite w : SiteJournal.restore(level, siteId, group).cells()) {
-				BlockPos p = BlockPos.of(w.pos());
-				net.minecraft.world.level.block.state.BlockState now = level.getBlockState(p);
-				String id = Builder.blockId(now);
-				String before = w.value().state().getStringOr("Name", "minecraft:air");
-				if (now.isAir() || id.equals(before)) {
-					continue;
-				}
-				String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(now.getBlock().asItem()).toString();
-				out.add(new dev.larattalabs.architect.survival.Refunds.Cell(w.pos(), id, Map.of(item, 1)));
-			}
-		} catch (Sites.SiteException e) {
-			return null;
-		}
-		return out;
+		return CrateSettle.legacyCells(level, siteId, group);
 	}
 
 	/** (T4 final round) The legacy road's conversion waits (logged once). */
@@ -812,7 +793,8 @@ final class RestoreJob implements Placement.Job {
 
 	/**
 	 * (T4 final round, P1 2) A pre-T4 queued standalone road removal: its C29 credit becomes a {@code removal.road} stash (credited by the
-	 * txn after the restore, min(planned, found) not applied: a pre-T4 credit has no per-cell tally), saved confirmed with the ledger before
+	 * txn after the restore; slice T4R: min(the credit, what its W finds) applied over its journal cells, the ones restored already included),
+	 * saved confirmed with the ledger before
 	 * the job goes on; the job then carries the stash and no credit. Waits (null answer means done) while saving is off, a store failed to
 	 * load or the save is refused; never pays through C29.
 	 */
