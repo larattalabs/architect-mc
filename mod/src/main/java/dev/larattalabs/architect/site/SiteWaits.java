@@ -252,7 +252,7 @@ public final class SiteWaits {
 				}
 			}
 		}
-		if (dev.larattalabs.architect.txn.TxnServer.held("site:" + id)) {
+		if (Sites.txnHeld(id)) { // (slice T3b) site: or road:
 			// (slice T1, §3.12.3) held by an open txn: the feed skips it (Stockpiles.feed), not short of materials
 			return new SiteWait(id, true, CLOCK.held(id, since), items(needs), needs.moreUnits(), SiteWait.TXN_HELD, List.of());
 		}

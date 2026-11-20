@@ -140,9 +140,26 @@ public final class Sites {
 
 		/** (6c PT) A PLAYER_BUILD refusal with the builds in the way. */
 		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
+			this(reason, message, builds, "");
+		}
+
+		/** (slice T3b) With a stable sub-code ({@link #detail}): {@code ArchitectRefused.detail()}. */
+		public SiteException(Reason reason, String message, String detail) {
+			this(reason, message, List.of(), detail);
+		}
+
+		private SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds, String detail) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
+			this.detail = detail == null ? "" : detail;
+		}
+
+		private final String detail;
+
+		/** (slice T3b) The refusal's stable sub-code, {@code ""} when it has none. */
+		public String detail() {
+			return detail;
 		}
 
 		/** (6c PT) The builds in the way (PLAYER_BUILD), else empty. */
@@ -181,13 +198,33 @@ public final class Sites {
 	 */
 	public static @Nullable String adoptBusy(@Nullable String id) {
 		if (id != null) {
-			String held = dev.larattalabs.architect.txn.TxnServer.heldWhy("site:" + id);
+			String held = txnHeldWhy(id);
 			if (held != null) {
 				return held;
 			}
 		}
 		var f = ADOPT_BUSY;
 		return f == null || id == null ? null : f.apply(id);
+	}
+
+	/**
+	 * (slice T3b) {@code held(other) tx-<n>: ..} when an open txn holds the target or group {@code id} under any of its record resources
+	 * ({@code site:<id>}, and pile.adopt's {@code road:<id>} and {@code group:<id>}), else null. O(1) with no txn open.
+	 */
+	public static @Nullable String txnHeldWhy(String id) {
+		String h = dev.larattalabs.architect.txn.TxnServer.heldWhy("site:" + id);
+		if (h == null) {
+			h = dev.larattalabs.architect.txn.TxnServer.heldWhy("road:" + id);
+		}
+		if (h == null) {
+			h = dev.larattalabs.architect.txn.TxnServer.heldWhy("group:" + id);
+		}
+		return h;
+	}
+
+	/** (slice T3b) Whether {@link #txnHeldWhy} names a hold. */
+	public static boolean txnHeld(String id) {
+		return txnHeldWhy(id) != null;
 	}
 
 	/**
@@ -254,6 +291,7 @@ public final class Sites {
 			Drops.reset();
 			SiteDeltas.cleanStop(worldDir);
 			worldDir = null;
+			durable = null; // (T3b fix round) the next world's sites file gets its own
 			notifyListeners();
 		});
 	}
@@ -3861,12 +3899,98 @@ public final class Sites {
 		return server.getWorldPath(LevelResource.ROOT).resolve(FILE);
 	}
 
+	/** (slice T3b fix round, TEST {@code dev.stockpile.ps failSitesSaves}) the next n saves of the sites file fail as an I/O error would. */
+	public static final java.util.concurrent.atomic.AtomicInteger FAIL_SAVES = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** (slice T3b fix round) This world's sites file as a confirmed write ({@link #saveConfirmed}); null until first used, per world. */
+	private static @Nullable DurableFile durable;
+	/**
+	 * (T3b final check P2-1) Whether the sites file may hold a write no confirmed write covers: set by every ordinary save (it may have failed,
+	 * or not reached the disk) and at every load (the file read is not yet forced this session); cleared only by an OK {@link #saveConfirmed}.
+	 */
+	private static volatile boolean unconfirmed = true;
+
+	/** (T3b final check P2-1) Whether the sites file as written is acknowledged durable ({@link #saveConfirmed} OK since the last ordinary save). */
+	public static boolean confirmed() {
+		return !unconfirmed;
+	}
+
+	private static JsonObject root(State s) {
+		JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
+		JsonArray infra = Infras.toJson();
+		if (!infra.isEmpty()) {
+			root.add("infra", infra);
+		}
+		return root;
+	}
+
+	/**
+	 * (slice T3b fix round, GPT P2-2) The sites file written now as a confirmed write (temp forced, atomic rename, folder forced:
+	 * {@link DurableFile}); null when acknowledged OK, else why not. A txn's record effect requires it ({@link #save} swallows I/O errors).
+	 * Server thread.
+	 */
+	public static @Nullable String saveConfirmed(MinecraftServer server) {
+		if (loadFailed) {
+			return "the sites file failed to load this session";
+		}
+		if (FAIL_SAVES.get() > 0 && FAIL_SAVES.getAndDecrement() > 0) {
+			Architect.LOGGER.warn("Could not save {} (TEST: dev.stockpile.ps failSitesSaves)", file(server));
+			return "TEST: the sites file's save failed";
+		}
+		Path f = file(server);
+		DurableFile d = durable;
+		if (d == null || !d.file().equals(f)) {
+			d = durable = new DurableFile("sites", f);
+		}
+		unconfirmed = true;
+		DurableFile.Result r = d.write(root(state), d.request());
+		if (r.ok()) {
+			unconfirmed = false;
+		}
+		return r.ok() ? null : r.outcome() + ": " + r.reason();
+	}
+
+	/**
+	 * (slice T3b fix round, GPT P2-2) The crate cell a record names in the sites file on disk ({@code kind} site, road or group), or null when
+	 * the record is absent or names none. Throws when the file can't be read (a probe answers UNKNOWN). Server thread.
+	 */
+	public static int @Nullable [] savedCrate(MinecraftServer server, String kind, String id) throws IOException {
+		Path f = file(server);
+		if (!Files.exists(f)) {
+			return null;
+		}
+		JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+		String arr = switch (kind) {
+			case "group" -> "groups";
+			case "road" -> "infra";
+			default -> "sites";
+		};
+		if (!(root.get(arr) instanceof JsonArray a)) {
+			return null;
+		}
+		for (var e : a) {
+			if (!(e instanceof JsonObject o) || !o.has("id") || !id.equals(o.get("id").getAsString())) {
+				continue;
+			}
+			JsonObject c = kind.equals("group") ? o : o.get("construction") instanceof JsonObject co ? co : null;
+			if (c == null || !(c.get("crate") instanceof JsonObject cr) || !(cr.get("pos") instanceof JsonArray pos) || pos.size() != 3) {
+				return null;
+			}
+			return new int[] {pos.get(0).getAsInt(), pos.get(1).getAsInt(), pos.get(2).getAsInt()};
+		}
+		return null;
+	}
+
 	private static void save(MinecraftServer server, State s) {
 		if (loadFailed) {
 			return;
 		}
+		unconfirmed = true; // (T3b final check P2-1) readable is not durable: only saveConfirmed acknowledges
 		Path f = file(server);
 		try {
+			if (FAIL_SAVES.get() > 0 && FAIL_SAVES.getAndDecrement() > 0) {
+				throw new IOException("TEST: the sites file's save failed (dev.stockpile.ps failSitesSaves)");
+			}
 			Path tmp = f.resolveSibling(FILE + ".tmp");
 			JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
 			// phase 4e: roads and cell sites in their own array (0.7.0 never sees them; its saves drop it; the journal rebuilds them)
@@ -3883,6 +4007,7 @@ public final class Sites {
 
 	private static void load(MinecraftServer server) {
 		loadFailed = false;
+		unconfirmed = true;
 		groups = Map.of();
 		nextGroup = 1;
 		Infras.load(new JsonArray());

@@ -1699,7 +1699,7 @@ public final class Builder {
 		return false;
 	}
 
-	static void restoreCrateCell(ServerLevel level, Construction.Crate c) {
+	public static void restoreCrateCell(ServerLevel level, Construction.Crate c) {
 		BlockPos p = new BlockPos(c.x(), c.y(), c.z());
 		BlockState st;
 		try {
@@ -2505,6 +2505,11 @@ public final class Builder {
 		}
 		if (crate == null) {
 			throw new Sites.SiteException("The crate of " + id + " is missing");
+		}
+		String held = dev.larattalabs.architect.txn.TxnServer.cellWhy(crate.getLevel(), crate.getBlockPos());
+		if (held != null) {
+			// (slice T3b) an open txn holds the crate (an adoption): nothing goes in (its frozen ledger would take 0 anyway), refused by name
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "The crate of " + id + ": an open transaction holds it (" + held + ")", "held(other)");
 		}
 		Map<String, Integer> in = new LinkedHashMap<>();
 		for (var e : items.entrySet()) {

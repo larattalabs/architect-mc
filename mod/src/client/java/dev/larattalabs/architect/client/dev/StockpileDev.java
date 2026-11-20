@@ -21,6 +21,22 @@ public final class StockpileDev {
 		});
 	}
 
+	/** (slice T3b) Polls until the txn {@code a.pendingTxn} is no longer open (every 500 ms, about 280 s at most), then the stockpile's state. */
+	private static java.util.concurrent.CompletableFuture<JsonObject> waitRetired(net.minecraft.client.Minecraft mc, JsonObject a, JsonObject req, int n) {
+		String id = a.get("pendingTxn").getAsString();
+		return java.util.concurrent.CompletableFuture.supplyAsync(() -> null, java.util.concurrent.CompletableFuture.delayedExecutor(500,
+			java.util.concurrent.TimeUnit.MILLISECONDS)).thenCompose(v -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+				boolean open = dev.larattalabs.architect.txn.TxnServer.core().get(id) != null;
+				JsonObject o = a.deepCopy();
+				o.addProperty("retired", !open);
+				if (!open) {
+					o.add("stockpile", Stockpiles.dev(level.getServer(), player, "state", req).get("stockpile"));
+				}
+				return o;
+			})).thenCompose(x -> x)).thenCompose(o -> o.get("retired").getAsBoolean() || n >= 560 ? java.util.concurrent.CompletableFuture.completedFuture(o)
+				: waitRetired(mc, a, req, n + 1));
+	}
+
 	public static void init() {
 		op("dev.stockpile.create", "create", "{owner, crates: [[x,y,z]...], dimension?} - (6c Y1) Sites.createStockpile: idempotent per owner, adds the "
 			+ "named crates");
@@ -31,7 +47,15 @@ public final class StockpileDev {
 			+ "credit, reserved, the ledger (delivered, returned, consumed, withdrawn, dropped, refundOverflow), identity, feed order, per target");
 		op("dev.stockpile.order", "order", "{owner, ids?: [...]} - (6c Y1) Sites.setFeedOrder when ids are given; the order in stockpile.feedOrder");
 		op("dev.stockpile.withdraw", "withdraw", "{owner, items: {item: n}} - (6c Y1) Sites.withdraw into the player's inventory (credit only)");
-		op("dev.stockpile.adopt", "adopt", "{owner} - (6c Y1) Sites.adoptCrates");
+		// (slice T3b) one pile.adopt txn: -> joined, deferred {crate: reason}, txn; decided then held (a dev.txn.pauseAt pause, a refused barrier):
+		// heldDecided and pendingTxn, and the answer waits until that txn retires (up to the call's timeout), then carries the stockpile after it
+		DevBridge.register("dev.stockpile.adopt", 300_000, "{owner} - (6c Y1; slice T3b) Sites.adoptCratesResult through the pile.adopt txn -> joined, "
+			+ "deferred {crate: reason}, txn; a decided-then-held adoption answers once its txn retires (heldDecided, pendingTxn)", (req, mc) -> {
+				JsonObject r = req.deepCopy();
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> Stockpiles.dev(level.getServer(), player, "adopt", r)))
+					.thenCompose(x -> x).thenCompose(a -> a.has("pendingTxn") && !a.get("pendingTxn").isJsonNull() ? waitRetired(mc, a, r, 0)
+						: java.util.concurrent.CompletableFuture.completedFuture(a));
+			});
 		op("dev.stockpile.dissolve", "dissolve", "{owner, toPlayer?: false} - (6c Y1) Sites.dissolveStockpile (to the player, else dropped at a crate) "
 			+ "-> out, ledgerAtEnd");
 		op("dev.stockpile.audit", "audit", "{owner, min?: [x,y,z], max?: [x,y,z]} - (6c Y1) the conservation parts per item: stock, paidStanding "

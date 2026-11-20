@@ -72,6 +72,33 @@ public final class TxnServer {
 		c.register(CrateTxn.SETTLE_KIND); // (slice T2b part 2b)
 		c.register(RemovalTxn.SITE_KIND); // (slice T4b)
 		c.register(RemovalTxn.ROAD_KIND);
+		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
+	}
+
+	/** (slice T3b, TEST dev.txn.pauseAt) The kill point a live drive stops at (its txn held open), or null. */
+	private static volatile @Nullable String pauseAt;
+
+	/** (slice T3b, TEST) Arms ({@code point}) or clears (null) the pause; clearing retries a paused txn on the next tick. */
+	public static void pauseAt(@Nullable String point) {
+		pauseAt = point;
+		Architect.LOGGER.warn("Txn: pause point {} (dev.txn.pauseAt)", point);
+		if (point == null) {
+			heldBackoff = HELD_MIN;
+			heldWait = 0;
+		}
+	}
+
+	public static @Nullable String pausedAt() {
+		return pauseAt;
+	}
+
+	/**
+	 * (slice T3b) Whether every store a txn's effects read has loaded: the first server tick has run (the stockpiles, sites and the world
+	 * journal load in SERVER_STARTED's default phase, after the recovery slot). A probe of such a store answers UNKNOWN before (the txn holds
+	 * until the first tick), never ABSENT.
+	 */
+	public static boolean storesLoaded() {
+		return ticking && server != null;
 	}
 
 	/** The recovery slot: SERVER_STARTED's phase that runs before the default phase (every legacy listener registers there). */
@@ -104,6 +131,7 @@ public final class TxnServer {
 			QUEUED.clear();
 			core = emptyCore("no world loaded");
 			DurableBarrier.clearAfterOk();
+			dev.larattalabs.architect.site.PileAdopt.worldClosed(); // (T3b final check P2-3)
 		});
 	}
 
@@ -483,6 +511,12 @@ public final class TxnServer {
 		}
 
 		@Override
+		public boolean pauseAt(String point) {
+			String p = pauseAt;
+			return p != null && p.equals(point);
+		}
+
+		@Override
 		public boolean emit(TxnEntry t, String event, JsonObject payload, boolean replayed) {
 			String key = t.id + "/" + event;
 			if (DELIVERED.contains(key)) {
@@ -491,6 +525,11 @@ public final class TxnServer {
 			String line = t.id + " " + event + (replayed ? " (replayed)" : "") + " " + payload;
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
+				if ("stockpile_changed".equals(event) && payload.has("owner")) {
+					// (slice T3b fix round, GPT P2-4; final check P2-2) the txn's persisted payload marks the pile changed: Stockpiles' own limiter
+					// fires STOCKPILE_CHANGED (at least once, at most once per 20 ticks, never doubled with the ledger's own change)
+					dev.larattalabs.architect.site.Stockpiles.txnChanged(payload.get("owner").getAsString());
+				}
 				EVENTS.addLast(line);
 				while (EVENTS.size() > 32) {
 					EVENTS.pollFirst();

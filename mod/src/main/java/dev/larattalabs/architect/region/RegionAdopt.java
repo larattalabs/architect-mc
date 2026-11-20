@@ -179,7 +179,7 @@ public final class RegionAdopt {
 			}
 			var bx = b.box();
 			// (SAD §3) a BUILT site's crate reference counts only while its crate still stands (a shared crate another site builds from).
-			// (DFG) read where it stands: any crate block at its cell (one adoptCrates deferred), or a cell that can't be read, counts as standing
+			// (T3b, from DFG) read where it stands: any crate block at its cell (one adoptCrates deferred), or a cell that can't be read, counts
 			boolean crateLive = b.construction() != null && b.construction().crate() != null && (b.building() || dev.larattalabs.architect.site.Stockpiles
 				.crateMayStand(Sites.levelOf(s, b.dimension()), b));
 			siteRules(id, b.owner(), b.dimension(), bx.minX(), bx.minZ(), bx.maxX(), bx.maxZ(), b.placing(), b.construction(), b.building(), crateLive,

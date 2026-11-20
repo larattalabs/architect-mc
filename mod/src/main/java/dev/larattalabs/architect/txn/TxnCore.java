@@ -246,6 +246,34 @@ public final class TxnCore {
 		holds.hold(h);
 	}
 
+	/**
+	 * (slice T3b, Noah's decision 3) A state no kind can finish safely, held for ops: a quarantined entry of {@code kind} (no kind of that
+	 * name is registered, so a load quarantines it again) over {@code resources}, written to {@code txn.json} at once. Its resources stay
+	 * held, indefinitely, until ops removes it. Refused (null) when the journal failed to load or a resource is held already; else the new
+	 * id (the write's outcome is the journal's: a refused or in-doubt write leaves the core unsynced and the hold in memory).
+	 */
+	public @Nullable String holdForOps(String kind, List<String> resources, String why) {
+		if (loadFailed != null || holds.refusal(resources) != null || kinds.containsKey(kind)) {
+			return null;
+		}
+		String id = "tx-" + next++;
+		JsonObject raw = new JsonObject();
+		raw.addProperty("id", id);
+		raw.addProperty("kind", kind);
+		raw.addProperty("kv", 1);
+		JsonArray rs = new JsonArray();
+		resources.forEach(rs::add);
+		raw.add("resources", rs);
+		raw.addProperty("why", why);
+		raw.addProperty("at", env.wall());
+		quarantine(id, raw, "held for ops: " + why, resources);
+		DurableFile.Outcome o = env.store().write(toJson());
+		if (o != DurableFile.Outcome.OK) {
+			unsynced = true;
+		}
+		return id;
+	}
+
 	// ------------------------------------------------------------------ begin, plan, persist (R-1, R-2)
 
 	/**
@@ -368,12 +396,40 @@ public final class TxnCore {
 		}
 	}
 
+	/** (slice T3b, TEST) A drive stopped at a paused kill point ({@link TxnEnv#pauseAt}). */
+	private static final class Paused extends RuntimeException {
+		Paused() {
+			super(null, null, false, false);
+		}
+	}
+
 	/** Drives one entry as far as it can go now. */
 	public Status drive(TxnEntry t) {
 		TxnKind k = kinds.get(t.kind);
 		if (k == null) {
 			return Status.QUARANTINED;
 		}
+		if (t.paused != null) {
+			if (env.pauseAt(t.paused)) {
+				return hold(t, "paused at " + t.paused + " (dev.txn.pauseAt)", null);
+			}
+			t.paused = null;
+		}
+		boolean was = driving;
+		driving = true;
+		try {
+			return drive0(k, t);
+		} catch (Paused p) {
+			return hold(t, "paused at " + t.paused + " (dev.txn.pauseAt)", null);
+		} finally {
+			driving = was;
+		}
+	}
+
+	/** Whether a drive runs now (a pause only stops a drive, never a persist). */
+	private boolean driving;
+
+	private Status drive0(TxnKind k, TxnEntry t) {
 		for (int guard = 0; guard < 64; guard++) {
 			if (!open.containsKey(t.id)) {
 				return Status.DONE;
@@ -751,6 +807,15 @@ public final class TxnCore {
 			String ap = KillPoints.name(alias, !t.live, step);
 			KillPoints.reached(alias, ap);
 			env.kill(ap);
+		}
+		TxnKind k = kinds.get(t.kind);
+		String legacy = k == null || !t.live ? null : k.alias(t, step);
+		if (legacy != null) {
+			env.kill(legacy); // (slice T3b) a legacy name of the same point (pile.adopt's SAC1, SAC2)
+		}
+		if (driving && env.pauseAt(point)) {
+			t.paused = point;
+			throw new Paused(); // (TEST dev.txn.pauseAt) everything before this point is done and synced: the drive stops here, the txn held
 		}
 	}
 

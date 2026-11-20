@@ -50,6 +50,8 @@ public final class TxnEntry {
 	@Nullable String held;
 	/** The resource its hold names ({@code chunk x,z}, {@code player <name>}), or null. */
 	@Nullable String heldAt;
+	/** (slice T3b, TEST dev.txn.pauseAt) The point its drive stopped at, held open until the pause is cleared; null when not paused. */
+	@Nullable String paused;
 
 	TxnEntry(String id, String kind, int kv, @Nullable String key, long atTick, long atWall, @Nullable String who, List<String> resources,
 		String decider) {

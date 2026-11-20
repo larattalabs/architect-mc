@@ -418,6 +418,19 @@ public interface Sites {
 	}
 
 	/**
+	 * {@link #adoptCrates} with what it did ({@link AdoptCratesResult}: joined, deferred with a reason, the txn id); {@code adoptCrates}
+	 * wraps it. One transaction per call: overflow enters the stock past capacity (nothing dropped, nothing owed). Throws
+	 * {@link ArchitectRefused} with a stable {@link ArchitectRefused#detail()} (compare with {@code equals}; the txn id and the place are in
+	 * the message only): {@link Reason#SITE_BUSY} {@code held(other)}, another transaction holds a resource (the pile, a crate, a site,
+	 * road or group), nothing changed, retry later; {@link Reason#SITE_BUSY} {@code held(decided)}, this adoption was decided and then held
+	 * (it finishes later: re-read, don't retry); {@link Reason#JOURNAL_UNAVAILABLE} {@code txn_journal}, the txn journal failed to load
+	 * this session or the intent's write was refused, nothing changed. Server thread. Since NEXT.
+	 */
+	default AdoptCratesResult adoptCratesResult(String owner) {
+		throw new UnsupportedOperationException("Sites.adoptCratesResult needs Architect API NEXT");
+	}
+
+	/**
 	 * Ends the owner's stockpile (an abandoned settlement): every unit, reserved or not, goes to {@code to} (its inventory, the
 	 * overflow dropped at the player) or, with null, drops at a crate; every crate block is restored. Its building targets keep
 	 * their state and wait with no stockpile. Returns what went out. Since 1.17.0.

@@ -33614,6 +33614,66 @@ so two module lots that share items can't each be held to their own measured bou
   (gate-runs-T2 20261119-021858, -023614). Leftovers: group stashes still ride the unforced queue (not durable); a group removal's owed
   keys are this session's (not persisted across a restart); KEEP-pending roads never sweep.
 
+### Slice T3b as built (branch `slice/T3b` off `slice/T3a` + `slice/T2` b8f41be4 + `slice/DFG` 26a2f746; adoption as the txn kind `pile.adopt`; versions NEXT; $0; strict)
+
+- **Kind** (`site/PileAdopt`, kv 1, decider txn, null key; one txn per `adoptCrates` call, decision 6): plan by `AdoptPlan` (JOIN, DEFER,
+  legacy JOINED/FINISH, plus DFG's **GONE**: a read cell with no crate and no credit frees its targets; `CrateRead.known` added, T3a's
+  constructor kept); resources `pile:`, `crate:` per JOIN/GONE cell, `site:`/`road:`/`group:` per record, taken before any amount is read;
+  a shared crate's paid-record chunks loaded under the holds up to `CHUNK_BOUND` 64, past it the crate deferred `chunks unloaded`.
+- **Effects:** `crate.take` (B, prepare) per crate with stock; then `ledger.adopt` (L, keyed `adopt:<crateOwner>@<pos>`: delivered, placed,
+  paid by target from the intent; stock past capacity, decision 1: nothing dropped, no owed), `ledger.order` (L, marker `txn:<tx-n>/<i>`
+  credited), `crate.restore` (W), `journal.release` (R, the journal commit confirmed), `record.clear` (R per group, site, road). Probes of
+  the ledger, records and journal answer UNKNOWN until the first tick (those stores load after the recovery slot). PREPARED_DONE rolls back.
+- **`crate.restore`:** T2b part 2b's (`CrateTxn.restore`, `RESTORE_ADAPTER`, receipt `tx-n/i@restored`; a cell no longer a crate probes
+  APPLIED), so a GONE cell is never written over (only its journal kind released). The take reads `Ledger.heldStock()` (held by this txn).
+- **Legacy FINISH** (decision 3): `TxnCore.holdForOps` writes a quarantined entry (kind `pile.adopt.finish`) holding the crate and its records,
+  indefinitely; reported deferred `held for ops`. (Ops removal waits for `/architect txn resolve`, still deferred from T1.)
+- **Core (additive):** `TxnKind.alias` (SAC1 = the last take applied, or `prepared` with no take; SAC2 = the first record cleared; live only),
+  `TxnEnv.pauseAt` + `dev.txn.pauseAt {point|null}` (a live drive stops after that point, its txn held open; cleared, it goes on next tick).
+- **API (Since NEXT):** `Sites.adoptCratesResult(owner)` -> `AdoptCratesResult(stockpile, joined, deferred, txnId)` (**named apart from
+  PT2's `AdoptResult`; the design's `owed` list dropped by decision 1**); `adoptCrates` wraps it. `ArchitectRefused.detail()` stable:
+  `held(other)` (SITE_BUSY), `held(decided)` (SITE_BUSY), `txn_journal` (JOURNAL_UNAVAILABLE); `Sites.SiteException.detail` carries it.
+- **Holds honoured:** `pile:` refuses dissolve and removeStockpileCrate; `Builder.insertItems` (dev.crate.insert, Insert) refuses a held crate
+  SITE_BUSY; `Sites.adoptBusy`, the feed and SiteWaits read `site:`, `road:` and `group:`; `repairJoinedCrates` skips held records. RegionAdopt
+  reads `crateMayStand` (DFG). `Stockpiles.crateFate` is a DFG-named wrapper over `AdoptPlan.classify` (its test kept).
+- **Fixtures:** adopt-crate-held's stock check corrected (paused at `decided` the take has run: crate + in transit = the stock held);
+  `adopt-kill-matrix` added (every traced point bare and +save on the shared group crate, the world restored from a copy per halt).
+  `txn-crash-adopt` joins the `txn` chain; impact row "Slice T3b adoption on the txn layer".
+- **Ran:** red on the base f2cd4e60 with these fixtures (`_work/architect-mc-T3b-runs-red/20261118-050426-change`): txn-crash-adopt 42/12,
+  all 5 cases RED. Green at 34b69948 (9078:9079, 9084:9085, `--no-cache`): `_work/architect-mc-T3b-runs/20261118-060332-change` txn-crash-adopt
+  158/0 (5 GREEN; matrix 16 points x bare/+save = 32 halts, 8 back, 24 forward, 0 wrong), txn-core 75/0, txn-owed 73/0, txn-crate 68/0,
+  txn-holds 50/0; `_work/architect-mc-T3b-runs2/20261118-055313-change` sad-unit, sad-survival 56/0 (its SAC2 row now judged on the recovered
+  ledger), sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1607 (0 failed); api-compat --baselines 8/8.
+
+### Slice T3b final check (no P1; three P2s fixed, no further GPT round)
+
+- **P2-1** a record clear probes APPLIED only when memory and disk name no crate AND the sites file is acknowledged durable (`Sites.confirmed`:
+  an ordinary save or a load un-acknowledges it; the probe runs `saveConfirmed` first). **P2-2** the txn's `stockpile_changed` marks the pile
+  for Stockpiles' 20-tick limiter (`Stockpiles.txnChanged`, `eventDue`): at least once, never doubled. **P2-3** `PENDING_RELEASE` entries carry
+  their journal instance (`pendingFor`: another world's is stale) and are cleared at server stop (`PileAdopt.worldClosed`).
+- Units `PileAdoptFinalT3bTest` (3). Ran at 23cfe9e5: Gradle full 1614 (0 failed); `_work/architect-mc-T3b-runs5/20261118-092904-change`
+  (9078:9079, `--no-cache`): txn-crash-adopt 205/0 (all 7 rows GREEN, matrix 34 halts, 0 wrong), txn-core 75/0, sad-unit 2/0, sad-survival
+  56/0, sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0.
+
+### Slice T3b fix round (GPT NOT SAFE: 1 P1, 3 P2; one round; origin/main v0.80.0 merged, DFG already in it)
+
+- **P1** the start's repair (`repairJoinedCrates`) clears a credited reference only when its crate no longer stands (`startRepairs`); a
+  credited crate still standing is legacy FINISH: held for ops (`PileAdopt.holdFinish`, the quarantined `pile.adopt.finish` entry), its
+  references kept. Row `legacy-finish-at-start` (a key credited by `dev.stockpile.ps creditKey`, a clean restart).
+- **P2-2** `record.clear` requires `Sites.saveConfirmed` (the sites file through `DurableFile`); its probe reads the file on disk too
+  (`Sites.savedCrate`). Row `gone-save-refused` (`dev.stockpile.ps failSitesSaves 3`, a GONE crate, a halt right after).
+- **P2-3** a release keeps its submitted commit (`PENDING_RELEASE`); `releaseProbe` answers UNKNOWN while it is pending.
+- **P2-4** `stockpile_changed {owner}` is the txn's persisted payload, fired at EFFECTS_DONE and again after recovery; `TxnServer`'s emit
+  delivers `SiteEvents.STOCKPILE_CHANGED`. The matrix checks it on every committed point before the emit.
+- Units: `PileAdoptFixT3bTest` (the P1 and P2-3 seams).
+- **Ran:** red at cbdbd72c (hooks and rows, no fix; `_work/architect-mc-T3b-runs-red2/20261118-074247-change`): legacy-finish-at-start RED (references
+  cleared, nothing held, an insert accepted), gone-save-refused RED (house_4 named the gone crate after the restart), the matrix's event check
+  RED at decided and barrier:effects+save. Green at 34bd3e3c (`_work/architect-mc-T3b-runs3/20261118-075029-change`, 9078:9079): txn-crash-adopt
+  204/1 (all rows GREEN, the matrix 17 points x 2 = 34 halts, 0 wrong, the event fired after each committed recovery; the one FAIL was
+  gone-save's check of the BUILT house_3, no candidate once its crate is gone, as on main: fixed in ef37072b and green alone,
+  `_work/architect-mc-T3b-runs4/20261118-085727-change` 9/0), txn-core 75/0, txn-owed 73/0, txn-crate 68/0, txn-holds 50/0, sad-unit 2/0, sad-survival 56/0,
+  sad-crash 26/0, sad-instant 10/0, dfg-defer 30/0, dfg-missing 9/0. Gradle full 1611 (0 failed); api-compat --baselines 8/8.
+
 ### Slice T2b part 2a as built (crate holds, the crate.take adapter, DFG's guard; $0; strict)
 
 - **Crate holds** (resource `crate:<dim>@x,y,z`): the cell is frozen by T2a (its index takes `crate:` resources); the crate's `Ledger` is

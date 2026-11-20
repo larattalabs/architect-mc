@@ -884,7 +884,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
-		return new ArchitectRefused(e.reason(), e.getMessage(), "", e.builds());
+		return new ArchitectRefused(e.reason(), e.getMessage(), e.detail(), e.builds()); // (T3b) its stable sub-code
 	}
 
 	private dev.larattalabs.architect.api.Stockpile pileView(String owner) {
@@ -1005,12 +1005,18 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public dev.larattalabs.architect.api.Stockpile adoptCrates(String owner) {
+		return adoptCratesResult(owner).stockpile();
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.AdoptCratesResult adoptCratesResult(String owner) {
+		dev.larattalabs.architect.site.PileAdopt.Result r;
 		try {
-			dev.larattalabs.architect.site.Stockpiles.adopt(server, owner);
+			r = dev.larattalabs.architect.site.Stockpiles.adoptResult(server, owner);
 		} catch (Sites.SiteException e) {
 			throw refused(e);
 		}
-		return pileView(owner);
+		return new dev.larattalabs.architect.api.AdoptCratesResult(pileView(owner), r.joined(), r.deferred(), r.txnId());
 	}
 
 	@Override

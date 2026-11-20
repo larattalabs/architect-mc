@@ -64,8 +64,15 @@ final class TxnCrashModel {
 		/** T1 review P2-3: an event queued for a later tick counts as emitted before it is delivered. */
 		EMIT_ON_QUEUE,
 		/** T1 review P2-7: a marker that never reads APPLIED (and no PREPARED_DONE boundary): effects applied twice. */
-		NO_MARKER
+		NO_MARKER,
+		/** (slice T3a) §4.1 legacy kind adopt-main: main's Stockpiles.adopt (SAD: overflow dropped, then saveWithWorld, SAC1/SAC2). */
+		ADOPT_MAIN,
+		/** (slice T3a) §4.1 legacy kind adopt-ADP: a67b9331's adopt (credit saved first, restoreLedger in memory, finishTakes drains at start). */
+		ADOPT_ADP
 	}
+
+	/** (slice T3a) A legacy kind's own start resolvers, by its naive variant, run after {@link #legacy}'s (TxnAdoptModelTest registers them). */
+	static final Map<Naive, Consumer<World>> RESOLVERS = new java.util.concurrent.ConcurrentHashMap<>();
 
 	/** A crash: thrown at the armed kill point. */
 	static final class Crash extends RuntimeException {
@@ -899,12 +906,17 @@ final class TxnCrashModel {
 	}
 
 	static List<TxnKind> kinds(World w) {
-		return List.of(kind(w, "move", "txn"), kind(w, "removal", "journal"), kind(w, "deposit", "txn"), kind(w, "charge", "txn"));
+		return List.of(kind(w, "move", "txn"), kind(w, "removal", "journal"), kind(w, "deposit", "txn"), kind(w, "charge", "txn"), kind(w, "pile.adopt",
+			"txn"));
 	}
 
 	// ------------------------------------------------------------------ legacy resolvers (run after txn recovery, on unheld resources)
 
 	static void legacy(World w) {
+		Consumer<World> own = RESOLVERS.get(w.naive);
+		if (own != null) {
+			own.accept(w); // (slice T3a) a legacy kind's own start repair
+		}
 		// settle: an owed record of the queue that no txn holds is paid into the ledger (CXD's settle, PSV's decCredit)
 		Store q = w.stores.get("queue");
 		Store l = w.stores.get("ledger");
