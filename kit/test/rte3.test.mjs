@@ -58,10 +58,23 @@ test('streetRuns, untagged: an IR before RTE reads the id as before; a grouped g
     road('route_st_b_1_1', 2),
     road('route_st_quay_1_g1', 4, band),
     road('route_st_quay_1_g1_1', 8, band), road('route_st_quay_1_g1_2', 12, band),
-    // (an RTE2-era growth's groups that lost their band: the _g<n> stem)
-    road('route_st_quay_1_g2_1', 16),
+    // (an RTE2-era growth's groups that lost their band: a revision's piece (rid) with a _g<n> stem, no district of that id)
+    { ...road('route_st_quay_1_g2_1', 16), rid: 2 },
   ]);
   assert.deepEqual(r, { route_st_b_1_1: 'follow b_1', route_st_quay_1: 'follow quay' });
+});
+
+test('streetRuns, untagged: a district whose own id ends in _g<n> (quay_g1) keeps its street; a _g<n> stem is a growth only when no district has that id (v0.88.0 review P2)', () => {
+  const plan = (ids) => ({ plan: { zones: [{ id: 'z', program: { districts: ids.map((id) => ({ id })) } }] } });
+  const legacy = (d) => road(`route_st_${d}_1`, 0, { 'architect_mc:street': { zone: 'z', district: d } });
+  // (the plan's districts list names quay_g1; its legacy street, untagged, flagged by the old stampStreets)
+  assert.deepEqual(Object.fromEntries(streetRuns({ params: plan(['quay_g1']), roads: [legacy('quay_g1')] }).map((r) => [r.road, `${r.follow} ${r.district}`])), { route_st_quay_g1_1: 'true quay_g1' });
+  // (unflagged: the plan's list alone)
+  assert.deepEqual(streetRuns({ params: plan(['quay_g1']), roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.district), ['quay_g1']);
+  // (no plan record, no rid: as before RTE3, the id's district)
+  assert.deepEqual(streetRuns({ roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.district), ['quay_g1']);
+  // (quay's grown street beside: no district quay_g1, so its _g1 stem is a growth, never a follow run)
+  assert.deepEqual(streetRuns({ params: plan(['quay']), roads: [road('route_st_quay_g1_1', 0)] }).map((r) => r.road), []);
 });
 
 // ---- item 2: a grouped growth street's graph identity
