@@ -87,8 +87,8 @@ function streetRunsMain(eff) {
   }
   return out.sort((p, q) => (p.road < q.road ? -1 : p.road > q.road ? 1 : p.seg - q.seg));
 }
-/** An IR with every route tag removed (untagged, as a region planned before RTE). */
-const untag = (ir) => { const o = JSON.parse(JSON.stringify(ir)); for (const x of [...(o.roads ?? []), ...(o.paths ?? [])]) if (x.ext) delete x.ext[ROUTE]; return o; };
+/** An IR with every route tag removed (untagged, as a region planned before RTE; (RTE4) its district tags too, rte4's fixture's). */
+const untag = (ir) => { const o = JSON.parse(JSON.stringify(ir)); for (const x of [...(o.roads ?? []), ...(o.paths ?? [])]) if (x.ext) { delete x.ext[ROUTE]; delete x.ext['architect_mc:district']; } return o; };
 
 test('streetRuns, untagged: exactly origin/main\'s output, grouped growth pieces (band or not, rid or not) and _g<n> district ids included', () => {
   const band = { 'architect_mc:street': { zone: 'quay', district: 'quay' }, 'architect_mc:band': { district: 'quay', runs: [[0, 0, 15, 0]] } };

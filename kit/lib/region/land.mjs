@@ -12,6 +12,11 @@ import { keyRuns, runKeys } from './beside.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 /** (RTE) program.mjs ROUTE_EXT: the ext key a route piece names its graph edge under. */
 const ROUTE_EXT = 'architect_mc:route';
+/**
+ * (RTE4) The ext key a district's own road names its district under, `{id}`: written by the districts pass only where one district id is
+ * another's plus `_` and a word (`b` and `b_street`, districtIdsShadow), where the id cannot say whose `b_street_w` is.
+ */
+export const DISTRICT_EXT = 'architect_mc:district';
 
 /** The record's version (6d's grown parts move it to 2, §11). */
 export const LAND_V = 1;
@@ -44,6 +49,24 @@ export function districtOfId(id, ids, pre = '') {
   let best = null;
   for (const d of ids) if (typeof d === 'string' && String(id).startsWith(`${pre}${d}_`) && (best === null || d.length > best.length)) best = d;
   return best;
+}
+/**
+ * (RTE4) Whether some district id is another's plus `_` and a letter-led word (`b` and `b_street`, `b` and `b_props`): then an id such as
+ * `b_street_w` (b's street road) reads as the longer district's, and the districts pass records each district's roads (DISTRICT_EXT).
+ * A digit after the `_` (`b` and `b_1`) is not: a district's own ids go on with a word, so the longest id reads them exactly (RTE2).
+ */
+export function districtIdsShadow(ids) {
+  const s = ids.filter((d) => typeof d === 'string');
+  return s.some((a) => s.some((b) => b.length > a.length + 1 && b.startsWith(`${a}_`) && /^[a-z]/.test(b.slice(a.length + 1))));
+}
+/**
+ * (RTE4) A road's district: the one its DISTRICT_EXT tag names (a string id; one `ids` lacks: none), else, untagged (every plan without
+ * such ids, a region planned before RTE4), the longest district id it names, as before.
+ */
+export function districtOfRoad(rd, ids) {
+  const t = rd?.ext?.[DISTRICT_EXT]?.id;
+  if (typeof t === 'string') return ids.includes(t) ? t : null;
+  return districtOfId(rd?.id ?? '', ids);
 }
 const boxCols = (b, into) => { for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) into.add(k2(x, z)); };
 const rectOfKeys = (keys) => {
@@ -95,7 +118,9 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   const ids = ds.map((d) => d.id).filter((id) => typeof id === 'string');
   // ((RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
   // district's street piece the district whose street edge it names (ext architect_mc:route.edge `route_st_<id>`), untagged the longest
-  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group))
+  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group); (RTE4) a road
+  // tagged with its district (DISTRICT_EXT, written where one id is another's plus a word: b's `b_street_w` beside district b_street) is
+  // that district's)
   const stEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id).filter((e) => typeof e === 'string' && e.startsWith('route_st_')));
   const stIds = ids.filter((id) => !stEdges.size || stEdges.has(`route_st_${id}`));
   const streetOf = (x) => {
@@ -108,7 +133,7 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
     const cols = new Set();
     for (const p of ir.parts ?? []) if (mine(p.id)) for (const op of p.ops ?? []) opCols(op, cols);
     for (const l of ir.lots ?? []) if (mine(String(l.part ?? ''))) boxCols(l.box, cols);
-    for (const rd of ir.roads ?? []) if (mine(rd.id)) roadCols(rd, cols);
+    for (const rd of ir.roads ?? []) if (districtOfRoad(rd, ids) === d.id) roadCols(rd, cols);
     // a following district's street (`route_st_<id>`) is inside its mask
     for (const pa of ir.paths ?? []) if (pa.box && pa.id.startsWith('route_st_') && streetOf(pa) === d.id) boxCols(pa.box, cols);
     for (const rd of ir.roads ?? []) if (rd.id.startsWith('route_st_') && streetOf(rd) === d.id) roadCols(rd, cols);
