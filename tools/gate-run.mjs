@@ -111,7 +111,7 @@ import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mj
 import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
-import { loadScaleFor, loadScaledBudget } from './lib/load-timeout.mjs';
+import { loadScaleFor, loadScaledBudget, timeoutNote, timeoutRecord } from './lib/load-timeout.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -901,8 +901,9 @@ const slotNote = { waitedSeconds: 0, slot: null, slots: null, limit: SLOTS, dir:
 // the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md "Load-aware start"): slots.load in gate-chains.json, GATE_LOAD_MAX /
 // GATE_LOAD_WAIT_MAX_MIN, --no-load-wait (max1 0)
 const LOAD_GATE = flag('--no-load-wait') ? { ...loadConfig(cfg), max1: 0 } : loadConfig(cfg);
-// (GR-b) load-scaled timeouts (tools/lib/load-timeout.mjs): ref is the configured max1 (no env override; at least rule 10's 72)
-const LOAD_SCALE = (id) => loadScaleFor(cfg, id, { max1: cfg.slots?.load?.max1 });
+// (GR-b) load-scaled timeouts (tools/lib/load-timeout.mjs): ref is the machine's cores when timeoutLoadScale.ref is "cores" (GRA;
+// GATE_CPU_CORES overrides), else the configured max1 (at least rule 10's 72)
+const LOAD_SCALE = (id) => loadScaleFor(cfg, id, { max1: cfg.slots?.load?.max1, cores: machineCores() });
 async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
   const stamp = () => new Date().toISOString().slice(11, 19);
@@ -1790,6 +1791,8 @@ function runProcess(sh, step, logFile) {
     fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.name}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
     const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     let timedOut = false;
+    let timeout = null; // (GRA) what the runner knew at the kill: elapsed, limit, load (load-timeout.mjs timeoutRecord)
+    const startedMs = Date.now();
     let killTimer;
     // stalled after a FAIL (tools/lib/stall-watch.mjs, docs/GATES.md "Stalled after a FAIL"): a driver that printed a functional FAIL and then
     // nothing for stallAfterFailMin minutes is killed now, not at its timeout; the failed-step path below stops the client by PID
@@ -1805,7 +1808,8 @@ function runProcess(sh, step, logFile) {
     } });
     const onTimeout = (why) => {
       timedOut = true;
-      log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}${why ? `; ${why}` : ''}): killing step group ${child.pid}`, sh);
+      timeout = timeoutRecord({ startedMs, killedMs: Date.now(), limitMin: step.effTimeoutMin, source: step.timeoutSource, loadavg: os.loadavg(), loadScale });
+      log(`  TIMEOUT: ${timeoutNote(timeout)}${why ? ` (${why})` : ''}: killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
       clearTimeout(killTimer); // a stall kill's timer, if both fired: one pending SIGKILL, cleared on exit
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
@@ -1841,7 +1845,7 @@ function runProcess(sh, step, logFile) {
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
-      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, stalled, loadScale });
+      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, timeout, stalled, loadScale });
     });
     sh.activeGroup = child.pid;
   });
@@ -1956,8 +1960,10 @@ async function runStep(sh, step, rec) {
     && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
   // (GR-b) a load-scaled timeout's account: budget spent, wall minutes, the mean load (summary.json timeoutLoadScale)
   if (r.loadScale) rec.timeoutLoadScale = { budgetMin: step.effTimeoutMin, usedMin: r.loadScale.usedMin, wallMin: r.loadScale.wallMin, capMin: r.loadScale.capMin, meanLoad: r.loadScale.meanLoad, ref: r.loadScale.ref, ...(r.loadScale.why ? { why: r.loadScale.why } : {}) };
-  if (r.timedOut) rec.status = 'TIMEOUT';
-  else if (r.stalled) {
+  if (r.timedOut) {
+    rec.status = 'TIMEOUT';
+    if (r.timeout) rec.timeout = r.timeout;
+  } else if (r.stalled) {
     rec.status = 'FAIL';
     rec.stalledAfterFail = { failLine: r.stalled.failLine, idleSeconds: Math.round(r.stalled.idleMs / 1000), failAt: new Date(r.stalled.failAt).toISOString() };
     rec.error = `stalled: no output for ${fmtDur(r.stalled.idleMs / 1000)} after its FAIL; the step was killed and its client stopped`;
@@ -2106,7 +2112,8 @@ function summaryMd() {
   for (const s of summary.steps) {
     const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
       s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : '',
-      s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : ''].filter(Boolean).join('; ');
+      s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : '',
+      s.status === 'TIMEOUT' && s.timeout ? `killed at timeout: limit ${s.timeout.limitMin} min, load ${s.timeout.load?.load1 ?? '?'} at the kill` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${shards.length > 1 ? `${s.shardName ?? s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
   if (summary.splitResults) {
@@ -2130,7 +2137,9 @@ function summaryMd() {
   if (bad.length) {
     lines.push('', '## Not passing', '');
     for (const s of bad) {
-      lines.push(`- **${s.id}** ${s.status}${s.error ? `: ${s.error}` : ''} (log \`${s.log ?? '-'}\`)`);
+      lines.push(`- **${s.id}** ${s.status}${s.error ? `: ${s.error}` : ''}${s.status === 'TIMEOUT' && s.timeout ? `: ${timeoutNote(s.timeout)}` : ''} (log \`${s.log ?? '-'}\`)`);
+      // (GRA) a TIMEOUT's tail is what the step printed before the kill (often passing tests), not why it failed
+      if (s.status === 'TIMEOUT' && !s.failLines && s.tail?.length) lines.push('  - last output before the kill:');
       for (const l of s.failLines ?? s.tail ?? []) lines.push(`  - \`${l.replace(/`/g, "'").slice(0, 200)}\``);
     }
   }
