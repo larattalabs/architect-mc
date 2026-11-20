@@ -1269,6 +1269,7 @@ export async function registerTCC(steps, h) {
             fs.writeFileSync(sf, JSON.stringify(root, null, 2));
             fs.writeFileSync(qf, JSON.stringify(q, null, 2));
           }
+          fs.rmSync(path.join(W.dir, 'architect', 'dev-removal-pause.json'), { force: true }); // the pause is kept across a restart: not this one
           check(made && !!st, `${tag}: the queued job turned pre-T4 offline (C29's credit ${json(st?.refund ?? null)}, no stash)`, { st });
           await L.openWorld(name);
           await L.tp(...W.at);
