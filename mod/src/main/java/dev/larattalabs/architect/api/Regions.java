@@ -469,7 +469,7 @@ public interface Regions {
 	 * ({@link RegionLayout}). Cached per IR sha and head revision; the same in creative and survival. Empty for an unknown region. Server
 	 * thread; loads no chunk, asks no sidecar. Since 1.69.0. (LYW, feature {@code "layoutWalls"}; Since 1.70.0) A walled town's wall, gates
 	 * and corner towers, and a district's stair or graded connecting routes ({@link PartShape}). (RTE, feature {@code "layoutRouteEdges"};
-	 * Since NEXT) In a districts region planned since, such a route's road pieces are listed once, inside it, and only its own.
+	 * Since 1.71.0) In a districts region planned since, such a route's road pieces are listed once, inside it, and only its own.
 	 */
 	default Optional<RegionLayout> layout(String regionId) {
 		throw new UnsupportedOperationException("Regions.layout needs Architect API 1.69.0 (feature regionLayout)");

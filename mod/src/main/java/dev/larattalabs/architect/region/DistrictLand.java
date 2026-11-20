@@ -33,7 +33,7 @@ public final class DistrictLand {
 	private static final Pattern ROUTE_ROAD = Pattern.compile("^route_(d_[a-z0-9_]+?__[a-z0-9_]+?)_\\d+$");
 	/** (RTE) A route id read with its last {@code _<n>} as a road group's piece: {@code d_<a>__<b>} and n. */
 	private static final Pattern ROUTE_GROUP = Pattern.compile("^(d_[a-z0-9_]+?__[a-z0-9_]+?)_\\d+$");
-	/** (RTE) The ext key a route piece names its graph edge under (kit program.mjs ROUTE_EXT). Since NEXT. */
+	/** (RTE) The ext key a route piece names its graph edge under (kit program.mjs ROUTE_EXT). Since 1.71.0. */
 	public static final String ROUTE_EXT = "architect_mc:route";
 
 	private DistrictLand() {
