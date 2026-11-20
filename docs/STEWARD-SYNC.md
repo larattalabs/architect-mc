@@ -211,6 +211,11 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   `route_d_a__b_1` when edge `route_d_a__b_1` exists (its numbers then start at 2). So b's pieces no longer take b_1's ids (the
   RTE limit where one hid the other's route shape in `Regions.layout`), and a long first section no longer refuses the plan ("road id used twice"). Piece numbers may have gaps; order by them, don't count on them. CONTRACT "Slice RTE2".
 
+### New for Steward (NEXT, slice LYW3)
+- `Regions.layout` of a `mega_bench` (and so `mega_bench_forest`) region planned from NEXT on reports its ring wall: `wall` is
+  `connector.wall` (not `tile`) with gates `wall_g1`..`wall_g4` and no towers. Reporting walls now: `walled_hill`, `sky_isle`, `mega_bench`,
+  `mega_bench_forest`; `crater_works`'s rubble rim stays a `tile`. No API change. CONTRACT "Slice LYW3".
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.
