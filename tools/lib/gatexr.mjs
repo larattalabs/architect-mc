@@ -79,6 +79,9 @@ export async function registerXr(steps, h) {
     if (refuseCredit) {
       // (slice T4a, finding 4) the next take-up credit saves refused (a lot's or a road's): the put-down must wait, never roll back past it
       out.refuseArmed = await call('dev.stockpile.ps', { refuseCreditSaves: refuseCredit }, 10_000);
+      // (T4 final round) a hold case keeps the periodic save off too: since the SOFF2 merge a take-up confirms its credit by the ledger being on
+      // disk (saveCreditConfirmed), so a periodic save (never refused by this hook) would end the wait the case measures
+      if (hold) await call('dev.stockpile.ps', { noPeriodic: true }, 10_000);
     }
     let region;
     if (planId) {
@@ -193,7 +196,7 @@ export async function registerXr(steps, h) {
             await L.sleep(3000);
           }
           // (T4 final round) the refusals never outlive the hold case (a cancel that found no batch left them armed into the region's removal)
-          await call('dev.stockpile.ps', { refuseCreditSaves: 0 }, 10_000).catch(() => null);
+          await call('dev.stockpile.ps', { refuseCreditSaves: 0, noPeriodic: false }, 10_000).catch(() => null);
           for (let i = 0; i < 60 && (await jobs()).length; i++) await L.sleep(1000);
           out.jobsLeft = (await jobs()).length;
         }
