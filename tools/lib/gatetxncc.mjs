@@ -1740,7 +1740,7 @@ export async function registerTCC(steps, h) {
           if (items.includes(full)) { at = typeof k2 === 'string' ? k2.split(',').map(Number) : null; item = full; break; }
         }
         await call('dev.journal.killAt', { point: 'K6' }, 10_000);
-        const m = await api(`sgremove ${g.group}`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const m = await api(`sgremove ${g.group} - ${owner}`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) })); // as its owner
         const down = await haltWait();
         check(down, `${tag}: halted at K6 (the group's undo committed, its member not written) (${json(m).slice(0, 120)})`);
         if (down) {
