@@ -1474,7 +1474,11 @@ function spaceGuard() {
   const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
   // the shards' (and lanes') dirs once known (an existing -s<k> may be a symlink elsewhere): a fixed --shards run's before the slot,
   // a turbo/change/auto run's again after its choice (above); before that only RUN1 (or --run-dirs) and the frozen source
-  const r = checkSpace({ min, run1: RUN1, runDirs: shards.length ? shards.map((s) => s.RUN) : RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR });
+  // GATE_DISK_TEST_LOW (tests only, kit/test/gate-disk.test.mjs): real paths whose volume reads as 0 GiB free. It can only lower free
+  // space, so it never lets a run past the guard
+  const lowTest = (process.env.GATE_DISK_TEST_LOW ?? '').split(',').filter(Boolean);
+  const statfs = lowTest.length ? (p) => (lowTest.some((l) => p === l || p.startsWith(l + path.sep)) ? { bavail: 0, bsize: 4096 } : fs.statfsSync(p)) : undefined;
+  const r = checkSpace({ min, run1: RUN1, runDirs: shards.length ? shards.map((s) => s.RUN) : RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR, statfs });
   if (!(min > 0)) return;
   if (!r.ok) die(`${r.low.map((v) => `only ${v.free.toFixed(0)} GiB free on ${v.probe}'s volume (for ${v.dests.join(', ')})`).join('; ')}, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
   console.log(`disk: ${r.volumes.map((v) => `${v.free.toFixed(0)} GiB free on ${v.probe}`).join(', ')} (guard ${min})`);

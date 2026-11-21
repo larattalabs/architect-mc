@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { checkSpace, cleanupRunDirs } from '../../tools/lib/run-dirs.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
@@ -42,6 +43,21 @@ function layout() {
   return { root, mc, main, work, src, wt, opts };
 }
 const exists = (p) => fs.existsSync(p);
+/** n distinct free TCP ports (each bound to 0, then let go). */
+async function freePorts(n) {
+  const out = [];
+  while (out.length < n) {
+    const p = await new Promise((resolve) => {
+      const srv = net.createServer();
+      srv.listen(0, '127.0.0.1', () => {
+        const { port } = srv.address();
+        srv.close(() => resolve(port));
+      });
+    });
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
 const worktrees = (src) => git(src, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => fs.realpathSync(l.slice(9)));
 
 // ---------------------------------------------------------------- finding 1: symlinks
@@ -305,26 +321,51 @@ test('cleanup (fixcheck P2): a hung git worktree remove is killed at its timeout
   }
 });
 
-test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are checked after the choice, before the lock and setup', () => {
+test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are checked after the choice, before the lock and setup', async () => {
   const s = fs.readFileSync(path.join(ROOT, 'tools', 'gate-run.mjs'), 'utf8');
   // source order (the shard choice runs inside acquireSlot, under the slot mutex): a guard sits between it and takeLock()
   const acq = s.indexOf('await acquireSlot(async () => {');
   const lock = s.indexOf('\ntakeLock();', acq);
   assert.ok(acq > 0 && lock > acq);
   assert.match(s.slice(acq, lock), /\n(if \(decideShards\) )?spaceGuard\(\);/, 'spaceGuard() runs again once the shards are chosen');
-  // behaviour: the chosen dirs (RUN1, an -s2 symlinked onto a low volume, an -o1) are judged on their real volumes
+  // behaviour, through the real runner: a turbo --shards 2 --lanes 1 run in temp dirs (its own --slots-dir, --lock, --out, --run-dir;
+  // the machine's slots and lock are never touched), with the -s2 dir, then the -o1 dir, symlinked onto a volume that reads as full
+  // (GATE_DISK_TEST_LOW). Each refusal names that dir and gives the turbo slots back; with neither low the run passes the guard and
+  // stops at the lock, held by a live pid here, before any setup.
   const root2 = archTmpDir('gate-disk');
+  const holder = spawn('sleep', ['300'], { stdio: 'ignore' });
   try {
-    const lowVol = path.join(root2, 'low');
-    const big = path.join(root2, 'big');
-    fs.mkdirSync(path.join(lowVol, 's2-target'), { recursive: true });
-    fs.mkdirSync(big);
-    const run1 = path.join(big, 'architect-mc-gate-run');
-    fs.symlinkSync(path.join(lowVol, 's2-target'), `${run1}-s2`);
-    const r = checkSpace({ min: 150, run1, runDirs: [run1, `${run1}-s2`, `${run1}-o1`], frozen: true, drvDir: `${run1}-src`, statfs: fakeStatfs([fs.realpathSync(lowVol)], []) });
-    assert.equal(r.ok, false, JSON.stringify(r));
-    assert.ok(r.low.some((v) => v.dests.includes(`${run1}-s2`)), JSON.stringify(r));
+    const low = path.join(root2, 'low');
+    fs.mkdirSync(path.join(low, 'target'), { recursive: true });
+    const run1 = path.join(root2, 'p3sguard');
+    const lock = path.join(root2, 'gate.lock');
+    const slots = path.join(root2, 'slots');
+    fs.writeFileSync(lock, JSON.stringify({ pid: holder.pid, chain: 'gate-disk-test' }));
+    const ports = await freePorts(6);
+    const runOnce = () => spawnSync(process.execPath, [path.join(ROOT, 'tools', 'gate-run.mjs'), 'change', '--since', 'HEAD', '--only', 'sim-jobs,cn-unit',
+      '--turbo', '--shards', '2', '--lanes', '1', '--no-cache', '--no-load-wait', '--ports', `${ports[0]}:${ports[1]},${ports[2]}:${ports[3]},${ports[4]}:${ports[5]}`,
+      '--run-dir', run1, '--out', path.join(root2, 'out'), '--lock', lock, '--slots-dir', slots, '--min-free-gib', '1'],
+    { cwd: ROOT, encoding: 'utf8', timeout: 120_000, env: { ...process.env, GATE_DISK_TEST_LOW: fs.realpathSync(low), GATE_MIN_FREE_GIB: '', GATE_NOTIFY: '' } });
+    const slotFiles = () => fs.readdirSync(slots, { recursive: true }).filter((f) => fs.statSync(path.join(slots, f)).isFile());
+    for (const lowDir of [`${run1}-s2`, `${run1}-o1`]) {
+      fs.symlinkSync(path.join(low, 'target'), lowDir);
+      const r = runOnce();
+      fs.unlinkSync(lowDir);
+      const out = r.stdout + r.stderr;
+      assert.equal(r.status, 2, out);
+      assert.match(out, /TURBO: holds the machine/, 'refused after the turbo choice, under the slots');
+      assert.match(out, /under --min-free-gib 1/, out);
+      const refusal = out.split('\n').find((l) => l.includes('under --min-free-gib'));
+      assert.ok(refusal.includes(`(for ${lowDir})`), `the refusal names ${lowDir}: ${refusal}`);
+      assert.doesNotMatch(out, /another gate run holds/, 'refused before the lock');
+      assert.deepEqual(slotFiles(), [], 'the refusal gave every slot back');
+    }
+    const r = runOnce();
+    const out = r.stdout + r.stderr;
+    assert.match(out, /another gate run holds/, `neither low: past the guard, stopped at the lock: ${out}`);
+    assert.deepEqual(slotFiles(), [], 'the lock refusal gave every slot back too');
   } finally {
+    holder.kill();
     fs.rmSync(root2, { recursive: true, force: true });
   }
 });
