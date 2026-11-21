@@ -315,13 +315,20 @@ test('cleanup (fixcheck P2): a hung git worktree remove is killed at its timeout
     assert.ok(ms < 12_000, `bounded by the timeout, not the hook (${ms} ms)`);
     assert.deepEqual(out.map((o) => o.action), ['kept', 'removed'], JSON.stringify(out));
     assert.ok(!exists(next), 'the next dir is still cleaned up');
-    assert.ok(logs.some((m) => m.includes(hung) && /timed out/.test(m)), logs.join('\n'));
+    const line = logs.find((m) => m.includes(hung) && /timed out/.test(m));
+    assert.ok(line, logs.join('\n'));
+    // the timed-out dir is kept whole: its world copies survive (only a removed or refused dir loses them)
+    assert.ok(exists(path.join(hung, 'mod', 'run', 'saves', 'w1', 'level.dat')), 'the timed-out dir keeps its world copy');
+    // the git it logs was killed: that pid is gone
+    const pid = Number(/killed that git, pid (\d+)/.exec(line)?.[1]);
+    assert.ok(pid > 0, line);
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `git pid ${pid} still alive`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are checked after the choice, before the lock and setup', async () => {
+test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are checked after the choice, before the lock and setup', async (t) => {
   const s = fs.readFileSync(path.join(ROOT, 'tools', 'gate-run.mjs'), 'utf8');
   // source order (the shard choice runs inside acquireSlot, under the slot mutex): a guard sits between it and takeLock()
   const acq = s.indexOf('await acquireSlot(async () => {');
@@ -352,6 +359,8 @@ test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are c
       const r = runOnce();
       fs.unlinkSync(lowDir);
       const out = r.stdout + r.stderr;
+      // a machine too loaded for two turbo shards right now refuses before the guard: not this test's question
+      if (/turbo --shards 2: only \d+ fit/.test(out)) return t.skip(`turbo cannot fit 2 shards now: ${out.trim().split('\n').pop()}`);
       assert.equal(r.status, 2, out);
       assert.match(out, /TURBO: holds the machine/, 'refused after the turbo choice, under the slots');
       assert.match(out, /under --min-free-gib 1/, out);
