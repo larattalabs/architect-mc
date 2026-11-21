@@ -87,6 +87,9 @@ export async function registerTCC(steps, h) {
     if (!b) return {};
     const out = {};
     for (const st of (await cellsOf(b)).values()) {
+      // (slice T4R-N) a two-block block (a door) is one item: its upper half is not counted again (counted twice, a popped door half's
+      // stray item on the ground balanced the books)
+      if (/half=upper/.test(String(st))) continue;
       const id = String(st).replace(/\[.*$/, '').replace(/(^|:)wall_torch$/, '$1torch'); // (T4b) a wall torch is its torch item
       const full = id.includes(':') ? id : `minecraft:${id}`;
       if (items.includes(full)) out[full] = (out[full] ?? 0) + 1;
