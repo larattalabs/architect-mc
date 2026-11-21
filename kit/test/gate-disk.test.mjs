@@ -211,3 +211,120 @@ test('space guard: any actual destination on a low volume refuses (a --run-dirs 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------- v0.90.0 fix-check (Noah, 2026-11-21)
+
+test('cleanup (fixcheck P1): a run-dir root that is a symlink is refused, never followed, whatever its name or created flag', () => {
+  const { root, mc, work, wt, opts } = layout();
+  try {
+    const other = wt(path.join(work, 'architect-mc-OTHER')); // an unrelated existing worktree
+    world(other, 'their-world');
+    const dflt = path.join(mc, 'architect-mc-gate-run'); // the configured default's name, but a link to that worktree
+    fs.symlinkSync(other, dflt);
+    const logs = [];
+    const out = cleanupRunDirs({ ...opts, verdict: 'PASS', log: (m) => logs.push(m), dirs: [{ dir: dflt, created: false }] });
+    assert.ok(exists(path.join(other, 'mod', 'run', 'saves', 'their-world', 'level.dat')), 'the link target\'s world survives');
+    cleanupRunDirs({ ...opts, verdict: 'PASS', dirs: [{ dir: dflt, created: true }] });
+    assert.ok(exists(path.join(other, 'mod', 'run', 'saves', 'their-world', 'level.dat')), 'created:true does not follow it either');
+    assert.ok(fs.lstatSync(dflt).isSymbolicLink() && exists(other), 'the link and its target stay');
+    assert.deepEqual(out.map((o) => o.action), ['kept']);
+    assert.ok(logs.some((m) => m.includes(dflt) && /symlink/.test(m)), logs.join('\n'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('cleanup (fixcheck P1): a run dir reached through a symlinked parent inside the worktrees dir is refused', () => {
+  const { root, work, src, wt, opts } = layout();
+  try {
+    fs.mkdirSync(path.join(work, 'real-sub'));
+    fs.symlinkSync(path.join(work, 'real-sub'), path.join(work, 'sub'));
+    const d = wt(path.join(work, 'real-sub', 'architect-mc-DISK-run'));
+    world(d, 'w1');
+    const realD = fs.realpathSync(d);
+    const via = path.join(work, 'sub', 'architect-mc-DISK-run');
+    const logs = [];
+    const out = cleanupRunDirs({ ...opts, verdict: 'PASS', log: (m) => logs.push(m), dirs: [{ dir: via, created: true }] });
+    assert.ok(worktrees(src).includes(realD) && exists(d), 'not removed through the link');
+    assert.ok(exists(path.join(d, 'mod', 'run', 'saves', 'w1', 'level.dat')), 'nor emptied');
+    assert.deepEqual(out.map((o) => o.action), ['kept']);
+    assert.ok(logs.some((m) => m.includes(via) && /symlink/.test(m)), logs.join('\n'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('cleanup (fixcheck P1): only the named default and nightly dirs are disposable, not every sibling of main nor a _work dir', () => {
+  const { root, mc, work, src, wt, opts } = layout();
+  try {
+    const sib = wt(path.join(mc, 'architect-mc-OTHER')); // an existing worktree beside main, not a named run dir
+    world(sib, 'their-world');
+    const workDefault = wt(path.join(work, 'architect-mc-gate-run')); // cfg.runDir resolved from a _work checkout: an agent's dir
+    world(workDefault, 'agent-world');
+    const night = wt(path.join(mc, 'architect-mc-nightrun'));
+    world(night, 'n1');
+    const nightS2 = wt(path.join(mc, 'architect-mc-nightrun-s2'));
+    world(nightS2, 'n2');
+    const dflt = wt(path.join(mc, 'architect-mc-gate-run-o1'));
+    world(dflt, 'd1');
+    const out = cleanupRunDirs({ ...opts, nightlyRunDirs: ['../architect-mc-nightrun'], verdict: 'PASS', dirs: [
+      { dir: sib, created: false }, { dir: workDefault, created: false }, { dir: night, created: false }, { dir: nightS2, created: false }, { dir: dflt, created: false }] });
+    const wts = worktrees(src);
+    assert.ok(exists(path.join(sib, 'mod', 'run', 'saves', 'their-world', 'level.dat')) && wts.includes(fs.realpathSync(sib)), 'a sibling of main keeps everything');
+    assert.ok(exists(path.join(workDefault, 'mod', 'run', 'saves', 'agent-world', 'level.dat')), 'a pre-existing _work dir keeps everything');
+    for (const d of [night, nightS2, dflt]) assert.ok(wts.includes(fs.realpathSync(d)) && fs.readdirSync(path.join(d, 'mod', 'run', 'saves')).length === 0, `${d}: a named run dir keeps its worktree, loses its worlds`);
+    assert.deepEqual(out.map((o) => o.action), ['kept', 'kept', 'emptied', 'emptied', 'emptied']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('cleanup (fixcheck P2): a hung git worktree remove is killed at its timeout, logged, and the cleanup goes on', () => {
+  const { root, work, src, wt, opts } = layout();
+  try {
+    const hung = wt(path.join(work, 'architect-mc-DISK-run'));
+    world(hung, 'w1');
+    // a blocking fsmonitor hook, set on that worktree only: `git worktree remove` checks it for changes and blocks in the hook
+    git(src, 'config', 'extensions.worktreeConfig', 'true');
+    const hook = path.join(work, 'hang.sh');
+    write(hook, '#!/bin/sh\nsleep 25\n');
+    fs.chmodSync(hook, 0o755);
+    git(hung, 'config', '--worktree', 'core.fsmonitor', hook);
+    const next = wt(path.join(work, 'architect-mc-DISK-run-s2'));
+    world(next, 'w2');
+    const logs = [];
+    const t0 = Date.now();
+    const out = cleanupRunDirs({ ...opts, removeTimeoutMs: 1500, verdict: 'PASS', log: (m) => logs.push(m), dirs: [{ dir: hung, created: true }, { dir: next, created: true }] });
+    const ms = Date.now() - t0;
+    assert.ok(ms < 12_000, `bounded by the timeout, not the hook (${ms} ms)`);
+    assert.deepEqual(out.map((o) => o.action), ['kept', 'removed'], JSON.stringify(out));
+    assert.ok(!exists(next), 'the next dir is still cleaned up');
+    assert.ok(logs.some((m) => m.includes(hung) && /timed out/.test(m)), logs.join('\n'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are checked after the choice, before the lock and setup', () => {
+  const s = fs.readFileSync(path.join(ROOT, 'tools', 'gate-run.mjs'), 'utf8');
+  // source order (the shard choice runs inside acquireSlot, under the slot mutex): a guard sits between it and takeLock()
+  const acq = s.indexOf('await acquireSlot(async () => {');
+  const lock = s.indexOf('\ntakeLock();', acq);
+  assert.ok(acq > 0 && lock > acq);
+  assert.match(s.slice(acq, lock), /\n(if \(decideShards\) )?spaceGuard\(\);/, 'spaceGuard() runs again once the shards are chosen');
+  // behaviour: the chosen dirs (RUN1, an -s2 symlinked onto a low volume, an -o1) are judged on their real volumes
+  const root2 = archTmpDir('gate-disk');
+  try {
+    const lowVol = path.join(root2, 'low');
+    const big = path.join(root2, 'big');
+    fs.mkdirSync(path.join(lowVol, 's2-target'), { recursive: true });
+    fs.mkdirSync(big);
+    const run1 = path.join(big, 'architect-mc-gate-run');
+    fs.symlinkSync(path.join(lowVol, 's2-target'), `${run1}-s2`);
+    const r = checkSpace({ min: 150, run1, runDirs: [run1, `${run1}-s2`, `${run1}-o1`], frozen: true, drvDir: `${run1}-src`, statfs: fakeStatfs([fs.realpathSync(lowVol)], []) });
+    assert.equal(r.ok, false, JSON.stringify(r));
+    assert.ok(r.low.some((v) => v.dests.includes(`${run1}-s2`)), JSON.stringify(r));
+  } finally {
+    fs.rmSync(root2, { recursive: true, force: true });
+  }
+});
