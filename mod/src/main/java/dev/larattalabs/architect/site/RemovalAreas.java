@@ -79,13 +79,16 @@ public final class RemovalAreas {
 		return out;
 	}
 
-	/** Every in-flight removal's area that holds or writes outside this build's admission: the legacy ones, the durable stashes, the begun groups. */
+	/**
+	 * Every in-flight removal's area that holds or writes outside this build's admission: the legacy ones, the durable stashes, the begun groups
+	 * (begun this session, or open in the txn core as loaded from disk: slice T4R-N).
+	 */
 	static List<Area> heldAreas() {
 		return heldAreas(dev.larattalabs.architect.txn.TxnServer.core());
 	}
 
 	/** (TEST seam, slice T4R-N) {@link #heldAreas()} against {@code core} (the txn core whose loaded holds count). */
-	static List<Area> heldAreas(dev.larattalabs.architect.txn.TxnCore core) {
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core) {
 		List<Area> out = legacyAreas();
 		for (var e : CrateSettle.durableJson().entrySet()) {
 			com.google.gson.JsonObject st = e.getValue().getAsJsonObject();
@@ -95,11 +98,78 @@ public final class RemovalAreas {
 			}
 		}
 		for (Groups.Removal r : Groups.inFlight()) {
-			if (!r.legacy && r.gtx != null) {
+			if (!r.legacy && (r.gtx != null || begun(r, core))) {
 				groupAreas(r, "the removal of group " + r.group, out); // every member (paid or not): its writes go there
 			}
 		}
+		coreHolds(core, out);
 		return out;
+	}
+
+	/**
+	 * (slice T4R-N, the final check of f7607b13's P1-1) Whether {@code r}'s {@code removal.group} txn is open in {@code core}: begun before a
+	 * restart and loaded with its holds, while {@code r.gtx} (transient) is still null until its entry reattaches.
+	 */
+	static boolean begun(Groups.Removal r, dev.larattalabs.architect.txn.@Nullable TxnCore core) {
+		if (core == null || r.undo == null) {
+			return false;
+		}
+		String key = GroupTxn.key(r.group, r.stage, r.undo);
+		for (dev.larattalabs.architect.txn.TxnEntry t : core.open()) {
+			if (key.equals(t.key)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (slice T4R-N, P1-1) The removal boxes ({@code rbox:} resources) every open {@code removal.group} txn of {@code core} holds, as loaded from
+	 * disk: admission sees them whatever order the queue's entries reattach in (a waiting removal saved ahead of a stalled holder never begins
+	 * over the holder's box after a restart). Its own: the txn key's {@code group:<id>[/stage]}.
+	 */
+	static void coreHolds(dev.larattalabs.architect.txn.@Nullable TxnCore core, List<Area> out) {
+		if (core == null) {
+			return;
+		}
+		for (dev.larattalabs.architect.txn.TxnEntry t : core.open()) {
+			if (!dev.larattalabs.architect.txn.RemovalTxn.GROUP.equals(t.kind) || t.key == null) {
+				continue;
+			}
+			int at = t.key.lastIndexOf('@');
+			String self = at < 0 ? t.key : t.key.substring(0, at);
+			for (String res : t.resources) {
+				Area a = rboxArea(res, "the removal of " + self.replace("group:", "group ").replace("/", " stage ") + " (txn " + t.id + ")", self);
+				if (a != null) {
+					out.add(a);
+				}
+			}
+		}
+	}
+
+	/** {@code rbox:<dim>@x0,y0,z0:x1,y1,z1} as an area, or null (another resource, or malformed). Pure. */
+	static @Nullable Area rboxArea(String res, String who, String site) {
+		if (!res.startsWith("rbox:")) {
+			return null;
+		}
+		int at = res.lastIndexOf('@');
+		if (at < 5) {
+			return null;
+		}
+		String[] ab = res.substring(at + 1).split(":");
+		if (ab.length != 2) {
+			return null;
+		}
+		String[] a = ab[0].split(","), b = ab[1].split(",");
+		if (a.length != 3 || b.length != 3) {
+			return null;
+		}
+		try {
+			return new Area(res.substring(5, at), new Anchors.Bounds(Integer.parseInt(a[0]), Integer.parseInt(a[1]), Integer.parseInt(a[2]), Integer.parseInt(b[0]),
+				Integer.parseInt(b[1]), Integer.parseInt(b[2])), who, site);
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	private static void groupAreas(Groups.Removal r, String who, List<Area> out) {

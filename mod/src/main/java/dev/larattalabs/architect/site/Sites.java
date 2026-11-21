@@ -1929,6 +1929,7 @@ public final class Sites {
 			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
 			CrateSettle.recordFound(level, x.id(), group, stashes.get(x.id()));
 			CrateSettle.markRestored(x.id(), group);
+			CrateSettle.markLiveDrops(x.id(), group); // (slice T4R-N) its afterRestore below drops the player's blocks: its W never again
 			SiteJournal.Restore[] rr = new SiteJournal.Restore[1];
 			SiteException[] fail = new SiteException[1];
 			it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
@@ -3540,6 +3541,18 @@ public final class Sites {
 		// (J2, UMT F9) the released groups' entries go after every pending record settled: a road's evidence over a site removed after it
 		// reads the site's later restore (Sites.evidence's laterBelow), which an earlier release would have taken away
 		List<String> releaseAfter = new ArrayList<>();
+		// (slice T4R-N, the final check of f7607b13's P1-2) the cascade of a committed removal whose stash is durable: its removal txn's W writes
+		// them first (top first, as the live removal), so none is judged (or brought back) here meanwhile
+		java.util.Collection<JsonObject> stashesNow = new ArrayList<>();
+		pending.forEach(p -> {
+			if (p.settle() != null) {
+				stashesNow.add(p.settle());
+			}
+		});
+		if (early != null) {
+			stashesNow.addAll(early.values());
+		}
+		Set<String> rolled = CrateSettle.rolledCascade(stashesNow);
 		for (Site.Pending p : List.copyOf(pending)) {
 			Site gone = p.site();
 			boolean moved = "moved".equals(p.why());
@@ -3557,6 +3570,10 @@ public final class Sites {
 				continue;
 			}
 			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
+			if (stashOf == null && group != null && rolled.contains(gone.id() + "|" + group) && !jobSites.contains(gone.id())) {
+				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
+				continue;
+			}
 			if (stashOf == null && early == null && gone.construction() != null && group != null) {
 				// (T4b) its stash can't be read now: never judged (a release here could pay later with its blocks standing); kept for the next start
 				report(gone.id(), true, "removed " + gone.id() + ": its settle can't be read (the ledger file is unreadable); it waits, nothing released");
@@ -3688,6 +3705,11 @@ public final class Sites {
 			if (Groups.ownsAtStart(owned, gone.id(), group)) {
 				report(gone.id(), false, "removed " + gone.id() + ": its group's removal owns it; its removal.group txn restores and settles it");
 				continue; // (slice T4R, R1)
+			}
+			if (rolled.contains(gone.id() + "|" + group) && (early == null || early.get(gone.id()) == null)) {
+				// (slice T4R-N, P1-2) cascaded by a committed removal with a durable stash: its txn's W writes it first; settled at a later start
+				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
+				continue;
 			}
 			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null) {
 				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority

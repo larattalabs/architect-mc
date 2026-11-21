@@ -2956,6 +2956,7 @@ public final class Builder {
 			settle = CrateSettle.stash(s, tally.refund());
 			if (settle != null) {
 				CrateSettle.withCells(settle, tally.cells(), s.restoreBox()); // (T4b fix round, N3) the restore's min and the removal's hold
+				CrateSettle.withPlayer(settle, tally.playerCells()); // (slice T4R-N, P1-2) the player's cells: a recovered restore gives them back
 			}
 		}
 		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing, null, null, settle);

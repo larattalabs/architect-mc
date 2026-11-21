@@ -66,6 +66,8 @@ public final class Refunds {
 		private int mined;
 		/** (slice T4b fix round, N3) Each refunded cell: its position, the block it refunds, its items (in tally order). */
 		private final Map<Long, Cell> cells = new java.util.LinkedHashMap<>();
+		/** (slice T4R-N) Each player's cell (PLAYER_DROP): its position, the player's block, what it returns (in tally order). */
+		private final Map<Long, Cell> playerCells = new java.util.LinkedHashMap<>();
 		private long atPos = Long.MIN_VALUE;
 		private boolean unplaced;
 		private @org.jspecify.annotations.Nullable String atBlock;
@@ -98,8 +100,25 @@ public final class Refunds {
 				costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
 				cells.put(atPos, new Cell(atPos, atBlock, Map.copyOf(items)));
 			}
+			if (o == Outcome.PLAYER_DROP && atPos != Long.MIN_VALUE && atBlock != null && !costs.isEmpty()) {
+				Map<String, Integer> items = new TreeMap<>();
+				Cell was = playerCells.get(atPos);
+				if (was != null) {
+					items.putAll(was.items());
+				}
+				costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+				playerCells.put(atPos, new Cell(atPos, atBlock, Map.copyOf(items)));
+			}
 			atPos = Long.MIN_VALUE;
 			atBlock = null;
+		}
+
+		/**
+		 * (slice T4R-N, the final check of f7607b13's P1-2) The player's cells by position (a PLAYER_DROP booked at its cell); a player's block
+		 * booked without its cell is in {@link #playerBlocks} only.
+		 */
+		public List<Cell> playerCells() {
+			return List.copyOf(playerCells.values());
 		}
 
 		/** (N3) The refunded cells, by position; null when a refund was booked without its cell (then no per-cell record at all). */

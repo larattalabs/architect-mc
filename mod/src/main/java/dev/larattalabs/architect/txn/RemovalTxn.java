@@ -144,7 +144,18 @@ public final class RemovalTxn {
 			if (e.data().get("cells") instanceof JsonArray a) {
 				recordFound(level, site, group, a); // (T4b fix round, N3) before any write: kept where recorded already (never re-read after it)
 			}
-			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group));
+			boolean clear = e.data().has("clear") && e.data().get("clear").getAsBoolean();
+			JsonArray player = e.data().get("player") instanceof JsonArray pl ? pl : null;
+			net.minecraft.core.BlockPos dropAt = e.data().get("dropAt") instanceof JsonArray da && da.size() == 3 ? new net.minecraft.core.BlockPos(da.get(0)
+				.getAsInt(), da.get(1).getAsInt(), da.get(2).getAsInt()) : null;
+			java.util.List<String> cascade = new java.util.ArrayList<>();
+			if (e.data().get("cascade") instanceof JsonArray ca) {
+				ca.forEach(x -> cascade.add(x.getAsString()));
+			}
+			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group, clear, cascade, player, dropAt, (pos, items) -> {
+				// (slice T4R-N, P1-2) a player's block given back by this write: receipted in its chunk in the same tick (its result reads it)
+				TestMove.addReceipt(level.getChunkAt(net.minecraft.core.BlockPos.of(pos)), playerTag(site, group) + pos + "=" + encode(items));
+			}));
 			String k = restoredKey(t, e);
 			String tag = foundTag(site, group);
 			String pre = e.key(t.id) + "@found=";
@@ -169,6 +180,32 @@ public final class RemovalTxn {
 			return first == null ? "the restore of " + e.data().get("site").getAsString() : "chunk " + first.get(0).getAsInt() + "," + first.get(1).getAsInt();
 		}
 	};
+
+	/** (slice T4R-N) The chunk receipt naming a player's block a removal's W restore gave back: {@code pdrop:<site>@<group>:<pos>=<items>}. */
+	static String playerTag(String site, String group) {
+		return "pdrop:" + site + "@" + group + ":";
+	}
+
+	/**
+	 * (slice T4R-N, the final check of f7607b13's P1-2) What the W restore of {@code site} in {@code group} gave back of the player's cells
+	 * {@code player} (its receipts in their chunks), summed; empty when it gave back none (its live removal dropped them, or nothing stood).
+	 * Server thread; loads the chunks.
+	 */
+	public static java.util.Map<String, Integer> playerGiven(ServerLevel level, String site, String group, JsonArray player) {
+		java.util.Map<String, Integer> sum = new java.util.TreeMap<>();
+		String tag = playerTag(site, group);
+		for (var el : player) {
+			long pos = el.getAsJsonObject().get("pos").getAsLong();
+			String pre = tag + pos + "=";
+			for (String r : TestMove.receipts(level.getChunkAt(net.minecraft.core.BlockPos.of(pos)))) {
+				if (r.startsWith(pre)) {
+					decode(r.substring(pre.length())).forEach((k, v) -> sum.merge(k, v, Integer::sum));
+					break;
+				}
+			}
+		}
+		return sum;
+	}
 
 	/** (N3) The chunk receipt naming what of a removal's refunded cells stood there before its restore's first write. */
 	static String foundTag(String site, String group) {

@@ -158,6 +158,8 @@ public final class Groups {
 		 */
 		boolean legacy;
 		transient boolean gtxDone;
+		/** (slice T4R-N) It waits on a pre-T4R removal's area now (its wait counts in {@link #waited}, up to {@link Groups#MAX_WAIT}). */
+		transient boolean legacyWaiting;
 		/** (slice T4R) Why its txn waits to begin (logged once). */
 		transient @Nullable String gtxWait;
 
@@ -433,6 +435,15 @@ public final class Groups {
 		static Removed waitedOut(String id, boolean player, Map<String, Integer> refund) {
 			return new Removed(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed", refund, player
 				? dev.larattalabs.architect.api.RemovalStopCause.PLAYER_IN_BOX : dev.larattalabs.architect.api.RemovalStopCause.OTHER);
+		}
+
+		/**
+		 * (slice T4R-N) A member over the area of a removal a pre-T4R build left in flight past the wait ({@link Groups#MAX_WAIT}): stopped before
+		 * anything of it was planned (remove again once that one is done).
+		 */
+		static Removed legacyWaitedOut(String why, Map<String, Integer> refund) {
+			return new Removed("Not yet: " + why + " (waited 10 minutes); remove again once it is done", refund,
+				dev.larattalabs.architect.api.RemovalStopCause.OTHER);
 		}
 
 		/** (S-DRS-1) Covering sites outside the removal, refused. */
@@ -1093,16 +1104,28 @@ public final class Groups {
 		if (r.nextCheck > tick) {
 			return;
 		}
-		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy && RemovalAreas.anyLegacy()) {
+		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy && (RemovalAreas.anyLegacy() || r.legacyWaiting)) {
 			// (slice T4R-M) a removal over the area of one a pre-T4R build left in flight waits (holding nothing, planning nothing) until it ends
-			String lw = legacyWait(r);
+			String lw = RemovalAreas.anyLegacy() ? legacyWait(r) : null;
 			if (lw != null) {
+				r.legacyWaiting = true;
 				if (!lw.equals(r.gtxWait)) {
 					Architect.LOGGER.warn("Removal of group {}: waits for a removal from before the update: {}", r.group, lw);
 				}
 				r.gtxWait = lw;
 				r.nextCheck = tick + 20;
+				// (slice T4R-N, the final check of f7607b13's P2) never indefinite: a pre-T4R removal may be progressed by nothing this session
+				// (a single's pending record in KEEP, its J2 credit held, no job). Like a player in a box, it is waited for up to MAX_WAIT; then
+				// the call is answered stopped, nothing of it planned or changed (a retry after that removal ends goes ahead)
+				r.waited += 20;
+				if (r.waited >= MAX_WAIT) {
+					end(server, r, Removed.legacyWaitedOut(lw, Map.copyOf(r.refund)));
+				}
 				return;
+			}
+			if (r.legacyWaiting) {
+				r.legacyWaiting = false;
+				r.waited = 0; // (slice T4R-N) that wait ended: the player wait counts its own
 			}
 		}
 		if (r.undo == null && r.planner == null && !preflighted(server, r)) {

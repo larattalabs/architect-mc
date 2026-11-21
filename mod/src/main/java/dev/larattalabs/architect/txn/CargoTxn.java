@@ -63,14 +63,17 @@ public final class CargoTxn {
 	}
 
 	/**
-	 * (slice T4R-M) What {@code c} knows of the txn {@code id}: {@code "commit"} (open with a commit decision, or retired committed or
-	 * abandoned), {@code "abort"} (open with an abort decision, or retired aborted), {@code "open"} (open, undecided), {@code "unknown"} (neither
+	 * (slice T4R-M) What {@code c} knows of the txn {@code id}: {@code "commit"} (open with an acknowledged commit decision, or retired committed
+	 * or abandoned), {@code "abort"} (open with an acknowledged abort decision, or retired aborted), {@code "open"} (open, undecided or its
+	 * decision not yet acknowledged on disk: slice T4R-N), {@code "unknown"} (neither
 	 * open nor in the bounded result cache).
 	 */
 	public static String fate(String id, TxnCore c) {
 		TxnEntry t = c.get(id);
 		if (t != null) {
-			return t.decision == null ? "open" : t.decision.isAbort() ? "abort" : "commit";
+			// (slice T4R-N, the final check of f7607b13's P2) a decision counts only once the txn file acknowledged it: a refused or in-doubt
+			// decision write leaves it in memory only, and a crash then loads the txn undecided (recovery aborts it). Until then: open
+			return t.decision == null || !c.acknowledged() ? "open" : t.decision.isAbort() ? "abort" : "commit";
 		}
 		ResultCache.Done d = c.cache().byId(id);
 		return d == null ? "unknown" : Decision.ABORT.equals(d.decision()) ? "abort" : "commit";
@@ -88,7 +91,7 @@ public final class CargoTxn {
 		String id = owedKey.substring(6, slash);
 		TxnEntry t = c.get(id);
 		if (t != null) {
-			return t.decision != null && t.decision.isAbort();
+			return t.decision != null && c.acknowledged() && t.decision.isAbort(); // (slice T4R-N) as fate: acknowledged decisions only
 		}
 		ResultCache.Done d = c.cache().byId(id);
 		return d != null && Decision.ABORT.equals(d.decision());

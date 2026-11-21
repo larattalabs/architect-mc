@@ -149,7 +149,28 @@ public final class CrateSettle {
 		o.addProperty("site", s.id());
 		o.addProperty("pileKey", d.key());
 		o.add("refund", Builder.counts(d.credit()));
+		withPlayer(o, d.tally().playerCells());
 		return withCells(o, d.tally().cells(), s.restoreBox());
+	}
+
+	/**
+	 * (slice T4R-N, the final check of f7607b13's P1-2) {@code stash} told the player's cells in the removed box (pos, the player's block, what
+	 * it returns), saved with it before the undo commits: a removal recovered after a crash (its W restore writing the committed undo at the
+	 * next start) gives each back as the live removal does (dropped at the site), once, never lost under the restore. None: nothing added.
+	 */
+	static JsonObject withPlayer(JsonObject stash, java.util.Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells) {
+		if (!cells.isEmpty()) {
+			com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+			for (dev.larattalabs.architect.survival.Refunds.Cell c : cells) {
+				JsonObject x = new JsonObject();
+				x.addProperty("pos", c.pos());
+				x.addProperty("block", c.block());
+				x.add("items", Builder.counts(c.items()));
+				a.add(x);
+			}
+			stash.add("player", a);
+		}
+		return stash;
 	}
 
 	/**
@@ -427,6 +448,60 @@ public final class CrateSettle {
 
 	static void clearRestored() {
 		RESTORED_NOW.clear();
+		LIVE_DROPS.clear();
+	}
+
+	/**
+	 * (slice T4R-N) Removals whose live call writes their restore and drops the player's blocks itself this session ({@code site|group}): their
+	 * W never gives those blocks back again (a W that writes a part a hold refused finds them standing after the live drop).
+	 */
+	private static final java.util.Set<String> LIVE_DROPS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/**
+	 * (slice T4R-N, the final check of f7607b13's P1-2) {@code id|undoGroup} of each member of the cascades the durable {@code stashes} record
+	 * (their {@code fin}): sites and roads their single removal's W writes first. Pure.
+	 */
+	static java.util.Set<String> rolledCascade(java.util.Collection<JsonObject> stashes) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (JsonObject st : stashes) {
+			if (st == null || !st.has("undoGroup") || st.has("road") || !(st.get("fin") instanceof JsonObject f) || !(f.get("cascaded") instanceof com.google.gson.JsonArray ca)) {
+				continue;
+			}
+			String g = st.get("undoGroup").getAsString();
+			ca.forEach(x -> out.add(x.getAsString() + "|" + g));
+		}
+		return out;
+	}
+
+	static void markLiveDrops(String site, String group) {
+		LIVE_DROPS.add(site + "|" + group);
+	}
+
+	/** (slice T4R-N) The cells of {@code player} whose recorded block stands now, by position. Reads (loads) their chunks. */
+	static Map<Long, JsonObject> standingPlayer(ServerLevel level, com.google.gson.JsonArray player) {
+		Map<Long, JsonObject> out = new java.util.LinkedHashMap<>();
+		for (var el : player) {
+			JsonObject c = el.getAsJsonObject();
+			long pos = c.get("pos").getAsLong();
+			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(BlockPos.of(pos))))) {
+				out.put(pos, c);
+			}
+		}
+		return out;
+	}
+
+	/** A recorded cell's items. */
+	static Map<String, Integer> itemsOf(JsonObject cell) {
+		Map<String, Integer> m = new java.util.TreeMap<>();
+		if (cell.get("items") instanceof JsonObject o) {
+			o.entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return m;
+	}
+
+	/** (slice T4R-N) Where a W restore of {@code site} writes: its (pending or standing) record's restore box, or its road's; null when unknown. */
+	static dev.larattalabs.architect.placement.Anchors.@Nullable Bounds writeArea(String site) {
+		return Groups.boxOf(site);
 	}
 
 	/** (slice T4R-L) {@code site}'s restore in {@code group} was not fully written (a hold refused some of it): its W writes it itself. */
@@ -468,6 +543,19 @@ public final class CrateSettle {
 	 * the Sites check has run (the records and the journal both loaded) and every store loaded: otherwise it throws and the txn holds.
 	 */
 	public static void restoreSite(ServerLevel level, String site, String group) {
+		restoreSite(level, site, group, false, null, null, null, null);
+	}
+
+	/**
+	 * {@link #restoreSite(ServerLevel, String, String)} as a single site's or road's removal txn writes it itself in its W (not written this
+	 * session by its live removal). {@code clear}: the item entities its writes pop (a cascaded site's attached blocks) are cleared as the live
+	 * removal's afterRestore clears them ({@link Sites.Drops}; a group member's W never: its group's write drops its members' items), and
+	 * (slice T4R-N, the final check of f7607b13's P1-2) each of {@code player} (the player's cells its stash recorded) whose block stood before
+	 * this write and is gone after it is given back at {@code dropAt} as the live removal drops it; {@code dropped} told each such cell (its
+	 * receipt, in the same tick as its write). A cell gone already (written before) returns nothing: never twice.
+	 */
+	public static void restoreSite(ServerLevel level, String site, String group, boolean clear, java.util.@Nullable List<String> cascade,
+		com.google.gson.@Nullable JsonArray player, @Nullable BlockPos dropAt, java.util.function.@Nullable BiConsumer<Long, Map<String, Integer>> dropped) {
 		String why = notReady();
 		if (why != null) {
 			throw new IllegalStateException(why);
@@ -478,14 +566,41 @@ public final class CrateSettle {
 		if (DevStart.failWriteNow()) {
 			throw new IllegalStateException("TEST dev-start.json failWriteNow"); // (T4b fix round) the W apply fails: the txn holds, nothing paid
 		}
+		boolean give = player != null && dropAt != null && !LIVE_DROPS.contains(site + "|" + group);
+		Map<Long, JsonObject> standing = give ? standingPlayer(level, player) : Map.of();
+		// (slice T4R-N, P1-2) its cascade still pending with entries in its undo group (a crash before the live removal wrote them): written first,
+		// top first, as the live removal writes them (its records stay pending: the next start's check releases them, restored)
+		List<String> casc = new java.util.ArrayList<>();
+		if (cascade != null) {
+			for (boolean infra : new boolean[] {true, false}) { // the live order: its roads and cell sites, then its sites (each top first)
+				for (String c : cascade) {
+					if ((infra ? Infras.pending(c) != null : Sites.pendingRecord(c) != null) && undoneExists(c, group)) {
+						casc.add(c);
+					}
+				}
+			}
+		}
+		dev.larattalabs.architect.placement.Anchors.Bounds area = clear ? writeArea(site) : null;
+		for (String c : casc) {
+			dev.larattalabs.architect.placement.Anchors.Bounds cb = writeArea(c);
+			if (area != null && cb != null) {
+				area = Sites.union(area, cb);
+			}
+		}
+		Sites.Drops drops = area == null ? null : Sites.Drops.before(level, area);
 		java.util.Set<String> was = WRITING;
-		WRITING = java.util.Set.of(site);
+		java.util.Set<String> own = new java.util.HashSet<>(casc);
+		own.add(site);
+		WRITING = java.util.Set.copyOf(own);
 		SiteJournal.Restore[] r = new SiteJournal.Restore[1];
 		Sites.SiteException[] fail = new Sites.SiteException[1];
 		it.unimi.dsi.fastutil.longs.LongSet refused;
 		try {
 			refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
 				try {
+					for (String c : casc) {
+						SiteJournal.writeNow(level, c, group);
+					}
 					r[0] = SiteJournal.writeNow(level, site, group);
 				} catch (Sites.SiteException e) {
 					fail[0] = e;
@@ -493,6 +608,19 @@ public final class CrateSettle {
 			});
 		} finally {
 			WRITING = was;
+			if (drops != null) {
+				drops.clearNew(level); // (slice T4R-N) what its writes popped, as the live removal's afterRestore clears it
+			}
+			for (var en : standing.entrySet()) {
+				BlockPos p = BlockPos.of(en.getKey());
+				if (!en.getValue().get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
+					Map<String, Integer> items = itemsOf(en.getValue());
+					Builder.dropItems(level, dropAt, items, drops); // kept by the clear: it is the player's block given back
+					if (dropped != null) {
+						dropped.accept(en.getKey(), items);
+					}
+				}
+			}
 		}
 		if (fail[0] != null) {
 			throw new IllegalStateException("the restore of " + site + " could not be written: " + fail[0].getMessage());
@@ -1119,7 +1247,20 @@ public final class CrateSettle {
 		JsonObject fin = null;
 		if (group != null && undoneExists(site, group)) {
 			try {
-				first.add(dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group, cells), cells));
+				dev.larattalabs.architect.txn.Effect.Builder w = dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group,
+					cells), cells);
+				if (!stash.has("road")) {
+					// (slice T4R-N, the final check of f7607b13's P1-2) a single site's W written at a restart (K6) does what its live removal does
+					// after its write: what the write pops cleared, the player's blocks given back at the site's drop point
+					w.data("clear", new com.google.gson.JsonPrimitive(true));
+					if (stash.get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
+						w.data("player", pl).data("dropAt", posJsonOf(posOf(stash)));
+					}
+					if (stash.get("fin") instanceof JsonObject f1 && f1.get("cascaded") instanceof com.google.gson.JsonArray ca && !ca.isEmpty()) {
+						w.data("cascade", ca); // its cascade (top first): written first, as the live removal writes it
+					}
+				}
+				first.add(w);
 				SiteJournal.Restore r0 = SiteJournal.restore(level, site, group);
 				if (stash.get("fin") instanceof JsonObject f0) {
 					fin = f0.deepCopy(); // (fix round, P1-6) the result parts its removal recorded after its commit: restored, kept, hand-down, cascade
@@ -1243,7 +1384,13 @@ public final class CrateSettle {
 			// (slice T4c) the held, decided removal finished by itself (this session or after a restart): REMOVAL_FINISHED with its result.
 			// (slice T4R, P1-4) the full result from its txn (the credited refund, the restore's count; a replay's from its cached result),
 			// fired before its stash is forgotten: a crash before the event leaves the stash, and the replay fires it again (at least once)
-			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), Map.copyOf(s.credited()), s.restored(), s.kept(),
+			Map<String, Integer> refund = new TreeMap<>(s.credited());
+			if (st.get("player") instanceof com.google.gson.JsonArray pl && st.has("undoGroup")) {
+				// (slice T4R-N, P1-2) the player's blocks its W gave back (receipted with its writes): in its refund as the live removal reports them
+				dev.larattalabs.architect.txn.RemovalTxn.playerGiven(level, siteId, st.get("undoGroup").getAsString(), pl).forEach((k, v) -> refund.merge(k, v,
+					Integer::sum));
+			}
+			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), Map.copyOf(refund), s.restored(), s.kept(),
 				s.handed(), s.cascaded(), List.of(), List.copyOf(s.owed())));
 		}
 		Sites.settled(srv, siteId); // (its durable stash forgotten too, record or not)

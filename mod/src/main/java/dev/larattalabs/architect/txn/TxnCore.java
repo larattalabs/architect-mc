@@ -157,6 +157,15 @@ public final class TxnCore {
 		return unsynced;
 	}
 
+	/**
+	 * (slice T4R-N, the final check of f7607b13's P2) Whether every in-memory state of the open txns is the acknowledged {@code txn.json}'s: no
+	 * write refused or in doubt since the last acknowledged one. Each decision is written ({@code sync}) as it is made, so while this holds an
+	 * open txn's decision is on disk; while it does not, a decision may be in memory only (a crash loads the txn undecided).
+	 */
+	public boolean acknowledged() {
+		return !journalDoubt();
+	}
+
 	/** The open (and retiring) txns, oldest first. */
 	public List<TxnEntry> open() {
 		return List.copyOf(open.values());
