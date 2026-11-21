@@ -312,13 +312,26 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 `-run-s<k>`, `-run-src`, about 6 GB each in logical size) and nothing removed them. The cleanup removed 239 stale worktrees and 42 output
 folders (about 258 GiB). Two rules in `tools/gate-run.mjs` keep it from coming back:
 
-- **Free-space guard.** A run refuses to start, before it takes a slot, below `--min-free-gib` (`GATE_MIN_FREE_GIB`, default 150)
-  GiB free on its run dirs' volume. `0` turns it off.
-- **Cleanup after a PASS.** The run removes its own run worktrees and its frozen source (`git worktree remove`, never `--force`; a
-  worktree it can't remove is kept with its world copies emptied). A run dir beside the main checkout (the default, the nightly's)
-  is reused: only its world copies (`mod/run/saves`) go. A run that does not pass keeps everything for inspection: remove its dirs
-  with `git worktree remove` once the failure is understood. `--keep-run-dirs` (`GATE_KEEP_RUN_DIRS=1`) keeps all, for a follow-up
-  `--only` run in the same dirs.
+- **Free-space guard.** A run refuses to start, before it takes a slot, when any volume it writes to has under `--min-free-gib`
+  (`GATE_MIN_FREE_GIB`, default 150) GiB free. It checks every destination: each run dir (`--run-dirs`, else the run dir, whose
+  shards sit beside it) and the frozen source (`<run dir>-src`, also with `--run-dirs`; not with `--no-frozen-source`), each by the
+  real path of its nearest existing ancestor, so a symlinked run dir counts on its target's volume. `0` turns it off. With
+  `--shards auto` the guard runs before the shard count is known; auto shards sit beside the run dir, on its volume.
+- **Cleanup after a PASS** (`tools/lib/run-dirs.mjs`, tested in `kit/test/gate-disk.test.mjs`). It runs inside `finish()`, after
+  the verdict and before the summary, the notify and the release of the lock and slot, so a queued run never sets up in dirs being
+  emptied; a cleanup failure is logged (and recorded in `summary.cleanup`), never the verdict. What happens to each dir:
+  - **created by this invocation** (`setupShard` or the frozen source added the worktree; recorded in-process, never inferred from
+    the dir): `git worktree remove`, never `--force`. A worktree git refuses to remove is kept, with its world copies emptied.
+  - **a default run dir** (beside the main checkout by real path: `cfg.runDir`, its `-s<k>`/`-o<j>` shards, the nightly's): reused,
+    so only its world copies (`mod/run/saves/*`) go.
+  - **any other existing dir** (another slice's worktree passed as `--run-dir`, an earlier run's dir reused, a reused `-src`): this
+    run does not own it, so nothing is touched, not even its worlds. Such a dir stays until a run that creates it passes, or until
+    it is removed by hand.
+  - The main checkout, the source checkout and the seed (by real path) are never touched. No symlink is followed: the run dir, `mod`,
+    `mod/run` and `saves` must be real directories with `saves` inside the run dir by real path, a symlinked world entry is left as it
+    is, and a link inside a world is removed as a link.
+  - A run that does not pass keeps everything for inspection: remove its dirs with `git worktree remove` once the failure is
+    understood. `--keep-run-dirs` (`GATE_KEEP_RUN_DIRS=1`) keeps all, for a follow-up `--only` run in the same dirs.
 - **By hand:** a slice's worktree and red/mutant worktrees are removed when the slice is merged or shelved; release worktrees and
   `-rel` copies once the release's post-publish steps are done.
 
