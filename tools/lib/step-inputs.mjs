@@ -268,9 +268,26 @@ export function stepRoots(entry) {
   if (cwd) for (const m of text.matchAll(/(?:^|[\s'"])((?:\.\/)?[\w-]+\/[\w@./*-]+\.(?:mjs|js))/g)) roots.add(path.posix.join(cwd, m[1].replace(/^\.\//, '')));
   return [...roots].sort();
 }
-/** node options that take their value as the next word (the value is not the script): the preloads first. */
+/**
+ * node options that take their value as the next word (the value is not the script): the preloads first. Probed on node 24
+ * (`node <opt> <val> script` runs script). Not here: V8 flags (--stack-size, --max-old-space-size, ...: node accepts only their
+ * `=` form) and --inspect/--inspect-brk/--inspect-wait (an optional `=` value: the next word is the script).
+ */
 const NODE_PRELOAD_OPTS = '--import|--require|-r|--loader|--experimental-loader';
-const NODE_VALUE_OPTS = `${NODE_PRELOAD_OPTS}|--conditions|-C|--env-file|--input-type|--title|--test-reporter|--test-reporter-destination|--test-name-pattern|--watch-path`;
+const NODE_VALUE_OPTS = [
+  NODE_PRELOAD_OPTS,
+  '--conditions|-C|--env-file|--env-file-if-exists|--input-type|--title|--inspect-port|--debug-port',
+  '--test-reporter|--test-reporter-destination|--test-name-pattern|--test-skip-pattern|--test-concurrency|--test-isolation|--test-shard',
+  '--test-timeout|--test-global-setup|--test-coverage-include|--test-coverage-exclude|--test-coverage-lines|--test-coverage-branches',
+  '--test-coverage-functions|--watch-path|--watch-kill-signal',
+  '--disable-warning|--diagnostic-dir|--report-dir|--report-filename|--report-signal|--redirect-warnings',
+  '--secure-heap|--secure-heap-min|--icu-data-dir|--openssl-config|--dns-result-order|--unhandled-rejections',
+  '--heapsnapshot-signal|--heapsnapshot-near-heap-limit|--cpu-prof-dir|--cpu-prof-name|--cpu-prof-interval|--heap-prof-dir',
+  '--heap-prof-name|--heap-prof-interval|--localstorage-file|--max-http-header-size|--trace-event-categories|--trace-event-file-pattern',
+  '--use-largepages|--tls-cipher-list|--tls-keylog|--disable-proto|--network-family-autoselection-attempt-timeout',
+  '--max-old-space-size-percentage|--v8-pool-size|--trace-require-module|--allow-fs-read|--allow-fs-write|--snapshot-blob',
+  '--build-snapshot-config|--experimental-sea-config',
+].join('|');
 /**
  * (TI2) The driver paths a chain entry (or a split part) computes in its shell: a script argument of node/bash/sh with a shell
  * expansion in it (`node tools/gate${X}.mjs`, `node $DRIVER`). Such a step has no static closure, so `check` refuses it: name the
