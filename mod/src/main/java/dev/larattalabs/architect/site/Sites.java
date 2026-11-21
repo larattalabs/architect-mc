@@ -2146,11 +2146,13 @@ public final class Sites {
 		String id = b.id();
 		drops.clearNew(level);
 		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
+		boolean pileTxn = false;
 		if (dec != null) {
 			WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: the site's restore written; its refunds and its crate's stock not yet settled
 			// (T4b) the stash the removal saved before its commit (with its undo group): a stockpile site's refunds settle there too (N8)
 			Site.Pending pd = pendingOf(id);
 			JsonObject stash = pd != null && pd.settle() != null ? pd.settle() : dec.settle();
+			pileTxn = CrateSettle.isPileStash(stash);
 			Builder.dropDeconstruction(level, b, dec, drops, !CrateSettle.isPileStash(stash));
 			if (stash != null) {
 				// (T2b part 2b; T4b) after the restore: its removal txn writes the restore's receipts (W), then the crate's stock and the refunds,
@@ -2173,7 +2175,9 @@ public final class Sites {
 		notifyListeners();
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; its journal entries are kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
-		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : dec.reported());
+		// (slice T4R-M, found by T4RM-fin) a stockpile site's refund is its txn's credit (given below), never also the planned credit: reported()
+		// counted it twice in this call's result (the stock was credited once)
+		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : pileTxn ? dec.all() : dec.reported());
 		if (settled.owed().isEmpty()) {
 			settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 		}
