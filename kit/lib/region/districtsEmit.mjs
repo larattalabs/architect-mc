@@ -18,7 +18,7 @@ import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
-import { DISTRICT_EXT, untaggedMisreads } from './land.mjs';
+import { tagMisreadRoads } from './land.mjs';
 import { edgeColumns, footprintOf } from './passes/route.mjs';
 import { LEAD, chooseReach, reachFor } from './reach.mjs';
 import { aroundOf, gateMeta } from './gateJoin.mjs';
@@ -488,7 +488,9 @@ export function emitDistricts(r, intent = {}) {
     emitOne(d);
     for (const x of r.roads.slice(roads0)) owned.push({ x, id: x.id, district: d.id });
   }
-  if (untaggedMisreads(owned, ds.map((d) => d.id))) for (const o of owned) o.x.ext = { ...(o.x.ext ?? {}), [DISTRICT_EXT]: { id: o.district } };
+  // ((RTE5) plan_v0 (`_ownedRoads`) decides after its street stamp, on the roads as written: v0.89.0 decided here, before the stamp, and
+  // tagged a lone b_street whose stamped streets read right)
+  if (!it._ownedRoads) tagMisreadRoads(owned, ds.map((d) => d.id));
   function emitOne(d) {
     if (follows.has(d.id)) {
       const f = follows.get(d.id);
@@ -668,7 +670,7 @@ export function emitDistricts(r, intent = {}) {
   if (it.meta !== false) r.meta.districts = data;
   if (Object.keys(corridor).length) r.meta.corridor = Object.fromEntries(Object.entries(corridor).map(([k, v]) => [k, v.runs]));
   r.note(`pass districts: ${placedNow.length}/${ds.length} placed (${data.method}${exact ? '' : ', not exact'}${follows.size ? `; ${follows.size} following a boundary` : ''}), ${chosen.length} edge(s) (${span.tree.length} tree, ${span.loops.length} loop), loop cost ${span.loopCost} of tree ${span.treeCost}${join ? `, joined to ${beside ? `${beside.id} at ${join.q.node}` : join.b.name}` : ''}${unplaced.length ? `; unplaced: ${unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}` : ''}`);
-  return { data, layouts, ends: Object.fromEntries(placedNow.map((d) => [d.id, ends.get(d.id)])), reserved, laneCells };
+  return { data, layouts, ends: Object.fromEntries(placedNow.map((d) => [d.id, ends.get(d.id)])), reserved, laneCells, ...(it._ownedRoads ? { owned } : {}) };
 }
 
 /**
