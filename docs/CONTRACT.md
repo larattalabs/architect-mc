@@ -33688,7 +33688,7 @@ The v0.89.0 fix check's P3 and its corpus gaps. No API member, record or feature
   beside a town, undo to 1 and to 0 with a revision after (rid past its position), three cross-release chains (one backwards), and RTE4's
   33 cases under v0.48.0, v0.55.0, v0.65.0, v0.75.0, v0.84.0 (v0.48.0 is the first with revise.mjs). 438 cases, 1316 effective IRs.
   Expected: v0.88.0's readers, land by exact runs (parts, union, outside, inside; the town's claim given). Found: HEAD and v0.89.0 read
-  every round as v0.88.0 (0 mismatches); the own readings of older releases differ only by RTE2's longest-id land and pre-GD plan_v0
+  every round as v0.88.0 (0 mismatches); the own readings of older releases differ only by RTE2's longest-id land (district, join and grown parts) and pre-GD plan_v0
   growth refusals. HEAD writes v0.89.0's IRs for all 31 unmixed new cases except the 4 plan_v0 b_street cases (only the tag).
 - Not covered: grouped growth streets (4e's 2048-cell / 256-point split): a following district's length is at most 256, so a boundary
   growth's window is at most 512 cells and no growPlan can lay one; only emitGrowth with a hand path does (rte3.test.mjs).
