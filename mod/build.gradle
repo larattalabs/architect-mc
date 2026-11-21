@@ -129,10 +129,12 @@ test {
 	// (8a ST) tests that run the kit with node (TerrainOrderTest's kit/test/terrain-order-cells.mjs, PlanCatalogueTest, the delta kit test):
 	// the kit and its plan fixtures are their inputs, so a kit change never leaves the test task UP-TO-DATE on a stale PASS
 	inputs.dir("../kit/lib").withPropertyName("kitLib").withPathSensitivity(PathSensitivity.RELATIVE)
-	// ((TI) plan-helpers' fixtureLotBlocks imports the VOC-c designs, which import the VOC ones: in the helpers' closure)
+	// ((TI) plan-helpers' fixtureLotBlocks imports the VOC-c designs, which import the VOC ones: in the helpers' closure; (TI2) its
+	// synthVolume imports h-helpers, and its fixtureStyle and the VOC designs read the scenario bibles by name: scenarioBibles below)
 	inputs.files(
 		"../kit/test/terrain-order-cells.mjs",
 		"../kit/test/plan-helpers.mjs",
+		"../kit/test/h-helpers.mjs",
 		"../kit/test/fixtures/vocab/vocc-designs.mjs",
 		"../kit/test/fixtures/vocab/voc-designs.mjs",
 	).withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
@@ -196,6 +198,12 @@ test {
 	inputs.dir("../kit/schemas").withPropertyName("kitSchemas").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.files("../kit/voxel_classes.json").withPropertyName("kitVoxelClasses").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/regions").withPropertyName("kitRegions").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI2) computed reads and node children) TemplateDeltaKitEqualityTest's kit/tools/delta-fixtures.mjs rebuilds every design in a
+	// copy of the whole kit (kit/lib/rebuild.mjs copyKit: all but node_modules, .git, out, test and examples, the same excludes here):
+	// the bibles, kit/vocab (kit/lib/vocab.mjs imports its JSON, so every kit/lib caller reads it), kit/tools and the rest are its
+	// inputs. plan-helpers' fixtureStyle and the VOC designs read scenarios/bibles/<name>.json
+	inputs.files(fileTree("../kit") { exclude "**/node_modules/**", "**/.git/**", "**/out/**", "**/test/**", "**/examples/**" }).withPropertyName("kitCopied").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../scenarios/bibles").withPropertyName("scenarioBibles").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test
