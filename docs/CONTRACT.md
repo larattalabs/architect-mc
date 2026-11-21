@@ -34465,6 +34465,9 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   on the base); e2e T4R-legacygroup (base: the mine goes through, one minted), T4R-cargo-key (base: the second stack lost), the list check
   in T4R-visible; all green on HEAD. T4R-legacyroad-partial is green on the base too (the earlier job's found receipts cover it in game; a
   true pre-T4 world has none): a regression row, the unit is P1-4's red. The cargo recover variant is green on both.
+- **Gate:** change 63/63 (`gate-runs-T4R/20261120-230923-change`); `--only` fk-crash 97/0, fkb-crash 48/0, lc3-seal 40/0 (`20261121-012749`);
+  lc3-undo failed there on the T4R group-pause hook answering `*` (a TEST hook bug, fixed a844026d), re-run with t4r-crash: 16/0, 98/0
+  (`20261121-013956`).
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
