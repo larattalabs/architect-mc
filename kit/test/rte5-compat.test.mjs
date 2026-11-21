@@ -59,7 +59,8 @@ test('rte5-compat: v0.89.0 read every round as v0.88.0 did (RTE4\'s claim, over 
   assert.deepEqual(C.cases.filter((c) => c.v089).map((c) => c.key), []);
 });
 
-// ---- the emission check: what this tree writes for each new case, against what v0.89.0 wrote
+// ---- the emission check: what this tree writes for each new case, against what v0.89.0 wrote (digests without each IR's `kitVersion`
+// and `node`, writtenSha: a release's bump and CI's Node major are not emission changes)
 
 /** The cases RTE5 changes on purpose: plan_v0 zones whose districts' roads v0.89.0 tagged though streetRuns reads them right by the stamp. */
 const ITEM1 = ['pv0_b-b_street', 'pv0_b_street', 'pv0_b_street-c', 'pv0_two_zones'];

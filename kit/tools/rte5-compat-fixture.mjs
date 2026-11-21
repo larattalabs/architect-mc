@@ -6,7 +6,8 @@
 // read every round (`expected`: kit/test/rte5-compat.test.mjs and DistrictLandCompat5Test hold this tree to it), each release's own
 // readers its own cases (`own`, where they differ), and v0.89.0's readers every round (`v089`, where they differ from v0.88.0's: none
 // expected, RTE4's claim). v0.89.0 also plans each unmixed case (`written`: its IR and revisions' sha, with and without the district
-// tag), for the test's emission check: this tree writes v0.89.0's IRs but where RTE5 drops a tag v0.89.0 wrote needlessly (plan_v0).
+// tag, neither covering an IR's `kitVersion` or `node`), for the test's emission check: this tree writes v0.89.0's IRs but where RTE5
+// drops a tag v0.89.0 wrote needlessly (plan_v0).
 //   node kit/tools/rte5-compat-fixture.mjs v0.48.0=<tree> ... v0.88.0=<tree> v0.89.0=<tree>
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,9 +39,15 @@ export function loadCorpus(file = FIXTURE) {
 export function untagged(ir) {
   return { ...ir, roads: (ir.roads ?? []).map((r) => { if (!r.ext?.['architect_mc:district']) return r; const { 'architect_mc:district': _, ...ext } = r.ext; return { ...r, ext }; }) };
 }
-/** The sha of a case's written state (its IR and each revision's IR, in order). */
+/** An IR without its writer's metadata: `kitVersion` (every release bumps it) and `node` (the runtime's major: CI's need not be the
+ *  fixture's). Everything else is hashed exactly. */
+export function unversioned(ir) {
+  const { kitVersion: _k, node: _n, ...rest } = ir;
+  return rest;
+}
+/** The sha of a case's written state (its IR and each revision's IR, in order), without each IR's writer metadata (`unversioned`). */
 export function writtenSha(ir, revisions, strip = false) {
-  const f = strip ? untagged : (x) => x;
+  const f = strip ? (x) => unversioned(untagged(x)) : unversioned;
   return crypto.createHash('sha256').update(JSON.stringify([f(ir), ...revisions.map((r) => f(r.ir))])).digest('hex');
 }
 
