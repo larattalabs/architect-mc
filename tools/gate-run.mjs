@@ -99,6 +99,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { buildFrozenClasses, kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
+import { checkSpace, cleanupRunDirs as cleanupRunDirsLib } from './lib/run-dirs.mjs';
 import { ensureSlotPins } from './lib/pinned-deps.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
@@ -550,6 +551,7 @@ const RUN1 = path.resolve(opt('--run-dir') ?? process.env.GATE_RUN_DIR ?? path.r
 const FROZEN = !flag('--no-frozen-source');
 const DRV_DIR = `${RUN1}-src`;
 let DRV = SRC;
+let drvCreated = false; // this invocation added the frozen source worktree (cleanup removes only what it created)
 const RUN_DIRS = (opt('--run-dirs') ?? process.env.GATE_RUN_DIRS ?? '').split(',').map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
@@ -1460,43 +1462,20 @@ const releaseLock = () => {
 
 // ------------------------------------------------------------------ disk space (docs/GATES.md "Disk space")
 
-/** Refuses to start a run below --min-free-gib (GATE_MIN_FREE_GIB, default 150) GiB free on the run dirs' volume. */
+/** Refuses to start a run below --min-free-gib (GATE_MIN_FREE_GIB, default 150) GiB free on the run dirs' volume (tools/lib/run-dirs.mjs). */
 function spaceGuard() {
   const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
+  const r = checkSpace({ min, run1: RUN1, runDirs: RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR });
   if (!(min > 0)) return;
-  let probe = path.dirname(RUN1);
-  while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
-  const st = fs.statfsSync(probe);
-  const free = (st.bavail * st.bsize) / 2 ** 30;
-  if (free < min) die(`only ${free.toFixed(0)} GiB free on ${probe}'s volume, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
-  console.log(`disk: ${free.toFixed(0)} GiB free (guard ${min})`);
+  const v = r.low[0] ?? r.volumes[0];
+  if (!r.ok) die(`only ${v.free.toFixed(0)} GiB free on ${v.probe}'s volume, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
+  console.log(`disk: ${v.free.toFixed(0)} GiB free (guard ${min})`);
 }
 
-/** After a PASS: removes this run's own run worktrees and frozen source, and empties the world copies of the reused default run dirs
- * (cfg.runDir and its -s<k>/-o<j> shards, the nightly's). A run that does not pass keeps everything. --keep-run-dirs keeps all. */
+/** After a PASS: removes this run's own run worktrees and frozen source; tools/lib/run-dirs.mjs. */
 function cleanupRunDirs(verdict) {
-  if (flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1') return log('cleanup: --keep-run-dirs, run dirs kept');
-  if (verdict !== 'PASS') return log(`cleanup: ${verdict}, run dirs kept for inspection; remove them (git worktree remove) once done`);
-  // real paths: _work/architect-mc is a symlink to the main checkout, so a plain dirname would make every _work dir its sibling
-  const mainParent = path.dirname(real(MAIN));
-  const defaults = [path.resolve(SRC, cfg.runDir), path.resolve(MAIN, cfg.runDir)].map((d) => (fs.existsSync(d) ? real(d) : d));
-  // a run dir beside the main checkout (Minecraft/: the default, the nightly's, the seed's) is reused: only its worlds go
-  const isDefault = (d0) => { const d = real(d0); return path.dirname(d) === mainParent || defaults.some((b) => d === b || new RegExp(`^${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(s|o)\\d+$`).test(d)); };
-  const rm = (d) => {
-    const r = spawnSync('git', ['-C', SRC, 'worktree', 'remove', d], { encoding: 'utf8' });
-    if (r.status === 0) return true;
-    log(`cleanup: git worktree remove ${d} failed (${(r.stderr ?? '').trim().split('\n')[0]}): kept`);
-    return false;
-  };
-  const dirs = [...shards.map((s) => s.RUN), ...(FROZEN && DRV !== SRC ? [DRV_DIR] : [])];
-  for (const d of dirs) {
-    if (!fs.existsSync(d)) continue;
-    if (isDefault(d) || !rm(d)) {
-      const saves = path.join(d, 'mod', 'run', 'saves');
-      if (fs.existsSync(saves)) for (const w of fs.readdirSync(saves)) fs.rmSync(path.join(saves, w), { recursive: true, force: true });
-      log(`cleanup: ${d} kept, its world copies removed`);
-    } else log(`cleanup: removed ${d}`);
-  }
+  const dirs = [...shards.map((s) => ({ dir: s.RUN, created: !!s.created })), ...(FROZEN && DRV !== SRC ? [{ dir: DRV_DIR, created: drvCreated }] : [])];
+  return cleanupRunDirsLib({ verdict, keep: flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1', src: SRC, main: MAIN, seed: SEED, cfgRunDir: cfg.runDir, dirs, log });
 }
 
 // ------------------------------------------------------------------ the run dir, summary, log
