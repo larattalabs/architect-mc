@@ -2037,6 +2037,10 @@ export async function registerTCC(steps, h) {
           await L.openWorld(name);
           await L.tp(...W.at);
           await wait(3000);
+          // the coexistence rule: a new standalone removal over the pre-T4R removal's area is refused while it runs, nothing changed
+          const solo = await later(`remove ${b.rid} ${owner} noforce keep`, 60_000).catch((e) => ({ error: String(e?.message ?? e) }));
+          rowLog(tag, `a new standalone removal of ${b.rid} while the pre-T4R removal of ${a.group} runs: ${json(solo).slice(0, 300)}`);
+          check(/Not yet/.test(json(solo)) && !!(await roadState(b.rid).catch(() => null)), `${tag}: a new removal over a pre-T4R removal's area is refused while it runs (SITE_BUSY, ${b.rid} stands): ${json(solo).slice(0, 200)}`, solo);
           const rb = api(`sgremove ${b.group} - ${owner} keep`).catch((e) => ({ error: String(e) }));
           await wait(15000);
           const t1 = await txn();
@@ -2095,8 +2099,15 @@ export async function registerTCC(steps, h) {
         const crash = await fixture(`${mode}-crash`);
         if (!twin || !crash) continue;
         check(!!twin.top && !!crash.top && twin.changed.length === 2 && crash.changed.length === 2, `${tag} ${mode}: the fixture: a site LAYERed on top (${twin.top}, ${crash.top}), two cells changed by a player`, { twin, crash });
+        const stockOf = async (o) => (await call('dev.stockpile.state', { owner: o }, 60_000).catch(() => ({}))).stockpile?.stock ?? {};
+        const groundOf = async (site) => { const bb = await boxOf(site); return (await call('dev.items.near', { pos: [Math.floor((bb[0] + bb[3]) / 2), bb[1], Math.floor((bb[2] + bb[5]) / 2)], radius: 24 }, 30_000).catch(() => ({}))).items ?? {}; };
+        const t0 = { stock: await stockOf(twin.owner), ground: await groundOf(twin.site) };
+        const c0 = { stock: await stockOf(crash.owner), ground: await groundOf(crash.site) };
         const clean = await later(`remove ${twin.site} ${twin.owner} noforce ${mode}`, 120_000).catch((e) => ({ error: String(e) }));
-        rowLog(tag, `${mode} clean twin: ${json(clean).slice(0, 300)}`);
+        await wait(3000);
+        const tMoved = G.plus(minus(await stockOf(twin.owner), t0.stock), minus(await groundOf(twin.site), t0.ground));
+        rowLog(tag, `${mode} clean twin: ${json(clean).slice(0, 300)}; moved into stock and onto the ground ${json(tMoved)}`);
+        check(G.same(clean.refund ?? {}, tMoved), `${tag} ${mode}: the clean twin's result refund is what it moved (stock + dropped): ${json(clean.refund)} = ${json(tMoved)}`, { clean, tMoved });
         await call('dev.journal.killAt', { point: 'K6' }, 10_000);
         api(`remove ${crash.site} ${crash.owner} noforce ${mode}`).catch(() => null);
         const down = await haltWait();
@@ -2109,6 +2120,9 @@ export async function registerTCC(steps, h) {
         await wait(4000);
         const ev = (await evs()).filter((e) => e.id === crash.site);
         const res = ev[0]?.result ?? {};
+        const cMoved = G.plus(minus(await stockOf(crash.owner), c0.stock), minus(await groundOf(crash.site), c0.ground));
+        rowLog(tag, `${mode} recovered: moved into stock and onto the ground ${json(cMoved)}; its event's refund ${json(res.refund)}`);
+        check(G.same(minus(await stockOf(crash.owner), c0.stock), minus(await stockOf(twin.owner), t0.stock)), `${tag} ${mode}: the recovered removal credited what the clean twin credited`, { cMoved, tMoved });
         rowLog(tag, `${mode} recovered event: ${json(ev).slice(0, 400)}`);
         const handed = res.handedDown ?? res.handed ?? {};
         const cleanHanded = clean.handedDown ?? clean.handed ?? {};
