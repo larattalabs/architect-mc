@@ -468,7 +468,9 @@ parameter (ApiP0Test's `one(file)`: its callers' literals are scanned), a node c
 outside the repo (GlossaryWordingTest's opt-in ../../steward-mc). Gate drivers' computed reads stay the trace's (a read outside the
 set is an inputs-map miss, never a stale PASS); TI2's traced unit-kit and unit-sidecar run at HEAD found two enumerations, now
 whole in their data: gate-cpu-budget.test lists tools/*.mjs (unit-kit), regions-tc.test reads scenarios/<f>.json and the sidecar's
-vitest setup imports tools/lib (unit-sidecar).
+vitest setup imports tools/lib (unit-sidecar). v0.90.0 review P3s: test-trace holds a traced directory listing (`d`) to the directory
+rule (an `inputs.dir` of it or a parent), not only tracked files; and the computed-driver check reads past a value-taking node option
+(`--import`/`--require`/`-r`/`--loader` and the like) to the script, reporting a computed preload too. The map rebuilds unchanged.
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.
