@@ -1477,9 +1477,11 @@ function spaceGuard() {
 function cleanupRunDirs(verdict) {
   if (flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1') return log('cleanup: --keep-run-dirs, run dirs kept');
   if (verdict !== 'PASS') return log(`cleanup: ${verdict}, run dirs kept for inspection; remove them (git worktree remove) once done`);
-  const defaults = [path.resolve(SRC, cfg.runDir), path.resolve(MAIN, cfg.runDir)];
+  // real paths: _work/architect-mc is a symlink to the main checkout, so a plain dirname would make every _work dir its sibling
+  const mainParent = path.dirname(real(MAIN));
+  const defaults = [path.resolve(SRC, cfg.runDir), path.resolve(MAIN, cfg.runDir)].map((d) => (fs.existsSync(d) ? real(d) : d));
   // a run dir beside the main checkout (Minecraft/: the default, the nightly's, the seed's) is reused: only its worlds go
-  const isDefault = (d) => path.dirname(d) === path.dirname(MAIN) || defaults.some((b) => d === b || new RegExp(`^${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(s|o)\\d+$`).test(d));
+  const isDefault = (d0) => { const d = real(d0); return path.dirname(d) === mainParent || defaults.some((b) => d === b || new RegExp(`^${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(s|o)\\d+$`).test(d)); };
   const rm = (d) => {
     const r = spawnSync('git', ['-C', SRC, 'worktree', 'remove', d], { encoding: 'utf8' });
     if (r.status === 0) return true;
