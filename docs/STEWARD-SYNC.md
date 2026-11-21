@@ -20,7 +20,7 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
-| v0.89.0 | 2026-11-20 | 1.71.0 | 0.78.0 | 26 |  | RC pending | ok |
+| v0.89.0 | 2026-11-20 | 1.71.0 | 0.78.0 | 26 |  | RC passed | ok |
 | v0.88.0 | 2026-11-20 | 1.71.0 | 0.77.0 | 26 |  | not needed | ok |
 | v0.87.0 | 2026-11-20 | 1.71.0 | 0.76.0 | 26 |  | RC passed | ok |
 | v0.86.0 | 2026-11-20 | 1.71.0 | 0.75.0 | 26 | `layoutRouteEdges` | RC passed | ok |
