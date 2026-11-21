@@ -255,14 +255,42 @@ export function eagerClosure(roots, has, readText) {
   return seen;
 }
 
-/** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names, and the globs it passes to node (kit/test/*.test.mjs). */
+/** A chain entry's command texts: its shell or cmd, and (TI2) each split part's own shell (a part runs under its parent's set). */
+const stepTexts = (entry) => [entry.shell ?? (entry.cmd ?? []).join(' '), ...(entry.split?.parts ?? []).map((p) => p.shell).filter(Boolean)];
+
+/** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names (its split parts' shells too), and the globs it
+ * passes to node (kit/test/*.test.mjs). */
 export function stepRoots(entry) {
-  const text = entry.shell ?? (entry.cmd ?? []).join(' ');
+  const text = stepTexts(entry).join('\n');
   const cwd = (entry.cwd ?? '').replace(/^(run|src):/, '');
   const roots = new Set();
   for (const m of text.matchAll(/(?:^|[\s'"=])((?:\.\/)?(?:tools|kit|scenarios|sidecar)\/[\w@./*-]+\.(?:mjs|js|sh|ts))/g)) roots.add(m[1].replace(/^\.\//, ''));
   if (cwd) for (const m of text.matchAll(/(?:^|[\s'"])((?:\.\/)?[\w-]+\/[\w@./*-]+\.(?:mjs|js))/g)) roots.add(path.posix.join(cwd, m[1].replace(/^\.\//, '')));
   return [...roots].sort();
+}
+/** node options that take their value as the next word (the value is not the script): the preloads first. */
+const NODE_PRELOAD_OPTS = '--import|--require|-r|--loader|--experimental-loader';
+const NODE_VALUE_OPTS = `${NODE_PRELOAD_OPTS}|--conditions|-C|--env-file|--input-type|--title|--test-reporter|--test-reporter-destination|--test-name-pattern|--watch-path`;
+/**
+ * (TI2) The driver paths a chain entry (or a split part) computes in its shell: a script argument of node/bash/sh with a shell
+ * expansion in it (`node tools/gate${X}.mjs`, `node $DRIVER`). Such a step has no static closure, so `check` refuses it: name the
+ * driver literally. A flag (`${CONC:+--test-concurrency=...}`) and a computed output argument (`--out $OUT/x`) are not drivers.
+ */
+export function computedStepRoots(entry) {
+  const out = [];
+  const computed = (a) => a.includes('$') && (/\.(mjs|js|cjs|sh|ts)$/.test(a) || /^\$\{?\w+\}?$/.test(a) || /^(tools|kit|scenarios|sidecar)\//.test(a));
+  const unq = (a) => a.replace(/^['"]|['"]$/g, '');
+  for (const text of stepTexts(entry)) {
+    // the options before the script: a flag expansion, a value-taking node option with its value (`--import x`, `-r x`: a preload,
+    // not the driver), any other flag
+    for (const m of text.matchAll(new RegExp(`(?:^|[\\s;&|(])(?:node|bash|sh|npx\\s+tsx)((?:\\s+(?:\\$\\{\\w+:\\+[^}]*\\}|(?:${NODE_VALUE_OPTS})\\s+[^\\s;&|)]+|-[\\w-]+(?:=\\S+)?))*)\\s+([^\\s;&|)]+)`, 'g'))) {
+      const arg = unq(m[2]);
+      if (computed(arg)) out.push(arg);
+      // a computed preload is a module the step runs too
+      for (const o of m[1].matchAll(new RegExp(`(?:^|\\s)(?:${NODE_PRELOAD_OPTS})(?:=|\\s+)([^\\s;&|)]+)`, 'g'))) if (computed(unq(o[1]))) out.push(unq(o[1]));
+    }
+  }
+  return [...new Set(out)];
 }
 const expandRoots = (roots, has) => {
   const out = [];
