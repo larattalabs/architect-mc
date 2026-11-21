@@ -43,6 +43,7 @@
     "kit/test/fixtures/plan/valid/v06_terrace.json",
     "kit/test/fixtures/plan/valid/v72_f3_grove.json",
     "kit/test/fixtures/rte-compat/corpus.json.gz",
+    "kit/test/fixtures/rte-compat/rte5.json.gz",
     "kit/test/fixtures/rte2/land-irs.json",
     "kit/test/fixtures/rte3/land-irs.json",
     "kit/test/fixtures/rte3/layout-ir.json",
@@ -288,6 +289,8 @@
     "kit/test/rte2.test.mjs",
     "kit/test/rte3.test.mjs",
     "kit/test/rte4.test.mjs",
+    "kit/test/rte5-compat.test.mjs",
+    "kit/test/rte5.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -681,6 +684,7 @@
     "kit/test/fixtures/regions/floating_island.golden.json",
     "kit/test/fixtures/regions/mega_bench.golden.json",
     "kit/test/fixtures/rte-compat/corpus.json.gz",
+    "kit/test/fixtures/rte-compat/rte5.json.gz",
     "kit/test/fixtures/rte2/land-irs.json",
     "kit/test/fixtures/rte4/land-irs.json",
     "kit/test/fixtures/rv/make-merge.mjs",
@@ -833,6 +837,8 @@
     "kit/test/rte2.test.mjs",
     "kit/test/rte3.test.mjs",
     "kit/test/rte4.test.mjs",
+    "kit/test/rte5-compat.test.mjs",
+    "kit/test/rte5.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -904,6 +910,8 @@
     "kit/tools/rte-compat-worker.mjs",
     "kit/tools/rte3-fixture.mjs",
     "kit/tools/rte4-fixture.mjs",
+    "kit/tools/rte5-compat-fixture.mjs",
+    "kit/tools/rte5-compat-worker.mjs",
     "kit/tools/site-brief.mjs",
     "kit/tools/site-fixtures.mjs",
     "kit/tools/slices.mjs",
@@ -1225,6 +1233,14 @@
     {
      "from": "kit/test/step-cache.test.mjs",
      "expr": ") only when a run executed it"
+    },
+    {
+     "from": "kit/tools/rte5-compat-worker.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'lib', 'region', p)).href)"
+    },
+    {
+     "from": "kit/tools/rte5-compat-worker.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', 'test', p)).href)"
     },
     {
      "from": "kit/tools/rte-compat-worker.mjs",
@@ -1903,6 +1919,8 @@
     "kit/test/rte2.test.mjs",
     "kit/test/rte3.test.mjs",
     "kit/test/rte4.test.mjs",
+    "kit/test/rte5-compat.test.mjs",
+    "kit/test/rte5.test.mjs",
     "kit/test/rv-a.test.mjs",
     "kit/test/s3-live.test.mjs",
     "kit/test/sa.test.mjs",
@@ -1959,6 +1977,8 @@
     "kit/tools/preset-builds.mjs",
     "kit/tools/rte-compat-fixture.mjs",
     "kit/tools/rte-compat-worker.mjs",
+    "kit/tools/rte5-compat-fixture.mjs",
+    "kit/tools/rte5-compat-worker.mjs",
     "kit/tools/site-fixtures.mjs",
     "kit/tools/slices.mjs",
     "kit/vocab/hazards.json",
@@ -2032,6 +2052,7 @@
     "dark",
     "eval/fixtures/bibles/mosswater/**",
     "kit/test/fixtures/rte-compat/corpus.json.gz",
+    "kit/test/fixtures/rte-compat/rte5.json.gz",
     "nope",
     "rustic",
     "tools",
