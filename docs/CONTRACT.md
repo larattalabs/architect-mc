@@ -34540,7 +34540,11 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - **Leftovers:** a pre-T4R pending single left KEEP (its J2 credit held) blocks new removals over its box until it settles; after a K6
   crash a construction site's recovered removal does not drop its player blocks as the synchronous one does, and a cascaded instant site's
   attached blocks may pop as items (T4b's W restore has no `Drops`; seen in T4RM-fin, eca131b6 too).
-- **Gate:** (filled below)
+- **Gate:** red `gate-runs-T4RM-red/20261121-081844-change` (t4rm-crash 4 rows red, t4rm-cargo 2 chests) + `20261121-084150-change` (the
+  refusal and fin refund checks) and `units/` (6/6 T4RM units red); mutants `gate-runs-T4RM-mutant/20261121-082722-change` (routing),
+  `-mutant-cargo/20261121-082936-change`, `-mutant-overlap/20261121-084825-change` (admission + refund), `-mutant/units` (E, F, A/B);
+  change 66/66 (`gate-runs-T4RM/20261121-085926-change`); `--only` t4r-crash 65/0, t4rl-crash 27/0, t4rm-crash 80/0, t4rm-cargo 9/0,
+  t4-crash 85/0, fk-crash 97/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 16/0 (`20261121-114629-change`).
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
