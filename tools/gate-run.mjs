@@ -1468,7 +1468,8 @@ const releaseLock = () => {
  * (--run-dirs, else the run dir) and the frozen source, by real path (tools/lib/run-dirs.mjs checkSpace). */
 function spaceGuard() {
   const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
-  const r = checkSpace({ min, run1: RUN1, runDirs: RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR });
+  // a fixed --shards run's shards (and lanes) are known here (an existing -s<k> may be a symlink elsewhere); auto shards sit beside RUN1
+  const r = checkSpace({ min, run1: RUN1, runDirs: shards.length ? shards.map((s) => s.RUN) : RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR });
   if (!(min > 0)) return;
   if (!r.ok) die(`${r.low.map((v) => `only ${v.free.toFixed(0)} GiB free on ${v.probe}'s volume (for ${v.dests.join(', ')})`).join('; ')}, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
   console.log(`disk: ${r.volumes.map((v) => `${v.free.toFixed(0)} GiB free on ${v.probe}`).join(', ')} (guard ${min})`);
@@ -2209,7 +2210,7 @@ function notify() {
 async function finish(state, error) {
   if (sampler) clearInterval(sampler);
   if (machineSamples.length) summary.machine = foldSamples(machineSamples);
-  summary.state = state;
+  // summary.state stays 'running' until the cleanup is done: waiting agents watch it (AGENTS.md "launch, then wait once")
   if (error) summary.error = error;
   summary.endedAt = new Date().toISOString();
   summary.durationSeconds = (Date.now() - t0) / 1000;
@@ -2232,6 +2233,7 @@ async function finish(state, error) {
     summary.cleanup = { error: String(e?.message ?? e) };
     log(`cleanup failed: ${e?.message ?? e}`);
   }
+  summary.state = state;
   writeSummary();
   fs.writeFileSync(path.join(OUT, 'SUMMARY.md'), summaryMd());
   log(`${summary.verdict}: ${JSON.stringify(c)} in ${fmtDur(summary.durationSeconds)}; ${path.join(OUT, 'SUMMARY.md')}`);

@@ -313,13 +313,14 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 folders (about 258 GiB). Two rules in `tools/gate-run.mjs` keep it from coming back:
 
 - **Free-space guard.** A run refuses to start, before it takes a slot, when any volume it writes to has under `--min-free-gib`
-  (`GATE_MIN_FREE_GIB`, default 150) GiB free. It checks every destination: each run dir (`--run-dirs`, else the run dir, whose
-  shards sit beside it) and the frozen source (`<run dir>-src`, also with `--run-dirs`; not with `--no-frozen-source`), each by the
+  (`GATE_MIN_FREE_GIB`, default 150) GiB free. It checks every destination: each run dir (`--run-dirs`, or a fixed `--shards` run's
+  shards and lanes, else the run dir) and the frozen source (`<run dir>-src`, also with `--run-dirs`; not with `--no-frozen-source`), each by the
   real path of its nearest existing ancestor, so a symlinked run dir counts on its target's volume. `0` turns it off. With
   `--shards auto` the guard runs before the shard count is known; auto shards sit beside the run dir, on its volume.
 - **Cleanup after a PASS** (`tools/lib/run-dirs.mjs`, tested in `kit/test/gate-disk.test.mjs`). It runs inside `finish()`, after
   the verdict and before the summary, the notify and the release of the lock and slot, so a queued run never sets up in dirs being
-  emptied; a cleanup failure is logged (and recorded in `summary.cleanup`), never the verdict. What happens to each dir:
+  emptied, and `summary.json`'s `state` stays `running` until it is done (waiting agents watch that field); a cleanup failure is
+  logged (and recorded in `summary.cleanup`), never the verdict. What happens to each dir:
   - **created by this invocation** (`setupShard` or the frozen source added the worktree; recorded in-process, never inferred from
     the dir): `git worktree remove`, never `--force`. A worktree git refuses to remove is kept, with its world copies emptied.
   - **a default run dir** (beside the main checkout by real path: `cfg.runDir`, its `-s<k>`/`-o<j>` shards, the nightly's): reused,

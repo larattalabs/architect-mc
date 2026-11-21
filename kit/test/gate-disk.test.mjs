@@ -151,6 +151,8 @@ test('gate-run: the cleanup runs inside finish(), after the verdict and before t
   assert.ok(clean > at(/summary\.verdict = /), 'after the verdict');
   for (const re of [/SUMMARY\.md'\), summaryMd/, /\bnotify\(\)/, /\breleaseLock\(\)/]) assert.ok(clean < at(re), `before ${re}`);
   assert.match(body.slice(body.lastIndexOf('try {', clean), clean), /try \{/, 'inside a try: a cleanup failure never changes the verdict');
+  // summary.json's state is what waiting agents watch (AGENTS.md): it turns terminal only once the cleanup is done
+  assert.ok(at(/summary\.state = state/) > clean, 'summary.state turns terminal after the cleanup');
   const tail = s.slice(s.lastIndexOf("await finish(stopped || draining ? 'stopped' : 'done');"));
   assert.doesNotMatch(tail, /cleanupRunDirs/, 'nothing cleans up after finish() has released the lock');
 });
