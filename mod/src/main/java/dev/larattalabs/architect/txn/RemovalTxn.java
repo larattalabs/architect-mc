@@ -477,6 +477,15 @@ public final class RemovalTxn {
 		return "";
 	}
 
+	/**
+	 * (slice T4R-L seam) The sites whose removal holds accept {@code t}'s adapter writes ({@code TxnServer.boxHeld}): empty when {@code t} is
+	 * no removal's txn; as the T4R fix round built it, its first site only ({@link #siteOf}).
+	 */
+	public static java.util.Set<String> sitesOf(TxnEntry t) {
+		String s = siteOf(t);
+		return s.isEmpty() ? java.util.Set.of() : java.util.Set.of(s);
+	}
+
 	/** (slice T4R, P1-4) A group's REMOVAL_FINISHED from its txn's payload and result: kind region or group (never both), the full result. */
 	static dev.larattalabs.architect.api.RemovalFinished finished(TxnEntry t, com.google.gson.JsonObject p) {
 		com.google.gson.JsonObject res = t.result != null && t.result.has("refund") ? t.result : CrateTxn.resultOf(t);

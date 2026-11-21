@@ -329,6 +329,21 @@ public final class CrateSettle {
 	}
 
 	/**
+	 * (slice T4R-L seam) What one journal cell of a pre-T4R credit counts as found, given the block standing ({@code now}) and what its
+	 * placement wrote over what ({@code after} over {@code before}): as the T4R fix round counted it, one item of {@code after}'s block when
+	 * {@link #legacyFound}. Pure (registries only).
+	 */
+	static Map<String, Integer> legacyItems(net.minecraft.world.level.block.state.BlockState now, String after, String before) {
+		if (!legacyFound(after, before, Builder.blockId(now)) || after.equals("minecraft:air")) {
+			return Map.of();
+		}
+		net.minecraft.world.level.block.Block b = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(net.minecraft.resources.Identifier.parse(
+			after));
+		String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(b.asItem()).toString();
+		return item.equals("minecraft:air") ? Map.of() : Map.of(item, 1);
+	}
+
+	/**
 	 * (slice T4R fix round, P1-3 and P1-4) A pre-T4 credit's found evidence: every cell its entries wrote ({@code group}'s undone entries, or
 	 * the site's active ones while its undo is not committed) that {@link #legacyFound} counts, as a refunded cell (its block as it stands, the
 	 * item its placement put there, one). Recorded in its chunks before its W's first write (the hold covers it since the queue loaded), so
@@ -360,17 +375,12 @@ public final class CrateSettle {
 						String after = a.name();
 						String before = sc.before(i).name();
 						BlockPos p = BlockPos.of(sc.pos(i));
-						String now = Builder.blockId(level.getBlockState(p));
-						if (!legacyFound(after, before, now) || after.equals("minecraft:air")) {
+						net.minecraft.world.level.block.state.BlockState st = level.getBlockState(p);
+						Map<String, Integer> items = legacyItems(st, after, before);
+						if (items.isEmpty()) {
 							continue;
 						}
-						net.minecraft.world.level.block.Block b = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(net.minecraft.resources.Identifier
-							.parse(after));
-						String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(b.asItem()).toString();
-						if (item.equals("minecraft:air")) {
-							continue;
-						}
-						out.add(new dev.larattalabs.architect.survival.Refunds.Cell(sc.pos(i), now, Map.of(item, 1)));
+						out.add(new dev.larattalabs.architect.survival.Refunds.Cell(sc.pos(i), Builder.blockId(st), items));
 					}
 				}
 			}
@@ -756,6 +766,64 @@ public final class CrateSettle {
 	/** Whether any removal box is held (the guards' O(1) pre-check). */
 	public static boolean anyHeldBox() {
 		return !HELD.isEmpty();
+	}
+
+	/**
+	 * (slice T4R-L seam) {@link #heldFor} for a writing txn that settles the removals of {@code writerSites} (null: no txn writes; empty: a
+	 * txn that is no removal's): their holds accept its writes, every other one refuses them. Pure.
+	 */
+	static boolean heldForAny(List<HeldBox> held, String dim, int x, int y, int z, java.util.@Nullable Collection<String> writerSites) {
+		for (HeldBox b : held) {
+			if (!b.dim().equals(dim) || x < b.x0() || y < b.y0() || z < b.z0() || x > b.x1() || y > b.y1() || z > b.z1()) {
+				continue;
+			}
+			if (b.cells() != null && !b.cells().contains(net.minecraft.core.BlockPos.asLong(x, y, z))) {
+				continue;
+			}
+			if (writerSites != null && writerSites.contains(b.site())) {
+				continue;
+			}
+			if (WRITING.contains(b.site())) {
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/** {@link #stashBoxHeld} for a txn adapter writing that settles the removals of {@code writerSites} ({@link #heldForAny}). */
+	public static boolean stashBoxHeldBy(String dim, int x, int y, int z, java.util.@Nullable Collection<String> writerSites) {
+		return heldForAny(HELD, dim, x, y, z, writerSites);
+	}
+
+	/**
+	 * (TEST, slice T4R-L hooks: dev.removal.holdBox) A hold kept in memory over {@code cells} of {@code dim} for no removal ({@code dev:hold}):
+	 * every writer is refused there, as by an unrelated removal's held box. Empty: dropped.
+	 */
+	public static void devHold(String dim, List<BlockPos> cells) {
+		if (cells.isEmpty()) {
+			forgetHoldOnly("dev:hold");
+			return;
+		}
+		int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+		for (BlockPos p : cells) {
+			x0 = Math.min(x0, p.getX());
+			y0 = Math.min(y0, p.getY());
+			z0 = Math.min(z0, p.getZ());
+			x1 = Math.max(x1, p.getX());
+			y1 = Math.max(y1, p.getY());
+			z1 = Math.max(z1, p.getZ());
+		}
+		JsonObject st = new JsonObject();
+		st.addProperty("dim", dim);
+		st.addProperty("site", "dev:hold");
+		com.google.gson.JsonArray b = new com.google.gson.JsonArray();
+		for (int v : new int[] {x0, y0, z0, x1, y1, z1}) {
+			b.add(v);
+		}
+		st.add("box", b);
+		withFootprint(st, cells);
+		holdOnly("dev:hold", st);
 	}
 
 	/** Whether {@code (x, y, z)} of {@code dim} lies in a durable removal stash's box, outside the removal's own writes. */

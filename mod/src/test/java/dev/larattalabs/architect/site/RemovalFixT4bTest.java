@@ -73,7 +73,7 @@ class RemovalFixT4bTest {
 		assertTrue(sites.contains("throw new SiteException(Reason.SITE_BUSY, \"held(decided) \" + why);"), "a held settle answers held(decided)");
 		assertTrue(read(SITE + "InfraPlace.java").contains("notes, r.owed())"), "the road result keeps its owed keys");
 		assertTrue(read(SITE + "Placement.java").contains("SiteJournal.await(SiteJournal.release(e.record.id())"), "the extras' release is awaited");
-		assertTrue(read("src/main/java/dev/larattalabs/architect/txn/TxnServer.java").contains("CrateSettle.stashBoxHeld("), "every guard reads the removal box");
+		assertTrue(read("src/main/java/dev/larattalabs/architect/txn/TxnServer.java").contains("CrateSettle.stashBoxHeldBy("), "every guard reads the removal box");
 		assertTrue(read(SITE + "RoadBuilder.java").contains("CrateSettle.pileRoadStash("), "a stockpile road has a removal.road stash");
 	}
 }

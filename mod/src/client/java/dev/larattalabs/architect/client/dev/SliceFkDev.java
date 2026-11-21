@@ -448,8 +448,9 @@ public final class SliceFkDev {
 					return dev.larattalabs.architect.site.RemovalSeal.stateJson();
 				});
 			});
-		DevBridge.register("dev.cargo.owe", 30_000, "{pos, slot, recipient, key} - (slice T4R hooks) TEST: the removal.cargo txn on one data-bearing "
-			+ "stack in the holder at pos, slot (taken out and owed whole to recipient, source key key), as a group removal runs it -> {why, slotNow, owed}",
+		DevBridge.register("dev.cargo.owe", 30_000, "{pos, slot, recipient, key, group?} - (slice T4R hooks) TEST: the removal.cargo txn on one data-bearing "
+			+ "stack in the holder at pos, slot (taken out and owed whole to recipient, source key key), as a group removal runs it; (T4R-L) group: "
+			+ "through the queued removal of that group's own cargo step (Groups.oweCargo: its owed keys kept with the removal) -> {why, slotNow, owed}",
 			(req, mc) -> ServerTasks.callOnServer(s -> {
 				BlockPos p = posOf(req);
 				int slot = req.get("slot").getAsInt();
@@ -460,9 +461,10 @@ public final class SliceFkDev {
 					return o;
 				}
 				ItemStack st = box.getItem(slot).copy();
-				String why = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo-test:" + System.nanoTime(), java.util.List.of(
-					new dev.larattalabs.architect.txn.CargoTxn.Stack(req.get("key").getAsString(), req.get("recipient").getAsString(), level.dimension()
-						.identifier().toString(), p, slot, st, null)));
+				java.util.List<dev.larattalabs.architect.txn.CargoTxn.Stack> stacks = java.util.List.of(new dev.larattalabs.architect.txn.CargoTxn.Stack(req.get(
+					"key").getAsString(), req.get("recipient").getAsString(), level.dimension().identifier().toString(), p, slot, st, null));
+				String why = req.has("group") ? dev.larattalabs.architect.site.Groups.devOweCargo(s, level, req.get("group").getAsString(), "cargo-test:"
+					+ System.nanoTime(), stacks) : dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo-test:" + System.nanoTime(), stacks);
 				o.addProperty("why", why);
 				o.addProperty("slotNow", box.getItem(slot).isEmpty() ? "" : BuiltInRegistries.ITEM.getKey(box.getItem(slot).getItem()).toString());
 				JsonArray owed = new JsonArray();
@@ -472,6 +474,23 @@ public final class SliceFkDev {
 				o.add("owed", owed);
 				return o;
 			}));
+		DevBridge.register("dev.removal.holdBox", 10_000, "{cells: [[x, y, z]...], off?: bool} - (slice T4R-L hooks) TEST: a hold over those overworld cells "
+			+ "for no removal (every writer refused there, as by an unrelated removal's held box); off drops it -> {held}", (req, mc) -> {
+				java.util.List<BlockPos> cells = new java.util.ArrayList<>();
+				boolean off = req.has("off") && req.get("off").getAsBoolean();
+				if (!off && req.get("cells") instanceof JsonArray a) {
+					for (var e : a) {
+						JsonArray c = e.getAsJsonArray();
+						cells.add(new BlockPos(c.get(0).getAsInt(), c.get(1).getAsInt(), c.get(2).getAsInt()));
+					}
+				}
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.site.CrateSettle.devHold(s.overworld().dimension().identifier().toString(), cells);
+					JsonObject o = new JsonObject();
+					o.addProperty("held", cells.size());
+					return o;
+				});
+			});
 		DevBridge.register("dev.removal.failAfterCustody", 10_000, "{n?: 1} - (slice T4c, Steward's FKC0) TEST: the next n group or stage removals abort "
 			+ "right after their custody is taken and saved: the custody given back, saved, the removal ended NOT_STARTED (kill point FKC0 after the "
 			+ "give-back's save) -> armed", (req, mc) -> {

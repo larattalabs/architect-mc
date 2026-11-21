@@ -161,15 +161,17 @@ class T4RGroupModelTest {
 				// T4R: one removal.group txn; per member its W restore, a member barrier, its owe, a member barrier
 				TxnEntry t = begin(w, "move", "group:g@u:group-g", "group:g");
 				for (var e : MEMBERS.entrySet()) {
-					w.core.plan(t, fx("restore", EffectClass.W, chunk(e.getKey()), e.getValue(), "site", Effect.TRANSIT).member(e.getKey()));
+					Effect.Builder wb = fx("restore", EffectClass.W, chunk(e.getKey()), e.getValue(), "site", Effect.TRANSIT).member(e.getKey());
+					w.core.plan(t, e.getKey().equals("b") ? wb.data("serializeFail", chunk("b")) : wb);
 					w.core.plan(t, Effect.of("txn.barrier", EffectClass.R).member(e.getKey()));
 					w.core.plan(t, fx("owe", EffectClass.O, "ledger", e.getValue(), Effect.TRANSIT, "owed").data("key", "refund:" + e.getKey()).member(e
 						.getKey()));
 					w.core.plan(t, Effect.of("txn.barrier", EffectClass.R).member(e.getKey()));
 				}
-				// (fix round, P2 coverage) B's chunk write fails once: its member barrier is refused, the txn held; then the live retries drive it
-				// again (each a full drive from the entry), and nothing of B is paid before a barrier published its W
-				w.serializeFails.add(chunk("b"));
+				// (fix round, P2 coverage; T4R-L: armed by B's own W, so the fault falls on the member barrier after it, never the prepare barrier,
+				// which 9913d902's model consumed it at) B's chunk write fails once: its member barrier is refused, the txn held; then the live
+				// retries drive it again (each a full drive from the entry), and nothing of B is paid before a barrier published its W
+				w.notes.add("serialize-fail-once");
 				run(w, t);
 				for (int i = 0; i < 2 && w.core.get(t.id) != null; i++) {
 					w.core.drive(t);

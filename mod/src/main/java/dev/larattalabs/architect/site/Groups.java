@@ -1656,8 +1656,8 @@ public final class Groups {
 		}
 		if (!r.cargoData.isEmpty()) {
 			// (slice T4R, R5) the data-bearing stacks owed whole (taken out of their holders and owed, in one txn) before any holder is replaced
-			String why = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo:" + r.group + (r.stage == null ? "" : "/" + r.stage) + "@" + System.currentTimeMillis(),
-				List.copyOf(r.cargoData), r.cargoOwed);
+			String why = oweCargo(server, level, r, "cargo:" + r.group + (r.stage == null ? "" : "/" + r.stage) + "@" + System.currentTimeMillis(), List.copyOf(
+				r.cargoData));
 			if (why != null && !why.startsWith("held(decided)")) {
 				dropPending(r);
 				dropCargoPending(r);
@@ -1733,6 +1733,27 @@ public final class Groups {
 		} catch (Sites.SiteException e) {
 			end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
 		}
+	}
+
+	/**
+	 * (slice T4R, R5) A group removal's data cargo owed whole in one {@code removal.cargo} txn keyed {@code key}, its owed keys added to
+	 * {@link Removal#cargoOwed}. Null when done, else why not (as {@link dev.larattalabs.architect.txn.CargoTxn#owe}). Server thread.
+	 */
+	static @Nullable String oweCargo(MinecraftServer server, ServerLevel level, Removal r, String key, List<dev.larattalabs.architect.txn.CargoTxn.Stack> stacks) {
+		return dev.larattalabs.architect.txn.CargoTxn.owe(level, key, stacks, r.cargoOwed);
+	}
+
+	/**
+	 * (TEST, slice T4R-L hooks: dev.cargo.owe with a group) {@link #oweCargo} for the queued removal of {@code group} (no stage), as its R1 runs
+	 * it; null answer: done; else why not, or "no queued removal".
+	 */
+	public static @Nullable String devOweCargo(MinecraftServer server, ServerLevel level, String group, String key, List<dev.larattalabs.architect.txn.CargoTxn.Stack> stacks) {
+		for (Removal r : REMOVALS) {
+			if (r.group.equals(group) && r.stage == null) {
+				return oweCargo(server, level, r, key, stacks);
+			}
+		}
+		return "no queued removal of group " + group;
 	}
 
 	/**

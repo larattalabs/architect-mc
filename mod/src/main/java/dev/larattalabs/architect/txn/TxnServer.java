@@ -313,8 +313,8 @@ public final class TxnServer {
 		String dim = level.dimension().identifier().toString();
 		// (T4 final round, P1 3) a txn adapter writing is exempt only from the hold of the removal its own txn settles; any other txn's adapter
 		// (another removal's, an adoption's, a crate move's) is refused there like any writer
-		String own = WRITER == null ? null : RemovalTxn.siteOf(WRITER);
-		return CrateSettle.stashBoxHeld(dim, pos.getX(), pos.getY(), pos.getZ(), own) || RemovalTxn.boxHeld(dim, pos.getX(), pos
+		java.util.Set<String> own = WRITER == null ? null : RemovalTxn.sitesOf(WRITER);
+		return CrateSettle.stashBoxHeldBy(dim, pos.getX(), pos.getY(), pos.getZ(), own) || RemovalTxn.boxHeld(dim, pos.getX(), pos
 			.getY(), pos.getZ(), WRITER);
 	}
 
