@@ -9,7 +9,8 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import java.io.InputStream;
+import com.google.gson.stream.JsonReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +19,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.Test;
 
@@ -32,9 +34,25 @@ import org.junit.jupiter.api.Test;
 class DistrictLandCompat5Test {
 	static final Path CORPUS = Path.of("../kit/test/fixtures/rte-compat/rte5.json.gz");
 
-	private static JsonObject corpus() throws Exception {
-		try (InputStream in = new GZIPInputStream(Files.newInputStream(CORPUS))) {
-			return JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+	/**
+	 * Each case of the corpus, streamed one at a time (the corpus is about 29 MB of JSON: parsed whole it took the test JVM's heap under
+	 * the gate's parallel forks).
+	 */
+	private static void eachCase(Consumer<JsonObject> f) throws Exception {
+		try (JsonReader r = new JsonReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(CORPUS)), StandardCharsets.UTF_8))) {
+			r.beginObject();
+			while (r.hasNext()) {
+				if (!"cases".equals(r.nextName())) {
+					r.skipValue();
+					continue;
+				}
+				r.beginArray();
+				while (r.hasNext()) {
+					f.accept(JsonParser.parseReader(r).getAsJsonObject());
+				}
+				r.endArray();
+			}
+			r.endObject();
 		}
 	}
 
@@ -130,18 +148,16 @@ class DistrictLandCompat5Test {
 
 	@Test
 	void everyRoundsLandIsV088sByExactRuns() throws Exception {
-		JsonObject c = corpus();
 		List<String> bad = new ArrayList<>();
-		int n = 0;
-		for (JsonElement ce : c.getAsJsonArray("cases")) {
-			JsonObject cs = ce.getAsJsonObject();
+		int[] count = {0};
+		eachCase(cs -> {
 			JsonArray rounds = cs.getAsJsonArray("rounds"), expected = cs.getAsJsonArray("expected");
 			int[] town = null;
 			if (cs.get("standingClaim") instanceof JsonArray t) {
 				town = new int[] {t.get(0).getAsInt(), t.get(1).getAsInt(), t.get(2).getAsInt(), t.get(3).getAsInt()};
 			}
 			for (int k = 0; k < rounds.size(); k++) {
-				n++;
+				count[0]++;
 				JsonObject rd = rounds.get(k).getAsJsonObject();
 				JsonObject eff = effective(cs.getAsJsonObject("ir"), arr(cs, "revisions"), rd.getAsJsonArray("revs"));
 				JsonElement got = shape(DistrictLand.of(eff, town, null, rd.get("revised").getAsBoolean()));
@@ -150,8 +166,8 @@ class DistrictLandCompat5Test {
 					bad.add(cs.get("key").getAsString() + " round " + k + ": " + got.toString().substring(0, Math.min(400, got.toString().length())));
 				}
 			}
-		}
-		assertTrue(n >= 1200, "effective IRs: " + n);
+		});
+		assertTrue(count[0] >= 1200, "effective IRs: " + count[0]);
 		assertEquals(List.of(), bad);
 	}
 }
