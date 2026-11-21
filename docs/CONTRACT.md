@@ -34469,6 +34469,30 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   lc3-undo failed there on the T4R group-pause hook answering `*` (a TEST hook bug, fixed a844026d), re-run with t4r-crash: 16/0, 98/0
   (`20261121-013956`).
 
+### Slice T4R-L as built (the final check of 9913d902: NOT SAFE, three P1s in legacy conversion and a P2; legacy-only round)
+
+- **W-time legacy refunds (P1-2, P1-3):** a pre-T4R group or road credit no longer reads journal evidence. `CrateSettle.legacyCells` lists
+  the positions its committed undo writes over the placed block (`{pos, block, live}`); `foundIn` values each just before the W's first
+  write by what stands (`legacyItems`: the placed block, not a player's PT block, at `SurvivalItems` cost, a double slab 2). The refund pays
+  min(the credit, what its W removes). `legacyFound` and the one-item-per-cell count are gone.
+- **Known loss (no clean case):** cells an old (main) road or group-road job restored before the upgrade are not refunded. Main's job kept
+  no per-cell receipt (its cursor is memory only) and paid its credit only after its last write, so nothing on disk tells such a cell
+  from one a player mined to the same before. W-only accounting never pays more than was removed; it can lose that prefix (only a world
+  saved mid-way through such a job). A credit the old job already paid is skipped by its key. No in-game row can build that world (a job of this build leaves its W's found receipt in the chunks); T4R-legacyroad-partial stays a conservation regression row and `T4RLegacyValueTest` carries the rule.
+- **Holds (P1-1):** `GroupTxn.ensure` drops the load-time holds on ATTACHED and REPLAYED as on NEW; a writer txn's exemption is every site
+  and member it names (`RemovalTxn.sitesOf`, read once per `asHolder`). A restore write a hold refuses (the guards report it,
+  `TxnServer.refusals`) is never `markRestored`: the W writes it itself and `restoreSite` throws (held, retried) while it is refused.
+- **P2:** a single removal plans its undo before its stash's confirmed save (`SiteJournal.planSites`/`planEntries`, submitted after K5),
+  so `fin` is durable before the decision. A group's cargo txn is prepared and persisted, its owed keys saved in the queue (confirmed),
+  then driven (`CargoTxn.prepare`/`drive`); a refused queue write aborts it; an aborted cargo txn's keys stay out of the result.
+- **Rows** (failing-first 3dcfdf49, red = 9913d902 + hooks): e2e T4RL-reattach, -premined, -refused, -fin, -cargo (step `t4rl-crash`);
+  units `T4RLegacyValueTest` (replaces T4RLegacyFoundTest), `T4RHoldScopeTest` (P1-1 exemption + cross-removal WRITING isolation),
+  `T4RRvuAliasTest`; the group model's fault is armed by B's W (past the prepare barrier) with an ordering invariant; the cargo-key
+  recovery filter names its own key.
+- **Gate:** red `gate-runs-T4RL/20261121-023820-t4r` + `gate-runs-T4RL-red/20261121-024853-t4r` (every T4RL row red); targeted e2e
+  mutants `gate-runs-T4RL-mutant/20261121-030440-t4r` (each row red under its own revert); change 64/64 (`20261121-031448-change`);
+  `--only` fk-crash 97/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 16/0, t4r-crash 98/0, t4rl-crash 44/0 (`20261121-053549-change`).
+
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
 - The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
