@@ -2113,7 +2113,8 @@ export async function registerTCC(steps, h) {
         const handed = res.handedDown ?? res.handed ?? {};
         const cleanHanded = clean.handedDown ?? clean.handed ?? {};
         check(ev.length === 1, `${tag} ${mode}: one REMOVAL_FINISHED after the recovery (${ev.length})`, ev);
-        check((res.kept ?? 0) === crash.changed.length && (clean.kept ?? 0) === twin.changed.length, `${tag} ${mode}: kept = the ${crash.changed.length} cells the player changed (recovered ${res.kept}, clean twin ${clean.kept})`, { res, clean });
+        // a construction site's undo drops a player's block in its cells (PLAYER_DROP, in its refund), it never keeps it: its kept is 0 by design
+        check((res.kept ?? -1) === (clean.kept ?? -2), `${tag} ${mode}: kept as the clean twin (recovered ${res.kept}, clean twin ${clean.kept}; the player's ${crash.changed.length} blocks dropped, not kept)`, { res, clean });
         check(res.restored === clean.restored && res.restored > 0, `${tag} ${mode}: restored as the clean twin (${res.restored} = ${clean.restored})`, { res, clean });
         if (mode === 'keep') {
           check(sum(handed) > 0 && sum(handed) === sum(cleanHanded) && Object.keys(handed).length === 1, `${tag} keep: a hand-down to the site on top, as the clean twin (${json(handed)} vs ${json(cleanHanded)})`, { res, clean });
