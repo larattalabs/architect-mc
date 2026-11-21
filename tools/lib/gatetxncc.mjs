@@ -2121,14 +2121,17 @@ export async function registerTCC(steps, h) {
         const ev = (await evs()).filter((e) => e.id === crash.site);
         const res = ev[0]?.result ?? {};
         const cMoved = G.plus(minus(await stockOf(crash.owner), c0.stock), minus(await groundOf(crash.site), c0.ground));
-        // (observed, recorded only: a leftover of T4b's W restore on recovery, on eca131b6 too) the player's blocks of a K6-recovered removal are
-        // not dropped as the clean twin drops them, and a cascaded instant site's attached blocks may pop as items
+        // (slice T4R-N, the final check of f7607b13's P1-2) conservation against the clean twin: a K6-recovered removal gives back the player's
+        // blocks as the clean twin does (dropped, in its refund) and drops nothing extra (a cascaded instant site's attached blocks never pop as
+        // items). Recorded red on f7607b13 + the T4R-N tests commit (sponge=2 missing; cascade: carpets, a door, a torch extra)
         rowLog(tag, `${mode} recovered: moved into stock and onto the ground ${json(cMoved)}; its event's refund ${json(res.refund)}; the clean twin moved ${json(tMoved)}`);
         check(G.same(minus(await stockOf(crash.owner), c0.stock), minus(await stockOf(twin.owner), t0.stock)), `${tag} ${mode}: the recovered removal credited what the clean twin credited`, { cMoved, tMoved });
+        check(G.same(cMoved, tMoved), `${tag} ${mode}: conservation: the recovered removal moved what the clean twin moved (stock + ground): ${json(cMoved)} = ${json(tMoved)}`, { cMoved, tMoved });
         rowLog(tag, `${mode} recovered event: ${json(ev).slice(0, 400)}`);
         const handed = res.handedDown ?? res.handed ?? {};
         const cleanHanded = clean.handedDown ?? clean.handed ?? {};
         check(ev.length === 1, `${tag} ${mode}: one REMOVAL_FINISHED after the recovery (${ev.length})`, ev);
+        check(G.same(res.refund ?? {}, clean.refund ?? {}), `${tag} ${mode}: the recovered event's refund is the clean twin's (${json(res.refund)} = ${json(clean.refund)})`, { res, clean });
         // a construction site's undo drops a player's block in its cells (PLAYER_DROP, in its refund), it never keeps it: its kept is 0 by design
         check((res.kept ?? -1) === (clean.kept ?? -2), `${tag} ${mode}: kept as the clean twin (recovered ${res.kept}, clean twin ${clean.kept}; the player's ${crash.changed.length} blocks dropped, not kept)`, { res, clean });
         check(res.restored === clean.restored && res.restored > 0, `${tag} ${mode}: restored as the clean twin (${res.restored} = ${clean.restored})`, { res, clean });

@@ -81,6 +81,11 @@ public final class RemovalAreas {
 
 	/** Every in-flight removal's area that holds or writes outside this build's admission: the legacy ones, the durable stashes, the begun groups. */
 	static List<Area> heldAreas() {
+		return heldAreas(dev.larattalabs.architect.txn.TxnServer.core());
+	}
+
+	/** (TEST seam, slice T4R-N) {@link #heldAreas()} against {@code core} (the txn core whose loaded holds count). */
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.TxnCore core) {
 		List<Area> out = legacyAreas();
 		for (var e : CrateSettle.durableJson().entrySet()) {
 			com.google.gson.JsonObject st = e.getValue().getAsJsonObject();
@@ -114,7 +119,12 @@ public final class RemovalAreas {
 	 * there), or null. Server thread.
 	 */
 	public static @Nullable String overlapWhy(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
-		Area a = first(heldAreas(), dim, boxes, self);
+		return overlapWhy(dim, boxes, self, dev.larattalabs.architect.txn.TxnServer.core());
+	}
+
+	/** (TEST seam, slice T4R-N) {@link #overlapWhy(String, Collection, Set)} against {@code core}. */
+	static @Nullable String overlapWhy(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, dev.larattalabs.architect.txn.TxnCore core) {
+		Area a = first(heldAreas(core), dim, boxes, self);
 		return a == null ? null : a.who() + " is still in progress over " + Anchors.str(a.box());
 	}
 
