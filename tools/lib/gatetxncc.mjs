@@ -1964,6 +1964,16 @@ export async function registerTCC(steps, h) {
           check(sum(after.placed) === 0, `${tag}: the second member's restore written by the reattached txn: no paid block stands (${json(after.placed)})`, after);
           check(fin.length >= 1 && (fin[0].result?.restored ?? 0) > 0, `${tag}: REMOVAL_FINISHED with the restore count captured before the commit (restored ${fin[0]?.result?.restored})`, fin);
           judgeT4(tag, { tag, removal: m, txn: await txn() }, before, after);
+          // no stale hold once it is done: a player breaks the ground block at each member's box corner (the base kept the load-time holds)
+          const stale = [];
+          for (const site of g.sites) {
+            const b = await boxOf(site);
+            const cell = [b[0], b[1] - 1, b[2]];
+            const br = await call('dev.pt.breaks', { at: [cell], placer: 'T4RLGround' }, 60_000).catch((e) => ({ error: String(e) }));
+            if ((br.broken ?? 0) !== 1) stale.push({ site, cell, br });
+          }
+          await cmd(`/kill @e[type=minecraft:item,x=${W.at[0]},y=${W.at[1]},z=${W.at[2]},distance=..48]`).catch(() => null);
+          check(stale.length === 0, `${tag}: no member's box is held once the removal is done (${json(stale)})`, stale);
         } else {
           await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
         }
