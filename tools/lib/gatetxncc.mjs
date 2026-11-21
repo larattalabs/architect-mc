@@ -2040,7 +2040,7 @@ export async function registerTCC(steps, h) {
           // the coexistence rule: a new standalone removal over the pre-T4R removal's area is refused while it runs, nothing changed
           const solo = await later(`remove ${b.rid} ${owner} noforce keep`, 60_000).catch((e) => ({ error: String(e?.message ?? e) }));
           rowLog(tag, `a new standalone removal of ${b.rid} while the pre-T4R removal of ${a.group} runs: ${json(solo).slice(0, 300)}`);
-          check(/Not yet/.test(json(solo)) && !!(await roadState(b.rid).catch(() => null)), `${tag}: a new removal over a pre-T4R removal's area is refused while it runs (SITE_BUSY, ${b.rid} stands): ${json(solo).slice(0, 200)}`, solo);
+          check(/Not ?yet/.test(json(solo)) && !!(await roadState(b.rid).catch(() => null)), `${tag}: a new removal over a pre-T4R removal's area is refused while it runs (SITE_BUSY, ${b.rid} stands): ${json(solo).slice(0, 200)}`, solo);
           const rb = api(`sgremove ${b.group} - ${owner} keep`).catch((e) => ({ error: String(e) }));
           await wait(15000);
           const t1 = await txn();
@@ -2121,7 +2121,9 @@ export async function registerTCC(steps, h) {
         const ev = (await evs()).filter((e) => e.id === crash.site);
         const res = ev[0]?.result ?? {};
         const cMoved = G.plus(minus(await stockOf(crash.owner), c0.stock), minus(await groundOf(crash.site), c0.ground));
-        rowLog(tag, `${mode} recovered: moved into stock and onto the ground ${json(cMoved)}; its event's refund ${json(res.refund)}`);
+        // (observed, recorded only: a leftover of T4b's W restore on recovery, on eca131b6 too) the player's blocks of a K6-recovered removal are
+        // not dropped as the clean twin drops them, and a cascaded instant site's attached blocks may pop as items
+        rowLog(tag, `${mode} recovered: moved into stock and onto the ground ${json(cMoved)}; its event's refund ${json(res.refund)}; the clean twin moved ${json(tMoved)}`);
         check(G.same(minus(await stockOf(crash.owner), c0.stock), minus(await stockOf(twin.owner), t0.stock)), `${tag} ${mode}: the recovered removal credited what the clean twin credited`, { cMoved, tMoved });
         rowLog(tag, `${mode} recovered event: ${json(ev).slice(0, 400)}`);
         const handed = res.handedDown ?? res.handed ?? {};
