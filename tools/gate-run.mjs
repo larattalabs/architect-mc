@@ -25,6 +25,12 @@
 //                                         a sharded run names its ports). 8892-8895 are never a shard's (old-version clients, eval).
 //   --run-dir DIR          GATE_RUN_DIR   shard 1's run worktree (../architect-mc-gate-run); shard k is <DIR>-s<k>
 //   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
+//   --min-free-gib N       GATE_MIN_FREE_GIB  refuse to start below N GiB free on the run dirs' volume (default 150; 0 turns it off;
+//                                         docs/GATES.md "Disk space"). Many run dirs and world copies filled the disk on 2026-11-21
+//   --keep-run-dirs        GATE_KEEP_RUN_DIRS=1  keep the run worktrees after a PASS. By default a PASS removes this run's own run
+//                                         worktrees and its frozen source (git worktree remove) and only empties the world copies
+//                                         (mod/run/saves) of the reused default ones (any run dir beside the main checkout: cfg.runDir and its shards, the nightly's); a run that
+//                                         does not pass keeps everything for inspection
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
 //   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 6): at most N runs at once, across worktrees. A run
@@ -135,7 +141,7 @@ process.on('SIGUSR2', () => {
     // before the scheduler started: the workers see `draining` when they start
   }
 });
-const VALUED = ['--own', '--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+const VALUED = ['--own', '--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--min-free-gib', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -1432,6 +1438,7 @@ function takeLock() {
   }
   die(`could not take ${LOCK}`);
 }
+spaceGuard(); // before the slot: a refused run holds nothing
 // the slot (one per run) records this run's shard count and ports; an auto run decides both under the slot mutex
 await acquireSlot(async () => {
   if (decideShards) await decideShards();
@@ -1450,6 +1457,45 @@ const releaseLock = () => {
     // gone
   }
 };
+
+// ------------------------------------------------------------------ disk space (docs/GATES.md "Disk space")
+
+/** Refuses to start a run below --min-free-gib (GATE_MIN_FREE_GIB, default 150) GiB free on the run dirs' volume. */
+function spaceGuard() {
+  const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
+  if (!(min > 0)) return;
+  let probe = path.dirname(RUN1);
+  while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
+  const st = fs.statfsSync(probe);
+  const free = (st.bavail * st.bsize) / 2 ** 30;
+  if (free < min) die(`only ${free.toFixed(0)} GiB free on ${probe}'s volume, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
+  console.log(`disk: ${free.toFixed(0)} GiB free (guard ${min})`);
+}
+
+/** After a PASS: removes this run's own run worktrees and frozen source, and empties the world copies of the reused default run dirs
+ * (cfg.runDir and its -s<k>/-o<j> shards, the nightly's). A run that does not pass keeps everything. --keep-run-dirs keeps all. */
+function cleanupRunDirs(verdict) {
+  if (flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1') return log('cleanup: --keep-run-dirs, run dirs kept');
+  if (verdict !== 'PASS') return log(`cleanup: ${verdict}, run dirs kept for inspection; remove them (git worktree remove) once done`);
+  const defaults = [path.resolve(SRC, cfg.runDir), path.resolve(MAIN, cfg.runDir)];
+  // a run dir beside the main checkout (Minecraft/: the default, the nightly's, the seed's) is reused: only its worlds go
+  const isDefault = (d) => path.dirname(d) === path.dirname(MAIN) || defaults.some((b) => d === b || new RegExp(`^${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(s|o)\\d+$`).test(d));
+  const rm = (d) => {
+    const r = spawnSync('git', ['-C', SRC, 'worktree', 'remove', d], { encoding: 'utf8' });
+    if (r.status === 0) return true;
+    log(`cleanup: git worktree remove ${d} failed (${(r.stderr ?? '').trim().split('\n')[0]}): kept`);
+    return false;
+  };
+  const dirs = [...shards.map((s) => s.RUN), ...(FROZEN && DRV !== SRC ? [DRV_DIR] : [])];
+  for (const d of dirs) {
+    if (!fs.existsSync(d)) continue;
+    if (isDefault(d) || !rm(d)) {
+      const saves = path.join(d, 'mod', 'run', 'saves');
+      if (fs.existsSync(saves)) for (const w of fs.readdirSync(saves)) fs.rmSync(path.join(saves, w), { recursive: true, force: true });
+      log(`cleanup: ${d} kept, its world copies removed`);
+    } else log(`cleanup: removed ${d}`);
+  }
+}
 
 // ------------------------------------------------------------------ the run dir, summary, log
 
@@ -2498,4 +2544,9 @@ if (draining) {
 finishing = true;
 for (const sh of shards) await stopClient(sh, 'end of chain');
 await finish(stopped || draining ? 'stopped' : 'done');
+try {
+  cleanupRunDirs(summary.verdict);
+} catch (e) {
+  log(`cleanup failed: ${e?.message ?? e}`);
+}
 process.exit(summary.verdict === 'PASS' ? 0 : 1);
