@@ -51,18 +51,29 @@ export function districtOfId(id, ids, pre = '') {
   return best;
 }
 /**
- * (RTE4) Whether the untagged readers would give any of a districts plan's own roads (`owned`: [{id, district}], each road and the
- * district whose emission laid it) another district than its own: architect_mc:land's longest district id (`b_street_w`, b's street road,
- * beside district b_street), or streetRuns's street rule (the part before `street_`: a lone district b_street's `b_street_street_w` reads
- * as b's). Then the districts pass records every district's roads (DISTRICT_EXT); a plan whose roads read right stays untagged.
+ * (RTE4) Whether the untagged readers would give any of a districts plan's own roads (`owned`: [{id, district, x?}], each road, the
+ * district whose emission laid it and (RTE5) the road itself as written) another district than its own: architect_mc:land's longest
+ * district id (`b_street_w`, b's street road, beside district b_street), or streetRuns's reading: (RTE5) the road's
+ * `architect_mc:street.district` flag when it has one (plan_v0 stamps its zones' streets before the IR is read), else the street rule
+ * (the part before `street_`: a lone district b_street's `b_street_street_w` reads as b's). Then every district's roads are recorded
+ * (DISTRICT_EXT); a plan whose roads read right stays untagged. (RTE5) `land: false` for an IR land never reads (plan_v0's: no
+ * spec.districts, districtLand is null).
  */
-export function untaggedMisreads(owned, ids) {
-  for (const { id, district } of owned) {
-    if (districtOfId(id, ids) !== district) return true;
+export function untaggedMisreads(owned, ids, { land = true } = {}) {
+  for (const { id, district, x } of owned) {
+    if (land && districtOfId(id, ids) !== district) return true;
+    const flag = x?.ext?.['architect_mc:street']?.district;
+    if (typeof flag === 'string') { if (flag !== district) return true; continue; }
     // (grow.mjs streetRuns on an untagged, unflagged road: a street id not a route's reads its district from the part before `street_`)
     if (isStreetId(id) && !/^(route_)?st_/.test(id)) { const m = /^(.*?)_?street_[a-z0-9_]*$/.exec(id); if ((m && m[1] ? m[1] : null) !== district) return true; }
   }
   return false;
+}
+/** (RTE5) Record each owned road's district (DISTRICT_EXT) when untaggedMisreads says an untagged reader would misread one. */
+export function tagMisreadRoads(owned, ids, opts) {
+  if (!untaggedMisreads(owned, ids, opts)) return false;
+  for (const o of owned) o.x.ext = { ...(o.x.ext ?? {}), [DISTRICT_EXT]: { id: o.district } };
+  return true;
 }
 /**
  * (RTE4) A road's district: the one its DISTRICT_EXT tag names (a string id; one `ids` lacks: none), else, untagged (every plan without
