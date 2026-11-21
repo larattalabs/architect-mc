@@ -70,7 +70,7 @@ class StockLedgerPendingJ2Test {
 		int save = sites.indexOf("Stockpiles.saveWithWorldConfirmed(server);", hold);
 		int refused = sites.indexOf("stashes.keySet().forEach(CrateSettle::forgetDurable)", save);
 		int kill = sites.indexOf("WorldJournal.kill(\"FKC1\")", hold);
-		int commit = sites.indexOf("SiteJournal.undo(level, ids, group)", hold);
+		int commit = sites.indexOf("SiteJournal.submitUndo(plan)", hold); // (slice T4R-L) planned before the save, submitted after it
 		assertTrue(pile > 0 && hold > pile && save > hold && refused > save && kill > refused && commit > kill, "held, saved (a refusal undoes the hold), then committed");
 		String fills = Files.readString(Path.of(site + "Fills.java"));
 		int at = fills.indexOf("public static void atStart(MinecraftServer srv) {");
