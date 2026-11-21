@@ -130,6 +130,42 @@ test('(TI2) a value-taking node option is parsed before the driver: a preload ar
   assert.deepEqual(SI.computedStepRoots({ shell: 'node --import tools/hook-${H}.mjs tools/a.mjs' }), ['tools/hook-${H}.mjs'], 'a computed preload is a computed root too');
 });
 
+// (P3S, v0.90.0 fix-check P3 5) every node option that takes its value as the next word (probed on node 24: `node <opt> <val> script`
+// runs script), not just the preloads: `node --inspect-port 9237 tools/gate${X}.mjs` gave [] (9237 was taken for the driver).
+test('(P3S) every separate-value node option is skipped with its value; the = form and optional-value options still work', () => {
+  const X = 'tools/gate${X}.mjs';
+  const sep = [
+    ['--inspect-port', '9237'], ['--debug-port', '9237'], ['--require', 'tools/b.cjs'], ['-r', 'tools/b.cjs'], ['--import', 'tools/b.mjs'],
+    ['--loader', 'tools/l.mjs'], ['--experimental-loader', 'tools/l.mjs'], ['--conditions', 'dev'], ['-C', 'dev'], ['--env-file', '.env'],
+    ['--env-file-if-exists', '.env'], ['--title', 'x'], ['--disable-warning', 'DEP0040'], ['--diagnostic-dir', '/tmp'], ['--report-dir', '/tmp'],
+    ['--report-filename', 'r.json'], ['--report-signal', 'SIGUSR2'], ['--redirect-warnings', 'w.txt'], ['--test-concurrency', '2'],
+    ['--test-isolation', 'none'], ['--test-shard', '1/2'], ['--test-timeout', '100'], ['--test-global-setup', 'g.mjs'],
+    ['--test-coverage-include', 'x'], ['--test-coverage-exclude', 'x'], ['--test-coverage-lines', '1'], ['--test-coverage-branches', '1'],
+    ['--test-coverage-functions', '1'], ['--test-reporter', 'spec'], ['--test-reporter-destination', 'stdout'], ['--test-name-pattern', 'x'],
+    ['--test-skip-pattern', 'x'], ['--watch-path', '.'], ['--watch-kill-signal', 'SIGTERM'], ['--secure-heap', '0'], ['--secure-heap-min', '2'],
+    ['--icu-data-dir', '/tmp'], ['--openssl-config', 'o.cnf'], ['--dns-result-order', 'ipv4first'], ['--unhandled-rejections', 'strict'],
+    ['--heapsnapshot-signal', 'SIGUSR2'], ['--heapsnapshot-near-heap-limit', '1'], ['--cpu-prof-dir', '/tmp'], ['--cpu-prof-name', 'x'],
+    ['--cpu-prof-interval', '100'], ['--heap-prof-dir', '/tmp'], ['--heap-prof-name', 'x'], ['--heap-prof-interval', '100'],
+    ['--localstorage-file', 'x'], ['--max-http-header-size', '9000'], ['--trace-event-categories', 'v8'], ['--trace-event-file-pattern', 'x'],
+    ['--use-largepages', 'off'], ['--tls-cipher-list', 'x'], ['--tls-keylog', 'k'], ['--disable-proto', 'delete'],
+    ['--network-family-autoselection-attempt-timeout', '250'], ['--max-old-space-size-percentage', '50'], ['--v8-pool-size', '4'],
+    ['--trace-require-module', 'all'], ['--allow-fs-read', '.'], ['--allow-fs-write', '.'], ['--snapshot-blob', 'b'],
+    ['--build-snapshot-config', 'c.json'], ['--experimental-sea-config', 'c.json'],
+  ];
+  for (const [o, v] of sep) {
+    assert.deepEqual(SI.computedStepRoots({ shell: `node ${o} ${v} ${X}` }), [X], `${o} ${v}`);
+    if (o.startsWith('--')) assert.deepEqual(SI.computedStepRoots({ shell: `node ${o}=${v} ${X}` }), [X], `${o}=${v}`);
+  }
+  assert.deepEqual(SI.computedStepRoots({ shell: `node --inspect-port 9237 --stack-size=2000 --max-old-space-size=4096 ${X} --x 1` }), [X], 'chained, with = forms');
+  // V8 flags only take `=` (node rejects `--stack-size 2000 script`), and --inspect/--inspect-brk/--inspect-wait take an optional `=` value:
+  // the next word is the script
+  assert.deepEqual(SI.computedStepRoots({ shell: `node --inspect ${X}` }), [X]);
+  assert.deepEqual(SI.computedStepRoots({ shell: `node --inspect-brk=9237 ${X}` }), [X]);
+  assert.deepEqual(SI.computedStepRoots({ shell: `node --cpu-prof --cpu-prof-dir /tmp ${X}` }), [X], 'a boolean flag, then a separate-value one');
+  // a value option's value is never the driver, even a computed-looking one
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --test-reporter-destination $OUT tools/a.mjs' }), []);
+});
+
 // (TI2, v0.90.0 review P3) a traced directory listing needs the directory rule (an inputs.dir of it or a parent), as the static check.
 test('(TI2) a traced directory listing goes red until the directory is declared; single files under it never cover it', () => {
   const t = (body, trace) => tracedTestInputGaps(`test {\n${body}\n}\n`, new Map(trace), TI2_FILES);
