@@ -473,6 +473,26 @@ public final class CrateSettle {
 		return out;
 	}
 
+	/**
+	 * (slice T4R-N) Whether a cascaded member is written by its base's W: unpaid (no construction: nothing of it is refunded) and with no stash
+	 * of its own (durable or on its pending record). A paid member settles in its own removal txn, whose W records what stands before it writes
+	 * (written first by the base's W, it would find nothing and pay nothing). Pure.
+	 */
+	static boolean unpaidCascade(boolean construction, boolean durableStash, boolean pendingSettle) {
+		return !construction && !durableStash && !pendingSettle;
+	}
+
+	/** (slice T4R-N) {@link #unpaidCascade} for {@code id} (a pending site or road) with entries undone in {@code group}. Server thread. */
+	static boolean cascadeWritable(String id, String group) {
+		Site s = Sites.pendingRecord(id);
+		Infra inf = s == null ? Infras.pending(id) : null;
+		if (s == null && inf == null || !undoneExists(id, group)) {
+			return false;
+		}
+		Site.Pending pe = s == null ? null : Sites.pendingOf(id);
+		return unpaidCascade(s != null ? s.construction() != null : inf.construction() != null, durable(id) != null, pe != null && pe.settle() != null);
+	}
+
 	static void markLiveDrops(String site, String group) {
 		LIVE_DROPS.add(site + "|" + group);
 	}
@@ -574,8 +594,8 @@ public final class CrateSettle {
 		if (cascade != null) {
 			for (boolean infra : new boolean[] {true, false}) { // the live order: its roads and cell sites, then its sites (each top first)
 				for (String c : cascade) {
-					if ((infra ? Infras.pending(c) != null : Sites.pendingRecord(c) != null) && undoneExists(c, group)) {
-						casc.add(c);
+					if ((infra ? Infras.pending(c) != null : Sites.pendingRecord(c) != null) && cascadeWritable(c, group)) {
+						casc.add(c); // unpaid only: a paid member's own W writes it (after recording what stands)
 					}
 				}
 			}
@@ -1247,17 +1267,35 @@ public final class CrateSettle {
 		JsonObject fin = null;
 		if (group != null && undoneExists(site, group)) {
 			try {
-				dev.larattalabs.architect.txn.Effect.Builder w = dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, chunksOf(level, site, group,
-					cells), cells);
+				List<long[]> wChunks = new java.util.ArrayList<>(chunksOf(level, site, group, cells));
+				com.google.gson.JsonArray mine = new com.google.gson.JsonArray();
+				if (!stash.has("road") && stash.get("fin") instanceof JsonObject f1 && f1.get("cascaded") instanceof com.google.gson.JsonArray ca) {
+					// (slice T4R-N, P1-2) its cascade (top first): its unpaid members written first by this W, as the live removal writes them; their
+					// chunks are the W's too (probed and receipted with its own: a crash that saved only some of them writes them again)
+					java.util.Set<Long> seen = new java.util.HashSet<>();
+					wChunks.forEach(c -> seen.add(pack((int) c[0], (int) c[1])));
+					for (var x : ca) {
+						String c = x.getAsString();
+						if (cascadeWritable(c, group)) {
+							mine.add(c);
+							for (long[] ch : chunksOf(level, c, group)) {
+								if (seen.add(pack((int) ch[0], (int) ch[1]))) {
+									wChunks.add(ch);
+								}
+							}
+						}
+					}
+				}
+				dev.larattalabs.architect.txn.Effect.Builder w = dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, wChunks, cells);
 				if (!stash.has("road")) {
 					// (slice T4R-N, the final check of f7607b13's P1-2) a single site's W written at a restart (K6) does what its live removal does
-					// after its write: what the write pops cleared, the player's blocks given back at the site's drop point
+					// around its write: what the writes pop cleared, the player's blocks given back at the site's drop point, its unpaid cascade first
 					w.data("clear", new com.google.gson.JsonPrimitive(true));
 					if (stash.get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
 						w.data("player", pl).data("dropAt", posJsonOf(posOf(stash)));
 					}
-					if (stash.get("fin") instanceof JsonObject f1 && f1.get("cascaded") instanceof com.google.gson.JsonArray ca && !ca.isEmpty()) {
-						w.data("cascade", ca); // its cascade (top first): written first, as the live removal writes it
+					if (!mine.isEmpty()) {
+						w.data("cascade", mine);
 					}
 				}
 				first.add(w);

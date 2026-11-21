@@ -34555,16 +34555,18 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   (`player`: pos, block, items; `Refunds.Tally.playerCells`). Its W restore written at a restart (`clear`, `player`, `dropAt`, `cascade` in
   the W's data; never a group member's) clears what its writes pop (`Sites.Drops`, as `afterRestore`), gives back each player's block that
   stood before the write and is gone after it at the site's drop point (receipt `pdrop:` in its chunk, same tick; added to its
-  REMOVAL_FINISHED refund), and writes its cascade first (roads, then sites, top first, as live). The start check leaves a cascaded member of
-  such a removal pending for it (no RECOVER of a site whose base the txn then restores). A live removal's own drops are never repeated.
+  REMOVAL_FINISHED refund), and writes its unpaid cascade first (roads, then sites, top first, as live; their chunks are the W's too, probed
+  and receipted with its own). The start check leaves such an unpaid cascaded member pending for it (no RECOVER of a site whose base the txn
+  then restores). A paid cascaded member (construction, or its own stash) keeps its own txn. A live removal's own drops are never repeated.
 - **P2 phantom cargo key.** `CargoTxn.fate`/`aborted` count an open txn's decision only when `TxnCore.acknowledged()` (no refused or
   in-doubt write since the last acknowledged one); `resolveCargo` leaves the key unresolved until then.
 - **P2 legacy KEEP wait.** A new group's wait on a pre-T4R removal's area counts toward `MAX_WAIT` (`legacyWaiting`), then ends stopped
   ("Not yet: ... (waited 10 minutes)", `RemovalStopCause.OTHER`), nothing planned. The coexistence rule itself is unchanged.
-- **Rows:** failing-first e14452c3 (units `T4RNRestartHoldTest`, `T4RNCargoUnackTest`, `T4RNLegacyKeepWaitTest`, `T4RNK6PlayerBlocksTest`;
-  `T4RM-fin` now judges conservation and the event's refund against the clean twin), fixes 59e35b25. Red: units 4/4 (`T4RNCargoUnackTest`'s
+- **Rows:** failing-first e14452c3 (units `T4RNRestartHoldTest`, `T4RNCargoUnackTest`, `T4RNLegacyKeepWaitTest`, `T4RNK6PlayerBlocksTest` (its cascade predicate case added with the fix);
+  `T4RM-fin` now judges conservation and the event's refund against the clean twin), fixes 59e35b25 and the unpaid-cascade follow-up. Red: units 4/4 (`T4RNCargoUnackTest`'s
   acknowledged case green), t4rm-crash 4 FAIL (`gate-runs-T4RN-red/20261121-181248-change`); green: t4rm-crash 84/0
-  (`gate-runs-T4RN-green/20261121-182023-change`).
+  (`gate-runs-T4RN-green/20261121-182023-change`, then again after the unpaid-cascade follow-up).
+- **Leftover (older than this round):** at K6 a paid cascaded member's own W and its base's W may run in either order at the start.
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 

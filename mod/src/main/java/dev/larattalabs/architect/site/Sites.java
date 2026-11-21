@@ -3570,7 +3570,7 @@ public final class Sites {
 				continue;
 			}
 			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
-			if (stashOf == null && group != null && rolled.contains(gone.id() + "|" + group) && !jobSites.contains(gone.id())) {
+			if (stashOf == null && gone.construction() == null && group != null && rolled.contains(gone.id() + "|" + group) && !jobSites.contains(gone.id())) {
 				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
 				continue;
 			}
@@ -3706,7 +3706,7 @@ public final class Sites {
 				report(gone.id(), false, "removed " + gone.id() + ": its group's removal owns it; its removal.group txn restores and settles it");
 				continue; // (slice T4R, R1)
 			}
-			if (rolled.contains(gone.id() + "|" + group) && (early == null || early.get(gone.id()) == null)) {
+			if (rolled.contains(gone.id() + "|" + group) && gone.construction() == null && (early == null || early.get(gone.id()) == null)) {
 				// (slice T4R-N, P1-2) cascaded by a committed removal with a durable stash: its txn's W writes it first; settled at a later start
 				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
 				continue;
