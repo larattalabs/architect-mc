@@ -57,6 +57,8 @@ public final class TxnServer {
 	/** (TEST, dev.txn.failBarrier, T2b txn-crash-crate) barriers let through before the refused ones, then the refused ones. */
 	static final AtomicInteger BARRIER_SKIP = new AtomicInteger();
 	static final AtomicInteger BARRIER_FAIL = new AtomicInteger();
+	/** (TEST, slice T4R-M hooks) dev.txn.failBarrier's {@code kind}: only that kind's drives count and refuse (null: every barrier). */
+	static final java.util.concurrent.atomic.AtomicReference<String> BARRIER_KIND = new java.util.concurrent.atomic.AtomicReference<>();
 
 	private static TxnCore emptyCore(@Nullable String why) {
 		TxnCore c = new TxnCore(new GameEnv());
@@ -551,7 +553,8 @@ public final class TxnServer {
 			if (!ticking) {
 				return Barrier.refused("deferred to the first tick (the stores load in SERVER_STARTED)");
 			}
-			if (BARRIER_FAIL.get() > 0 && BARRIER_SKIP.getAndUpdate(n -> Math.max(0, n - 1)) == 0 && BARRIER_FAIL.getAndDecrement() > 0) {
+			String only = BARRIER_KIND.get();
+			if ((only == null || only.equals(core.drivingKind())) && BARRIER_FAIL.get() > 0 && BARRIER_SKIP.getAndUpdate(n -> Math.max(0, n - 1)) == 0 && BARRIER_FAIL.getAndDecrement() > 0) {
 				return Barrier.refused("TEST dev.txn.failBarrier"); // (TEST) a save not confirmed (IN_DOUBT as the txn sees it: not OK)
 			}
 			DurableBarrier.Result r;

@@ -37,6 +37,7 @@ public final class TxnDev {
 				yield o;
 			}
 			case "failBarrier" -> { // (TEST, T2b txn-crash-crate) the next n barriers refused, after skip barriers let through
+				TxnServer.BARRIER_KIND.set(req.has("kind") && !req.get("kind").isJsonNull() ? req.get("kind").getAsString() : null); // (slice T4R-M hooks)
 				TxnServer.BARRIER_SKIP.set(req.has("skip") ? req.get("skip").getAsInt() : 0);
 				TxnServer.BARRIER_FAIL.set(req.has("n") ? req.get("n").getAsInt() : 1);
 				JsonObject o = new JsonObject();

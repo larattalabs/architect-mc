@@ -32,6 +32,7 @@
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery
+//     t4rmcargo (t4rm-cargo)           slice T4R-M: a group removal never goes past a held cargo step (a region target's player chest)
 //     txncrashcrate (txn-crash-crate)  slice T2b part 2b: a removed crate-fed site's crate.settle halted at K5/K6/R4 and every TX point, single and
 //                                      group, bare and +save; CXD's 4 P1s and the must-fix rows (tools/lib/gatetxncc.mjs)
 //     txncrashadopt (txn-crash-adopt) slice T3a: adoption's failing-first cases (overflow, road chunks, retagged, crate held), red until T3b
@@ -1117,6 +1118,13 @@ steps.look = async () => {
 {
   const { registerDRS } = await import('./lib/gatedrs.mjs');
   await registerDRS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
+}
+
+// ------------------------------------------------------------------ (slice T4R-M) t4rmcargo: tools/lib/gatet4rm.mjs
+
+{
+  const { registerT4RM } = await import('./lib/gatet4rm.mjs');
+  await registerT4RM(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
 }
 
 // ------------------------------------------------------------------ (slice LCAP) lcapsurvival: tools/lib/gatelcap.mjs

@@ -1768,9 +1768,17 @@ public final class Groups {
 
 	/** (slice T4R-L) {@link Removal#cargoOwed} without the keys of a cargo txn known aborted (a crash before its drive: nothing owed). */
 	static List<String> cargoOwed(Removal r) {
+		if (r.cargoOwed.stream().noneMatch(k -> k.startsWith("cargo:tx-"))) {
+			return new ArrayList<>(r.cargoOwed); // no txn's key: nothing to ask the txn core
+		}
+		return cargoOwed(r, dev.larattalabs.architect.txn.TxnServer.core());
+	}
+
+	/** (TEST seam, slice T4R-M hooks) {@link #cargoOwed(Removal)} against {@code core}. */
+	static List<String> cargoOwed(Removal r, dev.larattalabs.architect.txn.TxnCore core) {
 		List<String> out = new ArrayList<>();
 		for (String k : r.cargoOwed) {
-			if (!dev.larattalabs.architect.txn.CargoTxn.aborted(k)) {
+			if (!dev.larattalabs.architect.txn.CargoTxn.aborted(k, core)) {
 				out.add(k);
 			}
 		}

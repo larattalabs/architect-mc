@@ -433,6 +433,23 @@ public final class TxnCore {
 
 	/** Drives one entry as far as it can go now. */
 	public Status drive(TxnEntry t) {
+		String was = drivingKind;
+		drivingKind = t.kind;
+		try {
+			return drive0(t);
+		} finally {
+			drivingKind = was;
+		}
+	}
+
+	/** (TEST seam, slice T4R-M hooks: dev.txn.failBarrier {kind}) The kind of the txn a drive is driving now, or null. */
+	private @Nullable String drivingKind;
+
+	public @Nullable String drivingKind() {
+		return drivingKind;
+	}
+
+	private Status drive0(TxnEntry t) {
 		TxnKind k = kinds.get(t.kind);
 		if (k == null) {
 			return Status.QUARANTINED;

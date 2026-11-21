@@ -2124,6 +2124,409 @@ export async function registerTCC(steps, h) {
         }
       }
     }
+    // ================================================================ (slice T4R-M) rows for the final check of eca131b6 (NOT SAFE; Noah's design:
+    // no old-world conversion). A removal a pre-T4R build left in flight finishes on main's path (main's accounting, no T4R txn of any kind);
+    // only removals started after the upgrade use T4R's txns, and a new removal never takes a hold over an in-flight removal's area.
+    // Recorded red on eca131b6 + the T4R-M hooks commit; green on the T4R-M fixes. GATE_TCC_PARTS=T4RM (step t4rm-crash).
+    /** Main's (v0.89.0) Groups.Removal.toJson keys: anything else this build writes is stripped from a fabricated main entry. */
+    const MAIN_REMOVAL_KEYS = ['group', 'stage', 'sites', 'requester', 'force', 'covered', 'started', 'current', 'waited', 'refund', 'planned',
+      'plannedSites', 'undo', 'undoSites', 'handed', 'restoredCells', 'keptCells', 'dec', 'credit', 'stalled'];
+    /** Main's (v0.89.0) RestoreJob.toJson keys. */
+    const MAIN_JOB_KEYS = ['kind', 'siteId', 'batchId', 'itemKey', 'group', 'phase', 'why', 'requeue', 'dropsBefore', 'handed', 'credit', 'type'];
+    const qFile = () => path.join(W.dir, 'architect-queue.json');
+    const sFile = () => path.join(W.dir, 'architect', 'stockpiles.json');
+    const tFile = () => path.join(W.dir, 'architect', 'txn.json');
+    /**
+     * The halted world's group removals of {@code groups} turned main-shaped offline: each member's pile stash a main decCredit, every field
+     * main's serializer lacks stripped (the txn marker included), and DR-S's pending credit for each target key in its pile's ledger (main's
+     * holdPending, saved before the commit). Returns the credits made, by key.
+     */
+    const mainGroupQueue = (owner, groups) => {
+      const q = JSON.parse(fs.readFileSync(qFile(), 'utf8'));
+      const root = JSON.parse(fs.readFileSync(sFile(), 'utf8'));
+      const credits = {};
+      for (const r of q.removals ?? []) {
+        if (!groups.includes(r.group)) continue;
+        for (const [id, st] of Object.entries(r.settle ?? {})) {
+          if (!st?.pileKey) continue;
+          r.credit = r.credit ?? {};
+          r.credit[id] = { owner, key: st.pileKey, items: st.refund ?? {}, at: st.pos ?? 0 };
+          credits[st.pileKey] = { items: st.refund ?? {}, at: st.pos ?? 0 };
+        }
+        for (const k2 of Object.keys(r)) if (!MAIN_REMOVAL_KEYS.includes(k2)) delete r[k2];
+      }
+      for (const po of root.stockpiles ?? []) {
+        if (po.owner !== owner) continue;
+        po.ledger = po.ledger ?? {};
+        po.ledger.pendingCredit = { ...(po.ledger.pendingCredit ?? {}), ...credits };
+      }
+      fs.writeFileSync(qFile(), JSON.stringify(q, null, 2));
+      fs.writeFileSync(sFile(), JSON.stringify(root, null, 2));
+      return credits;
+    };
+    /** The txn file's next id (null: none). */
+    const txnNext = () => { try { return JSON.parse(fs.readFileSync(tFile(), 'utf8')).next ?? 0; } catch { return 0; } };
+    /** Every txn (open, retiring, done) begun since id {@code next0}, as {id, kind, key}. */
+    const txnsSince = (next0) => {
+      let t = {};
+      try { t = JSON.parse(fs.readFileSync(tFile(), 'utf8')); } catch { return []; }
+      return [...(t.open ?? []), ...(t.retiring ?? []), ...(t.done ?? [])].filter((e) => Number(String(e.id).replace(/^tx-/, '')) >= next0)
+        .map((e) => ({ id: e.id, kind: e.kind ?? null, key: e.key ?? null }));
+    };
+    /** No removal txn (removal.group, removal.road, removal.site, crate.settle of a removal) began since {@code next0}. */
+    const noRemovalTxn = (tag, next0) => {
+      const all = txnsSince(next0);
+      const bad = all.filter((e) => /^removal\./.test(e.kind ?? '') || /^(group:|pile-refund:|crate-refund:|settle:|crate-settle)/.test(e.key ?? ''));
+      rowLog(tag, `txns since tx-${next0}: ${json(all)}`);
+      check(bad.length === 0, `${tag}: the pre-T4R removal ran on main's path: no removal txn began (${json(bad)})`, all);
+    };
+    const minus = (a, b) => Object.fromEntries(Object.entries(a ?? {}).map(([k2, v]) => [k2, v - (b?.[k2] ?? 0)]).filter(([, v]) => v !== 0));
+
+    // T4RM-legacy-group (P1-1, P1-2's legacy side): a pre-T4R group removal of one stockpile member, halted at K6 by main (its undo committed,
+    // nothing written), its queue main-shaped offline. It must finish on main's path: its decCredit credited once its restore is written,
+    // exactly as tallied, conserved, and no T4R txn (eca131b6 converted it into a removal.group txn with load-time holds and W-time valuation)
+    if (want('T4RM-legacy-group')) {
+      const tag = 'T4RM-legacy-group';
+      const owner = 'tcc:t4rmlg';
+      const pg = await pileGroup(tag, owner, 1);
+      if (pg) {
+        const { g, gparts } = pg;
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await gparts();
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        const m = await api(`sgremove ${g.group} - ${owner}`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: halted at K6 (${json(m).slice(0, 120)})`);
+        if (down) {
+          const next0 = txnNext();
+          const credits = mainGroupQueue(owner, [g.group]);
+          const credit = Object.values(credits).reduce((a, c) => G.plus(a, c.items), {});
+          check(Object.keys(credits).length === 1, `${tag}: the queued removal main-shaped offline (decCredit ${json(credits)}, DR-S's pending credit)`);
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await groupDone(g.sites);
+          const after = await gparts();
+          const refunded = minus(after.stock, before.stock);
+          rowLog(tag, `refunded ${json(refunded)}; credit ${json(credit)}; placed ${json(after.placed)}`);
+          check(G.same(refunded, credit), `${tag}: main's credit, once its restore is written: refunded ${json(refunded)} = the queued credit ${json(credit)}`, { refunded, credit });
+          judgeT4(tag, { tag, removal: m, credits, txn: await txn() }, before, after);
+          noRemovalTxn(tag, next0);
+          const pend = (JSON.parse(fs.readFileSync(sFile(), 'utf8')).stockpiles ?? []).find((p) => p.owner === owner)?.ledger?.pendingCredit ?? {};
+          check(Object.keys(credits).every((k2) => !pend[k2]), `${tag}: no pending credit left (${json(Object.keys(pend))})`, pend);
+        } else {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        }
+      }
+    }
+    // T4RM-legacy-road (P1-3's legacy side): a pre-T4R standalone stockpile road removal whose job restored 8 cells before the upgrade (paused
+    // there, saved), main-shaped offline (C29's credit, no stash). Main's path pays the C29 credit whole after its last write, no T4R txn
+    if (want('T4RM-legacy-road')) {
+      const tag = 'T4RM-legacy-road';
+      const owner = 'tcc:t4rmlr';
+      const pr = await pileRoad(tag, owner);
+      if (pr) {
+        const { rid, rparts, before } = pr;
+        await call('dev.removal.pause', { site: rid, after: 8 }, 10_000);
+        const rm = await api(`remove ${rid} ${pr.owner} noforce`).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+        await removalQueued(tag, rid, rm);
+        await wait(5000);
+        const mid0 = await rparts();
+        call('dev.txn.halt', { save: true }, 10_000).catch(() => null);
+        const down = await haltWait();
+        check(down, `${tag}: halted (+save) with the road's restore paused after 8 cells (${sum(mid0.placed)} of ${sum(before.placed)} standing)`);
+        if (down) {
+          const next0 = txnNext();
+          const q = JSON.parse(fs.readFileSync(qFile(), 'utf8'));
+          const root = JSON.parse(fs.readFileSync(sFile(), 'utf8'));
+          const st = root.crateSettles?.[rid];
+          let credit = null;
+          for (const j of q.jobs ?? []) {
+            if (j.siteId !== rid || !j.settle?.pileKey) continue;
+            j.credit = { owner, key: j.settle.pileKey, items: j.settle.refund ?? {}, at: j.settle.pos ?? 0 };
+            credit = j.credit.items;
+            for (const k2 of Object.keys(j)) if (!MAIN_JOB_KEYS.includes(k2)) delete j[k2];
+          }
+          if (credit && st) {
+            delete root.crateSettles[rid];
+            fs.writeFileSync(sFile(), JSON.stringify(root, null, 2));
+            fs.writeFileSync(qFile(), JSON.stringify(q, null, 2));
+          }
+          try { fs.unlinkSync(path.join(W.dir, 'architect', 'dev-removal-pause.json')); } catch { /* none */ }
+          check(!!credit && !!st, `${tag}: the queued job main-shaped offline (C29's credit ${json(credit)}, no stash)`, { st });
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await roadGone(rid);
+          for (let i = 0; i < 40 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(4000);
+          const after = await rparts();
+          const refunded = minus(after.stock, before.stock);
+          rowLog(tag, `refunded ${json(refunded)}; C29 credit ${json(credit)}; standing at the halt ${json(mid0.placed)}`);
+          check(G.same(refunded, credit ?? {}), `${tag}: main's C29 credit paid whole after the last write: ${json(refunded)} = ${json(credit)}`, { refunded, credit });
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, after);
+          await roadFinished(tag, pr, after);
+          noRemovalTxn(tag, next0);
+        }
+      }
+    }
+    // T4RM-legacy-single: a pre-T4R single stockpile site removal halted at K6 (its refund J2's pending credit, no stash, as main saves it):
+    // main's path settles it at the start (the Sites check, settlePendingCredits books the credit once), no T4R txn
+    if (want('T4RM-legacy-single')) {
+      const tag = 'T4RM-legacy-single';
+      const owner = 'tcc:t4rmls';
+      const pg = await pileGroup(tag, owner, 1);
+      if (pg) {
+        const { g, gparts } = pg;
+        const site = g.sites[0];
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await gparts();
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        const m = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: halted at K6 (${json(m).slice(0, 120)})`);
+        if (down) {
+          const next0 = txnNext();
+          const root = JSON.parse(fs.readFileSync(sFile(), 'utf8'));
+          const st = root.crateSettles?.[site];
+          let credit = null;
+          if (st?.pileKey) {
+            for (const po of root.stockpiles ?? []) {
+              if (po.owner !== owner) continue;
+              po.ledger = po.ledger ?? {};
+              po.ledger.pendingCredit = { ...(po.ledger.pendingCredit ?? {}), [st.pileKey]: { items: st.refund ?? {}, at: st.pos } };
+              credit = st.refund ?? {};
+            }
+            delete root.crateSettles[site];
+            fs.writeFileSync(sFile(), JSON.stringify(root, null, 2));
+          }
+          check(!!credit, `${tag}: the removal's stash main-shaped offline: J2's pending credit ${json(credit)}`, st);
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          for (let i = 0; i < 60 && (await siteState(site)); i++) await L.sleep(1000);
+          for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+          await wait(5000);
+          const after = await gparts();
+          const refunded = minus(after.stock, before.stock);
+          rowLog(tag, `refunded ${json(refunded)}; pending credit ${json(credit)}`);
+          check(G.same(refunded, credit ?? {}), `${tag}: main's settle booked the pending credit once: ${json(refunded)} = ${json(credit)}`, { refunded, credit });
+          judgeT4(tag, { tag, removal: m, txn: await txn() }, before, after);
+          noRemovalTxn(tag, next0);
+        } else {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        }
+      }
+    }
+    /**
+     * Two stockpile construction roads of one owner in two batches (two groups), parallel and 2 cells apart, each about half paid and built:
+     * each road's box holds the other's cells (a group's member box is its removal's hold), their cells disjoint.
+     */
+    const pileRoads2 = async (tag, owner) => {
+      const at = slot();
+      k += 2;
+      const y = gy + 1, X = at[0], Z = at[2] + 20;
+      await cmd(`/fill ${X - 3} ${y - 1} ${Z - 4} ${X + 30} ${y - 1} ${Z + 6} minecraft:stone`);
+      W.at = [X + 10, y + 1, Z + 9];
+      await L.tp(...W.at);
+      const crate = [X + 10, y, Z - 8];
+      await call('dev.stockpile.create', { owner, crates: [crate] }, 120_000).catch((e) => ({ refused: String(e) }));
+      const roads = [];
+      for (const [n, dz] of [[1, 0], [2, 2]]) {
+        const road = { points: [[X, y, Z + dz], [X + 26, y, Z + dz]], width: 1, mode: 'AUTO' };
+        const bid = await later(`bqueue ${json({ id: `tcct4rm${n}x${Date.now() % 100000}`, proximity: false, owner, autoApprove: true, items: [{ key: `r${n}`, road }] })}`, 120_000);
+        let bv;
+        for (let i = 0; i < 120; i++) { bv = await api(`batch ${bid}`); if (bv.items?.every((x) => x.site || x.status === 'FAILED')) break; await L.sleep(1000); }
+        const rid = bv?.items?.[0]?.site;
+        check(!!rid, `${tag}: road ${n} fed from the stockpile of ${owner} (${rid}; ${json(bv?.items?.[0]?.status ?? null)})`, bv);
+        if (!rid) return null;
+        for (let i = 0; i < 60; i++) { const rv0 = await roadState(rid).catch(() => null); if (rv0 && !/plac/i.test(String(rv0.state))) break; await L.sleep(1000); }
+        await call('dev.stockpile.pause', { site: rid, paused: true }, 60_000).catch(() => null);
+        roads.push({ rid, group: bv.group, bill: (await api(`stock ${bv.group}`).catch(() => ({}))).outstandingBySite?.[rid] ?? {} });
+      }
+      const pst = async () => (await call('dev.stockpile.state', { owner }, 60_000).catch(() => ({}))).stockpile ?? {};
+      const half = {};
+      for (const r of roads) for (const [kk, v] of Object.entries(r.bill)) half[kk] = (half[kk] ?? 0) + Math.max(1, Math.floor(v / 2));
+      await call('dev.crate.insert', { site: `stockpile:${owner}`, items: half, exact: true }, 120_000).catch(() => null);
+      for (const r of roads) await call('dev.stockpile.pause', { site: r.rid, paused: false }, 60_000).catch(() => null);
+      for (let i = 0; i < 90; i++) { if (sum((await pst()).stock) === 0) break; await L.sleep(500); }
+      for (const r of roads) await call('dev.stockpile.pause', { site: r.rid, paused: true }, 60_000).catch(() => null);
+      const items = [...new Set(roads.flatMap((r) => Object.keys(r.bill)))];
+      for (const r of roads) {
+        const rv = await roadState(r.rid);
+        const mm = rv && /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(rv.box);
+        r.box = mm ? mm.slice(1, 7).map(Number) : null;
+      }
+      const all = [Math.min(...roads.map((r) => r.box?.[0] ?? X)), y - 2, Z - 4, Math.max(...roads.map((r) => r.box?.[3] ?? X + 27)), y + 2, Z + 6];
+      const placedIn = async (b) => {
+        const placed = {};
+        for (const st of (await cellsOf(b)).values()) {
+          const id = String(st).replace(/\[.*$/, '');
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          if (items.includes(full)) placed[full] = (placed[full] ?? 0) + 1;
+        }
+        return placed;
+      };
+      const rparts = async () => {
+        const near = await call('dev.items.near', { pos: W.at, radius: 24 }, 30_000);
+        const p = { stock: pick((await pst()).stock ?? {}, items), placed: await placedIn(all), owed: {}, ground: pick(near.items ?? {}, items), inventory: {},
+          states: Object.fromEntries(await Promise.all(roads.map(async (r) => [r.rid, (await roadState(r.rid).catch(() => null))?.state ?? null]))) };
+        p.total = [p.stock, p.placed, p.ground].reduce((a, b) => G.plus(a, b), {});
+        return p;
+      };
+      await cmd('/save-all flush').catch(() => null);
+      await wait(2000);
+      const before = await rparts();
+      // the precondition: each road's box (its removal's member hold) covers paid cells of the other road
+      const cross = [];
+      for (const [a, b] of [[0, 1], [1, 0]]) {
+        const ab = roads[a].box, bb = roads[b].box;
+        const inter = ab && bb ? [Math.max(ab[0], bb[0]), Math.max(ab[1], bb[1]), Math.max(ab[2], bb[2]), Math.min(ab[3], bb[3]), Math.min(ab[4], bb[4]), Math.min(ab[5], bb[5])] : null;
+        cross.push(inter && inter[0] <= inter[3] && inter[1] <= inter[4] && inter[2] <= inter[5] ? sum(await placedIn(inter)) : 0);
+      }
+      rowLog(tag, `roads ${json(roads.map((r) => ({ rid: r.rid, group: r.group, box: r.box })))}; paid blocks in the boxes' overlap ${json(cross)}; placed ${json(before.placed)}`);
+      check(sum(before.placed) > 0 && roads.every((r) => r.box), `${tag}: two paid roads, their boxes overlapping (${json(cross)})`, before);
+      return { roads, rparts, before, pst };
+    };
+    const bothGone = async (roads, s = 150) => {
+      for (let i = 0; i < s; i++) {
+        const left = (await Promise.all(roads.map((r) => roadState(r.rid).catch(() => null)))).filter(Boolean);
+        if (left.length === 0 && (await txn()).openCount === 0) return true;
+        await L.sleep(1000);
+      }
+      return false;
+    };
+    const overlapJudge = async (tag, pr, extra) => {
+      const done = await bothGone(pr.roads);
+      const after = await pr.rparts();
+      const t = await txn();
+      rowLog(tag, `both removed ${done}; states ${json(after.states)}; txn open ${t.openCount} held ${t.heldCount} ${json((t.open ?? []).map((x) => ({ id: x.id, kind: x.kind, held: x.held })))}`);
+      check(done, `${tag}: both overlapping removals finish (no removal holds the other: states ${json(after.states)}, open txns ${t.openCount}, held ${t.heldCount})`, { after, t });
+      check(sum(after.placed) === 0, `${tag}: no paid block of either road stands (${json(after.placed)})`, after);
+      check(G.same(after.stock, G.plus(pr.before.stock, pr.before.placed)), `${tag}: both refunds credited once: ${json(after.stock)} = ${json(G.plus(pr.before.stock, pr.before.placed))}`, after);
+      judgeT4(tag, { tag, ...extra, txn: t }, pr.before, after);
+    };
+    // T4RM-overlap-new (P1-2 for new removals): two new group removals over overlapping boxes (two parallel stockpile roads, each road's box
+    // holding the other's cells). The first's restore paused until the second has started: both must finish. eca131b6 admitted both
+    // removal.group txns (only identical resource strings conflict), each held its member box, and each one's restore was refused in the
+    // other's box: both held for good
+    if (want('T4RM-overlap-new')) {
+      const tag = 'T4RM-overlap-new';
+      const pr = await pileRoads2(tag, 'tcc:t4rmon');
+      if (pr) {
+        const [a, b] = pr.roads;
+        await call('dev.removal.pause', { site: a.rid, after: 0 }, 10_000);
+        const ra = api(`sgremove ${a.group} - tcc:t4rmon`).catch((e) => ({ error: String(e) }));
+        await wait(8000);
+        const rb = api(`sgremove ${b.group} - tcc:t4rmon`).catch((e) => ({ error: String(e) }));
+        await wait(15000);
+        const t1 = await txn();
+        rowLog(tag, `with ${a.rid}'s restore paused: open txns ${json((t1.open ?? []).map((x) => ({ id: x.id, kind: x.kind, held: x.held, resources: x.resources })))}`);
+        await call('dev.removal.pause', { site: a.rid, off: true }, 10_000).catch(() => null);
+        await overlapJudge(tag, pr, { ra: await Promise.race([ra, L.sleep(1000).then(() => 'pending')]), rb: await Promise.race([rb, L.sleep(1000).then(() => 'pending')]) });
+      }
+    }
+    // T4RM-overlap-legacy (the coexistence rule): a pre-T4R group removal of road A (halted at K6, main-shaped offline, its restore paused
+    // across the start) and a new group removal of road B whose box overlaps A's: the new one waits for the pre-T4R one, which finishes on
+    // main's path; then the new one finishes. Both exact, no removal txn for A
+    if (want('T4RM-overlap-legacy')) {
+      const tag = 'T4RM-overlap-legacy';
+      const owner = 'tcc:t4rmol';
+      const pr = await pileRoads2(tag, owner);
+      if (pr) {
+        const [a, b] = pr.roads;
+        await call('dev.removal.pause', { site: a.rid, after: 0 }, 10_000);
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        const ra = await api(`sgremove ${a.group} - ${owner}`).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+        const down = await haltWait();
+        check(down, `${tag}: road ${a.rid}'s group removal halted at K6 (${json(ra).slice(0, 120)})`);
+        if (down) {
+          const next0 = txnNext();
+          const credits = mainGroupQueue(owner, [a.group]);
+          check(Object.keys(credits).length === 1, `${tag}: its queue entry main-shaped offline (${json(credits)})`);
+          await L.openWorld(name);
+          await L.tp(...W.at);
+          await wait(3000);
+          const rb = api(`sgremove ${b.group} - ${owner}`).catch((e) => ({ error: String(e) }));
+          await wait(15000);
+          const t1 = await txn();
+          rowLog(tag, `with the pre-T4R removal's restore paused: open txns ${json((t1.open ?? []).map((x) => ({ id: x.id, kind: x.kind, held: x.held })))}`);
+          await call('dev.removal.pause', { site: a.rid, off: true }, 10_000).catch(() => null);
+          await overlapJudge(tag, pr, { rb: await Promise.race([rb, L.sleep(1000).then(() => 'pending')]) });
+          const legacyTx = txnsSince(next0).filter((e) => (e.key ?? '').startsWith(`group:${a.group}`));
+          check(legacyTx.length === 0, `${tag}: no removal.group txn for the pre-T4R removal of ${a.group} (${json(legacyTx)})`, legacyTx);
+        } else {
+          await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+          await call('dev.removal.pause', { site: a.rid, off: true }, 10_000).catch(() => null);
+        }
+      }
+    }
+    // T4RM-fin (the final check's test gap): a single removal's completion parts recovered after K6 equal the parts of a clean twin removal
+    // (computed at its call from its plan, not from a saved fin) and are non-trivial: kept = the cells a player changed, a hand-down to a
+    // LAYERed site on top (KEEP), and a cascade of it (CASCADE). The base's T4RL-fin used kept 0, no hand-down, no cascade
+    if (want('T4RM-fin')) {
+      const tag = 'T4RM-fin';
+      /**
+       * A stockpile-fed rs_hut built whole (a paid removal: its pile stash carries fin), a gatehouse LAYERed on it (instant), two of its
+       * standing paid blocks outside the gatehouse's box replaced by sponge.
+       */
+      const fixture = async (sub) => {
+        const owner = `tcc:t4rmfin${sub.replace(/[^a-z]/g, '')}`;
+        const pg = await pileGroup(`${tag}-${sub}`, owner, 1);
+        if (!pg) return null;
+        const site = pg.g.sites[0];
+        const bom = (await siteState(site))?.bom ?? {};
+        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: bom, exact: true }, 120_000).catch(() => null);
+        await call('dev.stockpile.pause', { site, paused: false }, 60_000);
+        for (let i = 0; i < 240; i++) { if ((await siteState(site))?.state === 'built') break; await L.sleep(1000); }
+        const built = (await siteState(site))?.state === 'built';
+        const b = await boxOf(site);
+        const top = await later(`place gatehouse ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} INSTANT unowned noactor 0 force layer`, 120_000).catch(() => null);
+        const tb = top?.siteId ? await boxOf(top.siteId) : null;
+        const inTop = (c) => tb && c[0] >= tb[0] && c[0] <= tb[3] && c[1] >= tb[1] && c[1] <= tb[4] && c[2] >= tb[2] && c[2] <= tb[5];
+        const changed = [];
+        for (const [k2, st] of (await cellsOf(b)).entries()) {
+          const id = String(st).replace(/\[.*$/, '');
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          const c = typeof k2 === 'string' ? k2.split(',').map(Number) : null;
+          if (c && pg.items.includes(full) && !inTop(c) && changed.length < 2) changed.push(c);
+        }
+        for (const c of changed) await cmd(`/setblock ${c.join(' ')} minecraft:sponge`);
+        rowLog(tag, `${sub}: ${site} built ${built}; on top ${top?.siteId} (${json(tb)}); changed ${json(changed)}`);
+        return { site, items: pg.items, top: top?.siteId ?? null, changed, built };
+      };
+      for (const mode of ['keep', 'cascade']) {
+        const twin = await fixture(`${mode}-twin`);
+        const crash = await fixture(`${mode}-crash`);
+        if (!twin || !crash) continue;
+        check(!!twin.top && !!crash.top && twin.changed.length === 2 && crash.changed.length === 2, `${tag} ${mode}: the fixture: a site LAYERed on top (${twin.top}, ${crash.top}), two cells changed by a player`, { twin, crash });
+        const clean = await later(`remove ${twin.site} - noforce ${mode}`, 120_000).catch((e) => ({ error: String(e) }));
+        rowLog(tag, `${mode} clean twin: ${json(clean).slice(0, 300)}`);
+        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        api(`remove ${crash.site} - noforce ${mode}`).catch(() => null);
+        const down = await haltWait();
+        check(down, `${tag} ${mode}: halted at K6`);
+        if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+        await L.openWorld(name);
+        await L.tp(...W.at);
+        for (let i = 0; i < 60 && (await siteState(crash.site)); i++) await L.sleep(1000);
+        for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
+        await wait(4000);
+        const ev = (await evs()).filter((e) => e.id === crash.site);
+        const res = ev[0]?.result ?? {};
+        rowLog(tag, `${mode} recovered event: ${json(ev).slice(0, 400)}`);
+        const handed = res.handedDown ?? res.handed ?? {};
+        const cleanHanded = clean.handedDown ?? clean.handed ?? {};
+        check(ev.length === 1, `${tag} ${mode}: one REMOVAL_FINISHED after the recovery (${ev.length})`, ev);
+        check((res.kept ?? 0) === crash.changed.length && (clean.kept ?? 0) === twin.changed.length, `${tag} ${mode}: kept = the ${crash.changed.length} cells the player changed (recovered ${res.kept}, clean twin ${clean.kept})`, { res, clean });
+        check(res.restored === clean.restored && res.restored > 0, `${tag} ${mode}: restored as the clean twin (${res.restored} = ${clean.restored})`, { res, clean });
+        if (mode === 'keep') {
+          check(sum(handed) > 0 && sum(handed) === sum(cleanHanded) && Object.keys(handed).length === 1, `${tag} keep: a hand-down to the site on top, as the clean twin (${json(handed)} vs ${json(cleanHanded)})`, { res, clean });
+          check((res.cascaded ?? []).length === 0, `${tag} keep: no cascade (${json(res.cascaded)})`, res);
+        } else {
+          check(json(res.cascaded ?? []) === json([crash.top]) && json(clean.cascaded ?? []) === json([twin.top]), `${tag} cascade: the site on top cascaded (${json(res.cascaded)}; twin ${json(clean.cascaded)})`, { res, clean });
+        }
+      }
+    }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the
     // PSVLC3 merge, whose preflight confirms the job's queue write before it plans; LR-3/LR-3s cover the road's resumed job. The majority
     // rule is TxnRemovalModelT4Test's 3a; the sweep's absence rule is T4-corrupt's.)

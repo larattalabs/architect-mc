@@ -50,6 +50,11 @@ public final class CargoTxn {
 	 * or open with an abort decision): its key is no part of a removal's result. Unknown (evicted, not a cargo key): false.
 	 */
 	public static boolean aborted(String owedKey) {
+		return aborted(owedKey, TxnServer.core());
+	}
+
+	/** (TEST seam, slice T4R-M hooks) {@link #aborted(String)} against {@code c}. */
+	public static boolean aborted(String owedKey, TxnCore c) {
 		if (!owedKey.startsWith("cargo:tx-")) {
 			return false;
 		}
@@ -58,7 +63,6 @@ public final class CargoTxn {
 			return false;
 		}
 		String id = owedKey.substring(6, slash);
-		TxnCore c = TxnServer.core();
 		TxnEntry t = c.get(id);
 		if (t != null) {
 			return t.decision != null && t.decision.isAbort();

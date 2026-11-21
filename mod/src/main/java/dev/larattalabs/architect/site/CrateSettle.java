@@ -1000,7 +1000,11 @@ public final class CrateSettle {
 	 * judged at this start (its stash is unknown), and its entries are kept.
 	 */
 	static java.util.@Nullable Map<String, JsonObject> durableAtStart(MinecraftServer srv) {
-		java.nio.file.Path f = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(Stockpiles.FILE);
+		return durableAtStart(srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(Stockpiles.FILE));
+	}
+
+	/** (TEST seam, slice T4R-M hooks) {@link #durableAtStart(MinecraftServer)} over the stockpiles file {@code f}. */
+	static java.util.@Nullable Map<String, JsonObject> durableAtStart(java.nio.file.Path f) {
 		Map<String, JsonObject> out = new TreeMap<>();
 		if (!java.nio.file.Files.isRegularFile(f)) {
 			return out;
