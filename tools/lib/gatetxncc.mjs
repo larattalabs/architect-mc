@@ -1983,6 +1983,8 @@ export async function registerTCC(steps, h) {
         const br = at ? await call('dev.pt.breaks', { at: [at], placer: 'T4RLMiner' }, 60_000).catch((e) => ({ error: String(e) })) : { error: 'no paid cell' };
         rowLog(tag, `a player mined ${at} (${item}) before the removal: ${json(br)}`);
         check((br.broken ?? 0) > 0, `${tag}: the paid block mined before the removal (no hold yet) (${json(br)})`, br);
+        // the player picks the dropped block up (it is theirs now: left out of both counts), so the removal has no item stack to wait for
+        if (at) await cmd(`/kill @e[type=minecraft:item,x=${at[0]},y=${at[1]},z=${at[2]},distance=..4]`).catch(() => null);
         await cmd('/save-all flush').catch(() => null);
         await wait(2000);
         const before = await gparts();
