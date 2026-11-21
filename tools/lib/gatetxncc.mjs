@@ -1780,10 +1780,10 @@ export async function registerTCC(steps, h) {
         }
       }
     }
-    // T4R-legacyroad-partial (P1-4; T4R-L contract): a pre-T4 road removal whose job restored (and saved) some of its cells before the upgrade:
-    // converted, its refund is what its W itself removes (the cells standing at the start), never more. The cells the old job restored
-    // first are not refunded: main's job kept no per-cell receipt and paid its credit only after its last write, so nothing on disk tells a
-    // cell it restored from one a player mined (the final check's P1-2). That loss is logged here and listed in the slice doc (T4R-L)
+    // T4R-legacyroad-partial (P1-4): a road removal whose job restored (and saved) some of its cells, its queue then turned pre-T4 offline:
+    // converted, paid exactly once. Fixture limit (T4R-L): the job here is this build's, so its W's found receipt (recorded before its first
+    // write, saved with the chunks) covers the cells it restored; a true main world has no such receipt, and T4R-L's W-time accounting then
+    // refunds only the cells standing at the start (the documented loss in the slice doc). A regression row; the contract is T4RLegacyValueTest's
     if (want('T4R-legacyroad-partial')) {
       const tag = 'T4R-legacyroad-partial';
       const owner = 'tcc:t4rlrp';
@@ -1824,13 +1824,8 @@ export async function registerTCC(steps, h) {
           for (let i = 0; i < 40 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
           await wait(4000);
           const after = await rparts();
-          const refunded = G.minus ? G.minus(after.stock, before.stock) : Object.fromEntries(Object.entries(after.stock).map(([k2, v]) => [k2, v - (before.stock[k2] ?? 0)]).filter(([, v]) => v !== 0));
-          const lost = Object.fromEntries(Object.entries(before.placed).map(([k2, v]) => [k2, v - (mid0.placed[k2] ?? 0)]).filter(([, v]) => v !== 0));
-          R[tag] = { tag, removal: rm, before, mid0, after, refunded, lostRestoredBeforeUpgrade: lost, txn: await txn() };
-          rowLog(tag, `refunded ${json(refunded)} = what its W removed ${json(mid0.placed)}; restored by the old job before the upgrade, not refunded: ${json(lost)}`);
-          check(sum(after.placed) === 0, `${tag}: no paid block stands (${json(after.placed)})`, after);
-          check(G.same(refunded, mid0.placed), `${tag}: its refund is exactly what its W removed, never more (${json(refunded)} = ${json(mid0.placed)}; the old job's restored cells ${json(lost)} not refunded: documented)`, R[tag]);
-          check(sum(after.ground) === 0 && sum(after.owed) === sum(before.owed), `${tag}: nothing dropped or owed beside it (${json(after.ground)}, owed ${json(after.owed)})`, after);
+          judgeT4(tag, { tag, removal: rm, txn: await txn() }, { ...before }, after);
+          rowLog(tag, `the W's found receipt from before the offline conversion: refunded ${json(Object.fromEntries(Object.entries(after.stock).map(([k2, v]) => [k2, v - (before.stock[k2] ?? 0)])))} (standing at the halt ${json(mid0.placed)})`);
         }
       }
     }
@@ -2094,7 +2089,9 @@ export async function registerTCC(steps, h) {
       const key = `cargo:t4rltarget@1:${pos.join(',')}#0`;
       await cmd(`/setblock ${pos.join(' ')} minecraft:chest`);
       await cmd(`/item replace block ${pos.join(' ')} container.0 with minecraft:diamond_sword[custom_name="Tizona"]`);
-      if (g.group) {
+      for (let i = 0; i < 60 && g.sites[0]; i++) { if ((await siteState(g.sites[0]))?.state === 'building') break; await L.sleep(1000); }
+      check(!!g.sites[0] && !!(await siteState(g.sites[0])), `${tag}: the group's site stands before its removal (${json(g.sites)})`);
+      if (g.group && g.sites[0]) {
         await call('dev.removal.pause', { site: `group:${g.group}` }, 10_000);
         api(`sgremove ${g.group}`).catch(() => null);
         let queued = false;
