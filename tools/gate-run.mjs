@@ -30,9 +30,10 @@
 //                                         docs/GATES.md "Disk space"). Many run dirs and world copies filled the disk on 2026-11-21
 //   --keep-run-dirs        GATE_KEEP_RUN_DIRS=1  keep the run worktrees after a PASS. By default a PASS (before the lock and slot are
 //                                         released) removes the run worktrees and frozen source THIS invocation created (git worktree
-//                                         remove), only empties the world copies (mod/run/saves) of the reused default ones (beside the
-//                                         main checkout: cfg.runDir and its shards, the nightly's), leaves every other existing dir whole
-//                                         and never follows a symlink; a run that does not pass keeps everything for inspection
+//                                         remove, 5 min timeout), only empties the world copies (mod/run/saves) of the named reused ones
+//                                         (beside the main checkout: cfg.runDir, the nightly's run and UI-gallery dirs, their shards),
+//                                         refuses a symlinked run dir, leaves every other existing dir whole and never follows a
+//                                         symlink; a run that does not pass keeps everything for inspection
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
 //   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 6): at most N runs at once, across worktrees. A run
@@ -1449,6 +1450,9 @@ await acquireSlot(async () => {
   return { shards: NSHARDS, lanes: NLANES, ports: allPorts };
 });
 if (autoChoice) console.log(autoChoice.text);
+// a turbo, change-sharded or auto run chose its shards and lanes just now (their -s<k>/-o<j> dirs may be symlinks onto another
+// volume): the guard judges those actual dirs, before the lock and any setup (a refusal exits and gives the slot back)
+if (decideShards) spaceGuard();
 takeLock();
 let lockHeld = true;
 const releaseLock = () => {
@@ -1468,18 +1472,21 @@ const releaseLock = () => {
  * (--run-dirs, else the run dir) and the frozen source, by real path (tools/lib/run-dirs.mjs checkSpace). */
 function spaceGuard() {
   const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
-  // a fixed --shards run's shards (and lanes) are known here (an existing -s<k> may be a symlink elsewhere); auto shards sit beside RUN1
+  // the shards' (and lanes') dirs once known (an existing -s<k> may be a symlink elsewhere): a fixed --shards run's before the slot,
+  // a turbo/change/auto run's again after its choice (above); before that only RUN1 (or --run-dirs) and the frozen source
   const r = checkSpace({ min, run1: RUN1, runDirs: shards.length ? shards.map((s) => s.RUN) : RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR });
   if (!(min > 0)) return;
   if (!r.ok) die(`${r.low.map((v) => `only ${v.free.toFixed(0)} GiB free on ${v.probe}'s volume (for ${v.dests.join(', ')})`).join('; ')}, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
   console.log(`disk: ${r.volumes.map((v) => `${v.free.toFixed(0)} GiB free on ${v.probe}`).join(', ')} (guard ${min})`);
 }
 
-/** After a PASS: removes the run worktrees and frozen source this invocation created, empties the world copies of the reused default
- * run dirs, never follows a symlink and leaves every other existing dir whole (tools/lib/run-dirs.mjs cleanupRunDirs). */
+/** After a PASS: removes the run worktrees and frozen source this invocation created, empties the world copies of the reused named
+ * run dirs beside the main checkout (cfg.runDir, the nightly's run and UI-gallery dirs, their shards), refuses a symlinked run dir,
+ * never follows a symlink and leaves every other existing dir whole (tools/lib/run-dirs.mjs cleanupRunDirs). */
 function cleanupRunDirs(verdict) {
   const dirs = [...shards.map((s) => ({ dir: s.RUN, created: !!s.created })), ...(FROZEN && DRV !== SRC ? [{ dir: DRV_DIR, created: drvCreated }] : [])];
-  return cleanupRunDirsLib({ verdict, keep: flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1', src: SRC, main: MAIN, seed: SEED, cfgRunDir: cfg.runDir, dirs, log });
+  return cleanupRunDirsLib({ verdict, keep: flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1', src: SRC, main: MAIN, seed: SEED, cfgRunDir: cfg.runDir,
+    nightlyRunDirs: [CACHE_CONF.nightly?.runDir, CACHE_CONF.nightly?.uiGallery?.runDir], dirs, log });
 }
 
 // ------------------------------------------------------------------ the run dir, summary, log
