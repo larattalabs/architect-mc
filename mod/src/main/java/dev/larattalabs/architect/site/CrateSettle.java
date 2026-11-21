@@ -628,18 +628,22 @@ public final class CrateSettle {
 			});
 		} finally {
 			WRITING = was;
-			if (drops != null) {
-				drops.clearNew(level); // (slice T4R-N) what its writes popped, as the live removal's afterRestore clears it
-			}
+			int cleared = drops != null ? drops.clearNewCounted(level) : 0; // (slice T4R-N) what its writes popped, as afterRestore clears it
+			Map<String, Integer> given = new TreeMap<>();
 			for (var en : standing.entrySet()) {
 				BlockPos p = BlockPos.of(en.getKey());
 				if (!en.getValue().get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
 					Map<String, Integer> items = itemsOf(en.getValue());
 					Builder.dropItems(level, dropAt, items, drops); // kept by the clear: it is the player's block given back
+					items.forEach((k, v) -> given.merge(k, v, Integer::sum));
 					if (dropped != null) {
 						dropped.accept(en.getKey(), items);
 					}
 				}
+			}
+			if (clear || player != null) {
+				Architect.LOGGER.info("W restore of {} ({}): cascade {}, {} popped item(s) cleared, the player's blocks recorded {}, standing {}, given back {}",
+					site, group, casc, cleared, player == null ? 0 : player.size(), standing.size(), given);
 			}
 		}
 		if (fail[0] != null) {

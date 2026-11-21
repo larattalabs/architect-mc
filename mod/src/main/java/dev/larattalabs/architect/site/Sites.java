@@ -3970,8 +3970,14 @@ public final class Sites {
 		}
 
 		void clearNew(ServerLevel level) {
-			clear(level);
+			clearNewCounted(level);
+		}
+
+		/** (slice T4R-N) {@link #clearNew}, returning how many it cleared now (the later pass not counted). */
+		int clearNewCounted(ServerLevel level) {
+			int n = clear(level);
 			LATER.add(new Object[] {this, level, 3});
+			return n;
 		}
 
 		/** An entity the change brings on purpose (a deconstruct's refunds): never cleared. */
