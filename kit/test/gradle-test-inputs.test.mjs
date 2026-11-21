@@ -151,6 +151,9 @@ test('(P3S) every separate-value node option is skipped with its value; the = fo
     ['--network-family-autoselection-attempt-timeout', '250'], ['--max-old-space-size-percentage', '50'], ['--v8-pool-size', '4'],
     ['--trace-require-module', 'all'], ['--allow-fs-read', '.'], ['--allow-fs-write', '.'], ['--snapshot-blob', 'b'],
     ['--build-snapshot-config', 'c.json'], ['--experimental-sea-config', 'c.json'],
+    // (P3T, b25 review P3) six more probed on node 24.22.1
+    ['--inspect-publish-uid', 'stderr'], ['--report-directory', '/tmp'], ['--experimental-test-isolation', 'none'],
+    ['--test-random-seed', '1'], ['--test-rerun-failures', 'r.json'], ['--experimental-test-tag-filter', 'x'],
   ];
   for (const [o, v] of sep) {
     assert.deepEqual(SI.computedStepRoots({ shell: `node ${o} ${v} ${X}` }), [X], `${o} ${v}`);

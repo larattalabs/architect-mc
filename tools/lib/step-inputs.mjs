@@ -286,7 +286,8 @@ const NODE_VALUE_OPTS = [
   '--heap-prof-name|--heap-prof-interval|--localstorage-file|--max-http-header-size|--trace-event-categories|--trace-event-file-pattern',
   '--use-largepages|--tls-cipher-list|--tls-keylog|--disable-proto|--network-family-autoselection-attempt-timeout',
   '--max-old-space-size-percentage|--v8-pool-size|--trace-require-module|--allow-fs-read|--allow-fs-write|--snapshot-blob',
-  '--build-snapshot-config|--experimental-sea-config',
+  '--build-snapshot-config|--experimental-sea-config|--inspect-publish-uid|--report-directory|--experimental-test-isolation',
+  '--test-random-seed|--test-rerun-failures|--experimental-test-tag-filter',
 ].join('|');
 /**
  * (TI2) The driver paths a chain entry (or a split part) computes in its shell: a script argument of node/bash/sh with a shell
