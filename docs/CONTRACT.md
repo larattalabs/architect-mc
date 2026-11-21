@@ -34539,12 +34539,32 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   clean twin; hand-down and cascade are non-trivial. The legacy road has no e2e mutant (its red is the base's removal txn).
 - **Leftovers:** a pre-T4R pending single left KEEP (its J2 credit held) blocks new removals over its box until it settles; after a K6
   crash a construction site's recovered removal does not drop its player blocks as the synchronous one does, and a cascaded instant site's
-  attached blocks may pop as items (T4b's W restore has no `Drops`; seen in T4RM-fin, eca131b6 too).
+  attached blocks may pop as items (T4b's W restore has no `Drops`; seen in T4RM-fin, eca131b6 too). (Fixed in T4R-N, below.)
 - **Gate:** red `gate-runs-T4RM-red/20261121-081844-change` (t4rm-crash 4 rows red, t4rm-cargo 2 chests) + `20261121-084150-change` (the
   refusal and fin refund checks) and `units/` (6/6 T4RM units red); mutants `gate-runs-T4RM-mutant/20261121-082722-change` (routing),
   `-mutant-cargo/20261121-082936-change`, `-mutant-overlap/20261121-084825-change` (admission + refund), `-mutant/units` (E, F, A/B);
   change 66/66 (`gate-runs-T4RM/20261121-085926-change`); `--only` t4r-crash 65/0, t4rl-crash 27/0, t4rm-crash 80/0, t4rm-cargo 9/0,
   t4-crash 85/0, fk-crash 97/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 16/0 (`20261121-114629-change`).
+
+### Slice T4R-N as built (the final check of f7607b13: NOT SAFE; the final fix round, Noah 2026-11-21; strict; versions NEXT)
+
+- **P1-1 restart deadlock.** `RemovalAreas.heldAreas` also reads the txn core as loaded: every open `removal.group` txn's `rbox:` holds (its
+  own: the key's `group:<id>[/stage]`), and a queued removal whose txn is open counts as begun while its transient `gtx` is still null. A
+  removal saved ahead of a stalled holder waits after a restart instead of beginning over it.
+- **P1-2 K6 recovery (a regression vs v0.89.0 from eca131b6).** The single removal's stash (pile and crate) records the player's cells
+  (`player`: pos, block, items; `Refunds.Tally.playerCells`). Its W restore written at a restart (`clear`, `player`, `dropAt`, `cascade` in
+  the W's data; never a group member's) clears what its writes pop (`Sites.Drops`, as `afterRestore`), gives back each player's block that
+  stood before the write and is gone after it at the site's drop point (receipt `pdrop:` in its chunk, same tick; added to its
+  REMOVAL_FINISHED refund), and writes its cascade first (roads, then sites, top first, as live). The start check leaves a cascaded member of
+  such a removal pending for it (no RECOVER of a site whose base the txn then restores). A live removal's own drops are never repeated.
+- **P2 phantom cargo key.** `CargoTxn.fate`/`aborted` count an open txn's decision only when `TxnCore.acknowledged()` (no refused or
+  in-doubt write since the last acknowledged one); `resolveCargo` leaves the key unresolved until then.
+- **P2 legacy KEEP wait.** A new group's wait on a pre-T4R removal's area counts toward `MAX_WAIT` (`legacyWaiting`), then ends stopped
+  ("Not yet: ... (waited 10 minutes)", `RemovalStopCause.OTHER`), nothing planned. The coexistence rule itself is unchanged.
+- **Rows:** failing-first e14452c3 (units `T4RNRestartHoldTest`, `T4RNCargoUnackTest`, `T4RNLegacyKeepWaitTest`, `T4RNK6PlayerBlocksTest`;
+  `T4RM-fin` now judges conservation and the event's refund against the clean twin), fixes 59e35b25. Red: units 4/4 (`T4RNCargoUnackTest`'s
+  acknowledged case green), t4rm-crash 4 FAIL (`gate-runs-T4RN-red/20261121-181248-change`); green: t4rm-crash 84/0
+  (`gate-runs-T4RN-green/20261121-182023-change`).
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
