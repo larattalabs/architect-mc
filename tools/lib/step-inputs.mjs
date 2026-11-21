@@ -255,14 +255,33 @@ export function eagerClosure(roots, has, readText) {
   return seen;
 }
 
-/** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names, and the globs it passes to node (kit/test/*.test.mjs). */
+/** A chain entry's command texts: its shell or cmd, and (TI2) each split part's own shell (a part runs under its parent's set). */
+const stepTexts = (entry) => [entry.shell ?? (entry.cmd ?? []).join(' '), ...(entry.split?.parts ?? []).map((p) => p.shell).filter(Boolean)];
+
+/** The roots a chain entry runs: the tools/… and kit/… files its shell or cmd names (its split parts' shells too), and the globs it
+ * passes to node (kit/test/*.test.mjs). */
 export function stepRoots(entry) {
-  const text = entry.shell ?? (entry.cmd ?? []).join(' ');
+  const text = stepTexts(entry).join('\n');
   const cwd = (entry.cwd ?? '').replace(/^(run|src):/, '');
   const roots = new Set();
   for (const m of text.matchAll(/(?:^|[\s'"=])((?:\.\/)?(?:tools|kit|scenarios|sidecar)\/[\w@./*-]+\.(?:mjs|js|sh|ts))/g)) roots.add(m[1].replace(/^\.\//, ''));
   if (cwd) for (const m of text.matchAll(/(?:^|[\s'"])((?:\.\/)?[\w-]+\/[\w@./*-]+\.(?:mjs|js))/g)) roots.add(path.posix.join(cwd, m[1].replace(/^\.\//, '')));
   return [...roots].sort();
+}
+/**
+ * (TI2) The driver paths a chain entry (or a split part) computes in its shell: a script argument of node/bash/sh with a shell
+ * expansion in it (`node tools/gate${X}.mjs`, `node $DRIVER`). Such a step has no static closure, so `check` refuses it: name the
+ * driver literally. A flag (`${CONC:+--test-concurrency=...}`) and a computed output argument (`--out $OUT/x`) are not drivers.
+ */
+export function computedStepRoots(entry) {
+  const out = [];
+  for (const text of stepTexts(entry)) {
+    for (const m of text.matchAll(/(?:^|[\s;&|(])(?:node|bash|sh|npx\s+tsx)((?:\s+(?:\$\{\w+:\+[^}]*\}|-[\w-]+(?:=\S+)?))*)\s+([^\s;&|)]+)/g)) {
+      const arg = m[2].replace(/^['"]|['"]$/g, '');
+      if (arg.includes('$') && (/\.(mjs|js|cjs|sh|ts)$/.test(arg) || /^\$\{?\w+\}?$/.test(arg) || /^(tools|kit|scenarios|sidecar)\//.test(arg))) out.push(arg);
+    }
+  }
+  return [...new Set(out)];
 }
 const expandRoots = (roots, has) => {
   const out = [];

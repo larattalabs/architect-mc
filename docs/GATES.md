@@ -466,7 +466,25 @@ evidence are not inputs.
   `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes only by an `inputs.dir` of it or a parent, never by
   single files under it: v0.89.0 review P3; tools/lib/gradle-test-inputs.mjs, kit/test/gradle-test-inputs.test.mjs), so a
   local or gate Gradle run could stay UP-TO-DATE on a stale PASS. Known gaps would be listed in tools/step-inputs.mjs
-  (`GRADLE_TEST_UNDECLARED`, empty). Computed paths and a node child's own reads stay the author's to declare.
+  (`GRADLE_TEST_UNDECLARED`, empty).
+- (chore/TI2) a **computed** path a mod test builds is not under them either: a `Path` binding's resolve chain up to its first
+  computed argument (`KIT.resolve("examples").resolve(id)` -> kit/examples), a literal `Path.of` head, a concatenation's head
+  (`"regions/" + p`), each needing an `inputs.dir` of that directory; or a file or directory in the **module closure of a node
+  script** a test runs (moduleClosure: imports, JSON modules, literal paths). A `fileTree("../kit") { exclude ... }` counts less its
+  excludes. Every top-level repo directory but mod/ is scanned;
+- (chore/TI2) a step or split part whose shell **computes its driver path** (`node tools/gate${X}.mjs`). A split part's own `shell`
+  adds its drivers to the parent's roots, so `build` records them and `check` sees a new one.
+
+**TI2 as built.** The scan found every computed Java read already declared; the node closures and a recent unit-mod trace found
+kit/vocab/*.json (imported by kit/lib/vocab.mjs), kit/bibles and the rest of the kit that delta-fixtures' copyKit copies,
+kit/test/h-helpers.mjs (plan-helpers) and scenarios/bibles (plan-helpers' fixtureStyle, the VOC designs): now declared (the copied
+kit as a fileTree with copyKit's excludes). No template step had a gap; the map rebuilds unchanged. `step-inputs.mjs test-trace <run>`
+compares a run's unit-mod trace (the JVM's node children) with the test inputs. Left to the author: a path passed whole as a
+parameter (ApiP0Test's `one(file)`: its callers' literals are scanned), a node child's computed reads (test-trace shows them), reads
+outside the repo (GlossaryWordingTest's opt-in ../../steward-mc). Gate drivers' computed reads stay the trace's (a read outside the
+set is an inputs-map miss, never a stale PASS); TI2's traced unit-kit and unit-sidecar run at HEAD found two enumerations, now
+whole in their data: gate-cpu-budget.test lists tools/*.mjs (unit-kit), regions-tc.test reads scenarios/<f>.json and the sidecar's
+vitest setup imports tools/lib (unit-sidecar).
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.
