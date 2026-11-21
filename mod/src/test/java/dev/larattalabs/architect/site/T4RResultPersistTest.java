@@ -40,7 +40,7 @@ class T4RResultPersistTest {
 			co.setAccessible(true);
 			@SuppressWarnings("unchecked")
 			java.util.List<String> owed = (java.util.List<String>) co.get(r);
-			owed.add("cargo:tx-3/1");
+			owed.add("cargo:test-3");
 			JsonObject j = r.toJson();
 			System.out.println("ROW T4R-P1-6 queue entry (" + (durable ? "durable" : "planned, R2q") + "): " + j);
 			Groups.Removal b = Groups.Removal.fromJson(j);
@@ -51,7 +51,7 @@ class T4RResultPersistTest {
 			assertEquals(4, b.keptCells, "T4R-P1-6: the kept count survives (" + what + ")");
 			@SuppressWarnings("unchecked")
 			java.util.List<String> owed2 = (java.util.List<String>) co.get(b);
-			assertEquals(java.util.List.of("cargo:tx-3/1"), owed2, "T4R-P1-6: the data cargo's owed keys survive (" + what + ")");
+			assertEquals(java.util.List.of("cargo:test-3"), owed2, "T4R-P1-6: the data cargo's owed keys survive (" + what + ")");
 			JsonObject p = GroupTxn.payload(b);
 			assertTrue(p.get("restored").getAsInt() == 120 && p.get("kept").getAsInt() == 4 && p.getAsJsonObject("handed").has("s0") && p.getAsJsonArray(
 				"cascaded").size() == 1 && p.getAsJsonArray("owed").size() == 1, "T4R-P1-6: the txn payload from the reloaded removal is complete: " + p);

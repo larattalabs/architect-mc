@@ -45,6 +45,28 @@ public final class CargoTxn {
 		return "cargo:" + txnId + "/" + effect + ":" + source;
 	}
 
+	/**
+	 * (slice T4R-L) Whether the {@code removal.cargo} txn that an owed key {@link #oweKey} names is known to have ended without owing (aborted,
+	 * or open with an abort decision): its key is no part of a removal's result. Unknown (evicted, not a cargo key): false.
+	 */
+	public static boolean aborted(String owedKey) {
+		if (!owedKey.startsWith("cargo:tx-")) {
+			return false;
+		}
+		int slash = owedKey.indexOf('/', 6);
+		if (slash < 0) {
+			return false;
+		}
+		String id = owedKey.substring(6, slash);
+		TxnCore c = TxnServer.core();
+		TxnEntry t = c.get(id);
+		if (t != null) {
+			return t.decision != null && t.decision.isAbort();
+		}
+		ResultCache.Done d = c.cache().byId(id);
+		return d != null && Decision.ABORT.equals(d.decision());
+	}
+
 	static String itemId(ItemStack st) {
 		return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString();
 	}
@@ -63,8 +85,28 @@ public final class CargoTxn {
 	 * of an earlier (ended) one.
 	 */
 	public static @Nullable String owe(ServerLevel level, String key, List<Stack> stacks, List<String> owedKeys) {
+		Prepared p = prepare(level, key, stacks);
+		if (p.entry() == null) {
+			return p.why();
+		}
+		owedKeys.addAll(p.keys());
+		return drive(p.entry());
+	}
+
+	/** (slice T4R-L) A begun, planned and persisted {@code removal.cargo} txn (nothing applied yet) and the owed keys it will create. */
+	public record Prepared(@Nullable TxnEntry entry, @Nullable String why, List<String> keys) {
+	}
+
+	/**
+	 * (slice T4R-L, the final check's P2) {@link #owe}'s first half: the txn begun, planned and persisted, nothing applied (an undecided entry
+	 * recovered after a restart is compensated: nothing is owed). Its caller records {@link Prepared#keys} where its result reads them (a group
+	 * removal: in its queue, confirmed) before {@link #drive} can commit an owed entry. No entry: done (replayed, or nothing to owe; why null)
+	 * or refused before anything changed (why).
+	 */
+	public static Prepared prepare(ServerLevel level, String key, List<Stack> stacks) {
+		List<String> keys = new java.util.ArrayList<>();
 		if (stacks.isEmpty()) {
-			return null;
+			return new Prepared(null, null, keys);
 		}
 		TxnCore c = TxnServer.core();
 		List<String> res = new java.util.ArrayList<>();
@@ -77,10 +119,10 @@ public final class CargoTxn {
 		}
 		TxnCore.Started st = c.begin(KIND, key, res, stacks.get(0).recipient());
 		if (st.status() == TxnCore.Begin.REPLAYED) {
-			return null;
+			return new Prepared(null, null, keys);
 		}
 		if (st.status() != TxnCore.Begin.NEW) {
-			return st.status().name().toLowerCase(java.util.Locale.ROOT) + ": " + st.detail();
+			return new Prepared(null, st.status().name().toLowerCase(java.util.Locale.ROOT) + ": " + st.detail(), keys);
 		}
 		TxnEntry t = st.entry();
 		for (Stack s : stacks) {
@@ -89,7 +131,7 @@ public final class CargoTxn {
 			c.plan(t, Effect.of(TAKE, EffectClass.B).prepare().items(items).move("holder", Effect.TRANSIT).data("dim", dim).data("pos", CrateTxn.posJson(s
 				.pos())).data("slot", s.slot()).data("stack", enc));
 			String owedKey = oweKey(t.id, t.effects.size(), s.key());
-			owedKeys.add(owedKey);
+			keys.add(owedKey);
 			Effect.Builder ow = Effect.of(CrateTxn.OWE, EffectClass.O).items(items).move(Effect.TRANSIT, "owed").data("key", owedKey).data("recipient", s
 				.recipient()).data("dim", dim).data("pos", CrateTxn.posJson(s.pos())).data("reason", dev.larattalabs.architect.site.OwedLedger.CARGO).data(
 					"stack", enc);
@@ -99,8 +141,14 @@ public final class CargoTxn {
 			c.plan(t, ow);
 		}
 		if (c.persist(t) == dev.larattalabs.architect.site.DurableFile.Outcome.REFUSED) {
-			return "txn.json refused";
+			return new Prepared(null, "txn.json refused", List.of());
 		}
+		return new Prepared(t, null, List.copyOf(keys));
+	}
+
+	/** (slice T4R-L) {@link #owe}'s second half: a {@link #prepare}d txn driven. Null when done; else why not (as {@link #owe}). */
+	public static @Nullable String drive(TxnEntry t) {
+		TxnCore c = TxnServer.core();
 		TxnCore.Status s = c.drive(t);
 		if (t.decision != null && t.decision.isAbort()) {
 			return "aborted: " + t.result.get("refused");

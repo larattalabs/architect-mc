@@ -721,9 +721,12 @@ final class TxnCrashModel {
 			addItems(s, field(op), e.items(), sign);
 			put(s, receipts(e), e.data().has("key") ? e.data().get("key").getAsString() : e.key(t.id));
 			st.set(s);
-			if (e.data().has("serializeFail") && w.notes.remove("serialize-fail-once")) {
-				// (slice T4R-L) a fault armed by this effect: its chunk's next serialization fails (the barrier after this W, past the prepare's)
-				w.serializeFails.add(e.data().get("serializeFail").getAsString());
+			if (e.data().has("afterDurable")) {
+				// (slice T4R-L) an ordering invariant: this effect pays for a W whose chunk must already be on disk (a member barrier published it)
+				Store c = w.store(e.data().get("afterDurable").getAsString());
+				if (c.disk.get("items") instanceof JsonObject di && di.entrySet().stream().anyMatch(x -> x.getValue().getAsInt() > 0)) {
+					w.notes.add("violation:paid before its W was durable (" + c.name + " still stands on disk)");
+				}
 			}
 		}
 
@@ -843,6 +846,10 @@ final class TxnCrashModel {
 			restoreChunk(s);
 			put(s, "receipts", e.key(t.id) + "@restored");
 			st.set(s);
+			if (e.data().has("serializeFail") && w.notes.remove("serialize-fail-once")) {
+				// (slice T4R-L) a fault armed by this W: its chunk's next serialization fails (the member barrier after it, past the prepare's)
+				w.serializeFails.add(e.data().get("serializeFail").getAsString());
+			}
 		}
 
 		@Override

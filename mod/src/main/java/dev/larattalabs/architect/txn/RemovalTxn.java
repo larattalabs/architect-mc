@@ -478,12 +478,24 @@ public final class RemovalTxn {
 	}
 
 	/**
-	 * (slice T4R-L seam) The sites whose removal holds accept {@code t}'s adapter writes ({@code TxnServer.boxHeld}): empty when {@code t} is
-	 * no removal's txn; as the T4R fix round built it, its first site only ({@link #siteOf}).
+	 * (slice T4R-L, the final check's P1-1) The sites whose removal holds accept {@code t}'s adapter writes ({@code TxnServer.boxHeld}): every
+	 * site its effects name and every member it settles (a {@code removal.group} txn writes each member's restore, not only its first's); empty
+	 * when {@code t} is no removal's txn. Any other removal's hold still refuses it.
 	 */
 	public static java.util.Set<String> sitesOf(TxnEntry t) {
-		String s = siteOf(t);
-		return s.isEmpty() ? java.util.Set.of() : java.util.Set.of(s);
+		if (!t.kind.startsWith("removal.")) {
+			return java.util.Set.of();
+		}
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Effect e : t.effects) {
+			if (e.data().has("site")) {
+				out.add(e.data().get("site").getAsString());
+			}
+			if (e.member() != null) {
+				out.add(e.member());
+			}
+		}
+		return out;
 	}
 
 	/** (slice T4R, P1-4) A group's REMOVAL_FINISHED from its txn's payload and result: kind region or group (never both), the full result. */

@@ -127,6 +127,13 @@ class T4RGroupModelTest {
 			}
 
 			@Override
+			public List<String> check(World w, Map<String, Long> baseline) {
+				// (slice T4R-L) the ordering the member barrier owes: no owe applied while its member's W is not yet on disk (9913d902's model let
+				// the old core pass: its fault fell on the prepare barrier)
+				return w.notes.stream().filter(n -> n.startsWith("violation:")).toList();
+			}
+
+			@Override
 			public void op(World w) {
 				// the pre-save: the planned undo, its members and their stashes on disk before the commit
 				JsonObject q = w.store("queue").edit();
@@ -164,8 +171,8 @@ class T4RGroupModelTest {
 					Effect.Builder wb = fx("restore", EffectClass.W, chunk(e.getKey()), e.getValue(), "site", Effect.TRANSIT).member(e.getKey());
 					w.core.plan(t, e.getKey().equals("b") ? wb.data("serializeFail", chunk("b")) : wb);
 					w.core.plan(t, Effect.of("txn.barrier", EffectClass.R).member(e.getKey()));
-					w.core.plan(t, fx("owe", EffectClass.O, "ledger", e.getValue(), Effect.TRANSIT, "owed").data("key", "refund:" + e.getKey()).member(e
-						.getKey()));
+					w.core.plan(t, fx("owe", EffectClass.O, "ledger", e.getValue(), Effect.TRANSIT, "owed").data("key", "refund:" + e.getKey()).data(
+						"afterDurable", chunk(e.getKey())).member(e.getKey()));
 					w.core.plan(t, Effect.of("txn.barrier", EffectClass.R).member(e.getKey()));
 				}
 				// (fix round, P2 coverage; T4R-L: armed by B's own W, so the fault falls on the member barrier after it, never the prepare barrier,

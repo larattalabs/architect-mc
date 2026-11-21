@@ -22,6 +22,7 @@ public abstract class TxnHoldLevelMixin {
 	@Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldSet(BlockPos pos, BlockState state, int flags, int recursion, CallbackInfoReturnable<Boolean> cir) {
 		if (TxnServer.boxHeld((Level) (Object) this, pos)) {
+			TxnServer.refused((Level) (Object) this, pos); // (slice T4R-L) a restore write refused: its caller reads it, never receipts it
 			cir.setReturnValue(false);
 		}
 	}
@@ -36,6 +37,7 @@ public abstract class TxnHoldLevelMixin {
 	@Inject(method = "removeBlock", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldRemove(BlockPos pos, boolean moving, CallbackInfoReturnable<Boolean> cir) {
 		if (TxnServer.boxHeld((Level) (Object) this, pos)) {
+			TxnServer.refused((Level) (Object) this, pos);
 			cir.setReturnValue(false);
 		}
 	}

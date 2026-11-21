@@ -320,43 +320,44 @@ public final class CrateSettle {
 	}
 
 	/**
-	 * (slice T4R fix round, P1-3 and P1-4; pure) Whether a pre-T4 credit's journal cell counts as found: what its placement wrote ({@code after},
-	 * over {@code before}) still stands, or its old job already restored it ({@code before} stands: that refund is owed too); a cell a player
-	 * changed since (neither) does not.
+	 * (slice T4R-L, the final check's P1-2 and P1-3; pure but for the registries) What one cell of a pre-T4R credit is worth to its converted
+	 * refund: what its W removes there, valued by the survival cost of the block standing ({@code now}: SurvivalItems, the real items and
+	 * counts, a double slab two), when that block is the one its placement wrote ({@code after}'s block). Nothing otherwise: a cell a player
+	 * mined or changed, or one an old job already restored, is not the W's to remove. {@code ignoredBefore}: unused since T4R-L (the fix
+	 * round's "matches its before" evidence could not tell a cell an old job restored from one a player mined to a before of air).
 	 */
-	static boolean legacyFound(String after, String before, String now) {
-		return !after.equals(before) && (now.equals(after) || now.equals(before));
-	}
-
-	/**
-	 * (slice T4R-L seam) What one journal cell of a pre-T4R credit counts as found, given the block standing ({@code now}) and what its
-	 * placement wrote over what ({@code after} over {@code before}): as the T4R fix round counted it, one item of {@code after}'s block when
-	 * {@link #legacyFound}. Pure (registries only).
-	 */
-	static Map<String, Integer> legacyItems(net.minecraft.world.level.block.state.BlockState now, String after, String before) {
-		if (!legacyFound(after, before, Builder.blockId(now)) || after.equals("minecraft:air")) {
+	static Map<String, Integer> legacyItems(net.minecraft.world.level.block.state.BlockState now, String after, String ignoredBefore) {
+		if (now.isAir() || after.equals("minecraft:air") || !Cells.blockId(now).equals(after)) {
 			return Map.of();
 		}
-		net.minecraft.world.level.block.Block b = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(net.minecraft.resources.Identifier.parse(
-			after));
-		String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(b.asItem()).toString();
-		return item.equals("minecraft:air") ? Map.of() : Map.of(item, 1);
+		Map<String, Integer> out = new TreeMap<>();
+		for (dev.larattalabs.architect.survival.SurvivalItems.Cost c : Cells.cost(now)) {
+			if (c.count() > 0) {
+				out.merge(c.item(), c.count(), Integer::sum);
+			}
+		}
+		return out;
 	}
 
 	/**
-	 * (slice T4R fix round, P1-3 and P1-4) A pre-T4 credit's found evidence: every cell its entries wrote ({@code group}'s undone entries, or
-	 * the site's active ones while its undo is not committed) that {@link #legacyFound} counts, as a refunded cell (its block as it stands, the
-	 * item its placement put there, one). Recorded in its chunks before its W's first write (the hold covers it since the queue loaded), so
-	 * its refund pays min(the credit, what was found): the restored cells included, a cell changed by a player not. Null: unreadable.
+	 * (slice T4R-L) A pre-T4R credit's W-time cells: every position its journal entries wrote ({@code group}'s undone entries, or the site's
+	 * active ones while its undo is not committed) where its restore writes a block other than the one its placement put there, as
+	 * {@code {pos, block: the placed block, live: true}}. Nothing is valued now: {@link #foundIn} values each one just before its W's first
+	 * write (the hold covers it from the queue's load), by {@link #legacyItems} over what stands then, so its refund pays min(the credit, what
+	 * its W removes). Crate, leaves and scaffold entries are left out. Null: the journal can't be read.
 	 */
-	static java.util.@Nullable List<dev.larattalabs.architect.survival.Refunds.Cell> legacyCells(ServerLevel level, String siteId, @Nullable String group) {
+	static com.google.gson.@Nullable JsonArray legacyCells(ServerLevel level, String siteId, @Nullable String group) {
 		dev.larattalabs.architect.journal.JournalStore js = WorldJournal.storeOrNull();
 		if (js == null) {
 			return null;
 		}
-		List<dev.larattalabs.architect.journal.JournalStore.Meta> metas = group != null && !SiteJournal.undone(siteId, group).isEmpty() ? SiteJournal.undone(
-			siteId, group) : SiteJournal.active(siteId);
-		List<dev.larattalabs.architect.survival.Refunds.Cell> out = new java.util.ArrayList<>();
+		boolean undone = group != null && !SiteJournal.undone(siteId, group).isEmpty();
+		List<dev.larattalabs.architect.journal.JournalStore.Meta> metas = undone ? SiteJournal.undone(siteId, group) : SiteJournal.active(siteId);
+		// per position: the placed block (the highest layer's after) and what the restore writes there (the lowest layer's write)
+		Map<Long, String> placed = new TreeMap<>();
+		Map<Long, Long> top = new java.util.HashMap<>();
+		Map<Long, String> writes = new java.util.HashMap<>();
+		Map<Long, Long> bottom = new java.util.HashMap<>();
 		try {
 			for (dev.larattalabs.architect.journal.JournalStore.Meta m : metas) {
 				if (m.kind().equals(WorldJournal.CRATE) || m.kind().equals(WorldJournal.LEAVES) || m.kind().equals(WorldJournal.SCAFFOLD)) {
@@ -369,24 +370,37 @@ public final class CrateSettle {
 					}
 					for (int i = 0; i < sc.size(); i++) {
 						dev.larattalabs.architect.journal.Journal.Value a = sc.after(i);
-						if (a == null) {
-							continue;
+						dev.larattalabs.architect.journal.Journal.Value w = undone ? sc.written(i) : sc.before(i);
+						if (a == null || w == null) {
+							continue; // nothing placed there, or the committed undo keeps it (a cell changed since): never the W's to remove
 						}
-						String after = a.name();
-						String before = sc.before(i).name();
-						BlockPos p = BlockPos.of(sc.pos(i));
-						net.minecraft.world.level.block.state.BlockState st = level.getBlockState(p);
-						Map<String, Integer> items = legacyItems(st, after, before);
-						if (items.isEmpty()) {
-							continue;
+						long pos = sc.pos(i);
+						long layer = sc.layer(i);
+						if (!top.containsKey(pos) || layer > top.get(pos)) {
+							top.put(pos, layer);
+							placed.put(pos, a.name());
 						}
-						out.add(new dev.larattalabs.architect.survival.Refunds.Cell(sc.pos(i), Builder.blockId(st), items));
+						if (!bottom.containsKey(pos) || layer < bottom.get(pos)) {
+							bottom.put(pos, layer);
+							writes.put(pos, w.name());
+						}
 					}
 				}
 			}
 		} catch (java.io.IOException e) {
 			return null;
 		}
+		com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+		placed.forEach((pos, after) -> {
+			if (after.equals("minecraft:air") || after.equals(writes.get(pos))) {
+				return; // the restore writes the placed block itself there: it removes nothing
+			}
+			JsonObject c = new JsonObject();
+			c.addProperty("pos", pos);
+			c.addProperty("block", after);
+			c.addProperty("live", true);
+			out.add(c);
+		});
 		return out;
 	}
 
@@ -474,6 +488,14 @@ public final class CrateSettle {
 			BlockPos p = BlockPos.of(c.get("pos").getAsLong());
 			long ch = pack(p.getX() >> 4, p.getZ() >> 4);
 			Map<String, Integer> m = out.computeIfAbsent(ch, k -> new TreeMap<>());
+			if (c.has("live")) {
+				// (slice T4R-L) a pre-T4R credit's cell, valued now (before its W's first write): what the W removes there, a player's own block
+				// (its placement record) never
+				if (dev.larattalabs.architect.placed.Placed.record(level, p) == null) {
+					legacyItems(level.getBlockState(p), c.get("block").getAsString(), "").forEach((k, v) -> m.merge(k, v, Integer::sum));
+				}
+				continue;
+			}
 			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
 				c.getAsJsonObject("items").entrySet().forEach(e -> m.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
 			}
@@ -500,6 +522,40 @@ public final class CrateSettle {
 		RESTORED_NOW.clear();
 	}
 
+	/** (slice T4R-L) {@code site}'s restore in {@code group} was not fully written (a hold refused some of it): its W writes it itself. */
+	static void unmarkRestored(String site, String group) {
+		RESTORED_NOW.remove(site + "|" + group);
+	}
+
+	/** (slice T4R-L) Whether a hold refused a write of {@code r}'s own (a refused position in its box, or one of its cells). */
+	static boolean refusedIn(SiteJournal.Restore r, it.unimi.dsi.fastutil.longs.LongSet refused) {
+		if (refused.isEmpty()) {
+			return false;
+		}
+		if (r.box() != null && refusedIn(r.box(), refused)) {
+			return true;
+		}
+		for (List<SiteJournal.CellWrite> l : List.of(r.cells(), r.pre(), r.halves())) {
+			for (SiteJournal.CellWrite w : l) {
+				if (refused.contains(w.pos())) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** (slice T4R-L) Whether a refused position lies in {@code b}. */
+	static boolean refusedIn(dev.larattalabs.architect.placement.Anchors.Bounds b, it.unimi.dsi.fastutil.longs.LongSet refused) {
+		for (long p : refused) {
+			int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+			if (x >= b.minX() && y >= b.minY() && z >= b.minZ() && x <= b.maxX() && y <= b.maxY() && z <= b.maxZ()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * The W effect's write: {@code site}'s committed restore in {@code group}, from its journal entries (idempotent: the befores again). Only once
 	 * the Sites check has run (the records and the journal both loaded) and every store loaded: otherwise it throws and the txn holds.
@@ -517,12 +573,28 @@ public final class CrateSettle {
 		}
 		java.util.Set<String> was = WRITING;
 		WRITING = java.util.Set.of(site);
+		SiteJournal.Restore[] r = new SiteJournal.Restore[1];
+		Sites.SiteException[] fail = new Sites.SiteException[1];
+		it.unimi.dsi.fastutil.longs.LongSet refused;
 		try {
-			SiteJournal.writeNow(level, site, group);
-		} catch (Sites.SiteException e) {
-			throw new IllegalStateException("the restore of " + site + " could not be written: " + e.getMessage());
+			refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
+				try {
+					r[0] = SiteJournal.writeNow(level, site, group);
+				} catch (Sites.SiteException e) {
+					fail[0] = e;
+				}
+			});
 		} finally {
 			WRITING = was;
+		}
+		if (fail[0] != null) {
+			throw new IllegalStateException("the restore of " + site + " could not be written: " + fail[0].getMessage());
+		}
+		if (refusedIn(r[0], refused)) {
+			// (slice T4R-L, the final check's P1-1) a hold refused part of it (silently: setBlock answered false): never receipted, never paid;
+			// the W holds and writes it again on its retry
+			throw new IllegalStateException("the restore of " + site + " was refused by a hold at " + refused.size() + " cell(s) (e.g. " + BlockPos.of(refused
+				.iterator().nextLong()).toShortString() + ")");
 		}
 	}
 
@@ -725,22 +797,7 @@ public final class CrateSettle {
 	 * removal the writing txn adapter belongs to ({@code ""}: a txn that is no removal's; null: no txn writes now). Pure.
 	 */
 	static boolean heldFor(List<HeldBox> held, String dim, int x, int y, int z, @Nullable String writerSite) {
-		for (HeldBox b : held) {
-			if (!b.dim().equals(dim) || x < b.x0() || y < b.y0() || z < b.z0() || x > b.x1() || y > b.y1() || z > b.z1()) {
-				continue;
-			}
-			if (b.cells() != null && !b.cells().contains(net.minecraft.core.BlockPos.asLong(x, y, z))) {
-				continue; // (T4 final round, P1 3) a CELL road holds its footprint, never the rest of its bounding rectangle
-			}
-			if (writerSite != null && writerSite.equals(b.site())) {
-				continue; // (P1 3) the adapter of the txn that owns this removal; any other txn's adapter is refused
-			}
-			if (WRITING.contains(b.site())) {
-				continue; // (slice T4R fix round) that removal's own writes (its restore, its road job): no other removal's
-			}
-			return true;
-		}
-		return false;
+		return heldForAny(held, dim, x, y, z, writerSite == null ? null : java.util.Set.of(writerSite)); // (slice T4R-L) one rule for both
 	}
 
 	/**

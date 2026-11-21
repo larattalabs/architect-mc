@@ -1151,9 +1151,9 @@ public final class Groups {
 			Map<String, Integer> refund = new TreeMap<>(r.refund);
 			GroupTxn.credited(r).forEach((k, v) -> refund.merge(k, v, Integer::sum)); // credited only: owed is listed apart
 			List<String> owed = new ArrayList<>(r.owed);
-			r.cargoOwed.forEach(k -> {
+			cargoOwed(r).forEach(k -> {
 				if (!owed.contains(k)) {
-					owed.add(k); // (fix round, P1-6) its data cargo's owed keys
+					owed.add(k); // (fix round, P1-6) its data cargo's owed keys (T4R-L: an aborted cargo txn's left out)
 				}
 			});
 			GroupTxn.owed(r).forEach(k -> {
@@ -1228,16 +1228,25 @@ public final class Groups {
 						fail[0] = e;
 					}
 				};
-				if (r.gtx != null) {
-					dev.larattalabs.architect.txn.TxnServer.asHolder(r.gtx, write);
-				} else {
-					write.run();
-				}
+				it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
+					if (r.gtx != null) {
+						dev.larattalabs.architect.txn.TxnServer.asHolder(r.gtx, write);
+					} else {
+						write.run();
+					}
+				});
 				if (fail[0] != null) {
 					throw fail[0];
 				}
 				done[0].returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
-				CrateSettle.markRestored(id, r.undo); // its W receipts this write (in memory: its chunks and its receipts saved together)
+				if (!CrateSettle.refusedIn(s.restoreBox(), refused)) {
+					CrateSettle.markRestored(id, r.undo); // its W receipts this write (in memory: its chunks and its receipts saved together)
+				} else {
+					// (slice T4R-L, the final check's P1-1) a hold refused part of its write (silently): never receipted; its W writes it itself and
+					// holds (retried) while that is refused, so nothing of it is paid over a block still standing
+					Architect.LOGGER.warn("Removal of group {}: {}'s restore was refused by a hold at {} cell(s); its txn writes it again", r.group, id,
+						refused.size());
+				}
 			} catch (Sites.SiteException e) {
 				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
 				return;
@@ -1740,7 +1749,32 @@ public final class Groups {
 	 * {@link Removal#cargoOwed}. Null when done, else why not (as {@link dev.larattalabs.architect.txn.CargoTxn#owe}). Server thread.
 	 */
 	static @Nullable String oweCargo(MinecraftServer server, ServerLevel level, Removal r, String key, List<dev.larattalabs.architect.txn.CargoTxn.Stack> stacks) {
-		return dev.larattalabs.architect.txn.CargoTxn.owe(level, key, stacks, r.cargoOwed);
+		dev.larattalabs.architect.txn.CargoTxn.Prepared p = dev.larattalabs.architect.txn.CargoTxn.prepare(level, key, stacks);
+		if (p.entry() == null) {
+			return p.why();
+		}
+		// (slice T4R-L, the final check's P2) its owed keys in the queue file, confirmed, before the txn can commit an owed entry: a crash after
+		// that commit finds the removal's link to them on disk (before it, the undecided txn is compensated at recovery: nothing owed)
+		r.cargoOwed.addAll(p.keys());
+		long gen = Placement.save(server, false);
+		Placement.flushSaves();
+		if (!Placement.written(gen) || Placement.writeFailing()) {
+			r.cargoOwed.removeAll(p.keys());
+			String ab = dev.larattalabs.architect.txn.TxnServer.core().resolve(p.entry().id, "abort");
+			return "the queue file could not record its owed keys" + (ab == null ? "" : " (" + ab + ")");
+		}
+		return dev.larattalabs.architect.txn.CargoTxn.drive(p.entry());
+	}
+
+	/** (slice T4R-L) {@link Removal#cargoOwed} without the keys of a cargo txn known aborted (a crash before its drive: nothing owed). */
+	static List<String> cargoOwed(Removal r) {
+		List<String> out = new ArrayList<>();
+		for (String k : r.cargoOwed) {
+			if (!dev.larattalabs.architect.txn.CargoTxn.aborted(k)) {
+				out.add(k);
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -2258,8 +2292,10 @@ public final class Groups {
 				written.add(job.siteId);
 				if (GroupTxn.planned(r, job.siteId)) {
 					// (slice T4R, R1) a paid road or mechanism: its W receipts this write; its credit is the txn's (the next tick drives it), and it
-					// leaves the list only once that is durable
-					CrateSettle.markRestored(job.siteId, r.undo);
+					// leaves the list only once that is durable. (T4R-L) a write a hold refused is never receipted: its W writes it itself
+					if (!job.refusedOwn) {
+						CrateSettle.markRestored(job.siteId, r.undo);
+					}
 					return;
 				}
 				r.sites.remove(job.siteId);

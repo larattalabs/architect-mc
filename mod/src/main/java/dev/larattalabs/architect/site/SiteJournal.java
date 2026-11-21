@@ -824,6 +824,47 @@ public final class SiteJournal {
 		}
 	}
 
+	/**
+	 * (slice T4R-L) R1 alone: {@link #undo}'s plan over the active entries of {@code siteIds}, nothing submitted ({@link #submitUndo} commits
+	 * it). A removal reads its result parts (restore counts, hand-down) from it before its stash's confirmed save, so they are durable before
+	 * its decision.
+	 */
+	static WorldJournal.UndoWork planSites(ServerLevel level, Collection<String> siteIds, String group) throws Sites.SiteException {
+		List<String> ids = new ArrayList<>();
+		for (String sid : siteIds) {
+			for (JournalStore.Meta m : active(sid)) {
+				ids.add(m.id());
+			}
+		}
+		if (ids.isEmpty()) {
+			throw new Sites.SiteException(Reason.OTHER, "No journal entry for " + String.join(", ", siteIds) + ": it can't be restored; forget drops the "
+				+ "record and leaves the blocks");
+		}
+		return planEntries(level, ids, group);
+	}
+
+	/** (slice T4R-L) {@link #undoEntries}'s plan alone, nothing submitted. */
+	static WorldJournal.UndoWork planEntries(ServerLevel level, Collection<String> entryIds, String group) throws Sites.SiteException {
+		requireAvailable();
+		List<String> ids = new ArrayList<>();
+		for (String id : entryIds) {
+			JournalStore.Meta m = store().meta(id);
+			if (m != null && m.active()) {
+				ids.add(id);
+			}
+		}
+		List<String> siteIds = ids.stream().map(id -> store0().meta(id).site()).distinct().toList();
+		if (ids.isEmpty()) {
+			throw new Sites.SiteException(Reason.OTHER, "No active journal entry among " + entryIds);
+		}
+		try {
+			return WorldJournal.planUndo(level, ids, group);
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + String.join(", ", siteIds) + " can't be read (" + e.getMessage()
+				+ ")");
+		}
+	}
+
 	static Undone undoEntries(ServerLevel level, Collection<String> entryIds, String group) throws Sites.SiteException {
 		requireAvailable();
 		List<String> ids = new ArrayList<>();

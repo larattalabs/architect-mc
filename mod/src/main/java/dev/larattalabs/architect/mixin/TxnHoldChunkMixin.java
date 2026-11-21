@@ -24,6 +24,7 @@ public abstract class TxnHoldChunkMixin {
 	@Inject(method = "setBlockState", at = @At("HEAD"), cancellable = true)
 	private void architect$txnHeldState(BlockPos pos, BlockState state, int flags, CallbackInfoReturnable<BlockState> cir) {
 		if (TxnServer.boxHeld(((LevelChunk) (Object) this).getLevel(), pos)) {
+			TxnServer.refused(((LevelChunk) (Object) this).getLevel(), pos); // (slice T4R-L) read by a restore's write, never receipted
 			cir.setReturnValue(null);
 		}
 	}

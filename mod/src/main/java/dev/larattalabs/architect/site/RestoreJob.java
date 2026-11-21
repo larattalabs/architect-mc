@@ -580,7 +580,10 @@ final class RestoreJob implements Placement.Job {
 			java.util.Set<String> writingWas = CrateSettle.WRITING;
 			CrateSettle.WRITING = java.util.Set.of(siteId); // (T4b fix round, N3) the removal's own writes in its held box (T4R: its box only)
 			try {
-				restore.writing(level, () -> SiteJournal.writeCells(level, part));
+				SiteJournal.Restore rs = restore;
+				it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> rs.writing(level, () -> SiteJournal
+					.writeCells(level, part)));
+				refusedOwn |= CrateSettle.refusedIn(rs, refused); // (slice T4R-L) never receipted: its W writes it itself
 			} finally {
 				CrateSettle.WRITING = writingWas;
 			}
@@ -626,7 +629,9 @@ final class RestoreJob implements Placement.Job {
 			// resumed job replays it); held: this job waits, the crate keeps its stock
 			if (settle.has("road") && group != null) {
 				CrateSettle.withGroup(settle, group); // (T4b) its W restore's source: this job's committed undo, just written
-				CrateSettle.markRestored(siteId, group);
+				if (!refusedOwn) {
+					CrateSettle.markRestored(siteId, group); // (slice T4R-L) a write a hold refused is never receipted: its W writes it itself
+				}
 			}
 			CrateSettle.Settled ss = CrateSettle.settle(level, settle);
 			if (!ss.done()) {
@@ -765,6 +770,9 @@ final class RestoreJob implements Placement.Job {
 	/** (slice T4R, R1) A group's paid road member: its stash (its refunded cells), for the found receipts before its first write. Not saved. */
 	transient @Nullable JsonObject found;
 
+	/** (slice T4R-L) A hold refused one of this job's own writes this session: its W is never told it is written (it writes it itself). */
+	transient boolean refusedOwn;
+
 	/**
 	 * (slice T4R, R2) From the queue's load (before Placement's start grace ends and before any conversion): a pre-T4 road removal's footprint
 	 * held in memory, so no player mines a paid block of it before its conversion's stash is durable.
@@ -781,10 +789,11 @@ final class RestoreJob implements Placement.Job {
 	}
 
 	/**
-	 * (slice T4R, R2; fix round P1-4) A pre-T4 road's found-cells evidence from its journal cells: those standing, and those its job already
-	 * restored before the upgrade (owed too), never a cell a player changed ({@link CrateSettle#legacyCells}). Null: unreadable.
+	 * (slice T4R, R2; T4R-L) A pre-T4 road's W-time cells ({@link CrateSettle#legacyCells}): valued just before its W's first write by what
+	 * the W removes there. A cell its old job restored before the upgrade is not refunded: main's job kept no per-cell receipt and paid its
+	 * credit only after its last write, so nothing on disk tells it from a cell a player mined. Null: unreadable.
 	 */
-	java.util.@Nullable Collection<dev.larattalabs.architect.survival.Refunds.Cell> legacyCells(ServerLevel level, Infra inf) {
+	com.google.gson.@Nullable JsonArray legacyCells(ServerLevel level, Infra inf) {
 		return CrateSettle.legacyCells(level, siteId, group);
 	}
 
@@ -793,7 +802,7 @@ final class RestoreJob implements Placement.Job {
 
 	/**
 	 * (T4 final round, P1 2) A pre-T4 queued standalone road removal: its C29 credit becomes a {@code removal.road} stash (credited by the
-	 * txn after the restore; slice T4R: min(the credit, what its W finds) applied over its journal cells, the ones restored already included),
+	 * txn after the restore; slice T4R-L: min(the credit, what its W removes), each of its journal cells valued at its W's first write),
 	 * saved confirmed with the ledger before
 	 * the job goes on; the job then carries the stash and no credit. Waits (null answer means done) while saving is off, a store failed to
 	 * load or the save is refused; never pays through C29.
@@ -813,11 +822,12 @@ final class RestoreJob implements Placement.Job {
 		if (level == null) {
 			return inf.dimension() + " is not loaded";
 		}
-		java.util.Collection<dev.larattalabs.architect.survival.Refunds.Cell> cells = legacyCells(level, inf);
+		JsonArray cells = legacyCells(level, inf);
 		if (cells == null) {
 			return "its restore can't be read for its found cells";
 		}
-		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), cells, BlockPos.of(c.at()));
+		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), null, BlockPos.of(c.at()));
+		st.add("cells", cells); // (slice T4R-L) valued at its W's first write: what the W removes
 		st.addProperty("legacyRoad", true);
 		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
 		CrateSettle.holdDurable(siteId, st);

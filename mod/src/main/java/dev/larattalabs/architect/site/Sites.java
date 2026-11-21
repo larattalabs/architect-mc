@@ -1785,6 +1785,46 @@ public final class Sites {
 			JsonObject st = d == null ? null : d.stockpile() != null && x0 != null ? CrateSettle.pileStash(x0, d) : d.settle();
 			stashes.put(k, st == null ? null : CrateSettle.withGroup(st, group));
 		});
+		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
+		for (String c : cascade) {
+			if (Infras.get(c) != null) {
+				ids.add(0, c);
+			}
+		}
+		// (T2b part 2b) a crate a removal settles keeps its CRATE entry out of the undo: the settle restores its cell after the restore
+		List<String> keep = new ArrayList<>();
+		for (Site x : all) {
+			Builder.Deconstruction d = decs.get(x.id());
+			keep.addAll(CrateSettle.excluded(x, d == null ? null : d.settle()));
+		}
+		// (slice T4R-L, the final check's P2) R1 now, nothing written (R2 below submits this plan): each stash told its removal's result parts
+		// (the restore's counts; the removed site's hand-down and cascade) before its confirmed save, so a recovered or replayed removal reports
+		// them as this call would have, whatever crash follows the decision
+		WorldJournal.UndoWork plan = keep.isEmpty() ? SiteJournal.planSites(level, ids, group) : SiteJournal.planEntries(level, CrateSettle.undoIds(ids, keep),
+			group);
+		tr.mark("plan");
+		Map<String, Integer> handedAll = handedBySite(plan);
+		for (Site x : all) {
+			JsonObject st = stashes.get(x.id());
+			if (st == null) {
+				continue;
+			}
+			Journal.Stats xs = statsOf(plan, x.id());
+			JsonObject fin = new JsonObject();
+			fin.addProperty("restored", xs.restored());
+			fin.addProperty("kept", xs.changed());
+			JsonObject h = new JsonObject();
+			if (x.id().equals(id)) {
+				handedAll.forEach(h::addProperty);
+			}
+			fin.add("handed", h);
+			com.google.gson.JsonArray ca = new com.google.gson.JsonArray();
+			if (x.id().equals(id)) {
+				cascade.forEach(ca::add);
+			}
+			fin.add("cascaded", ca);
+			st.add("fin", fin);
+		}
 		boolean stashHeld = CrateSettle.holdDurable(stashes);
 		if (custody || pendingHeld || stashHeld) {
 			try {
@@ -1812,51 +1852,11 @@ public final class Sites {
 		}
 		Drops drops = Drops.before(level, u);
 		tr.mark("drops");
-		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
-		for (String c : cascade) {
-			if (Infras.get(c) != null) {
-				ids.add(0, c);
-			}
-		}
 		WorldJournal.kill("K5");
-		// (T2b part 2b) a crate a removal settles keeps its CRATE entry out of the undo: the settle restores its cell after the restore
-		List<String> keep = new ArrayList<>();
-		for (Site x : all) {
-			Builder.Deconstruction d = decs.get(x.id());
-			keep.addAll(CrateSettle.excluded(x, d == null ? null : d.settle()));
-		}
-		SiteJournal.Undone undone = keep.isEmpty() ? SiteJournal.undo(level, ids, group) : SiteJournal.undoEntries(level, CrateSettle.undoIds(ids, keep), group);
-		tr.mark("plan");
+		SiteJournal.Undone undone = SiteJournal.submitUndo(plan);
 		SiteJournal.await(undone.commit(), "the removal of " + id);
 		tr.mark("commit");
 		WorldJournal.kill("K6");
-		// (slice T4R fix round, P1-6) each stash told its removal's result parts (the restore's counts; the removed site's hand-down and
-		// cascade): its txn keeps them with its result, so a recovered or replayed removal reports them as this call would have
-		Map<String, Integer> handedAll = handedBySite(undone.work());
-		for (Site x : all) {
-			JsonObject st = stashes.get(x.id());
-			if (st == null) {
-				continue;
-			}
-			Journal.Stats xs = statsOf(undone.work(), x.id());
-			JsonObject fin = new JsonObject();
-			fin.addProperty("restored", xs.restored());
-			fin.addProperty("kept", xs.changed());
-			JsonObject h = new JsonObject();
-			if (x.id().equals(id)) {
-				handedAll.forEach(h::addProperty);
-			}
-			fin.add("handed", h);
-			com.google.gson.JsonArray ca = new com.google.gson.JsonArray();
-			if (x.id().equals(id)) {
-				cascade.forEach(ca::add);
-			}
-			fin.add("cascaded", ca);
-			st.add("fin", fin);
-			if (CrateSettle.durable(x.id()) != null) {
-				CrateSettle.holdDurable(x.id(), st); // its durable copy too (published with the next ledger save)
-			}
-		}
 		// R3: the records pending (with the crate.settle each owes: a restart before it settles it from there)
 		for (Site x : all) {
 			markPending(server, x, "removed", stashes.get(x.id()));
@@ -1909,7 +1909,22 @@ public final class Sites {
 			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
 			CrateSettle.recordFound(level, x.id(), group, stashes.get(x.id()));
 			CrateSettle.markRestored(x.id(), group);
-			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
+			SiteJournal.Restore[] rr = new SiteJournal.Restore[1];
+			SiteException[] fail = new SiteException[1];
+			it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
+				try {
+					rr[0] = SiteJournal.writeNow(level, x.id(), group);
+				} catch (SiteException e) {
+					fail[0] = e;
+				}
+			});
+			if (fail[0] != null) {
+				throw fail[0];
+			}
+			SiteJournal.Restore r = rr[0];
+			if (CrateSettle.refusedIn(r, refused)) {
+				CrateSettle.unmarkRestored(x.id(), group); // (slice T4R-L) a hold refused part of it: its W writes it itself, never receipts it
+			}
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),

@@ -313,7 +313,7 @@ public final class TxnServer {
 		String dim = level.dimension().identifier().toString();
 		// (T4 final round, P1 3) a txn adapter writing is exempt only from the hold of the removal its own txn settles; any other txn's adapter
 		// (another removal's, an adoption's, a crate move's) is refused there like any writer
-		java.util.Set<String> own = WRITER == null ? null : RemovalTxn.sitesOf(WRITER);
+		java.util.Set<String> own = WRITER == null ? null : WRITER_SITES;
 		return CrateSettle.stashBoxHeldBy(dim, pos.getX(), pos.getY(), pos.getZ(), own) || RemovalTxn.boxHeld(dim, pos.getX(), pos
 			.getY(), pos.getZ(), WRITER);
 	}
@@ -333,15 +333,54 @@ public final class TxnServer {
 	 */
 	private static @Nullable TxnEntry WRITER;
 
+	/** (slice T4R-L) {@link RemovalTxn#sitesOf} of {@link #WRITER}, read once per {@link #asHolder} (every guarded write asks it). */
+	private static java.util.Set<String> WRITER_SITES = java.util.Set.of();
+
 	/** Runs {@code r} as {@code t}'s own write: {@link #boxHeld} answers false for the cells {@code t} holds while it runs. */
 	public static void asHolder(TxnEntry t, Runnable r) {
 		TxnEntry was = WRITER;
+		java.util.Set<String> wasSites = WRITER_SITES;
 		WRITER = t;
+		WRITER_SITES = RemovalTxn.sitesOf(t);
 		try {
 			r.run();
 		} finally {
 			WRITER = was;
+			WRITER_SITES = wasSites;
 		}
+	}
+
+	/**
+	 * (slice T4R-L) The positions whose block writes a hold refused while {@link #refusals} captures (the level and chunk guards report
+	 * here), or null when none captures. Server thread.
+	 */
+	private static it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet REFUSED;
+
+	/** (slice T4R-L) A guard refused a block write at {@code pos} of {@code level} (server side). */
+	public static void refused(net.minecraft.world.level.@Nullable Level level, net.minecraft.core.BlockPos pos) {
+		if (REFUSED != null && level != null && !level.isClientSide()) {
+			REFUSED.add(pos.asLong());
+		}
+	}
+
+	/**
+	 * (slice T4R-L, the final check's P1-1) Runs {@code r} (a removal's restore write) and answers the positions a hold refused meanwhile: the
+	 * guards refuse silently ({@code setBlock} answers false), so a restore that must never be receipted or refunded over a refused write
+	 * reads it here. Nested captures each see their own refusals and pass them up.
+	 */
+	public static it.unimi.dsi.fastutil.longs.LongSet refusals(Runnable r) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet was = REFUSED;
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet mine = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		REFUSED = mine;
+		try {
+			r.run();
+		} finally {
+			REFUSED = was;
+			if (was != null) {
+				was.addAll(mine);
+			}
+		}
+		return mine;
 	}
 
 	/**

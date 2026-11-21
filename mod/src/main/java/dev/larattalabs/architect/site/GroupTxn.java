@@ -72,15 +72,17 @@ final class GroupTxn {
 		for (String id : order) {
 			JsonObject st = r.decSettle.get(id);
 			if (st.has("legacy") && !st.has("cells")) {
-				// (fix round, P1-3) a pre-T4R member credit: its found evidence from its journal cells (held since the queue loaded), so its refund
-				// pays min(the credit, what its W finds): a paid block a player took is not paid, one already restored is
+				// (slice T4R-L) a pre-T4R member credit: its W-time cells (held since the queue loaded), each valued just before its W's first write
+				// by what the W removes there, so its refund pays min(the credit, what its W removes): never a cell a player mined, nor one an old
+				// job restored (nothing on disk tells those apart)
 				ServerLevel lv = Sites.levelOf(server, st.get("dim").getAsString());
-				java.util.List<dev.larattalabs.architect.survival.Refunds.Cell> cells = lv == null ? null : CrateSettle.legacyCells(lv, id, r.undo);
+				JsonArray cells = lv == null ? null : CrateSettle.legacyCells(lv, id, r.undo);
 				dev.larattalabs.architect.placement.Anchors.Bounds box = Groups.boxOf(id);
 				if (cells == null || box == null) {
 					return "the journal cells of " + id + "'s pre-T4R credit can't be read";
 				}
-				CrateSettle.withCells(st, cells, box);
+				st.add("cells", cells);
+				CrateSettle.withBox(st, box);
 			}
 			if (st.get("box") instanceof JsonArray b && b.size() == 6) {
 				res.add(RemovalTxn.box(st.get("dim").getAsString(), b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4)
@@ -108,9 +110,13 @@ final class GroupTxn {
 				return "held: " + s.detail();
 			case REPLAYED:
 				r.gtxDone = true; // retired already (a stop after its end, before the queue dropped the removal): every member settled
+				order.forEach(CrateSettle::forgetHoldOnly); // (slice T4R-L) nothing of it is left to write: the load-time holds go
 				return null;
 			case ATTACHED:
 				r.gtx = s.entry();
+				// (slice T4R-L, the final check's P1-1) a restart reattached it: its own box holds (and its writer's exemption over every member)
+				// take over from the load-time ones, as at its begin; else a member's own restore write is refused by its member's legacy hold
+				order.forEach(CrateSettle::forgetHoldOnly);
 				return null;
 			default:
 				break;
@@ -199,7 +205,7 @@ final class GroupTxn {
 		r.decItems.values().forEach(m -> m.forEach((k, v) -> drops.merge(k, v, Integer::sum)));
 		o.add("drops", Builder.counts(drops));
 		JsonArray ow = new JsonArray(); // (fix round, P1-6) its data cargo's owed keys (a separate removal.cargo txn's)
-		r.cargoOwed.forEach(ow::add);
+		Groups.cargoOwed(r).forEach(ow::add); // (slice T4R-L) an aborted cargo txn's keys left out
 		o.add("owed", ow);
 		return o;
 	}
