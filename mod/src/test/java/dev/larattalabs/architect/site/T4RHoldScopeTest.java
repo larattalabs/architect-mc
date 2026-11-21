@@ -46,7 +46,7 @@ class T4RHoldScopeTest {
 
 	@AfterEach
 	void clear() {
-		CrateSettle.clearHoldOnly();
+		CrateSettle.clearDevHolds();
 		CrateSettle.WRITING = Set.of();
 	}
 
@@ -104,9 +104,9 @@ class T4RHoldScopeTest {
 	@Test
 	void aGroupTxnWritesEveryMembersHoldNotOnlyItsFirst() {
 		System.out.println("ROW T4RL-P1-1 (unit)");
-		CrateSettle.holdOnly("a", stash("a", 0));
-		CrateSettle.holdOnly("b", stash("b", 20));
-		CrateSettle.holdOnly("c", stash("c", 40)); // an unrelated removal's hold
+		CrateSettle.devHoldStash("a", stash("a", 0));
+		CrateSettle.devHoldStash("b", stash("b", 20));
+		CrateSettle.devHoldStash("c", stash("c", 40)); // an unrelated removal's hold
 		TxnCore c = new TxnCore(new Env());
 		c.register(RemovalTxn.GROUP_KIND);
 		c.load(null, null);
@@ -132,8 +132,8 @@ class T4RHoldScopeTest {
 	@Test
 	void oneRemovalsWritesNeverOpenAnothersHold() {
 		System.out.println("ROW T4RL-writing (unit)");
-		CrateSettle.holdOnly("a", stash("a", 0));
-		CrateSettle.holdOnly("b", stash("b", 20));
+		CrateSettle.devHoldStash("a", stash("a", 0));
+		CrateSettle.devHoldStash("b", stash("b", 20));
 		CrateSettle.WRITING = Set.of("a");
 		boolean a = CrateSettle.stashBoxHeld(DIM, 1, 65, 1);
 		boolean b = CrateSettle.stashBoxHeld(DIM, 21, 65, 1);

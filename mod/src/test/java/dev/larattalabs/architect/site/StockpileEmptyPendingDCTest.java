@@ -140,8 +140,12 @@ class StockpileEmptyPendingDCTest {
 	void everyRoadCreditGoesThroughCreditRefund() throws Exception {
 		String g = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "Groups.java");
 		// (slice T4R, R1) a group member's credit is its removal.group txn's pile.refund (CrateSettle.bookRefund -> Stockpiles.credit, which
-		// drops the pending credit by the credit rule), never a direct Groups.credit
-		assertFalse(g.contains("private static void credit(MinecraftServer server, Removal r, String id)"), "no direct group member credit");
+		// drops the pending credit by the credit rule). (slice T4R-M) main's direct Groups.credit is back for a pre-T4R removal only (legacyTick
+		// and removed()'s legacy branch), through Builder.creditRefund
+		String credit = StockpileSaveHFTest.body(g, "private static void credit(MinecraftServer server, Removal r, String id)");
+		assertTrue(credit.contains("Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);"), "main's group credit");
+		int calls = g.split("credit\\(server, r, ", -1).length - 1;
+		assertTrue(calls == 4, "Groups.credit is called by main's legacy path only (legacyTick 3, removed()'s legacy branch 1): " + calls);
 		String cs = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "CrateSettle.java");
 		assertTrue(cs.contains("Stockpiles.credit(srv, p, key, new TreeMap<>(items), at);"), "a group member's credit goes through Stockpiles.credit");
 		String rj = StockpileSaveJ1Test.read(StockpileSaveJ1Test.SITE + "RestoreJob.java");

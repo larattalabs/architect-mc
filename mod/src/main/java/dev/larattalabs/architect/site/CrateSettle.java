@@ -319,91 +319,6 @@ public final class CrateSettle {
 		return out;
 	}
 
-	/**
-	 * (slice T4R-L, the final check's P1-2 and P1-3; pure but for the registries) What one cell of a pre-T4R credit is worth to its converted
-	 * refund: what its W removes there, valued by the survival cost of the block standing ({@code now}: SurvivalItems, the real items and
-	 * counts, a double slab two), when that block is the one its placement wrote ({@code after}'s block). Nothing otherwise: a cell a player
-	 * mined or changed, or one an old job already restored, is not the W's to remove. {@code ignoredBefore}: unused since T4R-L (the fix
-	 * round's "matches its before" evidence could not tell a cell an old job restored from one a player mined to a before of air).
-	 */
-	static Map<String, Integer> legacyItems(net.minecraft.world.level.block.state.BlockState now, String after, String ignoredBefore) {
-		if (now.isAir() || after.equals("minecraft:air") || !Cells.blockId(now).equals(after)) {
-			return Map.of();
-		}
-		Map<String, Integer> out = new TreeMap<>();
-		for (dev.larattalabs.architect.survival.SurvivalItems.Cost c : Cells.cost(now)) {
-			if (c.count() > 0) {
-				out.merge(c.item(), c.count(), Integer::sum);
-			}
-		}
-		return out;
-	}
-
-	/**
-	 * (slice T4R-L) A pre-T4R credit's W-time cells: every position its journal entries wrote ({@code group}'s undone entries, or the site's
-	 * active ones while its undo is not committed) where its restore writes a block other than the one its placement put there, as
-	 * {@code {pos, block: the placed block, live: true}}. Nothing is valued now: {@link #foundIn} values each one just before its W's first
-	 * write (the hold covers it from the queue's load), by {@link #legacyItems} over what stands then, so its refund pays min(the credit, what
-	 * its W removes). Crate, leaves and scaffold entries are left out. Null: the journal can't be read.
-	 */
-	static com.google.gson.@Nullable JsonArray legacyCells(ServerLevel level, String siteId, @Nullable String group) {
-		dev.larattalabs.architect.journal.JournalStore js = WorldJournal.storeOrNull();
-		if (js == null) {
-			return null;
-		}
-		boolean undone = group != null && !SiteJournal.undone(siteId, group).isEmpty();
-		List<dev.larattalabs.architect.journal.JournalStore.Meta> metas = undone ? SiteJournal.undone(siteId, group) : SiteJournal.active(siteId);
-		// per position: the placed block (the highest layer's after) and what the restore writes there (the lowest layer's write)
-		Map<Long, String> placed = new TreeMap<>();
-		Map<Long, Long> top = new java.util.HashMap<>();
-		Map<Long, String> writes = new java.util.HashMap<>();
-		Map<Long, Long> bottom = new java.util.HashMap<>();
-		try {
-			for (dev.larattalabs.architect.journal.JournalStore.Meta m : metas) {
-				if (m.kind().equals(WorldJournal.CRATE) || m.kind().equals(WorldJournal.LEAVES) || m.kind().equals(WorldJournal.SCAFFOLD)) {
-					continue;
-				}
-				for (long k : m.sections()) {
-					dev.larattalabs.architect.journal.SectionCells sc = js.section(m.id(), k);
-					if (sc == null) {
-						continue;
-					}
-					for (int i = 0; i < sc.size(); i++) {
-						dev.larattalabs.architect.journal.Journal.Value a = sc.after(i);
-						dev.larattalabs.architect.journal.Journal.Value w = undone ? sc.written(i) : sc.before(i);
-						if (a == null || w == null) {
-							continue; // nothing placed there, or the committed undo keeps it (a cell changed since): never the W's to remove
-						}
-						long pos = sc.pos(i);
-						long layer = sc.layer(i);
-						if (!top.containsKey(pos) || layer > top.get(pos)) {
-							top.put(pos, layer);
-							placed.put(pos, a.name());
-						}
-						if (!bottom.containsKey(pos) || layer < bottom.get(pos)) {
-							bottom.put(pos, layer);
-							writes.put(pos, w.name());
-						}
-					}
-				}
-			}
-		} catch (java.io.IOException e) {
-			return null;
-		}
-		com.google.gson.JsonArray out = new com.google.gson.JsonArray();
-		placed.forEach((pos, after) -> {
-			if (after.equals("minecraft:air") || after.equals(writes.get(pos))) {
-				return; // the restore writes the placed block itself there: it removes nothing
-			}
-			JsonObject c = new JsonObject();
-			c.addProperty("pos", pos);
-			c.addProperty("block", after);
-			c.addProperty("live", true);
-			out.add(c);
-		});
-		return out;
-	}
-
 	/** Whether {@code stash} is a stockpile site's refund ({@link #pileStash}). */
 	static boolean isPileStash(@Nullable JsonObject stash) {
 		return stash != null && stash.has("pileKey");
@@ -488,14 +403,6 @@ public final class CrateSettle {
 			BlockPos p = BlockPos.of(c.get("pos").getAsLong());
 			long ch = pack(p.getX() >> 4, p.getZ() >> 4);
 			Map<String, Integer> m = out.computeIfAbsent(ch, k -> new TreeMap<>());
-			if (c.has("live")) {
-				// (slice T4R-L) a pre-T4R credit's cell, valued now (before its W's first write): what the W removes there, a player's own block
-				// (its placement record) never
-				if (dev.larattalabs.architect.placed.Placed.record(level, p) == null) {
-					legacyItems(level.getBlockState(p), c.get("block").getAsString(), "").forEach((k, v) -> m.merge(k, v, Integer::sum));
-				}
-				continue;
-			}
 			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
 				c.getAsJsonObject("items").entrySet().forEach(e -> m.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
 			}
@@ -747,29 +654,29 @@ public final class CrateSettle {
 
 	static void boxesChanged() {
 		List<JsonObject> all = new java.util.ArrayList<>(DURABLE.values());
-		all.addAll(HOLD_ONLY.values());
+		all.addAll(DEV_HOLDS.values());
 		HELD = heldOf(all);
 	}
 
 	/**
-	 * (slice T4R, R2) Holds kept in memory only, from the queue's load on: a pre-T4 queued road removal's footprint before (and while) its
-	 * conversion's stash is saved, so no player mines a paid block of it inside the start grace or while that save is refused.
+	 * (TEST, slice T4R-L hooks: dev.removal.holdBox; slice T4R-M: no pre-T4R removal holds anything any more) Holds kept in memory only, for no
+	 * removal: every writer is refused there, as by an unrelated removal's held box. The unit seams hold a removal's stash here too.
 	 */
-	private static final Map<String, JsonObject> HOLD_ONLY = new TreeMap<>();
+	private static final Map<String, JsonObject> DEV_HOLDS = new TreeMap<>();
 
-	static void holdOnly(String id, JsonObject stash) {
-		HOLD_ONLY.put(id, stash.deepCopy());
+	static void devHoldStash(String id, JsonObject stash) {
+		DEV_HOLDS.put(id, stash.deepCopy());
 		boxesChanged();
 	}
 
-	static void forgetHoldOnly(String id) {
-		if (HOLD_ONLY.remove(id) != null) {
+	static void forgetDevHold(String id) {
+		if (DEV_HOLDS.remove(id) != null) {
 			boxesChanged();
 		}
 	}
 
-	static void clearHoldOnly() {
-		HOLD_ONLY.clear();
+	static void clearDevHolds() {
+		DEV_HOLDS.clear();
 		boxesChanged();
 	}
 
@@ -859,7 +766,7 @@ public final class CrateSettle {
 	 */
 	public static void devHold(String dim, List<BlockPos> cells) {
 		if (cells.isEmpty()) {
-			forgetHoldOnly("dev:hold");
+			forgetDevHold("dev:hold");
 			return;
 		}
 		int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
@@ -880,7 +787,7 @@ public final class CrateSettle {
 		}
 		st.add("box", b);
 		withFootprint(st, cells);
-		holdOnly("dev:hold", st);
+		devHoldStash("dev:hold", st);
 	}
 
 	/** Whether {@code (x, y, z)} of {@code dim} lies in a durable removal stash's box, outside the removal's own writes. */
@@ -1015,66 +922,14 @@ public final class CrateSettle {
 			if (root.get("crateSettles") instanceof JsonObject cs) {
 				cs.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsJsonObject()));
 			}
-			// (T4b fix round, finding 4, N8) a pre-T4 stockpile removal's held pending credit (J2's, or C29's for a road) enters the same protocol:
-			// a pile stash, its restore (W) first, then its credit under its own key; never the threshold release with the absence-based book
-			if (root.get("stockpiles") instanceof com.google.gson.JsonArray piles) {
-				for (var pe : piles) {
-					JsonObject po = pe.getAsJsonObject();
-					if (!(po.get("ledger") instanceof JsonObject lg) || !(lg.get("pendingCredit") instanceof JsonObject pc)) {
-						continue;
-					}
-					for (var e : pc.entrySet()) {
-						JsonObject st = legacyStash(po.get("owner").getAsString(), po.get("dimension").getAsString(), e.getKey(), e.getValue().getAsJsonObject());
-						if (st != null && !out.containsKey(st.get("site").getAsString())) {
-							out.put(st.get("site").getAsString(), st);
-						}
-					}
-				}
-			}
+			// (slice T4R-M) a pre-T4R removal's held pending credit (J2's single site, DR-S's group member, C29's road) is no stash: its removal
+			// finishes on main's path (the Sites check's evidence, then Stockpiles.settlePendingCredits books it once), never a removal txn
 			return out;
 		} catch (java.io.IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Sites check: {} could not be read ({}): committed construction removals wait for the next start", f, e.toString());
 			return null;
 		}
 	}
-
-	/**
-	 * (pure, T4b fix round, finding 4) A pre-T4 held pending credit as a pile stash: {@code site:<id>@<placedAt>} (a site) or
-	 * {@code road:<id>@<placedAt>} (a road); null for any other key (a gate mechanism's, a delta's: legacy).
-	 */
-	static @Nullable JsonObject legacyStash(String owner, String dim, String key, JsonObject pending) {
-		boolean road = key.startsWith("road:");
-		if (!key.startsWith("site:") && !road || key.indexOf('@') < 0) {
-			return null;
-		}
-		String id = key.substring(key.indexOf(':') + 1, key.lastIndexOf('@'));
-		JsonObject o = new JsonObject();
-		o.addProperty("key", "pile-refund:" + key);
-		o.addProperty("dim", dim);
-		o.addProperty("pos", pending.has("at") ? pending.get("at").getAsLong() : 0L);
-		o.addProperty("recipient", owner);
-		o.addProperty("pile", owner);
-		o.addProperty("site", id);
-		o.addProperty("pileKey", key);
-		o.addProperty("legacy", true);
-		if (road) {
-			o.addProperty("road", true);
-		}
-		o.add("refund", pending.get("items") instanceof JsonObject it ? it.deepCopy() : new JsonObject());
-		return o;
-	}
-
-	/**
-	 * (T4b fix round) Whether a stash read at the check enters the new protocol: every real stash does; a converted pre-T4 pending credit only
-	 * when its removal was a single removal (not a group's or a stage's undo, whose decCredit stays legacy until T4c).
-	 */
-	static boolean convertible(JsonObject stash, @Nullable String group) {
-		// (slice T4R, R1) a group's or stage's credit converts like a single removal's. One its group's removal still owns (queued, or its
-		// removal.group txn open) is that removal's (converted from its decCredit, credited by its txn after its W) and never reaches here
-		// (Sites.reconcile skips owned members first); one no removal owns any more is a single removal.site txn's: W from its undo, then paid
-		return true;
-	}
-
 
 	/** The durable stash of {@code siteId}'s removal, or null. */
 	static @Nullable JsonObject durable(String siteId) {

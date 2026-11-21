@@ -64,26 +64,13 @@ final class GroupTxn {
 		}
 		for (String id : r.decSettle.keySet()) {
 			if (!order.contains(id) && r.undoSites.contains(id)) {
-				order.add(id); // a member out of the list already (a stash a load converted): planned too, last
+				order.add(id); // a member out of the list already: planned too, last
 			}
 		}
 		Set<String> res = new LinkedHashSet<>();
 		res.add("site:group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
 		for (String id : order) {
 			JsonObject st = r.decSettle.get(id);
-			if (st.has("legacy") && !st.has("cells")) {
-				// (slice T4R-L) a pre-T4R member credit: its W-time cells (held since the queue loaded), each valued just before its W's first write
-				// by what the W removes there, so its refund pays min(the credit, what its W removes): never a cell a player mined, nor one an old
-				// job restored (nothing on disk tells those apart)
-				ServerLevel lv = Sites.levelOf(server, st.get("dim").getAsString());
-				JsonArray cells = lv == null ? null : CrateSettle.legacyCells(lv, id, r.undo);
-				dev.larattalabs.architect.placement.Anchors.Bounds box = Groups.boxOf(id);
-				if (cells == null || box == null) {
-					return "the journal cells of " + id + "'s pre-T4R credit can't be read";
-				}
-				st.add("cells", cells);
-				CrateSettle.withBox(st, box);
-			}
 			if (st.get("box") instanceof JsonArray b && b.size() == 6) {
 				res.add(RemovalTxn.box(st.get("dim").getAsString(), b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4)
 					.getAsInt(), b.get(5).getAsInt()));
@@ -101,6 +88,14 @@ final class GroupTxn {
 		if (r.crateSettle != null) {
 			resourcesOf(r.crateSettle, res);
 		}
+		if (c.open().stream().noneMatch(t -> key.equals(t.key)) && c.cache().committed(key) == null) {
+			// (slice T4R-M, the final check's P1-2) its holds are born here: never over another in-flight removal's area (a pre-T4R one's, a
+			// stash's, a begun group's). It waits, holding nothing; that one never waits on it. A reattach or a replay takes no new hold
+			String busy = overlapWhy(r);
+			if (busy != null) {
+				return "waits for another removal: " + busy;
+			}
+		}
 		SiteGroupRec g = Sites.group(r.group);
 		TxnCore.Started s = c.begin(RemovalTxn.GROUP, key, List.copyOf(res), g == null ? null : g.owner());
 		switch (s.status()) {
@@ -110,13 +105,9 @@ final class GroupTxn {
 				return "held: " + s.detail();
 			case REPLAYED:
 				r.gtxDone = true; // retired already (a stop after its end, before the queue dropped the removal): every member settled
-				order.forEach(CrateSettle::forgetHoldOnly); // (slice T4R-L) nothing of it is left to write: the load-time holds go
 				return null;
 			case ATTACHED:
-				r.gtx = s.entry();
-				// (slice T4R-L, the final check's P1-1) a restart reattached it: its own box holds (and its writer's exemption over every member)
-				// take over from the load-time ones, as at its begin; else a member's own restore write is refused by its member's legacy hold
-				order.forEach(CrateSettle::forgetHoldOnly);
+				r.gtx = s.entry(); // a restart reattached it: its own box holds (and its writer's exemption over every member) as at its begin
 				return null;
 			default:
 				break;
@@ -163,9 +154,26 @@ final class GroupTxn {
 		}
 		r.gtx = t;
 		r.crateSettle = null; // planned in the txn now (its key there): never settled apart
-		order.forEach(CrateSettle::forgetHoldOnly); // (fix round, P1-3) the txn's own box holds take over from the load-time ones
 		Architect.LOGGER.info("Removal of group {}{}: removal.group {} begun over {} paid member(s) (undo {})", r.group, r.stage == null ? "" : " stage "
 			+ r.stage, t.id, order.size(), r.undo);
+		return null;
+	}
+
+	/** (slice T4R-M) {@link RemovalAreas#overlapWhy} over every member of {@code r} (its writes go to each one's box). */
+	static @Nullable String overlapWhy(Groups.Removal r) {
+		java.util.Set<String> self = java.util.Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
+		java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.undoSites);
+		ids.addAll(r.sites);
+		for (String id : ids) {
+			dev.larattalabs.architect.placement.Anchors.Bounds b = Groups.boxOf(id);
+			String dim = Groups.dimensionOfMember(id);
+			if (b != null && dim != null) {
+				String why = RemovalAreas.overlapWhy(dim, List.of(b), self);
+				if (why != null) {
+					return id + ": " + why;
+				}
+			}
+		}
 		return null;
 	}
 

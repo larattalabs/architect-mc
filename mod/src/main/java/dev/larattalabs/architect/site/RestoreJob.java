@@ -475,16 +475,6 @@ final class RestoreJob implements Placement.Job {
 			broken = inf.dimension() + " is not loaded";
 			return true;
 		}
-		if (legacyRoad()) {
-			String why = convertLegacyRoad(server, inf);
-			if (why != null) {
-				if (!why.equals(legacyWait)) {
-					dev.larattalabs.architect.Architect.LOGGER.warn("Removal of {}: its pre-T4 credit waits to become a removal stash: {}", siteId, why);
-				}
-				legacyWait = why;
-				return false;
-			}
-		}
 		try {
 			if (phase == PLAN) {
 				if (planner == null && !preflighted(server)) {
@@ -760,11 +750,12 @@ final class RestoreJob implements Placement.Job {
 	}
 
 	/**
-	 * (T4 final round's seam) Whether this job is a pre-T4 standalone road removal whose refund rides on C29's direct credit ({@link #credit},
-	 * no removal stash): converted to a {@code removal.road} stash before it goes on.
+	 * (slice T4R-M) Whether this job is a pre-T4R road removal's: C29's direct credit ({@link #credit}) and no removal stash (this build never
+	 * queues a road credit; its roads carry a {@code removal.road} stash). It runs main's path: its credit booked once after its last write
+	 * (C29), no txn, no hold, no conversion.
 	 */
-	boolean legacyRoad() {
-		return credit != null && settle == null && REMOVE.equals(purpose) && (group == null || group.startsWith("u:remove-"));
+	boolean legacy() {
+		return credit != null && settle == null;
 	}
 
 	/** (slice T4R, R1) A group's paid road member: its stash (its refunded cells), for the found receipts before its first write. Not saved. */
@@ -772,79 +763,6 @@ final class RestoreJob implements Placement.Job {
 
 	/** (slice T4R-L) A hold refused one of this job's own writes this session: its W is never told it is written (it writes it itself). */
 	transient boolean refusedOwn;
-
-	/**
-	 * (slice T4R, R2) From the queue's load (before Placement's start grace ends and before any conversion): a pre-T4 road removal's footprint
-	 * held in memory, so no player mines a paid block of it before its conversion's stash is durable.
-	 */
-	void holdLegacy(MinecraftServer server) {
-		Infra inf = Infras.get(siteId) != null ? Infras.get(siteId) : Infras.pending(siteId);
-		if (inf == null || credit == null) {
-			return;
-		}
-		JsonObject st = CrateSettle.pileRoadStash(inf, credit.owner(), credit.key(), credit.items(), null, BlockPos.of(credit.at()));
-		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
-		CrateSettle.holdOnly(siteId, st);
-		dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: a pre-T4 road removal: its footprint held from the queue's load", siteId);
-	}
-
-	/**
-	 * (slice T4R, R2; T4R-L) A pre-T4 road's W-time cells ({@link CrateSettle#legacyCells}): valued just before its W's first write by what
-	 * the W removes there. A cell its old job restored before the upgrade is not refunded: main's job kept no per-cell receipt and paid its
-	 * credit only after its last write, so nothing on disk tells it from a cell a player mined. Null: unreadable.
-	 */
-	com.google.gson.@Nullable JsonArray legacyCells(ServerLevel level, Infra inf) {
-		return CrateSettle.legacyCells(level, siteId, group);
-	}
-
-	/** (T4 final round) The legacy road's conversion waits (logged once). */
-	private transient @Nullable String legacyWait;
-
-	/**
-	 * (T4 final round, P1 2) A pre-T4 queued standalone road removal: its C29 credit becomes a {@code removal.road} stash (credited by the
-	 * txn after the restore; slice T4R-L: min(the credit, what its W removes), each of its journal cells valued at its W's first write),
-	 * saved confirmed with the ledger before
-	 * the job goes on; the job then carries the stash and no credit. Waits (null answer means done) while saving is off, a store failed to
-	 * load or the save is refused; never pays through C29.
-	 */
-	private @Nullable String convertLegacyRoad(MinecraftServer server, Infra inf) {
-		Groups.Credit c = java.util.Objects.requireNonNull(credit);
-		if (!SaveHold.admits(server)) {
-			return "saving is off";
-		}
-		String why = CrateSettle.notReady();
-		if (why != null) {
-			return why;
-		}
-		// (slice T4R, R2) the converted credit carries found-cells evidence: the road's paid cells standing now (held since the queue loaded),
-		// so its refund pays min(the pre-T4 credit, what its W finds standing) per chunk
-		ServerLevel level = Sites.levelOf(server, inf.dimension());
-		if (level == null) {
-			return inf.dimension() + " is not loaded";
-		}
-		JsonArray cells = legacyCells(level, inf);
-		if (cells == null) {
-			return "its restore can't be read for its found cells";
-		}
-		JsonObject st = CrateSettle.pileRoadStash(inf, c.owner(), c.key(), c.items(), null, BlockPos.of(c.at()));
-		st.add("cells", cells); // (slice T4R-L) valued at its W's first write: what the W removes
-		st.addProperty("legacyRoad", true);
-		CrateSettle.withFootprint(st, RoadBuilder.footprintOf(server, inf));
-		CrateSettle.holdDurable(siteId, st);
-		try {
-			Stockpiles.saveWithWorldConfirmed(server);
-		} catch (IllegalStateException e) {
-			// (slice T4R, R2) a refused save keeps the stash and its hold (in memory, with the queue's load-time hold) and the old credit: retried,
-			// never paid through C29, never a mine of a paid block meanwhile
-			return "its stash could not be saved (" + e.getMessage() + ")";
-		}
-		CrateSettle.forgetHoldOnly(siteId);
-		settle = st;
-		credit = null;
-		Placement.save(server, false); // the job carries its stash now (a start before this write converts it again, keyed: never twice)
-		dev.larattalabs.architect.Architect.LOGGER.info("Removal of {}: its pre-T4 credit {} is now a removal.road stash", siteId, c.key());
-		return null;
-	}
 
 	@Override
 	public String toString() {

@@ -33,20 +33,6 @@ class RemovalFixT4bTest {
 		assertEquals(planned, CrateSettle.minOf(planned, null));
 	}
 
-	/** Finding 4: a pre-T4 held pending credit becomes a pile stash for a site or a road; any other key stays legacy. */
-	@Test
-	void aPreT4PendingCreditBecomesAPileStash() {
-		JsonObject pend = JsonParser.parseString("{\"items\":{\"minecraft:cobblestone\":5},\"at\":123}").getAsJsonObject();
-		JsonObject st = CrateSettle.legacyStash("tcc:o", "minecraft:overworld", "site:s4@99", pend);
-		assertNotNull(st);
-		assertEquals("s4", st.get("site").getAsString());
-		assertEquals("site:s4@99", st.get("pileKey").getAsString());
-		assertTrue(CrateSettle.isPileStash(st));
-		JsonObject road = CrateSettle.legacyStash("tcc:o", "minecraft:overworld", "road:r2@7", pend);
-		assertTrue(road != null && road.has("road") && "r2".equals(road.get("site").getAsString()));
-		assertNull(CrateSettle.legacyStash("tcc:o", "minecraft:overworld", "region:g1:mech:3", pend));
-	}
-
 	/** Finding 6: a durable removal stash crediting a pile holds that pile against a dissolve. */
 	@Test
 	void aRemovalsStashHoldsItsPile() throws Exception {

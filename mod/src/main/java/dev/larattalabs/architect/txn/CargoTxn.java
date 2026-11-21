@@ -53,6 +53,29 @@ public final class CargoTxn {
 		return aborted(owedKey, TxnServer.core());
 	}
 
+	/** (slice T4R-M) The id of the {@code removal.cargo} txn an owed key {@link #oweKey} names, or null (not such a key). */
+	public static @Nullable String txnOf(String owedKey) {
+		if (!owedKey.startsWith("cargo:tx-")) {
+			return null;
+		}
+		int slash = owedKey.indexOf('/', 6);
+		return slash < 0 ? null : owedKey.substring(6, slash);
+	}
+
+	/**
+	 * (slice T4R-M) What {@code c} knows of the txn {@code id}: {@code "commit"} (open with a commit decision, or retired committed or
+	 * abandoned), {@code "abort"} (open with an abort decision, or retired aborted), {@code "open"} (open, undecided), {@code "unknown"} (neither
+	 * open nor in the bounded result cache).
+	 */
+	public static String fate(String id, TxnCore c) {
+		TxnEntry t = c.get(id);
+		if (t != null) {
+			return t.decision == null ? "open" : t.decision.isAbort() ? "abort" : "commit";
+		}
+		ResultCache.Done d = c.cache().byId(id);
+		return d == null ? "unknown" : Decision.ABORT.equals(d.decision()) ? "abort" : "commit";
+	}
+
 	/** (TEST seam, slice T4R-M hooks) {@link #aborted(String)} against {@code c}. */
 	public static boolean aborted(String owedKey, TxnCore c) {
 		if (!owedKey.startsWith("cargo:tx-")) {

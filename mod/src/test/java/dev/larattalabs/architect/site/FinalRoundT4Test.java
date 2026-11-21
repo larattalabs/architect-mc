@@ -105,14 +105,14 @@ class FinalRoundT4Test {
 		}
 	}
 
-	/** P1 2: a pre-T4 queued standalone road removal (C29's credit, no stash) converts; a group's road keeps its credit until T4c. */
+	/** (slice T4R-M) A pre-T4R queued road removal (C29's credit, no stash), standalone or a group's member, runs main's path (no conversion). */
 	@Test
-	void aQueuedPreT4RoadConverts() {
+	void aQueuedPreT4RRoadIsMains() {
 		JsonObject o = JsonParser.parseString("{\"siteId\":\"r2\",\"kind\":\"remove\",\"group\":\"u:remove-r2\",\"phase\":2,\"credit\":{\"owner\":\"tcc:o\","
 			+ "\"key\":\"road:r2@7\",\"items\":{\"minecraft:stone\":13},\"at\":0}}").getAsJsonObject();
 		RestoreJob j = RestoreJob.fromJson(o);
-		assertTrue(j.legacyRoad(), "a standalone road's C29 credit");
+		assertTrue(j.legacy() && j.credit != null && j.settle == null, "a pre-T4R road's C29 credit stays C29's");
 		o.addProperty("group", "u:group-g1");
-		assertFalse(RestoreJob.fromJson(o).legacyRoad(), "a group's road (T4c converts group credits)");
+		assertTrue(RestoreJob.fromJson(o).legacy(), "a group's road too");
 	}
 }

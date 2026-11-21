@@ -118,10 +118,14 @@ public final class Groups {
 		final transient Map<String, Credit> cargo = new LinkedHashMap<>();
 		/** (slice T4R fix round, P1-6) The owed keys its data cargo created (removal.cargo): in its result; saved with the queue. */
 		final List<String> cargoOwed = new ArrayList<>();
+		/** (slice T4R-M, P2) The data cargo's owed keys whose txn is known to have owed them ({@link #resolveCargo}); saved with the queue. */
+		final List<String> cargoKept = new ArrayList<>();
 		/** (slice T4R fix round, P1-6) The undo's work planned once (its stats saved with the pre-save, before the commit). Not saved. */
 		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoWork plannedWork;
 		/** (slice T4R, R5) The data-bearing stacks of the player holders (owed whole by a {@code removal.cargo} txn before the holders are replaced). */
 		final transient List<dev.larattalabs.architect.txn.CargoTxn.Stack> cargoData = new ArrayList<>();
+		/** (slice T4R-M, P1-3) R1's rest after a held data cargo, run once that cargo txn is done (not saved: a load plans again). */
+		transient @Nullable Runnable afterCargo;
 		/** (fix round) The holders of {@link #cargo} were replaced (their contents only in the pending credits now). */
 		transient boolean cargoApplied;
 		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
@@ -147,6 +151,12 @@ public final class Groups {
 		 * retired already. Not saved: its key ({@link GroupTxn#key}) finds it again.
 		 */
 		transient dev.larattalabs.architect.txn.@Nullable TxnEntry gtx;
+		/**
+		 * (slice T4R-M, Noah's design) A removal a pre-T4R build left in flight (its queue entry has no {@link #TXN_MARKER} and its undo was
+		 * committed by that build): it finishes on main's (v0.89.0) path ({@link #legacyTick}), never through this build's txns, stashes or
+		 * holds. Derived from the entry's shape at every load (saved without the marker, so it stays so).
+		 */
+		boolean legacy;
 		transient boolean gtxDone;
 		/** (slice T4R) Why its txn waits to begin (logged once). */
 		transient @Nullable String gtxWait;
@@ -161,6 +171,9 @@ public final class Groups {
 		JsonObject toJson() {
 			JsonObject o = new JsonObject();
 			o.addProperty("group", group);
+			if (!legacy) {
+				o.addProperty(TXN_MARKER, 1); // (slice T4R-M) this build's removal (its decision, stashes and txn); a pre-T4R entry is saved without
+			}
 			if (stage != null) {
 				o.addProperty("stage", stage);
 			}
@@ -218,6 +231,11 @@ public final class Groups {
 				JsonArray co = new JsonArray();
 				cargoOwed.forEach(co::add);
 				o.add("cargoOwed", co);
+			}
+			if (!cargoKept.isEmpty()) {
+				JsonArray ck = new JsonArray();
+				cargoKept.forEach(ck::add);
+				o.add("cargoKept", ck);
 			}
 			if (!decItems.isEmpty()) {
 				JsonObject d = new JsonObject();
@@ -290,6 +308,9 @@ public final class Groups {
 			if (o.get("cargoOwed") instanceof JsonArray co) {
 				co.forEach(e -> r.cargoOwed.add(e.getAsString()));
 			}
+			if (o.get("cargoKept") instanceof JsonArray ck) {
+				ck.forEach(e -> r.cargoKept.add(e.getAsString()));
+			}
 			if (o.has("undo")) {
 				r.undo = o.get("undo").getAsString();
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
@@ -331,18 +352,15 @@ public final class Groups {
 			if (o.has("credit")) {
 				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
 			}
-			if (r.undo != null || r.planned != null) {
-				// (slice T4R, R1) a pre-T4R queue's member credits (decCredit, a held J2 credit beside it) converted like a single removal's: a pile
-				// stash its removal.group txn credits once the member's W is done (keyed: a credit booked already is never booked again)
-				for (var e : new ArrayList<>(r.decCredit.entrySet())) {
-					Credit c = e.getValue();
-					if (!r.decSettle.containsKey(e.getKey())) {
-						JsonObject st = CrateSettle.pileCreditStash(e.getKey(), dimensionOf(e.getKey()), c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null,
-							null);
-						st.addProperty("legacy", true);
-						r.decSettle.put(e.getKey(), st);
-					}
-					r.decCredit.remove(e.getKey());
+			if (!o.has(TXN_MARKER)) {
+				// (slice T4R-M, Noah's design) an entry a pre-T4R build wrote (no txn marker). Its undo committed (or may have: planned, the journal
+				// decides at resumeCommitted): a removal in flight at the upgrade, finished on main's path (legacyTick: main's R4, its decCredit
+				// credited once each member's restore is written), never converted into this build's txns or holds. Neither: it decided nothing,
+				// so it plans afresh on this build's path (R1 tallies its stashes again) and carries no credit into that plan
+				if (r.undo != null || r.planned != null) {
+					r.legacy = true;
+				} else {
+					r.decCredit.clear();
 				}
 			}
 			return r;
@@ -374,6 +392,9 @@ public final class Groups {
 			return new Credit(o.get("owner").getAsString(), o.get("key").getAsString(), items, o.get("at").getAsLong());
 		}
 	}
+
+	/** (slice T4R-M) The queue entry field every removal this build starts carries ({@code "txn": 1}); a pre-T4R build never wrote it. */
+	static final String TXN_MARKER = "txn";
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
@@ -1030,6 +1051,13 @@ public final class Groups {
 	 * things in a box stop the removal before anything is written.
 	 */
 	private static void tick(MinecraftServer server, Removal r) {
+		if (!r.cargoOwed.isEmpty() && resolveCargo(r, dev.larattalabs.architect.txn.TxnServer.core())) {
+			Placement.save(server, false); // (slice T4R-M, P2) its cargo keys' outcomes saved with the queue, once known
+		}
+		if (r.legacy && r.undo != null) {
+			legacyTick(server, r); // (slice T4R-M) a pre-T4R removal in flight: main's path
+			return;
+		}
 		if (r.current != null) {
 			if (Placement.job(r.current) != null) {
 				return; // a restore job runs (Placement); removed() moves on
@@ -1064,6 +1092,18 @@ public final class Groups {
 		}
 		if (r.nextCheck > tick) {
 			return;
+		}
+		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy && RemovalAreas.anyLegacy()) {
+			// (slice T4R-M) a removal over the area of one a pre-T4R build left in flight waits (holding nothing, planning nothing) until it ends
+			String lw = legacyWait(r);
+			if (lw != null) {
+				if (!lw.equals(r.gtxWait)) {
+					Architect.LOGGER.warn("Removal of group {}: waits for a removal from before the update: {}", r.group, lw);
+				}
+				r.gtxWait = lw;
+				r.nextCheck = tick + 20;
+				return;
+			}
 		}
 		if (r.undo == null && r.planner == null && !preflighted(server, r)) {
 			return;
@@ -1270,6 +1310,109 @@ public final class Groups {
 	}
 
 	/**
+	 * (slice T4R-M, Noah's design) A pre-T4R removal's tick once its undo is committed ({@link Removal#legacy}): main's (v0.89.0)
+	 * committed-phase code, verbatim (Groups.tick's resume of a member's job, R3 after a load, and R4 with {@link #credit} once each member's
+	 * restore is written). No removal.group txn, stash, hold or W-time valuation: its refunds are main's credits as main tallied them. A
+	 * removal this build starts never takes a hold over its area while it runs ({@link RemovalAreas}).
+	 */
+	private static void legacyTick(MinecraftServer server, Removal r) {
+		if (r.current != null) {
+			if (Placement.job(r.current) != null) {
+				return; // a restore job runs (Placement); removed() moves on
+			}
+			// its job is gone (a load that could not resume it): write it again if it is still pending
+			if (r.undo != null && Sites.pendingRecord(r.current) != null && !written(r.current)) {
+				Placement.add(server, RestoreJob.writing(r.current, r.undo, r.current.equals(r.undoSites.isEmpty() ? null : r.undoSites.get(r.undoSites
+					.size() - 1)) ? r.handed : Map.of()));
+				return;
+			}
+			credit(server, r, r.current); // 6c Y: its restore was written (before a load): credited now, once per key
+			r.sites.remove(r.current);
+			written.add(r.current);
+			r.current = null;
+		}
+		if (r.nextCheck > tick) {
+			return;
+		}
+		pendAll(server, r); // after a load: the records go pending if they did not yet (R3)
+		// R4: the writes, last placed first
+		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null
+			&& Infras.pending(r.sites.get(0)) == null)) {
+			if (r.undoSites.contains(r.sites.get(0))) {
+				credit(server, r, r.sites.get(0)); // 6c Y: written before a load (its record is gone): credited now, once per key
+			}
+			r.sites.remove(0);
+		}
+		if (r.sites.isEmpty()) {
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells));
+			return;
+		}
+		String id = r.sites.get(0);
+		Site s = Sites.pendingRecord(id);
+		if (s == null && Infras.pending(id) != null) {
+			// a road or cell site of the group: its cells over ticks
+			r.current = id;
+			Placement.add(server, RestoreJob.writing(id, r.undo, Map.of()));
+			killAfterAMember(r);
+			return;
+		}
+		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
+		if (s == null || level == null) {
+			r.sites.remove(0);
+			return;
+		}
+		Map<String, Integer> handedHere = r.handed;
+		r.handed = Map.of();
+		if (s.construction() != null) {
+			// a construction site deconstructs at once (its refunds were tallied before the undo, rule 7), one per tick
+			Map<String, Integer> items = r.decItems.getOrDefault(id, Map.of());
+			long[] at = r.decAt.get(id);
+			try {
+				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
+				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+				credit(server, r, id); // 6c Y: its stockpile refunds, once its restore is written (once per key)
+			} catch (Sites.SiteException e) {
+				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
+				return;
+			}
+			r.sites.remove(0);
+			written.add(id);
+			Placement.save(server, false);
+			return;
+		}
+		r.current = id;
+		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
+		killAfterAMember(r);
+	}
+
+	/** 6c Y: credits a member's stockpile refunds (once per key); what was credited joins the removal's refund. */
+	private static void credit(MinecraftServer server, Removal r, String id) {
+		Credit c = r.decCredit.get(id);
+		if (c == null) {
+			return;
+		}
+		Stockpiles.Pile p = Stockpiles.get(c.owner());
+		ServerLevel level = p != null ? Sites.levelOf(server, p.dimension()) : Sites.levelOf(server, dimensionOf(id));
+		if (level == null) {
+			return;
+		}
+		boolean already = p != null && p.ledger().credited(c.key());
+		Map<String, Integer> held = p == null ? Map.of() : p.ledger().custody(c.key()); // (M5 FK) the declared containers' contents
+		if (!held.isEmpty() && !already) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("FKC2"); // (TEST) the restore written, the custody's credit not yet
+		}
+		Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);
+		if (!already) {
+			c.items().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			held.forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			// (slice PS, audit N1) the credit is saved with the world (players, the restored chunks flushed, the ledger) before the caller
+			// drops the member from the saved removal (and end() drops the removal, its decCredit with it): a crash after that point finds the
+			// refund in the saved ledger, never the building gone and its refund gone. Before it, the removal resumes and credits the key
+			// again (once per key: the saved ledger hasn't it).
+			Stockpiles.saveCredit(server);
+		}
+	}
+	/**
 	 * TEST kill point GW (F6 hazard, 4e-crash): a member's restore is written (out of the saved removal's sites) and the next member's
 	 * job is saved; nothing of the next is written yet. With no autosave since the removal began, the written member's blocks come back.
 	 */
@@ -1395,6 +1538,16 @@ public final class Groups {
 			return;
 		}
 		if (r.planned != null && resumeCommitted(server, r)) {
+			return;
+		}
+		if (cargoOpen(r)) {
+			r.nextCheck = tick + 20; // (slice T4R-M, P1-3) its data cargo's txn is still open (held): nothing of R1 goes on past it
+			return;
+		}
+		if (r.afterCargo != null) {
+			Runnable k = r.afterCargo;
+			r.afterCargo = null;
+			k.run(); // its cargo settled: R1 goes on exactly where it stopped
 			return;
 		}
 		// members with no standing record are not planned: gone ones leave the list wherever they stand (6d RV: a stage undo, a
@@ -1679,11 +1832,44 @@ public final class Groups {
 				end(server, r, Removed.saveRefused(r.group, "a player's items with their own data could not be owed now (" + why + ")", Map.copyOf(r.refund)));
 				return;
 			}
+			if (why != null) {
+				// (slice T4R-M, the final check's P1-3) held(decided): the cargo is decided (owed) but not settled, its hold on the holders kept. The
+				// removal goes no further until it has settled: no holder replaced, no player block dropped, no undo planned over them. The rest of
+				// R1 runs from here once that txn is done (a restart plans again: plan() waits for it first)
+				Architect.LOGGER.warn("Removal of group {}: its data cargo is held ({}); it waits for it before going on", r.group, why);
+				List<String> ids0 = List.copyOf(ids);
+				List<Infra> dl = List.copyOf(dropLater);
+				r.afterCargo = () -> prepareTail(server, level, r, ids0, dl);
+				r.nextCheck = tick + 20;
+				return;
+			}
 		}
+		prepareTail(server, level, r, ids, dropLater);
+	}
+
+	/**
+	 * (slice T4R-M) R1's end: the player blocks found drop, the holders' contents book once durable, the undo is planned. Run once every
+	 * holder's data cargo is owed for good ({@link #oweCargo} answered done); after a held cargo answer it runs only once that cargo txn has
+	 * settled ({@link Removal#afterCargo}), never past it.
+	 */
+	private static void prepareTail(MinecraftServer server, ServerLevel level, Removal r, List<String> ids, List<Infra> dropLater) {
 		// (DR-S) the credits are saved: now the player blocks found above drop at their cells (the same cells: nothing changed since)
 		for (Infra inf : dropLater) {
-			RegionTargets.dropPlayerBlocks(level, inf, true);
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet refused = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+			RegionTargets.dropPlayerBlocks(level, inf, true, refused);
 			RoadBuilder.dropPlayerMatches(level, inf, true);
+			for (long c : refused) {
+				// (slice T4R-M) a holder whose replacement a hold refused keeps its block and its contents: neither its item nor its contents'
+				// credit leaves it (eca131b6 credited both while the holder stood)
+				Credit cc = r.cargo.remove(cargoKey(inf.id(), inf.placedAt(), c));
+				Stockpiles.Pile pp = cc == null ? null : Stockpiles.get(cc.owner());
+				if (pp != null && pp.ledger().pendingKeys().contains(cc.key())) {
+					pp.ledger().dropPending(cc.key());
+					Stockpiles.changed(pp);
+				}
+				Architect.LOGGER.warn("Removal of group {}: the player block at {} in {} was not replaced (a hold refused it): it stands with its contents",
+					r.group, BlockPos.of(c).toShortString(), inf.id());
+			}
 		}
 		r.cargoApplied |= !r.cargo.isEmpty();
 		if (!r.cargo.isEmpty()) {
@@ -1766,23 +1952,79 @@ public final class Groups {
 		return dev.larattalabs.architect.txn.CargoTxn.drive(p.entry());
 	}
 
-	/** (slice T4R-L) {@link Removal#cargoOwed} without the keys of a cargo txn known aborted (a crash before its drive: nothing owed). */
+	/** (slice T4R-M, P1-3) Whether a cargo txn {@code r}'s owed keys name is still open (held, or not yet driven): R1 waits for it. */
+	static boolean cargoOpen(Removal r) {
+		if (r.cargoOwed.isEmpty() && r.cargoKept.isEmpty()) {
+			return false;
+		}
+		dev.larattalabs.architect.txn.TxnCore c = dev.larattalabs.architect.txn.TxnServer.core();
+		List<String> all = new ArrayList<>(r.cargoOwed);
+		all.addAll(r.cargoKept);
+		for (String k : all) {
+			String id = dev.larattalabs.architect.txn.CargoTxn.txnOf(k);
+			if (id != null && c.get(id) != null) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (slice T4R-M, the final check's P2) {@code r}'s data cargo's owed keys, for its result: only keys whose txn is known to owe them. The
+	 * queue entry is the durable owner of each key's outcome: {@link #resolveCargo} moves a key from {@link Removal#cargoOwed} (its txn not
+	 * yet known to have decided) to {@link Removal#cargoKept} (committed) or drops it (aborted), and the entry is saved with that, so no
+	 * bounded cache is read for it again. Server thread.
+	 */
 	static List<String> cargoOwed(Removal r) {
 		if (r.cargoOwed.stream().noneMatch(k -> k.startsWith("cargo:tx-"))) {
-			return new ArrayList<>(r.cargoOwed); // no txn's key: nothing to ask the txn core
+			resolveCargo(r, null); // no txn's key: nothing to ask the txn core
+		} else {
+			resolveCargo(r, dev.larattalabs.architect.txn.TxnServer.core());
 		}
-		return cargoOwed(r, dev.larattalabs.architect.txn.TxnServer.core());
+		return new ArrayList<>(r.cargoKept);
 	}
 
 	/** (TEST seam, slice T4R-M hooks) {@link #cargoOwed(Removal)} against {@code core}. */
 	static List<String> cargoOwed(Removal r, dev.larattalabs.architect.txn.TxnCore core) {
-		List<String> out = new ArrayList<>();
-		for (String k : r.cargoOwed) {
-			if (!dev.larattalabs.architect.txn.CargoTxn.aborted(k, core)) {
-				out.add(k);
+		resolveCargo(r, core);
+		return new ArrayList<>(r.cargoKept);
+	}
+
+	/**
+	 * (slice T4R-M) Each unresolved cargo key's outcome, once: its txn open with a commit decision, or retired committed: kept; open with an
+	 * abort decision, or retired aborted: dropped; open undecided: left. A txn neither open nor in the result cache (evicted): kept only when
+	 * the owed ledger knows the key (an aborted txn never owes, so its key is never known there). True when anything moved (the caller saves
+	 * the queue). {@code core} null: no txn keys (a key naming no txn is kept as it is).
+	 */
+	static boolean resolveCargo(Removal r, dev.larattalabs.architect.txn.@Nullable TxnCore core) {
+		boolean moved = false;
+		for (String k : List.copyOf(r.cargoOwed)) {
+			String id = dev.larattalabs.architect.txn.CargoTxn.txnOf(k);
+			Boolean keep;
+			if (id == null || core == null) {
+				keep = true;
+			} else {
+				String f = dev.larattalabs.architect.txn.CargoTxn.fate(id, core);
+				keep = switch (f) {
+					case "open" -> null;
+					case "commit" -> true;
+					case "abort" -> false;
+					default -> OwedLedger.known(k);
+				};
+			}
+			if (keep == null) {
+				continue;
+			}
+			r.cargoOwed.remove(k);
+			if (keep && !r.cargoKept.contains(k)) {
+				r.cargoKept.add(k);
+			}
+			moved = true;
+			if (!keep) {
+				Architect.LOGGER.info("Removal of group {}: its cargo txn {} owed nothing (aborted): {} is no part of its result", r.group, id, k);
 			}
 		}
-		return out;
+		return moved;
 	}
 
 	/**
@@ -2026,6 +2268,13 @@ public final class Groups {
 		r.planned = null;
 		if (!durable) {
 			r.plannedSites.clear();
+			if (r.legacy) {
+				// (slice T4R-M) a pre-T4R removal that decided nothing: planned afresh on this build's path; main's held pending credits go
+				// (its targets stand), none carried into the new plan
+				dropPending(r);
+				r.decCredit.clear();
+				r.legacy = false;
+			}
 			Architect.LOGGER.info("Removal of group {}: its undo {} was not committed before the stop; it is planned again", r.group, g);
 			return false;
 		}
@@ -2113,6 +2362,41 @@ public final class Groups {
 		Placement.save(server, false);
 	}
 
+	/** (slice T4R-M) The removals in flight: queued and stalled ({@link RemovalAreas}). */
+	static List<Removal> inFlight() {
+		List<Removal> out = new ArrayList<>(REMOVALS);
+		out.addAll(STALLED);
+		return out;
+	}
+
+	/** (slice T4R-M) A member's dimension: its record's (standing or pending) or its road's; null when it has none. */
+	static @Nullable String dimensionOfMember(String id) {
+		Site m = Sites.pendingRecord(id) != null ? Sites.pendingRecord(id) : Sites.get(id);
+		if (m != null) {
+			return m.dimension();
+		}
+		Infra inf = Infras.pending(id) != null ? Infras.pending(id) : Infras.get(id);
+		return inf == null ? null : inf.dimension();
+	}
+
+	/**
+	 * (slice T4R-M, the coexistence rule) Why a removal this build starts waits before it plans: a member's box meets the area of a removal a
+	 * pre-T4R build left in flight (it finishes on main's path first); null when none does.
+	 */
+	static @Nullable String legacyWait(Removal r) {
+		for (String id : r.sites) {
+			dev.larattalabs.architect.placement.Anchors.Bounds b = boxOf(id);
+			String dim = dimensionOfMember(id);
+			if (b != null && dim != null) {
+				String why = RemovalAreas.legacyWhy(dim, List.of(b), java.util.Set.of());
+				if (why != null) {
+					return id + ": " + why;
+				}
+			}
+		}
+		return null;
+	}
+
 	private static String dimensionOf(String id) {
 		Site s = Sites.get(id);
 		if (s != null) {
@@ -2186,11 +2470,14 @@ public final class Groups {
 			if (root.get("removals") instanceof JsonArray a) {
 				for (JsonElement e : a) {
 					JsonObject o = e.getAsJsonObject();
+					if (!o.has(TXN_MARKER)) {
+						continue; // (slice T4R-M) a pre-T4R removal: main's Sites check (the evidence, writeAgain) judges its members, as main does
+					}
 					for (String g : new String[] {o.has("undo") ? o.get("undo").getAsString() : null, o.has("planned") ? o.get("planned").getAsString() : null}) {
 						if (g == null) {
 							continue;
 						}
-						for (String k : new String[] {"settle", "credit"}) {
+						for (String k : new String[] {"settle"}) {
 							if (o.get(k) instanceof JsonObject m) {
 								m.keySet().forEach(id -> out.add(id + "|" + g));
 							}
@@ -2295,6 +2582,12 @@ public final class Groups {
 				if (job.broken != null) {
 					// (6c X, C22) a restore that broke is not done: the member stays (pending) for the retry
 					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
+					return;
+				}
+				if (r.legacy) {
+					credit(server, r, job.siteId); // (slice T4R-M) main's: a pre-T4R stockpile road's refunds, once its restore is written
+					r.sites.remove(job.siteId);
+					written.add(job.siteId);
 					return;
 				}
 				written.add(job.siteId);
@@ -2661,7 +2954,6 @@ public final class Groups {
 		for (JsonElement e : a) {
 			try {
 				Removal rm = Removal.fromJson(e.getAsJsonObject());
-				holdLegacy(rm);
 				writeAgainIn(rm);
 				(e.getAsJsonObject().has("stalled") ? STALLED : REMOVALS).add(rm);
 			} catch (RuntimeException ex) {
@@ -2669,23 +2961,6 @@ public final class Groups {
 			}
 		}
 		writeAgainDone();
-	}
-
-	/**
-	 * (slice T4R fix round, P1-3) A pre-T4R queue's converted member credits: each member's box held from the queue's load (before the start
-	 * grace ends and before its removal.group txn begins, whose own box holds take over), so no player mines a paid block it credits.
-	 */
-	static void holdLegacy(Removal r) {
-		for (var e : r.decSettle.entrySet()) {
-			if (!e.getValue().has("legacy")) {
-				continue;
-			}
-			dev.larattalabs.architect.placement.Anchors.Bounds box = boxOf(e.getKey());
-			if (box != null) {
-				CrateSettle.withBox(e.getValue(), box);
-				CrateSettle.holdOnly(e.getKey(), e.getValue());
-			}
-		}
 	}
 
 	/** A member's box: its record's (standing or pending) restore box, or its road's. */

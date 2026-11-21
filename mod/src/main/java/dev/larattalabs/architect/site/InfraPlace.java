@@ -633,6 +633,13 @@ public final class InfraPlace {
 		if (!cover.isEmpty() && covered == Sites.Covered.REFUSE) {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
+		{
+			// (slice T4R-M) its stash's hold is born below: never over another in-flight removal's area (RemovalAreas); refused before anything
+			String busy = RemovalAreas.overlapWhy(i.dimension(), List.of(i.box()), java.util.Set.of(id));
+			if (busy != null) {
+				throw new Sites.SiteException(Reason.SITE_BUSY, "Not yet: " + busy + "; remove " + id + " again once it is done");
+			}
+		}
 		RoadBuilder.Removing removing = RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
 		if (removing.settle() != null) {
 			removing.settle().addProperty("road", true); // (T4b) a standalone road removal's settle is its removal.road txn: its restore (W) first

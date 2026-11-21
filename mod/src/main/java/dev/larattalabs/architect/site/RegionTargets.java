@@ -1905,6 +1905,15 @@ public final class RegionTargets {
 	 * tallies its refund over them first and drops them only once its credits are saved, so a refused save drops nothing.
 	 */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t, boolean apply) {
+		return dropPlayerBlocks(level, t, apply, null);
+	}
+
+	/**
+	 * {@link #dropPlayerBlocks}; (slice T4R-M, the final check's P1-3) a cell whose write a hold refuses keeps its block: nothing of it drops,
+	 * and it is added to {@code refused} (the caller keeps its holder's contents where they are).
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t, boolean apply,
+		it.unimi.dsi.fastutil.longs.@Nullable LongSet refused) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (!is(t)) {
 			return out;
@@ -1936,8 +1945,13 @@ public final class RegionTargets {
 			Cells.cost(now).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
 			// (slice PSVLC3 fix round, GPT P1 4) a player's item holder there (a chest, a lectern, a campfire): its contents are never dropped as
 			// items; the group removal held them pending in the owner's ledger before this write and books them once it is durable (Groups.cargo)
-			dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
-				Sites.CELL_FLAGS);
+			if (!dev.larattalabs.architect.placed.Placed.set(level, p, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),
+				Sites.CELL_FLAGS)) {
+				if (refused != null) {
+					refused.add(p.asLong());
+				}
+				continue; // (slice T4R-M) refused (a hold): the block stands, so its item never drops beside it
+			}
 			Builder.dropAtCell(level, p, items); // (LC2, F10) on top of the before just written, never inside it
 			n++;
 		}

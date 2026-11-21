@@ -797,7 +797,7 @@ public final class Placement {
 	private static void load(MinecraftServer srv) {
 		server = srv;
 		JOBS.clear();
-		CrateSettle.clearHoldOnly(); // (slice T4R) the load-time holds are this world's, set below (group legacy credits, legacy roads)
+		CrateSettle.clearDevHolds(); // (TEST) a dev hold is this world's only (slice T4R-M: nothing pre-T4R is held)
 		loadFailed = false;
 		refusedLogged = false;
 		saveWanted = false; // (LC3 fix 2) a new world: no retry carried over
@@ -841,16 +841,6 @@ public final class Placement {
 					resume(srv, e.getAsJsonObject(), clean);
 				} catch (RuntimeException ex) {
 					Architect.LOGGER.warn("Could not resume a placement job {}", e, ex);
-				}
-			}
-		}
-		// (slice T4R, R2) a pre-T4 queued road removal's footprint held from now on (before the start grace ends, before its conversion)
-		for (Job j : JOBS) {
-			if (j instanceof RestoreJob rj && rj.legacyRoad()) {
-				try {
-					rj.holdLegacy(srv);
-				} catch (RuntimeException ex) {
-					Architect.LOGGER.warn("Could not hold the pre-T4 road removal {}", rj.siteId, ex);
 				}
 			}
 		}
