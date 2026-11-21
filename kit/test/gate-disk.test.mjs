@@ -349,10 +349,13 @@ test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are c
     const slots = path.join(root2, 'slots');
     fs.writeFileSync(lock, JSON.stringify({ pid: holder.pid, chain: 'gate-disk-test' }));
     const ports = await freePorts(6);
+    // inside a gate run (unit-kit) the step's GATE_*/ARCHITECT_* settings (GATE_RUN_DIRS, GATE_PORTS, ...) would steer this runner:
+    // none pass through but the tracer's (NODE_OPTIONS and GATE_TRACE_*, so a traced step still records the child)
+    const childEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GATE_|ARCHITECT_)/.test(k) || /^GATE_TRACE_/.test(k)));
     const runOnce = () => spawnSync(process.execPath, [path.join(ROOT, 'tools', 'gate-run.mjs'), 'change', '--since', 'HEAD', '--only', 'sim-jobs,cn-unit',
       '--turbo', '--shards', '2', '--lanes', '1', '--no-cache', '--no-load-wait', '--ports', `${ports[0]}:${ports[1]},${ports[2]}:${ports[3]},${ports[4]}:${ports[5]}`,
       '--run-dir', run1, '--out', path.join(root2, 'out'), '--lock', lock, '--slots-dir', slots, '--min-free-gib', '1'],
-    { cwd: ROOT, encoding: 'utf8', timeout: 120_000, env: { ...process.env, GATE_DISK_TEST_LOW: fs.realpathSync(low), GATE_MIN_FREE_GIB: '', GATE_NOTIFY: '' } });
+    { cwd: ROOT, encoding: 'utf8', timeout: 120_000, env: { ...childEnv, GATE_DISK_TEST_LOW: fs.realpathSync(low) } });
     const slotFiles = () => fs.readdirSync(slots, { recursive: true }).filter((f) => fs.statSync(path.join(slots, f)).isFile());
     for (const lowDir of [`${run1}-s2`, `${run1}-o1`]) {
       fs.symlinkSync(path.join(low, 'target'), lowDir);
@@ -371,6 +374,7 @@ test('space guard (fixcheck P2): a turbo run\'s chosen shard and lane dirs are c
     }
     const r = runOnce();
     const out = r.stdout + r.stderr;
+    if (/turbo --shards 2: only \d+ fit/.test(out)) return t.skip(`turbo cannot fit 2 shards now: ${out.trim().split('\n').pop()}`);
     assert.match(out, /another gate run holds/, `neither low: past the guard, stopped at the lock: ${out}`);
     assert.deepEqual(slotFiles(), [], 'the lock refusal gave every slot back too');
   } finally {
