@@ -34471,6 +34471,11 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 
 ### Slice T4R-L as built (the final check of 9913d902: NOT SAFE, three P1s in legacy conversion and a P2; legacy-only round)
 
+> **Superseded by T4R-M (below):** everything here about pre-T4R removals (W-time legacy refunds, `legacyCells`/`legacyItems`, the known
+> old-job loss, load-time holds and the ATTACHED/REPLAYED hold cleanup, rows T4RL-reattach and T4RL-premined) is gone: a pre-T4R removal
+> runs main's path. The holds' writer exemption, `refusals`/no `markRestored`, the P2 `fin`, and the cargo prepare/drive still stand; the
+> cargo abort filter is replaced by T4R-M's durable outcomes.
+
 - **W-time legacy refunds (P1-2, P1-3):** a pre-T4R group or road credit no longer reads journal evidence. `CrateSettle.legacyCells` lists
   the positions its committed undo writes over the placed block (`{pos, block, live}`); `foundIn` values each just before the W's first
   write by what stands (`legacyItems`: the placed block, not a player's PT block, at `SurvivalItems` cost, a double slab 2). The refund pays
@@ -34492,6 +34497,50 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - **Gate:** red `gate-runs-T4RL/20261121-023820-t4r` + `gate-runs-T4RL-red/20261121-024853-t4r` (every T4RL row red); targeted e2e
   mutants `gate-runs-T4RL-mutant/20261121-030440-t4r` (each row red under its own revert); change 64/64 (`20261121-031448-change`);
   `--only` fk-crash 97/0, fkb-crash 48/0, lc3-seal 40/0, lc3-undo 16/0, t4r-crash 98/0, t4rl-crash 44/0 (`20261121-053549-change`).
+
+### Slice T4R-M as built (the final check of eca131b6: NOT SAFE; Noah's design: no old-world conversion; strict; versions NEXT)
+
+- **Legacy = main's path (design 1).** A group queue entry without `"txn": 1` (every entry this build writes has it) whose undo was
+  committed by the old build (`undo`, or `planned` that `resumeCommitted` finds in the journal) is a pre-T4R removal: `Groups.legacyTick`
+  runs main's v0.89.0 committed-phase code verbatim (R3 after a load, R4, `credit()` once each member's restore is written; `removed()`'s
+  road credit). One that decided nothing plans afresh on this build's path (its `decCredit` dropped). A road job with C29's `credit` and no
+  stash (this build never queues one) runs C29. A J2 pending credit is no stash: main's Sites check and `settlePendingCredits` settle it.
+  `ownedAtStart` reads marked entries only, so main's evidence/`writeAgain` path judges legacy members. Removed: the decCredit conversion,
+  `holdLegacy` (Groups, RestoreJob), `HOLD_ONLY` (a dev hold store stays for `dev.removal.holdBox`), `convertLegacyRoad`, `legacyCells`,
+  `legacyItems`, `foundIn`'s live branch, `legacyStash`, `convertible`, GroupTxn's legacy and ATTACHED/REPLAYED hold branches. Nothing on
+  the legacy path begins a txn or makes a stash. Diff vs main: `artifacts/gate-runs-T4RM-mainpath` (tick: only the pre-commit branches a
+  loaded committed removal never reaches are left out; `credit` identical).
+- **Coexistence and P1-2 by construction (`RemovalAreas`).** A removal's holds are born only after `overlapWhy` finds no other in-flight
+  removal's area there: a pre-T4R one's (a legacy group's members, a C29 road job, a pending record whose J2 credit is held), a durable
+  stash's box, or a begun group's members. `removeDetailed` and `InfraPlace.remove0` refuse `SITE_BUSY` ("Not yet: ...") before anything
+  changes; `GroupTxn.ensure` waits holding nothing (a reattach/replay is not re-checked); a new group also waits before planning while a
+  member meets a pre-T4R area. Holds of different removals are disjoint and a waiting removal holds nothing, so no two hold each other.
+- **P1-3.** A held(decided) cargo answer stops R1: no holder replaced, no player block dropped, no undo planned; the rest runs once the
+  cargo txn is done (`Removal.afterCargo`; after a restart `plan()` waits on `cargoOpen`). `dropPlayerBlocks` drops nothing for a write a
+  hold refused, and that holder's contents keep their place (its `r.cargo` credit dropped).
+- **P2.** The queue owns each cargo key's outcome: `resolveCargo` moves a key, once its txn is known decided or retired, to `cargoKept`
+  (saved) or drops it; a key whose txn left the bounded cache counts only if the owed ledger knows it (an aborted txn never owes).
+- **Event:** a legacy group's end fires REMOVAL_FINISHED directly (main had none; additive), never from a txn payload.
+- **Legacy keeps main's risks** (by design): no load-time hold, a player may mine a paid block of a pre-T4R removal before its main job
+  writes it, refunds are main's tallied credits (the threshold settle and C29's credit-after-the-last-write), T4c's held(decided) retry
+  still applies to a stopped legacy removal. Kept from this batch on that path: PSV's preflight and confirmed saves, SOFF2's confirmed C29
+  credit save, the LC3/T4R TEST pause hooks.
+- **Refund reported once (found by T4RM-fin):** a stockpile site's single removal reported its refund twice in its call's result
+  (`Sites.afterRestore`: `reported()` holds the planned credit, and the txn's `given` was added); now drops + the txn's credit. The stock
+  was always credited once.
+- **Rows** (failing-first d0ae8837, row fixes 1dc90a1f, 68337f4c, 150e533c, 51f8f35b, ca8565d8; red = those on d0ae8837 without the
+  fixes 87e9d15b, b2112ae9): units `T4RMLegacyRouteTest`, `T4RMCargoAbortTest`, `T4RMRemovalAreasTest` (pure); e2e `t4rm-crash`
+  (T4RM-legacy-group/-road/-single, -overlap-new, -overlap-legacy incl. the refusal of a new removal over a running pre-T4R one, -fin)
+  and `t4rm-cargo` (a survival town's region target). Retired: T4-legacy, T4-legacyroad, T4R-legacyroad-fail/-window, T4R-legacygroup,
+  T4R-legacyroad-partial, T4RL-reattach, T4RL-premined, `T4RLegacyValueTest`.
+- **Deviations:** T4RM-overlap-new is green on eca131b6 (its two crossing group removals never held each other in game: the base
+  serialised them); it is a regression row and the admission's red is the refusal check in -overlap-legacy. T4RM-fin's kept is 0 on both
+  sides: a construction site's undo drops a player's block in its cells (PLAYER_DROP), it never keeps one, so kept is judged against a
+  clean twin; hand-down and cascade are non-trivial. The legacy road has no e2e mutant (its red is the base's removal txn).
+- **Leftovers:** a pre-T4R pending single left KEEP (its J2 credit held) blocks new removals over its box until it settles; after a K6
+  crash a construction site's recovered removal does not drop its player blocks as the synchronous one does, and a cascaded instant site's
+  attached blocks may pop as items (T4b's W restore has no `Drops`; seen in T4RM-fin, eca131b6 too).
+- **Gate:** (filled below)
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
