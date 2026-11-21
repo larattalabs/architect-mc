@@ -252,13 +252,17 @@ export function gradleTestInputGaps(gradle, sources, files, known = [], { read }
 
 /**
  * (TI2) A unit-mod trace (tools/lib/step-trace.mjs: what the node children of the JVM tests read) against the test block: -> the
- * tracked repo paths read and not declared. `trace` is readTrace's Map(path -> kinds), `tracked` the commit's files.
+ * tracked repo paths read and not declared (a file by the file rule, a listed directory by the directory rule). `trace` is readTrace's
+ * Map(path -> kinds), `tracked` the commit's files.
  */
 export function tracedTestInputGaps(gradle, trace, tracked) {
   const has = tracked instanceof Map ? new Set(tracked.keys()) : tracked;
   const decl = declaredTestInputs(gradle);
   if (!decl) return ['mod/build.gradle: no `test {` block'];
-  const { fileOk } = coverOf(decl, has);
-  const tops = new RegExp(`^(${TOPS_RE})/`);
-  return [...trace.keys()].filter((p) => tops.test(p) && has.has(p) && !fileOk(p)).sort();
+  const { fileOk, dirOk } = coverOf(decl, has);
+  const tops = new RegExp(`^(${TOPS_RE})(/|$)`);
+  // a directory listing (kind d) depends on every name under it: the directory rule (an inputs.dir of it or a parent), as the static check
+  const isDir = (p) => [...has].some((f) => f.startsWith(`${p}/`));
+  const gap = (p, kinds) => (has.has(p) ? !fileOk(p) : kinds.has('d') && isDir(p) && !dirOk(p));
+  return [...trace].filter(([p, kinds]) => tops.test(p) && gap(p, kinds)).map(([p]) => p).sort();
 }

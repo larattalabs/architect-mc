@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { declaredTestInputs, gradleTestInputGaps, literalTestPaths } from '../../tools/lib/gradle-test-inputs.mjs';
+import { declaredTestInputs, gradleTestInputGaps, literalTestPaths, tracedTestInputGaps } from '../../tools/lib/gradle-test-inputs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GRADLE = fs.readFileSync(path.join(ROOT, 'mod', 'build.gradle'), 'utf8');
@@ -118,4 +118,26 @@ test('(TI2) a computed driver path in a step or part shell is reported; literal 
   assert.deepEqual(SI.computedStepRoots({ shell: 'node tools/gate${PHASE}.mjs unit' }), ['tools/gate${PHASE}.mjs']);
   assert.deepEqual(SI.computedStepRoots({ cmd: ['node', '$DRIVER'] }), ['$DRIVER']);
   assert.deepEqual(SI.computedStepRoots({ shell: 'node tools/a.mjs', split: { parts: [{ shell: 'bash tools/run-$K.sh' }] } }), ['tools/run-$K.sh']);
+});
+
+// (TI2, v0.90.0 review P3) a preload a node option takes (--import/--require/-r/--loader) is not the driver: the script after it is.
+test('(TI2) a value-taking node option is parsed before the driver: a preload argument is not mistaken for it', () => {
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --import tools/bootstrap.mjs tools/gate${X}.mjs' }), ['tools/gate${X}.mjs']);
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --require tools/b.cjs tools/gate${X}.mjs' }), ['tools/gate${X}.mjs']);
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node -r tools/b.cjs --loader tools/l.mjs $DRIVER' }), ['$DRIVER']);
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --import=tools/bootstrap.mjs tools/gate${X}.mjs' }), ['tools/gate${X}.mjs']);
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --import tools/bootstrap.mjs tools/a.mjs' }), []);
+  assert.deepEqual(SI.computedStepRoots({ shell: 'node --import tools/hook-${H}.mjs tools/a.mjs' }), ['tools/hook-${H}.mjs'], 'a computed preload is a computed root too');
+});
+
+// (TI2, v0.90.0 review P3) a traced directory listing needs the directory rule (an inputs.dir of it or a parent), as the static check.
+test('(TI2) a traced directory listing goes red until the directory is declared; single files under it never cover it', () => {
+  const t = (body, trace) => tracedTestInputGaps(`test {\n${body}\n}\n`, new Map(trace), TI2_FILES);
+  const listing = [['kit/newdir', new Set(['d'])]];
+  assert.deepEqual(t('inputs.dir("../kit/lib")', listing), ['kit/newdir']);
+  assert.deepEqual(t('inputs.files("../kit/newdir/one.json", "../kit/newdir/two.json")', listing), ['kit/newdir']);
+  assert.deepEqual(t('inputs.dir("../kit/newdir")', listing), []);
+  assert.deepEqual(t('inputs.dir("../kit")', listing), []);
+  assert.deepEqual(t('inputs.files("../kit/newdir/one.json")', [['kit/newdir/one.json', new Set(['r'])]]), [], 'a file read: the file rule');
+  assert.deepEqual(t('inputs.dir("../kit/lib")', [['kit/newdir/one.json', new Set(['r'])]]), ['kit/newdir/one.json']);
 });
