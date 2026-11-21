@@ -306,6 +306,43 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
     the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
+### Disk space (2026-11-21)
+
+`Minecraft/_work` reached 977 GB (the disk at 99%): every slice, release, verify and red round made its own run dirs (`-run`,
+`-run-s<k>`, `-run-src`, about 6 GB each in logical size) and nothing removed them. The cleanup removed 239 stale worktrees and 42 output
+folders (about 258 GiB). Two rules in `tools/gate-run.mjs` keep it from coming back:
+
+- **Free-space guard.** A run refuses to start, before it takes a slot, when any volume it writes to has under `--min-free-gib`
+  (`GATE_MIN_FREE_GIB`, default 150) GiB free. It checks every destination: each run dir (`--run-dirs`, or a fixed `--shards` run's
+  shards and lanes, else the run dir) and the frozen source (`<run dir>-src`, also with `--run-dirs`; not with `--no-frozen-source`), each by the
+  real path of its nearest existing ancestor, so a symlinked run dir counts on its target's volume. `0` turns it off. A run that
+  chooses its shards under the slot (turbo, change shards, `--shards auto`) runs the guard again once they are chosen, on those
+  shard and lane dirs, before the lock and any setup; a refusal there gives the slot back.
+- **Cleanup after a PASS** (`tools/lib/run-dirs.mjs`, tested in `kit/test/gate-disk.test.mjs`). It runs inside `finish()`, after
+  the verdict and before the summary, the notify and the release of the lock and slot, so a queued run never sets up in dirs being
+  emptied, and `summary.json`'s `state` stays `running` until it is done (waiting agents watch that field); a cleanup failure is
+  logged (and recorded in `summary.cleanup`), never the verdict. What happens to each dir:
+  - **created by this invocation** (`setupShard` or the frozen source added the worktree; recorded in-process, never inferred from
+    the dir): `git worktree remove`, never `--force`. A worktree git refuses to remove is kept, with its world copies emptied. The
+    remove has a timeout (5 min): a hung one (a blocking fsmonitor hook) has only that git child killed, is logged and kept, and
+    the cleanup goes on, so it never holds the lock.
+  - **a named run dir** (beside the main checkout's real path: `cfg.runDir`, the nightly's `nightly.runDir` and
+    `nightly.uiGallery.runDir` from `tools/gate-cache.json`, and their `-s<k>`/`-o<j>` shards): reused, so only its world copies
+    (`mod/run/saves/*`) go. No other dir counts as one: not another sibling of the main checkout, not a dir under `_work`.
+  - **a symlinked run dir** (the dir itself, or a parent component inside the worktrees dir, by `lstat` on the path as given,
+    before any real path): refused, nothing touched. A default run dir reached through a `_work` bridge link is therefore left
+    for a run from the main checkout's side, or for removal by hand.
+  - **any other existing dir** (another slice's worktree passed as `--run-dir`, an earlier run's dir reused, a reused `-src`): this
+    run does not own it, so nothing is touched, not even its worlds. Such a dir stays until a run that creates it passes, or until
+    it is removed by hand.
+  - The main checkout, the source checkout and the seed (by real path) are never touched. No symlink is followed: the run dir, `mod`,
+    `mod/run` and `saves` must be real directories with `saves` inside the run dir by real path, a symlinked world entry is left as it
+    is, and a link inside a world is removed as a link.
+  - A run that does not pass keeps everything for inspection: remove its dirs with `git worktree remove` once the failure is
+    understood. `--keep-run-dirs` (`GATE_KEEP_RUN_DIRS=1`) keeps all, for a follow-up `--only` run in the same dirs.
+- **By hand:** a slice's worktree and red/mutant worktrees are removed when the slice is merged or shelved; release worktrees and
+  `-rel` copies once the release's post-publish steps are done.
+
 ### Ports (one table; the coordinator assigns slice pairs)
 
 | Range | Who |
