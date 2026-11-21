@@ -34566,7 +34566,14 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
   `T4RM-fin` now judges conservation and the event's refund against the clean twin), fixes 59e35b25 and the unpaid-cascade follow-up. Red: units 4/4 (`T4RNCargoUnackTest`'s
   acknowledged case green), t4rm-crash 4 FAIL (`gate-runs-T4RN-red/20261121-181248-change`); green: t4rm-crash 84/0
   (`gate-runs-T4RN-green/20261121-182023-change`, then again after the unpaid-cascade follow-up).
-- **Leftover (older than this round):** at K6 a paid cascaded member's own W and its base's W may run in either order at the start.
+- **Row fix:** `standing()` (gatetxncc) counts a door once (its `half=upper` cell skipped). LR-2/LR-2s counted both halves, and on the
+  base the recovered W's popped door half (a stray item, never cleared) balanced that; once the W clears it as the live removal does, the
+  double count showed (full gate on 4cd74a4a: txn-crash-crate LR-2/LR-2s red, `gate-runs-T4RN/20261121-182940-change`).
+- **Gate:** change on 4cd74a4a 65/66 (`gate-runs-T4RN/20261121-182940-change`; the one FAIL is the row above; timing bars recorded only);
+  after the row fix f45f3195, `--only` txn-crash-crate 579/0, t4-crash 85/0, t4r-crash 65/0, t4rl-crash 27/0, t4rm-crash 84/0,
+  t4rm-cargo 9/0 (`gate-runs-T4RN-rerun/20261121-212714-change`). The recovered W logs what it cleared and gave back (67930530).
+- **Leftover (older than this round):** at K6 a paid cascaded member's own W and its base's W may run in either order at the start. A
+  saved `waited` may carry into the player wait after a restart once the pre-T4R removal has ended. The branch is not merged with v0.90.0.
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
