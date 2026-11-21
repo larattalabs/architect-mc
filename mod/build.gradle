@@ -143,7 +143,7 @@ test {
 	inputs.dir("../scenarios/goldens").withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
 	// ((RTE3) every kit test fixture a mod test reads itself, exact files (the same files as the steps' data in tools/step-inputs.json):
 	// DistrictLandTest d3/, DistrictLandGrTest gr/, GateJoinTest gj/, RevisionsTest rv/, DistrictLandRte2Test rte2/ (RTE2), LayoutsRte3Test
-	// and DistrictLandRte3Test rte3/, DistrictLandRte4Test rte4/ and DistrictLandCompatTest rte-compat/ (RTE4), MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
+	// and DistrictLandRte3Test rte3/, DistrictLandRte4Test rte4/ and DistrictLandCompatTest rte-compat/ (RTE4), DistrictLandCompat5Test rte-compat/rte5.json.gz (RTE5), MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
 	// RoadTerrainNaturalTest natural/, ApiCXTest and TerrainOrderTest's named plan fixtures (also under kitPlanFixtures above))
 	inputs.files(
 		"../kit/test/fixtures/d3/parity.json",
@@ -166,6 +166,7 @@ test {
 		"../kit/test/fixtures/rte3/land-irs.json",
 		"../kit/test/fixtures/rte3/layout-ir.json",
 		"../kit/test/fixtures/rte-compat/corpus.json.gz",
+		"../kit/test/fixtures/rte-compat/rte5.json.gz",
 		"../kit/test/fixtures/rte4/land-irs.json",
 		"../kit/test/fixtures/rv/merge.json",
 		"../kit/test/fixtures/style-parity.json",
