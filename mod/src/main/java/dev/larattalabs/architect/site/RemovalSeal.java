@@ -704,6 +704,11 @@ public final class RemovalSeal {
 	 * resumes it ({@code off}). Kept in the world's {@code architect/dev-removal-pause.json} so a restart keeps it (the file exists only
 	 * while a pause is armed).
 	 */
+	/** (TEST, slice T4R hooks) Whether a pause names {@code key} itself ({@code group:<id>}): never the {@code *} pause of every restore. */
+	static boolean pausedExactly(String key) {
+		return !PAUSE.isEmpty() && PAUSE.containsKey(key);
+	}
+
 	/** (TEST, slice T4R hooks) A road restore's slice: one cell at a time while a pause after some cells is armed for it, else {@code n}. */
 	static int sliceFor(String site, int n) {
 		Integer after = PAUSE.isEmpty() ? null : PAUSE.get(site);

@@ -1305,7 +1305,7 @@ public final class Groups {
 	/** R1-R2 of a group undo: checks every member, tallies construction refunds, plans and submits one commit. */
 	private static void plan(MinecraftServer server, Removal r) {
 		if (r.planner != null) {
-			if (RemovalSeal.paused("group:" + r.group, 0)) {
+			if (RemovalSeal.pausedExactly("group:" + r.group)) {
 				return; // (TEST, slice T4R hooks: dev.removal.pause {site: "group:<id>"}) the refunds tallied, the undo not yet planned
 			}
 			// R1 over ticks (a large group plans per section; phase 4e budget)
