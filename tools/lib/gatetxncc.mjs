@@ -1843,8 +1843,9 @@ export async function registerTCC(steps, h) {
         }
       }
     }
-    // T4RM-legacy-single: a pre-T4R single stockpile site removal halted at K6 (its refund J2's pending credit, no stash, as main saves it):
-    // main's path settles it at the start (the Sites check, settlePendingCredits books the credit once), no T4R txn
+    // T4RM-legacy-single: a pre-T4R single stockpile site removal halted at R4 +save (its restore written and saved, its refund J2's held
+    // pending credit, no stash, as main saves it): main's path settles it at the start (the Sites check reads it restored and releases it,
+    // settlePendingCredits books the credit once), no T4R txn
     if (want('T4RM-legacy-single')) {
       const tag = 'T4RM-legacy-single';
       const owner = 'tcc:t4rmls';
@@ -1855,10 +1856,10 @@ export async function registerTCC(steps, h) {
         await cmd('/save-all flush').catch(() => null);
         await wait(2000);
         const before = await gparts();
-        await call('dev.journal.killAt', { point: 'K6' }, 10_000);
+        await call('dev.journal.killAt', { point: 'R4+save' }, 10_000);
         const m = await call('dev.site.deconstruct', { site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
         const down = await haltWait();
-        check(down, `${tag}: halted at K6 (${json(m).slice(0, 120)})`);
+        check(down, `${tag}: halted at R4 +save (${json(m).slice(0, 120)})`);
         if (down) {
           const next0 = txnNext();
           const root = JSON.parse(fs.readFileSync(sFile(), 'utf8'));
@@ -1873,11 +1874,17 @@ export async function registerTCC(steps, h) {
             }
             delete root.crateSettles[site];
             fs.writeFileSync(sFile(), JSON.stringify(root, null, 2));
+            // its pending record as main saves it: no settle stash on it
+            const sf2 = path.join(W.dir, 'architect-sites.json');
+            const sr = JSON.parse(fs.readFileSync(sf2, 'utf8'));
+            for (const pe of sr.pending ?? []) if (pe?.site?.id === site) delete pe.settle;
+            fs.writeFileSync(sf2, JSON.stringify(sr, null, 2));
           }
           check(!!credit, `${tag}: the removal's stash main-shaped offline: J2's pending credit ${json(credit)}`, st);
           await L.openWorld(name);
           await L.tp(...W.at);
           for (let i = 0; i < 60 && (await siteState(site)); i++) await L.sleep(1000);
+          check(!(await siteState(site)), `${tag}: ${site} removed (released by main's settle)`);
           for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000);
           await wait(5000);
           const after = await gparts();
@@ -2064,7 +2071,7 @@ export async function registerTCC(steps, h) {
         for (let i = 0; i < 240; i++) { if ((await siteState(site))?.state === 'built') break; await L.sleep(1000); }
         const built = (await siteState(site))?.state === 'built';
         const b = await boxOf(site);
-        const top = await later(`place cabin ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} INSTANT unowned noactor 0 force layer`, 120_000).catch((e) => ({ error: String(e) }));
+        const top = await later(`place cabin ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} INSTANT unowned actor 0 force layer`, 120_000).catch((e) => ({ error: String(e) }));
         const tb = top?.siteId ? await boxOf(top.siteId) : null;
         const inTop = (c) => tb && c[0] >= tb[0] && c[0] <= tb[3] && c[1] >= tb[1] && c[1] <= tb[4] && c[2] >= tb[2] && c[2] <= tb[5];
         const changed = [];
@@ -2074,7 +2081,12 @@ export async function registerTCC(steps, h) {
           const c = typeof k2 === 'string' ? k2.split(',').map(Number) : null;
           if (c && pg.items.includes(full) && !inTop(c) && changed.length < 2) changed.push(c);
         }
-        for (const c of changed) await cmd(`/setblock ${c.join(' ')} minecraft:sponge`);
+        // a player's change: the paid block broken and a sponge placed there by a player (its placement record: a player's block the undo keeps)
+        for (const c of changed) {
+          await call('dev.pt.breaks', { at: [c], placer: 'T4RMPlayer' }, 60_000).catch(() => null);
+          await call('dev.pt.uses', { ops: [{ item: 'minecraft:sponge', at: c, on: [c[0], c[1] - 1, c[2]], face: 'up', placer: 'T4RMPlayer' }] }, 60_000).catch(() => null);
+        }
+        await cmd(`/kill @e[type=minecraft:item,x=${b[0]},y=${b[1]},z=${b[2]},distance=..32]`).catch(() => null);
         rowLog(tag, `${sub}: ${site} built ${built}; on top ${json(top).slice(0, 300)} (${json(tb)}); changed ${json(changed)}`);
         return { site, owner, items: pg.items, top: top?.siteId ?? null, changed, built };
       };
