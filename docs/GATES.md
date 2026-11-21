@@ -306,6 +306,22 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
     the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
+### Disk space (2026-11-21)
+
+`Minecraft/_work` reached 977 GB (the disk at 99%): every slice, release, verify and red round made its own run dirs (`-run`,
+`-run-s<k>`, `-run-src`, about 6 GB each in logical size) and nothing removed them. The cleanup removed 239 stale worktrees and 42 output
+folders (about 258 GiB). Two rules in `tools/gate-run.mjs` keep it from coming back:
+
+- **Free-space guard.** A run refuses to start, before it takes a slot, below `--min-free-gib` (`GATE_MIN_FREE_GIB`, default 150)
+  GiB free on its run dirs' volume. `0` turns it off.
+- **Cleanup after a PASS.** The run removes its own run worktrees and its frozen source (`git worktree remove`, never `--force`; a
+  worktree it can't remove is kept with its world copies emptied). A run dir beside the main checkout (the default, the nightly's)
+  is reused: only its world copies (`mod/run/saves`) go. A run that does not pass keeps everything for inspection: remove its dirs
+  with `git worktree remove` once the failure is understood. `--keep-run-dirs` (`GATE_KEEP_RUN_DIRS=1`) keeps all, for a follow-up
+  `--only` run in the same dirs.
+- **By hand:** a slice's worktree and red/mutant worktrees are removed when the slice is merged or shelved; release worktrees and
+  `-rel` copies once the release's post-publish steps are done.
+
 ### Ports (one table; the coordinator assigns slice pairs)
 
 | Range | Who |
