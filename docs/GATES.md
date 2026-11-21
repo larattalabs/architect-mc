@@ -465,8 +465,10 @@ kit/test/h-helpers.mjs (plan-helpers) and scenarios/bibles (plan-helpers' fixtur
 kit as a fileTree with copyKit's excludes). No template step had a gap; the map rebuilds unchanged. `step-inputs.mjs test-trace <run>`
 compares a run's unit-mod trace (the JVM's node children) with the test inputs. Left to the author: a path passed whole as a
 parameter (ApiP0Test's `one(file)`: its callers' literals are scanned), a node child's computed reads (test-trace shows them), reads
-outside the repo (GlossaryWordingTest's opt-in ../../steward-mc). Gate drivers' computed reads stay the trace's: a read outside the
-set is an inputs-map miss (no record), never a stale PASS.
+outside the repo (GlossaryWordingTest's opt-in ../../steward-mc). Gate drivers' computed reads stay the trace's (a read outside the
+set is an inputs-map miss, never a stale PASS); TI2's traced unit-kit and unit-sidecar run at HEAD found two enumerations, now
+whole in their data: gate-cpu-budget.test lists tools/*.mjs (unit-kit), regions-tc.test reads scenarios/<f>.json and the sidecar's
+vitest setup imports tools/lib (unit-sidecar).
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.
