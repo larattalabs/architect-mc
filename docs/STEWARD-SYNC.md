@@ -255,3 +255,23 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
    FC and IG released; FK next).
 2. After 7c: 8a (survival construction for forms and relief), 8b (settlement data APIs; Steward owns the player settlement UI),
    8c (flowing water) (Noah, 2026-11-13; docs/PLAN.md "Planned after 7c").
+
+### New for Steward (NEXT, slice T4R-D; Steward's T4R-D review A2, A3, A5, A7, Q8)
+
+- **Semantic narrowing (the one non-additive change):** on a removal begun by this build, `RemoveResult.refund` no longer lists the
+  player's own blocks found in the box. They are owed (`RemoveResult.owedParts`, reason `player_blocks`) to their placer, else the site's
+  recipient, else the requester, else `architect:unclaimed`; never dropped, never credited to a pile automatically (only an explicit
+  `creditOwedToStock`). A removal a pre-T4R build left in flight still reports v0.89.0's refund.
+- `RemoveResult.owedParts` (`OwedPart(key, recipient, reason, items)`), immutable; `Sites.removalResult(kind, id)` (kinds `site`, `road`,
+  `group`, `stage` (`<group>/<stage>`), `region`, alias `revision` (`<region>#<rid>`); at most 1024 per world, oldest out).
+- `ArchitectRefused.busy()` = `Busy(kind, blockingId, blockingKind, blockingOwner)`, kinds `REMOVAL_IN_PROGRESS`, `WAITING_BEHIND`,
+  `PLAYER_BLOCKS_RETURNING`, `HELD_DECIDED`; `detail()` = `<kind_lower>:<blockingId>` or `held(decided)`. `Sites.remove` now fails with it
+  (it answered a `RemoveResult` with the "Not yet" text in `blockers`).
+- `RemovalStopCause.WAITING_BEHIND` (appended); `SiteGroup.removalWait()`, `RegionView.removalWait()` (`RemovalWait(cause, blocking,
+  sinceTick)`), null when not waiting. `RevisionView.removalWait()` exists and is null (a revision undo's wait shows on its region's view).
+- REMOVAL_FINISHED: a standalone cascade fires one event per member, each from its own snapshot; group, region and revision one aggregate.
+- Auto-collect: the player's blocks go into the online recipient's inventory after the removal retires ("Returned N of your blocks from
+  <site>."), what does not fit stays owed; at the next join "Architect owes you N items (from <sites>): /architect collect." Nothing at
+  server start; `architect:unclaimed` never auto-collected (`/architect owed nearby` lists it).
+- Dev (A3): `dev.pt.uses`/`dev.pt.uuid` give the fake placer's UUID; `dev.stockpile.owed {recipient}`; `dev.rv.undo` returns `refund`,
+  `owed`, `owedParts`; `dev.removal.owners`.

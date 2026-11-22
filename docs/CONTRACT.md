@@ -34575,6 +34575,77 @@ LYW's two leftovers. No API member, feature or version added (`layoutWalls` cove
 - **Leftover (older than this round):** at K6 a paid cascaded member's own W and its base's W may run in either order at the start. A
   saved `waited` may carry into the player wait after a restart once the pre-T4R removal has ended. The branch is not merged with v0.90.0.
 
+### Slice T4R-D as built (design rev 3, BUILD SCOPE option (b): the direct-write core; strict; versions NEXT)
+
+The design is `architect-T4R-D-design.md` rev 3 with its "Decisions" parts 1-4 (part 4 binding: no §3.0 inert/margin/deferred machinery).
+Closes T4R-N's findings (`reviews/T4R-N-fed9d672.findings.md`): P1-1 paid-cascade deadlock, P1-2 second-crash 0/2, P2 crop, P3 waited.
+
+- **One owner per single removal (D1a, I5).** `OwnerRemovals`: a single site removal (its cascade included, and Adopt PT2 with its delta
+  mask, held cell by cell) that pays anything or finds player cells saves one owner record (`stockpiles.json` `removals`, key
+  `removal:<base>@<undoGroup>`: order, per member box, stash, player cells with recipients, fin) confirmed before the undo commits (FKC1).
+  Its holds are every member's box and crate cell, named by the member (the writer exemption of `WRITING` and of the txn's `sitesOf`). One
+  owner txn (`removal.site`, journal-decided by `group.undo`, never aborted): per member W `site.restore`, member barrier, its settle
+  (`CrateSettle.planInto`, min of its W) and one OWE `player_blocks` per recipient, member barrier; then `removal.snapshot`, the core's
+  effects barrier, one `removal_finished:<member>` payload per member, retirement; then RD1 (`Sites.saveConfirmed`), RD2 (the record
+  forgotten in a confirmed ledger save), auto-collect. Pending records carry no stash (the record owns them; the Sites check leaves them
+  to it). Recovery: `OwnerRemovals.driveAll` at the start and each tick while a record is left (FKC1 with no journal undo: the record goes).
+  Deleted: `cascadeWritable`, `rolledCascade`, `unpaidCascade`, `LIVE_DROPS`, `playerGiven`, the `pdrop:` give-back, per-member single
+  removal stashes and txns (a branch build's per-site stash is logged and ignored).
+- **Player blocks (D1, I1-I4).** Recorded by chunk receipts: `pfound:<owner>/<member>=pos:block,...` (first write wins) before the call's
+  first write (live R4, a group's write, or the W itself), and `<tx>/<i>@pgone=pos,...` in the W's apply, the same tick as `@restored`. The
+  OWE pays the recorded items of the cells in `@pgone` (`RemovalTxn.amount`, `pof`), after the member barrier. `OwedLedger` records each O
+  effect's applied amount with its marker (`amounts`, one ledger write). Recipient: PT placer, else the site's recipient, else the requester,
+  else `architect:unclaimed` (collectable by anyone; `/architect owed nearby` within 64). A `player_blocks` entry is never credited to a pile
+  automatically. Nothing of a T4R removal drops as an item entity: `afterRestore` of an owner member drops nothing, a group's `decItems` and
+  `finishGroupDeconstruct` carry no player items.
+- **Groups (D1b).** Each member with player cells gets a stash carrying them (a player-only stash when it has no crate and no pile); the
+  group's write records `pfound` before each member's write; its W receipts `@pgone`; its OWE per recipient; one aggregate
+  `removal.snapshot` (results `group:`, `region:`, `stage:<g>/<s>`, alias `revision:<region>#<rid>`).
+- **R1 extraction (D1c).** `Extractions`: both producers' extractable cells per target (kept cells never), one `removal.pblocks` attempt
+  per generation (`extractions` table; P0 records it `planned`, saved confirmed, its cells held; the txn `pblocks:<target>@<placedAt>#<gen>`
+  writes each cell's before with `pfound`/`@pgone`, owes `player:<attempt>:<recipient>`, `extraction.snapshot` keeps it before retiring).
+  A start aborts a planned attempt with no txn. A group's R1 waits on it (holding nothing); a standalone stockpile road answers SITE_BUSY
+  `PLAYER_BLOCKS_RETURNING`. Refund tallies skip extracted cells.
+- **Admission (D2, §4.2).** `RemovalAreas.heldAreas` adds owner footprints, planned/open attempts and FIFO tickets; groups, stages, regions
+  and revisions wait before planning on a ticket (`Groups.tickets`, queue order; only tickets ahead count for a waiting group), with
+  `admitWaited` (persisted) advancing only while the progress signature of everything ahead is unchanged; at `MAX_WAIT` they stop
+  `WAITING_BEHIND`. `TxnCore.BEGIN_GUARD` (after attach/replay) refuses a NEW non-removal txn whose `crate:`/`cell:`/`rbox:` cells meet an
+  owner footprint, an attempt or a ticket. Placements (`checkSite`), `applyDelta` and `revert` refuse up front, typed.
+- **Results (D5).** `RemoveResult.owedParts`, `Sites.removalResult(kind, id)` (bounded 1024, oldest out), REMOVAL_FINISHED per member from
+  its snapshot (standalone cascade), one aggregate for a group/region. `refund` no longer lists the player's blocks (STEWARD-SYNC).
+- **Small fixes.** D3: `Refunds.Tally.add(Outcome, pos, block, costs, recipient)`; `at()` gone; a positionless PLAYER_DROP throws; `fieldCell`
+  books its crop at its cell. D4: `legacyWaited` persisted apart from `waited`.
+- **Steward asks.** A7a `ArchitectRefused.busy()` / `Busy(kind, blockingId, blockingKind, blockingOwner)`, detail token; A7b
+  `RemovalStopCause.WAITING_BEHIND`, `RemovalWait` on `SiteGroup` and `RegionView` (`RevisionView`'s component is there, filled null: a
+  revision undo's wait shows on its region); A2 `HELD_DECIDED` for a pending member of a live owner record; A3 `dev.pt.uses`/`dev.pt.uuid`
+  placer UUID, `dev.stockpile.owed`, `dev.rv.undo` with refund/owed/owedParts; `dev.removal.owners`.
+- **A7c: calls that can answer SITE_BUSY with a typed `Busy`:** `Sites.remove`/`removeDetailed` and road removal (REMOVAL_IN_PROGRESS,
+  WAITING_BEHIND, PLAYER_BLOCKS_RETURNING for a stockpile road, HELD_DECIDED); `place`, `realise*`, `applyDelta`, `revert`
+  (REMOVAL_IN_PROGRESS, WAITING_BEHIND); internal txns over held cells (crate take, `adoptCrates`, settle of a built crate: the begin guard,
+  HELD with the token in its detail). `removeGroup`, `Regions.remove`, `undoRevision` take a ticket and wait (`RemovalWait`), stopping
+  `WAITING_BEHIND`. `collectOwed`, `creditOwedToStock` and reads never.
+
+#### Known risks (direct-write scope)
+
+Decision part 4 dropped §3.0's inert rule, margin hold and deferred work. Induced effects keep v0.89.0 behaviour; a held cell is guarded
+only against direct writes (M1) and the existing block-entity, piston and explosion guards. Out of scope, each a v0.89.0 behaviour:
+- **Falling blocks:** a gravity block whose support a removal writes away falls (a falling entity, the vanilla drop where it lands); the
+  `FallingBlockEntity.fall` source write is refused for a held cell but the entity may still spawn (rev-1 P1-1, rev-2 P2-4 partial
+  stalactites, brushable blocks).
+- **Decay and ticks:** leaves decay and drop by random tick, crops grow, block entities tick (a campfire's `cookTick` drops its items: rev-3
+  P1-1), all while held.
+- **Attached blocks popping:** an exterior torch, a door, a carpet attached to a written cell pops as a vanilla item (a removal's own
+  writes clear what they pop with `Sites.Drops`, v0.89.0); a margin pop outside the box is an ordinary vanilla drop (rev-2 P1-2).
+- **Fluids and bucket pickup:** fluids flow into and out of held cells; `LiquidBlock.pickupBlock` ignores a refused write (rev-3 P1-1:
+  two lava buckets from a held source).
+- **Collateral support writes:** a CU-kept player block (a copper door) whose support another member's write removes pops with no payload
+  (rev-3 P1-2): not paid from receipts.
+- **Teleport and enderman:** a dragon egg teleports into or out of a held cell, an enderman takes or places there (rev-2 P1-1).
+- **Deferred work:** no `deferred.json`; nothing is replayed at release (rev-3 P1-3 and P2 do not arise: there is no deferral).
+- **Not built (declared in the changes):** the extraction's holder-content L credits and its `pile:` hold (holder contents keep the
+  existing pending-credit path); the `r1`/`pblockKeys` association of extraction results into the removal's own result; `RevisionView`'s
+  wait; a mutant per row.
+
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
 - The start's reconcile runs at the start under the hold (never after the release barrier refreshed the books). Each save call has its own
