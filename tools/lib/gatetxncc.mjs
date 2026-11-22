@@ -976,7 +976,7 @@ export async function registerTCC(steps, h) {
       const site = await single(tag);
       if (site) {
         const { cp, items } = await partBuilt(tag, site, 0.4);
-        await k6Row(tag, [site], site, cp, items, { start: { killAt: 'TX:removal.site:apply:0' } });
+        await k6Row(tag, [site], site, cp, items, { start: { killAt: 'TX:removal.site:apply:1' } }); // (T4R-D) the owner txn: effect 0 is its D (group.undo), 1 its first W
       }
     }
     // T4-nojournal (fix round, finding 2): a removal txn decided (its W not yet on disk: halted at its decision), then the world opened with
