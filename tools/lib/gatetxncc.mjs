@@ -24,6 +24,7 @@
 //   GATE_TCC_PARTS=S,G,P1,MF (default all) or a list of row tags limits the rows.
 // Evidence: <out>/txncrashcrate.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import path from 'node:path';
+import { secondCrash, txnOpenOnDisk } from './second-crash.mjs';
 
 export async function registerTCC(steps, h) {
   const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, cellsOf } = h;
@@ -2251,9 +2252,14 @@ export async function registerTCC(steps, h) {
           // the world halts during its start (the recovery runs at the load). (slice T4R-D fix round, SPD) openWorld fails as soon as the
           // headless host has no server; 5 minutes is only its bound, and the halt is the host showing no server (a fixed minute, then a
           // not-in-world check, passed while a slow start was still going and the next open found it starting)
-          await Promise.race([L.openWorld(name).catch(() => null), L.sleep(300_000)]);
-          down = await serverGone();
-          rowLog(tag, `second crash at the recovered member barrier: ${down}`);
+          // (slice T4R-D narrowing round, P2-4) it counts only when it happened: the open refused (not timed out, not opened), no server
+          // left, and the recovered removal.site txn still open in txn.json on disk; anything else FAILS the row
+          const sc = await secondCrash({ open: () => L.openWorld(name), sleep: L.sleep, serverGone, boundMs: 300_000,
+            txnOpen: () => txnOpenOnDisk(path.join(arch, 'txn.json'), 'removal.site') });
+          down = sc.down;
+          rowLog(tag, `second crash at the recovered member barrier: ${down} (${sc.why})`);
+          check(down, `${tag}: the second crash happened at the recovered member barrier (${sc.why})`, sc);
+          if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
         }
         await reopen();
         await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
