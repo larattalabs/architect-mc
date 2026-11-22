@@ -174,4 +174,31 @@ class T4RDFixExtractionAbortTest {
 		JsonArray unused = new JsonArray();
 		assertEquals(0, unused.size());
 	}
+
+	@Test
+	void aRoadsOwnPlannedAttemptNeverRefusesItsRetry() throws Exception {
+		System.out.println("ROW T4RDF-abort-hold (unit): the road's retry reaches its attempt");
+		Extractions.read(JsonParser.parseString("{\"r1@5\":{\"gen\":1,\"attempts\":{\"1\":{\"key\":\"pblocks:r1@5#1\",\"dim\":\"minecraft:overworld\","
+			+ "\"target\":\"r1\",\"cells\":[{\"pos\":" + net.minecraft.core.BlockPos.asLong(1, 65, 1) + ",\"block\":\"minecraft:sponge\"}],\"state\":\"planned\"}}}}"));
+		Infra r1 = new Infra("r1", "road", "p", new JsonObject(), "minecraft:overworld", new dev.larattalabs.architect.placement.Anchors.Bounds(0, 64, 0, 2, 66,
+			2), 5, null, false, new JsonObject());
+		java.util.List<RemovalAreas.Area> areas = new ArrayList<>();
+		Extractions.areas(areas);
+		java.util.Set<String> self = new java.util.HashSet<>(java.util.Set.of("r1"));
+		assertTrue(RemovalAreas.first(areas, "minecraft:overworld", List.of(r1.box()), self) != null, "fixture: the attempt's cell is an admission area");
+		Method keys;
+		try {
+			keys = Extractions.class.getDeclaredMethod("keysOf", Infra.class);
+		} catch (NoSuchMethodException e) {
+			keys = null;
+		}
+		org.junit.jupiter.api.Assertions.assertNotNull(keys, "T4RDF-abort-hold: a road's retry is refused by its own planned attempt (never reaches Extractions.run)");
+		keys.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		java.util.Set<String> own = (java.util.Set<String>) keys.invoke(null, r1);
+		self.addAll(own);
+		assertEquals(null, RemovalAreas.first(areas, "minecraft:overworld", List.of(r1.box()), self), "T4RDF-abort-hold: its own attempt is no blocker of its retry");
+		String src = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/InfraPlace.java"));
+		assertTrue(src.contains("Extractions.keysOf(i)"), "T4RDF-abort-hold: the road's admission excludes its own attempts");
+	}
 }

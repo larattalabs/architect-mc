@@ -65,7 +65,7 @@ class StockLedgerPendingJ2Test {
 		String sites = Files.readString(Path.of(site + "Sites.java"));
 		// (slice T4b, N8) a stockpile site's refunds are a stash (CrateSettle.pileStash) held durable with the others, saved confirmed, before
 		// the commit; its removal txn credits them after the restore (the J2 pending credit is legacy only)
-		int pile = sites.indexOf("CrateSettle.pileStash(");
+		int pile = sites.indexOf("CrateSettle.stashFor("); // (T4R-D fix round, P1-3) the one stash rule: pileStash for a stockpile site
 		int hold = sites.indexOf("CrateSettle.holdDurable(stashes)", pile);
 		int save = sites.indexOf("Stockpiles.saveWithWorldConfirmed(server);", hold);
 		int refused = sites.indexOf("stashes.keySet().forEach(CrateSettle::forgetDurable)", save);

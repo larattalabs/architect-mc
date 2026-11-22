@@ -95,6 +95,25 @@ public final class Extractions {
 		return out;
 	}
 
+	/**
+	 * (slice T4R-D fix round, P1-5) The keys of {@code t}'s planned and open attempts: its own removal's admission excludes them (they are
+	 * that removal's prerequisite, driven by its retry), so a retry always reaches {@link #run}, never refused by its own attempt.
+	 */
+	static synchronized java.util.Set<String> keysOf(Infra t) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		JsonObject tb = TABLE.get(tkey(t));
+		if (tb != null) {
+			for (var a : tb.getAsJsonObject("attempts").entrySet()) {
+				JsonObject at = a.getValue().getAsJsonObject();
+				String st = at.get("state").getAsString();
+				if (st.equals("planned") || st.equals("open")) {
+					out.add(at.get("key").getAsString());
+				}
+			}
+		}
+		return out;
+	}
+
 	/** Admission areas of the planned and open attempts (§4.2 (b)). */
 	static synchronized void areas(List<RemovalAreas.Area> out) {
 		for (JsonObject h : holds()) {
