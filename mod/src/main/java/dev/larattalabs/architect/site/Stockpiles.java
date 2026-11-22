@@ -3071,6 +3071,10 @@ public final class Stockpiles {
 		if (own != null) {
 			root.add("removals", own);
 		}
+		JsonObject ex = Extractions.json(); // (slice T4R-D, D1c) the extraction attempts
+		if (ex != null) {
+			root.add("extractions", ex);
+		}
 		JsonObject res = OwnerRemovals.resultsJson(); // (slice T4R-D, D5) the removals' immutable results (bounded)
 		if (res != null) {
 			root.add("removalResults", res);
@@ -4153,6 +4157,7 @@ public final class Stockpiles {
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 		forgetEarlyRuns(server);
 		Sites.crateCheckAfterStockpiles(server); // (chore LT) the crate-less sites' crate check, now that it can see which a stockpile feeds
+		Extractions.atStart(server); // (slice T4R-D, D1c) planned attempts with no txn: aborted
 		OwnerRemovals.startLater(server); // (slice T4R-D) every owner record's txn recovered (or its record dropped when its undo never committed)
 		CrateSettle.sweepLater(server); // (T2b last round P1 2, 3) the durable settle stashes no job or pending record carries: settled or forgotten
 	}
@@ -4191,6 +4196,7 @@ public final class Stockpiles {
 		OwedLedger.clear();
 		DURABLE_WB.clear();
 		OwnerRemovals.read(null, null);
+		Extractions.read(null);
 		CrateSettle.durableRead(null);
 		DURABLE_WB_GEN = 0;
 		nextId = 1;
@@ -4306,6 +4312,7 @@ public final class Stockpiles {
 		PILES.clear();
 		OwedLedger.readInto(root.get("owed"));
 		OwnerRemovals.read(root.get("removals"), root.get("removalResults")); // (slice T4R-D)
+		Extractions.read(root.get("extractions"));
 		CrateSettle.durableRead(root.get("crateSettles"));
 		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 		if (root.has("stockpiles")) {

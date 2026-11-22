@@ -468,6 +468,11 @@ public final class OwnerRemovals {
 
 	/** One OWE {@code player_blocks} per recipient of {@code member}'s player cells, paid from its W ({@code w})'s receipts. Pure. */
 	static List<Effect.Builder> playerOwes(String key, String member, String dim, int w, JsonArray player) {
+		return playerOwes0("player:" + key + "/" + member, member, dim, w, player);
+	}
+
+	/** {@link #playerOwes} keyed {@code <prefix>:<recipient>} (an extraction: {@code player:<extraction key>:<recipient>}). Pure. */
+	static List<Effect.Builder> playerOwes0(String prefix, String member, String dim, int w, JsonArray player) {
 		Map<String, JsonArray> by = new LinkedHashMap<>();
 		Map<String, Map<String, Integer>> planned = new LinkedHashMap<>();
 		for (JsonElement el : player) {
@@ -483,8 +488,8 @@ public final class OwnerRemovals {
 		List<Effect.Builder> out = new ArrayList<>();
 		for (var e : by.entrySet()) {
 			BlockPos at = BlockPos.of(e.getValue().get(0).getAsJsonObject().get("pos").getAsLong());
-			out.add(Effect.of(dev.larattalabs.architect.txn.CrateTxn.OWE, EffectClass.O).items(planned.get(e.getKey())).move("world", "owed").data("key", "player:"
-				+ key + "/" + member + ":" + e.getKey()).data("recipient", e.getKey()).data("dim", dim).data("pos", CrateSettle.posJsonOf(at)).data("reason",
+			out.add(Effect.of(dev.larattalabs.architect.txn.CrateTxn.OWE, EffectClass.O).items(planned.get(e.getKey())).move("world", "owed").data("key", prefix + ":"
+				+ e.getKey()).data("recipient", e.getKey()).data("dim", dim).data("pos", CrateSettle.posJsonOf(at)).data("reason",
 					OwedLedger.PLAYER_BLOCKS).data("site", member).data("pof", w).data("pcells", e.getValue()).member(member));
 		}
 		return out;

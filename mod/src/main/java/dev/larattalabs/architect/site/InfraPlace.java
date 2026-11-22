@@ -640,6 +640,15 @@ public final class InfraPlace {
 				throw busy;
 			}
 		}
+		if (i.construction() != null && Stockpiles.pileOf(i) != null) {
+			// (slice T4R-D, D1c) a stockpile road's (or region target's) player blocks are written back and owed by an extraction attempt first,
+			// never dropped; until it is kept the call answers SITE_BUSY (PLAYER_BLOCKS_RETURNING) and the caller retries
+			String ew = Extractions.run(level.getServer(), level, i, null);
+			if (ew != null) {
+				throw new Sites.SiteException(Reason.SITE_BUSY, "Not yet: your blocks on " + id + " are being given back first (" + ew + "); remove it again in a moment",
+					new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.PLAYER_BLOCKS_RETURNING, id, "road", i.owner()));
+			}
+		}
 		RoadBuilder.Removing removing = RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
 		if (removing.settle() != null) {
 			removing.settle().addProperty("road", true); // (T4b) a standalone road removal's settle is its removal.road txn: its restore (W) first

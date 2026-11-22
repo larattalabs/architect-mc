@@ -723,6 +723,7 @@ public final class CrateSettle {
 	static void boxesChanged() {
 		List<JsonObject> all = new java.util.ArrayList<>(DURABLE.values());
 		all.addAll(DEV_HOLDS.values());
+		all.addAll(Extractions.holds()); // (slice T4R-D, A4) an extraction attempt's cells, held from its P0 save
 		all.addAll(OwnerRemovals.holds()); // (slice T4R-D, I6) each owner record's footprint: member boxes and crate cells, named by member
 		HELD = heldOf(all);
 	}

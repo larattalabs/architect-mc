@@ -307,7 +307,7 @@ class RemovalSealTest {
 		int find = g.indexOf("findCargo(level, r, id, inf, pile, dropped)");
 		int hold = g.indexOf("p.ledger().holdPending(c.key(), c.items(), c.at()); // (fix round) the holder's contents");
 		int barrier = g.indexOf("the world barrier before a player's container is replaced");
-		int apply = g.indexOf("RegionTargets.dropPlayerBlocks(level, inf, true, refused)"); // (slice T4R-M) a refused replacement drops nothing
+		int apply = g.indexOf("Extractions.run(server, level, inf, r.requester)"); // (slice T4R-D, D1c) written back and owed by its extraction, never dropped
 		assertTrue(find > 0 && hold > 0 && barrier > 0 && apply > barrier, "found, held pending, made durable, then the holder replaced");
 		assertTrue(g.indexOf("Stockpiles.credit(server, p, c.key(), c.items()") > 0, "booked once the replacement is durable");
 		assertEquals(Stockpiles.PendingAction.DROP, Stockpiles.cargoAction(false, true), "the holder kept its items: the pending credit goes");

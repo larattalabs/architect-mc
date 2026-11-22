@@ -671,7 +671,9 @@ public final class RoadBuilder {
 			// 6c Y: a stockpile's road: its paid cells standing are refunded into the stockpile (once per placement); no crate here.
 			// C29: tallied now (the road left the feed with its removal job, so nothing is placed after this) and credited by the job
 			// once its restore is written (RestoreJob.credit), not before: a restore that breaks credits nothing
-			dev.larattalabs.architect.survival.Refunds.Tally pt = tallyOf(level, road, dropPlayerMatches(level, road)); // (J1) a player's matching block: theirs
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet skip = dropPlayerMatches(level, road); // (J1) a player's matching block: theirs
+			skip.addAll(Extractions.extracted(road)); // (slice T4R-D, D1c) a cell its extraction wrote back is no paid block (a soil cell reads built)
+			dev.larattalabs.architect.survival.Refunds.Tally pt = tallyOf(level, road, skip);
 			Map<String, Integer> refund = pt.refund();
 			Builder.Run foot = run(srv, road); // (T4 final round) its footprint, for the removal's hold
 			Builder.Run r = RUNS.get(road.id());
@@ -740,6 +742,15 @@ public final class RoadBuilder {
 
 	/** {@link #dropPlayerMatches}; {@code apply} false (slice DR-S) only finds the cells left out (nothing dropped, nothing written). */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road, boolean apply) {
+		return dropPlayerMatches(level, road, apply, null);
+	}
+
+	/**
+	 * (slice T4R-D, D1c) {@link #dropPlayerMatches} that, with {@code apply} false, adds each <b>extractable</b> cell to {@code sink} ({pos,
+	 * block, was, items}): the cells its apply would drop, never the kept ones (the same block as its before, a CU equivalent, no layer).
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road, boolean apply,
+		java.util.@Nullable List<JsonObject> sink) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		Construction c = road.construction();
 		Builder.Run r = c == null ? null : run(level.getServer(), road);
@@ -768,6 +779,9 @@ public final class RoadBuilder {
 				continue; // (JR-b verifier's case) the restore keeps it as the player's: nothing dropped, nothing refunded
 			}
 			if (!apply) {
+				if (sink != null) {
+					sink.add(Extractions.spec(level, p, now, was, null));
+				}
 				continue;
 			}
 			Map<String, Integer> items = new TreeMap<>();

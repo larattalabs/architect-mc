@@ -149,6 +149,7 @@ public final class RemovalAreas {
 		}
 		coreHolds(core, out);
 		OwnerRemovals.areas(out); // (slice T4R-D, §4.2 (a)) every owner record's footprint
+		Extractions.areas(out); // (b) every planned or open extraction attempt's cells
 		return out;
 	}
 
@@ -286,6 +287,7 @@ public final class RemovalAreas {
 		}
 		List<Area> areas = new ArrayList<>();
 		OwnerRemovals.areas(areas);
+		Extractions.areas(areas);
 		for (Groups.Removal t : Groups.tickets()) {
 			groupAreas(t, "the removal of group " + t.group + " (waiting first)", areas);
 		}

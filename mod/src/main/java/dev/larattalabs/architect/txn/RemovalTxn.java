@@ -594,6 +594,8 @@ public final class RemovalTxn {
 					case GROUP_DONE -> GROUP_DONER;
 					case UNDO -> UNDO_DECIDER;
 					case SNAPSHOT -> SNAPSHOTTER;
+					case CELLS_RESTORE -> CELLS_RESTORER;
+					case EXTRACTION_SNAPSHOT -> EXTRACTION_SNAPSHOTTER;
 					case CrateTxn.TAKE -> CrateTxn.ADAPTER;
 					case CrateTxn.RESTORE -> CrateTxn.RESTORE_ADAPTER;
 					case CrateTxn.RELEASE -> CrateTxn.RELEASER;
@@ -611,6 +613,113 @@ public final class RemovalTxn {
 	}
 
 	public static final TxnKind ROAD_KIND = kind(ROAD);
+
+	/** (slice T4R-D, D1c) The W of an extraction: each cell's before written back (data {@code dim}, {@code pkey}, {@code chunks}, {@code pcells}). */
+	public static final String CELLS_RESTORE = "cells.restore";
+	/** (slice T4R-D, D1c) The R effect that keeps an extraction attempt with its result in stockpiles.json before its txn retires. */
+	public static final String EXTRACTION_SNAPSHOT = "extraction.snapshot";
+
+	/** The {@link #CELLS_RESTORE} effect. */
+	public static Effect.Builder cellsRestore(String dim, String pkey, List<long[]> chunks, JsonArray pcells) {
+		JsonArray cs = new JsonArray();
+		for (long[] c : chunks) {
+			JsonArray a = new JsonArray();
+			a.add(c[0]);
+			a.add(c[1]);
+			cs.add(a);
+		}
+		return Effect.of(CELLS_RESTORE, EffectClass.W).data("dim", dim).data("pkey", pkey).data("site", pkey).data("chunks", cs).data("pcells", pcells);
+	}
+
+	static final TxnKind.Adapter CELLS_RESTORER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("dim") && e.data().has("pkey") && e.data().get("pcells") instanceof JsonArray ? null : "dim, pkey and pcells are required";
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			ServerLevel level = level(e);
+			java.util.List<LevelChunk> cs = level == null ? null : chunks(t, level, e);
+			if (cs == null) {
+				return Probe.UNKNOWN;
+			}
+			String k = restoredKey(t, e);
+			for (LevelChunk ch : cs) {
+				if (!TestMove.receipts(ch).contains(k)) {
+					return Probe.ABSENT;
+				}
+			}
+			return Probe.APPLIED;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			ServerLevel level = level(e);
+			if (level == null) {
+				throw new IllegalStateException("its dimension is not loaded");
+			}
+			java.util.List<LevelChunk> cs = chunks(t, level, e);
+			if (cs == null) {
+				throw new IllegalStateException("a chunk of its cells is not loaded");
+			}
+			JsonArray pc = e.data().getAsJsonArray("pcells");
+			String pkey = e.data().get("pkey").getAsString();
+			recordPfound(level, pkey, pc);
+			boolean[] refused = {false};
+			it.unimi.dsi.fastutil.longs.LongSet ref = TxnServer.refusals(() -> TxnServer.asHolder(t, () -> {
+				for (var el : pc) {
+					JsonObject c = el.getAsJsonObject();
+					long pos = c.get("pos").getAsLong();
+					// only a cell still holding the player's block recorded at P0 is written (one changed since stays: never paid, never overwritten)
+					if (c.get("block").getAsString().equals(CrateSettle.blockIdAt(level, BlockPos.of(pos)))) {
+						if (!dev.larattalabs.architect.site.Extractions.writeBack(level, pos, c.get("was").getAsString())) {
+							refused[0] = true;
+						}
+					}
+				}
+			}));
+			if (refused[0] || !ref.isEmpty()) {
+				throw new IllegalStateException("a hold refused part of the extraction (" + ref.size() + " cell(s)): held, written again on its retry");
+			}
+			recordPgone(level, pkey, e.key(t.id) + "@pgone=", pc);
+			String k = restoredKey(t, e);
+			for (LevelChunk ch : cs) {
+				TestMove.addReceipt(ch, k);
+			}
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("never a prepare effect");
+		}
+	};
+
+	static final TxnKind.Adapter EXTRACTION_SNAPSHOTTER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("target") && e.data().has("gen") ? null : "target and gen are required";
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return dev.larattalabs.architect.site.Extractions.snapshotted(e.data().get("target").getAsString(), e.data().get("gen").getAsString()) ? Probe.APPLIED
+				: Probe.ABSENT;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			dev.larattalabs.architect.site.Extractions.snapshot(t, e.data().get("target").getAsString(), e.data().get("gen").getAsString(), amounts(t));
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("never a prepare effect");
+		}
+	};
+
+	/** (slice T4R-D, D1c) {@code removal.pblocks}: an extraction attempt; no prepare effects, it decides COMMIT at its begin. */
+	public static final TxnKind PBLOCKS_KIND = kind(dev.larattalabs.architect.site.Extractions.KIND);
 
 	/**
 	 * (slice T4R-D, I5) {@code removal.site}: one single removal's owner txn ({@code removal:<base>@<undoGroup>}), decided by its committed

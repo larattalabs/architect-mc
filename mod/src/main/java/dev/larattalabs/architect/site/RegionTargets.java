@@ -1914,6 +1914,12 @@ public final class RegionTargets {
 	 */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t, boolean apply,
 		it.unimi.dsi.fastutil.longs.@Nullable LongSet refused) {
+		return dropPlayerBlocks(level, t, apply, refused, null);
+	}
+
+	/** (slice T4R-D, D1c) {@link #dropPlayerBlocks} that, with {@code apply} false, adds each cell found to {@code sink} ({pos, block, was, items}). */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerBlocks(ServerLevel level, Infra t, boolean apply,
+		it.unimi.dsi.fastutil.longs.@Nullable LongSet refused, java.util.@Nullable List<JsonObject> sink) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (!is(t)) {
 			return out;
@@ -1939,6 +1945,9 @@ public final class RegionTargets {
 			}
 			out.add(p.asLong());
 			if (!apply) {
+				if (sink != null) {
+					sink.add(Extractions.spec(level, p, now, was != null ? was : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), null));
+				}
 				continue;
 			}
 			Map<String, Integer> items = new TreeMap<>();

@@ -1864,6 +1864,8 @@ public final class Groups {
 					return;
 				}
 				var matches = RoadBuilder.dropPlayerMatches(level, inf, false);
+				matches = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(matches);
+				matches.addAll(Extractions.extracted(inf)); // (slice T4R-D, D1c) cells an earlier attempt wrote back: never refunded
 				dropLater.add(inf);
 				if (!matches.isEmpty()) {
 					dropped = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(dropped);
@@ -1952,11 +1954,22 @@ public final class Groups {
 	 * settled ({@link Removal#afterCargo}), never past it.
 	 */
 	private static void prepareTail(MinecraftServer server, ServerLevel level, Removal r, List<String> ids, List<Infra> dropLater) {
-		// (DR-S) the credits are saved: now the player blocks found above drop at their cells (the same cells: nothing changed since)
+		// (DR-S) the credits are saved: now the player blocks found above leave their cells. (slice T4R-D, D1c) never dropped: each target's
+		// extractable cells are written back and owed once by its removal.pblocks attempt; the removal waits (holding nothing) until each is kept
+		for (Infra inf : dropLater) {
+			String ew = Extractions.run(server, level, inf, r.requester);
+			if (ew != null) {
+				if (!ew.equals(r.gtxWait)) {
+					Architect.LOGGER.info("Removal of group {}: waits for the return of {}'s player blocks: {}", r.group, inf.id(), ew);
+				}
+				r.gtxWait = ew;
+				r.afterCargo = () -> prepareTail(server, level, r, ids, dropLater);
+				r.nextCheck = tick + 20;
+				return;
+			}
+		}
 		for (Infra inf : dropLater) {
 			it.unimi.dsi.fastutil.longs.LongOpenHashSet refused = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
-			RegionTargets.dropPlayerBlocks(level, inf, true, refused);
-			RoadBuilder.dropPlayerMatches(level, inf, true);
 			for (long c : refused) {
 				// (slice T4R-M) a holder whose replacement a hold refused keeps its block and its contents: neither its item nor its contents'
 				// credit leaves it (eca131b6 credited both while the holder stood)
