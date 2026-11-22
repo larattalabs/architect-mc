@@ -27,7 +27,9 @@ public final class IrStale {
 		"shape:ellipsoid", "shape:instances", "shape:prism", "shape:strata", "shape:warp", "shape:wedge", "volumes", "road:lamp", "voxels",
 		"mask", "pattern", "relief", "scatter", "stamp", "volume:blocks", "fluid", "volume:fluids", "courses", "survival", "coralDecor",
 		"bubbleColumns", // ((7a LF) a lift's column: a fluid op's bubble set)
-		"stagedTerrain"); // ((8aF) a survival IR's staged terrain ops: ARTL class 3, built over time from phase 8a)
+		"stagedTerrain", // ((8aF) a survival IR's staged terrain ops: ARTL class 3, built over time from phase 8a)
+		"flowingWater", // ((8cF) a fluid op with a flow member: a river's current or a fall off a form, written, drained and recovered by 8c's rules)
+		"volume:levels"); // ((8cF) a frozen volume of ARVX version 4: the fluid layer with each cell's LiquidBlock level)
 
 	private IrStale() {
 	}
@@ -120,7 +122,9 @@ public final class IrStale {
 			List<String> missing = new ArrayList<>();
 			for (JsonElement e : req) {
 				String k = e.isJsonPrimitive() ? e.getAsString() : e.toString();
-				if (!KINDS_FORMAT2.contains(k) || hello != null && !hello.irKinds().isEmpty() && !hello.irKinds().contains(k)) {
+				// ((8c, the review's P2-9) a river IR while this mod doesn't build rivers (-Darchitect.noFlowingWater): stale, never drained as H's)
+				if (!KINDS_FORMAT2.contains(k) || "flowingWater".equals(k) && !RegionFluids.flowingBuild() || hello != null && !hello.irKinds().isEmpty() && !hello.irKinds()
+					.contains(k)) {
 					missing.add(k);
 				}
 			}

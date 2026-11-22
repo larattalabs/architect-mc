@@ -182,11 +182,17 @@ public final class RegionsImpl implements Regions {
 			STAGE_CHECKS.clear();
 			GENERATED.clear();
 			RegionFluids.forget(null);
+			OWED.clear();
+			PENDING_INSTALL.clear();
+			AFTER_SAVE.clear();
 			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
 			// (slice SOFF) what can change the ledger or move paid items is held while saving is off (the read-only stages run on)
 			boolean admits = dev.larattalabs.architect.site.SaveHold.jobsAdmitted(s);
+			if (admits && (!OWED.isEmpty() || !PENDING_INSTALL.isEmpty())) {
+				retryOwed(s); // (slice DF round 2) owed region records tried again; (round 3) held installs retried until they run
+			}
 			if (admits && reconcilePending) {
 				reconcilePending = false;
 				reconcileRemovals();
@@ -975,6 +981,10 @@ public final class RegionsImpl implements Regions {
 		if (RegionSurvival.on(r.level().getServer())) {
 			m.addProperty("survival", true);
 		}
+		// (8c, the v0.81.0 review's P1) the kit plans rivers and falls off forms only for a mod that writes, drains and recovers them
+		if (RegionFluids.flowingBuild()) {
+			m.addProperty("flowingWater", true);
+		}
 		m.add("params", r.params().deepCopy());
 		if (r.seed() != null) {
 			m.addProperty("seed", Long.toUnsignedString(r.seed()));
@@ -1100,6 +1110,7 @@ public final class RegionsImpl implements Regions {
 			List<BoundingBox> boxes = new ArrayList<>();
 			java.util.Set<BoundingBox> withBlocks = new java.util.HashSet<>();
 			java.util.Set<BoundingBox> withFluids = new java.util.HashSet<>();
+			java.util.Set<BoundingBox> withLevels = new java.util.HashSet<>();
 			for (JsonElement e : need) {
 				JsonObject b = e.getAsJsonObject();
 				BoundingBox bb = new BoundingBox(b.get("minX").getAsInt(), b.get("minY").getAsInt(), b.get("minZ").getAsInt(), b.get("maxX").getAsInt(), b.get(
@@ -1110,6 +1121,9 @@ public final class RegionsImpl implements Regions {
 				}
 				if (b.get("fluids") instanceof JsonElement fl && fl.isJsonPrimitive() && fl.getAsBoolean()) {
 					withFluids.add(bb); // (6c H) r.needVolume(box, {fluids: true}): ARVX version 3
+				}
+				if (b.get("levels") instanceof JsonElement lv && lv.isJsonPrimitive() && lv.getAsBoolean()) {
+					withLevels.add(bb); // (8c VS) r.needVolume(box, {fluids: true, levels: true}): ARVX version 4 (a river body's)
 				}
 				cells += dev.larattalabs.architect.region.volume.VolumeSurvey.cells(bb);
 			}
@@ -1137,7 +1151,7 @@ public final class RegionsImpl implements Regions {
 				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
 				for (BoundingBox bb : boxes) {
 					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
-						policy, null, withBlocks.contains(bb), withFluids.contains(bb)).thenCompose(
+						policy, null, withBlocks.contains(bb), withFluids.contains(bb), withLevels.contains(bb)).thenCompose(
 							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
 								JsonObject o = new JsonObject();
 								o.addProperty("sha", vol.sha());
@@ -1912,6 +1926,11 @@ public final class RegionsImpl implements Regions {
 		rec.unqueued = true; // (LCAP, RG2a) the evidence an orphan needs: cleared with the save after the queue
 		try {
 			saveConfirmed(live);
+		} catch (RegionStore.InDoubt e) {
+			// (slice DF round 2) region.json may be on disk: it says unqueued, so a start treats it as an orphan (RG2a: nothing of it written);
+			// its ir.json stays beside it. Refused: nothing is queued
+			OWED.remove(id);
+			throw recordUnsaved("region " + id, e);
 		} catch (IOException e) {
 			try {
 				Files.deleteIfExists(RegionStore.region(w, id).resolve("ir.json"));
@@ -2933,16 +2952,107 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
-	/** (6c RS) Saves a region's record (RegionFluids' charge). */
-	public static void saveRec(Live l) {
-		save(l);
+	/** (6c RS) Saves a region's record (RegionFluids' charge); (slice DF round 2) true only when it is durably on disk. */
+	public static boolean saveRec(Live l) {
+		return save(l);
 	}
 
-	static void save(Live l) {
+	/** Saves a region's record; (slice DF round 2) true only when it is durably on disk (OK). */
+	static boolean save(Live l) {
 		try {
 			saveConfirmed(l);
+			return true;
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region {} could not be saved: {}", l.rec().id, e.toString());
+			return false;
+		}
+	}
+
+	/**
+	 * (slice DF round 2, P1 7) The regions whose record is not known on disk (its last save REFUSED or IN_DOUBT), with the time of the last
+	 * try ({@link System#nanoTime}). Cleared by the next OK save.
+	 */
+	private static final Map<String, Long> OWED = new java.util.concurrent.ConcurrentHashMap<>();
+	/** (slice DF round 2) How often an owed region record is tried again. */
+	static final long OWED_RETRY_NANOS = 1_000_000_000L;
+
+	/**
+	 * (slice DF round 2, P1 7) Whether the drivers of a region (its batch's items, its removal, its revisions and undo) may go on: its
+	 * record known on disk. An owed one is saved again first (one try a second); on OK the revision waiting on it is recovered.
+	 */
+	public static boolean mayDrive(Live l) {
+		Long t = OWED.get(l.rec().id);
+		if (t == null) {
+			return true;
+		}
+		if (System.nanoTime() - t < OWED_RETRY_NANOS) {
+			return false;
+		}
+		return save(l);
+	}
+
+	/** (slice DF round 3) A removal whose REMOVING save was refused: the record back as it was. */
+	static void removalRefused(Live l, RegionState stateWas, dev.larattalabs.architect.api.RemovalStop stopWas, @Nullable String stopReasonWas) {
+		l.rec().state = stateWas;
+		l.rec().removalStop = stopWas;
+		l.rec().removalStopReason = stopReasonWas;
+		if (stateWas != RegionState.REMOVING) {
+			BEFORE_REMOVAL.remove(l.rec().id);
+		}
+		// (round 3, P1 4) the debt stays: only a confirmed save of the state that made it clears it (an earlier REMOVING in doubt included)
+	}
+
+	/** (TEST) A region's debt and held operations forgotten. */
+	static void clearOwed(String id) {
+		OWED.remove(id);
+		PENDING_INSTALL.remove(id);
+		AFTER_SAVE.remove(id);
+	}
+
+	/** (slice DF round 2) Whether a region's record is owed (not known on disk). */
+	public static boolean owed(String id) {
+		return OWED.containsKey(id);
+	}
+
+	/** (slice DF round 2) The regions tick: each owed record tried again (one try a second); once OK, a publication it held is installed. */
+	/** (slice DF round 3, TEST seam) What the regions tick runs for a region whose held operation may go on ({@link Revisions#recoverOne}). */
+	static java.util.function.BiConsumer<MinecraftServer, Live> RECOVER = Revisions::recoverOne;
+
+	/**
+	 * (slice DF round 3, P1 3) The regions with a held operation of their own, apart from their record's debt: a revision accepted in doubt
+	 * whose install waits. Kept until the install ran (an unrelated OK save clears the debt, never this).
+	 */
+	private static final java.util.Set<String> PENDING_INSTALL = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	/** (slice DF round 3) What runs once a region's record is next saved OK (an undo's manifest cleanup after its finish save failed). */
+	private static final Map<String, List<Runnable>> AFTER_SAVE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (slice DF round 3) A revision's publication answered IN_DOUBT: its install waits until the record is confirmed (held explicitly). */
+	static void publicationInDoubt(Live l) {
+		OWED.put(l.rec().id, System.nanoTime());
+		PENDING_INSTALL.add(l.rec().id);
+	}
+
+	/** (slice DF round 3) {@code r} runs right after the region's record is next saved OK (on the saving thread). */
+	static void afterSave(Live l, Runnable r) {
+		AFTER_SAVE.computeIfAbsent(l.rec().id, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(r);
+	}
+
+	static void retryOwed(MinecraftServer s) {
+		java.util.Set<String> ids = new java.util.TreeSet<>(OWED.keySet());
+		ids.addAll(PENDING_INSTALL);
+		for (String id : ids) {
+			Live l = REGIONS.get(id);
+			if (l == null) {
+				OWED.remove(id);
+				PENDING_INSTALL.remove(id);
+				continue;
+			}
+			if (mayDrive(l)) {
+				RECOVER.accept(s, l); // (P1 8) a revision accepted in doubt installs now
+				if (!Revisions.awaitingInstall(l)) {
+					PENDING_INSTALL.remove(id); // (installed, or nothing of it left to install)
+				}
+			}
 		}
 	}
 
@@ -2951,7 +3061,17 @@ public final class RegionsImpl implements Regions {
 	 * their caps) call this and refuse when it throws, before any write the caps govern. Every other caller keeps {@link #save}'s WARN.
 	 */
 	static void saveConfirmed(Live l) throws IOException {
-		writeRec(l.world(), l.rec());
+		try {
+			writeRec(l.world(), l.rec());
+		} catch (IOException e) {
+			OWED.put(l.rec().id, System.nanoTime()); // (slice DF round 2) not known on disk until an OK save
+			throw e;
+		}
+		OWED.remove(l.rec().id);
+		List<Runnable> after = AFTER_SAVE.remove(l.rec().id);
+		if (after != null) {
+			after.forEach(Runnable::run); // (round 3) what waited for this record on disk
+		}
 	}
 
 	static void writeRec(Path world, RegionRec rec) throws IOException {
@@ -3064,7 +3184,8 @@ public final class RegionsImpl implements Regions {
 			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason, r.removalStop == dev.larattalabs.architect.api.RemovalStop.NONE ? null
 				: r.removalStopCause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : r.removalStopCause,
 			dev.larattalabs.architect.apiimpl.StatusViews.beside(r.ext), dev.larattalabs.architect.apiimpl.StatusViews.land(r.ext), r.groupId == null ? null
-				: dev.larattalabs.architect.site.Groups.waitOfAny(r.groupId)); // (slice T4R-D, A7b)
+				: dev.larattalabs.architect.site.Groups.waitOfAny(r.groupId), // (slice T4R-D, A7b)
+			RegionFluids.removalPhase(l)); // ((8cF) the fluids removal's phase)
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
@@ -3319,6 +3440,19 @@ public final class RegionsImpl implements Regions {
 		if (RegionAdopt.adopting(l.rec()) || RegionAdopt.BUSY.containsValue(regionId)) {
 			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
+		String heldDrain = FluidTxns.heldAny(regionId, FluidTxns.DRAIN);
+		if (heldDrain != null) {
+			// (8cT last round, P2) a removal (or lot or escape) drain held on a chunk: answered at once, typed, never left waiting; the drain
+			// finishes by itself (the region stays REMOVING) and a Remove asked after it joins
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, heldDrain + " (the region's water drains"
+				+ " first; it finishes by itself)", "held(other)"));
+		}
+		String heldWrite = FluidTxns.heldAny(regionId, FluidTxns.WRITE);
+		if (heldWrite != null) {
+			// (8cTc, Steward's ask) an open fluids write that is itself held (a chunk unreadable, a save in doubt): answered at once, never waited
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, heldWrite + " (the region's water is"
+				+ " being written; it finishes by itself)", "held(other)"));
+		}
 		return onServer(s, () -> {
 			if (dev.larattalabs.architect.site.Placement.loadFailed()) {
 				// (PSV fix round, GPT P1 2) the queue file failed to load: no undo can be recorded, so nothing is touched (no mined cell put back,
@@ -3426,11 +3560,27 @@ public final class RegionsImpl implements Regions {
 		if (l.rec().state != RegionState.REMOVING) {
 			BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
 		}
+		RegionState stateWas = l.rec().state;
+		var stopWas = l.rec().removalStop;
+		String stopReasonWas = l.rec().removalStopReason;
+		var causeWas = l.rec().removalStopCause;
 		l.rec().state = RegionState.REMOVING;
 		l.rec().removalStop = dev.larattalabs.architect.api.RemovalStop.NONE; // (DR-S) this removal's stop, when it stops, replaces it
 		l.rec().removalStopReason = null;
 		l.rec().removalStopCause = null;
-		save(l);
+		try {
+			saveConfirmed(l);
+		} catch (RegionStore.InDoubt e) {
+			// (slice DF round 2, P1 7/8) REMOVING may be on disk: kept, owed; the removal's drivers wait for the record (mayDrive)
+			Architect.LOGGER.warn("Region {}: its REMOVING record is in doubt ({}): the removal waits until it is confirmed", l.rec().id, e.getMessage());
+		} catch (IOException e) {
+			// (P1 7) not on disk: nothing removed, the region stands as it was
+			removalRefused(l, stateWas, stopWas, stopReasonWas);
+			l.rec().removalStopCause = causeWas;
+			String why = "the region record could not be saved (" + e.getMessage() + "): removal refused, nothing changed; try again once the disk takes writes";
+			Architect.LOGGER.warn("Region {}: {}", l.rec().id, why);
+			return CompletableFuture.completedFuture(new RemoveResult(false, List.of(why), Map.of()));
+		}
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 		// (C23) the region's end state is set by groupEnded (Groups.GROUP_ENDED), from the removal itself, not from this future:
 		// a removal resumed after a load has no future, and every end (or early answer) of the group's removal reaches the hook

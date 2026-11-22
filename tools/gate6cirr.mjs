@@ -18,6 +18,9 @@
 //     holders   (irr-holders)          fix/drain-holders: a separate site's waterlogged stair layered over one of f2's sources; f2's site
 //                                      removed alone (drainLot) and then the region: the stair stands, E-flat 0 outside it, 0 after it goes
 //     crash     (irr-crash)            item 6: FL1+save and FL2+save on v62's realise, FL6+save on a lot removal's drain
+//     df        (irr-df)               slice DF round 2: a lot removal with fluids.json refused drains and restores nothing
+//     t8d       (8ct-d)                slice 8cTa row D: FL6d bare, lotDrained stripped (a DF-era record): asked again, 0 water
+//     t9ll, t9lb, t9lh (8ct-ll, 8ct-lb, 8ct-lh) 8cT last round: legacy lot at load; lot flags never bypass the barrier; held lot typed
 //     look      (irr-look)             a client, recorded: camera shots of v62's irrigated farms (Noah's look, the gallery)
 //     report                            REPORT.md over the step JSONs
 //
@@ -160,6 +163,25 @@ steps.crash = async () => {
   spendZero();
   return out;
 };
+
+// (slice DF round 2) a lot removal with its fluids record refused
+steps.df = async () => {
+  await ensure();
+  const out = await G.dfLot(ctx);
+  spendZero();
+  return out;
+};
+
+// (slice 8cTa, failing first) the DF final review's D: a DF-era lotRemoved record re-drained
+steps.t8d = async () => {
+  await ensure();
+  const out = await G.t8d(ctx);
+  spendZero();
+  return out;
+};
+
+// (8cT last round) the legacy lot conversion at load; the lot flags and the barrier; a held lot drain answers typed
+for (const k of ['t9ll', 't9lb', 't9lh']) steps[k] = async () => { await ensure(); const out = await G[k](ctx); spendZero(); return out; };
 
 steps.look = async () => {
   await ensure();

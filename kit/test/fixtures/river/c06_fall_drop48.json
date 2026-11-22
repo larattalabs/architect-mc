@@ -1,0 +1,57 @@
+{
+ "about": "(8c RV-b, N-8c-3) the drop limit at its limit: an island 47 over the flat land whose lowest site drops exactly 48 into its basin (fits); rv-b.test plans it 49 over (every site drops 49: LIMIT {limit: drop, max: 48, value: 49})",
+ "terrain": {
+  "W": 128,
+  "D": 128,
+  "x0": 4000,
+  "z0": 4000,
+  "y": 64
+ },
+ "anchors": {
+  "isle_at": [
+   4064,
+   65,
+   4064
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "fall",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rvb_drop48",
+  "zones": [],
+  "forms": [
+   {
+    "id": "isle",
+    "kind": "floating_island",
+    "required": true,
+    "label": "The sky isle",
+    "where": {
+     "near": {
+      "anchor": "isle_at",
+      "within": 8
+     }
+    },
+    "size": {
+     "preset": "M"
+    },
+    "height": 47
+   },
+   {
+    "id": "fall",
+    "kind": "waterfall",
+    "required": true,
+    "label": "the isle's fall",
+    "lip": "form",
+    "on": {
+     "part": "isle"
+    }
+   }
+  ],
+  "connectors": [],
+  "rules": []
+ }
+}

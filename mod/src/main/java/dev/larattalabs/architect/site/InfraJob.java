@@ -571,6 +571,9 @@ final class InfraJob implements Placement.Job {
 					return false;
 				}
 				case WRITE -> {
+					if (!dev.larattalabs.architect.region.RegionFluids.itemMayWrite(batchId, itemKey)) {
+						return false; // (slice DF round 2) a region fluids tile waits while its record is not durable (a resumed write too)
+					}
 					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 					int n = 0;
 					// (8a ST) held leaves also when the main entry is a target (a tile all staged terrain): its free pass is gone, its leaves stay

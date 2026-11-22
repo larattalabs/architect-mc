@@ -20,6 +20,16 @@
 //     holders   (h-holders)            fix/drain-holders: a separate site's waterlogged stair layered over a pond source cell; Regions.remove
 //                                      keeps it standing (the drain skips cells another entry holds on top) and hands the cell down to it;
 //                                      E-flat 0 outside it, then 0 after the stair site goes (tools/lib/gate6ch-holders.mjs)
+//     df        (h-df)                 slice DF: a refused fluids.json save waits SITE_BUSY with 0 sources (main wrote them), then
+//                                      settles and undoes exactly; the halt at FL1r bare and +save resumes from the gate
+//     t8c, t8e, t8f (8ct-c, 8ct-e, 8ct-f) slice 8cTa rows C (a dispensed source in predicted flow survives the removal), E (FLe bare:
+//                                      the escape drain replayed), F (a done without barrierDone waits a fresh bound)
+//     t8wr      (8ct-wr)               slice 8cTc: a realise halted at TX:fluid.write:place, +save and bare: replayed, settled, E-flat 0
+//     t9rc, t9er, t9hd (8ct-rc, 8ct-er, 8ct-hd) 8cT last round: the recheck's drain durable; an escape's outcome rebuilt with its receipts
+//                                      present; a held drain answers held(other) at once
+//     t5wb, t5fz, t5kn                 slice T5Fa: T5F's failing-first rows (water bucket P2-a, force lost P2-b, kill point k of n)
+//     t8rr      (8ct-rr)               8cTb review P2-7: TX:fluid.drain:apply:0+save (receipts on disk, record not): a fresh bound
+//     t8rd      (8ct-rd)               slice 8cTb: a removal halted at TX:fluid.drain:drain, bare and +save: replayed, E-flat 0
 //     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
 //                                      file not saved), K7+save (mid-R4)
 //     probe     (h-probe)              item 14: (a) the sand anomaly (a sand cell on a rewritten cell, dry and under water, re-read with
@@ -186,6 +196,15 @@ steps.crash = async () => {
   await ensure();
   return { core: await (await import('./lib/gate6ch-core.mjs')).crash(ctx), halves: await halves('crash') };
 };
+// (slice DF) a refused fluids.json save stops the stage before any source; the halt at FL1r bare and +save
+steps.df = async () => {
+  await ensure();
+  return await (await import('./lib/gate6ch-core.mjs')).df(ctx);
+};
+// (slice 8cTa, failing first) the DF final review's C, E and F
+for (const k of ['t8c', 't8e', 't8f', 't8rd', 't8wr', 't8rr', 't9rc', 't9er', 't9hd']) steps[k] = async () => { await ensure(); return await (await import('./lib/gate6ch-core.mjs'))[k](ctx); };
+// (slice T5Fa) T5F's failing-first rows on h_core_demo (tools/lib/gate-t5f-h.mjs)
+for (const [k, f] of [['t5wb', 'waterBucket'], ['t5fz', 'forceLost'], ['t5kn', 'killProgress']]) steps[k] = async () => { await ensure(); return await (await import('./lib/gate-t5f-h.mjs'))[f](ctx); };
 // (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
 steps.holders = async () => {
   await ensure();

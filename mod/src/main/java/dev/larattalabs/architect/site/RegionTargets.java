@@ -2464,6 +2464,43 @@ public final class RegionTargets {
 	 * (6c close-out A, §8) A group's first target, lot (a construction site) or construction road still building, with its part
 	 * ({@code {id, part}}: a target's plan part, {@code lot <lot id>}, {@code road <road id>}), or null.
 	 */
+	/**
+	 * (8c SV) The target a survival region's fluids barrier names in its wait: the staged terrain target of the group still building with the
+	 * most cells left ({@code {id, part}}, so the wait is typed {@code kind: "terrain"} on the land the bodies wait longest for: a paid target
+	 * of the same tile waits for that staged target before it starts, so naming the paid one said "waits for the fall", untyped, while the
+	 * island built; and a one-cell staged target of a hidden room is not what holds them), else {@link #firstBuilding}'s.
+	 */
+	public static @Nullable String[] firstBuildingForFluids(MinecraftServer srv, String groupId) {
+		List<Cand> cands = new ArrayList<>();
+		for (Infra i : Infras.all()) {
+			if (is(i) && groupId.equals(i.group())) {
+				int left = 0;
+				if (isTerrain(i) && i.building()) {
+					Builder.Run r = RoadBuilder.run(srv, i);
+					left = r == null ? (i.construction() == null ? 0 : i.construction().size()) : r.size() - r.built.cardinality();
+				}
+				cands.add(new Cand(i.id(), partOf(i), isTerrain(i), i.building(), left));
+			}
+		}
+		String[] staged = stagedFirst(cands);
+		return staged != null ? staged : firstBuilding(groupId);
+	}
+
+	/** (8c SV) A region target as the fluids barrier reads it ({@code left}: a staged one's cells not yet built). */
+	record Cand(String id, @Nullable String part, boolean terrain, boolean building, int left) {
+	}
+
+	/** (8c SV) The staged terrain target still building with the most cells left (the first on a tie), {@code {id, part}}, or null. Pure. */
+	static @Nullable String[] stagedFirst(List<Cand> cands) {
+		Cand best = null;
+		for (Cand c : cands) {
+			if (c.terrain() && c.building() && (best == null || c.left() > best.left())) {
+				best = c;
+			}
+		}
+		return best == null ? null : new String[] {best.id(), best.part()};
+	}
+
 	public static @Nullable String[] firstBuilding(String groupId) {
 		for (Infra i : Infras.all()) {
 			if (is(i) && groupId.equals(i.group()) && i.building()) {

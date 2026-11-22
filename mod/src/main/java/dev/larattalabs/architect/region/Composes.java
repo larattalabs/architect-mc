@@ -128,6 +128,9 @@ public final class Composes {
 		dev.larattalabs.architect.api.@Nullable Volume volume, @Nullable String dimension) {
 		JsonObject m = new JsonObject();
 		m.addProperty("type", "region.compose");
+		if (RegionFluids.flowingBuild()) {
+			m.addProperty("flowingWater", true); // (8c, the review's P1) the composer offers rivers and falls off forms only then
+		}
 		m.addProperty("brief", r.brief());
 		BoundingBox c = r.claim();
 		JsonObject cl = new JsonObject();

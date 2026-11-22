@@ -55,7 +55,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1, links: 1, 'link-base': 1, authored: 1 }); // (7c AU) --authored <dir>: the plan's authored programs (<id>.mjs) // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', 'no-flowing-water': 'flag', node: 1, revision: 1, links: 1, 'link-base': 1, authored: 1 }); // (7c AU) --authored <dir>: the plan's authored programs (<id>.mjs) // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -129,7 +129,7 @@ async function plan(argv) {
   const authored = opts.authored ? await loadAuthoredDir(opts.authored, KIT_DIR, opts.out ? path.join(opts.out, '.authored') : undefined) : null;
   let res;
   try {
-    res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(format !== null ? { format } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
+    res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(format !== null ? { format } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts['no-flowing-water'] ? { flowingWater: false } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
   } catch (e) {
     // (7b LP, change 3) a link that can't reach an entry's port: NO_LINK {lot, port} (the realise is refused, nothing written)
     if (links && e instanceof LinkError) {

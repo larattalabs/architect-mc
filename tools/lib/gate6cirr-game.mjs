@@ -927,3 +927,282 @@ export async function look(ctx) {
   await L.leaveWorld();
   return { shots };
 }
+
+/**
+ * (slice DF round 2, the review's P1 3) A lot removal records before it drains: with fluids.json's save refused (sticky), f2's site
+ * removal refuses and nothing is drained or restored (its sources stand, its site stands); on main the drain ran and the site went. Lifted,
+ * the removal drains and restores (0 water in the lot's box); then the region, as item 6.
+ */
+export async function dfLot(ctx) {
+  const { L, check, json, B, core } = ctx;
+  const F = await installFields(ctx);
+  const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
+  const fx = B.fixture(ctx, 'valid/v62_irr_farm.json');
+  const o = await realiseIrr(ctx, 'dflot', fx, { entries: E62, fields: F });
+  if (!o.sha || !o.r) { check(false, `DF lot: v62 not realised (${json(o.parts ?? null)})`); await L.leaveWorld(); return {}; }
+  const sites = await lotSites(ctx, o.r.view);
+  const lot = o.r.ir.lots.find((l) => l.id === 'f2');
+  const b = lot.box;
+  const lotBox = [b.minX - 1, lot.floorY - 2, b.minZ - 1, b.maxX + 1, lot.floorY + 2, b.maxZ + 1];
+  const water0 = (await fluidsIn(ctx, lotBox)).size;
+  await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  const r1 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  await L.settle(3000);
+  const water1 = (await fluidsIn(ctx, lotBox)).size;
+  const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === sites.f2.siteId) ?? false;
+  await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  const out = { refused: { answer: r1.error ?? r1.removed ?? null, water: [water0, water1], siteStands: stands } };
+  // (8cTc) the lot's drain is a txn: its intent (txn.json) is the record before the drain, so the drain may run; its fluids record (R)
+  // refused holds the txn, and the lot's site is never restored until it lands
+  check(water0 > 0 && stands, `DF lot (fluids.json refused): f2's removal restores nothing until the drain's record is saved: its site stands: ${stands}; water in its box ${water0} -> ${water1} (the drain's intent is durable in txn.json; answer ${json(out.refused.answer)})`);
+  // (round 3, P2) the refused record retries once a second: a removal asked within that second answers SITE_BUSY ("try again"); asked
+  // again until it runs (at most 20 s)
+  let r2 = null, tries = 0;
+  for (; tries < 20; tries++) {
+    r2 = await L.call('dev.sites.remove', { site: sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    if (r2.removed !== false && !r2.error) break; // (8cTc) asked again while the lot's drain txn finishes (SITE_BUSY, not durable yet)
+    await sleep(1000);
+  }
+  await L.settle(5000);
+  const water2 = (await fluidsIn(ctx, lotBox)).size;
+  const r = await core.regionOf(ctx, o.r.region);
+  const rows = r.fluids.filter((x) => /^f2_irr_/.test(x.body));
+  out.lifted = { answer: r2.error ?? r2.removed ?? 'ok', message: r2.message ?? null, tries: tries + 1, water: water2, rows: rows.map((x) => [x.body, x.state, x.reason ?? null]) };
+  check(water2 === 0 && rows.length > 0 && rows.every((x) => x.state === 'drained' && /lot removed/.test(x.reason ?? '')), `DF lot (lifted): the removal drains and restores: 0 water in the lot's box (${water2}), rows ${json(out.lifted.rows)}`);
+  o.r = r;
+  out.removal = await removeRegion(ctx, o, 'DF lot: the region afterwards');
+  await L.leaveWorld();
+  // (slice DF round 3, the final check's P1 2) a lot removal halted bare at FL6 (lotDrained saved) and at FL6d (drained, lotDrained not
+  // saved): the drain's writes are durable before lotDrained is (T0's barrier), so the removal asked again leaves 0 water in the lot's box
+  for (const point of ['FL6', 'FL6d']) {
+    const tag = `dflot-${point.toLowerCase()}`;
+    const ob = await realiseIrr(ctx, tag, fx, { entries: E62, fields: F });
+    if (!ob.sha || !ob.r) { check(false, `DF lot ${point}: v62 not realised`); await L.leaveWorld(); continue; }
+    const sb = await lotSites(ctx, ob.r.view);
+    const lb = ob.r.ir.lots.find((x) => x.id === 'f2').box;
+    const fy = ob.r.ir.lots.find((x) => x.id === 'f2').floorY;
+    const boxB = [lb.minX - 1, fy - 2, lb.minZ - 1, lb.maxX + 1, fy + 2, lb.maxZ + 1];
+    await L.call('dev.journal.killAt', { point }, 10_000);
+    L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch(() => null);
+    await waitDown(ctx, point);
+    await L.openWorld(`G6B IRR ${tag}`);
+    await L.tp((ob.W.claim[0] + ob.W.claim[2]) / 2, 120, (ob.W.claim[1] + ob.W.claim[3]) / 2);
+    const again = await L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    await L.settle(5000);
+    const water = (await fluidsIn(ctx, boxB)).size;
+    out[point] = { again: again.error ?? again.removed ?? 'ok', water };
+    check(water === 0, `DF lot (${point} bare: the lot's drain then a halt without a save): the removal asked again (${json(out[point].again)}) leaves ${water} water in the lot's box (0 wanted)`);
+    ob.r = await core.regionOf(ctx, ob.r.region);
+    out[point].removal = await removeRegion(ctx, ob, `DF lot ${point}: the region afterwards`, { judged: false });
+    await L.leaveWorld();
+  }
+  return out;
+}
+
+/**
+ * (8cT row D, the DF final review's P1 D) v62 realised, its chunks saved (dev.stockpile.save: f2's sources on disk); f2's lot removal
+ * halted bare at FL6d (lotRemoved saved, the drain's writes not); then the record made a DF-era one offline (`lotDrained` deleted, as
+ * main and DF round 2 wrote it). The start, then the lot removal asked again: conservation, 0 water in f2's box (red on a6b14ace: a
+ * missing lotDrained reads as lotRemoved, so the lot is never drained again and its sources stand round the restored site).
+ */
+export async function t8d(ctx) {
+  const { L, check, json, B, core } = ctx;
+  const F = await installFields(ctx);
+  const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
+  const fx = B.fixture(ctx, 'valid/v62_irr_farm.json');
+  const tag = 't8d';
+  const ob = await realiseIrr(ctx, tag, fx, { entries: E62, fields: F });
+  if (!ob.sha || !ob.r) { check(false, `D: v62 not realised (${json(ob.parts ?? null)})`); await L.leaveWorld(); return {}; }
+  const sb = await lotSites(ctx, ob.r.view);
+  const lot = ob.r.ir.lots.find((x) => x.id === 'f2');
+  const lb = lot.box;
+  const boxB = [lb.minX - 1, lot.floorY - 2, lb.minZ - 1, lb.maxX + 1, lot.floorY + 2, lb.maxZ + 1];
+  const water0 = (await fluidsIn(ctx, boxB)).size;
+  await L.call('dev.stockpile.save', {}, 300_000);
+  await L.call('dev.journal.killAt', { point: 'FL6d' }, 10_000);
+  L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch(() => null);
+  await waitDown(ctx, 'FL6d');
+  const world = `G6B IRR ${tag}`;
+  const rec = path.join(L.SAVES, world, 'architect-regions', ob.r.region, 'fluids.json');
+  const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
+  let stripped = 0;
+  for (const b of Object.values(j.bodies ?? {})) if (b.lotRemoved && 'lotDrained' in b) { delete b.lotDrained; stripped++; }
+  if (stripped === 0) {
+    // (8cTc) the lot drain is a txn: FL6d leaves its intent open and the record unmarked. A DF-era world is made by hand: f2's bodies
+    // recorded lotRemoved (no lotDrained, no drain txn) and the open lot txn gone from txn.json, the sources on disk
+    for (const [id, b] of Object.entries(j.bodies ?? {})) if (/^f2_/.test(id)) { b.lotRemoved = true; b.state = 'drained'; delete b.lotDrained; delete b.drainTxn; stripped++; }
+    const tj = path.join(L.SAVES, world, 'architect', 'txn.json');
+    if (fs.existsSync(tj)) {
+      const t = JSON.parse(fs.readFileSync(tj, 'utf8'));
+      t.open = (t.open ?? []).filter((x) => !(x.kind === 'fluid.drain' && /\/lot:/.test(x.key ?? '')));
+      fs.writeFileSync(tj, JSON.stringify(t));
+    }
+  }
+  fs.writeFileSync(rec, JSON.stringify(j));
+  await L.openWorld(world);
+  await L.tp((ob.W.claim[0] + ob.W.claim[2]) / 2, 120, (ob.W.claim[1] + ob.W.claim[3]) / 2);
+  const water1 = (await fluidsIn(ctx, boxB)).size;
+  const again = await L.call('dev.sites.remove', { site: sb.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  await L.settle(5000);
+  const water2 = (await fluidsIn(ctx, boxB)).size;
+  const out = { water: [water0, water1, water2], stripped, again: again.error ?? again.removed ?? 'ok' };
+  check(water0 > 0 && stripped > 0, `D: the precondition: f2's sources on disk (${water0} water; ${water1} at the first read after the start: since the last round the legacy conversion may already have run at load), ${stripped} body record(s) made DF-era (lotRemoved, no lotDrained)`);
+  check(water2 === 0, `D conservation: the lot removal asked again (${json(out.again)}) leaves ${water2} water in f2's box (0 wanted: a DF-era lotRemoved re-drained)`);
+  ob.r = await core.regionOf(ctx, ob.r.region);
+  out.removal = await removeRegion(ctx, ob, 'D: the region afterwards', { judged: false });
+  await L.leaveWorld();
+  return out;
+}
+
+// ------------------------------------------------------------------ (8cT last round) failing-first rows, red on e29d8783
+
+async function irrLot(ctx, tag) {
+  const { L, B } = ctx;
+  const F = await installFields(ctx);
+  const E62 = { f1: 'g6c_irr_field_13x11', f2: 'g6c_irr_field_11x11' };
+  const fx = B.fixture(ctx, 'valid/v62_irr_farm.json');
+  const o = await realiseIrr(ctx, tag, fx, { entries: E62, fields: F });
+  if (!o.sha || !o.r) return null;
+  const sites = await lotSites(ctx, o.r.view);
+  const lot = o.r.ir.lots.find((x) => x.id === 'f2');
+  const b = lot.box;
+  const box = [b.minX - 1, lot.floorY - 2, b.minZ - 1, b.maxX + 1, lot.floorY + 2, b.maxZ + 1];
+  return { o, sites, lot, box, world: `G6B IRR ${tag}` };
+}
+
+/**
+ * (8cT last round #5) The legacy lot conversion runs at load. v62 realised and its chunks saved, the region files kept aside; f2's site
+ * removed (its lot drained, the site gone); then, the world closed, a world from before 8cT is made by hand: the kept region files back (the
+ * drain's chunks lost: f2's sources stand), f2's bodies lotRemoved without a drain txn, the lot txn gone from txn.json. Opened: no site
+ * removal is asked; within 20 s f2's box holds no water (red on e29d8783: only a site removal's retry drained it).
+ */
+export async function t9ll(ctx) {
+  const { L, check, json } = ctx;
+  const w = await irrLot(ctx, 't9ll');
+  if (!w) { check(false, 'LL: v62 not realised'); await L.leaveWorld(); return {}; }
+  const water0 = (await fluidsIn(ctx, w.box)).size;
+  await L.call('dev.stockpile.save', {}, 300_000);
+  const regionDir = path.join(L.SAVES, w.world, 'dimensions', 'minecraft', 'overworld', 'region');
+  const keep = path.join(ctx.OUT, 't9ll-region');
+  fs.rmSync(keep, { recursive: true, force: true });
+  fs.cpSync(regionDir, keep, { recursive: true });
+  const r1 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  for (let i = 0; i < 60; i++) {
+    const gone = !((await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false);
+    if (gone) break;
+    await sleep(1000);
+  }
+  await L.settle(5000);
+  const water1 = (await fluidsIn(ctx, w.box)).size;
+  await L.call('dev.stockpile.save', {}, 300_000);
+  await L.leaveWorld();
+  fs.cpSync(keep, regionDir, { recursive: true, force: true });
+  const rec = path.join(L.SAVES, w.world, 'architect-regions', w.o.r.region, 'fluids.json');
+  const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
+  let n = 0;
+  for (const [id, b] of Object.entries(j.bodies ?? {})) if (/^f2_/.test(id)) { b.lotRemoved = true; b.state = 'drained'; delete b.lotDrained; delete b.drainTxn; n++; }
+  fs.writeFileSync(rec, JSON.stringify(j));
+  const tj = path.join(L.SAVES, w.world, 'architect', 'txn.json');
+  if (fs.existsSync(tj)) {
+    const t = JSON.parse(fs.readFileSync(tj, 'utf8'));
+    t.open = (t.open ?? []).filter((x) => !/\/lot:/.test(x.key ?? ''));
+    t.done = (t.done ?? []).filter((x) => !/\/lot:/.test(x.key ?? ''));
+    fs.writeFileSync(tj, JSON.stringify(t));
+  }
+  await L.openWorld(w.world);
+  await L.tp((w.o.W.claim[0] + w.o.W.claim[2]) / 2, 120, (w.o.W.claim[1] + w.o.W.claim[3]) / 2);
+  const back = (await fluidsIn(ctx, w.box)).size;
+  let water2 = back;
+  for (let i = 0; i < 20 && water2 > 0; i++) { await sleep(1000); water2 = (await fluidsIn(ctx, w.box)).size; }
+  const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false;
+  const out = { water: [water0, water1, back, water2], bodies: n, siteStands: stands, removal: r1.error ?? r1.removed ?? 'ok' };
+  check(water0 > 0 && water1 === 0 && n > 0, `LL: the precondition: f2 drained (${water0} -> ${water1}), then a pre-8cT world: its region files from before the drain back (${back} water at the first read after the load: the conversion may already have run), ${n} body record(s) lotRemoved with no drain txn; no site removal asked (the site stands: ${stands})`);
+  check(water2 === 0, `LL conservation: at load the legacy lot conversion drains f2's sources without a site removal: ${water2} water left in its box after 20 s (0 wanted; ${json(out.water)})`);
+  await L.leaveWorld();
+  return out;
+}
+
+/**
+ * (8cT last round, P2) The lot flags never stand in for the txn's barrier: every barrier refused (dev.stockpile.barrier failPlayerReplace),
+ * f2's removal drains and records its lot (W, R) but its barrier is refused (NOT_DURABLE); asked again at once, it must join the still-open
+ * txn and keep the site (red on e29d8783: the second ask read lotRemoved + drainTxn as done and restored the site). Then the barrier is back:
+ * the removal goes through, 0 water in f2's box.
+ */
+export async function t9lb(ctx) {
+  const { L, check, json, log } = ctx;
+  const w = await irrLot(ctx, 't9lb');
+  if (!w) { check(false, 'LB: v62 not realised'); await L.leaveWorld(); return {}; }
+  const out = {};
+  const rec = path.join(L.SAVES, w.world, 'architect-regions', w.o.r.region, 'fluids.json');
+  try {
+    // the lot txn decided and held at its drain; then every barrier refused and the drain released: W and R land, the effects' barrier
+    // is refused, the txn stays open
+    await L.call('dev.fluid.hold', { drain: true }, 10_000);
+    const a1 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    await L.call('dev.stockpile.barrier', { run: false, failPlayerReplace: 500 }, 60_000);
+    await L.call('dev.fluid.hold', { drain: false }, 10_000);
+    let flags = 0;
+    for (let i = 0; i < 40 && !flags; i++) {
+      await sleep(1000);
+      const j = fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, 'utf8')) : {};
+      flags = Object.entries(j.bodies ?? {}).filter(([id, b]) => /^f2_/.test(id) && b.lotRemoved && b.drainTxn).length;
+    }
+    const a2 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    await L.settle(1500);
+    const stands = (await L.call('dev.sites.state', {}, 60_000)).sites?.some((x) => x.id === w.sites.f2.siteId) ?? false;
+    const tx = await L.call('dev.txn.state', {}, 30_000).catch(() => ({}));
+    const open = (tx.open ?? []).filter((x) => x.kind === 'fluid.drain');
+    Object.assign(out, { a1: a1.error ?? a1.removed ?? 'ok', flags, a2: a2.error ?? a2.message ?? a2.removed ?? 'ok', stands, open: open.map((x) => [x.id, x.phase, String(x.held).slice(0, 60)]) });
+    log(`  LB: ${json(out)}`);
+    check(flags > 0 && open.length > 0, `LB: the precondition: the lot's R landed (${flags} body record(s) lotRemoved with a drain txn) and its txn is still open, its barrier refused (${json(out.open)})`);
+    check(stands, `LB: asked again while the lot's txn waits for its barrier, f2's site stands (${json(out.a2).slice(0, 200)})`);
+  } finally {
+    await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
+    await L.call('dev.stockpile.barrier', { run: false, failPlayerReplace: 0, forgive: true }, 60_000).catch(() => null);
+  }
+  let r3 = null;
+  for (let i = 0; i < 30; i++) {
+    r3 = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    if (r3.removed !== false && !r3.error) break;
+    await sleep(1000);
+  }
+  await L.settle(3000);
+  const water = (await fluidsIn(ctx, w.box)).size;
+  out.after = { answer: r3?.error ?? r3?.removed ?? 'ok', water };
+  check(water === 0, `LB conservation: the barrier back, the removal goes through: ${water} water in f2's box (${json(out.after.answer)})`);
+  await L.leaveWorld();
+  return out;
+}
+
+/**
+ * (8cT last round, P2) A held lot drain answers typed: the drain held (dev.fluid.hold drain); f2's removal is refused SITE_BUSY with detail
+ * held(other) naming chunk x,z (red on e29d8783: the untyped "nothing was drained" message, no detail). Released: drained, 0 water.
+ */
+export async function t9lh(ctx) {
+  const { L, check, json, log } = ctx;
+  const w = await irrLot(ctx, 't9lh');
+  if (!w) { check(false, 'LH: v62 not realised'); await L.leaveWorld(); return {}; }
+  const out = {};
+  try {
+    await L.call('dev.fluid.hold', { drain: true }, 10_000);
+    const a = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e), detail: e.detail ?? null }));
+    out.answer = a;
+    log(`  LH: ${json(out)}`);
+    const text = JSON.stringify(a);
+    check(/held\(other\)/.test(text) && /chunk -?\d+,-?\d+/.test(text), `LH: a lot removal while its drain is held is answered typed: held(other) at chunk x,z (${text.slice(0, 300)})`);
+  } finally {
+    await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
+  }
+  let r = null;
+  for (let i = 0; i < 30; i++) {
+    r = await L.call('dev.sites.remove', { site: w.sites.f2.siteId, force: true }, 600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    if (r.removed !== false && !r.error) break;
+    await sleep(1000);
+  }
+  await L.settle(3000);
+  const water = (await fluidsIn(ctx, w.box)).size;
+  out.after = { water };
+  check(water === 0, `LH conservation: released, the lot drained: ${water} water in f2's box`);
+  await L.leaveWorld();
+  return out;
+}

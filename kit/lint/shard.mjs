@@ -16,9 +16,10 @@ export const BROKEN = Object.freeze({
   'fl/u03_zone_ignores_body.json': ['M25:clear'], // FL: a free zone's street through a body
 });
 
-export function runShard(i, n) {
+export function runShard(i, n, { lane = null } = {}) {
   const full = process.env.WATER_LINT_FULL === '1';
-  const all = corpus();
+  // ((8c SE) a lane's entries run in that lane's shards only: corpus-0..8 keep exactly their entries)
+  const all = corpus().filter((e) => (e.lane ?? null) === lane);
   for (const [k, e] of all.entries()) {
     if (k % n !== i) continue;
     test(`water lint: ${e.name}`, async () => {

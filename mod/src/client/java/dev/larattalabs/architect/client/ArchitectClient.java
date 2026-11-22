@@ -48,6 +48,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.SliceClDev.init(); // phase 7a slice CL hooks (dev.climb)
 		dev.larattalabs.architect.client.dev.SliceLfDev.init(); // phase 7a slice LF hooks (dev.lift.ride)
 		dev.larattalabs.architect.client.dev.SliceHDev.init(); // phase 6c slice H hooks (dev.fluid.*, dev.entity.damage)
+		dev.larattalabs.architect.client.dev.SliceT5FDev.init(); // slice T5Fa TEST hooks (dev.chunk.*, dev.fluid.holdChunk/writeTrace/forceTrace/saveAtGate, dev.player.*, dev.dispense, dev.txn.kinds)
 		dev.larattalabs.architect.client.dev.SliceVocDev.init(); // phase 6c slice VOC hooks (dev.vocab.*)
 		dev.larattalabs.architect.client.dev.SliceCuDev.init(); // phase 6c slice CU hooks (dev.copper.use)
 		dev.larattalabs.architect.client.dev.SliceRsDev.init(); // phase 6c slice RS hooks (dev.rs.*)

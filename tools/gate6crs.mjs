@@ -15,6 +15,10 @@
 //     survival  (rs-survival)           items 3 and 5 (build, bills), 8 (conservation), 9 (removal), 10 (mid-build removal), lv7 (L-V7:
 //                                       dried farmland across a restart), 14 (rs02 on S3's natural claim); GATE_P3=smoke: one build per proof
 //     crash     (rs-crash)              item 11
+//     df        (rs-df)                 slice DF: fluids.json refused in survival (rs03_water), FL1r+save, conservation and the charge once
+//     t8a       (8ct-a)                 slice 8cTa row A: tile-written lava, never forced, one taken: the refund + taken == charged
+//     t8b       (8ct-b)                 slice 8cTa row B: FLc+save, the charge settled at the start, never written, removed: refunded
+//     t5k4 t5k4rm t5dh t5fl5 t5dm t5sb t5gb t5s3a t5s3b t5tk t5q1   slice T5Fa: T5F's failing-first rows on rs03 (tools/lib/gate-t5f-rs.mjs)
 //     toggle    (rs-toggle)             item 18 (fix/survival-off-storm): /architect survival off mid-build: 0 chunks generated or charged
 //                                       outside claim + 2, a forceloaded chunk not charged, built in its mode as its twin, E-flat 0
 //     report                            REPORT.md over the step JSONs
@@ -805,6 +809,467 @@ steps.item10 = async () => {
     // ends, so the paid cells still standing mid-removal read as missing then; the end is exact)
     const judged = C.points.filter((p) => p.label !== 'reopened mid-removal');
     check(judged.every(G.exact) && ef.length === 0, `item 10 (${tag}): conservation exact at ${judged.map((p) => p.label).join(', ')}${leave ? ` (mid-removal after the reopen, recorded: ${json(C.points.find((p) => p.label === 'reopened mid-removal')?.diff)})` : ''}, E-flat ${ef.length}`, ef.slice(0, 6));
+  }
+  return out;
+};
+
+// ------------------------------------------------------------------ (slice DF, rule 3) the fluids record refused in survival
+
+/**
+ * (slice DF, CONTRACT 8c §4.4) rs03_water in survival with fluids.json's save refused (dev.region.failNextSave sticky): fed to its
+ * fluids gate, the stage waits ("the fluids record is not durable"), no lava standing, the charge (a lava bucket a source) booked once,
+ * conservation exact; then the halt at FL1r+save (the refusal again, nothing written): the start lifts the hook (a new JVM), the stage
+ * runs from its gate: PLACED, every body settled, the charge still once, conservation exact, no new item entity in the box; Regions.remove
+ * exact (the scoop once), conservation exact.
+ */
+steps.df = async () => {
+  await ensure();
+  const out = {};
+  const tag = 'rs03df';
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const pre = await G.snap(ctx, box, `rs-${tag}-pre`);
+  const ck = await G.check(ctx, tag, s);
+  const crateAt = await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  const a0 = await C.start();
+  await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let owed = null;
+  // fed to the fluids gate: the record's state read each wave (feed's extra hook), the feed ends once the record is owed
+  await G.feed(ctx, region, { cons: C, fraction: 0.5, timeoutMs: 2_400_000, until: (st) => !!owed || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+    extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.owed) owed = x; return {}; } });
+  await sleep(20_000);
+  const fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
+  const rs1 = await G.rsState(ctx, region);
+  const p1 = await C.point('refused');
+  out.refused = { owed: fs1?.owed ?? null, phase: fs1?.phase, bodies: (fs1?.bodies ?? []).map((b) => [b.id, b.state]), charged: rs1.record?.charged ?? null, point: p1 };
+  check(!!owed && fs1?.phase === 'gate' && (fs1?.bodies ?? []).every((b) => !['written', 'settled'].includes(b.state)) && sum(p1.fluid) === 0, `DF survival (${tag}): fluids.json refused at the fluids gate: the stage waits (${fs1?.owed}), phase ${fs1?.phase}, no body written, fluid standing ${json(p1.fluid)}`);
+  // (the charge is booked in the ledger before the record's save, as on main; standing nothing yet, the audit's diff is that charge: the
+  // lava buckets and the grates' bars held under the key, an empty bucket back per lava source)
+  const charged = rs1.record?.charged ?? {};
+  const held = G.minus(G.plus({}, charged['minecraft:lava_bucket'] ? { 'minecraft:bucket': charged['minecraft:lava_bucket'] } : {}), charged);
+  out.refused.held = held;
+  check(sum(charged) > 0 && G.same(p1.diff, held) && p1.identity, `DF survival (${tag}): the charge booked once (${json(charged)}); conservation while refused: the diff ${json(p1.diff)} is exactly that charge held in the ledger (${json(held)}), nothing else moved`);
+  // the halt at FL1r+save: the gate refuses again on its next try
+  await L.call('dev.journal.killAt', { point: 'FL1r+save' }, 10_000);
+  let down = false;
+  for (let i = 0; i < 180 && !down; i++) {
+    await sleep(2000);
+    const x = await L.call('dev.state', {}, 10_000).catch(() => null);
+    down = !!x && x.inWorld === false;
+  }
+  check(down, `DF survival (${tag}): the kill point FL1r+save halted the server`);
+  await L.openWorld(s.world);
+  const w = await G.waitFor(ctx, region, (st) => ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state), { timeoutMs: 1_800_000 });
+  const rs2 = await G.rsState(ctx, region);
+  const fl = w.st.view.ext?.['architect_mc:fluids'] ?? [];
+  const p2 = await C.point('resumed');
+  out.resumed = { state: w.st.view.state, fluids: fl.map((x) => [x.body, x.state]), charged: rs2.record?.charged ?? null, point: p2 };
+  check(w.st.view.state === 'PLACED' && fl.length > 0 && fl.every((x) => x.state === 'settled'), `DF survival (${tag}, FL1r+save resumed): the stage from its gate: ${w.st.view.state}, every body settled (${json(out.resumed.fluids)})`);
+  check(G.same(rs2.record?.charged ?? {}, rs1.record?.charged ?? {}) && G.exact(p2) && p2.entities === sum(a0.entities), `DF survival (${tag}, FL1r+save resumed): charged once (${json(rs2.record?.charged)}), conservation exact (${json(p2.diff)}), item entities in the box ${p2.entities} (at the start ${sum(a0.entities)})`);
+  const rm = await G.remove(ctx, region);
+  const e = await G.diff(ctx, box, pre);
+  const ef = e.list.filter((m) => !crateAt.some((c) => c.join(',') === m.pos));
+  const p3 = await C.point('removed');
+  out.removed = { removed: rm.removed, eflat: ef.length, point: p3 };
+  check(rm.removed && ef.length === 0 && G.exact(p3), `DF survival (${tag}): Regions.remove: E-flat ${ef.length} (the crates aside), conservation exact (${json(p3.diff)})`, ef.slice(0, 8));
+  out.points = C.points;
+  // (slice DF round 2, the review's P1 4) the other order: charged, the record refused, then removed before any source is written: the
+  // charge comes back (the scoop counts what the record says was charged, not only what stands), conservation exact
+  {
+    const tag2 = 'rs03dfr';
+    const s2 = await G.site(ctx, tag2, fx);
+    const box2 = G.boxOf(s2.W);
+    const pre2 = await G.snap(ctx, box2, `rs-${tag2}-pre`);
+    const ck2 = await G.check(ctx, tag2, s2);
+    const crate2 = await G.pile(ctx, s2, 4);
+    const C2 = new G.Conservation(ctx, box2);
+    await C2.start();
+    await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+    const region2 = await G.realise(ctx, ck2.check.artifactSha, entries);
+    let owed2 = null;
+    await G.feed(ctx, region2, { cons: C2, fraction: 0.5, timeoutMs: 2_400_000, until: (st) => !!owed2 || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+      extra: async () => { const x = await L.call('dev.fluid.state', { region: region2 }, 10_000).catch(() => null); if (x?.owed) owed2 = x; return {}; } });
+    const rsA = await G.rsState(ctx, region2);
+    const pA = await C2.point('refused');
+    const rmP = L.call('dev.region.remove', { region: region2, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e.message ?? e) }));
+    let v2 = null;
+    for (let i = 0; i < 60; i++) { await sleep(1000); v2 = await L.call('dev.region.state', { region: region2 }, 60_000).catch(() => null); if (v2?.view?.state === 'REMOVING') break; }
+    await sleep(3000);
+    await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+    await rmP;
+    for (let i = 0; i < 900; i++) { const x = await L.call('dev.region.state', { region: region2 }, 60_000).catch(() => null); const sx = x?.view?.state; if (!sx || ['REMOVED', 'PARTIAL', 'FAILED'].includes(sx)) break; await sleep(1000); }
+    await L.settle(2000);
+    const e2 = await G.diff(ctx, box2, pre2);
+    const ef2 = e2.list.filter((m) => !crate2.some((c) => c.join(',') === m.pos));
+    const pB = await C2.point('removed before written');
+    out.neverWritten = { charged: rsA.record?.charged ?? null, refused: pA, removed: pB, eflat: ef2.length };
+    check(sum(rsA.record?.charged) > 0 && G.exact(pB) && ef2.length === 0, `DF survival (${tag2}): charged (${json(rsA.record?.charged)}), the record refused, removed before any source was written: the charge returned, conservation exact (${json(pB.diff)}), E-flat ${ef2.length}`, ef2.slice(0, 8));
+  }
+  // (slice DF round 3, the final check's P1 1) charged and written, one lava source then taken (a player's bucket: the driver clears it),
+  // then removed: the scoop returns what stands and the never-written charge only, never the taken source again
+  {
+    const tag3 = 'rs03dfh';
+    const s3 = await G.site(ctx, tag3, fx);
+    const ck3 = await G.check(ctx, tag3, s3);
+    await G.pile(ctx, s3, 4);
+    const region3 = await G.realise(ctx, ck3.check.artifactSha, entries);
+    const f3 = await G.feed(ctx, region3, { fraction: 1, timeoutMs: 2_400_000 });
+    const box3 = G.boxOf(s3.W);
+    const c3 = await L.call('dev.fluid.census', { box: box3 }, 600_000);
+    const lava = c3.fluids.filter(([, , , st]) => st === 'minecraft:lava' || st === 'minecraft:lava[level=0]');
+    const taken = lava[0];
+    if (taken) await cmd(`/setblock ${taken[0]} ${taken[1]} ${taken[2]} minecraft:air`);
+    const standing = lava.length - (taken ? 1 : 0);
+    const ps0 = await G.pileState(ctx);
+    await G.remove(ctx, region3);
+    const ps1 = await G.pileState(ctx);
+    const got = (ps1.stock?.['minecraft:lava_bucket'] ?? 0) - (ps0.stock?.['minecraft:lava_bucket'] ?? 0);
+    out.harvested = { placed: f3.last.st.view.state, lavaSources: lava.length, standing, refundedLava: got };
+    check(f3.last.st.view.state === 'PLACED' && lava.length > 0 && got === standing, `DF survival (${tag3}): ${lava.length} lava source(s) written, one taken, removed: the scoop returns ${got} lava bucket(s), the ${standing} standing (never the taken one again)`);
+  }
+  return out;
+};
+
+// ------------------------------------------------------------------ (slice 8cTa, failing first) the DF final review's A and B
+
+/** Waits until the server halted (a kill point), at most 6 min. */
+async function waitHalt(point) {
+  for (let i = 0; i < 180; i++) {
+    await sleep(2000);
+    const x = await L.call('dev.state', {}, 10_000).catch(() => null);
+    if (x && x.inWorld === false) return true;
+  }
+  check(false, `the kill point ${point} halted the server`);
+  return false;
+}
+
+const LAVA = (st) => st === 'minecraft:lava' || st === 'minecraft:lava[level=0]';
+
+/**
+ * (8cT row A, the DF final review's P1 A) rs03_water in survival, its fluids stage written by its tiles and the forced tick held
+ * (dev.fluid.hold write: every body pending, never forced, so a6b14ace's neverWritten is true); one written lava source taken (the
+ * player's bucket: the driver clears the cell and counts one lava bucket out); then removed. Conservation: the lava buckets refunded + the
+ * one taken == the lava buckets charged (red on a6b14ace: the scoop refunds every cell of a never-forced body, the taken one again).
+ */
+steps.t8a = async () => {
+  await ensure();
+  const out = {};
+  const tag = 'rs03t8a';
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const ck = await G.check(ctx, tag, s);
+  await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  await L.call('dev.fluid.hold', { write: true }, 10_000);
+  try {
+    const region = await G.realise(ctx, ck.check.artifactSha, entries);
+    let writing = null;
+    await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000, until: (st) => !!writing || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+      extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.phase === 'writing') writing = x; return {}; } });
+    check(!!writing, `A (${tag}): the fluids gate passed (phase writing, charged), the forced tick held`);
+    // (8cTc) the tiles are markers: no lava stands while the write is held. Then the write txn writes it (the census held instead), and
+    // the row takes a source the txn wrote; on the red base the tiles wrote it under the held write
+    await sleep(30_000);
+    const c0 = await L.call('dev.fluid.census', { box }, 600_000);
+    out.markers = c0.fluids.filter(([, , , st]) => LAVA(st)).length === 0;
+    if (out.markers) await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
+    // the sources: the lava standing in the box, stable for 3 polls 5 s apart (at most 10 min)
+    let lava = [], last = -1, stable = 0;
+    for (let i = 0; i < 120 && stable < 3; i++) {
+      const c = await L.call('dev.fluid.census', { box }, 600_000);
+      lava = c.fluids.filter(([, , , st]) => LAVA(st));
+      stable = lava.length > 0 && lava.length === last ? stable + 1 : 0;
+      last = lava.length;
+      await sleep(5000);
+    }
+    const fs1 = await L.call('dev.fluid.state', { region }, 10_000);
+    const rs1 = await G.rsState(ctx, region);
+    const charged = rs1.record?.charged ?? {};
+    const chargedLava = charged['minecraft:lava_bucket'] ?? 0;
+    out.before = { phase: fs1.phase, bodies: (fs1.bodies ?? []).map((b) => [b.id, b.state, b.writtenAt]), charged, chargedBodies: rs1.record?.chargedBodies ?? null, lavaSources: lava.length };
+    log(`  A: ${json(out.before)}`);
+    check((out.markers ? (fs1.bodies ?? []).every((b) => b.state !== 'settled') : fs1.phase === 'writing' && (fs1.bodies ?? []).every((b) => b.state !== 'written' && b.state !== 'settled')) && chargedLava > 0 && lava.length === chargedLava, `A (${tag}): the precondition: every lava source written (${out.markers ? 'by the write txn, the census held' : 'by the tiles, no body forced'}: ${lava.length} of ${chargedLava} charged), none settled (${json(out.before.bodies)})`);
+    // the player's bucket: one written source taken
+    const taken = lava[0];
+    if (taken) await cmd(`/setblock ${taken[0]} ${taken[1]} ${taken[2]} minecraft:air`);
+    const standing = lava.length - (taken ? 1 : 0);
+    const ps0 = await G.pileState(ctx);
+    const rm = await G.remove(ctx, region);
+    const ps1 = await G.pileState(ctx);
+    const got = (ps1.stock?.['minecraft:lava_bucket'] ?? 0) - (ps0.stock?.['minecraft:lava_bucket'] ?? 0);
+    const p = await C.point('removed');
+    out.removed = { removed: rm.removed, standing, refundedLava: got, taken: taken ? 1 : 0, chargedLava, point: p };
+    log(`  A: ${json({ standing, got, chargedLava })}`);
+    check(got === standing && got + (taken ? 1 : 0) === chargedLava, `A (${tag}) conservation: lava buckets refunded ${got} + taken by the player ${taken ? 1 : 0} == charged ${chargedLava} (refund wanted: the ${standing} standing; ${got > standing ? `minted ${got - standing}` : 'no mint'})`);
+  } finally {
+    await L.call('dev.fluid.hold', { write: false, settle: false }, 10_000).catch(() => null);
+  }
+  return out;
+};
+
+/**
+ * (8cT row B, the DF final review's P1 B) rs03_water in survival: the halt at FLc+save (the keyed charge on disk, the region record not
+ * updated). The start settles the charge from the ledger (MechCharges.settleBooked), then the fluids record's save is refused (sticky), so
+ * no source is ever written, and the region is removed. Conservation: the lava buckets refunded == charged, the stockpile exact (red on
+ * a6b14ace: the settlement drops chargedBodies, the scoop finds nothing paid, the charge is lost).
+ */
+steps.t8b = async () => {
+  await ensure();
+  const out = {};
+  const tag = 'rs03t8b';
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const ck = await G.check(ctx, tag, s);
+  await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  const ps0 = await G.pileState(ctx);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  await L.call('dev.journal.killAt', { point: 'FLc+save' }, 10_000);
+  await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000 }).catch((e) => log(`  B: the feed ended (${String(e.message ?? e).slice(0, 120)})`));
+  const halted = await waitHalt('FLc+save');
+  out.halted = halted;
+  if (!halted) return out;
+  // the start's first fluids gate must not write the record before the hook is armed: a non-empty folder in the record's place refuses
+  // every write of it (the rename fails) until the hook (sticky) is armed; then the folder goes
+  const recDir = path.join(L.SAVES, s.world, 'architect-regions', region, 'fluids.json');
+  out.blocked = !fs.existsSync(recDir);
+  if (out.blocked) { fs.mkdirSync(recDir, { recursive: true }); fs.writeFileSync(path.join(recDir, 'block'), '8cTa row B'); }
+  await L.openWorld(s.world);
+  await L.call('dev.region.failNextSave', { file: 'fluids.json', sticky: true }, 10_000);
+  if (out.blocked) { fs.rmSync(path.join(recDir, 'block')); fs.rmdirSync(recDir); }
+  let fs1 = null;
+  for (let i = 0; i < 150; i++) {
+    fs1 = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null);
+    if (fs1?.owed) break;
+    await sleep(2000);
+  }
+  const rs1 = await G.rsState(ctx, region);
+  const charged = rs1.record?.charged ?? {};
+  const chargedLava = charged['minecraft:lava_bucket'] ?? 0;
+  const c1 = await L.call('dev.fluid.census', { box }, 600_000);
+  const lava1 = c1.fluids.filter(([, , , st]) => LAVA(st)).length;
+  out.restarted = { owed: fs1?.owed ?? null, phase: fs1?.phase, charged, chargedBodies: rs1.record?.chargedBodies ?? null, lavaSources: lava1 };
+  log(`  B: ${json(out.restarted)}`);
+  check(!!fs1?.owed && chargedLava > 0 && lava1 === 0, `B (${tag}): the precondition: after FLc+save the start settled the charge (${json(charged)}), the fluids record refused (${fs1?.owed}), no lava written (${lava1})`);
+  const ps1 = await G.pileState(ctx);
+  const rmP = L.call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ error: String(e.message ?? e) }));
+  for (let i = 0; i < 60; i++) { await sleep(1000); const v = await L.call('dev.region.state', { region }, 60_000).catch(() => null); if (v?.view?.state === 'REMOVING') break; }
+  await sleep(3000);
+  await L.call('dev.region.failNextSave', { off: true }, 10_000).catch(() => null);
+  await rmP;
+  for (let i = 0; i < 900; i++) { const x = await L.call('dev.region.state', { region }, 60_000).catch(() => null); const sx = x?.view?.state; if (!sx || ['REMOVED', 'PARTIAL', 'FAILED'].includes(sx)) break; await sleep(1000); }
+  await L.settle(2000);
+  const ps2 = await G.pileState(ctx);
+  const got = (ps2.stock?.['minecraft:lava_bucket'] ?? 0) - (ps1.stock?.['minecraft:lava_bucket'] ?? 0);
+  const p = await C.point('removed');
+  out.removed = { refundedLava: got, chargedLava, lavaStock: [ps0.stock?.['minecraft:lava_bucket'] ?? 0, ps2.stock?.['minecraft:lava_bucket'] ?? 0], point: p };
+  log(`  B: ${json({ got, chargedLava, diff: p.diff })}`);
+  check(got === chargedLava && G.exact(p), `B (${tag}) conservation: the charge settled at the start, never written, removed: lava buckets refunded ${got} of ${chargedLava} charged; the stockpile exact (${json(p.diff)})`);
+  return out;
+};
+
+// ------------------------------------------------------------------ (8cT last round) failing-first rows, red on e29d8783
+
+/** rs03_water in survival, built up to its fluids stage's tiles written with the forced tick held: {tag, s, box, region, lava (cells)}. */
+async function rsTilesWritten(tag, fx, entries) {
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const ck = await G.check(ctx, tag, s);
+  await G.pile(ctx, s, 4);
+  const C = new G.Conservation(ctx, box);
+  await C.start();
+  await L.call('dev.fluid.hold', { write: true }, 10_000);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  let writing = null;
+  await G.feed(ctx, region, { cons: C, fraction: 1, timeoutMs: 2_400_000, until: (st) => !!writing || ['PLACED', 'PARTIAL', 'FAILED'].includes(st.view.state),
+    extra: async () => { const x = await L.call('dev.fluid.state', { region }, 10_000).catch(() => null); if (x?.phase === 'writing') writing = x; return {}; } });
+  let lava = [], last = -1, stable = 0;
+  for (let i = 0; i < 120 && stable < 3; i++) {
+    const c = await L.call('dev.fluid.census', { box }, 600_000);
+    lava = c.fluids.filter(([, , , st]) => LAVA(st));
+    stable = lava.length > 0 && lava.length === last ? stable + 1 : 0;
+    last = lava.length;
+    await sleep(5000);
+  }
+  return { s, box, region, lava, C };
+}
+const lavaStock = async () => (await G.pileState(ctx)).stock?.['minecraft:lava_bucket'] ?? 0;
+const cellIs = async (c) => (await L.call('dev.fluid.census', { box: [c[0], c[1], c[2], c[0], c[1], c[2]] }, 60_000)).fluids.find((q) => q[0] === c[0] && q[1] === c[1] && q[2] === c[2])?.[3] ?? 'none';
+
+/**
+ * (8cT last round #1, the N1 condition) The tiles wrote the lava, the forced tick held; a player buckets one written source; the stage
+ * finishes (the write txn runs, the census held so nothing escapes). Conservation: the emptied cell stays empty (never refilled: red on
+ * e29d8783, whose writeBody refilled every open cell), and the removal refunds the standing sources only: refund + taken == charged.
+ * With `crash`, the write halts at TX:fluid.write:place+save (a chunk's receipt missing) and the start replays it.
+ */
+async function n1Row(tag, crash) {
+  const out = {};
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  try {
+    const w = await rsTilesWritten(tag, fx, entries);
+    const charged = (await G.rsState(ctx, w.region)).record?.charged?.['minecraft:lava_bucket'] ?? 0;
+    const taken = w.lava[0];
+    check(!!taken && w.lava.length === charged, `N1 (${tag}): the precondition: ${w.lava.length} lava source(s) written by the tiles, ${charged} charged`);
+    if (!taken) return out;
+    await cmd(`/setblock ${taken[0]} ${taken[1]} ${taken[2]} minecraft:air`); // the player's bucket
+    if (crash) {
+      await L.call('dev.journal.killAt', { point: 'TX:fluid.write:place+save' }, 10_000);
+      await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
+      out.halted = await waitHalt('TX:fluid.write:place+save');
+      await L.openWorld(w.s.world);
+      await L.call('dev.fluid.hold', { settle: true }, 10_000);
+    } else {
+      await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
+    }
+    let fs1 = null;
+    for (let i = 0; i < 120; i++) { fs1 = await L.call('dev.fluid.state', { region: w.region }, 10_000).catch(() => null); if (fs1?.phase === 'settling') break; await sleep(1000); }
+    await sleep(3000);
+    const cell = await cellIs(taken);
+    const c2 = await L.call('dev.fluid.census', { box: w.box }, 600_000);
+    const standing = c2.fluids.filter(([, , , st]) => LAVA(st)).length;
+    const s0 = await lavaStock();
+    await G.remove(ctx, w.region);
+    const got = (await lavaStock()) - s0;
+    Object.assign(out, { phase: fs1?.phase, cell, standing, charged, refunded: got });
+    log(`  N1 (${tag}): ${json(out)}`);
+    check(!LAVA(cell), `N1 (${tag}): the harvested cell ${taken.slice(0, 3).join(',')} stays empty after the stage's write${crash ? ' and its replay' : ''} (${cell}; never refilled)`);
+    check(got + 1 === charged && got === standing, `N1 (${tag}) conservation: refunded ${got} (the ${standing} standing) + taken 1 == charged ${charged}`);
+  } finally {
+    await L.call('dev.fluid.hold', { write: false, settle: false }, 10_000).catch(() => null);
+  }
+  return out;
+}
+steps.t9n1 = async () => { await ensure(); return n1Row('rs03t9n1', false); };
+steps.t9n1c = async () => { await ensure(); return n1Row('rs03t9n1c', true); };
+
+/**
+ * (8cT last round #2) What the drain saw is durable with its writes. (a) rs03_water placed (10 charged lava standing); removed and halted at
+ * TX:fluid.drain:drain+save (the drain on disk, its receipts and the scoop not): the start refunds 10, once (red on e29d8783: the replay
+ * recounted the drained cells as 0). (b) the drain held (dev.fluid.hold drain) after planning 10; a player takes 1; released with the halt at
+ * TX:fluid.drain:apply:0+save (the W's receipts on disk, the scoop not): the start refunds 9 (red on e29d8783: the planned 10).
+ */
+async function seenRow(tag, held) {
+  const out = {};
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, tag, fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const box = G.boxOf(s.W);
+  const ck = await G.check(ctx, tag, s);
+  await G.pile(ctx, s, 4);
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  await G.feed(ctx, region, { fraction: 1, timeoutMs: 2_400_000 });
+  const c0 = await L.call('dev.fluid.census', { box }, 600_000);
+  const lava = c0.fluids.filter(([, , , st]) => LAVA(st));
+  const charged = (await G.rsState(ctx, region)).record?.charged?.['minecraft:lava_bucket'] ?? 0;
+  check(lava.length === charged && charged > 0, `SEEN (${tag}): the precondition: placed, ${lava.length} lava standing of ${charged} charged`);
+  const s0 = await lavaStock();
+  const point = held ? 'TX:fluid.drain:apply:0+save' : 'TX:fluid.drain:drain+save';
+  let taken = 0;
+  try {
+    if (held) {
+      await L.call('dev.fluid.hold', { drain: true }, 10_000);
+      L.call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch(() => null);
+      await sleep(4000);
+      await cmd(`/setblock ${lava[0][0]} ${lava[0][1]} ${lava[0][2]} minecraft:air`); // the player's bucket while the drain waits
+      taken = 1;
+      await L.call('dev.journal.killAt', { point }, 10_000);
+      await L.call('dev.fluid.hold', { drain: false }, 10_000);
+    } else {
+      await L.call('dev.journal.killAt', { point }, 10_000);
+      L.call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch(() => null);
+    }
+    out.halted = await waitHalt(point);
+    await L.openWorld(s.world);
+    for (let i = 0; i < 900; i++) { const x = await L.call('dev.region.state', { region }, 60_000).catch(() => null); const sx = x?.view?.state; if (!sx || ['REMOVED', 'PARTIAL', 'FAILED'].includes(sx)) break; await sleep(1000); }
+    await L.settle(2000);
+  } finally {
+    await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
+  }
+  const got = (await lavaStock()) - s0;
+  Object.assign(out, { point, charged, taken, refunded: got });
+  log(`  SEEN (${tag}): ${json(out)}`);
+  check(got === charged - taken, `SEEN (${tag}) conservation: halted at ${point}${held ? ', one taken while held' : ''}: refunded ${got} lava bucket(s), once (${charged - taken} wanted: what the drain saw)`);
+  return out;
+}
+steps.t9s1 = async () => { await ensure(); return seenRow('rs03t9s1', false); };
+
+// ------------------------------------------------------------------ (slice T5Fa) T5F's failing-first rows (tools/lib/gate-t5f-rs.mjs)
+const T5 = await import('./lib/gate-t5f-rs.mjs');
+const H5 = () => ({ ctx, G, L, check, log, json, sleep, cmd, entriesOf, rsTilesWritten, waitHalt, LAVA });
+steps.t5k4 = async () => { await ensure(); return T5.tileK4(H5(), false); };
+steps.t5k4rm = async () => { await ensure(); return T5.tileK4(H5(), true); };
+steps.t5dh = async () => { await ensure(); return T5.drainHold(H5()); };
+steps.t5fl5 = async () => { await ensure(); return T5.drainFl5(H5()); };
+steps.t5dm = async () => { await ensure(); return T5.drainMixed(H5()); };
+steps.t5sb = async () => { await ensure(); return T5.scoopBarrier(H5()); };
+steps.t5gb = async () => { await ensure(); return T5.grateBroken(H5()); };
+steps.t5s3a = async () => { await ensure(); return T5.s3a(H5()); };
+steps.t5s3b = async () => { await ensure(); return T5.s3b(H5()); };
+steps.t5tk = async () => { await ensure(); return T5.taken(H5()); };
+steps.t5q1 = async () => { await ensure(); return T5.tombstone(H5()); };
+
+steps.t9s2 = async () => { await ensure(); return seenRow('rs03t9s2', true); };
+
+/**
+ * (8cT last round #3) rs03_water's brook: the tiles write both reaches (the forced tick held) and the chunks are saved; then the downstream
+ * reach brook_r2 is written (the census held) and its shell breached; released with FLe armed (bare): the escape drain's record saved
+ * (brook_r1, upstream, drained) and the JVM halted before its writes. The start's replay must drain the whole upstream closure: no source
+ * stands in brook_r1's cells (red on e29d8783: the replay skipped an upstream reach the record already called drained).
+ */
+steps.t9up = async () => {
+  await ensure();
+  const out = {};
+  const tag = 'rs03t9up';
+  const fx = G.fixture(ctx, 'rs03_water');
+  const entries = entriesOf(fx);
+  try {
+    const w = await rsTilesWritten(tag, fx, entries);
+    const R = await core.regionOf(ctx, w.region);
+    const up = R.bodies.find((b) => b.id === 'brook_r1');
+    const down = R.bodies.find((b) => b.id === 'brook_r2');
+    const k = (c) => `${c[0]},${c[1]},${c[2]}`;
+    const srcIn = async (b) => { const c = await L.call('dev.fluid.census', { box: w.box }, 600_000); const own = new Set(b.cells.map(k)); return c.fluids.filter(([x, y, z, st]) => own.has(`${x},${y},${z}`) && /water(\[level=0\])?$/.test(st)).length; };
+    const up0 = up ? await srcIn(up) : 0;
+    await L.call('dev.stockpile.save', {}, 300_000); // the tiles' water of both reaches on disk
+    await cmd('/save-off'); // (no later chunk save: the wave's clear of the upstream reach stays off disk, as a crash finds it)
+    await L.call('dev.fluid.hold', { write: false, settle: true }, 10_000);
+    let fs1 = null;
+    for (let i = 0; i < 120; i++) { fs1 = await L.call('dev.fluid.state', { region: w.region }, 10_000).catch(() => null); if ((fs1?.bodies ?? []).find((b) => b.id === 'brook_r2')?.state === 'written') break; await sleep(1000); }
+    const own = new Set(down.cells.map(k));
+    const side = down.shell.filter(([x, y, z]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => own.has(`${x + dx},${y},${z + dz}`))).sort((a, b) => a[1] - b[1])[0];
+    out.pre = { up0, downState: (fs1?.bodies ?? []).find((b) => b.id === 'brook_r2')?.state, breach: side };
+    check(!!up && !!down && up0 > 0 && !!side && out.pre.downState === 'written', `UP (${tag}): the precondition: the upstream reach's tile water on disk (${up0} sources), the downstream written, a shell cell to breach (${json(out.pre)})`);
+    if (!side) return out;
+    await cmd(`/setblock ${side[0]} ${side[1]} ${side[2]} minecraft:air`);
+    await sleep(3000);
+    await L.call('dev.journal.killAt', { point: 'FLe' }, 10_000);
+    await L.call('dev.fluid.hold', { settle: false }, 10_000);
+    out.halted = await waitHalt('FLe');
+    await L.openWorld(w.s.world);
+    await sleep(10_000);
+    const fs2 = await L.call('dev.fluid.state', { region: w.region }, 10_000).catch(() => null);
+    out.after = { up: (fs2?.bodies ?? []).find((b) => b.id === 'brook_r1')?.state, upSources: await srcIn(up) };
+    log(`  UP: ${json(out)}`);
+    check(out.after.up === 'drained' && out.after.upSources === 0, `UP (${tag}) conservation: after the replay brook_r1 reads ${out.after.up} and ${out.after.upSources} source(s) stand in its cells (0 wanted)`);
+    await G.remove(ctx, w.region).catch(() => null);
+  } finally {
+    await L.call('dev.fluid.hold', { write: false, settle: false }, 10_000).catch(() => null);
   }
   return out;
 };

@@ -1,5 +1,5 @@
 {
- "catalogueVersion": 26,
+ "catalogueVersion": 27,
  "api": "1.72.0",
  "kitVersion": "0.79.0",
  "schemaVersion": "plan/0",
@@ -593,7 +593,7 @@
   },
   {
    "id": "channel.course",
-   "sinceApi": "1.36.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -628,7 +628,8 @@
     "flows": [
      "level",
      "pools",
-     "riffles"
+     "riffles",
+     "current"
     ],
     "looks": [
      "natural",
@@ -1047,7 +1048,7 @@
   },
   {
    "id": "form.waterfall",
-   "sinceApi": "1.34.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -1059,7 +1060,12 @@
      1,
      5
     ],
-    "sculpt": 12
+    "sculpt": 12,
+    "form": {
+     "drop": 48,
+     "perRegion": 4,
+     "deepPast": 24
+    }
    }
   },
   {

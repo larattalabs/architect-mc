@@ -48,6 +48,11 @@ public abstract class IOWorkerDebtMixin {
 		IOWorker self = (IOWorker) (Object) this;
 		String key = ChunkDebt.key(self.storageInfo(), pos);
 		long seq = ChunkDebt.writing(key);
+		if (ChunkDebt.testDropped(key)) {
+			dev.larattalabs.architect.Architect.LOGGER.warn("(slice T5Fa TEST) dev.chunk.drop: the write of {} skipped (its snapshot lost)", key);
+			ChunkDebt.written(key, seq); // acknowledged as written (a barrier waiting on it goes on), the region file untouched
+			return; // TEST only (ChunkDebt.TEST_DROP is empty unless a dev hook armed it)
+		}
 		try {
 			if (ChunkDebt.failNext()) {
 				throw new IOException("(slice T0 TEST) a chunk write refused: " + key);

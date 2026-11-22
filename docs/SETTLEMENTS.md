@@ -298,7 +298,9 @@ re-simulated.
   a tile still skips air writes that would let water in, and the channel's own sources are cells of the tile's entry, so
   undo removes them. `waterlogged` is volatile under "still ours", so a player waterlogging a channel stair is kept, not a
   mismatch.
-- Rivers that flow (non-source water) are **deferred**: they change after the write and make E-normal unprovable.
+- Rivers that flow (non-source water) are **8c's** (docs/CONTRACT.md "Phase 8c"): a plan still writes only sources and solids, and
+  every flowing cell is predicted, watched and drained back exactly. Flowing water is outside E-normal **outside a body's watch
+  set** (the world classes, `flow` and 8c's `refed`); inside every watch set of the region E-normal is E-flat.
 
 ### 4.3 Slope-aware routing (`route`)
 
@@ -1078,7 +1080,7 @@ cost nothing.
 | **Form evaluation cost per tile** | Big unions of capsules make each cell expensive; 6a's 2 s per tile and 45k cells/s bars | One bounded op per cluster (section 9.1); measured per tile in 6c; bake to `voxels` past a cost threshold |
 | **Plan-time passes are slow** | Routing and hydrology over 1M columns in JS | 120 s plan budget, measured in 6c; districts and routing on coarse grids first, refined per corridor |
 | **Light engine under canopies and caves** | 6a measured lighting outside Architect's budget; big overhangs and caverns change sky light over large areas | Measured per scenario (the light tick share); if it spikes, stage the large forms and write caverns' roofs last |
-| **Fluids** | Channels, lifts and coral put water next to carved voids; undo exactness | Still water only; M4 and M16 on the virtual world; E-normal guards as built in 6a; flowing rivers deferred |
+| **Fluids** | Channels, lifts and coral put water next to carved voids; undo exactness | Sources only (8c's flowing cells predicted, watched and drained back); M4 and M16 on the virtual world; E-normal guards as built in 6a; inside a body's watch set E-normal is E-flat |
 | **Leaf decay, melt, coral death** | Generated forms that look right in the preview change after random ticks | `persistent=true` leaves, M17-M19, and every scenario's gallery screenshots taken after a 2-minute stand at default random ticks |
 | **Site-bound designs vs the library** | A design that only fits one place breaks the "library of reusable buildings" model | Site variants ($0 re-fit); the pin badge; on-pad designs stay the default for anything that doesn't need a site |
 | **Drift between design and placement** | A player cuts the host tree between plan and realise | Keep-critical cells, `SITE_DRIFTED`/`KEEP_LOST`, re-fit offered |

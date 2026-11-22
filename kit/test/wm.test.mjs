@@ -352,9 +352,9 @@ test('WM ARVX v4: the virtual world reads its levels and waterlogged cells; a v3
   assert.notEqual(P3.states[b3(0, 61, 1)], 'minecraft:oak_fence[waterlogged=true]', 'v3: the class block, as before');
 });
 
-test('WM: the kit walks no new IR kind yet (KINDS_FORMAT2 equals the mod\'s IrStale; 8cF/VS add flowingWater and volume:levels on both sides)', () => {
+test('WM (8cF): a wm op requires flowingWater and a levels volume volume:levels (both sides list them: PlanStaleTest)', () => {
   const ir = { parts: [{ id: 'p', ops: [{ op: 'fluid', model: 'wm' }] }], volumes: { a: { fluids: true, levels: true } } };
-  assert.deepEqual(walkKinds(ir).filter((k) => k === 'flowingWater' || k === 'volume:levels'), []);
+  assert.deepEqual(walkKinds(ir).filter((k) => k === 'flowingWater' || k === 'volume:levels'), ['flowingWater', 'volume:levels']);
 });
 
 // ------------------------------------------------------------------ the opt-in path end to end

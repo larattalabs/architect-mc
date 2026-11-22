@@ -454,6 +454,9 @@ export async function planRegion(o) {
       survivalRefuse: o.survivalRefuse ? Object.freeze({ ...o.survivalRefuse }) : null,
       // (6c RS) the plan is checked or planned in survival (the world's mode): its IR carries the free marks and the target groups
       survival: !!o.survival,
+      // (8c, the review's P1) false: the mod does not advertise flowingWater (the sidecar's --no-flowing-water): rivers and falls off forms
+      // answer unsupported; absent: the kit's own default, on
+      ...(o.flowingWater === false ? { flowingWater: false } : {}),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)

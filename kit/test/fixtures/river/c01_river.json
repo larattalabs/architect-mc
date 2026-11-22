@@ -1,0 +1,117 @@
+{
+ "about": "(8c RV) a river (connector.channel flow current) down a stepped meadow: a spring on the high terrace, a 1-block step every 10 cells for 9 drops, a terminal pool on the low ground: its reaches' steps are currents (runs of 6), simulated by the water model (op model wm)",
+ "terrain": {
+  "W": 240,
+  "D": 96,
+  "x0": 980,
+  "z0": 1980,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1029,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 74
+   },
+   {
+    "x0": 1030,
+    "x1": 1039,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 73
+   },
+   {
+    "x0": 1040,
+    "x1": 1049,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 72
+   },
+   {
+    "x0": 1050,
+    "x1": 1059,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 71
+   },
+   {
+    "x0": 1060,
+    "x1": 1069,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 70
+   },
+   {
+    "x0": 1070,
+    "x1": 1079,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 69
+   },
+   {
+    "x0": 1080,
+    "x1": 1089,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 68
+   },
+   {
+    "x0": 1090,
+    "x1": 1099,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 67
+   },
+   {
+    "x0": 1100,
+    "x1": 1109,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 66
+   },
+   {
+    "x0": 1110,
+    "x1": 1119,
+    "z0": 2000,
+    "z1": 2060,
+    "y": 65
+   }
+  ]
+ },
+ "anchors": {
+  "src": [
+   1010,
+   75,
+   2030
+  ],
+  "dst": [
+   1150,
+   65,
+   2030
+  ]
+ },
+ "volume": {},
+ "expect": {
+  "part": "river",
+  "class": "fits"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "rv_c01",
+  "connectors": [
+   {
+    "id": "river",
+    "kind": "channel",
+    "flow": "current",
+    "width": 3,
+    "from": {
+     "anchor": "src"
+    },
+    "to": {
+     "anchor": "dst"
+    }
+   }
+  ]
+ }
+}

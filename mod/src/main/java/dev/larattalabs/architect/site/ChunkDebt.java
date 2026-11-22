@@ -114,6 +114,23 @@ public final class ChunkDebt {
 		return key(info.level() + "/" + info.dimension().identifier() + "/" + info.type(), pos.x(), pos.z());
 	}
 
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.chunk.drop}: the chunks ({@code "x,z"}, any dimension) whose block-storage writes are skipped
+	 * while listed, as if their snapshot were lost in a crash: armed before a {@code +save} kill point, the halt then leaves those chunks at
+	 * their last saved state and every other chunk saved. Empty by default: off.
+	 */
+	public static final java.util.Set<String> TEST_DROP = ConcurrentHashMap.newKeySet();
+
+	/** (slice T5Fa TEST seam) Whether a chunk write (its debt key) is to be skipped: a {@link #TEST_DROP} chunk of a block storage. */
+	public static boolean testDropped(String key) {
+		if (TEST_DROP.isEmpty() || !key.contains("/chunk [")) {
+			return false;
+		}
+		int i = key.lastIndexOf(" [");
+		String xz = key.substring(i + 2, key.length() - 1).replace(" ", "");
+		return TEST_DROP.contains(xz);
+	}
+
 	/** (TEST seam) Whether this write is to fail (dev.stockpile.barrier failChunkWrite). */
 	public static boolean failNext() {
 		return FAIL_WRITES.get() > 0 && FAIL_WRITES.getAndDecrement() > 0;

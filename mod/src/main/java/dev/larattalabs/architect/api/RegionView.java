@@ -27,13 +27,16 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>(slice T4R-D A7b; Since 1.72.0) {@code removalWait}: while the region's removal waits on its FIFO ticket behind another removal, what it waits
  * behind; null when not waiting.
+
+ * <p>Since NEXT (8c, feature {@code "flowingWater"}): {@code fluidsRemoval}, where a removal stands with the region's fluid bodies
+ * ({@link FluidsRemoval}: draining, restoring, capped; until), null when no removal is draining them.
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
 	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
 	@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
 	@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land,
-	@Nullable RemovalWait removalWait) {
+	@Nullable RemovalWait removalWait, @Nullable FluidsRemoval fluidsRemoval) {
 	public RegionView {
 		removalStop = removalStop == null ? RemovalStop.NONE : removalStop;
 		ext = ext == null ? new JsonObject() : ext;
@@ -43,6 +46,17 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		actions = actions == null ? List.of() : List.copyOf(actions);
 		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
 		revisions = revisions == null ? List.of() : List.copyOf(revisions);
+	}
+
+	/** The 1.72.0 constructor: no fluids removal phase (since NEXT, 8c: null). */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
+		@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
+		@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land,
+		@Nullable RemovalWait removalWait) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, buildHits,
+			beside, build, position, busy, revisions, removalStop, removalStopReason, removalStopCause, besideNote, land, removalWait, null);
 	}
 
 	/** The 1.69.0 constructor: not waiting on a FIFO ticket. */

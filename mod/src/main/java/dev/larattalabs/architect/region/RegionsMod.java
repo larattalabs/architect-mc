@@ -17,6 +17,8 @@ public final class RegionsMod {
 		RegionAdopt.init(); // (6d AD) the adoption's recovery before Sites.reconcile, its SITE_BUSY
 		RegionCommands.init(); // phase 6b: /architect region ... (N7: commands, no Terrain tab)
 		BrushCommands.init(); // 6c B: /architect brush ...
+		// (8c WU) an item entity spawned in a flowing body's cells is counted (the 0-new-items check of every 8c gate row)
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents.ENTITY_LOAD.register((e, w) -> RegionFluids.itemSpawned(e));
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
 			ChunkGen.reset();
 			GenCounter.reset();

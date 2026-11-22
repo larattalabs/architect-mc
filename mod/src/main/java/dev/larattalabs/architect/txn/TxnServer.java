@@ -79,6 +79,7 @@ public final class TxnServer {
 		c.register(RemovalTxn.PBLOCKS_KIND); // (slice T4R-D, D1c)
 		c.register(CargoTxn.KIND_DEF); // (slice T4R, R5)
 		c.register(dev.larattalabs.architect.site.PileAdopt.KIND); // (slice T3b)
+		dev.larattalabs.architect.region.FluidTxns.register(c); // (8cTb) region.charge, fluid.drain
 	}
 
 	/** (slice T3b, TEST dev.txn.pauseAt) The kill point a live drive stops at (its txn held open), or null. */

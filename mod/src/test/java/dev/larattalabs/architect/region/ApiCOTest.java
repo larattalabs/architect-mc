@@ -40,8 +40,12 @@ class ApiCOTest {
 		ext.addProperty("test:x", 1);
 		ComposeRequest r = new ComposeRequest("a few homes", new BoundingBox(0, 0, 10, 159, 0, 169), "gothic", true, 0.5, "k.1", ext);
 		JsonObject m = Composes.message(r, "k.1", -64, 319, "b1", "flat", null);
-		assertEquals(JsonParser.parseString("{\"type\":\"region.compose\",\"brief\":\"a few homes\",\"claim\":{\"minX\":0,\"minZ\":10,\"maxX\":159,\"maxZ\":169,"
-			+ "\"minY\":-64,\"maxY\":319},\"surveyBlobId\":\"b1\",\"style\":\"gothic\",\"images\":true,\"budgetUsd\":0.5,\"opKey\":\"k.1\",\"ext\":{\"test:x\":1}}"), m);
+		JsonObject want = JsonParser.parseString("{\"type\":\"region.compose\",\"brief\":\"a few homes\",\"claim\":{\"minX\":0,\"minZ\":10,\"maxX\":159,\"maxZ\":169,"
+			+ "\"minY\":-64,\"maxY\":319},\"surveyBlobId\":\"b1\",\"style\":\"gothic\",\"images\":true,\"budgetUsd\":0.5,\"opKey\":\"k.1\",\"ext\":{\"test:x\":1}}").getAsJsonObject();
+		if (RegionFluids.flowingBuild()) {
+			want.addProperty("flowingWater", true); // ((8c) the composer offers rivers and falls off forms only for a mod that builds them)
+		}
+		assertEquals(want, m);
 		JsonObject bare = Composes.message(new ComposeRequest("b", new BoundingBox(0, 0, 0, 9, 0, 9), null, false, null, "k", null), null, -64, 319, "b2", "", null);
 		assertFalse(bare.has("style") || bare.has("budgetUsd") || bare.has("opKey") || bare.has("ext"));
 		assertEquals(false, bare.get("images").getAsBoolean());

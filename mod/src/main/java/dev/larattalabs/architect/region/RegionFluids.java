@@ -8,7 +8,9 @@ import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.journal.WorldJournal;
+import dev.larattalabs.architect.txn.TxnEntry;
 import dev.larattalabs.architect.site.Batches;
+import dev.larattalabs.architect.site.DurableFile;
 import dev.larattalabs.architect.site.RegionItems;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -83,6 +85,11 @@ import org.jspecify.annotations.Nullable;
  * every body whose spill lands in it, transitively, drains in the same tick, upstream first, reported {@code drained} with
  * {@code reason: "upstream of <body>"} (one not yet written is never written). Downstream bodies stand.</li>
  * <li><b>The removal</b> drains in the exact reverse of the write order (the head first), kill point {@code FL5} after the first body.</li>
+ * <li>(slice DF, CONTRACT 8c §4.4, rule 3) <b>The record is durable first</b>: {@code fluids.json} is written through T0's
+ * {@link DurableFile} (temp, force, rename, the folder chain forced: OK, REFUSED or IN_DOUBT). A save that is not OK leaves the record
+ * {@link Regional#owed owed}: at the gate the stage waits SITE_BUSY and writes no source (kill point {@code FL1r}); past it no forced tick,
+ * wave, census or hand-down to the solids happens and the batch does not end until a fresh forced write is OK. A removal's
+ * {@code draining} phase is durable before its first write (kill point {@code FL3d}); a start that reads it drains again.</li>
  * </ul>
  * An H-only region has none of these members: its bodies are written by the tiles and forced together, in plan order, as before.
  * <p>
@@ -113,6 +120,106 @@ public final class RegionFluids {
 	 * bound after the drain) and the solids were restored with fluid still ticking in a watch set (a river's flow, say). Absent otherwise.
 	 */
 	public static final String EXT_REMOVAL = "architect_mc:fluidsRemoval";
+	/**
+	 * (8cF, Steward's S-8c-3) RegionView ext key: {@code [{part, body, phase: "writing" | "draining", box: [x0, y0, z0, x1, y1, z1]}]}, every
+	 * body while its water is being written and settling, or drained by a removal (the box: its watch set's, cells, shell, spill, watch,
+	 * lining and (a flowing body) predicted cells grown by {@link #WATCH_GROW}). Absent when no body is in either phase.
+	 */
+	public static final String EXT_WATCH = "architect_mc:fluidsWatch";
+	/** (8cF) At most this many foreign cells are named on a capped removal's rows (with the count). */
+	static final int FOREIGN_NAMED = 64;
+	/**
+	 * (8cF) Whether this mod writes, drains and recovers flowing water by 8c's rules (slice WU): until then {@code flowingWater} is not
+	 * advertised (ApiRules), and a flowing body is drained as H's.
+	 */
+	static final boolean FLOWING_BUILD = !Boolean.getBoolean("architect.noFlowingWater"); // (8c WU) -Darchitect.noFlowingWater=true: H's drain, not advertised
+
+	/**
+	 * (8c WU) The item entities spawned this session in a flowing body's own or predicted cells (a wash the gate missed, a mint), by the
+	 * record's key: never saved (a test counter, {@code dev.fluid.river}); a crash test counts the box too.
+	 */
+	static final Map<String, Integer> ITEMS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/**
+	 * (8c WU, §4.4 "0 new item entities") Server thread (ServerEntityEvents.ENTITY_LOAD): a newly spawned item entity (age 0, its first
+	 * tick) in a flowing body's own or predicted cells is counted against that body's record. Only items from the body's own cells: a
+	 * farm beside the river is not counted.
+	 */
+	public static void itemSpawned(Entity e) {
+		if (!(e instanceof net.minecraft.world.entity.item.ItemEntity it) || it.getAge() > 1 || STATE.isEmpty()) {
+			return;
+		}
+		long p = e.blockPosition().asLong();
+		for (var en : STATE.entrySet()) {
+			Regional st = en.getValue(); // (counted whether this mod builds rivers or not: the failing-first runs count the mint too)
+			for (Body b : st.bodies) {
+				if (b.flowing() && (b.predicted.containsKey(p) || b.ownSet().contains(p))) {
+					ITEMS.merge(en.getKey(), 1, Integer::sum);
+					Architect.LOGGER.warn("Region {}: an item entity spawned in fluid body {}'s cells at {}", en.getKey(), b.id, BlockPos.of(p).toShortString());
+					return;
+				}
+			}
+		}
+	}
+
+	/** (8c WU) Whether a cell is in a standing flowing body's watch set (E-normal's {@code refed} never applies there: E-flat does). */
+	public static boolean watchedByFlowing(long p) {
+		for (Regional st : STATE.values()) {
+			for (Body b : st.bodies) {
+				if (b.flowing() && b.watchSet().contains(p)) {
+					return true;
+				}
+			}
+		}
+		synchronized (REMOVED_WATCH) {
+			for (LongOpenHashSet w : REMOVED_WATCH.values()) {
+				if (w.contains(p)) {
+					return true; // ((8c fix round, P2-7) a removed river's watch set: E-flat, never refed)
+				}
+			}
+		}
+		return false;
+	}
+
+	/** (8c fix round, P2-7) The flowing watch sets of records forgotten this session (a removal's undo diff runs after), by key; at most 32. */
+	static final Map<String, LongOpenHashSet> REMOVED_WATCH = new LinkedHashMap<>() {
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, LongOpenHashSet> e) {
+			return size() > 32;
+		}
+	};
+
+	/** (8c fix round, P2-7) A record's flowing watch sets kept before it is forgotten. */
+	static void snapshotWatch(String key, @Nullable Regional st) {
+		if (st == null) {
+			return;
+		}
+		LongOpenHashSet w = new LongOpenHashSet();
+		for (Body b : st.bodies) {
+			if (b.flowing()) {
+				w.addAll(b.watchSet());
+			}
+		}
+		if (!w.isEmpty()) {
+			synchronized (REMOVED_WATCH) {
+				REMOVED_WATCH.put(key, w);
+			}
+		}
+	}
+
+	/** (8c WU) The items counted for a region's record (its id), kept after the region is removed. */
+	public static int itemsOf(String regionId) {
+		return ITEMS.getOrDefault(regionId, 0);
+	}
+
+	/** (8cF) Whether this mod builds 8c's flowing water ({@link #FLOWING_BUILD}). */
+	public static boolean flowingBuild() {
+		Boolean t = testFlowing;
+		return t != null ? t : FLOWING_BUILD;
+	}
+
+	/** (TEST, 8c fix round) Overrides {@link #flowingBuild} in the units (null: the build's). */
+	static volatile @Nullable Boolean testFlowing;
 	/** (the H batch) The capped removals' notes by region id, kept after the record is forgotten (DevBridge {@code dev.fluid.state}); at most 64. */
 	private static final Map<String, String> REMOVAL_NOTES = java.util.Collections.synchronizedMap(new LinkedHashMap<>() {
 		@Override
@@ -151,8 +258,29 @@ public final class RegionFluids {
 	static final int WATCH_GROW = 2;
 	/** How often (ticks) a settling body's census runs. */
 	static final int CENSUS_EVERY = 5;
+	/** (8cT last round) TEST, DevBridge {@code dev.fluid.hold {drain}}: a removal's or lot's drain W refuses (held) while on. Default off. */
+	public static volatile boolean holdDrain;
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.writeTrace}: while non-null, every body cell {@link #writeBody} writes (a source, ice, a
+	 * grate's bars) is added here: the rows assert Architect's own write, not the cell (vanilla may refill water itself). Default null: off.
+	 */
+	public static volatile java.util.@Nullable Set<Long> writeTrace;
+	/**
+	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.forceTrace}: while non-null, every {@link #forceBody} call adds {@code <body>@<gameTime>}
+	 * here: the forced ticks a write (or its replay) scheduled. Default null: off.
+	 */
+	public static volatile java.util.@Nullable List<String> forceTrace;
 	/** DevBridge {@code dev.fluid.bypass} (gate item 2's negative control): the containment check is not run (every body is written). */
 	public static volatile boolean bypassCheck;
+	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's write step (the forced tick, an ordered course's wave) is not run. Default off. */
+	public static volatile boolean holdWrite;
+	/** (8cTa) TEST, DevBridge {@code dev.fluid.hold}: a record's census (settle, escape guard) is not run. Default off. */
+	public static volatile boolean holdSettle;
+	/**
+	 * (8c, the review's P1-5) DevBridge {@code dev.fluid.beforeWave}: run once, right before an ordered region's next wave after its first
+	 * (a reach written after the reach it lands in settled) writes its sources.
+	 */
+	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeWave;
 	/** DevBridge {@code dev.fluid.beforeGate} (gate item 3): run once, at the next fluids gate, right before its containment check. */
 	public static volatile java.util.function.@Nullable Consumer<ServerLevel> beforeCheck;
 	private static final Map<String, Regional> STATE = new HashMap<>();
@@ -206,6 +334,53 @@ public final class RegionFluids {
 		@Nullable LongOpenHashSet grateSet;
 		/** (7a LF) Body cells written as bubble columns, and each one's drag (true: down, over magma). */
 		final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap bubble = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
+		/**
+		 * (8cF) The op's {@code flow} (an open enum: "current", a river's long current from few sources; "level"), else null. With
+		 * {@link #lip} "form" it makes the body 8c's ({@link #flowing}). Unknown values are kept and noted, never refused.
+		 */
+		@Nullable String flow;
+		/** (8cF) The op's body {@code kind} (an open enum: "reach", "pool", "basin", "header", ...), else null. */
+		@Nullable String kind;
+		/** (8cF) The op's {@code lip} ("form": a fall off a plan form, its host the part {@link #on}), else null. */
+		@Nullable String lip;
+		/** (8cF) A {@code lip: "form"} fall's host form part, else null. */
+		@Nullable String on;
+		/** (8cF, §2.4) The wash clears: natural washable cells in the predicted flow an earlier stage cleared to air (journaled). */
+		long[] wash = new long[0];
+		/** (8cF, §2.2) The predicted conversions the planner lifted into written sources (each one of {@link #cells}). */
+		long[] converted = new long[0];
+
+		@Nullable LongOpenHashSet ownSet;
+		@Nullable LongOpenHashSet iceSet;
+		/** (8c fix round, P2-11) The watch set sorted, for the census's slices. */
+		long @Nullable [] watchSorted;
+
+		/** (8c fix round) The ice cap's cells as a set. */
+		LongOpenHashSet iceSet() {
+			if (iceSet == null) {
+				iceSet = new LongOpenHashSet(ice);
+			}
+			return iceSet;
+		}
+
+		/** (8c WU) The body's own cells as a set. */
+		LongOpenHashSet ownSet() {
+			if (ownSet == null) {
+				ownSet = new LongOpenHashSet(cells);
+			}
+			return ownSet;
+		}
+
+		/** (8c) The op's {@code model} (the kit's WM: "wm"), else null. */
+		@Nullable String model;
+
+		/**
+		 * (8cF; the coordinator's decision) Whether the body is 8c's flowing water: {@code flow: "current"}, {@code lip: "form"} or the kit's
+		 * {@code model: "wm"}. Any other flow ({@code "level"}, an unknown value: kept, noted) is a plain HY body.
+		 */
+		boolean flowing() {
+			return "current".equals(flow) || "form".equals(lip) || "wm".equals(model);
+		}
 
 		/** (6c HY) Whether a cell is a grate cell. */
 		boolean gratePos(long p) {
@@ -240,6 +415,9 @@ public final class RegionFluids {
 						base.add(p);
 					}
 				}
+				if (flowing()) {
+					base.addAll(predicted.keySet()); // (8cF) a river's current is watched wherever the planner predicts it (its spill holds it too)
+				}
 				LongOpenHashSet out = new LongOpenHashSet();
 				for (long p : base) {
 					int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
@@ -254,6 +432,47 @@ public final class RegionFluids {
 				watchSet = out;
 			}
 			return watchSet;
+		}
+
+		/** (8cF) The watch set's box [x0, y0, z0, x1, y1, z1]: the cells it grows from, grown by {@link #WATCH_GROW}. */
+		int[] watchBox() {
+			int[] b = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+			java.util.function.LongConsumer add = p -> {
+				int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+				b[0] = Math.min(b[0], x);
+				b[1] = Math.min(b[1], y);
+				b[2] = Math.min(b[2], z);
+				b[3] = Math.max(b[3], x);
+				b[4] = Math.max(b[4], y);
+				b[5] = Math.max(b[5], z);
+			};
+			for (long[] a : new long[][] {cells, shell, spill, watch, lining}) {
+				for (long p : a) {
+					add.accept(p);
+				}
+			}
+			if (flowing()) {
+				predicted.keySet().forEach(add);
+			}
+			if (b[0] > b[3]) {
+				return new int[6];
+			}
+			for (int i = 0; i < 3; i++) {
+				b[i] -= WATCH_GROW;
+				b[i + 3] += WATCH_GROW;
+			}
+			return b;
+		}
+
+		/** (8cF) The predicted flowing cells (levels 1-7) and falling cells (8). */
+		int flowingCells() {
+			int n = 0;
+			for (int lv : predicted.values()) {
+				if (lv > 0) {
+					n++;
+				}
+			}
+			return n;
 		}
 
 		LongOpenHashSet declared() {
@@ -289,8 +508,14 @@ public final class RegionFluids {
 		boolean held;
 		/** (6c IRR, S-IRR-4) Drained because its lot's site was removed (the sources belong to the farm): never written again. Saved. */
 		boolean lotRemoved;
+		/** (slice DF round 2, P1 3) A removed lot's drain ran (its record saved first, lotRemoved, then this): a start drains the others again. */
+		boolean lotDrained;
 		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
 		long writtenAt = -1;
+		/** (8cTc) The {@code fluid.write} txn that wrote this body (its R effect), else null. Saved. */
+		@Nullable String writeTxn;
+		/** (8cTc) The {@code fluid.drain} txn (escape, unsettled, upstream or lot) whose R effect recorded this body drained, else null. Saved. */
+		@Nullable String drainTxn;
 		/** Before the write: the cells', ice cap's, spill's and watched cells' states. */
 		final Long2ObjectOpenHashMap<String> before = new Long2ObjectOpenHashMap<>();
 		/**
@@ -300,10 +525,59 @@ public final class RegionFluids {
 		final LongOpenHashSet escapedCells = new LongOpenHashSet();
 		/** (6c IRR, S-IRR-3) The cells of a breach's flow over its own field that a drain took back (counted, saved). */
 		int breached;
+		/**
+		 * (8cF, Steward's S-8c-2) The typed why beside {@link #reason} (an open enum, {@link #WHYS}), set where the reason is; null on a body
+		 * that settled, or one saved before 8c (then derived from the flags: {@link #whyOf}).
+		 */
+		@Nullable String why;
+		/** (8cF) A capped removal's foreign cells in this body's watch set: water not the region's that kept it ticking (saved). */
+		final it.unimi.dsi.fastutil.longs.LongArrayList foreign = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		/** (8cF) How many foreign cells the capped removal found (at most {@link #FOREIGN_NAMED} kept in {@link #foreign}). */
+		int foreignCount;
+		/** (8c fix round, P2-11) The census's slice cursor and the sweep's findings so far (transient). */
+		int censusAt;
+		@Nullable Census censusAcc;
 
 		boolean ended() {
 			return "settled".equals(state) || "drained".equals(state);
 		}
+	}
+
+	/**
+	 * (8cF) The typed whys of the fluids rows (an open enum: a consumer notes an unknown one, never refuses it): {@code foreign_water}
+	 * (water not the region's in the watch set: a player's bucket, a spring; clear it, then Expand again), {@code census_drift} (the
+	 * world settled other than the model predicted), {@code escaped} (fluid outside the body's cells, spill and joins), {@code uncontained}
+	 * (a shell, lining or join cell didn't hold at the gate), {@code upstream} (drained or held with a body it lands in), {@code lot_removed}
+	 * (an irrigation source left with its lot), {@code wash} (a predicted cell held a block that isn't natural and writable: M25:wash),
+	 * {@code bubble} (soul sand or magma under a predicted cell: M25:bubble).
+	 */
+	static final List<String> WHYS = List.of("foreign_water", "census_drift", "escaped", "uncontained", "upstream", "lot_removed", "wash", "bubble");
+
+	/** (8cF) A body's typed why: the one recorded, else derived from its flags and reason (a record saved before 8c); null when it settled. */
+	static @Nullable String whyOf(BodyState bs) {
+		if (bs.why != null) {
+			return bs.why;
+		}
+		if (!"drained".equals(bs.state)) {
+			return null;
+		}
+		String r = bs.reason == null ? "" : bs.reason;
+		if (bs.lotRemoved) {
+			return "lot_removed";
+		}
+		if (bs.held || r.startsWith("upstream of")) {
+			return "upstream";
+		}
+		if (bs.uncontained) {
+			return "uncontained";
+		}
+		if (bs.escaped || r.startsWith("escaped")) {
+			return "escaped";
+		}
+		if (r.startsWith("unsettled")) {
+			return "census_drift";
+		}
+		return null;
 	}
 
 	/** A region's fluids: its bodies (from the IR) and its saved progress. */
@@ -321,6 +595,18 @@ public final class RegionFluids {
 		long until = -1;
 		/** (the H batch) The removal went on without its settle (fluid still ticking 2 x the bound after the drain): why, else null. */
 		@Nullable String removalNote;
+		/** (8c fix round, P2-11) The stray pass's work (chunk-sorted [cell, order index, target level]) and its cursor; transient. */
+		long @Nullable [][] strayWork;
+		int strayAt;
+		int strayDone;
+		/**
+		 * (8c round 2, P1-2) The stray pass's chunks still to restore (packed chunk keys): set when the removal enters `restoring`, saved with
+		 * the record, a chunk removed (and saved) once its cells are done; `done` only when none is left. A resumed pass re-tickets every
+		 * watch set and waits until each remaining chunk is loaded, so no residue is missed in an unloaded chunk.
+		 */
+		@Nullable LongOpenHashSet strayChunks;
+		/** (8cF) The removal's phase as the view shows it ({@link dev.larattalabs.architect.api.FluidsRemoval#phase}); null: "draining". Saved. */
+		@Nullable String removalPhase;
 		long lastCensus;
 		/** This session drained already (a removal resumed after a stop drains again first). */
 		boolean redrained;
@@ -336,6 +622,38 @@ public final class RegionFluids {
 		final List<Body> order;
 		/** (6c HY) This session cleared the bodies not yet due (after a stop, again: idempotent). */
 		boolean cleared;
+		/** (slice DF) The record's durable file (T0's DurableFile, created at the first load or save). */
+		@Nullable DurableFile durable;
+		/**
+		 * (slice DF, rule 3) The record is not known on disk: the last save was REFUSED or IN_DOUBT, or the loaded file is unconfirmed. While
+		 * owed nothing goes on: no source, no forced tick, no hand-down to the solids; each try writes a fresh forced snapshot.
+		 */
+		boolean owed;
+		/** (slice DF) Why the record is owed (the outcome and its reason), else null. */
+		@Nullable String owedWhy;
+		/** (slice DF) When an owed record was last tried again ({@link System#nanoTime}), 0 never. */
+		long owedTriedAt;
+		/** (slice DF round 2) When the removal last tried T0's world barrier before its done record and was refused, 0 none. */
+		long barrierTriedAt;
+		/** (slice DF round 3, P1 6) The removal's done record was saved after T0's world barrier (a done without it is recovered first). */
+		boolean barrierDone;
+		/**
+		 * (8cTb) The removal's {@code fluid.drain} txn that wrote {@code drained} (its R effect): set, the drain's writes are covered by its
+		 * barrier once it retired, so a start never drains again. Null on a record drained before 8cT (a start drains it again in a txn).
+		 */
+		@Nullable String drainTxn;
+		/** (8cTb) {@link #drainTxn} as last saved durably or loaded (the R effect's probe). */
+		@Nullable String drainTxnOnDisk;
+		/** (8cTb, Steward's ask) While the removal's drain txn is held: its where ({@code chunk x,z}), for the view's {@code heldAt}. */
+		@Nullable String drainHeldAt;
+		/** (8cTc) The cells the last lot drain wrote (its log line); transient. */
+		int lastLotCells;
+		/** (8cT last round, #5) This session's legacy lot conversion is done (or there was none); transient. */
+		boolean legacyLotsDone;
+		/** (8cT last round, P2) Why the last lot drain waits ({@code held(..) tx-<n>: chunk x,z} when its txn is held); transient. */
+		@Nullable String lastLotHeld;
+		/** (8cTb review P1-3) What the removal drain saw, just before its writes this session: {lava, grates} to refund at most; transient. */
+		int @Nullable [] scoopSeen;
 
 		Regional(List<Body> bodies) {
 			this.bodies = bodies;
@@ -361,6 +679,11 @@ public final class RegionFluids {
 		 * ordered region a body not yet written is not standing: a head written before the reach it falls into (the dependency order
 		 * broken) floods that reach's empty basin, and the census names it as escaped.
 		 */
+		/** (8c WU) Whether the record holds 8c's flowing water: its removal drains the sources first, then the stray pass ({@link #gateFlowing}). */
+		boolean flowingRegion() {
+			return flowingBuild() && bodies.stream().anyMatch(Body::flowing);
+		}
+
 		LongOpenHashSet othersOf(Body b) {
 			LongOpenHashSet out = new LongOpenHashSet();
 			for (Body o : bodies) {
@@ -435,10 +758,23 @@ public final class RegionFluids {
 					}
 				}
 				b.settleTicks = o.has("settleTicks") ? o.get("settleTicks").getAsInt() : 100;
+				// (8cF) 8c's members (open enums kept as given)
+				b.flow = strOrNull(o, "flow");
+				b.kind = strOrNull(o, "kind");
+				b.lip = strOrNull(o, "lip");
+				b.model = strOrNull(o, "model");
+				b.on = o.get("on") instanceof JsonObject on ? strOrNull(on, "part") : strOrNull(o, "on");
+				b.wash = runs(o.get("wash"));
+				b.converted = runs(o.get("converted"));
 				out.add(b);
 			}
 		}
 		return out;
+	}
+
+	/** (8cF) A string member, else null. */
+	static @Nullable String strOrNull(JsonObject o, String k) {
+		return o.get(k) instanceof JsonElement e && e.isJsonPrimitive() ? e.getAsString() : null;
 	}
 
 	/**
@@ -614,6 +950,7 @@ public final class RegionFluids {
 		st.irrigation.putAll(irrigationLots(l.ir().json()));
 		if (!st.bodies.isEmpty()) {
 			load(l, st);
+			opened(l, st);
 		}
 		STATE.put(key, st);
 		return st.bodies.isEmpty() ? null : st;
@@ -627,6 +964,7 @@ public final class RegionFluids {
 	/** (6d RV) A revision's bodies' record is forgotten (an undo finished: its revision UNDONE; its file stays). */
 	public static void forgetRevision(String regionId, int rid) {
 		Regional st = STATE.remove(regionId + "#rv" + rid);
+		snapshotWatch(regionId + "#rv" + rid, st); // ((8c fix round, P2-7))
 		if (st != null) {
 			hold(null, st, false);
 		}
@@ -673,12 +1011,22 @@ public final class RegionFluids {
 		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
 		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, stage); // (6d RV) a revision's bodies
 		Regional st = l == null ? null : of(l);
+		// (slice DF, rule 3) the stage goes on only while its record is durably on disk: an owed record is written again first (one try a
+		// second, in every phase: round 2, P2 10)
+		if (st != null && !mayWrite(l, st)) {
+			waitNotDurable(b, stage, st);
+			return false;
+		}
 		if (st != null && st.recheck) {
 			ServerLevel level = l.level(s);
 			if (level == null) {
 				return false;
 			}
 			recheck(level, l, st);
+			if (!afterRecheck(l, st)) {
+				RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+				return false;
+			}
 		}
 		if (st == null || !"gate".equals(st.phase)) {
 			return true;
@@ -693,7 +1041,8 @@ public final class RegionFluids {
 			String waiting = survivalBarrier(s, l);
 			if (waiting != null) {
 				// (6c close-out A, §8) with waitsFor {target, part, waiter, say}: what the bodies wait for, sayable
-				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuilding(l.rec().groupId);
+				// (8c SV) a staged terrain target first: the paid targets of its tiles wait for it, so it is what the bodies wait for
+				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuildingForFluids(s, l.rec().groupId);
 				if (first != null) {
 					RegionItems.waitStageFor(s, b, stage, first[0], first[1], waiting); // (8a HB) typed on a staged terrain target
 				} else {
@@ -730,6 +1079,9 @@ public final class RegionFluids {
 			beforeCheck = null;
 			hook.accept(level);
 		}
+		if (st.flowingRegion() && st.bodies.stream().anyMatch(x -> x.wash.length > 0)) {
+			WorldJournal.kill("FL7"); // (8c CR) the wash clears journaled (an earlier stage), no source written
+		}
 		for (Body body : st.bodies) {
 			BodyState bs = st.states.get(body.id);
 			if (!"pending".equals(bs.state)) {
@@ -742,6 +1094,24 @@ public final class RegionFluids {
 				bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against";
 				bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
 				Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
+				continue;
+			}
+			// (8c WU, §2.4, §2.2) a flowing body's predicted cells are re-checked live before any source: a block the flow would wash (a torch
+			// placed after approval: M25:wash) or meet, or soul sand or magma under one (M25:bubble), holds the body (not written)
+			if (st.flowingRegion() && body.flowing() && !bypassCheck) {
+				String[] why = new String[1];
+				List<long[]> w = washCheck(level, body, why);
+				if (!w.isEmpty()) {
+					bs.state = "drained";
+					bs.uncontained = true;
+					bs.why = why[0];
+					bs.reason = washReason(why[0], w.size());
+					if (!"bubble".equals(why[0]) && !"wash".equals(why[0])) {
+						bs.why = "uncontained";
+					}
+					bs.at.addAll(w.subList(0, Math.min(NAMED, w.size())));
+					Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
+				}
 			}
 		}
 		// (6c HY, §3.3) a body not written holds back its upstream closure (none in an H-only region)
@@ -769,6 +1139,11 @@ public final class RegionFluids {
 		}
 		// (6c RS, §7.3) the bodies' write takes a lava bucket per lava source and the grates' iron bars from the owner's stockpile (the
 		// bucket comes back); until all of it is there, the stage waits, naming what it lacks
+		if (l.rec().survival() && !l.rec().survival.has("chargedAt") && FluidTxns.chargeOpen(l)) {
+			// (8cTb) the charge's txn is open (held, or its record replay waits for the region): it finishes first
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for their charge (its txn is still open)");
+			return false;
+		}
 		if (l.rec().survival() && !l.rec().survival.has("chargedAt")) {
 			Map<String, Integer> charge = chargeOf(st);
 			var booked = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
@@ -778,6 +1153,9 @@ public final class RegionFluids {
 				return false;
 			}
 			if (!charge.isEmpty() && booked != null && settleBooked(l, booked.ledger(), level.getGameTime())) {
+				if (!l.rec().survival.has(CHARGED_BODIES)) {
+					l.rec().survival.add(CHARGED_BODIES, chargedBodiesOf(st)); // (round 3) the bodies the ledger's charge paid for (chargeOf's)
+				}
 				charge = Map.of(); // (fix b5b, review finding 3) booked before a crash lost the record: settled from the ledger, not charged again
 			}
 			if (!charge.isEmpty()) {
@@ -790,15 +1168,19 @@ public final class RegionFluids {
 						+ capOver + " (a lava bucket per lava source, a grate's iron bars)");
 					return false;
 				}
-				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge, chargeKey(l), l.rid())) {
-					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
-						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
+				Map<String, Integer> lack = dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec().owner, charge);
+				if (!lack.isEmpty()) {
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for " + lack + " in the stockpile of " + l.rec().owner
+						+ " (a lava bucket per lava source, a grate's iron bars)");
 					return false;
 				}
-				JsonObject c = new JsonObject();
-				charge.forEach(c::addProperty);
-				l.rec().survival.add("charged", c);
-				l.rec().survival.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, l.rid()); // (BC-c) counted against that rid's cap
+				// (8cTb, B) the charge is a txn: its intent (the items, the rid, the bodies it pays for) durable first, then the keyed debit (L),
+				// then the region record's charge with chargedBodies (R); a crash between them replays the record from the entry (FLc: after the L)
+				FluidTxns.Step g = FluidTxns.charge(s, l, charge, chargedBodiesOf(st), level.getGameTime());
+				if (g.kind() != FluidTxns.Step.Kind.DONE) {
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for their charge" + (g.detail() == null ? "" : ": " + g.detail()));
+					return false;
+				}
 			}
 			if (!l.rec().survival.has("chargedAt")) {
 				l.rec().survival.addProperty("chargedAt", level.getGameTime());
@@ -806,12 +1188,39 @@ public final class RegionFluids {
 			RegionsImpl.saveRec(l);
 		}
 		st.phase = "writing";
-		save(l, st);
+		if (!save(l, st)) {
+			// (slice DF, rule 3) the before states are not durable: no source is written; the stage waits and the gate runs again (throttled)
+			st.phase = "gate";
+			st.owedTriedAt = System.nanoTime();
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused or in doubt, no source written
+			return false;
+		}
 		report(l, st);
 		WorldJournal.kill("FL1"); // the check and the before states saved, no source written
 		Architect.LOGGER.info("Region {}: fluids stage checked ({} bod{}, {} not written)", l.rec().id, st.bodies.size(), st.bodies.size() == 1 ? "y" : "ies", st
 			.states.values().stream().filter(x -> "drained".equals(x.state)).count());
 		return true;
+	}
+
+	/** (slice DF round 3) The record's member naming the bodies the region's fluids charge paid for. */
+	static final String CHARGED_BODIES = "chargedBodies";
+
+	/** (slice DF round 3) The bodies {@link #chargeOf} charges (pending, with lava or a grate), as ids. */
+	static JsonArray chargedBodiesOf(Regional st) {
+		JsonArray a = new JsonArray();
+		for (Body b : st.bodies) {
+			if ("pending".equals(st.states.get(b.id).state) && (b.lava && b.cells.length > 0 || b.grate.length > 0)) {
+				a.add(b.id);
+			}
+		}
+		return a;
+	}
+
+	/** (slice DF round 2) The record whose bodies the region's fluids charge was counted against ({@code survival.chargedRid}, else 0). */
+	static int chargedRid(RegionsImpl.Live l) {
+		JsonElement e = l.rec().survival.get(dev.larattalabs.architect.site.BillCaps.CHARGED_RID);
+		return e != null && e.isJsonPrimitive() ? e.getAsInt() : 0;
 	}
 
 	/** (fix b5b) The ledger key of a survival region's fluids charge (once per region: {@code survival.chargedAt} is never cleared). */
@@ -824,14 +1233,18 @@ public final class RegionFluids {
 	 * {@code chargedRid}, {@code chargedAt}). Returns whether it settled one; the caller saves the record.
 	 */
 	public static boolean settleBooked(RegionsImpl.Live l, dev.larattalabs.architect.survival.StockLedger ledger, long now) {
-		if (!l.rec().survival() || l.rec().survival.has("chargedAt")) {
-			return false;
+		if (!l.rec().survival() || l.rec().survival.has("chargedAt") || FluidTxns.chargeOpen(l)) {
+			return false; // (8cTb) an open charge txn replays its own record (the bodies included)
 		}
 		var c = ledger.charged(chargeKey(l));
 		if (c == null) {
 			return false;
 		}
 		settleCharge(l.rec().survival, c, now);
+		Regional st = of(l);
+		if (st != null && !l.rec().survival.has(CHARGED_BODIES)) {
+			l.rec().survival.add(CHARGED_BODIES, chargedBodiesOf(st)); // (8cTb, B) a booking from before 8cT: the bodies it paid for (still pending)
+		}
 		Architect.LOGGER.warn("Region {}: its fluids' charge {} was booked before its record was saved: settled from the ledger", l.rec().id, c.items());
 		return true;
 	}
@@ -980,30 +1393,109 @@ public final class RegionFluids {
 				continue;
 			}
 			List<long[]> bad = bypassCheck ? List.of() : check(level, l, body);
-			if (bad.isEmpty()) {
+			String[] why = new String[1];
+			// ((8c, the review's P1-5) a flowing body's predicted cells again too: a washable recovered from older chunks holds it)
+			List<long[]> wash = bad.isEmpty() && st.flowingRegion() && body.flowing() && !bypassCheck ? washCheck(level, body, why) : List.of();
+			if (bad.isEmpty() && wash.isEmpty()) {
 				continue;
 			}
-			drain(level, st, body, bs, false, st.othersOf(body));
-			bs.state = "drained";
-			bs.uncontained = true;
-			bs.reason = "uncontained: " + bad.size() + "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
-			bs.at.clear();
-			bs.at.addAll(bad.subList(0, Math.min(NAMED, bad.size())));
-			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
-			// (6c HY) its upstream closure: pending bodies are held, their tile-written cells (if any) cleared
-			for (Body u : upstreamOf(st, body)) {
-				BodyState us = st.states.get(u.id);
-				if ("pending".equals(us.state) && !us.before.isEmpty()) {
-					drain(level, st, u, us, false, st.othersOf(u));
-				}
+			String typed = "uncontained";
+			if (!wash.isEmpty()) {
+				bad = wash;
+				typed = "bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained";
 			}
-			holdUpstream(l, st, body);
+			String reason = !wash.isEmpty() ? washReason(why[0], wash.size()) + " (checked again after a stop)" : "uncontained: " + bad.size()
+				+ "+ shell or join cell(s) do not hold what the body was checked against (checked again after a stop)";
+			// (8cT last round, #4) the body's (and its pending upstream closure's) tile-written cells drained in a txn: W, R (drained, held
+			// upstream), the barrier
+			FluidTxns.Step g = FluidTxns.hold(l, st, body, typed, reason, bad.subList(0, Math.min(NAMED, bad.size())));
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				st.recheck = true; // (checked again next time: the txn finishes first)
+				return;
+			}
+			Architect.LOGGER.warn("Region {}: fluid body {} is not written ({}): {}", l.rec().id, body.id, bs.reason, cells(bs.at));
 			changed = true;
 		}
 		if (changed) {
 			save(l, st);
 			report(l, st);
 		}
+	}
+
+	/**
+	 * (8c WU, §2.4) A flowing body's predicted cells (its own cells aside) as they stand before any source: each must be air or a fluid. A
+	 * washable block there (a torch, a plant, a rail: not fluid-stopping) is {@code wash}; any other block {@code meet}; soul sand or magma
+	 * under a predicted cell {@code bubble}. Returns the cells, {@code why[0]} the first kind found (wash before bubble before meet).
+	 */
+	/**
+	 * (8c round 2, P1-1, P1-3) The emission check of a flowing body, at its wave or its forced tick: its own cells open (air, or what it
+	 * wrote: a player's waterlogged chest there is not) and its predicted cells free of washables. Null when it may be written, else
+	 * {why, reason} and the cells in {@code at}.
+	 */
+	static @Nullable String[] emissionCheck(ServerLevel level, Body b, List<long[]> at) {
+		List<long[]> shut = new ArrayList<>();
+		for (long[] a : new long[][] {b.cells, b.ice}) {
+			for (long p : a) {
+				BlockState now = level.getBlockState(BlockPos.of(p));
+				if (now.hasBlockEntity() || !(now.isAir() || ownStillOurs(b, p, now) || openCell(b, p, now))) {
+					shut.add(new long[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)});
+				}
+			}
+		}
+		if (!shut.isEmpty()) {
+			at.addAll(shut.subList(0, Math.min(NAMED, shut.size())));
+			return new String[] {"uncontained", "uncontained: " + shut.size() + " of its own cell(s) hold a block it didn't write (a player's waterlogged block?)"};
+		}
+		String[] why = new String[1];
+		List<long[]> w = washCheck(level, b, why);
+		if (w.isEmpty()) {
+			return null;
+		}
+		at.addAll(w.subList(0, Math.min(NAMED, w.size())));
+		return new String[] {"bubble".equals(why[0]) || "wash".equals(why[0]) ? why[0] : "uncontained", washReason(why[0], w.size())};
+	}
+
+	/**
+	 * (8c round 2, P1-3) A body the emission check holds: its cells the stage's tiles already wrote drained back first (the guarded drain:
+	 * only what still holds its water), then reported drained (never while its sources stand), its upstream closure held.
+	 */
+	static boolean holdBody(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String[] why, List<long[]> at, String where) {
+		// (8cT last round, #4) the tiles wrote it: its drain is a txn (W the drain, R the record drained, the barrier); true once done
+		FluidTxns.Step g = FluidTxns.hold(l, st, b, why[0], why[1] + " (" + where + ")", at);
+		if (g.kind() != FluidTxns.Step.Kind.DONE) {
+			return false;
+		}
+		Architect.LOGGER.info("Region {}: fluid body {} is not written ({}): {}", l.rec().id, b.id, bs.reason, cells(bs.at));
+		return true;
+	}
+
+	static String washReason(@Nullable String why, int n) {
+		return "bubble".equals(why) ? "M25:bubble: " + n + " predicted cell(s) over soul sand or magma" : "M25:wash: " + n
+			+ " predicted cell(s) hold a block the flow would " + ("wash".equals(why) ? "wash away" : "meet") + " (placed after approval?)";
+	}
+
+	static List<long[]> washCheck(ServerLevel level, Body body, String[] why) {
+		List<long[]> wash = new ArrayList<>(), meet = new ArrayList<>(), bub = new ArrayList<>();
+		LongOpenHashSet own = body.ownSet();
+		long[] keys = body.predicted.keySet().toLongArray();
+		java.util.Arrays.sort(keys);
+		for (long p : keys) {
+			if (own.contains(p)) {
+				continue;
+			}
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			long[] c = {bp.getX(), bp.getY(), bp.getZ()};
+			if (!now.isAir() && now.getFluidState().isEmpty()) {
+				(fluidStopping(level, bp, now) ? meet : wash).add(c);
+			}
+			BlockState under = level.getBlockState(bp.below());
+			if (under.is(Blocks.SOUL_SAND) || under.is(Blocks.MAGMA_BLOCK)) {
+				bub.add(c);
+			}
+		}
+		why[0] = !wash.isEmpty() ? "wash" : !bub.isEmpty() ? "bubble" : !meet.isEmpty() ? "meet" : null;
+		return !wash.isEmpty() ? wash : !bub.isEmpty() ? bub : meet;
 	}
 
 	/**
@@ -1087,7 +1579,9 @@ public final class RegionFluids {
 		LongOpenHashSet drop = new LongOpenHashSet();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
-			// not contained (or held, HY): never written; (6c IRR) nor a source whose lot was removed
+			// not contained (or held, HY): never written; (6c IRR) nor a source whose lot was removed. (8cTc, deviation from N1) the tiles
+			// still write the bodies' cells: their journal entries carry the undo's hand-down to a later entry layered over a body cell
+			// (irr-holders) and the drain's holders' floor; the write txn records and forces what they wrote (FluidTxns.write)
 			if ("drained".equals(bs.state) && (bs.uncontained || bs.held || bs.lotRemoved || bs.before.isEmpty())) {
 				for (long p : b.cells) {
 					drop.add(p);
@@ -1164,18 +1658,41 @@ public final class RegionFluids {
 				continue;
 			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
-			if ("writing".equals(st.phase) && stageWritten(l)) {
-				if (st.ordered) {
-					writeWaves(level, l, st); // (6c HY) one wave of bodies whose landings have settled
+			legacyLots(l, st); // (8cT last round, #5) a lot removed before 8cT, its drain maybe lost: drained again at load, in a txn
+			final RegionsImpl.Live fl = l;
+			final Regional fst = st;
+			tickRecord(l, st, () -> "writing".equals(fst.phase) && stageWritten(fl), () -> {
+				if (fst.ordered) {
+					writeWaves(level, fl, fst); // (6c HY) one wave of bodies whose landings have settled
 				} else {
-					force(level, l, st);
+					force(level, fl, fst);
 				}
+			}, () -> ("settling".equals(fst.phase) || fst.ordered && "writing".equals(fst.phase) && fst.forcedAt >= 0) && level.getGameTime() - fst.lastCensus
+				>= CENSUS_EVERY, () -> {
+				fst.lastCensus = level.getGameTime();
+				settle(level, fl, fst);
+			});
 			}
-			if (("settling".equals(st.phase) || st.ordered && "writing".equals(st.phase) && st.forcedAt >= 0) && level.getGameTime() - st.lastCensus >= CENSUS_EVERY) {
-				st.lastCensus = level.getGameTime();
-				settle(level, l, st);
+		}
+	}
+
+	/**
+	 * (slice DF round 2) One record's tick: its write step (the forced ticks, or a course's next wave) when due, then its census when due.
+	 * Nothing runs while the record is owed and its retry fails.
+	 */
+	static void tickRecord(RegionsImpl.Live l, Regional st, java.util.function.BooleanSupplier writeDue, Runnable write, java.util.function.BooleanSupplier settleDue,
+		Runnable settle) {
+		if (st.owed && !durable(l, st)) {
+			return; // (slice DF, rule 3) nothing forced, written or settled while the record is not on disk
+		}
+		if (!holdWrite && writeDue.getAsBoolean()) {
+			write.run();
+			if (st.owed) {
+				return; // (round 2, P1 6) the write step's save failed: no census or escape drain on an undurable record this tick
 			}
-			}
+		}
+		if (!holdSettle && settleDue.getAsBoolean()) {
+			settle.run();
 		}
 	}
 
@@ -1192,24 +1709,56 @@ public final class RegionFluids {
 		return !items.isEmpty() && items.stream().allMatch(i -> i.status.terminal());
 	}
 
+	/** (8cTc) A body state's id in its record. */
+	static String idOf(Regional st, BodyState bs) {
+		for (var e : st.states.entrySet()) {
+			if (e.getValue() == bs) {
+				return e.getKey();
+			}
+		}
+		return "";
+	}
+
 	/** §3.2: one fluid tick on every source and every face neighbour of one that is no body cell. */
 	static void force(ServerLevel level, RegionsImpl.Live l, Regional st) {
-		int n = 0;
+		List<String> due = new ArrayList<>();
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			if (!"pending".equals(bs.state)) {
 				continue;
 			}
-			n += forceBody(level, b);
-			bs.state = "written";
-			bs.sources = b.cells.length;
-			bs.spill = b.spill.length;
+			// ((8c round 2, P1-3) an unordered flowing body's emission check before its forced tick: held, its tile-written sources drained)
+			if (st.flowingRegion() && b.flowing() && !bypassCheck) {
+				List<long[]> at = new ArrayList<>();
+				String[] why = emissionCheck(level, b, at);
+				if (why != null) {
+					if (!holdBody(level, l, st, b, bs, why, at, "at its forced tick")) {
+						return; // (8cT last round) its drain txn runs first
+					}
+					continue;
+				}
+			}
+			due.add(b.id);
 		}
-		st.phase = "settling";
-		st.forcedAt = level.getGameTime();
-		save(l, st);
+		// (8cTc, N1) the tiles are markers: the write txn writes every due body's cells and forces it (W, receipts per chunk), then records
+		// them written and the phase settling (R), the barrier; a start replays it
+		if (!due.isEmpty()) {
+			FluidTxns.Step g = FluidTxns.write(l, st, due, true);
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				if (g.detail() != null) {
+					Architect.LOGGER.warn("Region {}: the fluids write waits: {}", l.rec().id, g.detail());
+				}
+				return;
+			}
+		} else {
+			st.phase = "settling";
+			save(l, st);
+		}
+		if (st.forcedAt < 0) {
+			st.forcedAt = level.getGameTime();
+		}
 		WorldJournal.kill("FL2"); // the sources written and ticked, settling
-		Architect.LOGGER.info("Region {}: fluids written; {} forced fluid tick(s), settling", l.rec().id, n);
+		Architect.LOGGER.info("Region {}: fluids written; {} bod{} forced, settling", l.rec().id, due.size(), due.size() == 1 ? "y" : "ies");
 	}
 
 	/**
@@ -1249,6 +1798,9 @@ public final class RegionFluids {
 			int n = 0;
 			for (Body b : waiting) {
 				BodyState bs = st.states.get(b.id);
+				if (b.lava || b.grate.length > 0) {
+					continue; // (8cT last round, #1) a charged body's tile-written cells stay: they are never written again (the N1 condition)
+				}
 				if (!bs.before.isEmpty()) {
 					n += drain(level, st, b, bs, false, st.othersOf(b));
 				}
@@ -1258,23 +1810,56 @@ public final class RegionFluids {
 			}
 		}
 		int forced = 0;
+		var waveHook = beforeWave;
+		if (waveHook != null && !due.isEmpty() && st.states.values().stream().anyMatch(x -> !"pending".equals(x.state) && !"drained".equals(x.state))) {
+			beforeWave = null; // (TEST, the review's P1-5) a later wave: a block set now stands in its predicted cells
+			waveHook.accept(level);
+		}
+		List<Body> held = new ArrayList<>();
+		List<String> wave = new ArrayList<>();
 		for (Body b : due) {
 			BodyState bs = st.states.get(b.id);
-			writeBody(level, b);
-			forced += forceBody(level, b);
-			bs.state = "written";
-			bs.writtenAt = now;
-			bs.sources = b.cells.length;
-			bs.spill = b.spill.length;
+			if (!"pending".equals(bs.state)) {
+				continue; // (held by an earlier body's wash check this wave)
+			}
+			// ((8c P1-5; round 2, P1-1, P1-3) the emission check at the source's wave: a washable in its predicted cells, or a block it didn't
+			// write in its own cells, holds it; what the tiles wrote of it is drained first)
+			if (st.flowingRegion() && b.flowing() && !bypassCheck) {
+				List<long[]> at = new ArrayList<>();
+				String[] why = emissionCheck(level, b, at);
+				if (why != null) {
+					if (!holdBody(level, l, st, b, bs, why, at, "at its wave")) {
+						return; // (8cT last round) its drain txn runs first
+					}
+					held.add(b);
+					continue;
+				}
+			}
+			wave.add(b.id);
 		}
 		if (due.isEmpty()) {
 			return;
 		}
-		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state));
-		if (!more) {
-			st.phase = "settling";
+		if (!held.isEmpty()) {
+			report(l, st);
 		}
-		save(l, st);
+		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state) && !wave.contains(x == null ? "" : idOf(st, x)));
+		if (!wave.isEmpty()) {
+			// (8cTc, N1) the wave's write as a txn (W: the bodies written and forced, receipts; R: written, settling with the last wave)
+			FluidTxns.Step g = FluidTxns.write(l, st, wave, !more);
+			if (g.kind() != FluidTxns.Step.Kind.DONE) {
+				if (g.detail() != null) {
+					Architect.LOGGER.warn("Region {}: the fluids wave waits: {}", l.rec().id, g.detail());
+				}
+				return;
+			}
+			forced = wave.size();
+		} else {
+			if (!more) {
+				st.phase = "settling";
+			}
+			save(l, st);
+		}
 		Architect.LOGGER.info("Region {}: fluids wave {}: {} forced fluid tick(s){}", l.rec().id, due.stream().map(b -> b.id).toList(), forced, more ? "" : "; every body written, settling");
 		WorldJournal.kill(more ? "FL4" : "FL2"); // (6c HY) between two reaches: the downstream written, the upstream not
 	}
@@ -1284,27 +1869,46 @@ public final class RegionFluids {
 	 * (6c F3-c) Then its decor where the cell is open (after its water: a decor cell never takes a source first).
 	 */
 	static void writeBody(ServerLevel level, Body b) {
+		writeBody(level, b, p -> true, null);
+	}
+
+	/**
+	 * (8cT last round, #1, the N1 condition) {@link #writeBody} over the cells {@code in} accepts; with {@code jw}, a lava or grate cell a tile's
+	 * active journal entry wrote is never written again (if it is empty now, a player emptied it). Returns the cells written.
+	 */
+	static int writeBody(ServerLevel level, Body b, java.util.function.LongPredicate in, @Nullable JournalWrites jw) {
+		int written = 0;
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
 		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
 		BlockState bars = parse(GRATE);
 		for (long p : b.cells) {
-			if (b.decorState.containsKey(p)) {
+			if (b.decorState.containsKey(p) || !in.test(p)) {
 				continue; // (6c F3-c) the decor's own cell: written below, never water first
+			}
+			if (jw != null && (b.lava && jw.wrote(p, Blocks.LAVA) || grate.contains(p) && jw.wrote(p, Blocks.IRON_BARS))) {
+				continue; // (8cT last round, #1) the tiles wrote this charged cell: never refilled
 			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : b.bubble.containsKey(p) ? bubbleState(b.bubble.get(p)) : src;
-			boolean open = now.isAir() || !now.getFluidState().isEmpty() || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS);
+			// ((8c round 2, P1-1) only into air or what the body wrote there (its fluid, ice, its grate's bars, its column): never over a block
+			// with a block entity or a waterlogged block a player placed (a chest set in a cleared reach while the one below settled))
+			boolean open = !now.hasBlockEntity() && (now.isAir() || ownStillOurs(b, p, now) || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
 			if (open && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written++;
+				java.util.Set<Long> wt = writeTrace;
+				if (wt != null) {
+					wt.add(p); // (T5Fa TEST) dev.fluid.writeTrace
+				}
 			}
 		}
 		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already); a bed cell's stays as the tiles
 		// wrote it (the shell's cell, never cleared))
 		LongOpenHashSet own = b.decor.length > 0 ? new LongOpenHashSet(b.cells) : null;
 		for (long p : b.decor) {
-			if (!own.contains(p)) {
+			if (!own.contains(p) || !in.test(p)) {
 				continue;
 			}
 			BlockPos bp = BlockPos.of(p);
@@ -1317,6 +1921,9 @@ public final class RegionFluids {
 		// ((6c HY-c, §8.3) the grate's bars joined to each other and to the shell, as vanilla's own neighbour update would join them:
 		// unjoined bars are posts 2/16 wide with gaps of 14/16, which a 0.6-wide mob passes (HY-c's probe). Still no update sent.)
 		for (long p : b.grate) {
+			if (!in.test(p)) {
+				continue;
+			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			if (!now.is(Blocks.IRON_BARS)) continue;
@@ -1325,6 +1932,7 @@ public final class RegionFluids {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, joined, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 			}
 		}
+		return written;
 	}
 
 	/**
@@ -1333,6 +1941,10 @@ public final class RegionFluids {
 	 * outside the body get the fluid tick as any source's.
 	 */
 	static int forceBody(ServerLevel level, Body b) {
+		java.util.List<String> ft = forceTrace;
+		if (ft != null) {
+			ft.add(b.id + "@" + level.getGameTime()); // (T5Fa TEST) dev.fluid.forceTrace
+		}
 		int n = 0;
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		Fluid f = b.source();
@@ -1364,6 +1976,11 @@ public final class RegionFluids {
 	}
 
 	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others) {
+		return census(level, b, fluidBefore, others, null);
+	}
+
+	/** {@link #census} over {@code only} of the watch set's cells (all of them when null). */
+	static Census census(ServerLevel level, Body b, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others, long @Nullable [] only) {
 		Fluid src = b.source();
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
@@ -1373,7 +1990,7 @@ public final class RegionFluids {
 		List<long[]> escaped = new ArrayList<>();
 		int fluidCells = 0;
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-		for (long p : b.watchSet()) {
+		for (long p : only != null ? only : b.watchSet().toLongArray()) {
 			m.set(p);
 			if (!level.isLoaded(m)) {
 				ticking = true; // not seen is not settled (the ticket loads it)
@@ -1424,6 +2041,55 @@ public final class RegionFluids {
 		return new Census(ticking, mismatch, escaped, fluidCells);
 	}
 
+	/** (8c fix round, P2-11) Whether any fluid tick is scheduled (or any cell unloaded) in a body's watch set: the removal wait's read, no census. */
+	static boolean tickingIn(ServerLevel level, Body b) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (long p : b.watchSet()) {
+			m.set(p);
+			if (!level.isLoaded(m) || level.getFluidTicks().hasScheduledTick(m, Fluids.WATER) || level.getFluidTicks().hasScheduledTick(m, Fluids.FLOWING_WATER) || level
+				.getFluidTicks().hasScheduledTick(m, Fluids.LAVA) || level.getFluidTicks().hasScheduledTick(m, Fluids.FLOWING_LAVA)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** (8c fix round, P2-11) Watched cells a river's census reads a census tick at most. */
+	static final int CENSUS_BUDGET = 32768;
+
+	/**
+	 * (8c fix round, P2-11) A flowing body's census in slices: at most {@link #CENSUS_BUDGET} watched cells per call (its watch set sorted),
+	 * the findings carried over; null until a whole sweep is done, then the sweep's census (a body is judged settled only on a whole
+	 * clean sweep). A body under the budget sweeps in one call, as {@link #census} does.
+	 */
+	static @Nullable Census censusStep(ServerLevel level, Body b, BodyState bs, Long2ObjectOpenHashMap<String> fluidBefore, LongOpenHashSet others) {
+		if (b.watchSorted == null) {
+			b.watchSorted = b.watchSet().toLongArray();
+			java.util.Arrays.sort(b.watchSorted);
+		}
+		long[] all = b.watchSorted;
+		if (all.length <= CENSUS_BUDGET) {
+			return census(level, b, fluidBefore, others);
+		}
+		int from = bs.censusAt, to = Math.min(all.length, from + CENSUS_BUDGET);
+		Census part = census(level, b, fluidBefore, others, java.util.Arrays.copyOfRange(all, from, to));
+		bs.censusAcc = bs.censusAcc == null ? part : new Census(bs.censusAcc.ticking() || part.ticking(), concat(bs.censusAcc.mismatch(), part.mismatch()), concat(bs.censusAcc
+			.escaped(), part.escaped()), bs.censusAcc.fluidCells() + part.fluidCells());
+		bs.censusAt = to >= all.length ? 0 : to;
+		if (to < all.length) {
+			return null;
+		}
+		Census whole = bs.censusAcc;
+		bs.censusAcc = null;
+		return whole;
+	}
+
+	private static List<long[]> concat(List<long[]> a, List<long[]> b) {
+		List<long[]> o = new ArrayList<>(a);
+		o.addAll(b);
+		return o;
+	}
+
 	static void settle(ServerLevel level, RegionsImpl.Live l, Regional st) {
 		boolean changed = false;
 		long now = level.getGameTime();
@@ -1432,19 +2098,31 @@ public final class RegionFluids {
 			if (!"written".equals(bs.state)) {
 				continue;
 			}
-			Census c = census(level, b, st.fluidBefore, st.othersOf(b));
+			Census c = b.flowing() && st.flowingRegion() ? censusStep(level, b, bs, st.fluidBefore, st.othersOf(b)) : census(level, b, st.fluidBefore, st.othersOf(b));
+			if (c == null) {
+				continue; // ((8c fix round, P2-11) a river's census spans census ticks: judged once a whole sweep is done)
+			}
 			long t0 = bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt;
 			if (!c.escaped().isEmpty()) {
-				escape(level, l, st, b, bs, "escaped", c.escaped());
+				// (8cTc, E) the escape drain is a txn: drained (W), the record saved (R; FLe), the barrier; a start replays it
+				FluidTxns.Step g = FluidTxns.escape(l, st, b, "escaped", "escaped", c.escaped());
 				changed = true;
+				if (g.kind() != FluidTxns.Step.Kind.DONE) {
+					break; // (one drain txn at a time; the census goes on once it is done)
+				}
 			} else if (!c.ticking() && c.mismatch().isEmpty()) {
 				bs.state = "settled";
 				bs.settledAt = now - t0;
 				changed = true;
 				Architect.LOGGER.info("Region {}: fluid body {} settled in {} ticks (bound {})", l.rec().id, b.id, bs.settledAt, b.settleTicks);
 			} else if (now - t0 > 2L * b.settleTicks) {
-				escape(level, l, st, b, bs, "unsettled", c.mismatch());
+				boolean foreign = b.flowing() && foreignIn(level, b, st);
+				// (8c WU, Steward's S-8c-2) a typed why: water not ours in the watch set, else the model drifted; (8cTc, E) drained in a txn
+				FluidTxns.Step g = FluidTxns.escape(l, st, b, "unsettled", foreign ? "foreign_water" : "census_drift", c.mismatch());
 				changed = true;
+				if (g.kind() != FluidTxns.Step.Kind.DONE) {
+					break;
+				}
 			}
 		}
 		if (st.states.values().stream().allMatch(BodyState::ended)) {
@@ -1457,15 +2135,56 @@ public final class RegionFluids {
 		}
 	}
 
+	/**
+	 * (8c WU) Whether water that isn't the body's stands in its watch set: a cell holding fluid before the write ({@code fluidBefore}), a
+	 * source no body plans (a player's bucket, a spring), or a waterlogged block that isn't one of its own cells.
+	 */
+	static boolean foreignIn(ServerLevel level, Body b, Regional st) {
+		LongOpenHashSet own = b.ownSet(), others = st.othersOf(b);
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (long p : b.watchSet()) {
+			if (own.contains(p) || others.contains(p)) {
+				continue;
+			}
+			m.set(p);
+			if (!level.isLoaded(m)) {
+				continue;
+			}
+			BlockState s = level.getBlockState(m);
+			FluidState f = s.getFluidState();
+			if (f.isEmpty()) {
+				continue;
+			}
+			if (st.fluidBefore.containsKey(p) || f.isSource()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** §3.4: the escape guard: drain the body now, report it drained with the cells. */
 	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at) {
+		escape(level, l, st, b, bs, why, at, true);
+	}
+
+	/**
+	 * (8cT last round) The escape's writes ({@code writes}: the drain txn's W) and its outcome on the record (always: the R rebuilds it after
+	 * a start that found the W's receipts). (#3) The whole upstream closure is drained whatever its saved state: a replay after a crash
+	 * drains an upstream reach the record already called drained but whose drain the chunks lost.
+	 */
+	static void escape(ServerLevel level, RegionsImpl.Live l, Regional st, Body b, BodyState bs, String why, List<long[]> at, boolean writes) {
 		// (6c HY, §3.3) the upstream closure first, in the same tick, upstream first: a reach above would pour into this one's emptied cells
 		for (Body u : upstreamOf(st, b)) {
 			BodyState us = st.states.get(u.id);
-			if ("drained".equals(us.state)) {
-				continue;
+			boolean was = "drained".equals(us.state);
+			int un = 0;
+			if (writes && !us.before.isEmpty()) {
+				un = st.flowingRegion() && u.flowing() && !"pending".equals(us.state) && !was ? abortFlowing(level, st, u, us) : drain(level, st, u, us,
+					!"pending".equals(us.state), st.othersOf(u));
 			}
-			int un = us.before.isEmpty() ? 0 : drain(level, st, u, us, !"pending".equals(us.state), st.othersOf(u));
+			if (was) {
+				continue; // (its outcome stands: an earlier drain's reason)
+			}
 			if ("pending".equals(us.state)) {
 				us.held = true;
 			}
@@ -1479,7 +2198,8 @@ public final class RegionFluids {
 				bs.escapedCells.add(BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]));
 			}
 		}
-		int n = drain(level, st, b, bs, true, st.othersOf(b));
+		int n = !writes ? 0 : st.flowingRegion() && b.flowing() && !"drained".equals(bs.state) ? abortFlowing(level, st, b, bs) : drain(level, st, b, bs, true, st
+			.othersOf(b)); // ((8c fix round, P1-2))
 		bs.state = "drained";
 		bs.escaped = "escaped".equals(why);
 		bs.reason = why + ": " + at.size() + " cell(s) " + ("escaped".equals(why) ? "outside the body's cells, spill and joins" : "not as predicted after 2 x "
@@ -1507,6 +2227,11 @@ public final class RegionFluids {
 
 		/** An Architect write of one cell ({@code Placed.set}). */
 		void set(BlockPos p, BlockState s, int flags);
+
+		/** (slice DF round 3) Whether a player placed what the cell holds (its {@code Placed} record). */
+		default boolean playerPlaced(BlockPos p) {
+			return false;
+		}
 	}
 
 	/** {@code others}: cells another standing body plans, left alone (the escape guard drains one body of several). */
@@ -1538,6 +2263,11 @@ public final class RegionFluids {
 			public void set(BlockPos p, BlockState s, int flags) {
 				dev.larattalabs.architect.placed.Placed.set(level, p, s, flags);
 			}
+
+			@Override
+			public boolean playerPlaced(BlockPos p) {
+				return dev.larattalabs.architect.placed.Placed.record(level, p) != null;
+			}
 		}, level, st, b, bs, strays, others, held, removal);
 	}
 
@@ -1550,6 +2280,7 @@ public final class RegionFluids {
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
 		// ((6c IRR, the batch's fix) an irrigation source's breach flow is judged before anything is written: once the source is air, its
 		// flow has no feeder left to tell it from a pond's or a player's)
 		int[] lot = strays ? st.irrigation.get(b.id) : null;
@@ -1561,9 +2292,10 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not)
-				if (now.getFluidState().isEmpty() && !now.is(Blocks.ICE) && !now.is(Blocks.FROSTED_ICE) && !(grate.contains(p) && now.is(Blocks.IRON_BARS))) {
-					continue;
+				// ((6c HY) a grate cell goes back too, whether its bars still hold the water or not; (8c fix round) only a cell that still holds
+				// what the body wrote, by both readings (8c's still-ours and DF round 2's exact state): a player's waterlogged chest is never replaced)
+				if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, grate.contains(p)) || t.playerPlaced(bp)) {
+					continue; // ((DF round 3, P1 5) a source a player placed there (its Placed record) is theirs)
 				}
 				if (held.test(p)) {
 					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
@@ -1572,6 +2304,7 @@ public final class RegionFluids {
 				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
 				if (now != to) {
 					t.set(bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
 					n++;
 				}
 			}
@@ -1580,8 +2313,9 @@ public final class RegionFluids {
 			for (long p : a) {
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				FluidState f = now.getFluidState();
-				if (f.isEmpty() || others.contains(p) || held.test(p)) {
+				// ((8c fix round; DF round 2, P1 5) only the body's flow: a source (a player's bucket), a waterlogged block or another fluid is kept;
+				// (DF round 3) nor a player's placed source, nor a level the body does not predict there)
+				if (!flowStillOurs(b, now) || !ownFluid(now, src) || others.contains(p) || held.test(p) || t.playerPlaced(bp) || !predictedLevel(b, p, now)) {
 					continue;
 				}
 				String before = bs.before.get(p);
@@ -1590,6 +2324,7 @@ public final class RegionFluids {
 					continue; // as it was before (a natural cell, its level included): not the body's doing
 				}
 				t.set(bp, was, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written.add(p);
 				n++;
 			}
 		}
@@ -1601,12 +2336,16 @@ public final class RegionFluids {
 				}
 				BlockPos bp = BlockPos.of(p);
 				BlockState now = t.get(bp);
-				if (now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p)) {
+				if (flowStillOurs(b, now) && now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(src) && !held.test(p) && !t
+					.playerPlaced(bp)) { // ((8c fix round) never a source: a player's bucket in the predicted flow stays; (DF round 3) nor a placed
+					// one. (8cTb, C) closed by flowStillOurs: a dispensed source is a source. The level is not judged here: a foreign source beside
+					// the flow shifts the body's own levels, and that flow must still go (RegionFluidsLintTest strays/spout-and-bucket))
 					// a cell another body recorded (its breached shell cell, its watched cell) goes back to that record, not to air: that body's
 					// own drain, later in the removal, finds no fluid there any more
 					String was = beforeAny(st, p);
 					t.set(bp, was == null ? Blocks.AIR.defaultBlockState() : parse(was), Block.UPDATE_CLIENTS
 						| Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
 					n++;
 				}
 			}
@@ -1615,7 +2354,165 @@ public final class RegionFluids {
 				n += sweepBreach(level, st, b, bs, breach, held);
 			}
 		}
+		if (level != null && !written.isEmpty()) {
+			tickAround(level, written); // ((8c fix round) water that isn't the body's settles back to its own level)
+		}
 		return n;
+	}
+
+	/**
+	 * (8c fix round, the review's structural rule for P1-1, 2, 6) Whether one of a body's own cells (its sources, ice cap, grate, bubble and
+	 * decor cells) still holds what its record wrote: its fluid as a liquid block (a source, or flowing once its feeders went), ice on an ice
+	 * cell, the bars on a grate cell, the column on a bubble cell, the decor's block on a decor cell. Anything else (a player's waterlogged
+	 * chest, stair or slab, a placed block) is not the body's: no drain, restore or abort writes it. Pure.
+	 */
+	static boolean ownStillOurs(Body b, long p, BlockState now) {
+		boolean liquid = now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source());
+		if (b.ice.length > 0 && b.iceSet().contains(p)) {
+			return now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || liquid;
+		}
+		if (b.grate.length > 0 && b.gratePos(p)) {
+			return now.is(Blocks.IRON_BARS);
+		}
+		if (b.bubble.containsKey(p) && now.is(Blocks.BUBBLE_COLUMN)) {
+			return true;
+		}
+		String d = b.decorState.get(p);
+		if (d != null && now.getBlock() == parse(d).getBlock()) {
+			return true;
+		}
+		return liquid;
+	}
+
+	/**
+	 * (8c fix round, the structural rule) Whether a cell outside a body's own cells may hold the body's flow: flowing (or falling) water of
+	 * its fluid in a liquid block. A source there is never the body's (a player's bucket, a spring: a body writes sources only in its own
+	 * cells), nor a waterlogged block. Pure.
+	 */
+	static boolean flowStillOurs(Body b, BlockState now) {
+		return now.getBlock() instanceof LiquidBlock && now.getFluidState().getType().isSame(b.source()) && !now.getFluidState().isSource();
+	}
+
+	/**
+	 * (8c fix round) After a drain wrote cells without updates: a fluid tick on every fluid face neighbour of a written cell, so water that
+	 * isn't the body's (a lake, a player's source) settles back into its own level by vanilla's ticks (a raised cell goes to the foreign-only
+	 * level; an own-only cell stays dry).
+	 */
+	static void tickAround(ServerLevel level, it.unimi.dsi.fastutil.longs.LongArrayList written) {
+		LongOpenHashSet done = new LongOpenHashSet();
+		for (int i = 0; i < written.size(); i++) {
+			long p = written.getLong(i);
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				long q = BlockPos.offset(p, d);
+				if (!done.add(q)) {
+					continue;
+				}
+				BlockPos bp = BlockPos.of(q);
+				FluidState f = level.getBlockState(bp).getFluidState();
+				if (!f.isEmpty()) {
+					level.scheduleTick(bp, f.getType(), 1);
+				}
+			}
+		}
+	}
+
+	/**
+	 * (8c fix round, P1-6) The level each cell of a stray take holds from water that isn't the body's alone (the foreign-only level), by a
+	 * fixed point over the take: a cell under foreign (or foreign-lowered) water falls (amount 8); beside one, its amount less 1. Own cells
+	 * (the body's sources, gone after the drain) feed nothing. Returns the amount per taken cell (0: dry, the cell goes to its before
+	 * state). Pure over {@code at}.
+	 */
+	static Long2IntOpenHashMap foreignOnly(LongOpenHashSet take, LongOpenHashSet own, java.util.function.LongFunction<@Nullable Wet> at) {
+		Long2IntOpenHashMap amt = new Long2IntOpenHashMap();
+		// ((8c round 2, P1-4) an own cell feeds when it holds water the body didn't write (a player's waterlogged chest that ownStillOurs
+		// keeps: a source, no liquid block); the body's own water (a liquid block there) never does)
+		java.util.function.LongToIntFunction of = (q) -> {
+			if (take.contains(q)) {
+				return amt.get(q);
+			}
+			Wet w = at.apply(q);
+			if (w == null) {
+				return 0;
+			}
+			return own.contains(q) && w.liquid() ? 0 : w.amount();
+		};
+		net.minecraft.core.Direction[] side = {net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.WEST,
+			net.minecraft.core.Direction.EAST};
+		// ((8c round 2, P1-4) a worklist to the real fixed point: amounts only rise, each at most to 8, so it ends within 8 x the take's
+		// cells; a 48-high falling column converges as a 1-cell one)
+		java.util.ArrayDeque<Long> work = new java.util.ArrayDeque<>();
+		LongOpenHashSet queued = new LongOpenHashSet();
+		for (long c : take) {
+			work.add(c);
+			queued.add(c);
+		}
+		long bound = 8L * take.size() + 16;
+		while (!work.isEmpty() && bound-- > 0) {
+			long c = work.poll();
+			queued.remove(c);
+			int best = of.applyAsInt(BlockPos.offset(c, net.minecraft.core.Direction.UP)) > 0 ? 8 : 0;
+			for (net.minecraft.core.Direction d : side) {
+				best = Math.max(best, of.applyAsInt(BlockPos.offset(c, d)) - 1);
+			}
+			if (best > amt.get(c)) {
+				amt.put(c, best);
+				for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+					long q = BlockPos.offset(c, d);
+					if (take.contains(q) && queued.add(q)) {
+						work.add(q);
+					}
+				}
+			}
+		}
+		return amt;
+	}
+
+	/** (8c fix round) A water (or lava) cell of an amount (1..8; 8 falling) as its liquid block state. */
+	static BlockState flowingState(Fluid src, int amount) {
+		Fluid fl = src.isSame(Fluids.LAVA) ? Fluids.FLOWING_LAVA : Fluids.FLOWING_WATER;
+		return ((net.minecraft.world.level.material.FlowingFluid) fl).getFlowing(Math.min(8, amount), amount >= 8).createLegacyBlock();
+	}
+
+	/**
+	 * (slice DF round 2, P1 5) Whether a body cell holds what the body wrote there: its fluid (a source or flow of it, a bubble column for
+	 * water: a lift's), ice in an ice cell, iron bars in a grate cell, exactly its decor state in a decor cell. Anything else (a player's
+	 * waterlogged stair, a block put there since) is not the body's and a drain leaves it.
+	 */
+	static boolean bodyWrote(Body b, long p, BlockState now, Fluid src, boolean grateCell) {
+		if (ownFluid(now, src) && (now.getFluidState().isSource() || now.is(Blocks.BUBBLE_COLUMN))) {
+			return true; // ((round 3) a source cell holds a source: flow there is the decay of the body's own, gone without it)
+		}
+		if ((now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)) && java.util.Arrays.stream(b.ice).anyMatch(x -> x == p)) {
+			return true;
+		}
+		if (grateCell && now.is(Blocks.IRON_BARS)) {
+			return true;
+		}
+		String d = b.decor.length > 0 ? b.decorState.get(p) : null;
+		if (d == null || now.getFluidState().isEmpty()) {
+			return false;
+		}
+		try {
+			return now == parse(d);
+		} catch (RuntimeException e) {
+			return false;
+		}
+	}
+
+	/** (slice DF round 3) A watched or spill cell's level is the one the body predicts there (any level where it predicts none). */
+	static boolean predictedLevel(Body b, long p, BlockState now) {
+		if (!b.predicted.containsKey(p) || !(now.getBlock() instanceof LiquidBlock)) {
+			return true;
+		}
+		return now.getValue(LiquidBlock.LEVEL) == b.predicted.get(p);
+	}
+
+	/** (slice DF round 2) A cell holding the body's own fluid: a liquid block of it, or (water) a bubble column. */
+	static boolean ownFluid(BlockState now, Fluid src) {
+		if (now.getBlock() instanceof LiquidBlock) {
+			return now.getFluidState().getType().isSame(src);
+		}
+		return src.isSame(Fluids.WATER) && now.is(Blocks.BUBBLE_COLUMN);
 	}
 
 	/**
@@ -1823,7 +2720,7 @@ public final class RegionFluids {
 			l = Revisions.liveFor(l, Revisions.stageName(rv.get("rid").getAsInt(), STAGE)); // (6d RV) a revision's batch holds for its own bodies
 		}
 		Regional st = l == null ? null : of(l);
-		return st != null && ("writing".equals(st.phase) || "settling".equals(st.phase)) && stageWritten(l);
+		return st != null && (st.owed || ("writing".equals(st.phase) || "settling".equals(st.phase)) && stageWritten(l)); // (slice DF) or its record owed
 	}
 
 	/** Whether a body of the region was not written or was drained (the region ends PARTIAL, §2.4, §3.4). */
@@ -1843,6 +2740,26 @@ public final class RegionFluids {
 	 * written yet is marked the same, so the fluids stage never writes it. The shells stay the region's until the region is removed.
 	 * Idempotent. Returns the cells written, or -1 when the group is no region or the lot has no irrigation.
 	 */
+	/** (8cT last round, P2) Per group, why its last lot drain waits ({@code held(other) tx-<n>: chunk x,z}), else absent. */
+	static final java.util.Map<String, String> LOT_WAIT = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (8cT last round, P2) A txn step's detail as {@code held(other) tx-<n>: <where>} (the caller's word: another txn holds it). */
+	static String heldOther(@Nullable String detail) {
+		if (detail == null) {
+			return "held(other): the region's water record";
+		}
+		return detail.startsWith("held(decided) ") ? "held(other) " + detail.substring("held(decided) ".length()) : detail.startsWith("held(") ? detail
+			: "held(other) " + detail;
+	}
+
+	/** (8cT last round, P2) The worded hold of a group's waiting lot drain, or null. */
+	public static @Nullable String lotWait(@Nullable String group) {
+		return group == null ? null : LOT_WAIT.get(group);
+	}
+
+	/** (slice DF round 2) {@link #drainLot}'s answer when its record could not be saved: the lot's site must not be restored now. */
+	public static final int NOT_DURABLE = -2;
+
 	public static int drainLot(ServerLevel level, @Nullable String group, @Nullable String lotId) {
 		if (group == null || lotId == null) {
 			return -1;
@@ -1868,36 +2785,104 @@ public final class RegionFluids {
 		if (st == null) {
 			return -1;
 		}
-		int n = 0;
-		boolean changed = false;
-		Holders held = null; // (fix/drain-holders) as the region's removal: a later entry's block on top of a source stays
+		if (!mayWrite(l, st)) {
+			return NOT_DURABLE; // (round 2, P1 3) the record not on disk: nothing drained, the site not restored
+		}
+		// (8cTc, D) the lot's drain is a txn: its bodies drained (W, receipts; FL6d after the writes), then lotRemoved, lotDrained and the
+		// drain txn saved (R), the barrier. A body lotRemoved without a drain txn (DF's or main's record, its drain maybe lost to a crash) is
+		// drained again: the legacy lot conversion
+		List<String> need = new ArrayList<>();
 		for (Body b : st.bodies) {
-			if (!ids.contains(b.id)) {
-				continue;
-			}
 			BodyState bs = st.states.get(b.id);
-			if (bs.lotRemoved) {
+			if (ids.contains(b.id) && !(bs.lotRemoved && bs.drainTxn != null)) {
+				need.add(b.id);
+			}
+		}
+		if (need.isEmpty()) {
+			// (8cT last round, P2) the flags are the R's: while the lot's txn is still open (its barrier refused, say), join it, never go on
+			TxnEntry open = FluidTxns.open(FluidTxns.DRAIN, "fluid-drain:" + FluidTxns.recKey(l) + "/lot:" + lotId);
+			if (open == null) {
+				return 0;
+			}
+			FluidTxns.Step j = FluidTxns.after(open);
+			if (j.kind() != FluidTxns.Step.Kind.DONE) {
+				st.lastLotHeld = j.detail();
+				LOT_WAIT.put(group, heldOther(j.detail()));
+				return NOT_DURABLE;
+			}
+			return 0;
+		}
+		FluidTxns.Step g = FluidTxns.lot(l, st, lotId, need);
+		if (g.kind() != FluidTxns.Step.Kind.DONE) {
+			Architect.LOGGER.warn("Region {}: lot {}'s drain is not durable yet{}; its site waits", l.rec().id, lotId, g.detail() == null ? "" : " (" + g.detail()
+				+ ")");
+			st.lastLotHeld = g.detail(); // (8cT last round, P2) the typed answer the site removal gives
+			LOT_WAIT.put(group, heldOther(g.detail()));
+			return NOT_DURABLE;
+		}
+		LOT_WAIT.remove(group);
+		report(l, st);
+		int n = st.lastLotCells;
+		Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written)", l.rec().id, lotId, n);
+		WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
+		return n;
+	}
+
+	/**
+	 * (8cT last round, #5) The legacy lot conversion at load: every body recorded {@code lotRemoved} without a drain txn (a world from before
+	 * 8cT, where the site's removal finished but its drain's chunks may not have) is drained again in its lot's txn, without waiting for a
+	 * site removal that can no longer run. Once a session per record; a txn that waits is driven again by the core's tick.
+	 */
+	static void legacyLots(RegionsImpl.Live l, Regional st) {
+		if (st.legacyLotsDone) {
+			return;
+		}
+		java.util.Map<String, List<String>> byLot = new java.util.TreeMap<>();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs.lotRemoved && bs.drainTxn == null) {
+				String lot = bs.reason != null && bs.reason.startsWith("lot removed: ") ? bs.reason.substring("lot removed: ".length()).split(" ")[0] : "legacy";
+				byLot.computeIfAbsent(lot, k -> new ArrayList<>()).add(b.id);
+			}
+		}
+		if (byLot.isEmpty()) {
+			st.legacyLotsDone = true;
+			return;
+		}
+		boolean all = true;
+		for (var e : byLot.entrySet()) {
+			FluidTxns.Step g = FluidTxns.lot(l, st, e.getKey(), e.getValue());
+			all &= g.kind() == FluidTxns.Step.Kind.DONE;
+			if (g.kind() == FluidTxns.Step.Kind.DONE) {
+				report(l, st);
+				Architect.LOGGER.info("Region {}: lot {} (removed before 8cT): its irrigation sources drained again at load", l.rec().id, e.getKey());
+			}
+		}
+		st.legacyLotsDone = all;
+	}
+
+	/** (8cTc, D) The lot drain txn's writes: each of {@code ids} marked removed (never written again) and drained (its decor water too). */
+	static int lotDrainWrites(ServerLevel level, RegionsImpl.Live l, Regional st, String lotId, List<String> ids) {
+		int n = 0;
+		Holders held = null;
+		for (String id : ids) {
+			Body b = st.body(id);
+			BodyState bs = st.states.get(id);
+			if (b == null || bs == null) {
 				continue;
 			}
+			bs.state = "drained";
+			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
+			bs.lotRemoved = true; // in memory: the stage never writes it again; the R effect saves it
+			bs.at.clear();
 			if (!bs.before.isEmpty()) {
 				if (held == null) {
 					held = new Holders(l.rec().dimension, l.rec().groupId, st);
 				}
 				n += drain(level, st, b, bs, true, st.othersOf(b), held, false); // ((6c F3-c) a lot removed: its decor water goes too)
 			}
-			bs.state = "drained";
-			bs.reason = "lot removed: " + lotId + " (its sources leave with it, S-IRR-4)";
-			bs.lotRemoved = true;
-			bs.at.clear();
-			changed = true;
 		}
-		if (changed) {
-			save(l, st);
-			report(l, st);
-			Architect.LOGGER.info("Region {}: lot {} removed: its irrigation sources drained ({} cell(s) written){}", l.rec().id, lotId, n, held == null || held
-				.kept().isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept: " + cells(held.keptCells()));
-			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
-		}
+		st.lastLotCells = n;
 		return n;
 	}
 
@@ -2099,14 +3084,91 @@ public final class RegionFluids {
 		if (l0 == null) {
 			return true;
 		}
+		if (!RegionsImpl.mayDrive(l0)) {
+			return false; // (slice DF round 2, P1 7) the region's record (REMOVING) not on disk: nothing drained or restored yet
+		}
 		// (6d RV, §6) the standing revisions' bodies first (top first), then the region's own: every body drains before any solid goes
 		for (RegionsImpl.Live x : lives(l0)) {
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, group)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, group))) {
 				return false;
 			}
 		}
 		return true;
+	}
+
+	/** (slice DF round 2) Whether one record's removal drain is done, running its next step ({@code gateOne}) when it is not. */
+	static boolean removalReady(RegionsImpl.Live x, Regional st, java.util.function.BooleanSupplier gateOne) {
+		// (round 2, P1 2) a loaded done record is confirmed too: the solids are restored only on a record known on disk
+		return mayWrite(x, st) && ("done".equals(st.removal) || gateOne.getAsBoolean());
+	}
+
+	/**
+	 * (slice DF round 2) Whether a region batch's running stage may start an item now: the fluids stage's gate while it is approved; any
+	 * other state or stage goes on.
+	 */
+	public static boolean stageMayRun(MinecraftServer s, QBatch b, @Nullable String stage, boolean approvedState) {
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		if (l0 != null && stage != null && !RegionsImpl.mayDrive(l0)) {
+			RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the region record is not durable: nothing is written until it is saved");
+			return false; // (round 2, P1 7) the region's record not on disk: no item of its batch starts
+		}
+		RegionsImpl.Live l = l0 == null || stage == null ? null : Revisions.liveFor(l0, stage);
+		if (l != null && stage != null && STAGE.equals(Revisions.plainStage(stage))) {
+			Regional st = of(l);
+			if (st != null && !mayWrite(l, st)) {
+				waitNotDurable(b, stage, st);
+				return false;
+			}
+		}
+		return stageMayRun(l, stage, approvedState, () -> gate(s, b, stage));
+	}
+
+	/** {@link #stageMayRun(MinecraftServer, QBatch, String, boolean)}'s rule over a record ({@code l}: null when none resolves). */
+	static boolean stageMayRun(RegionsImpl.@Nullable Live l, @Nullable String stage, boolean approvedState, java.util.function.BooleanSupplier gate) {
+		// (round 2, P1 1) a PLACING fluids stage too (its gate ran before a stop): no item starts while its record is owed
+		if (l != null && stage != null && STAGE.equals(Revisions.plainStage(stage))) {
+			Regional st = of(l);
+			if (st != null && !mayWrite(l, st)) {
+				return false;
+			}
+		}
+		return !approvedState || gate.getAsBoolean();
+	}
+
+	/**
+	 * (slice DF round 2) The one check before a write to the world on this record's behalf, and after any save: true when the record is
+	 * known on disk; an owed one is written again first (one try a second).
+	 */
+	static boolean mayWrite(RegionsImpl.Live l, Regional st) {
+		return durable(l, st);
+	}
+
+	/**
+	 * (slice DF round 2) Whether a running job of a region batch's item ({@code batchId}, {@code itemKey}) may write its cells now: a fluids
+	 * stage tile waits while its record is not durable. Any other job goes on.
+	 */
+	public static boolean itemMayWrite(@Nullable String batchId, @Nullable String itemKey) {
+		QBatch b = batchId == null ? null : Batches.get(batchId);
+		if (b == null || itemKey == null || !RegionItems.isRegion(b)) {
+			return true;
+		}
+		QItem it = b.items.stream().filter(i -> itemKey.equals(i.key)).findFirst().orElse(null);
+		if (it == null || it.stage == null || !STAGE.equals(Revisions.plainStage(it.stage))) {
+			return true;
+		}
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		if (l0 == null) {
+			return true;
+		}
+		RegionsImpl.Live l = Revisions.liveFor(l0, it.stage);
+		Regional st = of(l);
+		return st == null || mayWrite(l, st); // (round 2, P1 1) a resumed fluids tile writes nothing while its record is owed
+	}
+
+	/** (slice DF round 2) After a recheck (which may have saved): whether the gate goes on. */
+	static boolean afterRecheck(RegionsImpl.Live l, Regional st) {
+		return mayWrite(l, st); // (round 2, P1 6) a recheck whose save failed stops the gate
 	}
 
 	/**
@@ -2122,7 +3184,7 @@ public final class RegionFluids {
 				continue;
 			}
 			Regional st = of(x);
-			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, l.rec().groupId)) {
+			if (st != null && !removalReady(x, st, () -> gateOne(s, x, st, l.rec().groupId))) {
 				return false;
 			}
 		}
@@ -2135,75 +3197,21 @@ public final class RegionFluids {
 		if (level == null) {
 			return true;
 		}
-		if (st.removal == null) {
-			// (fix/drain-holders) the cells a later entry outside the group holds on top: never drained (the undo hands them down)
-			Holders held = new Holders(l.rec().dimension, group, st);
-			int n = 0;
-			// (6c RS, §9.2) a survival region's standing lava sources are scooped into its owner's stockpile (a bucket from stock each) and
-			// its standing grates refunded, once (keyed), before the drain
-			if (l.rec().survival()) {
-				int lava = 0, grates = 0;
-				for (Body b : st.bodies) {
-					BodyState bs = st.states.get(b.id);
-					if (bs.before.isEmpty()) {
-						continue;
-					}
-					if (b.lava) {
-						for (long p : b.cells) {
-							FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
-							if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
-								lava++;
-							}
-						}
-					}
-					for (long p : b.grate) {
-						if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
-							grates++;
-						}
-					}
-				}
-				if (lava > 0 || grates > 0) {
-					dev.larattalabs.architect.site.Stockpiles.scoop(s, l.rec().owner, "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids", lava, grates);
-				}
-			}
-			// (6c HY, §4.1) the exact reverse of the write order (an H region: reverse plan order), the head first
-			int drained = 0;
-			for (int i = st.order.size() - 1; i >= 0; i--) {
-				Body b = st.order.get(i);
-				BodyState bs = st.states.get(b.id);
-				if (bs.before.isEmpty()) {
-					continue; // never written (not checked, or not contained): nothing of it stands
-				}
-				n += drain(level, st, b, bs, true, new LongOpenHashSet(), held, true); // ((6c F3-c) the removal: decor left for the undo)
-				if (++drained == 1 && st.ordered && i > 0) {
-					WorldJournal.kill("FL5"); // (6c HY) the head drained, the rest of the course not yet
-				}
-			}
-			int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
-			st.removal = "drained";
-			st.redrained = true;
-			st.until = level.getGameTime() + bound;
-			save(l, st);
-			Architect.LOGGER.info("Region {}: removal drained {} fluid cell(s); the solids wait one settle bound ({} ticks){}", l.rec().id, n, bound, held.kept()
-				.isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept for the undo's hand-down: " + cells(held.keptCells()));
-			WorldJournal.kill("FL3"); // drained (step 2), before the solids (step 3)
-			return false;
+		if (st.removal != null && st.owed && !durable(l, st)) {
+			return false; // (slice DF) the removal's record is not on disk: the drain's next step waits for it
 		}
-		if (!st.redrained) {
-			// (§3.5) a removal resumed after a stop: the drain again (idempotent: what the stop lost of it, unsaved chunks, is written now)
-			st.redrained = true;
-			Holders held = new Holders(l.rec().dimension, group, st); // (fix/drain-holders) as the first drain
-			int n = 0;
-			for (int i = st.order.size() - 1; i >= 0; i--) {
-				Body b = st.order.get(i);
-				BodyState bs = st.states.get(b.id);
-				if (!bs.before.isEmpty()) {
-					n += drain(level, st, b, bs, true, new LongOpenHashSet(), held, true); // ((6c F3-c) the removal: decor left for the undo)
-				}
+		if (st.flowingRegion()) {
+			return gateFlowing(s, level, l, st, group); // (8c WU) the sources first, the flow dies, the stray pass, then the solids
+		}
+		if (needsDrain(l, st)) {
+			// (8cTb, CONTRACT "Phase 8cT" §2.3) the drain is a txn: its intent (the scoop's amounts, the chunks, the bound) durable first, then
+			// the scoop (L, keyed), the writes (W, a receipt per chunk), drained with a fresh bound (R), the barrier. A start finds it open and
+			// replays it; a Remove asked again joins it (the same key)
+			if (!drainStep(s, level, l, st, group, false)) {
+				return false;
 			}
-			if (n > 0) {
-				Architect.LOGGER.info("Region {}: the resumed removal drained {} fluid cell(s) again", l.rec().id, n);
-			}
+			WorldJournal.kill("FL3"); // drained (its txn retired: the writes durable), before the solids
+			return false;
 		}
 		hold(level, st, true);
 		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
@@ -2232,11 +3240,757 @@ public final class RegionFluids {
 			REMOVAL_NOTES.put(l.rec().id, st.removalNote);
 			Architect.LOGGER.warn("Region {}: removal: {}", l.rec().id, st.removalNote);
 		}
+		// (round 2, P1 2) the drain's writes durable before the record says done (T0's world barrier: players, a flushed chunk save, the
+		// ledger): a crash after done can never lose them and restore the solids round surviving sources. Refused: stays drained, again later
+		long tb = System.nanoTime();
+		if (st.barrierTriedAt != 0 && tb - st.barrierTriedAt < RETRY_NANOS) {
+			return false; // (a refused barrier: one try a second)
+		}
+		st.barrierTriedAt = tb;
+		var barrier = dev.larattalabs.architect.site.Stockpiles.barrier(s);
+		if (!barrier.ok()) {
+			Architect.LOGGER.warn("Region {}: the drain's writes are not durable yet ({}: {}); the solids wait", l.rec().id, barrier.outcome(), barrier.reason());
+			return false;
+		}
+		st.barrierTriedAt = 0;
 		st.removal = "done";
+		st.barrierDone = true;
+		if (!save(l, st)) {
+			st.barrierDone = false;
+			st.removal = "drained"; // (slice DF) the solids wait until the record says done on disk
+			st.owedTriedAt = System.nanoTime();
+			return false;
+		}
 		hold(level, st, false);
-		save(l, st);
+		WorldJournal.kill("FL3x"); // (slice DF round 2) the removal's done record saved, the solids not restored yet
 		Architect.LOGGER.info("Region {}: fluids drained and settled; the solids are restored next", l.rec().id);
 		return true;
+	}
+
+	// ------------------------------------------------------------------ (8cTb) the removal's drain on the txn layer
+
+	/**
+	 * (8cTb) Whether the record's removal still needs its drain txn: not begun ({@code removal} null, or DF's {@code draining}), drained
+	 * before 8cT ({@code drainTxn} null: a start drains it again, with a fresh bound: F), or its txn still open (drained written, the
+	 * barrier not yet).
+	 */
+	static boolean needsDrain(RegionsImpl.Live l, Regional st) {
+		if (st.removal == null || "draining".equals(st.removal)) {
+			return true;
+		}
+		if (!"drained".equals(st.removal)) {
+			return false;
+		}
+		return st.drainTxn == null || FluidTxns.openDrain(l) != null;
+	}
+
+	/** (8cTb) Runs (or joins) the drain txn; true once it retired. While held, the view's {@code heldAt} and a revision's waiting say where. */
+	static boolean drainStep(MinecraftServer s, ServerLevel level, RegionsImpl.Live l, Regional st, String group, boolean flowing) {
+		FluidTxns.Step g = FluidTxns.removalDrain(s, level, l, st, group, flowing);
+		if (g.kind() == FluidTxns.Step.Kind.DONE) {
+			if (st.drainHeldAt != null) {
+				st.drainHeldAt = null;
+				Revisions.drainWaiting(l, null);
+			}
+			return true;
+		}
+		if (g.kind() == FluidTxns.Step.Kind.HELD || g.kind() == FluidTxns.Step.Kind.REFUSED) {
+			String where = g.detail() == null ? null : g.detail().replaceFirst("^held\\((decided|other)\\) tx-[0-9]+: ", "");
+			if (where != null && !where.equals(st.drainHeldAt)) {
+				st.drainHeldAt = where;
+				Revisions.drainWaiting(l, "the water drains first: " + g.detail());
+				Architect.LOGGER.warn("Region {}: the removal's drain waits: {}", l.rec().id, g.detail());
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (8cTb, A's refund side, N2) What a survival record's removal scoops, planned once from the world before any drain write: per lava cell
+	 * and grate cell of its bodies, {lava sources, grate bars}. A body that stands (it has befores): each cell still standing. A body the
+	 * charge paid for ({@code chargedBodies}, its rid): a cell the stage's tiles never wrote (no active journal entry of the group writes the
+	 * body's lava or bars there) comes back too; a cell written and then taken (a player's bucket, broken bars) is neither. A record without
+	 * {@code chargedBodies} (charged before DF round 3) gets the standing rule only.
+	 */
+	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group) {
+		return scoopPlan(level, l, st, group, p -> true);
+	}
+
+	/** {@link #scoopPlan} over the cells {@code in} accepts (8cT last round, #2: one chunk's, saved with that chunk). */
+	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
+		java.util.Set<String> paid = new java.util.HashSet<>();
+		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
+			cb.forEach(x -> paid.add(x.getAsString()));
+		}
+		JournalWrites jw = new JournalWrites(l.rec().dimension, group);
+		int lava = 0, grates = 0;
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			boolean ours = !bs.before.isEmpty();
+			boolean charged = paid.contains(b.id);
+			if (!ours && !charged) {
+				continue;
+			}
+			if (b.lava) {
+				for (long p : b.cells) {
+					if (!in.test(p)) {
+						continue;
+					}
+					FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
+					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+						lava += ours || charged ? 1 : 0;
+					} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.LAVA)) { // (8cTc) a body its write txn wrote is written
+						lava++;
+					}
+				}
+			}
+			for (long p : b.grate) {
+				if (!in.test(p)) {
+					continue;
+				}
+				if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
+					grates++;
+				} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.IRON_BARS)) {
+					grates++;
+				}
+			}
+		}
+		return new int[] {lava, grates};
+	}
+
+	/** (8cTb) Per section, the cells an active (written, not PLACING) journal entry of the group wrote, with the block it wrote. */
+	static final class JournalWrites {
+		private final String dim;
+		private final String group;
+		private final Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<java.util.List<net.minecraft.world.level.block.Block>>> bySection =
+			new Long2ObjectOpenHashMap<>();
+
+		JournalWrites(String dim, String group) {
+			this.dim = dim;
+			this.group = group;
+		}
+
+		boolean wrote(long pos, net.minecraft.world.level.block.Block block) {
+			long key = dev.larattalabs.architect.journal.Sections.key(pos);
+			var m = bySection.get(key);
+			if (m == null) {
+				m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+				try {
+					var store = WorldJournal.store();
+					for (var e : WorldJournal.activeSlices(dim, key)) {
+						var meta = store.meta(e.id());
+						if (meta == null || !group.equals(meta.group()) || e.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
+							continue;
+						}
+						for (var c : e.cells()) {
+							if (c.after() != null) {
+								m.computeIfAbsent(c.pos(), x -> new java.util.ArrayList<>()).add(WorldJournal.state(c.after()).getBlock());
+							}
+						}
+					}
+				} catch (IOException | RuntimeException ex) {
+					// (8cTb review P2-8) never guessed: the removal's drain waits until the journal reads
+					throw new IllegalStateException("the journal could not be read for section " + key + " (" + ex + "): the refund waits for it");
+				}
+				bySection.put(key, m);
+			}
+			var l = m.get(pos);
+			return l != null && l.contains(block);
+		}
+	}
+
+	/** (8cTb) A cell's chunk as {@code cx << 32 | cz} (unsigned low half). */
+	static long chunkKey(long p) {
+		return (long) (BlockPos.getX(p) >> 4) << 32 | (BlockPos.getZ(p) >> 4) & 0xffffffffL;
+	}
+
+	/** (8cTb) Every chunk a removal's drain may write: the bodies' cells, ice, grates, spill, watch and predicted cells, escaped cells. */
+	static long[] drainChunks(Regional st) {
+		LongOpenHashSet c = new LongOpenHashSet();
+		for (Body b : st.bodies) {
+			for (long[] a : new long[][] {b.cells, b.ice, b.grate, b.spill, b.watch}) {
+				for (long p : a) {
+					c.add(chunkKey(p));
+				}
+			}
+			for (long p : b.predicted.keySet()) {
+				c.add(chunkKey(p));
+			}
+			for (long p : st.states.get(b.id).escapedCells) {
+				c.add(chunkKey(p));
+			}
+			int[] lot = st.irrigation.get(b.id);
+			if (lot != null) {
+				// (8cTb review P1-6) the breach sweep's search box: the lot grown by BREACH_REACH (sweepBreach's own)
+				for (int x = (lot[0] - BREACH_REACH) >> 4; x <= (lot[2] + BREACH_REACH) >> 4; x++) {
+					for (int z = (lot[1] - BREACH_REACH) >> 4; z <= (lot[3] + BREACH_REACH) >> 4; z++) {
+						c.add((long) x << 32 | z & 0xffffffffL);
+					}
+				}
+			}
+		}
+		long[] out = c.toLongArray();
+		java.util.Arrays.sort(out);
+		return out;
+	}
+
+	/**
+	 * (8cTb) The drain txn's W effect: the record's removal writes (idempotent: every write goes through the ownership rules, a drained cell
+	 * is at its before state). An H region: every written body, the exact reverse of the write order (FL5 after an ordered head), the stray
+	 * pass with it; a flowing region: its sources only (the flow dies; the stray pass follows the wait). Returns the cells written.
+	 */
+	static int removalDrainWrites(ServerLevel level, RegionsImpl.Live l, Regional st, String group, boolean flowing) {
+		Holders held = new Holders(l.rec().dimension, group, st);
+		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
+		if (flowing) {
+			int n = drainSourcesAll(level, st, held, true);
+			Architect.LOGGER.info("Region {}: removal drained {} source cell(s) of its flowing water; the flow dies for up to {} ticks before the stray pass", l.rec()
+				.id, n, bound);
+			return n;
+		}
+		int n = 0;
+		int drained = 0;
+		for (int i = st.order.size() - 1; i >= 0; i--) {
+			Body b = st.order.get(i);
+			BodyState bs = st.states.get(b.id);
+			if (bs.before.isEmpty()) {
+				continue; // never written (not checked, or not contained): nothing of it stands
+			}
+			n += drain(level, st, b, bs, true, new LongOpenHashSet(), held, true); // ((6c F3-c) the removal: decor left for the undo)
+			if (++drained == 1 && st.ordered && i > 0) {
+				WorldJournal.kill("FL5"); // (6c HY) the head drained, the rest of the course not yet
+			}
+		}
+		Architect.LOGGER.info("Region {}: removal drained {} fluid cell(s); the solids wait one settle bound ({} ticks){}", l.rec().id, n, bound, held.kept()
+			.isEmpty() ? "" : "; " + held.kept().size() + " cell(s) another entry holds on top kept for the undo's hand-down: " + cells(held.keptCells()));
+		return n;
+	}
+
+	// ------------------------------------------------------------------ (8c WU) a flowing region's removal: the reverse of flow
+
+	/**
+	 * (8c WU, §4.2, §4.4) A flowing region's removal drain, server thread, one call per tick until true (the solids next):
+	 * <ol>
+	 * <li>{@code draining} saved durably first (DF; kill point FL3d), then every body's <b>sources only</b> back to their before states,
+	 * the head first (the exact reverse of the write order; FL5 after the head), each with a fluid tick on its face neighbours so vanilla
+	 * lets the flow die (a write skips updates); {@code drained} saved, the wait until now + the settle bound (FL8).</li>
+	 * <li>The wait: done when no fluid tick is scheduled in any watch set past the bound; capped at 2 x the bound (the foreign cells that
+	 * keep it ticking named on the rows). A start that finds {@code draining} or {@code drained} drains the sources again (idempotent).</li>
+	 * <li>{@code restoring} saved, then the <b>stray pass</b>, chunk by chunk (FL9 after the first): every watched cell the bodies made that is
+	 * not at its before state, as W5 attributes it ({@link #breachTake}: flowing water connected to the bodies' own cells, less every cell
+	 * fed from water that isn't theirs), back to its before state. It never writes foreign-fed water or a source that isn't the body's.</li>
+	 * <li>{@code done} saved (FL3); then the group undo restores the solids.</li>
+	 * </ol>
+	 * A Remove asked meanwhile joins this removal (the group's removal is one; this gate is its barrier).
+	 */
+	static boolean gateFlowing(MinecraftServer s, ServerLevel level, RegionsImpl.Live l, Regional st, String group) {
+		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
+		if (needsDrain(l, st)) {
+			// (8cTb) the sources' drain as a txn (as an H region's, §2.3): intent, scoop, writes, drained with a fresh bound, barrier
+			if (!drainStep(s, level, l, st, group, true)) {
+				return false;
+			}
+			hold(level, st, true);
+			report(l, st);
+			WorldJournal.kill("FL8"); // (8c CR) the sources drained and the flow dying, before the stray pass
+			return false;
+		}
+		if ("drained".equals(st.removal)) {
+			hold(level, st, true);
+			long now = level.getGameTime();
+			boolean ticking = false;
+			if (now >= st.until) {
+				if (now - st.lastCensus < CENSUS_EVERY) {
+					return false; // ((8c fix round, P2-11) the wait reads its watch sets every CENSUS_EVERY ticks, not every tick)
+				}
+				st.lastCensus = now;
+				for (Body b : st.bodies) {
+					if (tickingIn(level, b)) {
+						ticking = true;
+						break;
+					}
+				}
+			}
+			RemovalWait w = removalWait(now, st.until, bound, ticking);
+			if (w == RemovalWait.WAIT) {
+				return false;
+			}
+			if (w == RemovalWait.CAPPED) {
+				int named = capForeign(level, st);
+				st.removalNote = "fluid still ticking in a body's watch set " + (2L * bound) + " ticks after the drain (2 x the settle bound, " + bound + "): "
+					+ named + " cell(s) of water not the region's keep it running; the solids are restored without waiting further";
+				JsonObject note = new JsonObject();
+				note.addProperty("state", "capped");
+				note.addProperty("note", st.removalNote);
+				note.addProperty("ticks", 2L * bound);
+				l.rec().ext.add(EXT_REMOVAL, note);
+				REMOVAL_NOTES.put(l.rec().id, st.removalNote);
+				st.removalPhase = "capped";
+				Architect.LOGGER.warn("Region {}: removal: {}", l.rec().id, st.removalNote);
+			} else {
+				st.removalPhase = "restoring";
+			}
+			st.removal = "restoring";
+			st.strayChunks = watchChunks(st); // ((8c round 2, P1-2) every chunk the bodies watch, durable before the first stray write)
+			if (!save(l, st)) {
+				st.removal = "drained";
+				st.strayChunks = null;
+				return false;
+			}
+			report(l, st);
+		}
+		if ("restoring".equals(st.removal) && !st.redrained) {
+			// (8c CR, FL9 bare) a start in the stray pass: the world's chunks may be older than the record (the sources standing again, flowing
+			// into cells the wash cleared): the sources are drained again and the flow waits to die before the stray pass goes on
+			st.redrained = true;
+			int n = drainSourcesAll(level, st, new Holders(l.rec().dimension, group, st), false);
+			if (n > 0) {
+				st.removal = "drained";
+				st.removalPhase = "draining";
+				st.until = level.getGameTime() + bound;
+				if (!save(l, st)) {
+					st.removal = "restoring";
+					return false;
+				}
+				Architect.LOGGER.info("Region {}: the resumed stray pass found {} source cell(s) standing again: drained, the flow waits again", l.rec().id, n);
+				return false;
+			}
+		}
+		if ("restoring".equals(st.removal)) {
+			Holders held = new Holders(l.rec().dimension, group, st);
+			if (!strayStep(level, l, st, held)) {
+				return false; // ((8c fix round, P2-11) the pass goes on next tick)
+			}
+			int n = st.strayDone;
+			// ((8c fix round, P1-4) `done` is recorded only once the drain's chunks are durable: the T0 barrier (players, chunks forced, the
+			// ledger), tried at most once a second; a start before it finds `restoring` and drains and restores again)
+			long t = System.nanoTime();
+			if (st.barrierTriedAt != 0 && t - st.barrierTriedAt < RETRY_NANOS) {
+				return false;
+			}
+			st.barrierTriedAt = t;
+			dev.larattalabs.architect.site.DurableBarrier.Result br = barrier.apply(s);
+			if (!br.ok()) {
+				Architect.LOGGER.warn("Region {}: the river's drain waits for the world barrier ({}: {})", l.rec().id, br.outcome(), br.reason());
+				return false;
+			}
+			st.removal = "done";
+			st.barrierDone = true; // (merge with DF round 3) done saved after the barrier: trusted at a start
+			if (!save(l, st)) {
+				st.removal = "restoring";
+				st.barrierDone = false;
+				return false;
+			}
+			hold(level, st, false);
+			report(l, st);
+			Architect.LOGGER.info("Region {}: the stray pass restored {} watched cell(s); the solids are restored next", l.rec().id, n);
+			WorldJournal.kill("FL3"); // the fluids drained and restored, before the solids
+			WorldJournal.kill("FL3x"); // (DF round 2's point, a river's too) done saved after the world barrier, the solids not restored yet
+			return true;
+		}
+		return true;
+	}
+
+	/** (8c fix round, P1-3) The charged items standing in a record's written bodies: {lava sources, grate bars}, any body kind. Pure over {@code get}. */
+	static int[] standingCharged(Regional st, java.util.function.LongFunction<BlockState> get) {
+		int lava = 0, grates = 0;
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (bs.before.isEmpty()) {
+				continue;
+			}
+			if (b.lava) {
+				for (long p : b.cells) {
+					FluidState f = get.apply(p).getFluidState();
+					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
+						lava++;
+					}
+				}
+			}
+			for (long p : b.grate) {
+				if (get.apply(p).is(Blocks.IRON_BARS)) {
+					grates++;
+				}
+			}
+		}
+		return new int[] {lava, grates};
+	}
+
+	/** (8c fix round, P1-4; TEST seam) The world barrier the river's removal waits for before it records done. */
+	static java.util.function.Function<MinecraftServer, dev.larattalabs.architect.site.DurableBarrier.Result> barrier = dev.larattalabs.architect.site.Stockpiles::barrier;
+
+	/** (8c WU) Every written body's sources back, the head first (the reverse of the write order); FL5 after the head when {@code first}. */
+	static int drainSourcesAll(ServerLevel level, Regional st, java.util.function.LongPredicate held, boolean first) {
+		int n = 0, drained = 0;
+		for (int i = st.order.size() - 1; i >= 0; i--) {
+			Body b = st.order.get(i);
+			BodyState bs = st.states.get(b.id);
+			if (bs.before.isEmpty()) {
+				continue;
+			}
+			n += drainSources(level, b, bs, held);
+			if (first && ++drained == 1 && st.ordered && i > 0) {
+				WorldJournal.kill("FL5");
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * (8c WU) One body's sources (its cells, ice and grate) back to their before states where they hold a fluid or ice, then a fluid tick
+	 * on each face neighbour holding fluid that isn't a cell of the body: the flow they fed dies by vanilla's own ticks.
+	 */
+	static int drainSources(ServerLevel level, Body b, BodyState bs, java.util.function.LongPredicate held) {
+		int n = 0;
+		LongOpenHashSet own = b.ownSet();
+		LongOpenHashSet tick = new LongOpenHashSet();
+		for (long[] a : new long[][] {b.ice, b.cells}) {
+			for (long p : a) {
+				if (drainSkips(b, p)) {
+					continue;
+				}
+				BlockPos bp = BlockPos.of(p);
+				BlockState now = level.getBlockState(bp);
+				if (held.test(p)) {
+					continue; // (fix/drain-holders) another entry's block on top: handed down by the undo, not drained
+				}
+				if (!ownStillOurs(b, p, now)) {
+					continue; // ((8c fix round, P1-1) a player's waterlogged chest in a source cell is never drained)
+				}
+				String before = bs.before.get(p);
+				BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
+				if (now != to) {
+					dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					n++;
+				}
+				for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+					long q = BlockPos.offset(p, d);
+					if (!own.contains(q)) {
+						tick.add(q);
+					}
+				}
+			}
+		}
+		for (long q : tick) {
+			BlockPos bp = BlockPos.of(q);
+			FluidState f = level.getBlockState(bp).getFluidState();
+			if (!f.isEmpty()) {
+				level.scheduleTick(bp, f.getType(), 1);
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * (8c WU, §4.2, W5) What the stray pass takes: per body, the watched cells holding its fluid as flowing water, connected to its own
+	 * cells or holding what wasn't there before, less every cell fed from water that isn't the region's (breachTake's prune: water there
+	 * before the realise, another standing body's, a source the region never wrote). The cells, sorted, each with the body whose before
+	 * applies. Pure over {@code at}.
+	 */
+	static java.util.List<long[]> strayTake(Regional st, java.util.function.LongFunction<@Nullable Wet> at, java.util.function.LongPredicate loaded) {
+		return strayTake(st, at, loaded, null);
+	}
+
+	/** (8c fix round) {@link #strayTake} over one body only ({@code only}), or every written body (null). */
+	static java.util.List<long[]> strayTake(Regional st, java.util.function.LongFunction<@Nullable Wet> at, java.util.function.LongPredicate loaded, @Nullable Body only) {
+		java.util.List<long[]> out = new ArrayList<>();
+		LongOpenHashSet seen = new LongOpenHashSet();
+		for (int i = st.order.size() - 1; i >= 0; i--) {
+			Body b = st.order.get(i);
+			BodyState bs = st.states.get(b.id);
+			if (bs.before.isEmpty() || only != null && b != only) {
+				continue;
+			}
+			LongOpenHashSet foreign = new LongOpenHashSet(st.othersOf(b));
+			foreign.addAll(st.fluidBefore.keySet());
+			it.unimi.dsi.fastutil.longs.LongArrayList seeds = new it.unimi.dsi.fastutil.longs.LongArrayList();
+			for (long p : b.watchSet()) {
+				if (loaded.test(p) && !foreign.contains(p)) {
+					seeds.add(p);
+				}
+			}
+			int[] wb = b.watchBox();
+			LongOpenHashSet take = breachTake(List.of(b.cells, seeds.toLongArray()), b.ownSet(), foreign, wb, at, BREACH_MAX);
+			for (long p : take) {
+				if (seen.add(p)) {
+					out.add(new long[] {p, i});
+				}
+			}
+		}
+		out.sort(java.util.Comparator.comparingLong((long[] a) -> ChunkPos.pack(BlockPos.getX(a[0]) >> 4, BlockPos.getZ(a[0]) >> 4)).thenComparingLong(a -> a[0]));
+		return out;
+	}
+
+	/** (8c fix round, P2-11) Stray cells restored a tick at most (a cap-sized river's pass spans ticks). */
+	static final int STRAY_BUDGET = 4096;
+
+	/**
+	 * (8c fix round, P1-6) The stray pass's work for the take: each cell with its body's order index and its target (the foreign-only
+	 * amount, {@link #foreignOnly}; 0: its before state), sorted by chunk then position. Pure over {@code at}.
+	 */
+	static long[][] strayWork(Regional st, java.util.List<long[]> take, java.util.function.LongFunction<@Nullable Wet> at) {
+		LongOpenHashSet set = new LongOpenHashSet();
+		LongOpenHashSet own = new LongOpenHashSet();
+		for (long[] c : take) {
+			set.add(c[0]);
+		}
+		for (Body b : st.bodies) {
+			own.addAll(b.ownSet());
+		}
+		Long2IntOpenHashMap lv = foreignOnly(set, own, at);
+		long[][] out = new long[take.size()][];
+		for (int i = 0; i < take.size(); i++) {
+			out[i] = new long[] {take.get(i)[0], take.get(i)[1], lv.get(take.get(i)[0])};
+		}
+		return out;
+	}
+
+	/**
+	 * (8c fix round, P2-11, P1-6) One tick of the stray pass: its work computed once (the world as it stands), then at most
+	 * {@link #STRAY_BUDGET} cells written, chunk by chunk: a cell the foreign water alone reaches to its foreign-only level, any other to
+	 * its before state, only where the body's flow still stands ({@link #flowStillOurs}); then a fluid tick round them. FL9 once the first
+	 * chunk is done with more to come. Returns true when the pass is done.
+	 */
+	/** (8c round 2, P1-2) Every chunk of the record's bodies' watch sets (packed keys). */
+	static LongOpenHashSet watchChunks(Regional st) {
+		LongOpenHashSet out = new LongOpenHashSet();
+		for (Body b : st.bodies) {
+			for (long p : b.watchSet()) {
+				out.add(ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4));
+			}
+		}
+		return out;
+	}
+
+	/** (8c round 2, P1-2) Whether every remaining stray chunk is loaded (the pass waits for the rest: never a seed lost to an unloaded one). Pure. */
+	static boolean strayReady(Regional st, java.util.function.LongPredicate chunkLoaded) {
+		if (st.strayChunks == null) {
+			return true;
+		}
+		for (long k : st.strayChunks) {
+			if (!chunkLoaded.test(k)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** (8c round 2, P1-2) The work cells in the remaining chunks only (a resumed pass never redoes a finished chunk, never skips a left one). Pure. */
+	static long[][] remainingWork(long[][] work, @Nullable LongOpenHashSet chunks) {
+		if (chunks == null) {
+			return work;
+		}
+		return java.util.Arrays.stream(work).filter(c -> chunks.contains(ChunkPos.pack(BlockPos.getX(c[0]) >> 4, BlockPos.getZ(c[0]) >> 4))).toArray(long[][]::new);
+	}
+
+	static boolean strayStep(ServerLevel level, RegionsImpl.Live l, Regional st, java.util.function.LongPredicate held) {
+		java.util.function.LongFunction<@Nullable Wet> at = k -> {
+			BlockState bs = level.getBlockState(BlockPos.of(k));
+			FluidState f = bs.getFluidState();
+			return f.isEmpty() || !f.getType().isSame(Fluids.WATER) ? null : new Wet(f.getAmount(), f.isSource(), bs.getBlock() instanceof LiquidBlock);
+		};
+		hold(level, st, true); // ((8c round 2, P1-2) a resumed pass re-tickets every watch set)
+		if (st.strayChunks == null) {
+			st.strayChunks = watchChunks(st); // (a record saved before round 2: every chunk)
+		}
+		if (!strayReady(st, k -> level.getChunkSource().hasChunk(ChunkPos.getX(k), ChunkPos.getZ(k)))) {
+			return false; // (the ticket loads them: the pass waits, never seeds from loaded chunks only)
+		}
+		if (st.strayWork == null) {
+			st.strayWork = remainingWork(strayWork(st, strayTake(st, at, p -> true), at), st.strayChunks);
+			st.strayAt = 0;
+		}
+		long[][] w = st.strayWork;
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		int budget = STRAY_BUDGET;
+		long firstChunk = w.length == 0 ? 0 : ChunkPos.pack(BlockPos.getX(w[0][0]) >> 4, BlockPos.getZ(w[0][0]) >> 4);
+		while (st.strayAt < w.length && budget-- > 0) {
+			long[] c = w[st.strayAt++];
+			long p = c[0];
+			Body b = st.order.get((int) c[1]);
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			if (!held.test(p) && flowStillOurs(b, now)) {
+				BlockState to;
+				if (c[2] > 0) {
+					to = flowingState(b.source(), (int) c[2]); // (raised: the foreign water's own level)
+				} else {
+					String was = st.states.get(b.id).before.get(p);
+					if (was == null) {
+						was = beforeAny(st, p);
+					}
+					to = was == null ? Blocks.AIR.defaultBlockState() : parse(was);
+				}
+				if (now != to) {
+					dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+					written.add(p);
+					st.strayDone++;
+				}
+			}
+			long ck = ChunkPos.pack(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
+			boolean chunkEnds = st.strayAt >= w.length || ChunkPos.pack(BlockPos.getX(w[st.strayAt][0]) >> 4, BlockPos.getZ(w[st.strayAt][0]) >> 4) != ck;
+			if (chunkEnds) {
+				// ((8c round 2, P1-2) a finished chunk leaves the saved list: a start resumes with the chunks left)
+				tickAround(level, written);
+				written.clear();
+				st.strayChunks.remove(ck); // (8cTb review P1-5) in memory only: the saved list keeps every chunk until done is saved after the barrier
+				if (ck == firstChunk && st.strayAt < w.length) {
+					WorldJournal.kill("FL9"); // (8c CR) the stray pass half done: one chunk's cells restored, the next not
+				}
+			}
+		}
+		if (!written.isEmpty()) {
+			tickAround(level, written);
+		}
+		if (st.strayAt >= w.length) {
+			if (w.length <= 1 && st.strayDone == 0) {
+				WorldJournal.kill("FL9"); // (a pass with nothing to split still reaches its kill point once)
+			}
+			st.strayChunks.clear(); // (every chunk's work is done; chunks with none are done too); (P1-5) not saved: done follows the barrier
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * (8c fix round, P1-2) A flowing body's abort (escaped, unsettled, upstream of one): the stray take judged first over the flow as it
+	 * stands (its sources still feeding), then the sources back ({@link #drainSources}: only what still holds the body's water), then
+	 * every taken cell to its foreign-only level or its before state, a tick round them. A player's source or waterlogged block is never
+	 * written. Returns the cells written.
+	 */
+	static int abortFlowing(ServerLevel level, Regional st, Body b, BodyState bs) {
+		java.util.function.LongFunction<@Nullable Wet> at = k -> {
+			BlockState s0 = level.getBlockState(BlockPos.of(k));
+			FluidState f = s0.getFluidState();
+			return f.isEmpty() || !f.getType().isSame(b.source()) ? null : new Wet(f.getAmount(), f.isSource(), s0.getBlock() instanceof LiquidBlock);
+		};
+		long[][] w = strayWork(st, strayTake(st, at, p -> level.isLoaded(BlockPos.of(p)), b), at);
+		int n = drainSources(level, b, bs, NOT_HELD);
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (long[] c : w) {
+			BlockPos bp = BlockPos.of(c[0]);
+			BlockState now = level.getBlockState(bp);
+			if (!flowStillOurs(b, now)) {
+				continue;
+			}
+			String was = bs.before.get(c[0]);
+			BlockState to = c[2] > 0 ? flowingState(b.source(), (int) c[2]) : was == null ? Blocks.AIR.defaultBlockState() : parse(was);
+			if (now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written.add(c[0]);
+				n++;
+			}
+		}
+		tickAround(level, written);
+		return n;
+	}
+
+	/**
+	 * (8c WU, Steward's S-8c-1) A capped removal's foreign cells: per body, the cells of its watch set still holding fluid that isn't the
+	 * region's (a source no body wrote, water there before) or with a fluid tick scheduled, at most {@link #FOREIGN_NAMED} named. Returns
+	 * how many cells it found.
+	 */
+	static int capForeign(ServerLevel level, Regional st) {
+		int total = 0;
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			bs.foreign.clear();
+			bs.foreignCount = 0;
+			long[] keys = b.watchSet().toLongArray();
+			java.util.Arrays.sort(keys);
+			for (long p : keys) {
+				m.set(p);
+				if (!level.isLoaded(m)) {
+					continue;
+				}
+				FluidState f = level.getBlockState(m).getFluidState();
+				boolean tick = level.getFluidTicks().hasScheduledTick(m, Fluids.WATER) || level.getFluidTicks().hasScheduledTick(m, Fluids.FLOWING_WATER);
+				if (!f.isEmpty() && (f.isSource() || st.fluidBefore.containsKey(p)) || tick && !f.isEmpty()) {
+					bs.foreignCount++;
+					if (bs.foreign.size() < FOREIGN_NAMED) {
+						bs.foreign.add(p);
+					}
+				}
+			}
+			total += bs.foreignCount;
+		}
+		return total;
+	}
+
+	/**
+	 * (8c WU) DevBridge {@code dev.fluid.river}: per body its flow, predicted cells (flowing), the census now (mismatches, escaped,
+	 * ticking), a sample of predicted levels against the world's, and the item entities spawned in its cells this session.
+	 */
+	public static JsonObject riverJson(ServerLevel level, RegionsImpl.Live l) {
+		Regional st = of(l);
+		JsonObject o = new JsonObject();
+		JsonArray bodies = new JsonArray();
+		o.add("bodies", bodies);
+		o.addProperty("items", ITEMS.getOrDefault(key(l), 0));
+		if (st == null) {
+			return o;
+		}
+		o.addProperty("phase", st.phase);
+		if (st.removal != null) {
+			o.addProperty("removal", st.removal);
+		}
+		// (8c WU) the item entities standing now in a flowing body's own or predicted cells (or beside one: water carries them a cell)
+		int now = 0;
+		for (Body b : st.bodies) {
+			if (!b.flowing()) {
+				continue;
+			}
+			int[] wb = b.watchBox();
+			for (var it : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, new AABB(wb[0], wb[1], wb[2], wb[3] + 1, wb[4] + 1, wb[5] + 1))) {
+				BlockPos q = it.blockPosition();
+				boolean near = false;
+				for (int dx = -1; dx <= 1 && !near; dx++) {
+					for (int dy = -1; dy <= 1 && !near; dy++) {
+						for (int dz = -1; dz <= 1 && !near; dz++) {
+							long k = BlockPos.asLong(q.getX() + dx, q.getY() + dy, q.getZ() + dz);
+							near = b.predicted.containsKey(k) || b.ownSet().contains(k);
+						}
+					}
+				}
+				if (near) {
+					now++;
+				}
+			}
+		}
+		o.addProperty("itemsNow", now);
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			JsonObject x = new JsonObject();
+			x.addProperty("id", b.id);
+			x.addProperty("state", bs.state);
+			if (b.flow != null) {
+				x.addProperty("flow", b.flow);
+			}
+			x.addProperty("predicted", b.predicted.size());
+			x.addProperty("flowing", b.flowingCells());
+			Census c = census(level, b, st.fluidBefore, st.othersOf(b));
+			x.addProperty("mismatch", c.mismatch().size());
+			x.addProperty("escaped", c.escaped().size());
+			x.addProperty("ticking", c.ticking());
+			JsonArray lv = new JsonArray();
+			long[] keys = b.predicted.keySet().toLongArray();
+			java.util.Arrays.sort(keys);
+			for (int i = 0; i < keys.length && lv.size() < 16; i += Math.max(1, keys.length / 16)) {
+				BlockState s = level.getBlockState(BlockPos.of(keys[i]));
+				JsonArray q = new JsonArray();
+				q.add(BlockPos.getX(keys[i]));
+				q.add(BlockPos.getY(keys[i]));
+				q.add(BlockPos.getZ(keys[i]));
+				q.add(b.predicted.get(keys[i]));
+				q.add(s.getBlock() instanceof LiquidBlock ? s.getValue(LiquidBlock.LEVEL) : -1);
+				lv.add(q);
+			}
+			x.add("levels", lv);
+			x.addProperty("items", 0);
+			bodies.add(x);
+		}
+		return o;
 	}
 
 	// ------------------------------------------------------------------ the report and the record
@@ -2255,10 +4009,23 @@ public final class RegionFluids {
 			}
 		}
 		l.rec().ext.add(EXT, a);
+		// (8cF) the bodies being written or drained, with their boxes
+		JsonArray w = new JsonArray();
+		for (RegionsImpl.Live x : all) {
+			Regional xs = x.rid() == l.rid() ? st : of(x);
+			if (xs != null) {
+				watchRows(w, x.rid(), xs);
+			}
+		}
+		if (w.isEmpty()) {
+			l.rec().ext.remove(EXT_WATCH);
+		} else {
+			l.rec().ext.add(EXT_WATCH, w);
+		}
 		RegionsImpl.save(l);
 	}
 
-	private static void rows(JsonArray a, int rid, Regional st) {
+	static void rows(JsonArray a, int rid, Regional st) {
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			if (!bs.ended()) {
@@ -2292,8 +4059,109 @@ public final class RegionFluids {
 			if (rid > 0) {
 				o.addProperty("rid", rid); // (6d RV) a revision's body
 			}
+			rowExtras(o, b, bs);
 			a.add(o);
 		}
+	}
+
+	/**
+	 * (8cF, Steward's S-8c-1, S-8c-2, S-8c-4) A row's 8c members: {@code why} (typed, {@link #WHYS}; absent when settled), {@code box} (the
+	 * watch set's), {@code settleTicks}; on a flowing body {@code kind}, {@code flow}, {@code lip} and {@code on} (as the op gave them),
+	 * {@code flowing} (predicted flowing and falling cells), {@code converted}, {@code washed}; on a capped removal {@code foreign} (at most
+	 * {@link #FOREIGN_NAMED} positions) and {@code foreignCount}. Additive: every member before 8c is as it was.
+	 */
+	static void rowExtras(JsonObject o, Body b, BodyState bs) {
+		String why = whyOf(bs);
+		if (why != null) {
+			o.addProperty("why", why);
+		}
+		o.add("box", ints(b.watchBox()));
+		o.addProperty("settleTicks", b.settleTicks);
+		if (b.flowing()) {
+			if (b.kind != null) {
+				o.addProperty("kind", b.kind);
+			}
+			if (b.flow != null) {
+				o.addProperty("flow", b.flow);
+			}
+			if (b.lip != null) {
+				o.addProperty("lip", b.lip);
+			}
+			if (b.on != null) {
+				o.addProperty("on", b.on);
+			}
+			o.addProperty("flowing", b.flowingCells());
+			o.addProperty("converted", b.converted.length);
+			o.addProperty("washed", b.wash.length);
+		}
+		if (bs.foreignCount > 0) {
+			JsonArray f = new JsonArray();
+			for (int i = 0; i < bs.foreign.size(); i++) {
+				long p = bs.foreign.getLong(i);
+				f.add(ints(new int[] {BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)}));
+			}
+			o.add("foreign", f);
+			o.addProperty("foreignCount", bs.foreignCount);
+		}
+	}
+
+	static JsonArray ints(int[] v) {
+		JsonArray a = new JsonArray();
+		for (int x : v) {
+			a.add(x);
+		}
+		return a;
+	}
+
+	/**
+	 * (8cF, S-8c-3) The {@link #EXT_WATCH} rows of one record: every body whose water is being written ({@code writing}: the stage checked,
+	 * the body written or not yet, not ended) or drained by a removal ({@code draining}: the removal began and isn't done), with its box.
+	 */
+	static void watchRows(JsonArray a, int rid, Regional st) {
+		boolean removing = st.removal != null && !"done".equals(st.removal);
+		boolean writing = "writing".equals(st.phase) || "settling".equals(st.phase);
+		if (!removing && !writing) {
+			return;
+		}
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (removing ? bs.before.isEmpty() : bs.ended()) {
+				continue; // (nothing of it stands, or it ended)
+			}
+			JsonObject o = new JsonObject();
+			o.addProperty("part", b.part != null ? b.part : b.id);
+			o.addProperty("body", b.id);
+			o.addProperty("phase", removing ? "draining" : "writing");
+			o.add("box", ints(b.watchBox()));
+			if (rid > 0) {
+				o.addProperty("rid", rid);
+			}
+			a.add(o);
+		}
+	}
+
+	/**
+	 * (8cF, Steward's §2 drain timing) The removal's phase for {@link dev.larattalabs.architect.api.RegionView#fluidsRemoval}: while a
+	 * record's removal drained its bodies and waits ({@code removal: "drained"}, "draining" until the bound), else null. A revision's record
+	 * (6d RV) counts as the region's. Server thread.
+	 */
+	public static dev.larattalabs.architect.api.@Nullable FluidsRemoval removalPhase(RegionsImpl.Live base) {
+		List<RegionsImpl.Live> all;
+		try {
+			all = lives(base);
+		} catch (RuntimeException e) {
+			return null;
+		}
+		for (RegionsImpl.Live x : all) {
+			Regional st = STATE.get(key(x));
+			if (st == null || st.removal == null || "done".equals(st.removal)) {
+				continue;
+			}
+			long now = st.ticketLevel != null ? st.ticketLevel.getGameTime() : st.until;
+			String phase = st.drainHeldAt != null ? "held" : st.removalPhase != null ? st.removalPhase : "restoring".equals(st.removal) ? "restoring" : "draining";
+			return new dev.larattalabs.architect.api.FluidsRemoval(phase, st.until, st.until < 0 ? 0 : st.until - now, st.drainHeldAt); // (8cTb) heldAt
+		}
+		return null;
 	}
 
 	/** The region's fluids record as JSON (DevBridge {@code dev.fluid.state}). */
@@ -2307,6 +4175,9 @@ public final class RegionFluids {
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
 		o.addProperty("ordered", st.ordered); // (6c HY)
+		if (st.owed) {
+			o.addProperty("owed", st.owedWhy == null ? "owed" : st.owedWhy); // (slice DF) the record not on disk
+		}
 		JsonArray order = new JsonArray();
 		st.order.forEach(b -> order.add(b.id));
 		o.add("order", order);
@@ -2344,16 +4215,35 @@ public final class RegionFluids {
 		return RegionStore.region(l.world(), l.rec().id).resolve(l.rid() == 0 ? "fluids.json" : "fluids-rv" + l.rid() + ".json");
 	}
 
-	static void save(RegionsImpl.Live l, Regional st) {
+	/** Saves the record (slice DF: on DurableFile); true only when it is durably on disk (OK). */
+	static boolean save(RegionsImpl.Live l, Regional st) {
 		JsonObject o = new JsonObject();
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
 		if (st.removal != null) {
 			o.addProperty("removal", st.removal);
 		}
+		if (st.barrierDone) {
+			o.addProperty("barrierDone", true); // (round 3)
+		}
+		if (st.drainTxn != null) {
+			o.addProperty("drainTxn", st.drainTxn); // (8cTb) the drain txn that wrote drained
+		}
 		o.addProperty("until", st.until);
 		if (st.removalNote != null) {
 			o.addProperty("removalNote", st.removalNote);
+		}
+		if (st.removalPhase != null) {
+			o.addProperty("removalPhase", st.removalPhase); // (8cF)
+		}
+		if (st.strayChunks != null && "restoring".equals(st.removal)) {
+			JsonArray sc = new JsonArray(); // ((8c round 2, P1-2) the stray pass's chunks still to restore)
+			long[] ks = st.strayChunks.toLongArray();
+			java.util.Arrays.sort(ks);
+			for (long k : ks) {
+				sc.add(k);
+			}
+			o.add("strayChunks", sc);
 		}
 		JsonObject bodies = new JsonObject();
 		for (var e : st.states.entrySet()) {
@@ -2380,12 +4270,33 @@ public final class RegionFluids {
 			}
 			if (bs.lotRemoved) {
 				b.addProperty("lotRemoved", true);
+				b.addProperty("lotDrained", bs.lotDrained); // (round 2)
+			}
+			if (bs.writeTxn != null) {
+				b.addProperty("writeTxn", bs.writeTxn); // (8cTc)
+			}
+			if (bs.drainTxn != null) {
+				b.addProperty("drainTxn", bs.drainTxn); // (8cTc)
 			}
 			if (bs.breached > 0) {
 				b.addProperty("breached", bs.breached);
 			}
 			if (bs.writtenAt >= 0) {
 				b.addProperty("writtenAt", bs.writtenAt);
+			}
+			if (bs.why != null) {
+				b.addProperty("why", bs.why); // (8cF)
+			}
+			if (bs.foreignCount > 0) {
+				JsonArray fa = new JsonArray(); // (8cF) a capped removal's foreign cells
+				for (int i = 0; i < bs.foreign.size(); i++) {
+					long p = bs.foreign.getLong(i);
+					fa.add(BlockPos.getX(p));
+					fa.add(BlockPos.getY(p));
+					fa.add(BlockPos.getZ(p));
+				}
+				b.add("foreign", fa);
+				b.addProperty("foreignCount", bs.foreignCount);
 			}
 			b.add("before", packStates(bs.before));
 			if (!bs.escapedCells.isEmpty()) {
@@ -2403,14 +4314,93 @@ public final class RegionFluids {
 		}
 		o.add("bodies", bodies);
 		o.add("fluidBefore", packStates(st.fluidBefore));
-		try {
-			RegionStore.writeJson(file(l), o);
-		} catch (IOException e) {
-			Architect.LOGGER.warn("Region {}: fluids.json could not be saved: {}", l.rec().id, e.toString());
+		DurableFile.Result r = persist(file(l), st, o);
+		boolean was = st.owed;
+		st.owed = !r.ok();
+		st.owedWhy = r.ok() ? null : r.outcome() + ": " + r.reason();
+		if (!r.ok()) {
+			if (!was) {
+				Architect.LOGGER.warn("Region {}: {} not saved ({}): the fluids stage holds until it is", l.rec().id, file(l).getFileName(), st.owedWhy);
+			}
+			return false;
+		}
+		if (was) {
+			Architect.LOGGER.info("Region {}: {} saved; the fluids stage goes on", l.rec().id, file(l).getFileName());
 		}
 		if (st.removal == null) {
 			Realised.bodies(l.world(), l.rec().id, l.rid(), realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't); (6d RV) a revision's at its layer
 		}
+		return true;
+	}
+
+	/** (slice DF) The durable file's type label in {@code _durable}. */
+	static final String STORE = "fluids";
+
+	/**
+	 * (slice DF, rule 3) One snapshot of the record written through its {@link DurableFile} (temp, force, rename, the folder chain forced):
+	 * OK, REFUSED (the old file stays) or IN_DOUBT (renamed, a force failed: never read as saved). {@code dev.region.failNextSave} on the
+	 * file's name refuses it.
+	 */
+	static DurableFile.Result persist(Path f, Regional st, JsonObject o) {
+		RegionStore.Injection inj = RegionStore.injection(f);
+		if (inj == RegionStore.Injection.REFUSED) {
+			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "injected write failure of " + f.getFileName() + " (dev.region.failNextSave)");
+		}
+		DurableFile df = st.durable;
+		if (df == null || !df.file().equals(f)) {
+			st.durable = df = new DurableFile(STORE, f).compact(); // (round 2) one line: a river's record stays small
+		}
+		DurableFile.Result r = df.write(o, df.request());
+		if (inj == RegionStore.Injection.IN_DOUBT && r.ok()) {
+			return new DurableFile.Result(DurableFile.Outcome.IN_DOUBT, r.gen(), "injected in-doubt write of " + f.getFileName() + " (dev.region.failNextSave inDoubt)");
+		}
+		return r;
+	}
+
+	/**
+	 * (slice DF) A loaded record's durable file: a file on disk not confirmed (written before DF, or its loaded generation's re-force failed)
+	 * is owed, so it is written again, forced, before the stage goes on.
+	 */
+	static void opened(RegionsImpl.Live l, Regional st) {
+		Path f = file(l);
+		if (!Files.isRegularFile(f)) {
+			return;
+		}
+		DurableFile df = new DurableFile(STORE, f).compact();
+		st.durable = df;
+		if (df.writtenGen() == 0 || df.inDoubt() > 0 || df.installedGen() > df.writtenGen()) {
+			st.owed = true;
+			st.owedWhy = df.writtenGen() == 0 ? "loaded, not confirmed (no generation)" : "loaded, its re-force in doubt";
+		}
+	}
+
+	/** (slice DF) Whether the record is durably on disk: an owed one is written again (a fresh forced snapshot covers an IN_DOUBT one). */
+	static boolean durable(RegionsImpl.Live l, Regional st) {
+		if (!st.owed) {
+			return true;
+		}
+		long now = System.nanoTime();
+		if (st.owedTriedAt != 0 && now - st.owedTriedAt < RETRY_NANOS) {
+			return false; // (a failing disk: one try a second, not one per caller per tick)
+		}
+		st.owedTriedAt = now;
+		return save(l, st);
+	}
+
+	/** (slice DF) How often an owed record is tried again. */
+	static final long RETRY_NANOS = 1_000_000_000L;
+
+	/** (slice DF) The fluids stage waits SITE_BUSY on its owed record; at its gate (nothing written yet) that is kill point FL1r. */
+	static void waitNotDurable(QBatch b, String stage, Regional st) {
+		RegionItems.waitStage(b, stage, Reason.SITE_BUSY, notDurable(st));
+		if ("gate".equals(st.phase)) {
+			WorldJournal.kill("FL1r"); // (slice DF) the record's save refused (again) at its gate, no source written
+		}
+	}
+
+	/** (slice DF) The stage's wait while its record is owed. */
+	static String notDurable(Regional st) {
+		return "the fluids record is not durable (" + (st.owedWhy == null ? "owed" : st.owedWhy) + "): nothing is written until it is saved";
 	}
 
 	/** (RP) Each body that left {@code pending}: its part, state and the flags that decided it (the realised record's rows). Pure. */
@@ -2454,6 +4444,22 @@ public final class RegionFluids {
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;
 			st.until = o.has("until") ? o.get("until").getAsLong() : -1;
 			st.removalNote = o.get("removalNote") instanceof JsonElement rn && rn.isJsonPrimitive() ? rn.getAsString() : null;
+			st.barrierDone = o.has("barrierDone") && o.get("barrierDone").getAsBoolean();
+			st.drainTxn = strOrNull(o, "drainTxn"); // (8cTb)
+			st.drainTxnOnDisk = st.drainTxn;
+			if ("done".equals(st.removal) && !st.barrierDone) {
+				// (round 3, P1 6) a done written before the barrier (its drain's writes maybe lost): recovered as drained (drained again through the
+				// ownership check, the wait, the barrier, then done)
+				st.removal = "drained";
+				st.until = -1;
+				st.drainTxn = null; // (8cTb) untrusted: drained again in a legacy txn, with a fresh bound (F)
+				st.drainTxnOnDisk = null;
+			}
+			st.removalPhase = strOrNull(o, "removalPhase"); // (8cF)
+			if (o.get("strayChunks") instanceof JsonArray sc) {
+				st.strayChunks = new LongOpenHashSet();
+				sc.forEach(e -> st.strayChunks.add(e.getAsLong()));
+			}
 			if (o.get("bodies") instanceof JsonObject bodies) {
 				for (var e : bodies.entrySet()) {
 					BodyState bs = st.states.get(e.getKey());
@@ -2476,8 +4482,19 @@ public final class RegionFluids {
 					bs.uncontained = b.has("uncontained") && b.get("uncontained").getAsBoolean();
 					bs.held = b.has("held") && b.get("held").getAsBoolean();
 					bs.lotRemoved = b.has("lotRemoved") && b.get("lotRemoved").getAsBoolean();
+					// (round 2) a record from before round 2 saved lotRemoved after its drain
+					bs.lotDrained = b.has("lotDrained") ? b.get("lotDrained").getAsBoolean() : bs.lotRemoved;
+					bs.writeTxn = strOrNull(b, "writeTxn"); // (8cTc)
+					bs.drainTxn = strOrNull(b, "drainTxn"); // (8cTc) a lot's or an escape's drain txn; a lotRemoved without one is drained again (D)
 					bs.breached = b.has("breached") ? b.get("breached").getAsInt() : 0;
 					bs.writtenAt = b.has("writtenAt") ? b.get("writtenAt").getAsLong() : -1;
+					bs.why = strOrNull(b, "why"); // (8cF)
+					if (b.get("foreign") instanceof JsonArray fa) {
+						for (int i = 0; i + 2 < fa.size(); i += 3) {
+							bs.foreign.add(BlockPos.asLong(fa.get(i).getAsInt(), fa.get(i + 1).getAsInt(), fa.get(i + 2).getAsInt()));
+						}
+					}
+					bs.foreignCount = b.has("foreignCount") ? b.get("foreignCount").getAsInt() : bs.foreign.size();
 					unpackStates(b.get("before"), bs.before);
 					if (b.get("escapedCells") instanceof JsonArray esc) {
 						for (int i = 0; i + 2 < esc.size(); i += 3) {
@@ -2566,12 +4583,14 @@ public final class RegionFluids {
 			STATE.clear();
 		} else {
 			Regional st = STATE.remove(regionId);
+			snapshotWatch(regionId, st); // ((8c fix round, P2-7))
 			if (st != null) {
 				hold(null, st, false);
 			}
 			// (6d RV) and its revisions' records
 			for (String k : List.copyOf(STATE.keySet())) {
 				if (k.startsWith(regionId + "#rv")) {
+					snapshotWatch(k, STATE.get(k)); // ((8c round 2, P2-5) a revision's river too)
 					hold(null, STATE.remove(k), false);
 				}
 			}

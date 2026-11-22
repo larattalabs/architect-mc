@@ -169,7 +169,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   // place for a lamp; only a course's or ditch's bodies, so every other plan's lamps stand as before)
   const keep = Array.isArray(r._keep) ? r._keep.filter((q) => q.kind === 'body') : [];
   let keptSkipped = 0;
-  const spillCols = new Set((r._fluidBodies ?? []).filter((b) => b.kind === 'course' || b.kind === 'ditch').flatMap((b) => b.spill.map((c) => `${c[0]},${c[2]}`)));
+  const spillCols = new Set((r._fluidBodies ?? []).filter((b) => b.kind === 'course' || b.kind === 'ditch' || b.kind === 'river').flatMap((b) => b.spill.map((c) => `${c[0]},${c[2]}`)));
   const colOk = (x, z) => (vw.inClaim(x, z) || (reach ? reach.lampOk(x, z) : false)) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`) && !spillCols.has(`${x},${z}`);
   const standY = (x, z, h) => {
     const [lo, hi] = vw.colRange(x, z);

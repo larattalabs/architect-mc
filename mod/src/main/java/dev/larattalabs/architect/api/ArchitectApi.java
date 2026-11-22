@@ -324,6 +324,23 @@ public interface ArchitectApi {
 	 * {@code built}, {@code done} and {@code percent} count staged cells; an item waiting for one waits {@link Reason#SITE_BUSY} with
 	 * {@code architect_mc:waitsFor {target, part, kind: "terrain", terrainCells, terrainBuilt, say}}. A survival IR with staged ops
 	 * {@code requires} {@code stagedTerrain}, so an older mod refuses it {@link Reason#PLAN_STALE}. No new method or reason.
+	 * (8c, since NEXT) {@code "flowingWater"} is advertised when the helper's kit plans flowing water (its {@code region.flowingWater}) and
+	 * this mod writes, drains and recovers it: rivers (a {@code connector.channel} course with {@code flow: "current"}, a long current from
+	 * few source reaches) and, once the planner builds them, falls off plan forms ({@code form.waterfall} with {@code lip: "form"},
+	 * {@code on: {part}}). Architect still
+	 * writes only sources and solids; every flowing cell is predicted, watched, census-checked and drained back (docs/CONTRACT.md
+	 * "Phase 8c"). Water is free (no bill line, no txn kind). Each {@code architect_mc:fluids} row of {@link RegionView#ext} carries
+	 * {@code part} (the plan part id), {@code on} (a fall's host form), a typed {@code why} (an open enum: {@code foreign_water},
+	 * {@code census_drift}, {@code escaped}, {@code uncontained}, {@code upstream}, {@code lot_removed}, {@code wash}, {@code bubble}; unknown
+	 * values are noted, not refused) beside the free-text {@code reason}, the body's watch {@code box} [x0, y0, z0, x1, y1, z1], the
+	 * {@code kind} and {@code flow} (open enums), {@code flowing}, {@code converted}, {@code washed} and {@code settleTicks}, and a capped
+	 * removal's {@code foreign} cells as positions (at most 64, with {@code foreignCount}); {@code architect_mc:fluidsWatch} lists every
+	 * body while it is {@code writing} or {@code draining}, with its box; {@link RegionView#fluidsRemoval} is the removal's phase. Body
+	 * ids are stable: {@code <part>_r<k>}. An IR with a river or such a fall {@code requires} {@code flowingWater} (and
+	 * {@code volume:levels} when it read a version-4 volume), so an older mod refuses it {@link Reason#PLAN_STALE}. Only a current
+	 * ({@code flow: "current"}) or a fall off a form is 8c's: any other {@code flow} is a plain HY body. New: {@link Reason#UNSETTLED} (a plan
+	 * check's part answer, read by {@link Unsettled#of}: say, the cap that was hit, wouldFit), {@link FluidsRemoval} and
+	 * {@link RegionView#fluidsRemoval}. No new method.
 	 * (7c PF, since 1.61.0) {@code "shapePromotion"} is advertised when the helper's kit plans promoted forms (its
 	 * {@code plan.shapePromotion}): generators that passed the kit's promotion pipeline (kit/lib/forms/CANDIDATES.md) are ordinary plan/0
 	 * {@code form.<name>} catalogue entries with their {@code sinceApi}; the first is {@code form.arch_span} (the archSpan module: an arcade

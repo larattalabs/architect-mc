@@ -95,6 +95,33 @@ public final class SliceHDev {
 					return RegionFluids.stateJson(l);
 				});
 			});
+		DevBridge.register("dev.fluid.beforeWave", 10_000, "{setblock: [[x,y,z,state]]} - (8c, the review's P1-5) TEST: right before an ordered region's "
+			+ "next wave after its first writes its sources, set blocks -> {armed}", (req, mc) -> {
+				JsonArray sb = req.getAsJsonArray("setblock");
+				RegionFluids.beforeWave = level -> {
+					for (var c : sb) {
+						JsonArray q = c.getAsJsonArray();
+						level.setBlock(new BlockPos(q.get(0).getAsInt(), q.get(1).getAsInt(), q.get(2).getAsInt()), dev.larattalabs.architect.region.Packed.parse(q.get(3)
+							.getAsString()), 3);
+					}
+				};
+				JsonObject o = new JsonObject();
+				o.addProperty("armed", true);
+				return CompletableFuture.completedFuture(o);
+			});
+		DevBridge.register("dev.fluid.river", 120_000, "{region} - (8c WU) per body of the region's fluids: flow, predicted and flowing cells, the census now "
+			+ "(mismatch, escaped, ticking), a sample of predicted levels against the world's [x,y,z,predicted,level], and items: the item entities spawned "
+			+ "this session in a flowing body's own or predicted cells -> {phase, removal?, items, bodies}", (req, mc) -> ServerTasks.callAsPlayer((level, player) -> {
+				var l = dev.larattalabs.architect.region.RegionsImpl.live(req.get("region").getAsString());
+				if (l == null) {
+					JsonObject o = new JsonObject(); // (a removed region: its items counter only)
+					o.addProperty("removed", true);
+					o.addProperty("items", RegionFluids.itemsOf(req.get("region").getAsString()));
+					o.add("bodies", new JsonArray());
+					return o;
+				}
+				return RegionFluids.riverJson(level, l);
+			}));
 		DevBridge.register("dev.fluid.beforeGate", 10_000, "{protect?: [x0,z0,x1,z1], owner?, setblock?: [[x,y,z,state]]} - (6c H) TEST: at the next "
 			+ "fluids gate, right before its containment check, mark a protected area for the owner and/or set blocks -> {armed}", (req, mc) -> {
 				JsonArray pr = req.has("protect") ? req.getAsJsonArray("protect") : null;
@@ -115,6 +142,23 @@ public final class SliceHDev {
 				};
 				JsonObject o = new JsonObject();
 				o.addProperty("armed", true);
+				return CompletableFuture.completedFuture(o);
+			});
+		DevBridge.register("dev.fluid.hold", 10_000, "{write?: bool, settle?: bool, drain?: bool} - (8cTa; drain: 8cT last round) TEST: a fluids record's write step (forced tick, wave) "
+			+ "and/or its census (settle, escape guard) not run while on; omitted keys keep their value -> {write, settle}", (req, mc) -> {
+				if (req.has("write")) {
+					RegionFluids.holdWrite = req.get("write").getAsBoolean();
+				}
+				if (req.has("settle")) {
+					RegionFluids.holdSettle = req.get("settle").getAsBoolean();
+				}
+				if (req.has("drain")) {
+					RegionFluids.holdDrain = req.get("drain").getAsBoolean(); // (8cT last round) a removal's or lot's drain W refuses (held)
+				}
+				JsonObject o = new JsonObject();
+				o.addProperty("write", RegionFluids.holdWrite);
+				o.addProperty("settle", RegionFluids.holdSettle);
+				o.addProperty("drain", RegionFluids.holdDrain);
 				return CompletableFuture.completedFuture(o);
 			});
 		DevBridge.register("dev.fluid.bypass", 10_000, "{on: bool} - (6c H) TEST: the fluids stage's containment check is not run (every body is written: "

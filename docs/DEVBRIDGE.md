@@ -863,3 +863,32 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   answer in `dev.stockpile.saved` `testHooks.autoSaveOffAnswer` (soff-crash Y2).
 - (slice T4c, TEST; Steward's FKC0) `dev.removal.failAfterCustody {n?: 1}`: the next n group or stage removals abort right after their
   custody is taken and saved: given back, saved, ended NOT_STARTED; kill point `FKC0` after the give-back's save (`dev.journal.killAt`).
+- **2026-11-18 (slice DF, fluids.json on DurableFile):** `dev.region.failNextSave` takes `sticky: true` (every write of that file fails until
+  `off`; the answer gains `sticky`); on `fluids.json` the fluids stage then waits SITE_BUSY ("the fluids record is not durable"), nothing
+  written. `dev.fluid.state {region}` gains `owed` (the outcome and reason while the record is not on disk). `dev.journal.killAt` gains
+  `FL1r` (the gate's save of the record refused or in doubt, no source written) and `FL3d` (a removal's `draining` record saved, nothing
+  drained yet), each also with `+save`.
+- **2026-11-18 (8c slices WU, CR, the in-game lane):** new `dev.fluid.river {region}` (`SliceHDev`, generated headless too): per body of the
+  region's fluids its `flow`, `predicted` and `flowing` cells, the census now (`mismatch`, `escaped`, `ticking`), a sample of predicted levels
+  against the world's `[x, y, z, predicted, level]`, the region's `items`: item entities spawned this session in a flowing body's own or
+  predicted cells (a removed region answers `{removed, items}`), and `itemsNow`: item entities standing within a cell of them now. `dev.journal.killAt` gains `FL7` (a river's wash clears journaled, no source
+  written), `FL8` (a removal's sources drained and the flow dying, before the stray pass) and `FL9` (the stray pass half done: one chunk's
+  cells restored, the next not), each also with `+save`. Driven by `tools/gate8c.mjs` (steps `8c-probe`, `8c-ingame`, `8c-crash`; slice SV's `8c-survival` reads the same hooks with
+  `dev.region.terrain`'s waits, `dev.region.quote` and the stockpile's, no new hook).
+- **2026-11-18 (slice DF round 2):** `dev.region.failNextSave` takes `inDoubt: true` (the armed file's write is renamed into place and then
+  answers IN_DOUBT, as a folder force that failed after the rename; one write, or every write with `sticky`). `dev.journal.killAt` gains
+  `FL3x` (a removal's `done` fluids record saved after T0's world barrier, the solids not restored yet), also with `+save`. New gate steps
+  `irr-df` (gate6cirr `df`) and `rv-df` (gate6drv `df`).
+- **2026-11-18 (slice DF round 3):** `dev.journal.killAt` gains `FL6d` (a lot removal's sources drained, T0's barrier and the `lotDrained`
+  save not yet), also with `+save`.
+- **2026-11-18 (slice 8cTa, hooks only):** TEST `dev.fluid.hold {write?, settle?}` (a fluids record's write step, the forced tick or an
+  ordered course's wave, and/or its census, settle and escape guard, not run while on; default off). `dev.journal.killAt` gains `FLc` (a
+  survival region's keyed fluids charge on disk, its region record not updated or saved) and `FLe` (a census tick's escape or unsettled
+  drain, its fluids record saved, its world writes not), each also with `+save`.
+- **2026-11-19 (slice 8cTb):** txn kinds `region.charge` and `fluid.drain` (`dev.txn.state`, `dev.txn.points`). `dev.journal.killAt`
+  takes their points, `+save` too: `TX:region.charge:*` (FLc stays, inside the debit), `TX:fluid.drain:drain` (the removal's drain written,
+  its chunk receipts not: Steward's S3 drain row), the core's `TX:fluid.drain:intent|apply:<i>|barrier:effects|effects|retiring|done`;
+  FL3d is reached after the drain's intent. `dev.fluid.state`'s `removal` is now written by the drain txn's R effect.
+- **2026-11-19 (slice 8cTc):** txn kind `fluid.write` (`TX:fluid.write:place`, the wave written and forced, its receipts not: Steward's
+  S3 write row; the core's points too); `fluid.drain` also carries escape/unsettled (`TX:fluid.drain:drain`, FLe after its R) and lot drains
+  (FL6d after its W).

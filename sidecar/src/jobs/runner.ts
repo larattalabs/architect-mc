@@ -642,7 +642,7 @@ export class JobRunner {
       const resume = w.sessionId;
       const prompt = answers && resume ? continuationPrompt(answers) : retryPrompt ?? (resume ? RESUME_PROMPT : spec.prompt);
       // (C33) the refs lead, then the caller's system text (or the kind's default); expanded from the running kit on every query
-      const system = await composeSystem(this.sc.config.kitDir, spec.systemRefs, spec.system ?? (spec.kind === 'structured' ? STRUCTURED_SYSTEM : AGENT_SYSTEM)).catch((e: Error) => e);
+      const system = await composeSystem(this.sc.config.kitDir, spec.systemRefs, spec.system ?? (spec.kind === 'structured' ? STRUCTURED_SYSTEM : AGENT_SYSTEM), { flowingWater: spec.flowingWater === true }).catch((e: Error) => e);
       if (system instanceof Error) return this.fail(id, `system prompt: ${system.message}`);
       const tools = spec.kind === 'agent' ? [...(spec.tools ?? []).map((t) => this.modTool(id, t, r)), this.statusTool(id)] : [];
       w.queries++;

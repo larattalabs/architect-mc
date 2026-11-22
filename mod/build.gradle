@@ -116,6 +116,8 @@ test {
 	systemProperties(providers.systemPropertiesPrefixedBy("umt.").get())
 	// the P3 lints (docs/FAST-CHECKS.md): -Dledger.seeds/from/strict, -Dledger.probe=<events.json> (the calibration replay)
 	systemProperties(providers.systemPropertiesPrefixedBy("ledger.").get())
+	// (slice 8cTa) failing-first records that stay red until their fix slice: -Dred.8cT=true runs them (RegionFluids8cTaRedTest)
+	systemProperties(providers.systemPropertiesPrefixedBy("red.").get())
 	// -Darvx.write=true rewrites the ARVX fixtures (src/test/resources/arvx, ArvxTest)
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
 	// -Dmirror.write=true rewrites kit/test/fixtures/mirror-oracle.json (MirrorOracleTest, slice 0b)

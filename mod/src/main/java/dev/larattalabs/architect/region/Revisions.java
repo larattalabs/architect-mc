@@ -567,6 +567,11 @@ public final class Revisions {
 			if (l == null) {
 				throw RegionsImpl.refusal(Reason.OTHER, "no region " + regionId);
 			}
+			String held = FluidTxns.heldAny(regionId, null);
+			if (held != null) {
+				// (8cTc, Steward's ask) a new revision blocked by a held fluid txn (a drain or write that finishes later): held(other), never decided
+				throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, held + " (the region's water finishes first)", "held(other)");
+			}
 			// (6d GR §9) a growth: the region's own program with params {grow}, or revise with {grow} or {spec: {grow}}: revise's spec.grow
 			JsonObject params = growParams(req);
 			if (params == null) {
@@ -994,6 +999,13 @@ public final class Revisions {
 		EFFECTIVE.put(id + "#" + rid, eff);
 		try {
 			RegionsImpl.saveConfirmed(l); // the publication; (LCAP, rule 17) confirmed: its caps are on disk before any install
+		} catch (RegionStore.InDoubt e) {
+			// (slice DF round 2, P1 8) renamed, a force failed: the disk may hold the new head. Never refused: accepted and held, owed; the
+			// install waits until the record is confirmed (RegionsImpl.retryOwed, then recoverOne installs it, idempotent by item key)
+			Architect.LOGGER.warn("Region {}: revision {}'s publication is in doubt ({}): accepted, its install waits for the record", id, rid, e.getMessage());
+			RegionsImpl.publicationInDoubt(l);
+			SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+			return id;
 		} catch (java.io.IOException e) {
 			// nothing installed or written: the record goes back to its head (on disk it still is: a crash at RV2's state), then refused
 			rec.revisions.remove(rv);
@@ -1404,6 +1416,12 @@ public final class Revisions {
 		if (s == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
 		}
+		String held = FluidTxns.heldAny(regionId, FluidTxns.DRAIN);
+		if (held != null) {
+			// (8cT last round, P2) an undo asked while a drain of the region is held: typed at once (the revision stays UNDOING)
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, held + " (the region's water drains first;"
+				+ " it finishes by itself)", "held(other)"));
+		}
 		return RegionsImpl.onServer(s, () -> undo0(s, regionId, toPosition, actor)).thenCompose(f -> f);
 	}
 
@@ -1536,18 +1554,45 @@ public final class Revisions {
 		}
 		op.add("result", new JsonObject());
 		writeUndo(l, op);
+		String busyWas = rec.busy, manifestWas = rec.manifest;
+		Map<Integer, String> statesWas = new LinkedHashMap<>();
+		for (Rev r : suffix) {
+			statesWas.put(r.rid, r.state);
+		}
 		for (Rev r : suffix) {
 			r.state = "UNDOING";
 		}
 		rec.busy = "undoing " + opId;
 		rec.manifest = "rev/op-" + opId + ".json";
-		RegionsImpl.save(l);
-		// (slice T4R fix round) RVU1 is the stage removal txn's decision now (RemovalTxn.GROUP_KIND.alias, Steward's changes §1)
+		boolean inDoubt = false;
+		try {
+			RegionsImpl.saveConfirmed(l);
+		} catch (RegionStore.InDoubt e) {
+			inDoubt = true; // (slice DF round 2, P1 7/8) the commit may be on disk: kept, owed; the driver goes on once it is confirmed
+			Architect.LOGGER.warn("Region {}: undo {}'s commit is in doubt ({}): it runs once the record is confirmed", regionId, opId, e.getMessage());
+		} catch (IOException e) {
+			// (P1 7) the commit point not on disk: nothing drained or removed; the record back as it was, the manifest dropped
+			for (Rev r : suffix) {
+				r.state = statesWas.get(r.rid);
+			}
+			rec.busy = busyWas;
+			rec.manifest = manifestWas;
+			try {
+				Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
+			} catch (IOException x) {
+				Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, x.toString());
+			}
+			throw RegionsImpl.recordUnsaved("region " + regionId + "'s undo", e);
+		}
+		// (slice T4R fix round) RVU1 is the stage removal txn's decision now (RemovalTxn.GROUP_KIND.alias, Steward's changes §1); (slice T5F merge)
+		// DF round 2's confirmed commit save is kept
 		CompletableFuture<dev.larattalabs.architect.api.RemoveResult> f = new CompletableFuture<>();
 		UNDO_FUTURES.computeIfAbsent(opId, k -> new ArrayList<>()).add(f);
 		Architect.LOGGER.info("Region {}: undo {} to position {} (revisions {}, stages {})", regionId, opId, toPosition, rids, stages);
 		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
-		undoStep(s, l, op);
+		if (!inDoubt) {
+			undoStep(s, l, op);
+		}
 		return f;
 	}
 
@@ -1723,7 +1768,9 @@ public final class Revisions {
 			cancelEnded(l, op);
 			op.addProperty("phase", "drain");
 			writeUndo(l, op);
-			RegionsImpl.save(l);
+			if (!RegionsImpl.save(l)) {
+				return; // (slice DF round 2, P1 7) the record not on disk: nothing drained; the driver comes back once it is (mayDrive)
+			}
 			WorldJournal.kill("RVC2"); // the batch cancelled and ended, nothing drained or removed
 			phase = "drain";
 		}
@@ -1961,13 +2008,27 @@ public final class Revisions {
 		rec.manifest = null;
 		EFFECTIVE.keySet().removeIf(k -> k.startsWith(rec.id + "#"));
 		readersMoved(l);
-		RegionsImpl.save(l);
-		op.addProperty("phase", "done");
-		writeUndo(l, op);
-		try {
-			Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
-		} catch (IOException e) {
-			Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, e.toString());
+		if (RegionsImpl.save(l)) {
+			op.addProperty("phase", "done");
+			writeUndo(l, op);
+			try {
+				Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
+			} catch (IOException e) {
+				Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, e.toString());
+			}
+		} else {
+			// (slice DF round 2, P1 7) the finished record owed: the manifest stays (a start before it is saved resumes the undo, idempotent);
+			// (round 3) and is closed and deleted right after the record's next OK save, whichever save that is
+			Architect.LOGGER.warn("Region {}: undo {} finished; its record is owed, the manifest kept until it is saved", rec.id, opId);
+			RegionsImpl.afterSave(l, () -> {
+				op.addProperty("phase", "done");
+				try {
+					writeUndo(l, op);
+					Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
+				} catch (IOException | RuntimeException e) {
+					Architect.LOGGER.warn("Region {}: undo manifest {} not closed: {}", rec.id, opId, e.toString());
+				}
+			});
 		}
 		JsonObject agg = op.getAsJsonObject("result");
 		dev.larattalabs.architect.api.RemoveResult done = undoResult(agg);
@@ -2093,8 +2154,8 @@ public final class Revisions {
 				continue;
 			}
 			String opId = b.substring(8).trim();
-			if (UNDO_INFLIGHT.contains(opId)) {
-				continue;
+			if (UNDO_INFLIGHT.contains(opId) || !RegionsImpl.mayDrive(l)) {
+				continue; // ((slice DF round 2) an owed record: the undo waits for it)
 			}
 			JsonObject op = readUndo(l, opId);
 			if (op == null) {
@@ -2155,9 +2216,32 @@ public final class Revisions {
 	/** {@link #started}'s recovery, at the first tick (the batches are loaded by then). */
 	static void recover(MinecraftServer s) {
 		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			recoverOne(s, l);
+		}
+	}
+
+	/**
+	 * (slice DF round 2) {@link #recover}'s step for one region: a revision accepted (busy {@code revising}) and not installed is installed;
+	 * one whose batch is gone is ended. Also run once an owed record is confirmed (a publication in doubt). Idempotent.
+	 */
+	/** (slice DF round 3) Whether a revision of the region is accepted and not installed (busy revising, no batch of it). */
+	static boolean awaitingInstall(RegionsImpl.Live l) {
+		RegionRec rec = l.rec();
+		if (rec.busy == null || !rec.busy.startsWith("revising ")) {
+			return false;
+		}
+		Rev rv = rev(rec, Integer.parseInt(rec.busy.substring("revising ".length()).trim()));
+		return rv != null && (rv.batchId == null || Batches.get(rv.batchId) == null) && "ACCEPTED".equals(rv.state);
+	}
+
+	static void recoverOne(MinecraftServer s, RegionsImpl.Live l) {
+		{
 			RegionRec rec = l.rec();
 			if (rec.busy == null || !rec.busy.startsWith("revising ")) {
-				continue;
+				return;
+			}
+			if (!RegionsImpl.mayDrive(l)) {
+				return; // (its record owed: once it is confirmed)
 			}
 			int rid = Integer.parseInt(rec.busy.substring("revising ".length()).trim());
 			Rev rv = rev(rec, rid);
@@ -2165,7 +2249,7 @@ public final class Revisions {
 				rec.busy = null;
 				rec.manifest = null;
 				RegionsImpl.save(l);
-				continue;
+				return;
 			}
 			effective(l); // rebuilt when its snapshot was lost
 			JsonObject op;
@@ -2179,13 +2263,13 @@ public final class Revisions {
 				rv.state = "FAILED";
 				rv.waitFor("its manifest was lost", null);
 				end(l, rv, RegionState.valueOf(rv.regionStateBefore));
-				continue;
+				return;
 			}
 			if (rv.batchId != null && Batches.get(rv.batchId) != null) {
 				rv.state = "PLACING"; // (its install's save may have been lost after the batch's)
 				Architect.LOGGER.info("Region {}: revision {} resumes with its batch {}", rec.id, rid, rv.batchId);
 				RegionsImpl.save(l);
-				continue;
+				return;
 			}
 			boolean found = false;
 			for (QBatch b : Batches.ofGroup(rec.groupId)) {
@@ -2197,14 +2281,14 @@ public final class Revisions {
 			if (found) {
 				rv.state = "PLACING";
 				RegionsImpl.save(l);
-				continue;
+				return;
 			}
 			if (rv.batchId != null && (!rv.sites.isEmpty() || written(l, rid))) {
 				// its batch ran (something of it is written) and is gone: ended by what it wrote (the verifier's nit: PLACED when every tile of
 				// its IR has a committed record and every lot it built stands, else PARTIAL)
 				rv.state = complete(l, rv) ? "PLACED" : "PARTIAL";
 				end(l, rv, RegionState.valueOf(rv.regionStateBefore));
-				continue;
+				return;
 			}
 			// (the queue's file is written off the server thread: a stop right after the install may lose the batch; nothing of it written,
 			// it is installed again, idempotent by item key)
@@ -2474,4 +2558,24 @@ public final class Revisions {
 	static Path world(MinecraftServer s) {
 		return s.getWorldPath(LevelResource.ROOT);
 	}
+
+	/**
+	 * (8cTb, Steward's ask) A revision's record whose removal drain is held: its UNDOING revision's {@code waiting} names where ({@code chunk
+	 * x,z}); null clears a drain's note (never another one). Server thread.
+	 */
+	static void drainWaiting(RegionsImpl.Live l, @org.jspecify.annotations.Nullable String why) {
+		if (l.rid() == 0) {
+			return;
+		}
+		for (Rev r : l.rec().revisions) {
+			if (r.rid == l.rid() && "UNDOING".equals(r.state)) {
+				if (why != null) {
+					r.waiting = why;
+				} else if (r.waiting != null && r.waiting.startsWith("the water drains first: ")) {
+					r.waiting = null;
+				}
+			}
+		}
+	}
+
 }
