@@ -1932,7 +1932,23 @@ public final class Sites {
 					infraCascade.add(c);
 				}
 			}
-			OwnerRemovals.put(ownerKey, OwnerRemovals.build(id, group, b.dimension(), tagOwner, describe(id), infraCascade, all, decs, stashes, fins));
+			JsonObject rec = OwnerRemovals.build(id, group, b.dimension(), tagOwner, describe(id), infraCascade, all, decs, stashes, fins);
+			// (slice T4R-D fix round, P1-4) admitted over exactly the footprint the record holds (every member's box and every crate cell its
+			// settles touch, a historical crate outside its boxes included), before it is saved: no other removal's footprint, open txn cell or
+			// waiting ticket meets it, so no hold of this record can block another's own write (I6)
+			java.util.Set<String> selfIds = new java.util.HashSet<>(cascade);
+			all.forEach(x -> selfIds.add(x.id()));
+			SiteException busy = RemovalAreas.footprintRefusal(OwnerRemovals.holdsOf(rec), selfIds, "remove " + id);
+			if (busy != null) {
+				Stockpiles.dropPendingCredits(decs.values());
+				for (Site y : all) {
+					if (y.construction() != null && Fills.phase(y) != null) {
+						Fills.writeBack(level, y); // the custody taken above goes back: nothing of the removal changed
+					}
+				}
+				throw busy;
+			}
+			OwnerRemovals.put(ownerKey, rec);
 		}
 		boolean stashHeld = ownerKey != null || CrateSettle.holdDurable(stashes);
 		if (custody || pendingHeld || stashHeld) {

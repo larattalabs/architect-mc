@@ -1310,6 +1310,11 @@ public final class Adopt {
 			com.google.gson.JsonObject rec = ownerRecord(b, dec, group, wb, cells, tagOwner);
 			if (rec != null) {
 				stash = rec.getAsJsonObject("members").getAsJsonObject(b.id()).get("settle") instanceof com.google.gson.JsonObject st ? st : null;
+				// (fix round P1-4) admitted over exactly the footprint its record holds (its delta cells, its crate cell), before it is saved
+				Sites.SiteException busy = RemovalAreas.footprintRefusal(OwnerRemovals.holdsOf(rec), java.util.Set.of(b.id()), "remove " + b.id());
+				if (busy != null) {
+					throw busy;
+				}
 				ownerKey = OwnerRemovals.key(b.id(), group);
 				OwnerRemovals.put(ownerKey, rec);
 				try {

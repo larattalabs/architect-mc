@@ -187,18 +187,41 @@ public final class RemovalAreas {
 			return;
 		}
 		for (dev.larattalabs.architect.txn.TxnEntry t : core.open()) {
-			if (!dev.larattalabs.architect.txn.RemovalTxn.GROUP.equals(t.kind) || t.key == null) {
+			if (t.key == null) {
 				continue;
 			}
-			int at = t.key.lastIndexOf('@');
-			String self = at < 0 ? t.key : t.key.substring(0, at);
+			if (dev.larattalabs.architect.txn.RemovalTxn.GROUP.equals(t.kind)) {
+				int at = t.key.lastIndexOf('@');
+				String self = at < 0 ? t.key : t.key.substring(0, at);
+				for (String res : t.resources) {
+					Area a = rboxArea(res, "the removal of " + self.replace("group:", "group ").replace("/", " stage ") + " (txn " + t.id + ")", self);
+					if (a != null) {
+						out.add(a);
+					}
+				}
+				continue;
+			}
+			if (ownAreas(t.kind)) {
+				continue; // its durable record's areas stand for it (an owner record, an extraction attempt, a group's members)
+			}
+			// (slice T4R-D fix round, P1-4; design §4.2 (c)) any other open txn's cell resources (a crate settle, a take, a delivery, a standalone
+			// road's removal txn, an adoption), as loaded from disk: no new removal saves a footprint over a cell such a txn holds or writes
 			for (String res : t.resources) {
-				Area a = rboxArea(res, "the removal of " + self.replace("group:", "group ").replace("/", " stage ") + " (txn " + t.id + ")", self);
-				if (a != null) {
-					out.add(a);
+				Area cell = resourceArea(res);
+				if (cell != null) {
+					out.add(new Area(cell.dim(), cell.box(), "txn " + t.id + " (" + t.kind + ")", "txn:" + t.key));
 				}
 			}
 		}
+	}
+
+	/**
+	 * (fix round P1-4) Whether an open txn of {@code kind} is represented by its durable record's areas: a single removal's owner txn (its
+	 * owner record), an extraction (its attempt), a group's cargo (inside its members' boxes, its own prerequisite).
+	 */
+	static boolean ownAreas(String kind) {
+		return dev.larattalabs.architect.txn.RemovalTxn.SITE.equals(kind) || Extractions.KIND.equals(kind) || dev.larattalabs.architect.txn.CargoTxn.KIND
+			.equals(kind);
 	}
 
 	/** {@code rbox:<dim>@x0,y0,z0:x1,y1,z1} as an area, or null (another resource, or malformed). Pure. */
@@ -227,15 +250,89 @@ public final class RemovalAreas {
 	}
 
 	private static void groupAreas(Groups.Removal r, String who, List<Area> out) {
+		String site = "group:" + r.group + (r.stage == null ? "" : "/" + r.stage);
+		for (Area a : footprintOf(r)) {
+			out.add(new Area(a.dim(), a.box(), who, site));
+		}
+	}
+
+	/**
+	 * (slice T4R-D fix round, P1-4) A group's (or stage's) full footprint: every member's box and every crate cell its settles touch (each
+	 * member's construction crate, standing or historical, and the group's shared crate), the cells its removal txn holds and writes.
+	 */
+	static List<Area> footprintOf(Groups.Removal r) {
+		List<Area> out = new ArrayList<>();
 		java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.undoSites);
 		ids.addAll(r.sites);
 		for (String id : ids) {
 			Anchors.Bounds b = Groups.boxOf(id);
 			String dim = Groups.dimensionOfMember(id);
 			if (b != null && dim != null) {
-				out.add(new Area(dim, b, who, "group:" + r.group + (r.stage == null ? "" : "/" + r.stage)));
+				out.add(new Area(dim, b, id, id));
+				Construction.Crate c = crateOfMember(id);
+				if (c != null) {
+					out.add(new Area(dim, new Anchors.Bounds(c.x(), c.y(), c.z(), c.x(), c.y(), c.z()), id, id));
+				}
 			}
 		}
+		SiteGroupRec g = Sites.group(r.group);
+		if (g != null && g.crate() != null && !ids.isEmpty()) {
+			String dim = Groups.dimensionOfMember(ids.iterator().next());
+			if (dim != null) {
+				Construction.Crate c = g.crate();
+				out.add(new Area(dim, new Anchors.Bounds(c.x(), c.y(), c.z(), c.x(), c.y(), c.z()), r.group, r.group));
+			}
+		}
+		return out;
+	}
+
+	private static Construction.@Nullable Crate crateOfMember(String id) {
+		Site m = Sites.pendingRecord(id) != null ? Sites.pendingRecord(id) : Sites.get(id);
+		if (m != null) {
+			return m.construction() == null ? null : m.construction().crate();
+		}
+		Infra inf = Infras.pending(id) != null ? Infras.pending(id) : Infras.get(id);
+		return inf == null || inf.construction() == null ? null : inf.construction().crate();
+	}
+
+	/**
+	 * (slice T4R-D fix round, P1-4) Admission over exactly the footprint a record will hold: the typed SITE_BUSY refusal of the first in-flight
+	 * area meeting any of {@code holds} (pseudo-stashes as {@link OwnerRemovals#holdsOf} makes them: each its dim, its box and, for an adopted
+	 * site, its cells one by one), or null. {@code self}: the record's own members. Server thread.
+	 */
+	public static Sites.@Nullable SiteException footprintRefusal(List<com.google.gson.JsonObject> holds, Set<String> self, String what) {
+		return footprintRefusal(holds, self, what, dev.larattalabs.architect.txn.TxnServer.core());
+	}
+
+	/** (TEST seam) {@link #footprintRefusal(List, Set, String)} against {@code core} (the txn core whose open txns count). */
+	static Sites.@Nullable SiteException footprintRefusal(List<com.google.gson.JsonObject> holds, Set<String> self, String what,
+		dev.larattalabs.architect.txn.@Nullable TxnCore core) {
+		List<Area> held = heldAreas(core, null);
+		for (com.google.gson.JsonObject h : holds) {
+			Area a = first(held, h.get("dim").getAsString(), boxesOf(h), self);
+			if (a != null) {
+				return new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "Not yet: " + a.who() + " is still in progress over " + Anchors
+					.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
+			}
+		}
+		return null;
+	}
+
+	/** The boxes of one hold: its cells one by one when it names them (an adopted site's delta mask), else its box. Pure. */
+	static List<Anchors.Bounds> boxesOf(com.google.gson.JsonObject h) {
+		List<Anchors.Bounds> out = new ArrayList<>();
+		if (h.get("hold") instanceof com.google.gson.JsonArray cells && !cells.isEmpty()) {
+			for (com.google.gson.JsonElement e : cells) {
+				long p = e.getAsLong();
+				int x = net.minecraft.core.BlockPos.getX(p), y = net.minecraft.core.BlockPos.getY(p), z = net.minecraft.core.BlockPos.getZ(p);
+				out.add(new Anchors.Bounds(x, y, z, x, y, z));
+			}
+			return out;
+		}
+		com.google.gson.JsonArray b = h.getAsJsonArray("box");
+		out.add(new Anchors.Bounds(b.get(0).getAsInt(), b.get(1).getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4).getAsInt(), b.get(5)
+			.getAsInt()));
+		return out;
 	}
 
 	/**
@@ -268,16 +365,10 @@ public final class RemovalAreas {
 	static @Nullable Area admissionOf(Groups.Removal r) {
 		Set<String> self = Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
 		List<Area> held = heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), r);
-		java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.undoSites);
-		ids.addAll(r.sites);
-		for (String id : ids) {
-			Anchors.Bounds b = Groups.boxOf(id);
-			String dim = Groups.dimensionOfMember(id);
-			if (b != null && dim != null) {
-				Area a = first(held, dim, List.of(b), self);
-				if (a != null) {
-					return a;
-				}
+		for (Area f : footprintOf(r)) { // (fix round P1-4) its members' boxes and every crate cell its settles touch
+			Area a = first(held, f.dim(), List.of(f.box()), self);
+			if (a != null) {
+				return a;
 			}
 		}
 		return null;
