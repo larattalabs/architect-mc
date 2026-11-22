@@ -22,8 +22,36 @@ public final class AutoCollect {
 	private AutoCollect() {
 	}
 
+	/** Players who joined and whose owed player blocks wait for their collect (the stores loaded, the player in the world), with the tick. */
+	private static final Map<java.util.UUID, Integer> JOINED = new java.util.concurrent.ConcurrentHashMap<>();
+
 	static void init() {
-		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> server.execute(() -> joined(server, handler.getPlayer().getUUID(), 0)));
+		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> JOINED.put(handler.getPlayer().getUUID(), 0));
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(AutoCollect::tick);
+	}
+
+	/**
+	 * Each tick: a joined player's notice and collect once every store is loaded and the player is in the world (at most a minute later: it
+	 * then runs as is); never at server start without a player.
+	 */
+	static void tick(MinecraftServer srv) {
+		if (JOINED.isEmpty()) {
+			return;
+		}
+		for (java.util.UUID id : List.copyOf(JOINED.keySet())) {
+			int n = JOINED.merge(id, 1, Integer::sum);
+			ServerPlayer p = srv.getPlayerList().getPlayer(id);
+			if (p == null) {
+				JOINED.remove(id);
+				continue;
+			}
+			if ((CrateSettle.notReady() != null || p.isRemoved() || p.isDeadOrDying() || n < 20) && n < 1200) {
+				continue;
+			}
+			JOINED.remove(id);
+			Architect.LOGGER.info("Auto-collect at the join of {}: {} owed entr(ies)", id, OwedLedger.of(id.toString()).size());
+			onJoin(srv, p);
+		}
 	}
 
 	/** After owner {@code rec} retired: its {@code player_blocks} parts collected for their online recipients, by site title. */
@@ -39,31 +67,6 @@ public final class AutoCollect {
 				}
 			}
 		}
-	}
-
-	/**
-	 * At a join: once every store is loaded (the owed ledger read) and the player is in the world, the notice and the collect; retried each
-	 * second for a minute (a join answered before the start's loads finished, or a player not placed yet), never dropped.
-	 */
-	static void joined(MinecraftServer srv, java.util.UUID id, int tries) {
-		ServerPlayer p = srv.getPlayerList().getPlayer(id);
-		if (p == null) {
-			return; // left again: the next join
-		}
-		if ((CrateSettle.notReady() != null || p.isRemoved() || p.isDeadOrDying()) && tries < 60) {
-			dev.larattalabs.architect.txn.TxnServer.later(() -> srv.execute(() -> joinedLater(srv, id, tries + 1)));
-			return;
-		}
-		Architect.LOGGER.info("Auto-collect at the join of {}: {} owed entr(ies)", id, OwedLedger.of(id.toString()).size());
-		onJoin(srv, p);
-	}
-
-	private static void joinedLater(MinecraftServer srv, java.util.UUID id, int tries) {
-		if (tries % 20 != 0) {
-			dev.larattalabs.architect.txn.TxnServer.later(() -> joinedLater(srv, id, tries + 1)); // about a second between checks
-			return;
-		}
-		joined(srv, id, tries);
 	}
 
 	/** The join notice and collect: every {@code player_blocks} entry owed to {@code p}. */
