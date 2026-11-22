@@ -87,7 +87,6 @@ class T4RDLKillMarkerTest {
 			assertTrue(mark > prevHalt, "T4RDL-kill-marker: halt #" + halts + " in WorldJournal.kill is preceded by its marker");
 		}
 		assertEquals(2, halts, "both halts (plain and +save)");
-		String js = Files.readString(Path.of("../tools/lib/second-crash.mjs"));
-		assertTrue(js.contains("'dev-killed.json'"), "the gate reads the same file name (tools/lib/second-crash.mjs KILL_MARKER)");
+		assertEquals("dev-killed.json", DevStart.KILLED, "the file the gate reads (kit/test/t4rd-2crash.test.mjs checks its side)");
 	}
 }

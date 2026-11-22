@@ -50,6 +50,8 @@ test('T4RDL-2crash-marker: refused, no server, its recovery open, but no marker 
 
 test('T4RDL-2crash-marker: killMarker reads the point from <arch>/dev-killed.json', () => {
   assert.equal(sc.KILL_MARKER, MARKER, 'the same file name as DevStart.markKilled');
+  const java = fs.readFileSync(new URL('../../mod/src/main/java/dev/larattalabs/architect/site/DevStart.java', import.meta.url), 'utf8');
+  assert.match(java, /static final String KILLED = "dev-killed\.json";/, 'DevStart.KILLED names the same file');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't4rdl-marker-'));
   try {
     assert.equal(sc.killMarker(dir), null, 'absent');
