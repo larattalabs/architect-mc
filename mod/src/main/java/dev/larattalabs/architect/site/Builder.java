@@ -2895,8 +2895,7 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							BlockState now = level.getBlockState(m);
 							if (qi >= 0 && !free.get(qi) && r.matches(now, qi) && (shadow == null || !shadow.contains(m.asLong()))) {
-								tally.at(m.asLong(), blockId(now)); // (T4b fix round, N3) recorded per cell for the restore's min
-								tally.add(Refunds.Outcome.REFUND, r.refundCost(now, qi));
+								tally.add(Refunds.Outcome.REFUND, m.asLong(), blockId(now), r.refundCost(now, qi), null); // (N3; T4R-D D3) per cell
 							}
 							continue;
 						}
@@ -2904,7 +2903,7 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
 							// the covering site kept stays in the world; it drops once, with the covering site's removal)
-							coverCell(r, qi, WorldJournal.state(over), level.getBlockState(m), free, tally);
+							coverCell(r, qi, m.asLong(), WorldJournal.state(over), level.getBlockState(m), free, tally);
 							continue;
 						}
 					}
@@ -2916,16 +2915,20 @@ public final class Builder {
 					if (qi0 < 0 && !scaffold.isEmpty() && scaffold.contains(m.asLong()) && isScaffold(now)) {
 						continue;
 					}
-					if (field != null && fieldCell(field, m.asLong(), now, field.cropCell(m.asLong())
-						&& dev.larattalabs.architect.placed.Placed.record(level, m) != null, tally)) {
-						continue;
+					if (field != null && field.cropCell(m.asLong())) {
+						dev.larattalabs.architect.placed.Placed.Rec fr = dev.larattalabs.architect.placed.Placed.record(level, m);
+						if (fieldCell(field, m.asLong(), now, fr != null, fr == null ? null : fr.placer().toString(), tally)) {
+							continue;
+						}
 					}
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);
-					tally.at(m.asLong(), blockId(now)); // (T4b fix round, N3) a REFUND here is recorded per cell for the restore's min
-					Refunds.Outcome o = tallyCell(r, qi, now, was, free, only != null, () -> dev.larattalabs.architect.placed.Placed.record(level, m) != null,
-						tally);
+					long mp = m.asLong();
+					Refunds.Outcome o = tallyCell(r, qi, mp, now, was, free, only != null, () -> {
+						dev.larattalabs.architect.placed.Placed.Rec pr = dev.larattalabs.architect.placed.Placed.record(level, BlockPos.of(mp));
+						return pr == null ? null : pr.placer().toString();
+					}, tally);
 					if (o == null) {
 						missing++;
 					}
@@ -2991,25 +2994,33 @@ public final class Builder {
 		return tallyCell(r, qi, now, was, free, adopted, () -> false, tally);
 	}
 
-	/**
-	 * {@link #tallyCell(Run, int, BlockState, BlockState, BitSet, boolean, Refunds.Tally)} with the cell's PT record ({@code playerRecord}, asked
-	 * only for a queued cell that matches): (JR-b, F10) a queued cell holding its target that a player placed (Architect's own writes clear a
-	 * record, so a record there is the player's block: the builder found it standing and charged nothing, or the player replaced a block they
-	 * mined) is the player's: its block drops (PLAYER_DROP), never a refund out of the target's paid record or the legacy pool. The undo
-	 * still writes the cell's before back (it holds the entry's after), so only when that before is another block (else the block stays: as before);
-	 * a block that holds the target only through CU's equivalence (another copper stage, farmland for dirt, ...) the undo leaves standing as the
-	 * player's ({@link dev.larattalabs.architect.journal.WorldJournal#holdsOurs}): NONE, nothing dropped or refunded.
-	 */
+	/** {@link #tallyCell(Run, int, long, BlockState, BlockState, BitSet, boolean, java.util.function.Supplier, Refunds.Tally)} at no cell (TEST seam). */
 	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, BlockState now, BlockState was, BitSet free,
 		boolean adopted, java.util.function.BooleanSupplier playerRecord, Refunds.Tally tally) {
+		return tallyCell(r, qi, 0L, now, was, free, adopted, () -> playerRecord.getAsBoolean() ? "" : null, tally);
+	}
+
+	/**
+	 * One cell of a deconstruct at {@code pos} with the cell's PT placer ({@code placer}: its UUID, "" for a record of unknown placer, null for
+	 * no record; asked only for a queued cell that matches, or a player's block): (JR-b, F10) a queued cell holding its target that a player placed (Architect's own writes clear a
+	 * record, so a record there is the player's block: the builder found it standing and charged nothing, or the player replaced a block they
+	 * mined) is the player's (PLAYER_DROP), never a refund out of the target's paid record or the legacy pool. The undo
+	 * still writes the cell's before back (it holds the entry's after), so only when that before is another block (else the block stays: as before);
+	 * a block that holds the target only through CU's equivalence (another copper stage, farmland for dirt, ...) the undo leaves standing as the
+	 * player's ({@link dev.larattalabs.architect.journal.WorldJournal#holdsOurs}): NONE, nothing dropped or refunded. (slice T4R-D, D3) every
+	 * REFUND and PLAYER_DROP is booked at its cell (pos, block id, the placer as recipient).
+	 */
+	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, long pos, BlockState now, BlockState was, BitSet free,
+		boolean adopted, java.util.function.Supplier<@Nullable String> placer, Refunds.Tally tally) {
 		boolean asPlaced = qi >= 0 && r.matches(now, qi);
 		// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
 		boolean asSnapshot = Copper.is(now, was.getBlock());
-		if (asPlaced && !adopted && !asSnapshot && playerRecord.getAsBoolean()) {
+		String who = asPlaced && !adopted && !asSnapshot ? placer.get() : null;
+		if (who != null) {
 			if (dev.larattalabs.architect.journal.WorldJournal.cuEquivalent(now, r.target[qi])) {
 				return Refunds.Outcome.NONE; // (JR-b verifier) a CU equivalent with a record: the undo keeps it (holdsOurs), so it stays the player's
 			}
-			tally.add(Refunds.Outcome.PLAYER_DROP, Cells.cost(now)); // (JR-b, F10) the before isn't this block: the undo takes it away
+			tally.add(Refunds.Outcome.PLAYER_DROP, pos, blockId(now), Cells.cost(now), who.isEmpty() ? null : who); // (JR-b, F10)
 			return Refunds.Outcome.PLAYER_DROP;
 		}
 		Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), asSnapshot,
@@ -3018,9 +3029,10 @@ public final class Builder {
 			o = Refunds.Outcome.NONE; // (6c PT2) the undo writes the same block back: it stays, so no refund
 		}
 		if (o == Refunds.Outcome.REFUND) {
-			tally.add(o, r.refundCost(now, qi)); // (6c CU, S-CU-2) the block standing
+			tally.add(o, pos, blockId(now), r.refundCost(now, qi), null); // (6c CU, S-CU-2) the block standing
 		} else if (o == Refunds.Outcome.PLAYER_DROP) {
-			tally.add(o, Cells.cost(now));
+			String pw = placer.get();
+			tally.add(o, pos, blockId(now), Cells.cost(now), pw == null || pw.isEmpty() ? null : pw);
 		} else if (qi >= 0 && !asPlaced && now.isAir()) {
 			tally.mined();
 			return null;
@@ -3036,10 +3048,15 @@ public final class Builder {
 	 * #tallyCell} as before (our crop at any age refunds as construction, air nothing). The ledger lint's seam, as {@link #tallyCell}.
 	 */
 	static boolean fieldCell(@Nullable FieldCells f, long pos, BlockState now, boolean playerRecord, Refunds.Tally tally) {
+		return fieldCell(f, pos, now, playerRecord, null, tally);
+	}
+
+	/** (slice T4R-D, D3; T4R-N's P2) {@link #fieldCell} booked at its cell: pos, the crop's block id, its default state's cost, its placer. */
+	static boolean fieldCell(@Nullable FieldCells f, long pos, BlockState now, boolean playerRecord, @Nullable String placer, Refunds.Tally tally) {
 		if (f == null || !playerRecord || !f.cropCell(pos) || !f.fieldCrop(now)) {
 			return false;
 		}
-		tally.add(Refunds.Outcome.PLAYER_DROP, Cells.cost(now.getBlock().defaultBlockState()));
+		tally.add(Refunds.Outcome.PLAYER_DROP, pos, blockId(now), Cells.cost(now.getBlock().defaultBlockState()), placer);
 		return true;
 	}
 
@@ -3050,7 +3067,14 @@ public final class Builder {
 	 */
 	static void coverCell(@Nullable Run r, int qi, BlockState was0, BlockState now, BitSet free, Refunds.Tally tally) {
 		if (qi >= 0 && !free.get(qi) && Copper.is(was0, r.target[qi].getBlock()) && !Copper.is(now, r.target[qi].getBlock())) {
-			tally.add(Refunds.Outcome.REFUND, r.refundCost(was0, qi)); // (6c CU) the block that stood there
+			tally.add(Refunds.Outcome.REFUND, r.refundCost(was0, qi)); // (6c CU) the block that stood there (no cell: the lint seam)
+		}
+	}
+
+	/** (slice T4R-D, D3) {@link #coverCell} at {@code pos}: the REFUND recorded with its position and the displaced block. */
+	static void coverCell(@Nullable Run r, int qi, long pos, BlockState was0, BlockState now, BitSet free, Refunds.Tally tally) {
+		if (qi >= 0 && !free.get(qi) && Copper.is(was0, r.target[qi].getBlock()) && !Copper.is(now, r.target[qi].getBlock())) {
+			tally.add(Refunds.Outcome.REFUND, pos, blockId(was0), r.refundCost(was0, qi), null); // (6c CU) the block that stood there
 		}
 	}
 

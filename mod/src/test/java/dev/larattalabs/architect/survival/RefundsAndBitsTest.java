@@ -65,7 +65,7 @@ class RefundsAndBitsTest {
 		}
 		t.add(Refunds.classify(true, true, false, false, false, false), DOOR);
 		t.add(Refunds.classify(true, true, false, false, false, false), List.of()); // the door's upper half costs nothing
-		t.add(Refunds.classify(false, false, false, false, false, false), STONE);
+		t.add(Refunds.classify(false, false, false, false, false, false), 99L, "minecraft:stone", STONE, null); // (T4R-D, D3) at its cell
 		assertEquals(Map.of("minecraft:spruce_planks", 7, "minecraft:spruce_door", 1), t.refund());
 		assertEquals(Map.of("minecraft:stone", 1), t.playerBlocks());
 		assertEquals(3, t.minedCells());

@@ -31,12 +31,10 @@ class T4RNK6PlayerBlocksTest {
 		Refunds.Tally tally = new Refunds.Tally();
 		long p0 = BlockPos.asLong(0, 64, 0), p1 = BlockPos.asLong(1, 64, 0), s0 = BlockPos.asLong(2, 64, 0), s1 = BlockPos.asLong(3, 64, 0);
 		for (long p : new long[] {p0, p1}) {
-			tally.at(p, "minecraft:oak_planks");
-			tally.add(Refunds.Outcome.REFUND, List.of(new SurvivalItems.Cost("minecraft:oak_planks", 1)));
+			tally.add(Refunds.Outcome.REFUND, p, "minecraft:oak_planks", List.of(new SurvivalItems.Cost("minecraft:oak_planks", 1)), null);
 		}
 		for (long p : new long[] {s0, s1}) {
-			tally.at(p, "minecraft:sponge");
-			tally.add(Refunds.Outcome.PLAYER_DROP, List.of(new SurvivalItems.Cost("minecraft:sponge", 1)));
+			tally.add(Refunds.Outcome.PLAYER_DROP, p, "minecraft:sponge", List.of(new SurvivalItems.Cost("minecraft:sponge", 1)), null);
 		}
 		Anchors.Bounds bx = new Anchors.Bounds(0, 64, 0, 3, 64, 0);
 		Construction con = new Construction(Construction.BUILT, new int[] {0, 1, 2, 3}, "journal", null, new BitSet(), false, "owner");

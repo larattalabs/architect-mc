@@ -55,8 +55,14 @@ public final class Refunds {
 		return SOIL.contains(was) && SOIL.contains(now);
 	}
 
-	/** (slice T4b fix round, N3) One refunded cell: its position ({@code BlockPos.asLong}), its block's id, what it refunds. */
-	public record Cell(long pos, String block, Map<String, Integer> items) {
+	/**
+	 * (slice T4b fix round, N3) One refunded cell: its position ({@code BlockPos.asLong}), its block's id, what it refunds. (slice T4R-D, D3)
+	 * {@code recipient}: for a player's cell, its PT placer's UUID when the cell has a record (null: resolved at the removal, Q1).
+	 */
+	public record Cell(long pos, String block, Map<String, Integer> items, @org.jspecify.annotations.Nullable String recipient) {
+		public Cell(long pos, String block, Map<String, Integer> items) {
+			this(pos, block, items, null);
+		}
 	}
 
 	/** The items a deconstruct gives back, summed per item: refunds and the player's blocks apart. */
@@ -68,49 +74,42 @@ public final class Refunds {
 		private final Map<Long, Cell> cells = new java.util.LinkedHashMap<>();
 		/** (slice T4R-N) Each player's cell (PLAYER_DROP): its position, the player's block, what it returns (in tally order). */
 		private final Map<Long, Cell> playerCells = new java.util.LinkedHashMap<>();
-		private long atPos = Long.MIN_VALUE;
 		private boolean unplaced;
-		private @org.jspecify.annotations.Nullable String atBlock;
 
-		/** (N3) The cell the next {@link #add} books: a REFUND there is recorded per cell (pos, block id), for the restore's min. */
-		public void at(long pos, String block) {
-			atPos = pos;
-			atBlock = block;
+		/**
+		 * Books one cell without its position: NONE, or a REFUND with no per-cell record (the planned amounts stand, no min). (slice T4R-D, D3)
+		 * A PLAYER_DROP is never booked without its cell: it throws (a player's block is paid only from its recorded cell).
+		 */
+		public void add(Outcome o, List<SurvivalItems.Cost> costs) {
+			if (o == Outcome.PLAYER_DROP && !costs.isEmpty()) {
+				throw new IllegalArgumentException("a player's block is booked only with its position, block and items (D3)");
+			}
+			if (o == Outcome.REFUND) {
+				costs.forEach(c -> refund.merge(c.item(), c.count(), Integer::sum));
+				if (!costs.isEmpty()) {
+					unplaced = true; // a refund booked without its cell: no per-cell record (the planned amounts stand, no min)
+				}
+			}
 		}
 
-		/** Books one cell. {@code costs}: what the cell's block costs ({@link SurvivalItems#cost}). */
-		public void add(Outcome o, List<SurvivalItems.Cost> costs) {
-			Map<String, Integer> to = switch (o) {
-				case REFUND -> refund;
-				case PLAYER_DROP -> playerBlocks;
-				case NONE -> null;
-			};
-			if (to != null) {
-				costs.forEach(c -> to.merge(c.item(), c.count(), Integer::sum));
+		/**
+		 * (slice T4R-D, D3) Books one cell at {@code pos} holding {@code block}: a REFUND is recorded per cell (the restore's min), a
+		 * PLAYER_DROP as the player's cell with its {@code recipient} (its PT placer, or null). {@code costs}: what the block costs.
+		 */
+		public void add(Outcome o, long pos, String block, List<SurvivalItems.Cost> costs, @org.jspecify.annotations.Nullable String recipient) {
+			if (o == Outcome.NONE || costs.isEmpty()) {
+				return;
 			}
-			if (o == Outcome.REFUND && !costs.isEmpty() && (atPos == Long.MIN_VALUE || atBlock == null)) {
-				unplaced = true; // a refund booked without its cell: no per-cell record (the planned amounts stand, no min)
+			Map<String, Integer> to = o == Outcome.REFUND ? refund : playerBlocks;
+			costs.forEach(c -> to.merge(c.item(), c.count(), Integer::sum));
+			Map<Long, Cell> per = o == Outcome.REFUND ? cells : playerCells;
+			Map<String, Integer> items = new TreeMap<>();
+			Cell was = per.get(pos);
+			if (was != null) {
+				items.putAll(was.items());
 			}
-			if (o == Outcome.REFUND && atPos != Long.MIN_VALUE && atBlock != null && !costs.isEmpty()) {
-				Map<String, Integer> items = new TreeMap<>();
-				Cell was = cells.get(atPos);
-				if (was != null) {
-					items.putAll(was.items());
-				}
-				costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
-				cells.put(atPos, new Cell(atPos, atBlock, Map.copyOf(items)));
-			}
-			if (o == Outcome.PLAYER_DROP && atPos != Long.MIN_VALUE && atBlock != null && !costs.isEmpty()) {
-				Map<String, Integer> items = new TreeMap<>();
-				Cell was = playerCells.get(atPos);
-				if (was != null) {
-					items.putAll(was.items());
-				}
-				costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
-				playerCells.put(atPos, new Cell(atPos, atBlock, Map.copyOf(items)));
-			}
-			atPos = Long.MIN_VALUE;
-			atBlock = null;
+			costs.forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			per.put(pos, new Cell(pos, block, Map.copyOf(items), o == Outcome.PLAYER_DROP ? recipient : null));
 		}
 
 		/**

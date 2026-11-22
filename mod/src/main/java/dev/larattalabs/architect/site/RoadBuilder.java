@@ -820,8 +820,7 @@ public final class RoadBuilder {
 				}
 				// (6c CU, S-CU-2) the block standing: a weathered, waxed or scraped copper cell pays what is there
 				BlockState now = level.getBlockState(r.pos(q));
-				t.at(r.pos(q).asLong(), Builder.blockId(now));
-				t.add(dev.larattalabs.architect.survival.Refunds.Outcome.REFUND, r.refundCost(now, q));
+				t.add(dev.larattalabs.architect.survival.Refunds.Outcome.REFUND, r.pos(q).asLong(), Builder.blockId(now), r.refundCost(now, q), null);
 			}
 		}
 		return t;
