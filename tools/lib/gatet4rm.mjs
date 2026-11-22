@@ -108,7 +108,9 @@ export async function registerT4RM(steps, h) {
     // (slice T4R-D, re-pointed) a foreign (non-PT) block in the settlement's target is owed to its owner id (player_blocks), never dropped
     const owedChests = async () => ((await call('dev.stockpile.owed', { recipient: G.OWNER }, 30_000).catch(() => ({}))).owed ?? []).filter((e) => e.reason === 'player_blocks')
       .reduce((n, e) => n + (e.items?.['minecraft:chest'] ?? 0), 0);
-    const chests = async () => ((await chestAt()) ? 1 : 0) + ((await near())['minecraft:chest'] ?? 0) + ((await pile()).stock?.['minecraft:chest'] ?? 0) + (await owedChests());
+    // (slice T4R-D fix round) T4RDF-holder above owed its own chests to the same owner id: counted from here on
+    const oc0 = await owedChests();
+    const chests = async () => ((await chestAt()) ? 1 : 0) + ((await near())['minecraft:chest'] ?? 0) + ((await pile()).stock?.['minecraft:chest'] ?? 0) + (await owedChests()) - oc0;
     const feathers0 = (await pile()).stock?.['minecraft:feather'] ?? 0;
     const c0 = await chests();
     check(c0 === 1 && (await owedSwords()).length === 0, `${tag}: one chest at ${at} (sword and 5 feathers in it), nothing owed (${c0})`);
@@ -137,7 +139,7 @@ export async function registerT4RM(steps, h) {
     check(!v || v.state === 'REMOVED', `${tag}: the region removed (${v?.state ?? 'gone'}: ${v?.removalStopReason ?? ''})`, after);
     check(after.chests === 1, `${tag}: exactly one chest (standing, dropped, in the stock or owed): ${after.chests}`, after);
     // T4RD-settlement-nonpt (Steward P2-5): the settlement's non-PT block is owed to the owner id as player_blocks, not dropped, not credited
-    const oc = await owedChests();
+    const oc = (await owedChests()) - oc0;
     check(oc === 1 && (after.near['minecraft:chest'] ?? 0) === 0 && !((await pile()).stock?.['minecraft:chest']), `T4RD-settlement-nonpt: the foreign chest owed to ${G.OWNER} (player_blocks ${oc}), not dropped, not credited`, after);
     check(after.swords.length === 1 && (after.swords[0].items?.['minecraft:diamond_sword'] ?? 0) === 1, `${tag}: the named sword owed once (${json(after.swords.map((e) => e.key))})`, after);
     check(after.feathers === 5 && (after.near['minecraft:feather'] ?? 0) === 0, `${tag}: the 5 feathers credited once, none dropped (stock +${after.feathers})`, after);
