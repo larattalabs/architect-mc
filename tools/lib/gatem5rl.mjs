@@ -257,7 +257,10 @@ export async function registerRL(steps, h) {
     out.removed = { state: st?.view?.state ?? 'gone', paid: sum(paid), refund: sum(pos(refund)), want: sum(pos(want)), diff: G.minus(refund, pos(want)), roadDrops: near.items ?? {}, cuAfter: cuNow?.was ?? null };
     log(`  ${tag}: removed ${out.removed.state}; refund ${sum(pos(refund))} vs paid ${sum(paid)} less the two player cells ${sum(pos(want))}; diff ${json(out.removed.diff)}; at the road cell ${json(near.items)}; the tilled cell ${out.removed.cuAfter}`);
     check(!st?.view?.state || st.view.state === 'REMOVED', `${tag}: the town removed: ${out.removed.state}`);
-    check(!out.road?.was || (near.items?.[out.road.was] ?? 0) >= 1, `${tag} F10 roads: the player's block dropped at the road cell as theirs (${json(near.items)})`, out.removed);
+    // (slice T4R-D, re-pointed) the player's block is theirs, owed (player_blocks) by the road's extraction attempt, never dropped
+    const pOwed = ((await call('dev.stockpile.owed', {}, 30_000).catch(() => ({}))).owed ?? []).filter((e) => e.reason === 'player_blocks')
+      .reduce((n, e) => n + (e.items?.[out.road?.was] ?? 0), 0);
+    check(!out.road?.was || pOwed >= 1 && !(near.items?.[out.road.was]), `${tag} F10 roads: the player's block owed to them (player_blocks ${pOwed}), not dropped at the road cell (${json(near.items)})`, out.removed);
     const cuNear = out.cu ? (await call('dev.items.near', { pos: out.cu.at, radius: 2 }, 10_000)).items ?? {} : {};
     out.removed.cuDrops = cuNear;
     // JR-b's fix is the dupe: a CU equivalent with a record is NONE (neither a PLAYER_DROP of it nor a refund of the copper it stands for).
