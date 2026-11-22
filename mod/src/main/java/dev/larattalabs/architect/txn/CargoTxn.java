@@ -202,6 +202,37 @@ public final class CargoTxn {
 		return s == TxnCore.Status.HELD || t.held() != null ? "held(decided): " + Holds.decided(t) : null;
 	}
 
+	/**
+	 * (slice T4R-D narrowing round, P1) One verified holder write, the rule for the TAKE and its compensation: refused before any change unless
+	 * {@code before} holds; refused after the write unless {@code after} holds. A write a hold cancels ({@code TxnHoldContentMixin}: another
+	 * removal's box over the holder) leaves the slot as it was: refused, so no receipt is written and nothing is credited or owed for it (a
+	 * refused prepare effect aborts the txn before its decision; a refused compensation stays in transit, held). What a receipt records is
+	 * what was removed: the credit, planned from the same stack, is exactly what left the slot.
+	 */
+	static void verifiedWrite(String what, java.util.function.BooleanSupplier before, Runnable write, java.util.function.BooleanSupplier after) {
+		if (!before.getAsBoolean()) {
+			throw new IllegalStateException(what + ": not as planned, nothing changed");
+		}
+		write.run();
+		if (!after.getAsBoolean()) {
+			throw new IllegalStateException(what + ": the write did not take effect (a hold refused it), nothing recorded");
+		}
+	}
+
+	/** The TAKE's write: the slot holds exactly {@code want} before and nothing after ({@link #verifiedWrite}). */
+	static void takeOut(Container box, int slot, ItemStack want) {
+		verifiedWrite("the take of " + itemId(want) + " from the holder's slot " + slot, () -> !want.isEmpty() && ItemStack.matches(box.getItem(slot), want),
+			() -> box.setItem(slot, ItemStack.EMPTY), () -> box.getItem(slot).isEmpty());
+		box.setChanged();
+	}
+
+	/** The TAKE's compensation: the slot empty before and holding {@code stack} after ({@link #verifiedWrite}); else in transit, held. */
+	static void putBack(Container box, int slot, ItemStack stack) {
+		verifiedWrite("the return of " + itemId(stack) + " into the holder's slot " + slot, () -> box.getItem(slot).isEmpty(), () -> box.setItem(slot,
+			stack.copy()), () -> ItemStack.matches(box.getItem(slot), stack));
+		box.setChanged();
+	}
+
 	static final TxnKind.Adapter TAKER = new TxnKind.Adapter() {
 		@Override
 		public @Nullable String invalid(Effect e) {
@@ -228,15 +259,8 @@ public final class CargoTxn {
 				if (ch == null || !(level.getBlockEntity(p) instanceof Container box)) {
 					throw new IllegalStateException("the holder is not loaded or gone");
 				}
-				int slot = e.data().get("slot").getAsInt();
-				ItemStack now = box.getItem(slot);
-				ItemStack want = decode(level.getServer(), e.data().get("stack").getAsString());
-				if (want.isEmpty() || !ItemStack.matches(now, want)) {
-					throw new IllegalStateException("the holder's slot " + slot + " no longer holds " + itemId(want)); // checked before any change
-				}
-				box.setItem(slot, ItemStack.EMPTY);
-				box.setChanged();
-				TestMove.addReceipt(ch, e.key(t.id)); // the same tick, the same chunk
+				takeOut(box, e.data().get("slot").getAsInt(), decode(level.getServer(), e.data().get("stack").getAsString()));
+				TestMove.addReceipt(ch, e.key(t.id)); // the same tick, the same chunk: only once the slot is seen empty
 			});
 		}
 
@@ -249,13 +273,8 @@ public final class CargoTxn {
 				if (ch == null || !(level.getBlockEntity(p) instanceof Container box)) {
 					throw new IllegalStateException("the holder is not loaded or gone: its stack stays in transit (held)");
 				}
-				int slot = e.data().get("slot").getAsInt();
-				if (!box.getItem(slot).isEmpty()) {
-					throw new IllegalStateException("the holder's slot " + slot + " is taken: its stack stays in transit (held)");
-				}
-				box.setItem(slot, decode(level.getServer(), e.data().get("stack").getAsString()));
-				box.setChanged();
-				TestMove.addReceipt(ch, e.compKey(t.id));
+				putBack(box, e.data().get("slot").getAsInt(), decode(level.getServer(), e.data().get("stack").getAsString()));
+				TestMove.addReceipt(ch, e.compKey(t.id)); // only once the slot is seen holding the stack again
 			});
 		}
 

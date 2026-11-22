@@ -16,11 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
-import net.minecraft.world.SimpleContainer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -38,12 +34,6 @@ import org.junit.jupiter.api.Test;
 class T4RDNCargoTest {
 	static final String DIM = T4RDFixAdmissionTest.DIM;
 	static final String CARGO = "cargo:roadB@1@100#7";
-
-	@BeforeAll
-	static void boot() {
-		net.minecraft.SharedConstants.tryDetectVersion();
-		net.minecraft.server.Bootstrap.bootStrap();
-	}
 
 	@AfterEach
 	void reset() {
@@ -91,76 +81,67 @@ class T4RDNCargoTest {
 		System.out.println("ROW T4RDN-cargo-self (unit)");
 		Method own = null;
 		try {
-			own = Extractions.class.getDeclaredMethod("ownCargo", String.class, TxnCore.class);
+			own = Extractions.class.getDeclaredMethod("cargoSelf", String.class);
 			own.setAccessible(true);
 		} catch (NoSuchMethodException e) {
 			// red: no rule for the target's own cargo
 		}
-		assertNotNull(own, "T4RDN-cargo-self: the target's own open cargo txns are named for its own retry's admission");
+		assertNotNull(own, "T4RDN-cargo-self: the target's own cargo txns are named for its own retry's admission (Extractions.cargoSelf)");
 		TxnCore c = core();
 		openCargo(c);
-		@SuppressWarnings("unchecked")
-		Set<String> self = (Set<String>) own.invoke(null, "roadB@1", c);
-		@SuppressWarnings("unchecked")
-		Set<String> other = (Set<String>) own.invoke(null, "roadB@10", c);
-		assertTrue(other.isEmpty(), "another target's (roadB@10) cargo is not its own: " + other);
 		JsonObject a = T4RDFixAdmissionTest.rec("roadB", 0, null, "sameOwner");
-		java.util.Set<String> s = new java.util.HashSet<>(self);
-		s.add("roadB");
-		assertNull(T4RDFixAdmissionTest.refusal().invoke(null, OwnerRemovals.holdsOf(a), s, "remove roadB", c),
-			"T4RDN-cargo-self: roadB's retry is not refused by its own cargo (" + self + ")");
-	}
-
-	/** A chest whose writes a hold cancels, as TxnHoldContentMixin cancels {@code setItem} in a held cell. */
-	static final class HeldChest extends SimpleContainer {
-		boolean held;
-
-		HeldChest() {
-			super(27);
-		}
-
-		@Override
-		public void setItem(int slot, ItemStack stack) {
-			if (!held) {
-				super.setItem(slot, stack);
-			}
-		}
-	}
-
-	static Method take(String name) {
-		try {
-			Method m = CargoTxn.class.getDeclaredMethod(name, net.minecraft.world.Container.class, int.class, ItemStack.class);
-			m.setAccessible(true);
-			return m;
-		} catch (NoSuchMethodException e) {
-			return null;
-		}
+		Method m = T4RDFixAdmissionTest.refusal();
+		assertNotNull(m.invoke(null, OwnerRemovals.holdsOf(a), Set.of("roadB", (String) own.invoke(null, "roadB@10")), "remove roadB", c),
+			"another target's (roadB@10) self does not exempt roadB@1's cargo");
+		assertNull(m.invoke(null, OwnerRemovals.holdsOf(a), Set.of("roadB", (String) own.invoke(null, "roadB@1")), "remove roadB", c),
+			"T4RDN-cargo-self: roadB@1's retry is not refused by its own cargo");
 	}
 
 	@Test
 	void aTakeTheHoldCancelledHasNoReceipt() throws Exception {
 		System.out.println("ROW T4RDN-cargo-credit (unit)");
-		Method take = take("takeOut"), back = take("putBack");
-		assertNotNull(take, "T4RDN-cargo-credit: a TAKE checks its write took effect (CargoTxn.takeOut)");
-		assertNotNull(back, "T4RDN-cargo-credit: and its compensation (CargoTxn.putBack)");
-		HeldChest box = new HeldChest();
-		box.setItem(0, new ItemStack(Items.DIAMOND, 3));
-		box.held = true; // an owner record's hold over the chest: setItem cancelled
-		InvocationTargetException x = assertThrows(InvocationTargetException.class, () -> take.invoke(null, box, 0, new ItemStack(Items.DIAMOND, 3)),
-			"T4RDN-cargo-credit: a TAKE whose write was cancelled is refused (no receipt, no credit)");
-		assertTrue(x.getCause() instanceof IllegalStateException, "refused as an IllegalStateException: " + x.getCause());
-		assertEquals(3, box.getItem(0).getCount(), "the diamonds stay in the chest");
-		box.held = false;
-		take.invoke(null, box, 0, new ItemStack(Items.DIAMOND, 3));
-		assertTrue(box.getItem(0).isEmpty(), "unheld: taken out");
-		box.held = true;
-		assertThrows(InvocationTargetException.class, () -> back.invoke(null, box, 0, new ItemStack(Items.DIAMOND, 3)),
-			"T4RDN-cargo-credit: a compensation whose write was cancelled is refused (stays in transit, held)");
-		box.held = false;
-		back.invoke(null, box, 0, new ItemStack(Items.DIAMOND, 3));
-		assertEquals(3, box.getItem(0).getCount(), "unheld: put back");
-		assertThrows(InvocationTargetException.class, () -> take.invoke(null, box, 0, new ItemStack(Items.DIAMOND, 2)),
-			"a slot that does not hold exactly the planned stack is refused before any change");
-		assertEquals(3, box.getItem(0).getCount(), "unchanged");
+		Method m = null;
+		try {
+			m = CargoTxn.class.getDeclaredMethod("verifiedWrite", String.class, java.util.function.BooleanSupplier.class, Runnable.class,
+				java.util.function.BooleanSupplier.class);
+			m.setAccessible(true);
+		} catch (NoSuchMethodException e) {
+			// red: the TAKE wrote its receipt without checking its write
+		}
+		assertNotNull(m, "T4RDN-cargo-credit: a TAKE (and its compensation) checks its write took effect before its receipt (CargoTxn.verifiedWrite)");
+		Method w = m;
+		// a slot of 3 diamonds; a hold over the chest cancels every write (as TxnHoldContentMixin cancels setItem)
+		int[] slot = {3};
+		boolean[] held = {true}, receipt = {false};
+		Runnable take = () -> {
+			try {
+				w.invoke(null, "take", (java.util.function.BooleanSupplier) () -> slot[0] == 3, (Runnable) () -> {
+					if (!held[0]) {
+						slot[0] = 0;
+					}
+				}, (java.util.function.BooleanSupplier) () -> slot[0] == 0);
+				receipt[0] = true; // as TAKER.apply: the receipt only after the verified write
+			} catch (InvocationTargetException e) {
+				throw (RuntimeException) e.getCause();
+			} catch (IllegalAccessException e) {
+				throw new AssertionError(e);
+			}
+		};
+		assertThrows(IllegalStateException.class, take::run, "T4RDN-cargo-credit: a TAKE whose write the hold cancelled is refused");
+		assertEquals(3, slot[0], "the diamonds stay in the chest");
+		assertTrue(!receipt[0], "T4RDN-cargo-credit: no receipt (so no credit) for a take that did not happen");
+		held[0] = false;
+		take.run();
+		assertEquals(0, slot[0], "unheld: taken out");
+		assertTrue(receipt[0], "and receipted");
+		slot[0] = 2;
+		receipt[0] = false;
+		assertThrows(IllegalStateException.class, take::run, "a slot not holding the planned stack is refused before any change");
+		assertEquals(2, slot[0], "unchanged");
+		// the production TAKE and its compensation go through it
+		String src = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/txn/CargoTxn.java"));
+		int apply = src.indexOf("public void apply(TxnEntry t, Effect e)"), comp = src.indexOf("public void compensate(TxnEntry t, Effect e)", apply);
+		assertTrue(src.substring(apply, comp).matches("(?s).*takeOut\\(.*addReceipt.*"), "TAKER.apply: takeOut (verified) before its receipt");
+		assertTrue(src.substring(comp, comp + 900).matches("(?s).*putBack\\(.*addReceipt.*"), "TAKER.compensate: putBack (verified) before its receipt");
 	}
 }

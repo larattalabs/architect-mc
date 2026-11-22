@@ -111,7 +111,21 @@ public final class Extractions {
 				}
 			}
 		}
+		out.add(cargoSelf(tkey(t))); // (narrowing round, P1) and its own holder cargo
 		return out;
+	}
+
+	/** (slice T4R-D narrowing round, P1) The key prefix of target {@code tk}'s holder cargo txns ({@link #takeContents}): one rule for both. */
+	static String cargoPrefix(String tk) {
+		return "cargo:" + tk + "@";
+	}
+
+	/**
+	 * (narrowing round, P1) How admission names target {@code tk}'s holder cargo txns ({@code txn:<cargoPrefix>}, {@link RemovalAreas#coreHolds}):
+	 * in its own retry's {@code self}, so it is never refused by its own cargo (driven again by that retry); every other removal is. Pure.
+	 */
+	static String cargoSelf(String tk) {
+		return "txn:" + cargoPrefix(tk);
 	}
 
 	/** Admission areas of the planned and open attempts (§4.2 (b)). */
@@ -239,7 +253,7 @@ public final class Extractions {
 		if (stacks.isEmpty()) {
 			return null;
 		}
-		String w = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo:" + tk + "@" + level.getGameTime() + "#" + System.nanoTime(), stacks);
+		String w = dev.larattalabs.architect.txn.CargoTxn.owe(level, cargoPrefix(tk) + level.getGameTime() + "#" + System.nanoTime(), stacks);
 		return w == null ? null : "the contents of a player's holder on " + t.id() + " are being taken out first (" + w + ")";
 	}
 
