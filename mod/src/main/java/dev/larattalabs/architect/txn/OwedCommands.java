@@ -27,6 +27,29 @@ public final class OwedCommands {
 			"collect").executes(OwedCommands::all).then(Commands.argument("key", StringArgumentType.string()).executes(ctx -> one(ctx, null)).then(
 				Commands.argument("player", EntityArgument.player()).requires(OwedCommands::ops).executes(ctx -> one(ctx, EntityArgument.getPlayer(ctx,
 					"player"))))))));
+		// (slice T4R-D, Q7) /architect owed nearby: the unclaimed player blocks within 64 blocks (any player may collect them by key)
+		CommandRegistrationCallback.EVENT.register((dispatcher, registry, env) -> dispatcher.register(Commands.literal("architect").then(Commands.literal(
+			"owed").then(Commands.literal("nearby").executes(OwedCommands::nearby)))));
+	}
+
+	/** (slice T4R-D, Q7) The {@code architect:unclaimed} entries within 64 blocks of the caller, in its dimension. */
+	static int nearby(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+		ServerPlayer p = ctx.getSource().getPlayerOrException();
+		String dim = p.level().dimension().identifier().toString();
+		int n = 0;
+		for (OwedLedger.Entry e : OwedLedger.of(OwedLedger.UNCLAIMED)) {
+			if (!e.dimension().equals(dim) || p.blockPosition().distSqr(new net.minecraft.core.BlockPos(e.x(), e.y(), e.z())) > 64 * 64) {
+				continue;
+			}
+			n++;
+			int c = e.items().values().stream().mapToInt(Integer::intValue).sum();
+			ctx.getSource().sendSuccess(() -> Component.literal("Unclaimed: " + c + " item(s) at " + e.x() + " " + e.y() + " " + e.z() + ": /architect collect "
+				+ e.key()), false);
+		}
+		if (n == 0) {
+			ctx.getSource().sendSuccess(() -> Component.literal("No unclaimed blocks within 64 blocks."), false);
+		}
+		return n;
 	}
 
 	static boolean ops(CommandSourceStack src) {
@@ -55,7 +78,8 @@ public final class OwedCommands {
 			ctx.getSource().sendFailure(Component.literal("Nothing is owed under " + key + "."));
 			return 0;
 		}
-		boolean own = e.recipient().equals(p.getUUID().toString()) && to == null;
+		// (slice T4R-D, Q7) an unclaimed entry is anyone's to collect (its per-entry collect lock kept: the txn's owed:<key> resource)
+		boolean own = (e.recipient().equals(p.getUUID().toString()) || OwedLedger.UNCLAIMED.equals(e.recipient())) && to == null;
 		if (!own && !ops(ctx.getSource())) {
 			ctx.getSource().sendFailure(Component.literal(key + " is not owed to you."));
 			return 0;

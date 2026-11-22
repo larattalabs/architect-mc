@@ -325,6 +325,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o), tagOwner);
 				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
+				if (e.busy() != null) {
+					// (slice T4R-D, A7a) a removal in the way: failed typed (ArchitectRefused.busy()), the caller retries on its REMOVAL_FINISHED
+					return CompletableFuture.<RemoveResult>failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), e.busy()));
+				}
 				if (e.getMessage() != null && e.getMessage().startsWith("held(decided)")) {
 					// (T4b fix round, P2) decided and written, its refunds not yet settled: it finishes by itself
 					return CompletableFuture.<RemoveResult>failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), "held(decided)"));
@@ -336,7 +340,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	static RemoveResult result(Sites.Removed done) {
 		return new RemoveResult(true, List.of(), Views.items(done.returned()), done.restored(), done.kept(), done.handedDown(), done.cascaded(),
-			done.owed());
+			done.owed(), Views.owedParts(done.owedParts()));
 	}
 
 	/** A road's or cell site's removal (over ticks): the owner rule, then the job. */
@@ -899,6 +903,9 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
+		if (e.busy() != null) {
+			return new ArchitectRefused(e.reason(), e.getMessage(), e.busy()); // (slice T4R-D, A7a) typed busy
+		}
 		return new ArchitectRefused(e.reason(), e.getMessage(), e.detail(), e.builds()); // (T3b) its stable sub-code
 	}
 

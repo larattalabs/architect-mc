@@ -2488,6 +2488,13 @@ public final class Groups {
 				}
 			}
 		}
+		try {
+			// (slice T4R-D) every member of a single removal's owner record: its owner txn restores and settles it, never the threshold here
+			OwnerRemovals.ownedAtStart(srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect").resolve(Stockpiles.FILE), out);
+		} catch (java.io.IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Sites check: the owner records could not be read ({}): no removal is judged at this start", e.toString());
+			return null;
+		}
 		java.nio.file.Path f = srv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(Placement.FILE);
 		if (!java.nio.file.Files.isRegularFile(f)) {
 			return out;

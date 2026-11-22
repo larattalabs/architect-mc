@@ -57,27 +57,5 @@ class T4RNK6PlayerBlocksTest {
 		assertEquals(Map.of("minecraft:oak_planks", 2), CrateSettle.refundOf(stash), "T4RN-k6-stash: the paid refund unchanged");
 	}
 
-	@Test
-	void onlyAnUnpaidCascadeIsWrittenByItsBase() {
-		System.out.println("ROW T4RN-k6-cascade (unit)");
-		// a recovered single removal's W writes its cascade first only where nothing of the member is paid (its own W records what stands)
-		assertTrue(CrateSettle.unpaidCascade(false, false, false), "an instant site or road: written by its base's W");
-		assertTrue(!CrateSettle.unpaidCascade(true, false, false), "a construction member: its own W (its refunds pay min(planned, found))");
-		assertTrue(!CrateSettle.unpaidCascade(false, true, false), "a member with a durable stash: its own txn");
-		assertTrue(!CrateSettle.unpaidCascade(false, false, true), "a member whose pending record holds its settle: its own txn");
-		JsonObject a = new JsonObject();
-		a.addProperty("undoGroup", "u:s10");
-		JsonObject fin = new JsonObject();
-		JsonArray ca = new JsonArray();
-		ca.add("s11");
-		fin.add("cascaded", ca);
-		a.add("fin", fin);
-		JsonObject road = a.deepCopy();
-		road.addProperty("road", true);
-		road.addProperty("undoGroup", "u:r1");
-		JsonObject noGroup = new JsonObject();
-		noGroup.add("fin", fin.deepCopy());
-		assertEquals(java.util.Set.of("s11|u:s10"), CrateSettle.rolledCascade(java.util.Arrays.asList(a, road, noGroup, null)),
-			"T4RN-k6-cascade: the cascade of a committed single site's durable stash, by its undo group");
-	}
+	// (slice T4R-D) the T4R-N cascade predicate case is retired with its helpers: one owner txn writes every member (T4RDOwnerTest)
 }

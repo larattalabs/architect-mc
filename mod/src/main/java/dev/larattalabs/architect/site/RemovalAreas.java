@@ -103,6 +103,7 @@ public final class RemovalAreas {
 			}
 		}
 		coreHolds(core, out);
+		OwnerRemovals.areas(out); // (slice T4R-D, §4.2 (a)) every owner record's footprint
 		return out;
 	}
 

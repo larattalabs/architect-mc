@@ -2,6 +2,7 @@ package dev.larattalabs.architect.txn;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import dev.larattalabs.architect.site.CrateSettle;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -145,17 +146,17 @@ public final class RemovalTxn {
 				recordFound(level, site, group, a); // (T4b fix round, N3) before any write: kept where recorded already (never re-read after it)
 			}
 			boolean clear = e.data().has("clear") && e.data().get("clear").getAsBoolean();
-			JsonArray player = e.data().get("player") instanceof JsonArray pl ? pl : null;
-			net.minecraft.core.BlockPos dropAt = e.data().get("dropAt") instanceof JsonArray da && da.size() == 3 ? new net.minecraft.core.BlockPos(da.get(0)
-				.getAsInt(), da.get(1).getAsInt(), da.get(2).getAsInt()) : null;
-			java.util.List<String> cascade = new java.util.ArrayList<>();
-			if (e.data().get("cascade") instanceof JsonArray ca) {
-				ca.forEach(x -> cascade.add(x.getAsString()));
+			JsonArray pcells = e.data().get("pcells") instanceof JsonArray pc ? pc : null;
+			String pkey = e.data().has("pkey") ? e.data().get("pkey").getAsString() : null;
+			if (pcells != null && pkey != null) {
+				// (slice T4R-D, I2) the player's cells standing before the first write, first write wins (pos:block), in their chunks
+				recordPfound(level, pkey, pcells);
 			}
-			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group, clear, cascade, player, dropAt, (pos, items) -> {
-				// (slice T4R-N, P1-2) a player's block given back by this write: receipted in its chunk in the same tick (its result reads it)
-				TestMove.addReceipt(level.getChunkAt(net.minecraft.core.BlockPos.of(pos)), playerTag(site, group) + pos + "=" + encode(items));
-			}));
+			TxnServer.asHolder(t, () -> CrateSettle.restoreSite(level, site, group, clear, null, null, null, null));
+			if (pcells != null && pkey != null) {
+				// (slice T4R-D, I2) the recorded cells gone after this W's write: receipted once per (effect, chunk), the same tick as @restored
+				recordPgone(level, pkey, e.key(t.id) + "@pgone=", pcells);
+			}
 			String k = restoredKey(t, e);
 			String tag = foundTag(site, group);
 			String pre = e.key(t.id) + "@found=";
@@ -181,30 +182,121 @@ public final class RemovalTxn {
 		}
 	};
 
-	/** (slice T4R-N) The chunk receipt naming a player's block a removal's W restore gave back: {@code pdrop:<site>@<group>:<pos>=<items>}. */
-	static String playerTag(String site, String group) {
-		return "pdrop:" + site + "@" + group + ":";
+	/** (slice T4R-D, I2) The chunk receipt of the player's cells standing before any write of {@code pkey} ({@code <owner>/<member>} or an extraction key). */
+	static String pfoundTag(String pkey) {
+		return "pfound:" + pkey + "=";
+	}
+
+	/** The chunks (packed) of {@code pcells} ([{pos, ...}]) and each one's cells. */
+	static java.util.Map<Long, java.util.List<Long>> byChunk(JsonArray pcells) {
+		java.util.Map<Long, java.util.List<Long>> out = new java.util.TreeMap<>();
+		for (var el : pcells) {
+			long pos = el.getAsJsonObject().get("pos").getAsLong();
+			BlockPos p = BlockPos.of(pos);
+			out.computeIfAbsent((long) (p.getX() >> 4) << 32 | (p.getZ() >> 4) & 0xFFFFFFFFL, k -> new java.util.ArrayList<>()).add(pos);
+		}
+		return out;
 	}
 
 	/**
-	 * (slice T4R-N, the final check of f7607b13's P1-2) What the W restore of {@code site} in {@code group} gave back of the player's cells
-	 * {@code player} (its receipts in their chunks), summed; empty when it gave back none (its live removal dropped them, or nothing stood).
-	 * Server thread; loads the chunks.
+	 * (slice T4R-D, I2) Records in each chunk of {@code pcells} that has none yet which of them stand now (before the first write: {@code
+	 * pfound:<pkey>=pos:block,...}): first write wins, so a replay after a write reads it, never the world. Server thread; loads the chunks.
 	 */
-	public static java.util.Map<String, Integer> playerGiven(ServerLevel level, String site, String group, JsonArray player) {
-		java.util.Map<String, Integer> sum = new java.util.TreeMap<>();
-		String tag = playerTag(site, group);
-		for (var el : player) {
-			long pos = el.getAsJsonObject().get("pos").getAsLong();
-			String pre = tag + pos + "=";
-			for (String r : TestMove.receipts(level.getChunkAt(net.minecraft.core.BlockPos.of(pos)))) {
+	public static void recordPfound(ServerLevel level, String pkey, JsonArray pcells) {
+		String tag = pfoundTag(pkey);
+		java.util.Map<Long, String> blockAt = new java.util.HashMap<>();
+		pcells.forEach(el -> blockAt.put(el.getAsJsonObject().get("pos").getAsLong(), el.getAsJsonObject().get("block").getAsString()));
+		for (var en : byChunk(pcells).entrySet()) {
+			LevelChunk ch = level.getChunk((int) (en.getKey() >> 32), (int) (long) en.getKey());
+			if (TestMove.receipts(ch).stream().anyMatch(r -> r.startsWith(tag))) {
+				continue;
+			}
+			StringBuilder b = new StringBuilder();
+			for (long pos : en.getValue()) {
+				String block = blockAt.get(pos);
+				if (block.equals(CrateSettle.blockIdAt(level, BlockPos.of(pos)))) {
+					b.append(b.length() == 0 ? "" : ",").append(pos).append(':').append(block);
+				}
+			}
+			TestMove.addReceipt(ch, tag + b);
+		}
+	}
+
+	/** (slice T4R-D) The positions a {@code pfound} receipt in {@code ch} recorded standing, or null when it has none. */
+	static java.util.@Nullable Map<Long, String> pfound(LevelChunk ch, String pkey) {
+		String tag = pfoundTag(pkey);
+		for (String r : TestMove.receipts(ch)) {
+			if (r.startsWith(tag)) {
+				java.util.Map<Long, String> m = new java.util.LinkedHashMap<>();
+				String v = r.substring(tag.length());
+				if (!v.isEmpty()) {
+					for (String p : v.split(",")) {
+						int c = p.indexOf(':');
+						m.put(Long.parseLong(p.substring(0, c)), p.substring(c + 1));
+					}
+				}
+				return m;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (slice T4R-D, I2) After a W's write: in each chunk of {@code pcells} without a {@code pre} receipt ({@code <tx>/<i>@pgone=}), the cells its
+	 * {@code pfound} recorded standing that no longer hold that block. Once per (effect, chunk), the same tick as the write.
+	 */
+	public static void recordPgone(ServerLevel level, String pkey, String pre, JsonArray pcells) {
+		for (var en : byChunk(pcells).entrySet()) {
+			LevelChunk ch = level.getChunk((int) (en.getKey() >> 32), (int) (long) en.getKey());
+			if (!foundToAdd(TestMove.receipts(ch), pre)) {
+				continue;
+			}
+			java.util.Map<Long, String> was = pfound(ch, pkey);
+			StringBuilder b = new StringBuilder();
+			if (was != null) {
+				for (var w : was.entrySet()) {
+					if (!w.getValue().equals(CrateSettle.blockIdAt(level, BlockPos.of(w.getKey())))) {
+						b.append(b.length() == 0 ? "" : ",").append(w.getKey());
+					}
+				}
+			}
+			TestMove.addReceipt(ch, pre + b);
+		}
+	}
+
+	/**
+	 * (slice T4R-D, I2) The positions of {@code pcells} the W effect {@code w} receipted gone ({@code @pgone}), over its cells' chunks. Throws
+	 * when a chunk can't be read or lacks the receipt (the W has not applied there: the caller's effect holds; a barrier precedes it).
+	 */
+	static java.util.Set<Long> pgone(TxnEntry t, Effect w, JsonArray pcells) {
+		ServerLevel level = level(w);
+		if (level == null) {
+			throw new IllegalStateException("its dimension is not loaded");
+		}
+		String pre = w.key(t.id) + "@pgone=";
+		java.util.Set<Long> out = new java.util.HashSet<>();
+		for (var en : byChunk(pcells).entrySet()) {
+			LevelChunk ch = TestMove.chunkFor(t, level, new BlockPos((int) (en.getKey() >> 32) << 4, 0, (int) (long) en.getKey() << 4));
+			if (ch == null) {
+				throw new IllegalStateException("a chunk of its player's cells is not loaded");
+			}
+			String rec = null;
+			for (String r : TestMove.receipts(ch)) {
 				if (r.startsWith(pre)) {
-					decode(r.substring(pre.length())).forEach((k, v) -> sum.merge(k, v, Integer::sum));
+					rec = r.substring(pre.length());
 					break;
 				}
 			}
+			if (rec == null) {
+				throw new IllegalStateException("its restore's player receipt is missing in a chunk (not written yet)");
+			}
+			if (!rec.isEmpty()) {
+				for (String p : rec.split(",")) {
+					out.add(Long.parseLong(p));
+				}
+			}
 		}
-		return sum;
+		return out;
 	}
 
 	/** (N3) The chunk receipt naming what of a removal's refunded cells stood there before its restore's first write. */
@@ -308,6 +400,18 @@ public final class RemovalTxn {
 
 	/** (N3) The amount a refund effect pays: its planned items, capped by its W's found amounts when it names one ({@code minOf}). */
 	static java.util.Map<String, Integer> amount(TxnEntry t, Effect e) {
+		if (e.data().has("pof") && e.data().get("pcells") instanceof JsonArray pc) {
+			// (slice T4R-D, I2) a player-blocks OWE: the recorded items of its cells its W receipted gone (stood before, gone after): once
+			java.util.Set<Long> gone = pgone(t, t.effects.get(e.data().get("pof").getAsInt()), pc);
+			java.util.Map<String, Integer> sum = new java.util.TreeMap<>();
+			for (var el : pc) {
+				JsonObject c = el.getAsJsonObject();
+				if (gone.contains(c.get("pos").getAsLong())) {
+					c.getAsJsonObject("items").entrySet().forEach(x -> sum.merge(x.getKey(), x.getValue().getAsInt(), Integer::sum));
+				}
+			}
+			return sum;
+		}
 		if (!e.data().has("minOf")) {
 			return e.items();
 		}
@@ -347,8 +451,62 @@ public final class RemovalTxn {
 	 */
 	public static final String UNDO = "group.undo";
 
+	/**
+	 * (slice T4R-D, D5) The R effect of a single removal's owner txn ({@code removal.site}): every member's result snapshotted (refund, owed
+	 * parts with their applied amounts, the counts) into {@code stockpiles.json}'s removal results, published by the barrier after it, before
+	 * the txn retires. Its probe reads the loaded table. Data {@code owner}.
+	 */
+	public static final String SNAPSHOT = "removal.snapshot";
+
+	static final TxnKind.Adapter SNAPSHOTTER = new TxnKind.Adapter() {
+		@Override
+		public @Nullable String invalid(Effect e) {
+			return e.data().has("owner") ? null : "owner is required";
+		}
+
+		@Override
+		public Probe probe(TxnEntry t, Effect e) {
+			return dev.larattalabs.architect.site.OwnerRemovals.snapshotted(e.data().get("owner").getAsString()) ? Probe.APPLIED : Probe.ABSENT;
+		}
+
+		@Override
+		public void apply(TxnEntry t, Effect e) {
+			dev.larattalabs.architect.site.OwnerRemovals.snapshot(t, e.data().get("owner").getAsString(), amounts(t));
+		}
+
+		@Override
+		public void compensate(TxnEntry t, Effect e) {
+			throw new IllegalStateException("never a prepare effect");
+		}
+	};
+
+	/**
+	 * (slice T4R-D, D5) What each L and O effect of {@code t} paid, by effect index: an O effect its applied amount (recorded with its marker),
+	 * an L effect its amount (planned, capped by its W's found receipts). Throws while one can't be read (held, retried).
+	 */
+	public static java.util.Map<Integer, java.util.Map<String, Integer>> amounts(TxnEntry t) {
+		java.util.Map<Integer, java.util.Map<String, Integer>> out = new java.util.TreeMap<>();
+		for (Effect f : t.effects) {
+			if (CrateTxn.OWE.equals(f.op())) {
+				java.util.Map<String, Integer> a = dev.larattalabs.architect.site.OwedLedger.amountOf(f.key(t.id));
+				if (a == null) {
+					throw new IllegalStateException("effect " + f.i() + "'s owed amount is not recorded");
+				}
+				out.put(f.i(), a);
+			} else if (CrateTxn.PILE_CREDIT.equals(f.op()) || PILE_REFUND.equals(f.op())) {
+				out.put(f.i(), amount(t, f));
+			}
+		}
+		return out;
+	}
+
 	/** (TEST seam) Whether undo group {@code g} reached the world journal. */
 	static java.util.function.Predicate<String> UNDO_COMMITTED = dev.larattalabs.architect.site.Groups::undoInJournal;
+
+	/** (slice T4R-D) Whether undo group {@code g} reached the world journal (an owner record's decision). */
+	public static boolean undoCommitted(String g) {
+		return UNDO_COMMITTED.test(g);
+	}
 
 	/** (slice T4R fix round, P1-1) {@link #UNDO} for undo group {@code undo}. */
 	public static Effect.Builder undoDecision(String undo) {
@@ -434,6 +592,7 @@ public final class RemovalTxn {
 					case PILE_REFUND -> PILE_REFUNDER;
 					case GROUP_DONE -> GROUP_DONER;
 					case UNDO -> UNDO_DECIDER;
+					case SNAPSHOT -> SNAPSHOTTER;
 					case CrateTxn.TAKE -> CrateTxn.ADAPTER;
 					case CrateTxn.RESTORE -> CrateTxn.RESTORE_ADAPTER;
 					case CrateTxn.RELEASE -> CrateTxn.RELEASER;
@@ -450,7 +609,40 @@ public final class RemovalTxn {
 		};
 	}
 
-	public static final TxnKind SITE_KIND = kind(SITE), ROAD_KIND = kind(ROAD);
+	public static final TxnKind ROAD_KIND = kind(ROAD);
+
+	/**
+	 * (slice T4R-D, I5) {@code removal.site}: one single removal's owner txn ({@code removal:<base>@<undoGroup>}), decided by its committed
+	 * journal undo ({@link #UNDO}), never aborted; it owns every member's W, settle, OWE, snapshot and events.
+	 */
+	public static final TxnKind SITE_KIND = new TxnKind() {
+		final TxnKind base = kind(SITE);
+
+		@Override
+		public String name() {
+			return SITE;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public String decider() {
+			return "journal";
+		}
+
+		@Override
+		public TxnKind.Adapter adapter(Effect e) {
+			return base.adapter(e);
+		}
+
+		@Override
+		public com.google.gson.JsonObject result(TxnEntry t) {
+			return base.result(t);
+		}
+	};
 
 	/** (slice T4R fix round, P1-1) {@code removal.group}: decided by its committed journal undo ({@link #UNDO}), never by its own file. */
 	public static final TxnKind GROUP_KIND = new TxnKind() {

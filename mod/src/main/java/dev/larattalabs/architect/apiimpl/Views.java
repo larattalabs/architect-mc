@@ -254,6 +254,18 @@ public final class Views {
 	}
 
 	/** Item ids -> items (unknown ids dropped). */
+	/** (slice T4R-D) A result's owed parts ({key, recipient, reason, items}) as the API's. */
+	public static List<dev.larattalabs.architect.api.OwedPart> owedParts(List<com.google.gson.JsonObject> parts) {
+		List<dev.larattalabs.architect.api.OwedPart> out = new java.util.ArrayList<>();
+		for (com.google.gson.JsonObject p : parts) {
+			Map<String, Integer> m = new java.util.TreeMap<>();
+			p.getAsJsonObject("items").entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+			out.add(new dev.larattalabs.architect.api.OwedPart(p.get("key").getAsString(), p.get("recipient").getAsString(), p.get("reason").getAsString(),
+				items(m)));
+		}
+		return out;
+	}
+
 	public static Map<Item, Integer> items(Map<String, Integer> byId) {
 		Map<Item, Integer> out = new LinkedHashMap<>();
 		byId.forEach((id, n) -> {

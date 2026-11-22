@@ -155,6 +155,23 @@ public final class Sites {
 			this.reason = reason == null ? Reason.OTHER : reason;
 			this.builds = builds == null ? List.of() : List.copyOf(builds);
 			this.detail = detail == null ? "" : detail;
+			this.busy = null;
+		}
+
+		private final dev.larattalabs.architect.api.@Nullable Busy busy;
+
+		/** (slice T4R-D, A7a) A SITE_BUSY refusal because of a removal, typed; its detail is the busy's token. */
+		public SiteException(Reason reason, String message, dev.larattalabs.architect.api.Busy busy) {
+			super(message);
+			this.reason = reason == null ? Reason.OTHER : reason;
+			this.builds = List.of();
+			this.detail = busy.token();
+			this.busy = busy;
+		}
+
+		/** (slice T4R-D, A7a) What blocks the call, typed, or null. */
+		public dev.larattalabs.architect.api.@Nullable Busy busy() {
+			return busy;
 		}
 
 		/** (slice T3b, SOFF2) The refusal's stable sub-code ({@code ""} when it has none): {@code saving_off:<dims>} for the saving-off hold. */
@@ -1651,7 +1668,13 @@ public final class Sites {
 	 * kept, the cells handed down per covering site, and the sites a cascade removed first.
 	 */
 	public record Removed(Site site, Map<String, Integer> returned, int restored, int kept, Map<String, Integer> handedDown, List<String> cascaded,
-		List<String> notes, List<String> owed) {
+		List<String> notes, List<String> owed, List<JsonObject> owedParts) {
+		/** (slice T4R-D) Before owed parts ({@code {key, recipient, reason, items}}, the snapshot's). */
+		public Removed(Site site, Map<String, Integer> returned, int restored, int kept, Map<String, Integer> handedDown, List<String> cascaded,
+			List<String> notes, List<String> owed) {
+			this(site, returned, restored, kept, handedDown, cascaded, notes, owed, List.of());
+		}
+
 		public Removed(Site site, Map<String, Integer> returned) {
 			this(site, returned, 0, 0, Map.of(), List.of(), List.of());
 		}
@@ -1679,6 +1702,14 @@ public final class Sites {
 	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered, @Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
+			String own = OwnerRemovals.ownerOf(id);
+			if (own != null) {
+				// (slice T4R-D, Steward's A2) a pending member of a decided removal not finished yet: held(decided), typed
+				String[] w = OwnerRemovals.who(own);
+				throw new SiteException(Reason.SITE_BUSY, "held(decided) " + id + " is being removed with " + (w == null ? own : w[0]) + "; it finishes by itself",
+					new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.HELD_DECIDED, w == null ? own : w[0], "site", w == null ? null
+						: w[1]));
+			}
 			throw new SiteException("No site " + id + " (see /architect list)");
 		}
 		if (b.construction() != null) {
@@ -1824,11 +1855,9 @@ public final class Sites {
 			group);
 		tr.mark("plan");
 		Map<String, Integer> handedAll = handedBySite(plan);
+		Map<String, JsonObject> fins = new java.util.HashMap<>();
 		for (Site x : all) {
 			JsonObject st = stashes.get(x.id());
-			if (st == null) {
-				continue;
-			}
 			Journal.Stats xs = statsOf(plan, x.id());
 			JsonObject fin = new JsonObject();
 			fin.addProperty("restored", xs.restored());
@@ -1843,9 +1872,24 @@ public final class Sites {
 				cascade.forEach(ca::add);
 			}
 			fin.add("cascaded", ca);
-			st.add("fin", fin);
+			fins.put(x.id(), fin);
+			if (st != null) {
+				st.add("fin", fin);
+			}
 		}
-		boolean stashHeld = CrateSettle.holdDurable(stashes);
+		// (slice T4R-D, I5) one owner record for the whole call (every member paid or with player cells): saved confirmed before the undo
+		// commits; its holds are born with it. No per-member stash, no per-member txn
+		String ownerKey = OwnerRemovals.needed(stashes, decs) ? OwnerRemovals.key(id, group) : null;
+		if (ownerKey != null) {
+			List<String> infraCascade = new ArrayList<>();
+			for (String c : cascade) {
+				if (Infras.get(c) != null) {
+					infraCascade.add(c);
+				}
+			}
+			OwnerRemovals.put(ownerKey, OwnerRemovals.build(id, group, b.dimension(), tagOwner, describe(id), infraCascade, all, decs, stashes, fins));
+		}
+		boolean stashHeld = ownerKey != null || CrateSettle.holdDurable(stashes);
 		if (custody || pendingHeld || stashHeld) {
 			try {
 				if (stashHeld) {
@@ -1857,6 +1901,9 @@ public final class Sites {
 				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
 				Stockpiles.dropPendingCredits(decs.values());
 				stashes.keySet().forEach(CrateSettle::forgetDurable);
+				if (ownerKey != null) {
+					OwnerRemovals.forget(ownerKey);
+				}
 				for (Site y : all) {
 					if (y.construction() != null && Fills.phase(y) != null) {
 						Fills.writeBack(level, y);
@@ -1879,24 +1926,30 @@ public final class Sites {
 		WorldJournal.kill("K6");
 		// R3: the records pending (with the crate.settle each owes: a restart before it settles it from there)
 		for (Site x : all) {
-			markPending(server, x, "removed", stashes.get(x.id()));
+			markPending(server, x, "removed", ownerKey != null ? null : stashes.get(x.id())); // (T4R-D) owned by its record: no stash on it
 		}
 		for (String c : cascade) {
 			if (Infras.get(c) != null) {
 				Infras.markPending(server, c);
 			}
 		}
+		WorldJournal.kill("R3a"); // (TEST, T4R-D) the records pending (one sites save), nothing written
 		// R4: the writes, top first (the cascade is ordered top-down); (T4b fix round, N3) as the removal's own writes (its boxes are held)
 		java.util.Set<String> writingWas = CrateSettle.WRITING;
 		java.util.Set<String> own = new java.util.HashSet<>(cascade);
 		all.forEach(x -> own.add(x.id()));
 		CrateSettle.WRITING = java.util.Set.copyOf(own); // (slice T4R fix round) this removal's own sites only
 		try {
+			OWNER_WRITE = ownerKey;
 			return writeRemoval(level, server, id, all, cascade, decs, stashes, undone, group, drops, force, tr);
 		} finally {
 			CrateSettle.WRITING = writingWas;
+			OWNER_WRITE = null;
 		}
 	}
+
+	/** (slice T4R-D) The owner key of the single removal writing now (its afterRestore settles and drops nothing: its owner txn pays). */
+	static @Nullable String OWNER_WRITE;
 
 	/** (T4b fix round) removeDetailed's R4 and after: the writes, then each site's settle; the removal's own writes. */
 	private static Removed writeRemoval(ServerLevel level, MinecraftServer server, String id, List<Site> all, List<String> cascade,
@@ -1920,6 +1973,17 @@ public final class Sites {
 		Removed last = null;
 		Map<String, Integer> handed = handedBySite(undone.work());
 		tr.mark("pending");
+		String ownerKey = OWNER_WRITE;
+		JsonObject rec = ownerKey == null ? null : OwnerRemovals.record(ownerKey);
+		if (rec != null) {
+			// (slice T4R-D, I2) the recording rule: every member's player cells that stand now, before the call's first write (pos:block, first
+			// write wins), in their chunks: the same tick as the writes below
+			for (var en : rec.getAsJsonObject("members").entrySet()) {
+				if (en.getValue().getAsJsonObject().get("player") instanceof JsonArray pl && !pl.isEmpty()) {
+					dev.larattalabs.architect.txn.RemovalTxn.recordPfound(level, ownerKey + "/" + en.getKey(), pl);
+				}
+			}
+		}
 		for (String c : cascade) {
 			if (Infras.get(c) == null && Infras.pending(c) != null) {
 				Infras.finishRemoval(level, c, group, true);
@@ -1929,7 +1993,6 @@ public final class Sites {
 			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
 			CrateSettle.recordFound(level, x.id(), group, stashes.get(x.id()));
 			CrateSettle.markRestored(x.id(), group);
-			CrateSettle.markLiveDrops(x.id(), group); // (slice T4R-N) its afterRestore below drops the player's blocks: its W never again
 			SiteJournal.Restore[] rr = new SiteJournal.Restore[1];
 			SiteException[] fail = new SiteException[1];
 			it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
@@ -1950,9 +2013,24 @@ public final class Sites {
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
 				x.id().equals(id) ? cascade : List.of(), notesOf(level, r));
+			WorldJournal.kill("R4m"); // (TEST, T4R-D) a member written, its owner txn not begun
 			tr.mark("after " + x.id());
 			if (x.id().equals(id)) {
 				last = done;
+			}
+		}
+		if (ownerKey != null) {
+			// (slice T4R-D, D1a step 6) the owner txn: every member's W receipts its write, settles and owes, snapshots, fires, retires; then RD1,
+			// RD2 and auto-collect. Held: the call answers held(decided), and it finishes by itself
+			String held = OwnerRemovals.drive(server, ownerKey);
+			if (held != null) {
+				HELD_NOW.add(id + ": " + held);
+				OwnerRemovals.startLater(server);
+			} else {
+				JsonObject res = OwnerRemovals.result("site", id);
+				if (res != null && last != null) {
+					last = OwnerRemovals.removed(last.site(), res, last.notes());
+				}
 			}
 		}
 		tr.done();
@@ -2148,7 +2226,12 @@ public final class Sites {
 		drops.clearNew(level);
 		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
 		boolean pileTxn = false;
-		if (dec != null) {
+		boolean ownerMember = OWNER_WRITE != null && OwnerRemovals.record(OWNER_WRITE) != null && OwnerRemovals.record(OWNER_WRITE).getAsJsonObject("members").has(id);
+		if (dec != null && ownerMember) {
+			// (slice T4R-D) owned by its removal's owner record: nothing drops here (its refunds, crate and player blocks are its owner txn's)
+			WorldJournal.kill("R4");
+			Builder.forget(server, id);
+		} else if (dec != null) {
 			WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: the site's restore written; its refunds and its crate's stock not yet settled
 			// (T4b) the stash the removal saved before its commit (with its undo group): a stockpile site's refunds settle there too (N8)
 			Site.Pending pd = pendingOf(id);
@@ -2178,14 +2261,16 @@ public final class Sites {
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
 		// (slice T4R-M, found by T4RM-fin) a stockpile site's refund is its txn's credit (given below), never also the planned credit: reported()
 		// counted it twice in this call's result (the stock was credited once)
-		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : pileTxn ? dec.all() : dec.reported());
+		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null || ownerMember ? Map.of() : pileTxn ? dec.all() : dec.reported());
 		if (settled.owed().isEmpty()) {
 			settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 		}
 		Removed r = new Removed(b, Map.copyOf(returned), stats.restored(), stats.changed(), handed, cascaded, notes, List.copyOf(settled.owed()));
 		if (event && settled.done()) { // (T4b fix round, P2) a held settle is not removed yet (it finishes by itself)
 			ApiEvents.removed(server, r);
-			ApiEvents.removalFinished(id, r); // (slice T4c) one path for consumers: a held one fires when it finishes (CrateSettle.resumeNow)
+			if (!ownerMember) {
+				ApiEvents.removalFinished(id, r); // (slice T4c) one path for consumers: a held one fires when it finishes (CrateSettle.resumeNow)
+			} // (slice T4R-D) an owner member's REMOVAL_FINISHED is its owner txn's, from its snapshot
 		}
 		return r;
 	}
@@ -3541,18 +3626,6 @@ public final class Sites {
 		// (J2, UMT F9) the released groups' entries go after every pending record settled: a road's evidence over a site removed after it
 		// reads the site's later restore (Sites.evidence's laterBelow), which an earlier release would have taken away
 		List<String> releaseAfter = new ArrayList<>();
-		// (slice T4R-N, the final check of f7607b13's P1-2) the cascade of a committed removal whose stash is durable: its removal txn's W writes
-		// them first (top first, as the live removal), so none is judged (or brought back) here meanwhile
-		java.util.Collection<JsonObject> stashesNow = new ArrayList<>();
-		pending.forEach(p -> {
-			if (p.settle() != null) {
-				stashesNow.add(p.settle());
-			}
-		});
-		if (early != null) {
-			stashesNow.addAll(early.values());
-		}
-		Set<String> rolled = CrateSettle.rolledCascade(stashesNow);
 		for (Site.Pending p : List.copyOf(pending)) {
 			Site gone = p.site();
 			boolean moved = "moved".equals(p.why());
@@ -3570,10 +3643,6 @@ public final class Sites {
 				continue;
 			}
 			JsonObject stashOf = p.settle() != null ? p.settle() : early == null ? null : early.get(gone.id());
-			if (stashOf == null && gone.construction() == null && group != null && rolled.contains(gone.id() + "|" + group) && !jobSites.contains(gone.id())) {
-				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
-				continue;
-			}
 			if (stashOf == null && early == null && gone.construction() != null && group != null) {
 				// (T4b) its stash can't be read now: never judged (a release here could pay later with its blocks standing); kept for the next start
 				report(gone.id(), true, "removed " + gone.id() + ": its settle can't be read (the ledger file is unreadable); it waits, nothing released");
@@ -3705,11 +3774,6 @@ public final class Sites {
 			if (Groups.ownsAtStart(owned, gone.id(), group)) {
 				report(gone.id(), false, "removed " + gone.id() + ": its group's removal owns it; its removal.group txn restores and settles it");
 				continue; // (slice T4R, R1)
-			}
-			if (rolled.contains(gone.id() + "|" + group) && gone.construction() == null && (early == null || early.get(gone.id()) == null)) {
-				// (slice T4R-N, P1-2) cascaded by a committed removal with a durable stash: its txn's W writes it first; settled at a later start
-				report(gone.id(), false, "removed " + gone.id() + ": cascaded by a committed removal; that removal's txn writes it, then it is settled");
-				continue;
 			}
 			if (early == null && gone.construction() != null || early != null && early.get(gone.id()) != null) {
 				// (T4b, finding 3a) a committed road removal with a durable stash: its removal txn restores it (W), then settles; never by majority

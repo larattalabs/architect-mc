@@ -389,6 +389,7 @@ public final class Stockpiles {
 			lastSaveTick = 0;
 		});
 		SaveGuards.init();
+		AutoCollect.init(); // (slice T4R-D, D1d) the join's collect of a player's owed blocks
 	}
 
 	// ------------------------------------------------------------------ lookups
@@ -3066,6 +3067,14 @@ public final class Stockpiles {
 		if (!CrateSettle.durableEmpty()) {
 			root.add("crateSettles", CrateSettle.durableJson()); // (T2b fix round P1-c) a removal's settle, its refunds, durable before its undo commits
 		}
+		JsonObject own = OwnerRemovals.recordsJson(); // (slice T4R-D) single removals' owner records, durable before their undo commits
+		if (own != null) {
+			root.add("removals", own);
+		}
+		JsonObject res = OwnerRemovals.resultsJson(); // (slice T4R-D, D5) the removals' immutable results (bounded)
+		if (res != null) {
+			root.add("removalResults", res);
+		}
 		return root;
 	}
 
@@ -4144,6 +4153,7 @@ public final class Stockpiles {
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 		forgetEarlyRuns(server);
 		Sites.crateCheckAfterStockpiles(server); // (chore LT) the crate-less sites' crate check, now that it can see which a stockpile feeds
+		OwnerRemovals.startLater(server); // (slice T4R-D) every owner record's txn recovered (or its record dropped when its undo never committed)
 		CrateSettle.sweepLater(server); // (T2b last round P1 2, 3) the durable settle stashes no job or pending record carries: settled or forgotten
 	}
 
@@ -4180,6 +4190,7 @@ public final class Stockpiles {
 		PILES.clear();
 		OwedLedger.clear();
 		DURABLE_WB.clear();
+		OwnerRemovals.read(null, null);
 		CrateSettle.durableRead(null);
 		DURABLE_WB_GEN = 0;
 		nextId = 1;
@@ -4294,6 +4305,7 @@ public final class Stockpiles {
 	static void readInto(JsonObject root) {
 		PILES.clear();
 		OwedLedger.readInto(root.get("owed"));
+		OwnerRemovals.read(root.get("removals"), root.get("removalResults")); // (slice T4R-D)
 		CrateSettle.durableRead(root.get("crateSettles"));
 		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 		if (root.has("stockpiles")) {

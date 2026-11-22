@@ -603,6 +603,10 @@ public final class TxnServer {
 			String line = t.id + " " + event + (replayed ? " (replayed)" : "") + " " + payload;
 			Runnable fire = () -> {
 				Architect.LOGGER.info("Txn event: {}", line);
+				if (event.startsWith("removal_finished:") && payload.has("owner") && payload.has("member")) {
+					// (slice T4R-D, D5) a single removal's member finished: its REMOVAL_FINISHED from its immutable snapshot (at least once)
+					dev.larattalabs.architect.site.OwnerRemovals.finished(payload.get("owner").getAsString(), payload.get("member").getAsString());
+				}
 				if ("removal_finished".equals(event)) {
 					// (slice T4R, P1-4) a group's or stage's removal finished: its one REMOVAL_FINISHED, built from the payload captured at planning and
 					// the result its effects left (the credits, the owed keys); delivered at least once (re-fired after recovery until delivered)

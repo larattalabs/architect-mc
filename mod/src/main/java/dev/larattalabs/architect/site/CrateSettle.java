@@ -448,66 +448,11 @@ public final class CrateSettle {
 
 	static void clearRestored() {
 		RESTORED_NOW.clear();
-		LIVE_DROPS.clear();
 	}
 
-	/**
-	 * (slice T4R-N) Removals whose live call writes their restore and drops the player's blocks itself this session ({@code site|group}): their
-	 * W never gives those blocks back again (a W that writes a part a hold refused finds them standing after the live drop).
-	 */
-	private static final java.util.Set<String> LIVE_DROPS = java.util.concurrent.ConcurrentHashMap.newKeySet();
-
-	/**
-	 * (slice T4R-N, the final check of f7607b13's P1-2) {@code id|undoGroup} of each member of the cascades the durable {@code stashes} record
-	 * (their {@code fin}): sites and roads their single removal's W writes first. Pure.
-	 */
-	static java.util.Set<String> rolledCascade(java.util.Collection<JsonObject> stashes) {
-		java.util.Set<String> out = new java.util.HashSet<>();
-		for (JsonObject st : stashes) {
-			if (st == null || !st.has("undoGroup") || st.has("road") || !(st.get("fin") instanceof JsonObject f) || !(f.get("cascaded") instanceof com.google.gson.JsonArray ca)) {
-				continue;
-			}
-			String g = st.get("undoGroup").getAsString();
-			ca.forEach(x -> out.add(x.getAsString() + "|" + g));
-		}
-		return out;
-	}
-
-	/**
-	 * (slice T4R-N) Whether a cascaded member is written by its base's W: unpaid (no construction: nothing of it is refunded) and with no stash
-	 * of its own (durable or on its pending record). A paid member settles in its own removal txn, whose W records what stands before it writes
-	 * (written first by the base's W, it would find nothing and pay nothing). Pure.
-	 */
-	static boolean unpaidCascade(boolean construction, boolean durableStash, boolean pendingSettle) {
-		return !construction && !durableStash && !pendingSettle;
-	}
-
-	/** (slice T4R-N) {@link #unpaidCascade} for {@code id} (a pending site or road) with entries undone in {@code group}. Server thread. */
-	static boolean cascadeWritable(String id, String group) {
-		Site s = Sites.pendingRecord(id);
-		Infra inf = s == null ? Infras.pending(id) : null;
-		if (s == null && inf == null || !undoneExists(id, group)) {
-			return false;
-		}
-		Site.Pending pe = s == null ? null : Sites.pendingOf(id);
-		return unpaidCascade(s != null ? s.construction() != null : inf.construction() != null, durable(id) != null, pe != null && pe.settle() != null);
-	}
-
-	static void markLiveDrops(String site, String group) {
-		LIVE_DROPS.add(site + "|" + group);
-	}
-
-	/** (slice T4R-N) The cells of {@code player} whose recorded block stands now, by position. Reads (loads) their chunks. */
-	static Map<Long, JsonObject> standingPlayer(ServerLevel level, com.google.gson.JsonArray player) {
-		Map<Long, JsonObject> out = new java.util.LinkedHashMap<>();
-		for (var el : player) {
-			JsonObject c = el.getAsJsonObject();
-			long pos = c.get("pos").getAsLong();
-			if (c.get("block").getAsString().equals(Builder.blockId(level.getBlockState(BlockPos.of(pos))))) {
-				out.put(pos, c);
-			}
-		}
-		return out;
+	/** (slice T4R-D) The id of the block at {@code p} (loads its chunk). */
+	public static String blockIdAt(ServerLevel level, BlockPos p) {
+		return Builder.blockId(level.getBlockState(p));
 	}
 
 	/** A recorded cell's items. */
@@ -586,30 +531,12 @@ public final class CrateSettle {
 		if (DevStart.failWriteNow()) {
 			throw new IllegalStateException("TEST dev-start.json failWriteNow"); // (T4b fix round) the W apply fails: the txn holds, nothing paid
 		}
-		boolean give = player != null && dropAt != null && !LIVE_DROPS.contains(site + "|" + group);
-		Map<Long, JsonObject> standing = give ? standingPlayer(level, player) : Map.of();
-		// (slice T4R-N, P1-2) its cascade still pending with entries in its undo group (a crash before the live removal wrote them): written first,
-		// top first, as the live removal writes them (its records stay pending: the next start's check releases them, restored)
-		List<String> casc = new java.util.ArrayList<>();
-		if (cascade != null) {
-			for (boolean infra : new boolean[] {true, false}) { // the live order: its roads and cell sites, then its sites (each top first)
-				for (String c : cascade) {
-					if ((infra ? Infras.pending(c) != null : Sites.pendingRecord(c) != null) && cascadeWritable(c, group)) {
-						casc.add(c); // unpaid only: a paid member's own W writes it (after recording what stands)
-					}
-				}
-			}
-		}
+		// (slice T4R-D) a single removal's members each have their own W in the owner txn: no cascade is written here, and no player's block is
+		// given back (the player's cells are paid once from receipts, owed: never dropped)
 		dev.larattalabs.architect.placement.Anchors.Bounds area = clear ? writeArea(site) : null;
-		for (String c : casc) {
-			dev.larattalabs.architect.placement.Anchors.Bounds cb = writeArea(c);
-			if (area != null && cb != null) {
-				area = Sites.union(area, cb);
-			}
-		}
 		Sites.Drops drops = area == null ? null : Sites.Drops.before(level, area);
 		java.util.Set<String> was = WRITING;
-		java.util.Set<String> own = new java.util.HashSet<>(casc);
+		java.util.Set<String> own = new java.util.HashSet<>(WRITING);
 		own.add(site);
 		WRITING = java.util.Set.copyOf(own);
 		SiteJournal.Restore[] r = new SiteJournal.Restore[1];
@@ -618,9 +545,6 @@ public final class CrateSettle {
 		try {
 			refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
 				try {
-					for (String c : casc) {
-						SiteJournal.writeNow(level, c, group);
-					}
 					r[0] = SiteJournal.writeNow(level, site, group);
 				} catch (Sites.SiteException e) {
 					fail[0] = e;
@@ -628,22 +552,9 @@ public final class CrateSettle {
 			});
 		} finally {
 			WRITING = was;
-			int cleared = drops != null ? drops.clearNewCounted(level) : 0; // (slice T4R-N) what its writes popped, as afterRestore clears it
-			Map<String, Integer> given = new TreeMap<>();
-			for (var en : standing.entrySet()) {
-				BlockPos p = BlockPos.of(en.getKey());
-				if (!en.getValue().get("block").getAsString().equals(Builder.blockId(level.getBlockState(p)))) {
-					Map<String, Integer> items = itemsOf(en.getValue());
-					Builder.dropItems(level, dropAt, items, drops); // kept by the clear: it is the player's block given back
-					items.forEach((k, v) -> given.merge(k, v, Integer::sum));
-					if (dropped != null) {
-						dropped.accept(en.getKey(), items);
-					}
-				}
-			}
-			if (clear || player != null) {
-				Architect.LOGGER.info("W restore of {} ({}): cascade {}, {} popped item(s) cleared, the player's blocks recorded {}, standing {}, given back {}",
-					site, group, casc, cleared, player == null ? 0 : player.size(), standing.size(), given);
+			int cleared = drops != null ? drops.clearNewCounted(level) : 0; // what its writes popped, as afterRestore clears it (v0.89.0 behaviour)
+			if (clear) {
+				Architect.LOGGER.info("W restore of {} ({}): {} popped item(s) cleared", site, group, cleared);
 			}
 		}
 		if (fail[0] != null) {
@@ -807,6 +718,7 @@ public final class CrateSettle {
 	static void boxesChanged() {
 		List<JsonObject> all = new java.util.ArrayList<>(DURABLE.values());
 		all.addAll(DEV_HOLDS.values());
+		all.addAll(OwnerRemovals.holds()); // (slice T4R-D, I6) each owner record's footprint: member boxes and crate cells, named by member
 		HELD = heldOf(all);
 	}
 
@@ -1256,7 +1168,13 @@ public final class CrateSettle {
 		if (why != null) {
 			return new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), why);
 		}
-		String kind = stash.has("road") ? dev.larattalabs.architect.txn.RemovalTxn.ROAD : dev.larattalabs.architect.txn.RemovalTxn.SITE;
+		if (!stash.has("road")) {
+			// (slice T4R-D) a single site's removal is its owner record's txn (OwnerRemovals); a branch build's per-site stash is logged and
+			// ignored ("not committed": dropped by its caller, nothing paid from it)
+			Architect.LOGGER.warn("crate.settle: a per-site removal stash of {} from a branch build is ignored (T4R-D: single removals are owner txns)", site);
+			return new Removal(CrateTxn.SETTLE, List.of(), List.of(), List.of(), "not committed");
+		}
+		String kind = dev.larattalabs.architect.txn.RemovalTxn.ROAD;
 		String group = stash.has("undoGroup") ? stash.get("undoGroup").getAsString() : latestUndone(site);
 		List<dev.larattalabs.architect.txn.Effect.Builder> first = new java.util.ArrayList<>();
 		List<String> more = new java.util.ArrayList<>();
@@ -1272,36 +1190,7 @@ public final class CrateSettle {
 		if (group != null && undoneExists(site, group)) {
 			try {
 				List<long[]> wChunks = new java.util.ArrayList<>(chunksOf(level, site, group, cells));
-				com.google.gson.JsonArray mine = new com.google.gson.JsonArray();
-				if (!stash.has("road") && stash.get("fin") instanceof JsonObject f1 && f1.get("cascaded") instanceof com.google.gson.JsonArray ca) {
-					// (slice T4R-N, P1-2) its cascade (top first): its unpaid members written first by this W, as the live removal writes them; their
-					// chunks are the W's too (probed and receipted with its own: a crash that saved only some of them writes them again)
-					java.util.Set<Long> seen = new java.util.HashSet<>();
-					wChunks.forEach(c -> seen.add(pack((int) c[0], (int) c[1])));
-					for (var x : ca) {
-						String c = x.getAsString();
-						if (cascadeWritable(c, group)) {
-							mine.add(c);
-							for (long[] ch : chunksOf(level, c, group)) {
-								if (seen.add(pack((int) ch[0], (int) ch[1]))) {
-									wChunks.add(ch);
-								}
-							}
-						}
-					}
-				}
 				dev.larattalabs.architect.txn.Effect.Builder w = dev.larattalabs.architect.txn.RemovalTxn.restore(dim, site, group, wChunks, cells);
-				if (!stash.has("road")) {
-					// (slice T4R-N, the final check of f7607b13's P1-2) a single site's W written at a restart (K6) does what its live removal does
-					// around its write: what the writes pop cleared, the player's blocks given back at the site's drop point, its unpaid cascade first
-					w.data("clear", new com.google.gson.JsonPrimitive(true));
-					if (stash.get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
-						w.data("player", pl).data("dropAt", posJsonOf(posOf(stash)));
-					}
-					if (!mine.isEmpty()) {
-						w.data("cascade", mine);
-					}
-				}
 				first.add(w);
 				SiteJournal.Restore r0 = SiteJournal.restore(level, site, group);
 				if (stash.get("fin") instanceof JsonObject f0) {
@@ -1427,11 +1316,6 @@ public final class CrateSettle {
 			// (slice T4R, P1-4) the full result from its txn (the credited refund, the restore's count; a replay's from its cached result),
 			// fired before its stash is forgotten: a crash before the event leaves the stash, and the replay fires it again (at least once)
 			Map<String, Integer> refund = new TreeMap<>(s.credited());
-			if (st.get("player") instanceof com.google.gson.JsonArray pl && st.has("undoGroup")) {
-				// (slice T4R-N, P1-2) the player's blocks its W gave back (receipted with its writes): in its refund as the live removal reports them
-				dev.larattalabs.architect.txn.RemovalTxn.playerGiven(level, siteId, st.get("undoGroup").getAsString(), pl).forEach((k, v) -> refund.merge(k, v,
-					Integer::sum));
-			}
 			dev.larattalabs.architect.apiimpl.ApiEvents.removalFinished(siteId, new Sites.Removed(p.site(), Map.copyOf(refund), s.restored(), s.kept(),
 				s.handed(), s.cascaded(), List.of(), List.copyOf(s.owed())));
 		}

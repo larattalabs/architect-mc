@@ -90,13 +90,29 @@ public final class OwedLedger {
 	public static final String CRATE_SETTLE = "crate_settle", CRATE_PUTBACK = "crate_putback", GROUP_REFUND = "group_refund";
 	/** (slice T4R, R5) A player holder's stack with its own data in a removed region target: owed whole ({@link Entry#stack}). */
 	public static final String CARGO = "cargo";
+	/**
+	 * (slice T4R-D, D1) A T4R removal's player blocks (or an extraction's), owed to their placer, else the site's recipient, else the
+	 * requester, else {@link #UNCLAIMED}. Never credited to a pile automatically (Steward's P2-3 exception to the T2b recipient rule): only an
+	 * explicit {@code creditOwedToStock} does it.
+	 */
+	public static final String PLAYER_BLOCKS = "player_blocks";
+	/** (slice T4R-D, Q7) The recipient of player blocks nobody can be named for: any player may collect them by key. */
+	public static final String UNCLAIMED = "architect:unclaimed";
 
 	static final int BOUND = 4096;
 	private static final LinkedHashMap<String, Entry> ENTRIES = new LinkedHashMap<>();
 	private static final LinkedHashSet<String> ENDED = new LinkedHashSet<>();
 	private static final LinkedHashSet<String> APPLIED = new LinkedHashSet<>();
+	/**
+	 * (slice T4R-D, I4) The amount each O effect owed, by its marker ({@code effectKey}), set in the same ledger change as the marker (one
+	 * atomic write of stockpiles.json) and never changed after: a removal's result reads it, never a live balance.
+	 */
+	private static final LinkedHashMap<String, Map<String, Integer>> AMOUNTS = new LinkedHashMap<>();
 
 	public static synchronized boolean isEmpty() {
+		if (!AMOUNTS.isEmpty()) {
+			return false;
+		}
 		return ENTRIES.isEmpty() && ENDED.isEmpty() && APPLIED.isEmpty();
 	}
 
@@ -104,6 +120,7 @@ public final class OwedLedger {
 		ENTRIES.clear();
 		ENDED.clear();
 		APPLIED.clear();
+		AMOUNTS.clear();
 	}
 
 	/** The recipient's entries, oldest first (by tick, then key). */
@@ -149,6 +166,9 @@ public final class OwedLedger {
 		}
 		ENTRIES.put(e.key(), e);
 		mark(effectKey);
+		if (effectKey != null) {
+			AMOUNTS.put(effectKey, Map.copyOf(e.items()));
+		}
 		return true;
 	}
 
@@ -185,6 +205,12 @@ public final class OwedLedger {
 	/** (T4b fix round, N3) Marks {@code effectKey} applied with nothing owed (its refund found nothing standing). */
 	public static synchronized void markApplied(String effectKey) {
 		mark(effectKey);
+		AMOUNTS.put(effectKey, Map.of());
+	}
+
+	/** (slice T4R-D, I4) What the O effect {@code effectKey} owed when it applied (empty: nothing), or null when not applied (or evicted). */
+	public static synchronized @Nullable Map<String, Integer> amountOf(String effectKey) {
+		return AMOUNTS.get(effectKey);
 	}
 
 	private static void mark(@Nullable String effectKey) {
@@ -207,8 +233,10 @@ public final class OwedLedger {
 		}
 		var it = APPLIED.iterator();
 		while (APPLIED.size() > BOUND && it.hasNext()) {
-			if (!PINNED.test(it.next())) {
+			String k = it.next();
+			if (!PINNED.test(k)) {
 				it.remove();
+				AMOUNTS.remove(k);
 			}
 		}
 	}
@@ -240,6 +268,15 @@ public final class OwedLedger {
 		JsonArray ap = new JsonArray();
 		APPLIED.forEach(ap::add);
 		o.add("applied", ap);
+		if (!AMOUNTS.isEmpty()) {
+			JsonObject am = new JsonObject();
+			AMOUNTS.forEach((k, v) -> {
+				JsonObject m = new JsonObject();
+				v.forEach(m::addProperty);
+				am.add(k, m);
+			});
+			o.add("amounts", am); // (slice T4R-D, I4)
+		}
 		return o;
 	}
 
@@ -259,6 +296,13 @@ public final class OwedLedger {
 		}
 		if (o.get("applied") instanceof JsonArray ap) {
 			ap.forEach(x -> APPLIED.add(x.getAsString()));
+		}
+		if (o.get("amounts") instanceof JsonObject am) {
+			am.entrySet().forEach(x -> {
+				Map<String, Integer> m = new TreeMap<>();
+				x.getValue().getAsJsonObject().entrySet().forEach(y -> m.put(y.getKey(), y.getValue().getAsInt()));
+				AMOUNTS.put(x.getKey(), Map.copyOf(m));
+			});
 		}
 	}
 }
