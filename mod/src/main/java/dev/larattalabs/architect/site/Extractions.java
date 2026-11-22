@@ -36,6 +36,8 @@ public final class Extractions {
 	}
 
 	public static final String KIND = "removal.pblocks";
+	/** (TEST seam, REL-v0910 fix round) The live txn core ({@code TxnServer}'s); a unit test sets its own. */
+	static java.util.function.Supplier<TxnCore> CORE = TxnServer::core;
 	/** Target key ({@code <id>@<placedAt>}) -> {gen, attempts: {gen: {key, cells, state, result?}}}. */
 	private static final Map<String, JsonObject> TABLE = new TreeMap<>();
 
@@ -318,7 +320,7 @@ public final class Extractions {
 			}
 		}
 		// (slice T4R-D last round, P1) never while one of its own holder cargo txns is open: it may still put its stack back (see ownCargo)
-		TxnEntry cargo = ownCargo(TxnServer.core(), tk);
+		TxnEntry cargo = ownCargo(CORE.get(), tk);
 		if (cargo != null) {
 			return "the contents of a player's holder on " + t.id() + " are still being taken out (" + cargo.id + (cargo.held() != null ? ": " + cargo
 				.held() : "") + ")";
@@ -370,7 +372,7 @@ public final class Extractions {
 	/** Begins (or attaches to) attempt {@code at}'s txn and drives it; marks it kept once retired. Null when kept; else why it waits. */
 	static @Nullable String drive(MinecraftServer srv, ServerLevel level, String tk, JsonObject at) {
 		String key = at.get("key").getAsString();
-		TxnCore c = TxnServer.core();
+		TxnCore c = CORE.get();
 		JsonArray cells = at.getAsJsonArray("cells");
 		List<String> res = new ArrayList<>();
 		for (JsonElement el : cells) {
@@ -445,7 +447,7 @@ public final class Extractions {
 	 * recipients).
 	 */
 	static java.util.function.Consumer<Runnable> collectQueue = TxnServer::later;
-	static java.util.function.Predicate<String> txnOpen = k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key));
+	static java.util.function.Predicate<String> txnOpen = k -> CORE.get().open().stream().anyMatch(t -> k.equals(t.key));
 	static java.util.function.BiConsumer<String, @Nullable JsonArray> collector = (target, parts) -> {
 		MinecraftServer srv = SiteDeltas.serverOrNull();
 		if (srv != null) {
@@ -547,7 +549,7 @@ public final class Extractions {
 	 * same rule once its txn retires: the resolver runs each tick ({@link TxnServer#later}) while any attempt is planned or open.
 	 */
 	static void atStart(MinecraftServer srv) {
-		atStart(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null,
+		atStart(srv, k -> CORE.get().open().stream().anyMatch(t -> k.equals(t.key)), k -> CORE.get().cache().committed(k) != null,
 			TxnServer::later);
 	}
 
@@ -602,19 +604,19 @@ public final class Extractions {
 
 	/** The live server's resolver (an attempt left planned or open by a held or aborted drive). Server thread. */
 	static void resolveLater(MinecraftServer srv) {
-		resolveLater(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null,
+		resolveLater(srv, k -> CORE.get().open().stream().anyMatch(t -> k.equals(t.key)), k -> CORE.get().cache().committed(k) != null,
 			TxnServer::later);
 	}
 
 	/** (fix round P1-5) {@link #resolve} now, at run time (a removal's admission asks it first: an attempt whose txn retired holds nothing). */
 	static void resolveNow(MinecraftServer srv) {
 		if (anyLive() && ready()) {
-			resolve(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null, false);
+			resolve(srv, k -> CORE.get().open().stream().anyMatch(t -> k.equals(t.key)), k -> CORE.get().cache().committed(k) != null, false);
 		}
 	}
 
 	private static boolean ready() {
-		return CrateSettle.notReady() == null && TxnServer.core().loadFailed() == null;
+		return CrateSettle.notReady() == null && CORE.get().loadFailed() == null;
 	}
 
 	/** Whether any attempt is open (its txn begun: it is resolved once that txn retires). A planned one is driven by its caller's retry. */

@@ -25,6 +25,12 @@ public final class RemovalAreas {
 	}
 
 	/**
+	 * (TEST seam, REL-v0910 fix round) The txn core whose open txns the server-thread entry points read: the live one ({@code TxnServer}'s).
+	 * A unit test sets its own (TxnServer itself needs the game's attachments).
+	 */
+	static java.util.function.Supplier<dev.larattalabs.architect.txn.TxnCore> CORE = dev.larattalabs.architect.txn.TxnServer::core;
+
+	/**
 	 * One area: its dimension, box and whose it is (for the reason). (slice T4R-D, A7a) {@code busy}: what kind of answer it gives a NEW
 	 * attempt it blocks (its blocking id, kind and owner), null for a generic one.
 	 */
@@ -108,7 +114,7 @@ public final class RemovalAreas {
 	 * (begun this session, or open in the txn core as loaded from disk: slice T4R-N).
 	 */
 	static List<Area> heldAreas() {
-		return heldAreas(dev.larattalabs.architect.txn.TxnServer.core());
+		return heldAreas(CORE.get());
 	}
 
 	/**
@@ -324,7 +330,7 @@ public final class RemovalAreas {
 	 * site, its cells one by one), or null. {@code self}: the record's own members. Server thread.
 	 */
 	public static Sites.@Nullable SiteException footprintRefusal(List<com.google.gson.JsonObject> holds, Set<String> self, String what) {
-		return footprintRefusal(holds, self, what, dev.larattalabs.architect.txn.TxnServer.core());
+		return footprintRefusal(holds, self, what, CORE.get());
 	}
 
 	/** (TEST seam) {@link #footprintRefusal(List, Set, String)} against {@code core} (the txn core whose open txns count). */
@@ -363,7 +369,7 @@ public final class RemovalAreas {
 	 * there), or null. Server thread.
 	 */
 	public static @Nullable String overlapWhy(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
-		return overlapWhy(dim, boxes, self, dev.larattalabs.architect.txn.TxnServer.core());
+		return overlapWhy(dim, boxes, self, CORE.get());
 	}
 
 	/** (TEST seam, slice T4R-N) {@link #overlapWhy(String, Collection, Set)} against {@code core}. */
@@ -374,7 +380,7 @@ public final class RemovalAreas {
 
 	/** (slice T4R-D, A7a) The first in-flight removal's area (tickets included) meeting {@code boxes}, or null. Server thread. */
 	public static @Nullable Area overlapArea(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
-		return first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null), dim, boxes, self);
+		return first(heldAreas(CORE.get(), null), dim, boxes, self);
 	}
 
 	/**
@@ -382,7 +388,7 @@ public final class RemovalAreas {
 	 * {@link #busyRefusal} over the removals' footprints, attempts and tickets only, never another open txn's cells (a delivery's crate).
 	 */
 	public static Sites.@Nullable SiteException placementRefusal(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, String what) {
-		Area a = first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null, true, false), dim, boxes, self);
+		Area a = first(heldAreas(CORE.get(), null, true, false), dim, boxes, self);
 		return a == null ? null : new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "Not yet: " + a.who() + " is still in progress over "
 			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
 	}
@@ -397,7 +403,7 @@ public final class RemovalAreas {
 	/** (slice T4R-D, §4.2 FIFO) A waiting group's admission: the first area ahead of it (tickets ahead included) meeting its members, or null. */
 	static @Nullable Area admissionOf(Groups.Removal r) {
 		Set<String> self = Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
-		List<Area> held = heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), r);
+		List<Area> held = heldAreas(CORE.get(), r);
 		for (Area f : footprintOf(r)) { // (fix round P1-4) its members' boxes and every crate cell its settles touch
 			Area a = first(held, f.dim(), List.of(f.box()), self);
 			if (a != null) {
