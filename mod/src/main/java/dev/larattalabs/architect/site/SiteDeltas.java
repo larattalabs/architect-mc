@@ -1008,7 +1008,7 @@ public final class SiteDeltas {
 		if (b == null) {
 			return;
 		}
-		Sites.SiteException e = RemovalAreas.busyRefusal(b.dimension(), List.of(b.restoreBox()), java.util.Set.of(siteId), what);
+		Sites.SiteException e = RemovalAreas.placementRefusal(b.dimension(), List.of(b.restoreBox()), java.util.Set.of(siteId), what);
 		if (e != null) {
 			throw e;
 		}

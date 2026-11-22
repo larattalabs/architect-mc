@@ -895,7 +895,7 @@ public final class Sites {
 		{
 			// (slice T4R-D, §4.2 placement pre-check, Q14) refused before any pin, quote, charge or write when its box meets a removal in flight
 			// (an owner record's footprint, a begun group) or a waiting ticket: typed, never refused cell by cell mid-job
-			SiteException busy = RemovalAreas.busyRefusal(dimensionId(level), List.of(snapBox), moving == null ? java.util.Set.of() : java.util.Set.of(moving
+			SiteException busy = RemovalAreas.placementRefusal(dimensionId(level), List.of(snapBox), moving == null ? java.util.Set.of() : java.util.Set.of(moving
 				.id()), "place it");
 			if (busy != null) {
 				out.busy(busy);

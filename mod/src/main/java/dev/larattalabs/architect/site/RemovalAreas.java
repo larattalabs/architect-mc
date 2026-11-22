@@ -128,6 +128,15 @@ public final class RemovalAreas {
 	 * holds a ticket, or (for {@code behind}, a waiting group itself) only those ahead of it in the queue.
 	 */
 	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind, boolean tickets) {
+		return heldAreas(core, behind, tickets, true);
+	}
+
+	/**
+	 * {@link #heldAreas(dev.larattalabs.architect.txn.TxnCore, Groups.Removal, boolean)}; {@code txnCells} (fix round P1-4, §4.2 (c)): every
+	 * other open txn's cell resources count too. A removal's admission counts them; a placement-type pre-check (§4.2: (a), (b), (f) only)
+	 * does not.
+	 */
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind, boolean tickets, boolean txnCells) {
 		List<Area> out = legacyAreas();
 		for (Groups.Removal t : tickets ? Groups.tickets() : List.<Groups.Removal>of()) {
 			if (t == behind) {
@@ -154,7 +163,7 @@ public final class RemovalAreas {
 				groupAreas(r, "the removal of group " + r.group, out); // every member (paid or not): its writes go there
 			}
 		}
-		coreHolds(core, out);
+		coreHolds(core, out, txnCells);
 		OwnerRemovals.areas(out); // (slice T4R-D, §4.2 (a)) every owner record's footprint
 		Extractions.areas(out); // (b) every planned or open extraction attempt's cells
 		return out;
@@ -183,6 +192,10 @@ public final class RemovalAreas {
 	 * over the holder's box after a restart). Its own: the txn key's {@code group:<id>[/stage]}.
 	 */
 	static void coreHolds(dev.larattalabs.architect.txn.@Nullable TxnCore core, List<Area> out) {
+		coreHolds(core, out, true);
+	}
+
+	static void coreHolds(dev.larattalabs.architect.txn.@Nullable TxnCore core, List<Area> out, boolean txnCells) {
 		if (core == null) {
 			return;
 		}
@@ -201,7 +214,7 @@ public final class RemovalAreas {
 				}
 				continue;
 			}
-			if (ownAreas(t.kind)) {
+			if (!txnCells || ownAreas(t.kind)) {
 				continue; // its durable record's areas stand for it (an owner record, an extraction attempt, a group's members)
 			}
 			// (slice T4R-D fix round, P1-4; design §4.2 (c)) any other open txn's cell resources (a crate settle, a take, a delivery, a standalone
@@ -352,6 +365,16 @@ public final class RemovalAreas {
 	/** (slice T4R-D, A7a) The first in-flight removal's area (tickets included) meeting {@code boxes}, or null. Server thread. */
 	public static @Nullable Area overlapArea(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
 		return first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null), dim, boxes, self);
+	}
+
+	/**
+	 * (fix round P1-4) A placement-type call's pre-check ({@code place}, {@code realise*}, {@code applyDelta}, {@code revert}; design §4.2):
+	 * {@link #busyRefusal} over the removals' footprints, attempts and tickets only, never another open txn's cells (a delivery's crate).
+	 */
+	public static Sites.@Nullable SiteException placementRefusal(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, String what) {
+		Area a = first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null, true, false), dim, boxes, self);
+		return a == null ? null : new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "Not yet: " + a.who() + " is still in progress over "
+			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
 	}
 
 	/** (slice T4R-D, A7a) {@link #overlapArea} as a typed SITE_BUSY refusal ("Not yet: ..."), or null when free. */
