@@ -2355,7 +2355,7 @@ export async function registerTCC(steps, h) {
           check(f.changed.length === 2, `${tag}: the fixture: two paid cells replaced by the player's sponges`, f);
           const inv0 = (await groundAt(f.site)).inventory ?? {};
           const gr0 = (await groundAt(f.site)).items ?? {};
-          const rm = await later(`sgremove ${f.group}`, 600_000).catch((e) => ({ error: String(e) }));
+          const rm = await later(`sgremove ${f.group} noforce ${f.owner}`, 600_000).catch((e) => ({ error: String(e) }));
           let inv = {};
           for (let i = 0; i < 30; i++) { // bounded: 30 s after the group's removal answered; not back by then is a FAIL
             inv = minus((await groundAt(f.site)).inventory ?? {}, inv0);
