@@ -2214,7 +2214,7 @@ export async function registerTCC(steps, h) {
         }
         await cmd(`/kill @e[type=minecraft:item,x=${b[0]},y=${b[1]},z=${b[2]},distance=..32]`).catch(() => null);
         rowLog(tag0, `${sub}: ${site} on top ${topId}; changed ${json(changed)}`);
-        return { site, owner, items: pg.items, changed, top: topId };
+        return { site, owner, items: pg.items, changed, top: topId, group: pg.g.group };
       };
       const owedOf = async (rcpt) => (await call('dev.stockpile.owed', { recipient: rcpt }, 30_000).catch(() => ({}))).total ?? {};
       const groundAt = async (site) => { const bb = await boxOf(site); return (await call('dev.items.near', { pos: [Math.floor((bb[0] + bb[3]) / 2), bb[1], Math.floor((bb[2] + bb[5]) / 2)], radius: 24 }, 30_000).catch(() => ({}))); };
@@ -2335,6 +2335,37 @@ export async function registerTCC(steps, h) {
         }
         check(inv['minecraft:sponge'] === 2, `${tag}: the player's 2 sponges came back into the inventory exactly once (${json(inv)})`, { inv });
         check(left.length === 0, `${tag}: nothing left owed (${json(left)})`, left);
+      }
+
+      // T4RDF-group-collect (slice T4R-D fix round, P2-1): the player's own blocks in a GROUP's member come back into the inventory once the
+      // group's txn retired, the player online all along (no join): auto-collect after a group's retirement, as after a single removal's.
+      // Red on d004407a: only single removals auto-collected; the group's sponges stayed owed until a join or /architect collect
+      if (want('T4RDF-group-collect')) {
+        const tag = 'T4RDF-group-collect';
+        const lst = (await cmd('/list uuids').catch(() => ({ messages: [] }))).messages ?? [];
+        const myName = (/:\s*([A-Za-z0-9_]+)\s*\(/.exec(lst.join(' ')) ?? [])[1] ?? 'bot';
+        const f = await t4rdFixture('groupcollect', myName);
+        if (f && f.group) {
+          check(f.changed.length === 2, `${tag}: the fixture: two paid cells replaced by the player's sponges`, f);
+          const inv0 = (await groundAt(f.site)).inventory ?? {};
+          const gr0 = (await groundAt(f.site)).items ?? {};
+          const rm = await later(`sgremove ${f.group}`, 600_000).catch((e) => ({ error: String(e) }));
+          let inv = {};
+          for (let i = 0; i < 30; i++) { // bounded: 30 s after the group's removal answered; not back by then is a FAIL
+            inv = minus((await groundAt(f.site)).inventory ?? {}, inv0);
+            if (inv['minecraft:sponge'] === 2) break;
+            await L.sleep(1000);
+          }
+          const left = Object.values((await call('dev.stockpile.owed', {}, 30_000).catch(() => ({ owed: [] }))).owed ?? []).filter((e) => e.reason === 'player_blocks'
+            && (e.items?.['minecraft:sponge'] ?? 0) > 0 && String(e.key ?? '').includes(f.group));
+          const gr = minus((await groundAt(f.site)).items ?? {}, gr0);
+          rowLog(tag, `group ${f.group} removed ${json(rm).slice(0, 200)}; inventory gained ${json(inv)}; still owed ${json(left)}; ground ${json(gr)}`);
+          check(!gr['minecraft:sponge'], `${tag}: never dropped (${json(gr)})`, gr);
+          check(inv['minecraft:sponge'] === 2, `${tag}: the group's 2 sponges came back into the online player's inventory, once (${json(inv)})`, { inv, left });
+          check(left.length === 0, `${tag}: nothing of them left owed (${json(left)})`, left);
+        } else {
+          check(false, `${tag}: the fixture (a one-site pile group)`, f);
+        }
       }
     }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the
