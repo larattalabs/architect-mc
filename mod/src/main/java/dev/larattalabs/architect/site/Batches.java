@@ -1351,6 +1351,13 @@ public final class Batches {
 			Architect.LOGGER.info("Batch {}: item {} is {} as {}; the rollback of {} leaves it as it is", b.id, i.key, i.status, i.siteId, job.siteId);
 			return;
 		}
+		String next = Placement.otherRollback(job);
+		if (next != null && i.status == QItem.Status.PLACING) {
+			// (slice PLR) another rollback of the same attempt is still restoring: the item waits for it
+			i.siteId = next;
+			CHANGED.add(b.id);
+			return;
+		}
 		untickItem(server, b, "job:" + i.key);
 		if (job.requeue && b.running() && !b.cancelling) {
 			i.status = QItem.Status.QUEUED;
@@ -1375,6 +1382,23 @@ public final class Batches {
 		if (i != null && i.status == QItem.Status.PLACING) {
 			untickItem(server, b, "job:" + i.key);
 			fail(b, i, Reason.JOURNAL_UNAVAILABLE, why);
+		}
+	}
+
+	/**
+	 * (slice PLR) A stray placing record's rollback at load: its item, queued again from the queue file's last save (not done, naming no
+	 * site), waits PLACING as {@code siteId}'s until the rollback ends ({@link #rolledBack} queues it again). Server thread.
+	 */
+	static void holdForRollback(@Nullable String batchId, @Nullable String itemKey, String siteId) {
+		QBatch b = batchId == null ? null : BATCHES.get(batchId);
+		QItem i = b == null || itemKey == null ? null : b.item(itemKey);
+		if (i != null && !i.status.terminal() && (i.siteId == null || i.siteId.equals(siteId))) {
+			i.status = QItem.Status.PLACING;
+			i.siteId = siteId;
+			i.reason = null;
+			i.message = "";
+			CHANGED.add(b.id);
+			Architect.LOGGER.info("Batch {}: item {} waits for the rollback of {} before it is placed again", b.id, i.key, siteId);
 		}
 	}
 

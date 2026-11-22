@@ -15,8 +15,8 @@
 //                                      nothing to write: the record written, the item not placed), K2+save, RG4+save, K4+save, and RP1 and
 //                                      (PLR) RG4
 //                                      without a save: after the restart the region completes and its record verifies (every tile committed,
-//                                      none stale or unrecorded, the journal and the world agree); (PLR) no tile entry left PLACING and no
-//                                      record of the region still placing after a clean stop
+//                                      none stale or unrecorded, the journal and the world agree); (PLR) no tile entry left PLACING, no live
+//                                      record of the region still placing after a clean stop, and one more start settles a rolled-back one
 //     audit                            the audit lines of a gate run's shards (ARCHITECT_RP_AUDIT dir): per step and region, ok or not
 //     report                            REPORT.md over the step JSONs
 //
@@ -437,10 +437,26 @@ steps.crash = async () => {
     check(v.placingLeftover === 0, `${point}: no tile entry of the group left PLACING after the restart (${v.placingLeftover} left)`);
     await L.leaveWorld();
     const sitesFile = path.join(L.SAVES, world, 'architect-sites.json');
-    const infra = fs.existsSync(sitesFile) ? (JSON.parse(fs.readFileSync(sitesFile, 'utf8')).infra ?? []) : [];
-    const stray = infra.filter((r) => r.placing && r.member?.group && (r.ext?.['architect_mc:region'] === rid));
-    out[tag].strayPlacing = stray.map((r) => `${r.id} ${r.member.itemKey}`);
-    check(stray.length === 0, `${point}: no road or cell site record of the region still placing after the region PLACED and a clean stop (${stray.length}: ${stray.map((r) => r.id).join(', ')})`);
+    const regionInfra = () => (fs.existsSync(sitesFile) ? (JSON.parse(fs.readFileSync(sitesFile, 'utf8')).infra ?? []) : []).filter((r) => r.ext?.['architect_mc:region'] === rid);
+    // a rolled-back record waits pending (pendingSince, its placing flag kept) until the next start settles it: live records only here
+    const infra1 = regionInfra();
+    const stray = infra1.filter((r) => r.placing && r.pendingSince == null);
+    const pendingIds = infra1.filter((r) => r.pendingSince != null).map((r) => r.id);
+    out[tag].strayPlacing = stray.map((r) => `${r.id} ${r.member?.itemKey}`);
+    out[tag].pendingAfter1 = pendingIds;
+    check(stray.length === 0, `${point}: no live road or cell site record of the region still placing after the region PLACED and a clean stop (${stray.length}: ${stray.map((r) => r.id).join(', ')}; ${pendingIds.length} rolled back, pending: ${pendingIds.join(', ')})`);
+    // one more start: the pending record is settled once (gone, never rebuilt from the journal or placing again), the tile items unchanged
+    await L.openWorld(world);
+    await L.tp(CX, 40, CZ - 10);
+    await L.waitRegion(rid, 600_000);
+    const rv2 = await realised(rid, { verify: true });
+    await L.leaveWorld();
+    const infra2 = regionInfra();
+    const back = infra2.filter((r) => pendingIds.includes(r.id) || r.placing);
+    const items1 = rv.tiles.map((t) => `${t.stage}/${t.set}/${t.key}=${t.site}`).sort().join(' ');
+    const items2 = rv2.tiles.map((t) => `${t.stage}/${t.set}/${t.key}=${t.site}`).sort().join(' ');
+    out[tag].afterRestart2 = { records: infra2.map((r) => r.id), placingLeftover: rv2.verify.placingLeftover, ok: rv2.verify.ok };
+    check(back.length === 0 && rv2.verify.placingLeftover === 0 && rv2.verify.ok && items1 === items2, `${point}: after one more start the rolled-back record(s) are settled (${pendingIds.length ? pendingIds.join(', ') + ' gone' : 'none'}; ${back.length} back or placing), no entry PLACING (${rv2.verify.placingLeftover}), the record verifies, each tile still counted once by the same site (${rv2.tiles.length} tiles)`, { back: back.map((r) => r.id), items1, items2 });
     if (point === 'RP1+save') {
       // the record of the tile that halted was written for a site whose commit never happened: rewritten for the site that did
       check(atHalt.length >= 1, `${point}: the halted tile's record was on disk before its PLACING commit (${atHalt.join(', ')})`);
