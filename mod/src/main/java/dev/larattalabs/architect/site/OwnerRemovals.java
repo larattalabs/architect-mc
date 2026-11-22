@@ -95,8 +95,8 @@ public final class OwnerRemovals {
 		CrateSettle.boxesChanged();
 	}
 
-	/** (TEST seam) The records as they are now. */
-	static synchronized Map<String, JsonObject> records() {
+	/** (TEST seam, dev.removal.owners) The records as they are now. */
+	public static synchronized Map<String, JsonObject> records() {
 		Map<String, JsonObject> m = new TreeMap<>();
 		RECORDS.forEach((k, v) -> m.put(k, v.deepCopy()));
 		return m;

@@ -2104,13 +2104,21 @@ export async function registerTCC(steps, h) {
         check(!!twin.top && !!crash.top && twin.changed.length === 2 && crash.changed.length === 2, `${tag} ${mode}: the fixture: a site LAYERed on top (${twin.top}, ${crash.top}), two cells changed by a player`, { twin, crash });
         const stockOf = async (o) => (await call('dev.stockpile.state', { owner: o }, 60_000).catch(() => ({}))).stockpile?.stock ?? {};
         const groundOf = async (site) => { const bb = await boxOf(site); return (await call('dev.items.near', { pos: [Math.floor((bb[0] + bb[3]) / 2), bb[1], Math.floor((bb[2] + bb[5]) / 2)], radius: 24 }, 30_000).catch(() => ({}))).items ?? {}; };
-        const t0 = { stock: await stockOf(twin.owner), ground: await groundOf(twin.site) };
-        const c0 = { stock: await stockOf(crash.owner), ground: await groundOf(crash.site) };
+        // (slice T4R-D, re-pointed) the player's blocks are owed to their placer (reason player_blocks), never dropped: moved = stock + ground + owed
+        const placer = (await call('dev.pt.uuid', { name: 'T4RMPlayer' }, 10_000).catch(() => ({}))).uuid;
+        const owedTo = async () => (await call('dev.stockpile.owed', { recipient: placer }, 30_000).catch(() => ({}))).total ?? {};
+        const t0 = { stock: await stockOf(twin.owner), ground: await groundOf(twin.site), owed: await owedTo() };
         const clean = await later(`remove ${twin.site} ${twin.owner} noforce ${mode}`, 120_000).catch((e) => ({ error: String(e) }));
         await wait(3000);
-        const tMoved = G.plus(minus(await stockOf(twin.owner), t0.stock), minus(await groundOf(twin.site), t0.ground));
+        const tGround = minus(await groundOf(twin.site), t0.ground);
+        const tOwed = minus(await owedTo(), t0.owed);
+        const tMoved = G.plus(G.plus(minus(await stockOf(twin.owner), t0.stock), tGround), tOwed);
+        check(!tGround['minecraft:sponge'] && tOwed['minecraft:sponge'] === 2, `${tag} ${mode}: the clean twin owes the player's 2 sponges to their placer, none dropped (owed ${json(tOwed)}, ground ${json(tGround)})`, { tOwed, tGround });
+        check((clean.owedParts ?? []).some((pp) => pp.reason === 'player_blocks' && pp.recipient === placer && pp.items?.['minecraft:sponge'] === 2) && !(clean.refund ?? {})['minecraft:sponge'],
+          `${tag} ${mode}: the clean twin's result: sponge in owedParts (player_blocks, to the placer), not in refund (${json(clean.owedParts)}; refund ${json(clean.refund)})`, clean);
+        const c0 = { stock: await stockOf(crash.owner), ground: await groundOf(crash.site), owed: await owedTo() };
         rowLog(tag, `${mode} clean twin: ${json(clean).slice(0, 300)}; moved into stock and onto the ground ${json(tMoved)}`);
-        check(G.same(clean.refund ?? {}, tMoved), `${tag} ${mode}: the clean twin's result refund is what it moved (stock + dropped): ${json(clean.refund)} = ${json(tMoved)}`, { clean, tMoved });
+        check(G.same(G.plus(clean.refund ?? {}, tOwed), tMoved), `${tag} ${mode}: the clean twin's result refund + its player's owed is what it moved (stock + dropped + owed): ${json(clean.refund)} + ${json(tOwed)} = ${json(tMoved)}`, { clean, tMoved });
         await call('dev.journal.killAt', { point: 'K6' }, 10_000);
         api(`remove ${crash.site} ${crash.owner} noforce ${mode}`).catch(() => null);
         const down = await haltWait();
@@ -2123,7 +2131,13 @@ export async function registerTCC(steps, h) {
         await wait(4000);
         const ev = (await evs()).filter((e) => e.id === crash.site);
         const res = ev[0]?.result ?? {};
-        const cMoved = G.plus(minus(await stockOf(crash.owner), c0.stock), minus(await groundOf(crash.site), c0.ground));
+        const cOwed = minus(await owedTo(), c0.owed);
+        const cMoved = G.plus(G.plus(minus(await stockOf(crash.owner), c0.stock), minus(await groundOf(crash.site), c0.ground)), cOwed);
+        check(G.same(cOwed, tOwed), `${tag} ${mode}: the recovered removal owes the player's blocks as the clean twin (${json(cOwed)} = ${json(tOwed)})`, { cOwed, tOwed });
+        check(json(res.owedParts ?? []) === json(clean.owedParts ?? []) || G.same((res.owedParts ?? []).find((x) => x.reason === 'player_blocks')?.items ?? {}, (clean.owedParts ?? []).find((x) => x.reason === 'player_blocks')?.items ?? {}),
+          `${tag} ${mode}: T4RD-api-recovered: the recovered event's owedParts carry the player_blocks part as the clean twin (${json(res.owedParts)})`, { res, clean });
+        const rr = await api(`removalResult site ${crash.site}`).catch(() => null);
+        check(rr && G.same(rr.refund ?? {}, res.refund ?? {}) && !(rr.refund ?? {})['minecraft:sponge'], `${tag} ${mode}: T4RD-api-recovered: Sites.removalResult = the event's result, refund without the player's blocks (${json(rr)})`, { rr, res });
         // (slice T4R-N, the final check of f7607b13's P1-2) conservation against the clean twin: a K6-recovered removal gives back the player's
         // blocks as the clean twin does (dropped, in its refund) and drops nothing extra (a cascaded instant site's attached blocks never pop as
         // items). Recorded red on f7607b13 + the T4R-N tests commit (sponge=2 missing; cascade: carpets, a door, a torch extra)
@@ -2144,6 +2158,150 @@ export async function registerTCC(steps, h) {
         } else {
           check(json(res.cascaded ?? []) === json([crash.top]) && json(clean.cascaded ?? []) === json([twin.top]), `${tag} cascade: the site on top cascaded (${json(res.cascaded)}; twin ${json(clean.cascaded)})`, { res, clean });
         }
+      }
+    }
+    // ------------------------------------------------------------------ slice T4R-D (GATE_TCC_PARTS=T4RD, step t4rd-crash)
+    // One owner record and one owner txn per single removal; the player's blocks owed once from chunk receipts (pfound/@pgone) behind the
+    // barrier, never dropped. Red on 8cc24326 (the merged head: T4R-N's per-member txns, the player's blocks dropped); green on slice/T4R.
+    if (want('T4RD')) {
+      const tag0 = 'T4RD';
+      /** A stockpile-fed rs_hut built whole, two of its paid blocks replaced by a player's sponges ({@code placer}: a fake player's name, or the client). */
+      const t4rdFixture = async (sub, placer, top = false) => {
+        const owner = `tcc:t4rd${sub.replace(/[^a-z]/g, '')}`;
+        const pg = await pileGroup(`${tag0}-${sub}`, owner, 1);
+        if (!pg) return null;
+        const site = pg.g.sites[0];
+        const bom = (await siteState(site))?.bom ?? {};
+        await call('dev.crate.insert', { site: `stockpile:${owner}`, items: bom, exact: true }, 120_000).catch(() => null);
+        await call('dev.stockpile.pause', { site, paused: false }, 60_000);
+        for (let i = 0; i < 240; i++) { if ((await siteState(site))?.state === 'built') break; await L.sleep(1000); }
+        const b = await boxOf(site);
+        let topId = null;
+        if (top) {
+          const t = await later(`place cabin ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} INSTANT unowned actor 0 force layer`, 120_000).catch((e) => ({ error: String(e) }));
+          topId = t?.siteId ?? null;
+        }
+        const tb = topId ? await boxOf(topId) : null;
+        const inTop = (c) => tb && c[0] >= tb[0] && c[0] <= tb[3] && c[1] >= tb[1] && c[1] <= tb[4] && c[2] >= tb[2] && c[2] <= tb[5];
+        const changed = [];
+        for (const [k2, st] of (await cellsOf(b)).entries()) {
+          const id = String(st).replace(/\[.*$/, '');
+          const full = id.includes(':') ? id : `minecraft:${id}`;
+          const c = typeof k2 === 'string' ? k2.split(',').map(Number) : null;
+          if (c && pg.items.includes(full) && !inTop(c) && changed.length < 2) changed.push(c);
+        }
+        const pl = placer ? { placer } : {};
+        for (const c of changed) {
+          await call('dev.pt.breaks', { at: [c], ...pl }, 60_000).catch(() => null);
+          await call('dev.pt.uses', { ops: [{ item: 'minecraft:sponge', at: c, on: [c[0], c[1] - 1, c[2]], face: 'up', ...pl }] }, 60_000).catch(() => null);
+        }
+        await cmd(`/kill @e[type=minecraft:item,x=${b[0]},y=${b[1]},z=${b[2]},distance=..32]`).catch(() => null);
+        rowLog(tag0, `${sub}: ${site} on top ${topId}; changed ${json(changed)}`);
+        return { site, owner, items: pg.items, changed, top: topId };
+      };
+      const owedOf = async (rcpt) => (await call('dev.stockpile.owed', { recipient: rcpt }, 30_000).catch(() => ({}))).total ?? {};
+      const groundAt = async (site) => { const bb = await boxOf(site); return (await call('dev.items.near', { pos: [Math.floor((bb[0] + bb[3]) / 2), bb[1], Math.floor((bb[2] + bb[5]) / 2)], radius: 24 }, 30_000).catch(() => ({}))); };
+      const reopen = async () => { await L.openWorld(name); await L.tp(...W.at); for (let i = 0; i < 30 && (await txn()).openCount !== 0; i++) await L.sleep(1000); await wait(4000); };
+      const owners = async () => (await call('dev.removal.owners', {}, 30_000).catch(() => ({}))).owners ?? null;
+
+      // T4RD-2crash (T4R-N's second-crash split, design D1a's table): the W's chunk durable, its OWE not (kill at its apply after a save), then
+      // a second crash at the recovered member barrier (the OWE booked, the ledger not saved). Fed9d672: 0 or 2 sponges; T4R-D: owed exactly 2
+      // (two cells), once, nothing on the ground. And the 'chunk lost' variant (kill at the apply without a save): owed 2.
+      for (const [sub, first] of [['2crash', 'TX:removal.site:apply:1+save'], ['lost', 'TX:removal.site:apply:1']]) {
+        const tag = `T4RD-${sub}`;
+        if (!want(tag)) continue;
+        const placer = (await call('dev.pt.uuid', { name: 'T4RDPlayer' }, 10_000).catch(() => ({}))).uuid;
+        const f = await t4rdFixture(sub, 'T4RDPlayer');
+        if (!f) continue;
+        check(f.changed.length === 2, `${tag}: the fixture: two paid cells replaced by the player's sponges`, f);
+        const o0 = await owedOf(placer);
+        const g0 = (await groundAt(f.site)).items ?? {};
+        await call('dev.journal.killAt', { point: first }, 10_000);
+        api(`remove ${f.site} ${f.owner} noforce keep`).catch(() => null);
+        let down = await haltWait();
+        check(down, `${tag}: halted at ${first}`);
+        if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+        if (sub === '2crash') {
+          // the second crash: the recovered owner txn's member barrier after its OWE (the ledger not yet saved)
+          const fs = await import('node:fs');
+          const arch = path.join(W.dir, 'architect');
+          fs.mkdirSync(arch, { recursive: true });
+          fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ killAt: 'TX:recover:removal.site:barrier:member' }));
+          await L.openWorld(name).catch(() => null);
+          down = await haltWait();
+          rowLog(tag, `second crash at the recovered member barrier: ${down}`);
+        }
+        await reopen();
+        await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        const ow = minus(await owedOf(placer), o0);
+        const gr = minus((await groundAt(f.site)).items ?? {}, g0);
+        const t1 = await txn();
+        rowLog(tag, `owed to the placer ${json(ow)}; ground ${json(gr)}; txn open ${t1.openCount}; owners ${json(await owners())}`);
+        check(ow['minecraft:sponge'] === 2, `${tag}: the player's 2 sponges owed exactly once (owed ${ow['minecraft:sponge'] ?? 0})`, { ow, gr });
+        check(!gr['minecraft:sponge'], `${tag}: none dropped as an item entity (${json(gr)})`, { gr });
+        check(t1.openCount === 0, `${tag}: the owner txn retired (open ${t1.openCount})`, t1);
+      }
+
+      // T4RD-cascade-R3 (T4R-N P1-1): a CASCADE pair, killed at R3a (the records pending, nothing written): one owner txn writes both after the
+      // restart, nothing held for good, the player's blocks owed once
+      if (want('T4RD-cascade-R3')) {
+        const tag = 'T4RD-cascade-R3';
+        const placer = (await call('dev.pt.uuid', { name: 'T4RDPlayer' }, 10_000).catch(() => ({}))).uuid;
+        const f = await t4rdFixture('cascr', 'T4RDPlayer', true);
+        if (f) {
+          const o0 = await owedOf(placer);
+          await call('dev.journal.killAt', { point: 'R3a' }, 10_000);
+          api(`remove ${f.site} ${f.owner} noforce cascade`).catch(() => null);
+          const down = await haltWait();
+          check(down, `${tag}: halted at R3a`);
+          if (down) {
+            await reopen();
+            for (let i = 0; i < 60 && (await siteState(f.site)); i++) await L.sleep(1000);
+            const t1 = await txn();
+            const ow = minus(await owedOf(placer), o0);
+            const ev = (await evs()).filter((e) => e.id === f.site || e.id === f.top);
+            rowLog(tag, `txn ${json({ open: t1.openCount, held: t1.heldCount })}; owed ${json(ow)}; events ${json(ev).slice(0, 400)}; owners ${json(await owners())}`);
+            check(t1.openCount === 0 && (t1.heldCount ?? 0) === 0, `${tag}: nothing held for good after the restart (open ${t1.openCount}, held ${t1.heldCount})`, t1);
+            check(ow['minecraft:sponge'] === 2, `${tag}: the player's sponges owed exactly once (${json(ow)})`, ow);
+            check(!(await siteState(f.site)) && (!f.top || !(await siteState(f.top))), `${tag}: both members removed`, f);
+            check(ev.filter((e) => e.id === f.site).length === 1 && (!f.top || ev.filter((e) => e.id === f.top).length === 1), `${tag}: one REMOVAL_FINISHED per member (${ev.length})`, ev);
+            check(((await owners()) ?? []).length === 0, `${tag}: the owner record forgotten (RD2)`, await owners());
+          } else {
+            await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+          }
+        }
+      }
+
+      // T4RD-retire-collect (Steward P3-3) and T4RD-autocollect: the player's own blocks (placed by the client's player) come back into the
+      // inventory after retirement (live); a kill between RD2 and the collect leaves them owed, collected once at the next join
+      for (const sub of ['autocollect', 'retire-collect']) {
+        const tag = `T4RD-${sub}`;
+        if (!want(tag)) continue;
+        const me = (await call('dev.state', {}, 10_000).catch(() => ({}))).playerUuid ?? (await call('dev.pt.uuid', { name: 'bot' }, 10_000).catch(() => ({}))).uuid;
+        const f = await t4rdFixture(sub.replace(/-/g, ''), null);
+        if (!f) continue;
+        const inv0 = (await groundAt(f.site)).inventory ?? {};
+        if (sub === 'retire-collect') await call('dev.journal.killAt', { point: 'RD2' }, 10_000);
+        const r = await later(`remove ${f.site} ${f.owner} noforce keep`, 120_000).catch((e) => ({ error: String(e) }));
+        if (sub === 'retire-collect') {
+          const down = await haltWait();
+          check(down, `${tag}: halted at RD2`);
+          if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+          const fs = await import('node:fs');
+          const mid = JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8'));
+          const owedMid = (mid.owed?.entries ?? []).filter((e) => e.reason === 'player_blocks').map((e) => e.items);
+          rowLog(tag, `on disk at the halt: player_blocks owed ${json(owedMid)}`);
+          check(owedMid.some((m) => m['minecraft:sponge'] === 2), `${tag}: still owed on disk between retirement and the collect`, mid.owed);
+          await reopen();
+          await wait(4000);
+        } else {
+          await wait(3000);
+        }
+        const inv = minus((await groundAt(f.site)).inventory ?? {}, inv0);
+        const left = Object.values((await call('dev.stockpile.owed', {}, 30_000).catch(() => ({ owed: [] }))).owed ?? []).filter((e) => e.reason === 'player_blocks' && e.key?.includes(f.site));
+        rowLog(tag, `result ${json(r).slice(0, 300)}; inventory gained ${json(inv)}; still owed ${json(left)}`);
+        check(inv['minecraft:sponge'] === 2, `${tag}: the player's 2 sponges came back into the inventory exactly once (${json(inv)})`, { inv });
+        check(left.length === 0, `${tag}: nothing left owed (${json(left)})`, left);
       }
     }
     // (T4-road, finding 3a, dropped at T4a: its precondition, a road removal's job lost to a failing queue file, can't arise since the

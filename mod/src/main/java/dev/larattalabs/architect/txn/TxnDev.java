@@ -69,6 +69,19 @@ public final class TxnDev {
 			case "cells" -> cells(player, req);
 			case "owedAdd" -> owedAdd(srv, player, req);
 			case "owedList" -> owedList(req);
+			case "removalOwners" -> {
+				// (slice T4R-D) the single removals' owner records (stockpiles.json removals), keys and members
+				JsonObject o = new JsonObject();
+				JsonArray a = new JsonArray();
+				dev.larattalabs.architect.site.OwnerRemovals.records().forEach((k, v) -> {
+					JsonObject x = new JsonObject();
+					x.addProperty("key", k);
+					x.add("members", new com.google.gson.Gson().toJsonTree(v.getAsJsonObject("members").keySet()));
+					a.add(x);
+				});
+				o.add("owners", a);
+				yield o;
+			}
 			case "owedCollect" -> answer(OwedTxn.collect(srv, req.get("recipient").getAsString(), req.get("key").getAsString(), player));
 			case "owedFailPlayerSave" -> {
 				OwedTxn.FAIL_PLAYER_SAVE.set(req.has("n") ? req.get("n").getAsInt() : 1);
