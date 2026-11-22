@@ -1634,7 +1634,9 @@ export async function registerTCC(steps, h) {
         check(down, `${tag}: halted at K6 (${json(m).slice(0, 120)})`);
         if (down) {
           const root = JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8'));
-          const st = root.crateSettles?.[site] ?? null;
+          // (slice T4R-D) the completion parts live in the call's owner record (removals[removal:<site>@<undo>].members[site].fin)
+          const own = Object.values(root.removals ?? {}).find((r) => r?.members?.[site]) ?? null;
+          const st = own?.members?.[site] ?? root.crateSettles?.[site] ?? null;
           const f = st?.fin ?? null;
           rowLog(tag, `the stash on disk at K6: fin ${json(f)}`);
           check(!!f && Number.isInteger(f.restored) && Number.isInteger(f.kept) && f.handed && Array.isArray(f.cascaded),
@@ -1866,7 +1868,9 @@ export async function registerTCC(steps, h) {
         if (down) {
           const next0 = txnNext();
           const root = JSON.parse(fs.readFileSync(sFile(), 'utf8'));
-          const st = root.crateSettles?.[site];
+          // (slice T4R-D) this build saves an owner record (removals), not a per-site stash: its member's settle is the pile stash
+          const ownKey = Object.keys(root.removals ?? {}).find((k) => root.removals[k]?.members?.[site]);
+          const st = ownKey ? root.removals[ownKey].members[site].settle : root.crateSettles?.[site];
           let credit = null;
           if (st?.pileKey) {
             for (const po of root.stockpiles ?? []) {
@@ -1875,7 +1879,8 @@ export async function registerTCC(steps, h) {
               po.ledger.pendingCredit = { ...(po.ledger.pendingCredit ?? {}), [st.pileKey]: { items: st.refund ?? {}, at: st.pos } };
               credit = st.refund ?? {};
             }
-            delete root.crateSettles[site];
+            if (root.crateSettles) delete root.crateSettles[site];
+            if (ownKey) delete root.removals[ownKey]; // main has no owner record
             fs.writeFileSync(sFile(), JSON.stringify(root, null, 2));
             // its pending record as main saves it: no settle stash on it
             const sf2 = path.join(W.dir, 'architect-sites.json');

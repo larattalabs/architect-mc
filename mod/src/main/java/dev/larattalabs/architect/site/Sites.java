@@ -331,7 +331,11 @@ public final class Sites {
 	 * removing and held(decided) until its txn retires: absence always means removed and settled. Server thread.
 	 */
 	public static @Nullable Object decidedRemoval(String id) {
-		boolean decided = CrateSettle.durable(id) != null || Groups.decidedMember(id);
+		// (slice T4R-D) a member of a live owner record whose undo is decided (committed) is decided too, until its record goes (RD2)
+		String own = OwnerRemovals.ownerOf(id);
+		boolean ownerDecided = own != null && OwnerRemovals.record(own) != null && dev.larattalabs.architect.txn.RemovalTxn.undoCommitted(OwnerRemovals.record(
+			own).get("undoGroup").getAsString());
+		boolean decided = CrateSettle.durable(id) != null || Groups.decidedMember(id) || ownerDecided;
 		if (!decided) {
 			return null;
 		}
