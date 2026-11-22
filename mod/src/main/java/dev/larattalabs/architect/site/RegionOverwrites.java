@@ -339,6 +339,75 @@ public final class RegionOverwrites {
 		retakeOnce(srv, ls, owner, dimension, up, at, siteId, "xr-lot:" + siteId + "@" + m.id());
 	}
 
+	// ------------------------------------------------------------------ (slice PLR2) a crash rollback over another writer's paid cell
+
+	/**
+	 * (slice PLR2) The refusal of a crash rollback ({@link RestoreJob} {@code requeue}) of road or cell site {@code siteId}, or null. A survival
+	 * region tile's free pass ({@code freePass}: a cell site written at its put-down, no construction of its own) gives the items of another
+	 * writer's paid block back to the stockpile as it writes over it ({@link #retakeToPile}: unkeyed, the victim's paid record lowered); the
+	 * rollback would write that block back for free while the items stay given back, so they would exist twice (the class
+	 * {@link Groups#undoStageRefusal} guards for a stage undo). Refused when a cell the tile writes ({@code written}) is a paid cell of another
+	 * writer of its region ({@code others}, or a writer whose run could not be read, {@code unread}, whose box holds it), unless the region is
+	 * known not to be a survival region ({@code survival} false). Pure.
+	 */
+	static @Nullable String crashRollbackRefusal(String siteId, boolean freePass, @Nullable Boolean survival, @Nullable String region, long[] written,
+		List<Live> others, List<dev.larattalabs.architect.placement.Anchors.Bounds> unread) {
+		return null;
+	}
+
+	/** (slice PLR2) {@link #crashRollbackRefusal(String, boolean, Boolean, String, long[], List, List)} of a record, read now. Server thread. */
+	static @Nullable String crashRollbackRefusal(MinecraftServer srv, Infra rec) {
+		boolean freePass = rec.construction() == null && !rec.road();
+		String group = rec.group();
+		if (!freePass || !regionGroup(group)) {
+			return null;
+		}
+		String region = rec.ext() != null && rec.ext().has(RegionItems.EXT_REGION) ? rec.ext().get(RegionItems.EXT_REGION).getAsString() : null;
+		if (region == null) {
+			SiteGroupRec g = Sites.group(group);
+			region = g == null || !g.ext().has(RegionItems.EXT_REGION) ? null : g.ext().get(RegionItems.EXT_REGION).getAsString();
+		}
+		var live = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
+		Boolean survival = live == null ? null : live.rec().survival();
+		JournalStore.Meta m = SiteJournal.main(rec.id());
+		long[] written = new long[0];
+		if (m != null) {
+			it.unimi.dsi.fastutil.longs.LongArrayList w = new it.unimi.dsi.fastutil.longs.LongArrayList();
+			for (var e : entry(m).entrySet()) {
+				if (e.getValue()[1] != null) {
+					w.add((long) e.getKey());
+				}
+			}
+			written = w.toLongArray();
+		}
+		// the writers lives() reads, and those whose run can't be read now (counted by their box: a guard never misses one)
+		List<Live> others = new ArrayList<>();
+		List<dev.larattalabs.architect.placement.Anchors.Bounds> unread = new ArrayList<>();
+		for (Infra i : Infras.all()) {
+			if (!group.equals(i.group()) || i.id().equals(rec.id()) || i.construction() == null || i.placing() || !(RegionTargets.is(i) || i.road())) {
+				continue;
+			}
+			Builder.Run r = RoadBuilder.run(srv, i);
+			if (r == null) {
+				unread.add(i.box());
+			} else {
+				others.add(new Live(i.id(), i.placedAt(), r, null, RegionTargets.is(i) ? foundOf(srv, i) : null));
+			}
+		}
+		for (Site s : Sites.all()) {
+			if (!group.equals(s.group()) || s.construction() == null || s.placing()) {
+				continue;
+			}
+			Builder.Run r = Builder.run(srv, s);
+			if (r == null) {
+				unread.add(s.restoreBox());
+			} else {
+				others.add(new Live(s.id(), s.placedAt(), r, s.construction().free()));
+			}
+		}
+		return crashRollbackRefusal(rec.id(), true, survival, region, written, others, unread);
+	}
+
 	/** A writer's kind. */
 	enum Kind {
 		TARGET, ROAD, LOT, FREE

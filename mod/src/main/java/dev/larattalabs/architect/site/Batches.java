@@ -1339,39 +1339,47 @@ public final class Batches {
 		placedItem(server, b, i);
 	}
 
-	/** A placing site was rolled back (a cancel, a broken job, or a crash: then its item queues again). */
+	/**
+	 * A placing site was rolled back (a cancel, a broken job, or a crash: then its item queues again). (slice PLR2) A rollback that stopped
+	 * before its box was restored ({@code broken}) fails its item: what it did not restore stays recorded under the site, never placed over.
+	 */
 	static void rolledBack(MinecraftServer server, RestoreJob job) {
 		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
 		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
 		if (i == null) {
 			return;
 		}
-		if (!Placement.rollbackOwnsItem(i.status, i.siteId, job.siteId)) {
-			// (slice PLR) a stray record rolled back after its item was placed (or started) again as another site: the item is that site's
-			Architect.LOGGER.info("Batch {}: item {} is {} as {}; the rollback of {} leaves it as it is", b.id, i.key, i.status, i.siteId, job.siteId);
-			return;
-		}
 		String next = Placement.otherRollback(job);
-		if (next != null && i.status == QItem.Status.PLACING) {
-			// (slice PLR) another rollback of the same attempt is still restoring: the item waits for it
-			i.siteId = next;
-			CHANGED.add(b.id);
-			return;
-		}
-		untickItem(server, b, "job:" + i.key);
-		if (job.requeue && b.running() && !b.cancelling) {
-			i.status = QItem.Status.QUEUED;
-			i.siteId = null;
-			i.reason = null;
-			i.message = "";
-			CHANGED.add(b.id);
-			Architect.LOGGER.info("Batch {}: item {} queued again after its rollback", b.id, i.key);
-			return;
-		}
-		if (i.status == QItem.Status.PLACING) {
-			boolean cancel = b.cancelling;
-			fail(b, i, cancel ? Reason.CANCELLED : Reason.OTHER, cancel ? "cancelled: rolled back from its snapshot"
-				: "rolled back: " + (job.why.isEmpty() ? "it could not be placed" : job.why));
+		switch (Placement.rollbackEnd(i.status, i.siteId, job.siteId, Placement.placing(i.siteId), job.broken, next != null, job.requeue,
+			b.running() && !b.cancelling)) {
+			case LEAVE -> {
+				if (!Placement.rollbackOwnsItem(i.status, i.siteId, job.siteId)) {
+					// (slice PLR) a stray record rolled back after its item was placed (or started) again as another site: the item is that site's
+					Architect.LOGGER.info("Batch {}: item {} is {} as {}; the rollback of {} leaves it as it is", b.id, i.key, i.status, i.siteId, job.siteId);
+				} else {
+					untickItem(server, b, "job:" + i.key);
+				}
+			}
+			case WAIT -> {
+				// (slice PLR) another rollback of the same attempt is still restoring: the item waits for it
+				i.siteId = next;
+				CHANGED.add(b.id);
+			}
+			case REQUEUE -> {
+				untickItem(server, b, "job:" + i.key);
+				i.status = QItem.Status.QUEUED;
+				i.siteId = null;
+				i.reason = null;
+				i.message = "";
+				CHANGED.add(b.id);
+				Architect.LOGGER.info("Batch {}: item {} queued again after its rollback", b.id, i.key);
+			}
+			case FAIL -> {
+				untickItem(server, b, "job:" + i.key);
+				boolean cancel = b.cancelling;
+				String msg = cancel ? "cancelled: rolled back from its snapshot" : "rolled back: " + (job.why.isEmpty() ? "it could not be placed" : job.why);
+				fail(b, i, cancel ? Reason.CANCELLED : Reason.OTHER, msg);
+			}
 		}
 	}
 

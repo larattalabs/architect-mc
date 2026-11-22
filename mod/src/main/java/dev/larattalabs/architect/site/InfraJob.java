@@ -600,13 +600,19 @@ final class InfraJob implements Placement.Job {
 							if (!xrLives.isEmpty()) {
 								BlockState was = level.getBlockState(m);
 								if (!was.isAir() && !was.is(WorldJournal.state(v).getBlock())) {
-									RegionOverwrites.retakeToPile(server, xrLives, record.owner(), record.dimension(), m.immutable(), was, m.above().immutable(), record.id());
+									var back = RegionOverwrites.retakeToPile(server, xrLives, record.owner(), record.dimension(), m.immutable(), was, m.above().immutable(), record.id());
+									if (!back.isEmpty() && WorldJournal.armed() != null && WorldJournal.armed().startsWith("XR1")) {
+										xr1 = new Object[] {m.immutable(), was, back};
+									}
 								}
 							}
 						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
 						if (rb != null) {
 							wrote.add(p);
+						}
+						if (xr1 != null) {
+							xr1Halt(server, level);
 						}
 						if (v.nbt() != null) {
 							BlockEntity be = level.getBlockEntity(m);
@@ -680,6 +686,41 @@ final class InfraJob implements Placement.Job {
 			broken = e.getMessage();
 			return true;
 		}
+	}
+
+	/** (slice PLR2) TEST: the cell this free pass just wrote over another writer's paid block (its position, the block, the items given back). */
+	private transient Object @org.jspecify.annotations.Nullable [] xr1;
+
+	/**
+	 * (slice PLR2) TEST kill point XR1 ({@code dev.journal.killAt XR1+save}): a survival region tile's free pass took up another writer's paid
+	 * block (its items given back) and wrote the cell; the cell is noted in {@code architect-dev-xr1.json} in the world's folder, then the halt
+	 * (with +save: the chunks and the ledger saved first).
+	 */
+	private void xr1Halt(MinecraftServer server, ServerLevel level) {
+		Object[] x = xr1;
+		xr1 = null;
+		BlockPos p = (BlockPos) x[0];
+		JsonObject o = new JsonObject();
+		o.addProperty("site", siteId);
+		o.addProperty("item", itemKey);
+		JsonArray at = new JsonArray();
+		at.add(p.getX());
+		at.add(p.getY());
+		at.add(p.getZ());
+		o.add("pos", at);
+		o.addProperty("was", x[1].toString());
+		o.addProperty("now", level.getBlockState(p).toString());
+		JsonObject back = new JsonObject();
+		@SuppressWarnings("unchecked")
+		java.util.Map<String, Integer> items = (java.util.Map<String, Integer>) x[2];
+		items.forEach(back::addProperty);
+		o.add("back", back);
+		try {
+			java.nio.file.Files.writeString(server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("architect-dev-xr1.json"), o.toString());
+		} catch (java.io.IOException e) {
+			Architect.LOGGER.warn("TEST: could not note XR1", e);
+		}
+		WorldJournal.kill("XR1");
 	}
 
 	/** After a load: the cells to write are the committed entry's cells (after as planned), lowest first. */

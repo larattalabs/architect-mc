@@ -398,9 +398,14 @@ steps.crash = async () => {
   await ensure();
   const out = {};
   // (slice PLR) RG4 without a save too (Steward's halt had none); GATE6CRP_POINTS (comma list) runs a subset
-  const points = ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'RG4', 'K4+save', 'RP1'];
+  // (slice PLR2) RG4!broken: RG4, then the restart's crash rollback broken (architect-dev-arm.json failRollback)
+  const points = ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'RG4', 'K4+save', 'RP1', 'RG4!broken'];
   const only = (process.env.GATE6CRP_POINTS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   for (const point of only.length ? points.filter((x) => only.includes(x)) : points) {
+    if (point === 'RG4!broken') {
+      out.RG4_broken = await brokenRollback();
+      continue;
+    }
     const tag = point.replace('+', '_');
     const world = `G6B RP Crash ${tag}`;
     await freshFlat(world);
@@ -464,6 +469,77 @@ steps.crash = async () => {
   }
   return out;
 };
+
+// ------------------------------------------------------------------ (slice PLR2) a crash rollback that breaks
+
+/** The world's queue file items and road or cell site records of a region (read with the world closed). */
+function filesOf(world, rid) {
+  const rd = (f) => { const p = path.join(L.SAVES, world, f); return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {}; };
+  const items = (rd('architect-queue.json').batches ?? []).flatMap((b) => (b.items ?? []).map((i) => ({ batch: b.id, ...i })));
+  const infra = (rd('architect-sites.json').infra ?? []).filter((r) => r.ext?.['architect_mc:region'] === rid);
+  return { items, infra };
+}
+
+/**
+ * (slice PLR2, P1 1) RG4 (a tile's first cell written, its record saved placing, the queue file not past its job), then the restart's crash
+ * rollback of that tile breaks before its undo (architect-dev-arm.json {failRollback: 0}). Before: the item queued again and was placed over
+ * the cells the rollback never restored (the region PLACED). Now: the item FAILED with the cause, nothing placed for it, its record still
+ * placing (the region PARTIAL); one more start rolls the record back (the stray sweep) and leaves the item FAILED.
+ */
+async function brokenRollback() {
+  const world = 'G6B RP Crash RG4 broken';
+  await freshFlat(world);
+  const p = await planDemo();
+  await call('dev.journal.killAt', { point: 'RG4' }, 10_000);
+  let region = null;
+  L.realise(p.planId).then((r) => { region = r; }).catch(() => null);
+  let down = false;
+  for (let i = 0; i < 180 && !down; i++) {
+    await sleep(2000);
+    const s = await call('dev.state', {}, 10_000).catch(() => null);
+    down = !!s && s.inWorld === false;
+  }
+  check(down, 'RG4!broken: the kill point halted the server');
+  if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); return { down }; }
+  const regionsDir = path.join(L.SAVES, world, 'architect-regions');
+  const rid = region ?? fs.readdirSync(regionsDir).filter((d) => fs.existsSync(path.join(regionsDir, d, 'region.json'))).sort().at(-1);
+  const f0 = filesOf(world, rid);
+  const halted = f0.infra.filter((r) => r.placing).map((r) => ({ id: r.id, key: r.member?.itemKey }));
+  fs.writeFileSync(path.join(L.SAVES, world, 'architect-dev-arm.json'), JSON.stringify({ failRollback: 0 }));
+  await L.openWorld(world);
+  await L.tp(CX, 40, CZ - 10);
+  const st = await L.waitRegion(rid, 3_600_000);
+  await L.leaveWorld();
+  const f1 = filesOf(world, rid);
+  const out = { region: rid, halted, state: st.view.state };
+  const h = halted[0];
+  const item = h ? f1.items.find((i) => i.key === h.key) : null;
+  const placedFor = h ? f1.infra.filter((r) => r.member?.itemKey === h.key && !r.placing && r.pendingSince == null).map((r) => r.id) : [];
+  const rec = h ? f1.infra.find((r) => r.id === h.id) : null;
+  out.after1 = { item, placedFor, record: rec ? { placing: rec.placing, pending: rec.pendingSince != null } : null };
+  check(!!h && st.view.state === 'PARTIAL' && item?.status === 'FAILED' && /rollback/.test(item?.message ?? '') && /injected/.test(item?.message ?? '') && placedFor.length === 0
+    && rec?.placing === true && rec?.pendingSince == null,
+    `RG4!broken: the restart's rollback of ${h?.id} (${h?.key}) broke: the region ${st.view.state} (PARTIAL), its item ${item?.status} (${item?.message}), nothing placed for it (${placedFor.join(', ') || 'none'}), its record still placing (${json(out.after1.record)})`, out.after1);
+  // one more start: the stray sweep rolls the record back; the item stays FAILED, nothing placed over the tile
+  await L.openWorld(world);
+  await L.tp(CX, 40, CZ - 10);
+  let rv = null;
+  for (let t1 = Date.now(); Date.now() - t1 < 120_000; ) {
+    await sleep(2000);
+    const j = await call('dev.placement.jobs', {}, 10_000).catch(() => []);
+    if (!(j ?? []).length) break;
+  }
+  rv = await realised(rid, { verify: true });
+  await L.leaveWorld();
+  const f2 = filesOf(world, rid);
+  const item2 = h ? f2.items.find((i) => i.key === h.key) : null;
+  const rec2 = h ? f2.infra.find((r) => r.id === h.id) : null;
+  const placed2 = h ? f2.infra.filter((r) => r.member?.itemKey === h.key && !r.placing && r.pendingSince == null).map((r) => r.id) : [];
+  out.after2 = { item: item2?.status, record: rec2 ? { placing: rec2.placing, pending: rec2.pendingSince != null } : null, placed2, placingLeftover: rv?.verify?.placingLeftover };
+  check(item2?.status === 'FAILED' && placed2.length === 0 && (!rec2 || rec2.pendingSince != null) && rv?.verify?.placingLeftover === 0,
+    `RG4!broken: one more start rolled ${h?.id} back (${rec2 ? 'pending' : 'gone'}), its item still ${item2?.status}, nothing placed for it, no entry PLACING (${rv?.verify?.placingLeftover})`, out.after2);
+  return out;
+}
 
 // ------------------------------------------------------------------ the audit of a gate run (ARCHITECT_RP_AUDIT)
 

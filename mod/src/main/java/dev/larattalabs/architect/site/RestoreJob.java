@@ -66,6 +66,8 @@ final class RestoreJob implements Placement.Job {
 	@Nullable String broken;
 	/** (6c X, C22) DevBridge {@code dev.undo.failRestore}: let this many removal restores finish their writes, then break the next one mid-removal (-1: off). */
 	public static volatile int failSkip = -1;
+	/** (slice PLR2) TEST ({@code architect-dev-arm.json}): let this many crash rollbacks start, then break the next before its undo (-1: off). */
+	static volatile int failRollback = -1;
 	private transient boolean failCounted;
 	boolean done;
 	/** Why a rollback happens (the item's ITEM_FAILED message). */
@@ -158,6 +160,13 @@ final class RestoreJob implements Placement.Job {
 	}
 
 	private boolean stepPhase(MinecraftServer server, long deadline) {
+		if (requeue && ROLLBACK.equals(purpose) && phase == PLAN && planner == null && failRollback >= 0) {
+			// (slice PLR2) TEST: a crash rollback that breaks before its undo is planned
+			if (failRollback-- == 0) {
+				broken = "injected rollback failure (dev, PLR2)";
+				return true;
+			}
+		}
 		Infra inf = Sites.get(siteId) == null && Sites.pendingRecord(siteId) == null ? infra() : null;
 		if (inf != null) {
 			return stepInfra(server, inf, deadline);
@@ -413,6 +422,15 @@ final class RestoreJob implements Placement.Job {
 		try {
 			if (phase == PLAN) {
 				if (planner == null) {
+					if (requeue && ROLLBACK.equals(purpose)) {
+						// (slice PLR2) a crash rollback of a survival region tile's free pass is refused when it could write back a block whose
+						// items the free pass gave back (XR); the item fails with the cause, the record and its entry are kept as they are
+						String no = RegionOverwrites.crashRollbackRefusal(server, inf);
+						if (no != null) {
+							broken = no;
+							return true;
+						}
+					}
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}

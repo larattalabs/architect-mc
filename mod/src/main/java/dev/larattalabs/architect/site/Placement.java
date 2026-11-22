@@ -7,6 +7,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.survival.SurvivalWorld;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -534,6 +535,7 @@ public final class Placement {
 	private static void load(MinecraftServer srv) {
 		server = srv;
 		JOBS.clear();
+		devArm(srv); // (slice PLR2) TEST only
 		loadFailed = false;
 		refusedLogged = false;
 		Path f = file(srv);
@@ -592,7 +594,19 @@ public final class Placement {
 				clean || JOBS.isEmpty() ? "" : " (the last stop was not clean: placing jobs roll back and their items queue again)");
 			save(srv, false); // not clean any more until the next stop
 		}
+		if (extrasSettled) {
+			extrasSettled = false;
+			if ("PLR2X".equals(WorldJournal.armed())) {
+				// (slice PLR2) TEST: a second halt once the start's queue save (past the stale job) is written, a crash rollback's extra targets
+				// just settled
+				flushSaves();
+				WorldJournal.kill("PLR2X");
+			}
+		}
 	}
+
+	/** (slice PLR2) This start's crash rollbacks settled a region tile's extra targets (the PLR2X kill point). */
+	private static boolean extrasSettled;
 
 	private static void resume(MinecraftServer srv, JsonObject o, boolean clean) {
 		String kind = o.get("kind").getAsString();
@@ -689,13 +703,26 @@ public final class Placement {
 	 */
 	private static void rollBackAfterCrash(MinecraftServer srv, InfraJob ij) {
 		for (InfraJob.Extra e : ij.extras) {
-			try {
-				SiteJournal.release(e.record.id());
-			} catch (Sites.SiteException x) {
-				Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
+			String xid = e.record.id();
+			dev.larattalabs.architect.journal.JournalStore.Meta xm = SiteJournal.main(xid);
+			if (extraRollsBack(xm == null ? null : xm.status(), Infras.get(xid) != null)) {
+				// (slice PLR2) an ACTIVE extra target: rolled back by its own tracked job, its record kept until the undo is committed (R3), so a
+				// second crash at any point resumes or replays it (a dropped record with an ACTIVE entry was rebuilt from the journal, untracked)
+				Architect.LOGGER.warn("Region target {} of {} was committed in the world journal; rolling it back with it", xid, ij.siteId);
+				RestoreJob xr = new RestoreJob(xid, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+				xr.requeue = true;
+				xr.why = "the game stopped without saving while it was being placed";
+				JOBS.add(xr);
+				continue;
 			}
-			Infras.drop(srv, e.record.id());
+			try {
+				SiteJournal.release(xid);
+			} catch (Sites.SiteException x) {
+				Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", xid, x.getMessage());
+			}
+			Infras.drop(srv, xid);
 		}
+		extrasSettled |= !ij.extras.isEmpty();
 		RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
 		rb.requeue = true;
 		rb.why = "the game stopped without saving while it was being placed";
@@ -836,6 +863,82 @@ public final class Placement {
 			}
 		}
 		return null;
+	}
+
+	// ------------------------------------------------------------------ (slice PLR2) a crash rollback's end, its extra targets
+
+	/** (slice PLR2) How a rollback's end settles its batch item ({@link Batches#rolledBack}). */
+	enum RollbackEnd {
+		/** Left as it is (done, or another site's). */
+		LEAVE,
+		/** Held for another rollback of the same attempt still in the queue. */
+		WAIT,
+		/** Queued again (a crash rollback that restored its box). */
+		REQUEUE,
+		/** Failed. */
+		FAIL
+	}
+
+	/**
+	 * (slice PLR2) A rollback of {@code jobSite} ended ({@code broken}: why it stopped before its box was restored, or null): what becomes of
+	 * its item ({@code status}, held as {@code itemSite}; {@code itemSiteLive}: a placement job of that site runs). {@code otherRollback}:
+	 * another rollback of the same attempt is still queued; {@code batchOpen}: the batch runs and is not being cancelled. Pure.
+	 */
+	static RollbackEnd rollbackEnd(dev.larattalabs.architect.batch.QItem.Status status, @Nullable String itemSite, String jobSite, boolean itemSiteLive,
+		@Nullable String broken, boolean otherRollback, boolean requeue, boolean batchOpen) {
+		if (!rollbackOwnsItem(status, itemSite, jobSite)) {
+			return RollbackEnd.LEAVE;
+		}
+		if (otherRollback && status == dev.larattalabs.architect.batch.QItem.Status.PLACING) {
+			return RollbackEnd.WAIT;
+		}
+		if (requeue && batchOpen) {
+			return RollbackEnd.REQUEUE;
+		}
+		return status == dev.larattalabs.architect.batch.QItem.Status.PLACING ? RollbackEnd.FAIL : RollbackEnd.LEAVE;
+	}
+
+	/**
+	 * (slice PLR2) Whether a crash rollback's extra target (its main entry's status, null with none; {@code recordOnDisk}: its record is in the
+	 * sites file) is rolled back by its own tracked job rather than released with its record dropped. Pure.
+	 */
+	static boolean extraRollsBack(dev.larattalabs.architect.journal.Journal.@Nullable Status entry, boolean recordOnDisk) {
+		return false;
+	}
+
+	/** (slice PLR2) Whether a placement job (a site's or a road's or cell site's) of {@code siteId} runs. */
+	static boolean placing(@Nullable String siteId) {
+		Job j = siteId == null ? null : job(siteId);
+		return j instanceof PlaceJob || j instanceof InfraJob;
+	}
+
+	/**
+	 * (slice PLR2) TEST, dev only: {@code architect-dev-arm.json} in the world's folder, read once (and deleted) as the world starts, before
+	 * the queue file is resumed, arms a fault for the start's own recovery (a kill point is in-JVM, and a crash test's restart is a new JVM):
+	 * {@code killAt} ({@link WorldJournal#killAt}), {@code failRollback} ({@link RestoreJob#failRollback}). Read only on a dev or headless
+	 * gate host (ARCHITECT_HEADLESS or ARCHITECT_DEV_TOKEN set).
+	 */
+	private static void devArm(MinecraftServer srv) {
+		if (System.getenv("ARCHITECT_HEADLESS") == null && System.getenv("ARCHITECT_DEV_TOKEN") == null) {
+			return;
+		}
+		Path f = srv.getWorldPath(LevelResource.ROOT).resolve("architect-dev-arm.json");
+		if (!Files.exists(f)) {
+			return;
+		}
+		try {
+			JsonObject o = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			Files.delete(f);
+			if (o.has("killAt")) {
+				WorldJournal.killAt(o.get("killAt").getAsString());
+			}
+			if (o.has("failRollback")) {
+				RestoreJob.failRollback = o.get("failRollback").getAsInt();
+			}
+			Architect.LOGGER.warn("TEST: armed from {}: {}", f.getFileName(), o);
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("TEST: could not read {}", f, e);
+		}
 	}
 
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
