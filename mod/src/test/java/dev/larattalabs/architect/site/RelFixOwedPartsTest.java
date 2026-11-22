@@ -210,4 +210,49 @@ class RelFixOwedPartsTest {
 		RemoveResult old = (RemoveResult) out.invoke(null, new JsonObject());
 		assertTrue(old.owed().isEmpty() && old.owedParts().isEmpty(), "an undo manifest saved before reads with none");
 	}
+
+	/**
+	 * (row RELF-owed-parts-awaited) A stage the revision undo started answers held(decided) (or resumes after a restart: no future reaches the
+	 * driver) and finishes by itself; the driver then sees it UNDONE. Red before: it was skipped ("undone already") and the undo's result left
+	 * its owed keys and parts out. Now the manifest records the stages it awaits, and such a stage joins from its durable stage snapshot, once.
+	 */
+	@Test
+	void aStageThatFinishedByItselfJoinsTheRevisionUndosResultOnce() throws Exception {
+		System.out.println("ROW RELF-owed-parts-awaited (unit)");
+		TxnEntry t = owingTxn();
+		JsonObject payload = new JsonObject();
+		payload.addProperty("group", "g1");
+		payload.addProperty("stage", "rv1:a");
+		OwnerRemovals.groupSnapshot(t, GKEY, RemovalTxn.amounts(t), payload);
+		JsonObject snap = OwnerRemovals.result("stage", "g1/rv1:a");
+		assertNotNull(snap, "fixture: the stage's snapshot");
+		Class<?> rv = Class.forName("dev.larattalabs.architect.region.Revisions");
+		Method await = null, merge = null, out = null;
+		for (Method m : rv.getDeclaredMethods()) {
+			if (m.getName().equals("awaitStage")) {
+				await = m;
+			}
+			if (m.getName().equals("mergeAwaited")) {
+				merge = m;
+			}
+			if (m.getName().equals("undoResult")) {
+				out = m;
+			}
+		}
+		assertNotNull(await, "RELF-owed-parts-awaited: the undo manifest records the stages it awaits (Revisions.awaitStage)");
+		assertNotNull(merge, "RELF-owed-parts-awaited: a stage that finished by itself joins from its snapshot (Revisions.mergeAwaited)");
+		await.setAccessible(true);
+		merge.setAccessible(true);
+		out.setAccessible(true);
+		JsonObject op = new JsonObject();
+		op.add("result", new JsonObject());
+		await.invoke(null, op, "rv1:a");
+		op = com.google.gson.JsonParser.parseString(op.toString()).getAsJsonObject(); // a restart: the manifest as read back
+		assertTrue((boolean) merge.invoke(null, op, "rv1:a", snap), "RELF-owed-parts-awaited: merged once");
+		assertTrue(!(boolean) merge.invoke(null, op, "rv1:a", snap), "RELF-owed-parts-awaited: never twice");
+		RemoveResult res = (RemoveResult) out.invoke(null, op.getAsJsonObject("result"));
+		System.out.println("ROW RELF-owed-parts-awaited: the revision undo's result: owed " + res.owed() + ", owedParts " + res.owedParts());
+		onePart(res.owedParts(), "a revision undo whose stage finished by itself");
+		assertTrue(!(boolean) merge.invoke(null, new JsonObject(), "rv1:a", snap), "a stage this undo never started is not merged");
+	}
 }
