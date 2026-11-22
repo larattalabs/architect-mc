@@ -78,9 +78,15 @@ public final class ApiEvents {
 	/** (slice T4c) A group's or a stage's removal finished (removed); a region's id when the group is a region's. */
 	public static void removalFinished(String group, @org.jspecify.annotations.Nullable String stage, @org.jspecify.annotations.Nullable Integer revisionId,
 		dev.larattalabs.architect.site.Groups.Removed r) {
-		RemoveResult res = new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed());
+		RemoveResult res = resultOf(r);
 		String region = stage == null ? Views.regionOfGroupPublic(group) : null;
 		finished(finishedOf(group, stage, revisionId, region, res));
+	}
+
+	/** (REL-v0910 fix round, P2-1) The one mapping of a group's, stage's or region's result to the API's: its owed parts included. */
+	public static RemoveResult resultOf(dev.larattalabs.architect.site.Groups.Removed r) {
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed(), Views
+			.owedParts(r.owedParts()));
 	}
 
 	/**

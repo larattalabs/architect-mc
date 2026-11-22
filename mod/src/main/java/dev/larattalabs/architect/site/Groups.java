@@ -418,7 +418,22 @@ public final class Groups {
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
-		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed) {
+		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed,
+		List<com.google.gson.JsonObject> owedParts) {
+		/**
+		 * (REL-v0910 fix round, P2-1) {@code owedParts}: each owed key's {key, recipient, reason, items} as the removal's aggregate snapshot
+		 * records it ({@link Groups#withOwedParts}); empty when nothing was owed.
+		 */
+		public Removed {
+			owedParts = owedParts == null ? List.of() : List.copyOf(owedParts);
+		}
+
+		/** The T4b shape (owed keys, no parts). */
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, kept, cause, owed, List.of());
+		}
+
 		/** The S-DRS-1 shape (no owed keys). */
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
 			List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause) {
@@ -2973,8 +2988,9 @@ public final class Groups {
 			});
 		}
 		// (T4b, finding 5) a removal that ends stopped or failed still reports the owed keys its settles wrote so far
-		Removed result = !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given.restored(),
-			given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given;
+		// (REL-v0910 fix round, P2-1) with its owed parts: the future, the event and removalResult agree
+		Removed result = withOwedParts(r, !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given
+			.restored(), given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given);
 		REMOVALS.remove(r);
 		// (slice T4c) once its undo committed (the decision), a group's or stage's removal never answers PARTIAL: it is held(decided), kept and
 		// retried by itself (Groups.tick), and REMOVAL_FINISHED fires once it is removed
@@ -3093,6 +3109,37 @@ public final class Groups {
 			dev.larattalabs.architect.txn.TxnServer.core().drive(r.gtx);
 		}
 		Placement.lap("end:futures", t0);
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-1) {@code given} with {@code r}'s owed parts: a finished removal with a {@code removal.group} txn reports the parts
+	 * of its aggregate snapshot ({@code owner:<txn key>}), or, before that snapshot is in, the same parts built by the same rule from its txn's
+	 * applied O effects ({@link OwnerRemovals#owedPartsOf}); its owed keys include every part's. Anything else (stopped, no txn) as given.
+	 */
+	static Removed withOwedParts(Removal r, Removed given) {
+		if (!given.removed() || r.undo == null) {
+			return given;
+		}
+		String key = GroupTxn.key(r.group, r.stage, r.undo);
+		JsonObject snap = OwnerRemovals.result("owner", key);
+		List<JsonObject> parts = new ArrayList<>();
+		if (snap != null && snap.get("owedParts") instanceof com.google.gson.JsonArray a) {
+			a.forEach(x -> parts.add(x.getAsJsonObject()));
+		} else if (r.gtx != null) {
+			OwnerRemovals.owedPartsOf(r.gtx, OwnerRemovals.appliedOwes(r.gtx)).forEach(x -> parts.add(x.getAsJsonObject()));
+		}
+		if (parts.isEmpty()) {
+			return given;
+		}
+		List<String> owed = new ArrayList<>(given.owed());
+		for (JsonObject p : parts) {
+			String k = p.get("key").getAsString();
+			if (!owed.contains(k)) {
+				owed.add(k);
+			}
+		}
+		return new Removed(given.removed(), given.blockers(), given.refund(), given.restored(), given.handedDown(), given.cascaded(), given.kept(),
+			given.cause(), List.copyOf(owed), parts);
 	}
 
 	/**

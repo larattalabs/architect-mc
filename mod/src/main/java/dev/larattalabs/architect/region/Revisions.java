@@ -1804,15 +1804,7 @@ public final class Revisions {
 						completeUndo(opId, new dev.larattalabs.architect.api.RemoveResult(false, List.of(why), Map.of()));
 						return;
 					}
-					JsonObject agg = cur.getAsJsonObject("result");
-					agg.addProperty("restored", (agg.has("restored") ? agg.get("restored").getAsInt() : 0) + res.restored());
-					agg.addProperty("kept", (agg.has("kept") ? agg.get("kept").getAsInt() : 0) + res.kept());
-					JsonObject hd = agg.get("handedDown") instanceof JsonObject h ? h : new JsonObject();
-					res.handedDown().forEach((k, v) -> hd.addProperty(k, (hd.has(k) ? hd.get(k).getAsInt() : 0) + v));
-					agg.add("handedDown", hd);
-					JsonObject rf = agg.get("refund") instanceof JsonObject h ? h : new JsonObject();
-					res.refund().forEach((k, v) -> rf.addProperty(k, (rf.has(k) ? rf.get(k).getAsInt() : 0) + v));
-					agg.add("refund", rf);
+					addStageResult(cur.getAsJsonObject("result"), res);
 					writeUndo(l, cur);
 					undoStep(s, l, cur);
 				}));
@@ -1969,6 +1961,40 @@ public final class Revisions {
 			Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, e.toString());
 		}
 		JsonObject agg = op.getAsJsonObject("result");
+		dev.larattalabs.architect.api.RemoveResult done = undoResult(agg);
+		Architect.LOGGER.info("Region {}: undo {} done: head {} at position {} ({} restored, {} kept, handed down {}, owed {})", rec.id, opId, headRid, to, done
+			.restored(), done.kept(), done.handedDown(), done.owed());
+		completeUndo(opId, done);
+		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-1) Adds one stage's removal result to a revision undo's aggregate (saved in its undo manifest): its counts,
+	 * hand-downs and refund summed, its owed keys and owed parts (recipient, reason, amount) appended.
+	 */
+	static void addStageResult(JsonObject agg, dev.larattalabs.architect.site.Groups.Removed res) {
+		agg.addProperty("restored", (agg.has("restored") ? agg.get("restored").getAsInt() : 0) + res.restored());
+		agg.addProperty("kept", (agg.has("kept") ? agg.get("kept").getAsInt() : 0) + res.kept());
+		JsonObject hd = agg.get("handedDown") instanceof JsonObject h ? h : new JsonObject();
+		res.handedDown().forEach((k, v) -> hd.addProperty(k, (hd.has(k) ? hd.get(k).getAsInt() : 0) + v));
+		agg.add("handedDown", hd);
+		JsonObject rf = agg.get("refund") instanceof JsonObject h ? h : new JsonObject();
+		res.refund().forEach((k, v) -> rf.addProperty(k, (rf.has(k) ? rf.get(k).getAsInt() : 0) + v));
+		agg.add("refund", rf);
+		com.google.gson.JsonArray owed = agg.get("owed") instanceof com.google.gson.JsonArray a ? a : new com.google.gson.JsonArray();
+		res.owed().forEach(k -> {
+			if (!owed.contains(new com.google.gson.JsonPrimitive(k))) {
+				owed.add(k);
+			}
+		});
+		agg.add("owed", owed);
+		com.google.gson.JsonArray parts = agg.get("owedParts") instanceof com.google.gson.JsonArray a ? a : new com.google.gson.JsonArray();
+		res.owedParts().forEach(p -> parts.add(p.deepCopy()));
+		agg.add("owedParts", parts);
+	}
+
+	/** (REL-v0910 fix round, P2-1) A revision undo's result from its aggregate (an undo manifest saved before has no owed keys or parts: none). */
+	static dev.larattalabs.architect.api.RemoveResult undoResult(JsonObject agg) {
 		Map<String, Integer> hd = new LinkedHashMap<>();
 		if (agg.get("handedDown") instanceof JsonObject h) {
 			h.entrySet().forEach(e -> hd.put(e.getKey(), e.getValue().getAsInt()));
@@ -1977,11 +2003,17 @@ public final class Revisions {
 		if (agg.get("refund") instanceof JsonObject h) {
 			h.entrySet().forEach(e -> rf.put(e.getKey(), e.getValue().getAsInt()));
 		}
-		Architect.LOGGER.info("Region {}: undo {} done: head {} at position {} ({} restored, {} kept, handed down {})", rec.id, opId, headRid, to, agg.has("restored")
-			? agg.get("restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd);
-		completeUndo(opId, new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(rf), agg.has("restored") ? agg.get(
-			"restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd, List.of()));
-		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+		List<String> owed = new ArrayList<>();
+		if (agg.get("owed") instanceof com.google.gson.JsonArray a) {
+			a.forEach(x -> owed.add(x.getAsString()));
+		}
+		List<JsonObject> parts = new ArrayList<>();
+		if (agg.get("owedParts") instanceof com.google.gson.JsonArray a) {
+			a.forEach(x -> parts.add(x.getAsJsonObject()));
+		}
+		return new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(rf), agg.has("restored") ? agg.get(
+			"restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd, List.of(), owed, dev.larattalabs.architect.apiimpl.Views.owedParts(
+				parts));
 	}
 
 	private static void completeUndo(String opId, dev.larattalabs.architect.api.RemoveResult r) {
