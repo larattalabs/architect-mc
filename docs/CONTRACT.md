@@ -34672,3 +34672,56 @@ No API member, record or feature.
 - Not fixed: untagged growth pieces read by id as v0.87.0 (above); district ids where one is another's plus a part word (`b`, `b_street`); grow.mjs's free-end reader (`endRe`, the edge path's
   `startsWith('route_st_<d>')`) still reads ids by prefix, so district `b`'s ends could take `b_1`'s grown street edges (no plan seen).
 - Units: `kit/test/rte3.test.mjs`, `LayoutsRte3Test`, `DistrictLandRte3Test` (`kit/test/fixtures/rte3/land-irs.json`).
+
+### Slice RTE4: the free-end reader and b beside b_street (light; branch `slice/RTE4` off main 30f2a9b4; versions NEXT; recorded 2026-11-20)
+RTE3's two leftovers. No API member or feature; one IR record, `architect_mc:district: {id}` on roads and paths (IR only: batch items
+carry only `architect_mc:street`). **Every IR a release before RTE4 saved reads exactly as v0.88.0** (the compatibility corpus, below).
+- grow.mjs `streetRouteEnds(eff, d)` (was inline in extendBoundary): a following district's route ends and free ends. A boundary growth
+  laid from RTE4 on (emitGrowth) records its district on its street's pieces (`architect_mc:district`); its edges (`<newRoad>#<k>`,
+  `<newRoad>#end`, path `<newRoad>`) and its end (`<newRoad>_end`, ref `<newRoad>`) are that district's. Everything else reads by
+  v0.88.0's id rule (ends `<d>_s<k>`, `route_st_<d>_..._g<n>_end`; edges whose path `startsWith('route_st_<d>')`). `ends` feeds the
+  extension's direction too. Was: district b's boundary extension started at b_1's grown end `route_st_b_1_1_g1_end` (two following
+  districts on one shore); fixed for growths laid from RTE4 on, kept for older ones. The fix round dropped the first reader's route-tag
+  rule: under v0.86.0's numbering, b's growth `route_st_b_1_g1` beside district `b_1_g1`'s route edge `route_st_b_1_g1` gave b's grown
+  end to b_1_g1 (v0.89.0 release review P2-1). Edge ids tell the two apart (`route_st_b_1_g1#1` the growth's, `b_1_g1_street#1` the chain's).
+- Districts pass: when the untagged readers would give any district's road another district (land.mjs `untaggedMisreads`: land's longest
+  id, or streetRuns's rule, the part before `street_`), every district's roads laid in its emission carry `architect_mc:district: {id}`:
+  `b` and `b_street` (b's `b_street_w`), a lone `b_street` or `b_street` beside `c` (`b_street_street_w` read as b's street; v0.89.0 review
+  P2-2). Plans whose roads read right (`b` and `b_1`, a lone `b`) stay untagged, their IRs unchanged. land.mjs `districtOfRoad` =
+  `DistrictLand.districtOfRoad`: a road's district is its tag's (a string naming a district; other ids: nobody's), else the longest id as
+  RTE2; a malformed tag (`17`, `false`) reads as untagged. grow.mjs `districtOfRoad` (streetRuns) reads it after `architect_mc:street`.
+  Was: b's `b_street_w`, `b_street_e` in b_street's land (1411 cells, now 408); growing b_street refused NO_ROOM "no standing street".
+- Compatibility corpus (`kit/test/fixtures/rte-compat/corpus.json.gz`, `kit/tools/rte-compat-fixture.mjs` and `-worker.mjs`): v0.85.0,
+  v0.86.0, v0.87.0 and v0.88.0, each in a worktree at its tag, planned and grew 33 cases (V districts on flat land, following districts on a
+  shore; b/b_1, b/b_1/b_1_g1, b/b_street, b_street, b_street+c, quay/quayside/quay_1, quay/quay_1, x/x_g1, quay_g1, b_g2; one to three
+  growth rounds): 132 cases, 408 effective IRs, each as its release wrote it. v0.88.0's readers' answers on every round (route ends and
+  free ends, growPlan prefer extend, streetRuns, land) are what `kit/test/rte-compat.test.mjs` requires of this tree and
+  `DistrictLandCompatTest` of the mod's land; each release's own readings are recorded where they differ (RTE2 and RTE3 on purpose).
+  Before the fix round the corpus found 82 mismatching (case, round, reader) entries in 20 cases (v0.86.0..v0.88.0 shore b/b_1, b/b_street,
+  quay/quay_1, and v0.86.0's b_1_g1/b: route ends and growPlan), none in v0.85.0's untagged IRs.
+- Fixture moved: `kit/test/fixtures/gr/land.json` (its boundary growth's roads gain `architect_mc:district {id: quay}`, the revision's
+  irSha; land unchanged). Goldens unchanged (`release-version --check`); `rte3-fixture --check`, `rte4-fixture --check` current.
+- Not fixed: parts carry no ext, so a part of b named like another district's (`b_props_lamp` beside district `b_props`) still reads by the
+  longest id; grow.mjs emitGrowth's junction stops (`n.id.startsWith('<d>_s')`, also `b_street_s1`); graph node ids (the join's `from`)
+  carry no tag; growths laid before RTE4 keep v0.88.0's ownership by id (b may take b_1's grown end).
+- Units: `kit/test/rte4.test.mjs`, `kit/test/rte-compat.test.mjs`, `DistrictLandRte4Test` (`kit/test/fixtures/rte4/land-irs.json`,
+  `kit/tools/rte4-fixture.mjs`), `DistrictLandCompatTest` (the corpus; both fixtures `kitTestFixtures` inputs and unit-mod data, the corpus unit-kit data too).
+
+### Slice RTE5 as built: RTE4's leftovers (light; branch `slice/RTE5` off main 4a2296b6; versions NEXT; recorded 2026-11-21)
+The v0.89.0 fix check's P3 and its corpus gaps. No API member, record or feature; readers unchanged.
+- (P3) plan_v0 decides the district tag (`architect_mc:district`) after its street stamp: compile.mjs passes `_ownedRoads` to
+  emitDistricts, which returns the roads it laid untagged; after `stampStreets`, land.mjs `tagMisreadRoads(owned, ids, {land: false})`.
+  `untaggedMisreads` reads a road's `architect_mc:street.district` first, as streetRuns does; `land: false` because a plan_v0 IR has no
+  architect_mc:land record (land.mjs and `DistrictLand` read `spec.districts` only). So plan_v0's lone `b_street`, `b_street` + `c` and
+  `b` + `b_street` are untagged (v0.89.0 tagged all three); streetRuns reads them as before. The districts program keeps RTE4's in-pass check.
+- Corpus 2 (`kit/test/fixtures/rte-compat/rte5.json.gz`, `kit/tools/rte5-compat-fixture.mjs`, `-worker.mjs`; trees by `git archive <tag> kit`):
+  plan_v0 zones (flags with and without a district), bandless street extensions, ridge and biome-edge boundaries, seam/reach/gate joins
+  beside a town, undo to 1 and to 0 with a revision after (rid past its position), three cross-release chains (one backwards), and RTE4's
+  33 cases under v0.48.0, v0.55.0, v0.65.0, v0.75.0, v0.84.0 (v0.48.0 is the first with revise.mjs). 438 cases, 1316 effective IRs.
+  Expected: v0.88.0's readers, land by exact runs (parts, union, outside, inside; the town's claim given). Found: HEAD and v0.89.0 read
+  every round as v0.88.0 (0 mismatches); the own readings of older releases differ only by RTE2's longest-id land (district, join and grown parts) and pre-GD plan_v0
+  growth refusals. HEAD writes v0.89.0's IRs for all 31 unmixed new cases except the 4 plan_v0 b_street cases (only the tag).
+- Not covered: grouped growth streets (4e's 2048-cell / 256-point split): a following district's length is at most 256, so a boundary
+  growth's window is at most 512 cells and no growPlan can lay one; only emitGrowth with a hand path does (rte3.test.mjs).
+- Units: `kit/test/rte5.test.mjs`, `kit/test/rte5-compat.test.mjs`, `DistrictLandCompat5Test` (the corpus a `kitTestFixtures` input,
+  unit-mod and unit-kit data).

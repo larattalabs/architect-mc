@@ -8,10 +8,15 @@
 //   outside   union minus the town's claim (the land Steward owns); inside: union in the town's claim (the join's reach, any seam cells)
 // Written columns: every op's columns (`columns` ops' cells, `bounds` ops' rects), the lots' boxes, the road items' width plus their verge,
 // and a reach plan's reach. A seam-step join's graded runs are read from their path boxes (the IR keeps no per-path column list there).
-import { keyRuns, runKeys } from './beside.mjs';
+import { isStreetId, keyRuns, runKeys } from './beside.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 /** (RTE) program.mjs ROUTE_EXT: the ext key a route piece names its graph edge under. */
 const ROUTE_EXT = 'architect_mc:route';
+/**
+ * (RTE4) The ext key a district's own road names its district under, `{id}`: written by the districts pass only where one district id is
+ * another's plus a word (`b` and `b_street`) or a road's id otherwise reads as another district's (a lone `b_street`): untaggedMisreads.
+ */
+export const DISTRICT_EXT = 'architect_mc:district';
 
 /** The record's version (6d's grown parts move it to 2, §11). */
 export const LAND_V = 1;
@@ -44,6 +49,40 @@ export function districtOfId(id, ids, pre = '') {
   let best = null;
   for (const d of ids) if (typeof d === 'string' && String(id).startsWith(`${pre}${d}_`) && (best === null || d.length > best.length)) best = d;
   return best;
+}
+/**
+ * (RTE4) Whether the untagged readers would give any of a districts plan's own roads (`owned`: [{id, district, x?}], each road, the
+ * district whose emission laid it and (RTE5) the road itself as written) another district than its own: architect_mc:land's longest
+ * district id (`b_street_w`, b's street road, beside district b_street), or streetRuns's reading: (RTE5) the road's
+ * `architect_mc:street.district` flag when it has one (plan_v0 stamps its zones' streets before the IR is read), else the street rule
+ * (the part before `street_`: a lone district b_street's `b_street_street_w` reads as b's). Then every district's roads are recorded
+ * (DISTRICT_EXT); a plan whose roads read right stays untagged. (RTE5) `land: false` for an IR land never reads (plan_v0's: no
+ * spec.districts, districtLand is null).
+ */
+export function untaggedMisreads(owned, ids, { land = true } = {}) {
+  for (const { id, district, x } of owned) {
+    if (land && districtOfId(id, ids) !== district) return true;
+    const flag = x?.ext?.['architect_mc:street']?.district;
+    if (typeof flag === 'string') { if (flag !== district) return true; continue; }
+    // (grow.mjs streetRuns on an untagged, unflagged road: a street id not a route's reads its district from the part before `street_`)
+    if (isStreetId(id) && !/^(route_)?st_/.test(id)) { const m = /^(.*?)_?street_[a-z0-9_]*$/.exec(id); if ((m && m[1] ? m[1] : null) !== district) return true; }
+  }
+  return false;
+}
+/** (RTE5) Record each owned road's district (DISTRICT_EXT) when untaggedMisreads says an untagged reader would misread one. */
+export function tagMisreadRoads(owned, ids, opts) {
+  if (!untaggedMisreads(owned, ids, opts)) return false;
+  for (const o of owned) o.x.ext = { ...(o.x.ext ?? {}), [DISTRICT_EXT]: { id: o.district } };
+  return true;
+}
+/**
+ * (RTE4) A road's district: the one its DISTRICT_EXT tag names (a string id; one `ids` lacks: none), else, untagged (every plan without
+ * such ids, a region planned before RTE4), the longest district id it names, as before.
+ */
+export function districtOfRoad(rd, ids) {
+  const t = rd?.ext?.[DISTRICT_EXT]?.id;
+  if (typeof t === 'string') return ids.includes(t) ? t : null;
+  return districtOfId(rd?.id ?? '', ids);
 }
 const boxCols = (b, into) => { for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) into.add(k2(x, z)); };
 const rectOfKeys = (keys) => {
@@ -95,7 +134,9 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
   const ids = ds.map((d) => d.id).filter((id) => typeof id === 'string');
   // ((RTE2) each part, lot and road is one district's: the longest district id it names (b_1_pads is b_1's, never b's too); a following
   // district's street piece the district whose street edge it names (ext architect_mc:route.edge `route_st_<id>`), untagged the longest
-  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group))
+  // district with a street edge in the graph (`route_st_b_1_1` untagged: b_1's when b_1 has a street, else b's group); (RTE4) a road
+  // tagged with its district (DISTRICT_EXT, written where one id is another's plus a word: b's `b_street_w` beside district b_street) is
+  // that district's)
   const stEdges = new Set((ir.graph?.edges ?? []).map((e) => e.id).filter((e) => typeof e === 'string' && e.startsWith('route_st_')));
   const stIds = ids.filter((id) => !stEdges.size || stEdges.has(`route_st_${id}`));
   const streetOf = (x) => {
@@ -108,7 +149,7 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
     const cols = new Set();
     for (const p of ir.parts ?? []) if (mine(p.id)) for (const op of p.ops ?? []) opCols(op, cols);
     for (const l of ir.lots ?? []) if (mine(String(l.part ?? ''))) boxCols(l.box, cols);
-    for (const rd of ir.roads ?? []) if (mine(rd.id)) roadCols(rd, cols);
+    for (const rd of ir.roads ?? []) if (districtOfRoad(rd, ids) === d.id) roadCols(rd, cols);
     // a following district's street (`route_st_<id>`) is inside its mask
     for (const pa of ir.paths ?? []) if (pa.box && pa.id.startsWith('route_st_') && streetOf(pa) === d.id) boxCols(pa.box, cols);
     for (const rd of ir.roads ?? []) if (rd.id.startsWith('route_st_') && streetOf(rd) === d.id) roadCols(rd, cols);

@@ -25,6 +25,15 @@
 //                                         a sharded run names its ports). 8892-8895 are never a shard's (old-version clients, eval).
 //   --run-dir DIR          GATE_RUN_DIR   shard 1's run worktree (../architect-mc-gate-run); shard k is <DIR>-s<k>
 //   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
+//   --min-free-gib N       GATE_MIN_FREE_GIB  refuse to start below N GiB free on any volume the run writes to: each run dir (--run-dirs,
+//                                         else the run dir) and the frozen source, by real path (default 150; 0 turns it off;
+//                                         docs/GATES.md "Disk space"). Many run dirs and world copies filled the disk on 2026-11-21
+//   --keep-run-dirs        GATE_KEEP_RUN_DIRS=1  keep the run worktrees after a PASS. By default a PASS (before the lock and slot are
+//                                         released) removes the run worktrees and frozen source THIS invocation created (git worktree
+//                                         remove, 5 min timeout), only empties the world copies (mod/run/saves) of the named reused ones
+//                                         (beside the main checkout: cfg.runDir, the nightly's run and UI-gallery dirs, their shards),
+//                                         refuses a symlinked run dir, leaves every other existing dir whole and never follows a
+//                                         symlink; a run that does not pass keeps everything for inspection
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
 //   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 6): at most N runs at once, across worktrees. A run
@@ -93,6 +102,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { buildFrozenClasses, kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
+import { checkSpace, cleanupRunDirs as cleanupRunDirsLib } from './lib/run-dirs.mjs';
 import { ensureSlotPins } from './lib/pinned-deps.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
@@ -111,7 +121,7 @@ import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mj
 import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
-import { loadScaleFor, loadScaledBudget } from './lib/load-timeout.mjs';
+import { loadScaleFor, loadScaledBudget, timeoutNote, timeoutRecord } from './lib/load-timeout.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -135,7 +145,7 @@ process.on('SIGUSR2', () => {
     // before the scheduler started: the workers see `draining` when they start
   }
 });
-const VALUED = ['--own', '--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+const VALUED = ['--own', '--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--min-free-gib', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -544,6 +554,7 @@ const RUN1 = path.resolve(opt('--run-dir') ?? process.env.GATE_RUN_DIR ?? path.r
 const FROZEN = !flag('--no-frozen-source');
 const DRV_DIR = `${RUN1}-src`;
 let DRV = SRC;
+let drvCreated = false; // this invocation added the frozen source worktree (cleanup removes only what it created)
 const RUN_DIRS = (opt('--run-dirs') ?? process.env.GATE_RUN_DIRS ?? '').split(',').map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
@@ -901,8 +912,9 @@ const slotNote = { waitedSeconds: 0, slot: null, slots: null, limit: SLOTS, dir:
 // the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md "Load-aware start"): slots.load in gate-chains.json, GATE_LOAD_MAX /
 // GATE_LOAD_WAIT_MAX_MIN, --no-load-wait (max1 0)
 const LOAD_GATE = flag('--no-load-wait') ? { ...loadConfig(cfg), max1: 0 } : loadConfig(cfg);
-// (GR-b) load-scaled timeouts (tools/lib/load-timeout.mjs): ref is the configured max1 (no env override; at least rule 10's 72)
-const LOAD_SCALE = (id) => loadScaleFor(cfg, id, { max1: cfg.slots?.load?.max1 });
+// (GR-b) load-scaled timeouts (tools/lib/load-timeout.mjs): ref is the machine's cores when timeoutLoadScale.ref is "cores" (GRA;
+// GATE_CPU_CORES overrides), else the configured max1 (at least rule 10's 72)
+const LOAD_SCALE = (id) => loadScaleFor(cfg, id, { max1: cfg.slots?.load?.max1, cores: machineCores() });
 async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
   const stamp = () => new Date().toISOString().slice(11, 19);
@@ -1431,12 +1443,16 @@ function takeLock() {
   }
   die(`could not take ${LOCK}`);
 }
+spaceGuard(); // before the slot: a refused run holds nothing
 // the slot (one per run) records this run's shard count and ports; an auto run decides both under the slot mutex
 await acquireSlot(async () => {
   if (decideShards) await decideShards();
   return { shards: NSHARDS, lanes: NLANES, ports: allPorts };
 });
 if (autoChoice) console.log(autoChoice.text);
+// a turbo, change-sharded or auto run chose its shards and lanes just now (their -s<k>/-o<j> dirs may be symlinks onto another
+// volume): the guard judges those actual dirs, before the lock and any setup (a refusal exits and gives the slot back)
+if (decideShards) spaceGuard();
 takeLock();
 let lockHeld = true;
 const releaseLock = () => {
@@ -1449,6 +1465,33 @@ const releaseLock = () => {
     // gone
   }
 };
+
+// ------------------------------------------------------------------ disk space (docs/GATES.md "Disk space")
+
+/** Refuses to start a run below --min-free-gib (GATE_MIN_FREE_GIB, default 150) GiB free on any volume it writes to: every run dir
+ * (--run-dirs, else the run dir) and the frozen source, by real path (tools/lib/run-dirs.mjs checkSpace). */
+function spaceGuard() {
+  const min = Number(opt('--min-free-gib') ?? process.env.GATE_MIN_FREE_GIB ?? 150);
+  // the shards' (and lanes') dirs once known (an existing -s<k> may be a symlink elsewhere): a fixed --shards run's before the slot,
+  // a turbo/change/auto run's again after its choice (above); before that only RUN1 (or --run-dirs) and the frozen source
+  // GATE_DISK_TEST_LOW (tests only, kit/test/gate-disk.test.mjs): real paths whose volume reads as 0 GiB free. It can only lower free
+  // space, so it never lets a run past the guard
+  const lowTest = (process.env.GATE_DISK_TEST_LOW ?? '').split(',').filter(Boolean);
+  const statfs = lowTest.length ? (p) => (lowTest.some((l) => p === l || p.startsWith(l + path.sep)) ? { bavail: 0, bsize: 4096 } : fs.statfsSync(p)) : undefined;
+  const r = checkSpace({ min, run1: RUN1, runDirs: shards.length ? shards.map((s) => s.RUN) : RUN_DIRS, frozen: FROZEN, drvDir: DRV_DIR, statfs });
+  if (!(min > 0)) return;
+  if (!r.ok) die(`${r.low.map((v) => `only ${v.free.toFixed(0)} GiB free on ${v.probe}'s volume (for ${v.dests.join(', ')})`).join('; ')}, under --min-free-gib ${min}: clean up finished run dirs, world copies and worktrees first (docs/GATES.md "Disk space"); GATE_MIN_FREE_GIB=0 skips the check`);
+  console.log(`disk: ${r.volumes.map((v) => `${v.free.toFixed(0)} GiB free on ${v.probe}`).join(', ')} (guard ${min})`);
+}
+
+/** After a PASS: removes the run worktrees and frozen source this invocation created, empties the world copies of the reused named
+ * run dirs beside the main checkout (cfg.runDir, the nightly's run and UI-gallery dirs, their shards), refuses a symlinked run dir,
+ * never follows a symlink and leaves every other existing dir whole (tools/lib/run-dirs.mjs cleanupRunDirs). */
+function cleanupRunDirs(verdict) {
+  const dirs = [...shards.map((s) => ({ dir: s.RUN, created: !!s.created })), ...(FROZEN && DRV !== SRC ? [{ dir: DRV_DIR, created: drvCreated }] : [])];
+  return cleanupRunDirsLib({ verdict, keep: flag('--keep-run-dirs') || process.env.GATE_KEEP_RUN_DIRS === '1', src: SRC, main: MAIN, seed: SEED, cfgRunDir: cfg.runDir,
+    nightlyRunDirs: [CACHE_CONF.nightly?.runDir, CACHE_CONF.nightly?.uiGallery?.runDir], dirs, log });
+}
 
 // ------------------------------------------------------------------ the run dir, summary, log
 
@@ -1790,6 +1833,8 @@ function runProcess(sh, step, logFile) {
     fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.name}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
     const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     let timedOut = false;
+    let timeout = null; // (GRA) what the runner knew at the kill: elapsed, limit, load (load-timeout.mjs timeoutRecord)
+    const startedMs = Date.now();
     let killTimer;
     // stalled after a FAIL (tools/lib/stall-watch.mjs, docs/GATES.md "Stalled after a FAIL"): a driver that printed a functional FAIL and then
     // nothing for stallAfterFailMin minutes is killed now, not at its timeout; the failed-step path below stops the client by PID
@@ -1805,7 +1850,8 @@ function runProcess(sh, step, logFile) {
     } });
     const onTimeout = (why) => {
       timedOut = true;
-      log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}${why ? `; ${why}` : ''}): killing step group ${child.pid}`, sh);
+      timeout = timeoutRecord({ startedMs, killedMs: Date.now(), limitMin: step.effTimeoutMin, source: step.timeoutSource, loadavg: os.loadavg(), loadScale });
+      log(`  TIMEOUT: ${timeoutNote(timeout)}${why ? ` (${why})` : ''}: killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
       clearTimeout(killTimer); // a stall kill's timer, if both fired: one pending SIGKILL, cleared on exit
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
@@ -1841,7 +1887,7 @@ function runProcess(sh, step, logFile) {
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
-      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, stalled, loadScale });
+      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, timeout, stalled, loadScale });
     });
     sh.activeGroup = child.pid;
   });
@@ -1956,8 +2002,10 @@ async function runStep(sh, step, rec) {
     && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
   // (GR-b) a load-scaled timeout's account: budget spent, wall minutes, the mean load (summary.json timeoutLoadScale)
   if (r.loadScale) rec.timeoutLoadScale = { budgetMin: step.effTimeoutMin, usedMin: r.loadScale.usedMin, wallMin: r.loadScale.wallMin, capMin: r.loadScale.capMin, meanLoad: r.loadScale.meanLoad, ref: r.loadScale.ref, ...(r.loadScale.why ? { why: r.loadScale.why } : {}) };
-  if (r.timedOut) rec.status = 'TIMEOUT';
-  else if (r.stalled) {
+  if (r.timedOut) {
+    rec.status = 'TIMEOUT';
+    if (r.timeout) rec.timeout = r.timeout;
+  } else if (r.stalled) {
     rec.status = 'FAIL';
     rec.stalledAfterFail = { failLine: r.stalled.failLine, idleSeconds: Math.round(r.stalled.idleMs / 1000), failAt: new Date(r.stalled.failAt).toISOString() };
     rec.error = `stalled: no output for ${fmtDur(r.stalled.idleMs / 1000)} after its FAIL; the step was killed and its client stopped`;
@@ -2016,6 +2064,7 @@ async function setupShard(sh, head) {
   if (!fs.existsSync(RUN)) {
     log(`setup: git worktree add --detach ${RUN} ${head.slice(0, 7)}`, sh);
     shx('git', ['-C', SRC, 'worktree', 'add', '--detach', RUN, head], SRC);
+    sh.created = true; // provenance: the cleanup after a PASS removes only worktrees this invocation added
   } else {
     if (git(RUN, 'rev-parse', '--git-common-dir') && real(path.resolve(RUN, git(RUN, 'rev-parse', '--git-common-dir'))) !== real(path.resolve(SRC, git(SRC, 'rev-parse', '--git-common-dir')))) {
       throw new Error(`${RUN} is not a worktree of this repository`);
@@ -2106,7 +2155,8 @@ function summaryMd() {
   for (const s of summary.steps) {
     const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
       s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : '',
-      s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : ''].filter(Boolean).join('; ');
+      s.contended ? `bench contended (ran with ${s.ranWith.length} step(s))` : '', s.timeoutSource?.startsWith('history') && s.status === 'TIMEOUT' ? `history timeout ${s.effectiveTimeoutMin} of ${s.timeoutMin} min` : '',
+      s.status === 'TIMEOUT' && s.timeout ? `killed at timeout: limit ${s.timeout.limitMin} min, load ${s.timeout.load?.load1 ?? '?'} at the kill` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${shards.length > 1 ? `${s.shardName ?? s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
   if (summary.splitResults) {
@@ -2130,7 +2180,9 @@ function summaryMd() {
   if (bad.length) {
     lines.push('', '## Not passing', '');
     for (const s of bad) {
-      lines.push(`- **${s.id}** ${s.status}${s.error ? `: ${s.error}` : ''} (log \`${s.log ?? '-'}\`)`);
+      lines.push(`- **${s.id}** ${s.status}${s.error ? `: ${s.error}` : ''}${s.status === 'TIMEOUT' && s.timeout ? `: ${timeoutNote(s.timeout)}` : ''} (log \`${s.log ?? '-'}\`)`);
+      // (GRA) a TIMEOUT's tail is what the step printed before the kill (often passing tests), not why it failed
+      if (s.status === 'TIMEOUT' && !s.failLines && s.tail?.length) lines.push('  - last output before the kill:');
       for (const l of s.failLines ?? s.tail ?? []) lines.push(`  - \`${l.replace(/`/g, "'").slice(0, 200)}\``);
     }
   }
@@ -2169,7 +2221,7 @@ function notify() {
 async function finish(state, error) {
   if (sampler) clearInterval(sampler);
   if (machineSamples.length) summary.machine = foldSamples(machineSamples);
-  summary.state = state;
+  // summary.state stays 'running' until the cleanup is done: waiting agents watch it (AGENTS.md "launch, then wait once")
   if (error) summary.error = error;
   summary.endedAt = new Date().toISOString();
   summary.durationSeconds = (Date.now() - t0) / 1000;
@@ -2184,6 +2236,15 @@ async function finish(state, error) {
   const clean = state === 'done' && !error && !summary.aggregateProblems.length;
   summary.verdict = clean && (c.PASS ?? 0) === summary.steps.length ? 'PASS'
     : clean && (c.PASS ?? 0) + (c.NOISY ?? 0) === summary.steps.length ? 'INCONCLUSIVE' : 'FAIL';
+  // the cleanup (docs/GATES.md "Disk space") runs while this run still holds its lock and slot: a queued run that reuses these dirs
+  // can't start its setup while worlds are being removed. A cleanup failure is logged, never the verdict
+  try {
+    summary.cleanup = cleanupRunDirs(summary.verdict);
+  } catch (e) {
+    summary.cleanup = { error: String(e?.message ?? e) };
+    log(`cleanup failed: ${e?.message ?? e}`);
+  }
+  summary.state = state;
   writeSummary();
   fs.writeFileSync(path.join(OUT, 'SUMMARY.md'), summaryMd());
   log(`${summary.verdict}: ${JSON.stringify(c)} in ${fmtDur(summary.durationSeconds)}; ${path.join(OUT, 'SUMMARY.md')}`);
@@ -2304,7 +2365,9 @@ try {
   }
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   if (FROZEN) {
-    DRV = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log }).dir;
+    const fz = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log });
+    DRV = fz.dir;
+    drvCreated = fz.created;
     // the snapshot's mod classes (a fresh worktree has none: gradle filters ran 0 tests, api-compat found no classes); a failure aborts the run here
     summary.frozenBuildMs = buildFrozenClasses({ dir: DRV, log }).ms;
     summary.frozenSource = DRV;

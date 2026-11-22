@@ -129,31 +129,25 @@ test {
 	// (8a ST) tests that run the kit with node (TerrainOrderTest's kit/test/terrain-order-cells.mjs, PlanCatalogueTest, the delta kit test):
 	// the kit and its plan fixtures are their inputs, so a kit change never leaves the test task UP-TO-DATE on a stale PASS
 	inputs.dir("../kit/lib").withPropertyName("kitLib").withPathSensitivity(PathSensitivity.RELATIVE)
-	inputs.files("../kit/test/terrain-order-cells.mjs", "../kit/test/plan-helpers.mjs").withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) plan-helpers' fixtureLotBlocks imports the VOC-c designs, which import the VOC ones: in the helpers' closure; (TI2) its
+	// synthVolume imports h-helpers, and its fixtureStyle and the VOC designs read the scenario bibles by name: scenarioBibles below)
+	inputs.files(
+		"../kit/test/terrain-order-cells.mjs",
+		"../kit/test/plan-helpers.mjs",
+		"../kit/test/h-helpers.mjs",
+		"../kit/test/fixtures/vocab/vocc-designs.mjs",
+		"../kit/test/fixtures/vocab/voc-designs.mjs",
+	).withPropertyName("kitHelpers").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/plan").withPropertyName("kitPlanFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	// the scenario goldens the tests read: S7's and route_demo's (S3's) survey through plan-helpers' goldenSurvey, S7's IR in
 	// LayoutsTest/ApiDTest, districts_demo's IR in LayoutsWallTest, and crossings_demo_flat's, forms_demo's and crater_toolbox's IRs in
-	// LayoutsTest.everyGoldenHasAShape (the same files as unit-mod's data in tools/step-inputs.json)
-	inputs.files(
-		"../scenarios/goldens/crater_toolbox/ir.json",
-		"../scenarios/goldens/crossings_demo_flat/ir.json",
-		"../scenarios/goldens/districts_demo/ir.json",
-		"../scenarios/goldens/forms_demo/ir.json",
-		"../scenarios/goldens/route_demo/ir.json",
-		"../scenarios/goldens/route_demo/survey.bin",
-		"../scenarios/goldens/s7/ir.json",
-		"../scenarios/goldens/s7/survey.bin",
-	).withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
+	// LayoutsTest.everyGoldenHasAShape; ((TI, v0.89.0 review P3) the whole directory: LayoutsTest's golden(id) names files in it by id)
+	inputs.dir("../scenarios/goldens").withPropertyName("scenarioGoldens").withPathSensitivity(PathSensitivity.RELATIVE)
 	// ((RTE3) every kit test fixture a mod test reads itself, exact files (the same files as the steps' data in tools/step-inputs.json):
 	// DistrictLandTest d3/, DistrictLandGrTest gr/, GateJoinTest gj/, RevisionsTest rv/, DistrictLandRte2Test rte2/ (RTE2), LayoutsRte3Test
-	// and DistrictLandRte3Test rte3/, MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, SchematicTest schem/, ApiAFTest af/ and site/,
-	// Api7bFTest, ApiSLTest and SupportOrderFixtureTest site/ (also on the classpath through the bundled kit copy), MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
+	// and DistrictLandRte3Test rte3/, DistrictLandRte4Test rte4/ and DistrictLandCompatTest rte-compat/ (RTE4), DistrictLandCompat5Test rte-compat/rte5.json.gz (RTE5), MirrorOracleTest and MirrorFitTest, StyleRolesTest and StyleFormTest style-parity, MaskPatternDriftTest mp/, NaturalDriftTest, TerrainOrderTest and
 	// RoadTerrainNaturalTest natural/, ApiCXTest and TerrainOrderTest's named plan fixtures (also under kitPlanFixtures above))
 	inputs.files(
-		"../kit/test/fixtures/af/cliff_face.json",
-		"../kit/test/fixtures/af/overhang.json",
-		"../kit/test/fixtures/af/rift_site.json",
-		"../kit/test/fixtures/af/trunk.json",
 		"../kit/test/fixtures/d3/parity.json",
 		"../kit/test/fixtures/gj/parity.json",
 		"../kit/test/fixtures/gj/pg-parity.json",
@@ -173,27 +167,44 @@ test {
 		"../kit/test/fixtures/rte2/land-irs.json",
 		"../kit/test/fixtures/rte3/land-irs.json",
 		"../kit/test/fixtures/rte3/layout-ir.json",
+		"../kit/test/fixtures/rte-compat/corpus.json.gz",
+		"../kit/test/fixtures/rte-compat/rte5.json.gz",
+		"../kit/test/fixtures/rte4/land-irs.json",
 		"../kit/test/fixtures/rv/merge.json",
-		"../kit/test/fixtures/schem/corrupt.schem",
-		"../kit/test/fixtures/schem/goldens.json",
-		"../kit/test/fixtures/schem/old_dataversion.schem",
-		"../kit/test/fixtures/schem/oversize.schem",
-		"../kit/test/fixtures/schem/unknown_block.schem",
-		"../kit/test/fixtures/schem/v2_hut.schem",
-		"../kit/test/fixtures/schem/v3_hut.schem",
-		"../kit/test/fixtures/site/cliff_face/site.json",
-		"../kit/test/fixtures/site/cliff_face/volume.bin",
-		"../kit/test/fixtures/site/grove/site.json",
-		"../kit/test/fixtures/site/overhang/site.json",
-		"../kit/test/fixtures/site/overhang/volume.bin",
-		"../kit/test/fixtures/site/rift_site/site.json",
-		"../kit/test/fixtures/site/rift_site/volume.bin",
-		"../kit/test/fixtures/site/trunk/site.json",
-		"../kit/test/fixtures/site/trunk/volume.bin",
-		"../kit/test/fixtures/site/tunnel_hill/site.json",
-		"../kit/test/fixtures/site/tunnel_hill/volume.bin",
 		"../kit/test/fixtures/style-parity.json",
 	).withPropertyName("kitTestFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI, v0.89.0 review P3) the fixture directories the tests read computed names in, whole: af/ (ApiAFTest), schem/ (SchematicTest),
+	// site/ (Api7bFTest, ApiAFTest, ApiSLTest, SupportOrderFixtureTest); the scenario goldens above likewise (LayoutsTest's golden(id)))
+	inputs.dir("../kit/test/fixtures/af").withPropertyName("kitAfFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/schem").withPropertyName("kitSchemFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/site").withPropertyName("kitSiteFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) the kit files outside kit/lib and kit/test/fixtures a mod test reads, missed by RTE3's list; the same paths as unit-mod's data
+	// in tools/step-inputs.json; `node tools/step-inputs.mjs check` holds every literal kit path under src/test/java to this block):
+	// RegionFluidsLintTest the lint's drain cases; SchematicTest, StyleSwapTest, SidecarJsonTest, MinLotSizeTest, MassingPredictionTest,
+	// BuildOrderGoldenTest and SupportOrderFixtureTest the kit examples; TemplateDeltaKitEqualityTest runs kit/tools/delta-fixtures.mjs,
+	// which reads kit/build.mjs, kit/render.mjs, kit/tools/diff.mjs, every kit/designs source and the tavern version sources
+	inputs.files("../kit/lint/fixtures/drain-cases.json").withPropertyName("kitLintFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/examples").withPropertyName("kitExamples").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.files(
+		"../kit/build.mjs",
+		"../kit/render.mjs",
+		"../kit/tools/delta-fixtures.mjs",
+		"../kit/tools/diff.mjs",
+	).withPropertyName("kitDeltaFixtureTools").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/designs").withPropertyName("kitDesigns").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/versions").withPropertyName("kitVersionFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI) MinLotSizeTest and BuildOrderGoldenTest walk the kit massings beside the examples; ApiMPTest, ApiP0Test and PlanCatalogueTest read
+	// the kit schemas and the catalogue golden; VoxelTableTest the voxel class table; LayoutsWallTest plans kit/regions programs with node)
+	inputs.dir("../kit/massings").withPropertyName("kitMassings").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/schemas").withPropertyName("kitSchemas").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.files("../kit/voxel_classes.json").withPropertyName("kitVoxelClasses").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/regions").withPropertyName("kitRegions").withPathSensitivity(PathSensitivity.RELATIVE)
+	// ((TI2) computed reads and node children) TemplateDeltaKitEqualityTest's kit/tools/delta-fixtures.mjs rebuilds every design in a
+	// copy of the whole kit (kit/lib/rebuild.mjs copyKit: all but node_modules, .git, out, test and examples, the same excludes here):
+	// the bibles, kit/vocab (kit/lib/vocab.mjs imports its JSON, so every kit/lib caller reads it), kit/tools and the rest are its
+	// inputs. plan-helpers' fixtureStyle and the VOC designs read scenarios/bibles/<name>.json
+	inputs.files(fileTree("../kit") { exclude "**/node_modules/**", "**/.git/**", "**/out/**", "**/test/**", "**/examples/**" }).withPropertyName("kitCopied").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../scenarios/bibles").withPropertyName("scenarioBibles").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // The gate runner (docs/GATES.md "Coverage-based inputs") sets -PgateRerunTests (ORG_GRADLE_PROJECT_gateRerunTests): every test

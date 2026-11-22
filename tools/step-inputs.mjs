@@ -7,15 +7,22 @@
 //                                                 (<run>/traces/<step>/, written by gate-run.mjs); prints every glob it adds
 //   node tools/step-inputs.mjs check              CI: every step's static closure at HEAD (its imports, literal paths, dynamic
 //                                                 imports widened) must be inside its recorded set, every step must have an entry,
-//                                                 and the recorded static part must equal a rebuild. Exit 1 with the differences.
+//                                                 and the recorded static part must equal a rebuild; and (TI) every literal kit/ or
+//                                                 scenarios/ path a mod test names must be a declared input of mod/build.gradle's
+//                                                 `test` task; (TI2) so must every computed path a test builds (its literal head,
+//                                                 as a directory) and the module closure of every node script a test runs; and no
+//                                                 step or split part may compute its driver's path. Exit 1 with the differences.
+//   node tools/step-inputs.mjs test-trace <run dir>  (TI2) the repo files unit-mod's traced node children read that the test
+//                                                 task does not declare (tools/lib/gradle-test-inputs.mjs tracedTestInputGaps)
 //   node tools/step-inputs.mjs show <step>        a step's set: classes, closure, globs, data, flags; and its file count at HEAD
 //   node tools/step-inputs.mjs which <path>       the steps whose set holds a path
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gradleTestInputGaps, tracedTestInputGaps } from './lib/gradle-test-inputs.mjs';
 import { parentOf } from './lib/step-split.mjs';
-import { buildStatic, checkTrace, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace, workingFiles } from './lib/step-inputs.mjs';
+import { buildStatic, checkTrace, computedStepRoots, inputMatcher, inputsHash, loadConf, loadMap, readTrace, saveMap, staticEntry, treeAt, widenFromTrace, workingFiles } from './lib/step-inputs.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [cmd, ...args] = process.argv.slice(2);
@@ -23,6 +30,14 @@ const cfg = JSON.parse(fs.readFileSync(path.join(SRC, 'tools', 'gate-chains.json
 const conf = loadConf(SRC);
 const KEEP = ['data', 'derived', 'fingerprint', 'notes', 'verified'];
 const STATIC = ['classes', 'roots', 'closure', 'globs', 'env', 'flags'];
+
+// (TI) Known gaps in mod/build.gradle's test inputs not yet declared (tools/lib/gradle-test-inputs.mjs), each a leftover (remove the
+// line when it is declared; empty since TI declared the last ones):
+const GRADLE_TEST_UNDECLARED = [];
+function gradleTestGaps(files) {
+  const sources = [...files].filter((f) => f.startsWith('mod/src/test/java/') && f.endsWith('.java')).map((f) => [f, fs.readFileSync(path.join(SRC, f), 'utf8')]);
+  return gradleTestInputGaps(fs.readFileSync(path.join(SRC, 'mod', 'build.gradle'), 'utf8'), sources, files, GRADLE_TEST_UNDECLARED, { read: (p) => fs.readFileSync(path.join(SRC, p), 'utf8') });
+}
 
 function rebuilt(old) {
   const steps = buildStatic(cfg, conf, SRC);
@@ -77,6 +92,8 @@ if (cmd === 'build') {
         continue;
       }
       const now = staticEntry(id, entry, conf, files, { src: SRC });
+      const computed = computedStepRoots(entry);
+      if (computed.length) bad.push(`${id}: its shell computes the driver path ${computed.join(', ')}: no static closure (name the driver literally)`);
       const m = inputMatcher(map, conf, id);
       const missing = [...now.closure.filter((f) => !m(f)), ...now.globs.filter((g) => !(rec.globs ?? []).includes(g) && !(rec.data ?? []).includes(g))];
       if (missing.length) bad.push(`${id}: the closure now reaches ${missing.join(', ')}, outside its recorded set (run node tools/step-inputs.mjs build and commit)`);
@@ -88,12 +105,21 @@ if (cmd === 'build') {
       if (JSON.stringify(rec.flags ?? {}) !== JSON.stringify(now.flags ?? {})) bad.push(`${id}: recorded flags differ from a rebuild's`);
     }
     for (const id of Object.keys(map.steps)) if (!cfg.steps[id]) bad.push(`${id}: in the map but not in gate-chains.json`);
+    bad.push(...gradleTestGaps(files));
   }
   if (bad.length) {
     console.error(`step-inputs check: ${bad.length} problem(s)\n${bad.map((b) => `  ${b}`).join('\n')}`);
     process.exit(1);
   }
   console.log(`step-inputs check: ${Object.keys(cfg.steps).length} steps, every closure inside its recorded set`);
+} else if (cmd === 'test-trace') {
+  // test-trace <run dir>: what unit-mod's traced node children read outside mod/build.gradle's test inputs
+  const sm = JSON.parse(fs.readFileSync(path.join(args[0], 'summary.json'), 'utf8'));
+  const tr = readTrace(path.join(args[0], 'traces', 'unit-mod'));
+  if (!tr) throw new Error(`no unit-mod trace in ${args[0]}`);
+  const gaps = tracedTestInputGaps(fs.readFileSync(path.join(SRC, 'mod', 'build.gradle'), 'utf8'), tr, treeAt(SRC, sm.head ?? 'HEAD'));
+  console.log(`test-trace: ${tr.size} traced paths, ${gaps.length} undeclared${gaps.length ? `\n${gaps.map((g) => `  ${g}`).join('\n')}` : ''}`);
+  if (gaps.length) process.exit(1);
 } else if (cmd === 'show') {
   const map = loadMap(SRC);
   const e = map?.steps?.[args[0]];
@@ -111,6 +137,6 @@ if (cmd === 'build') {
   const tr = readTrace(path.join(args[0], 'traces', args[1]));
   console.log(JSON.stringify(checkTrace(map, conf, map.steps[args[1]] ? args[1] : parentOf(args[1]), tr, { tracked: treeAt(SRC, sm.head) }), null, 1));
 } else {
-  console.error('usage: node tools/step-inputs.mjs build | merge <run dir>... | check | show <step> | which <path> | trace <run dir> <step>');
+  console.error('usage: node tools/step-inputs.mjs build | merge <run dir>... | check | test-trace <run dir> | show <step> | which <path> | trace <run dir> <step>');
   process.exit(2);
 }

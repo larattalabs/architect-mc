@@ -306,6 +306,43 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
     the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
+### Disk space (2026-11-21)
+
+`Minecraft/_work` reached 977 GB (the disk at 99%): every slice, release, verify and red round made its own run dirs (`-run`,
+`-run-s<k>`, `-run-src`, about 6 GB each in logical size) and nothing removed them. The cleanup removed 239 stale worktrees and 42 output
+folders (about 258 GiB). Two rules in `tools/gate-run.mjs` keep it from coming back:
+
+- **Free-space guard.** A run refuses to start, before it takes a slot, when any volume it writes to has under `--min-free-gib`
+  (`GATE_MIN_FREE_GIB`, default 150) GiB free. It checks every destination: each run dir (`--run-dirs`, or a fixed `--shards` run's
+  shards and lanes, else the run dir) and the frozen source (`<run dir>-src`, also with `--run-dirs`; not with `--no-frozen-source`), each by the
+  real path of its nearest existing ancestor, so a symlinked run dir counts on its target's volume. `0` turns it off. A run that
+  chooses its shards under the slot (turbo, change shards, `--shards auto`) runs the guard again once they are chosen, on those
+  shard and lane dirs, before the lock and any setup; a refusal there gives the slot back.
+- **Cleanup after a PASS** (`tools/lib/run-dirs.mjs`, tested in `kit/test/gate-disk.test.mjs`). It runs inside `finish()`, after
+  the verdict and before the summary, the notify and the release of the lock and slot, so a queued run never sets up in dirs being
+  emptied, and `summary.json`'s `state` stays `running` until it is done (waiting agents watch that field); a cleanup failure is
+  logged (and recorded in `summary.cleanup`), never the verdict. What happens to each dir:
+  - **created by this invocation** (`setupShard` or the frozen source added the worktree; recorded in-process, never inferred from
+    the dir): `git worktree remove`, never `--force`. A worktree git refuses to remove is kept, with its world copies emptied. The
+    remove has a timeout (5 min): a hung one (a blocking fsmonitor hook) has only that git child killed, is logged and kept, and
+    the cleanup goes on, so it never holds the lock.
+  - **a named run dir** (beside the main checkout's real path: `cfg.runDir`, the nightly's `nightly.runDir` and
+    `nightly.uiGallery.runDir` from `tools/gate-cache.json`, and their `-s<k>`/`-o<j>` shards): reused, so only its world copies
+    (`mod/run/saves/*`) go. No other dir counts as one: not another sibling of the main checkout, not a dir under `_work`.
+  - **a symlinked run dir** (the dir itself, or a parent component inside the worktrees dir, by `lstat` on the path as given,
+    before any real path): refused, nothing touched. A default run dir reached through a `_work` bridge link is therefore left
+    for a run from the main checkout's side, or for removal by hand.
+  - **any other existing dir** (another slice's worktree passed as `--run-dir`, an earlier run's dir reused, a reused `-src`): this
+    run does not own it, so nothing is touched, not even its worlds. Such a dir stays until a run that creates it passes, or until
+    it is removed by hand.
+  - The main checkout, the source checkout and the seed (by real path) are never touched. No symlink is followed: the run dir, `mod`,
+    `mod/run` and `saves` must be real directories with `saves` inside the run dir by real path, a symlinked world entry is left as it
+    is, and a link inside a world is removed as a link.
+  - A run that does not pass keeps everything for inspection: remove its dirs with `git worktree remove` once the failure is
+    understood. `--keep-run-dirs` (`GATE_KEEP_RUN_DIRS=1`) keeps all, for a follow-up `--only` run in the same dirs.
+- **By hand:** a slice's worktree and red/mutant worktrees are removed when the slice is merged or shelved; release worktrees and
+  `-rel` copies once the release's post-publish steps are done.
+
 ### Ports (one table; the coordinator assigns slice pairs)
 
 | Range | Who |
@@ -445,7 +482,32 @@ evidence are not inputs.
 **The check** (CI, `node tools/step-inputs.mjs check`) rebuilds the static part at HEAD and fails when:
 - a step's closure reaches a file outside its recorded set (a driver gained an import);
 - a step's classes, roots or the environment variables its closure reads differ from the recorded ones;
-- a step has no entry.
+- a step has no entry;
+- (chore/TI) a literal kit/ or scenarios/ path a mod test names (`"../kit/x"`, `Path.of("..", "kit", ...)`) is not under an
+  `inputs.dir`/`inputs.files` of mod/build.gradle's `test` block (a directory passes only by an `inputs.dir` of it or a parent, never by
+  single files under it: v0.89.0 review P3; tools/lib/gradle-test-inputs.mjs, kit/test/gradle-test-inputs.test.mjs), so a
+  local or gate Gradle run could stay UP-TO-DATE on a stale PASS. Known gaps would be listed in tools/step-inputs.mjs
+  (`GRADLE_TEST_UNDECLARED`, empty).
+- (chore/TI2) a **computed** path a mod test builds is not under them either: a `Path` binding's resolve chain up to its first
+  computed argument (`KIT.resolve("examples").resolve(id)` -> kit/examples), a literal `Path.of` head, a concatenation's head
+  (`"regions/" + p`), each needing an `inputs.dir` of that directory; or a file or directory in the **module closure of a node
+  script** a test runs (moduleClosure: imports, JSON modules, literal paths). A `fileTree("../kit") { exclude ... }` counts less its
+  excludes. Every top-level repo directory but mod/ is scanned;
+- (chore/TI2) a step or split part whose shell **computes its driver path** (`node tools/gate${X}.mjs`). A split part's own `shell`
+  adds its drivers to the parent's roots, so `build` records them and `check` sees a new one.
+
+**TI2 as built.** The scan found every computed Java read already declared; the node closures and a recent unit-mod trace found
+kit/vocab/*.json (imported by kit/lib/vocab.mjs), kit/bibles and the rest of the kit that delta-fixtures' copyKit copies,
+kit/test/h-helpers.mjs (plan-helpers) and scenarios/bibles (plan-helpers' fixtureStyle, the VOC designs): now declared (the copied
+kit as a fileTree with copyKit's excludes). No template step had a gap; the map rebuilds unchanged. `step-inputs.mjs test-trace <run>`
+compares a run's unit-mod trace (the JVM's node children) with the test inputs. Left to the author: a path passed whole as a
+parameter (ApiP0Test's `one(file)`: its callers' literals are scanned), a node child's computed reads (test-trace shows them), reads
+outside the repo (GlossaryWordingTest's opt-in ../../steward-mc). Gate drivers' computed reads stay the trace's (a read outside the
+set is an inputs-map miss, never a stale PASS); TI2's traced unit-kit and unit-sidecar run at HEAD found two enumerations, now
+whole in their data: gate-cpu-budget.test lists tools/*.mjs (unit-kit), regions-tc.test reads scenarios/<f>.json and the sidecar's
+vitest setup imports tools/lib (unit-sidecar). v0.90.0 review P3s: test-trace holds a traced directory listing (`d`) to the directory
+rule (an `inputs.dir` of it or a parent), not only tracked files; and the computed-driver check reads past a value-taking node option
+(`--import`/`--require`/`-r`/`--loader` and the like) to the script, reporting a computed preload too. The map rebuilds unchanged.
 
 The fix is `node tools/step-inputs.mjs build` (it keeps the traced data) and a commit. `show <step>` prints a set and its file count
 at HEAD; `which <path>` lists the steps whose sets hold a path.
@@ -1269,7 +1331,7 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
   rules (complete, this tree, every file with tests and no failure: no stale PASS). Fewer files: run here, never wait. A re-run
   that is incomplete too fails whole-suite readers fast. Not fail-all: one load TIMEOUT would become ~7 FAILs that speed rule 6 [2] re-runs.
   **Load-scaled timeouts:** `gate-chains.json` `timeoutLoadScale.steps` (unit-kit, -sidecar, -scope) spend `min(1, ref / load1)` of
-  their timeout per wall minute (ref `slots.load.max1`, >= 72), capped at 2x wall (speed rule 12 [10]'s spirit: bounded, recorded as
+  their timeout per wall minute (ref: the machine's cores since GRA, `"ref": "cores"`; before, `slots.load.max1` >= 72), capped at 2x wall (speed rule 12 [10]'s spirit: bounded, recorded as
   `timeoutLoadScale` in `summary.json`). Load, not CPU time: node --test children exit and Gradle's daemon is outside the group, so
   `ps` under-counts (`tools/lib/load-timeout.mjs`; tests `kit/test/gate-load-timeout.test.mjs`, `gate-kit-producer.test.mjs`).
 
@@ -2867,7 +2929,11 @@ what follows the speed rules (the earlier per-slice verifier text is in docs/arc
    10 min), at most the configured `timeoutMin`, with at least 5 samples) or the configured one (see "Gate speed").
    - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the shard's run-worktree processes are stopped (gradle
      and its daemon/workers, the client JVM, the sidecar, vitest, the client scripts, matched by their paths in that worktree).
-     Nothing else is touched. Stray apitest jars are removed from `mods/`.
+     Nothing else is touched. Stray apitest jars are removed from `mods/`. A TIMEOUT is never a pass. The runner records what it knew
+     at the kill (`summary.json` `timeout`: elapsed wall seconds, the limit and its source, load 1/5/15 then, a load-scaled step's
+     budget account) and prints it as one line in runner.log (`TIMEOUT: killed at its timeout after 15m17s wall (limit 15 min, ...);
+     load at the kill ...; a TIMEOUT, not a test FAIL`), in the table's key numbers and under "Not passing", where the log tail is
+     labelled "last output before the kill" (GRA).
    - **After any step that doesn't pass**, that shard's client is stopped. Its next step starts a fresh one.
    - **Verdicts.** PASS means exit 0, no `FAIL` lines, and at least one `ok` line. Unit tests use parsed counts instead.
    - **Failures.** The run continues past a failure, unless the step is `stopOnFail`. A step with `after` is skipped if that
@@ -3085,3 +3151,32 @@ Gate infra 2 plus the gate-runner leftovers GR-a; tooling, two mod minors, no AP
   (rule 10 bounds unchanged). **junit-reuse** takes `Class.method` patterns (globs; fails closed). **j3's split** compares every mod.
 - **A32**: a hopper is no anchor (`Builder.anchorState`); `removeScaffold` returns false on a failed take-down and `complete` leaves the
   site BUILDING, retried every 200 ticks. CLI units: api-baselines-build, plan-catalogue-diff, step-inputs, api-compat (kit/test/tool-clis).
+
+### Slice GRA as built
+
+Gate-runner leftovers after v0.86.0; tooling only, units only (speed rule 11). Each item was checked against origin/main 30f2a9b4
+first.
+- **Load-aware unit-suite timeouts.** v0.86.0's change gate (`gate-runs/20261119-140508-change`) killed unit-sidecar at 15m17s, mean
+  load 36 (23-54), 37 of 76 files done, no hang: files took 9-11 min each under that load. Seven unit-sidecar TIMEOUTs at 15:00-15:31
+  are in the history next to PASSes up to 14m51s. Two causes compounded:
+  1. GR-b's load scale used rule 10's start gate (72) as its ref, so at load 21-41 on 18 cores (CPU 1.2-2.3x oversubscribed) a wall
+     minute still spent a full budget minute. `timeoutLoadScale.ref` is now `"cores"` (`machineCores`, `GATE_CPU_CORES` overrides);
+     a config without `ref` keeps the old max(72, max1). The 2x wall cap is unchanged, so a real hang still ends.
+  2. unit-sidecar's configured 15 min capped its history timeout: p90 713 s makes 2 x p90 = 24 min. `timeoutMin` 15 -> 30 (as
+     fb-unit: a ceiling, the history picks the limit), `estMin` 0.65 -> 7 (p50 409 s). Both fields are outside the definition hash,
+     so history and cache keys do not move. Bound now: about 24 min at load <= 18, at most 48 wall minutes under any load.
+  The task's "unit-kit 20 min" was already 40 (GI2). Tests: `kit/test/gate-load-timeout.test.mjs` (ref cores, the v0.86.0 replay:
+  ref 72 spends all 15 min, ref 18 about half; the hang bound; the timeout record).
+- **A TIMEOUT reads as one** (`timeoutRecord` / `timeoutNote` in `tools/lib/load-timeout.mjs`): see "TIMEOUT" above.
+- **api-compat on an offline lane (951 MISSING): already fixed by GI2.** The CP run (`gate-runs-cp/20261115-023346-change`, head
+  a548f142) predates GI2 (bd3b6fcf). Since then api-compat has run on o1/o2/o3 (r075, r076, r077, r079, 20261119-115010) with every
+  member check ok, through `GATE_UNIT_MOD_RUN` and `tools/lib/api-classes.mjs`. Its remaining 2 FAILs in those runs are the newest
+  release's baseline jars missing under the main checkout's `artifacts/api-baselines/` (`api-baselines-build.mjs build vX`), not
+  the lane. No scheduler change.
+- **co-compose's sidecar restarts: already fixed by GI2** (the devserver probe re-probes a slow sidecar for 20 s and keeps its own
+  live one, see GI2 above). The two STOP_THEN_START restarts are in `gate-runs-cp/20261115-040728-change` (head before GI2); no client
+  log since 2026-11-16 has one. Not re-observed in game: co-compose has not run since. Its 30-min `TimeoutException` on that run
+  (design d109 requested after the second restart, d111 at 30 min) has no proven cause; a leftover for the next co-compose run.
+- **gitleaks false positives in CONTRACT.md: already allowlisted** (0534a07d, `.gitleaks.toml`, scoped to generic-api-key, the file
+  and `^6b-scenario-s1\W?$`). Checked: default rules alone report exactly the 4 CONTRACT.md hits; with the repo config 0, history and
+  tree; a planted fake `api_key = "..."` line and a `apijars = 6b-scenario-s1<suffix>` lookalike in a scratch copy are both caught.

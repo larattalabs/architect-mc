@@ -13,6 +13,7 @@
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
 import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
 import { growPlan, emitGrowth, growObstacles, stopSays, followStreetOf } from '../region/grow.mjs';
+import { tagMisreadRoads } from '../region/land.mjs';
 import { fieldDefs, emitFields } from '../region/field.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
@@ -1491,7 +1492,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       const out = emitDistricts(r, {
         districts: z.dsRaw, _placed: z.placement, ...(z.follow ? { _follow: z.follow } : {}), ...(z.near ? { near: z.near } : {}), loopiness: p.part.program?.loopiness ?? 0.15, lamps: false, anchors: false, meta: false,
         stage: { ground: stageOf('ground'), street: stageOf('street'), routes: stageOf('routes'), lots: stageOf('lots'), props: stageOf('props') },
-        routePart: `routes_${p.id}`.slice(0, 48), hard: [...env.hard.map(rectArr), ...others], ...extra,
+        routePart: `routes_${p.id}`.slice(0, 48), hard: [...env.hard.map(rectArr), ...others], ...extra, _ownedRoads: true,
         // ((6c S3) a terraced zone's routes keep its grade tolerance; every other zone as before)
         // ((6c S3) the broken variant `unretained` (the zone's ext architect_mc:unsafe): no retaining ring or rail on any terraced lot)
         ...(p.part.ext?.['architect_mc:unsafe']?.unretained === true ? { _unsafeUnretained: true } : {}),
@@ -1514,6 +1515,11 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         if (f !== undefined) return f;
         return dids.find((did) => new RegExp(`^(${escRe(did)}_street(_[we])?|route_st_${escRe(did)})(_\\d+)?$`).test(id)) ?? null;
       });
+      // ((RTE5) the district tag (land.mjs untaggedMisreads) decided on the stamped roads, as streetRuns reads them (flag first); a plan_v0
+      // IR has no architect_mc:land record (land reads districts plans only), so only streetRuns counts here. v0.89.0 decided inside the
+      // districts pass, before the stamp: a lone b_street got tags it does not need (v0.89.0 fix check P3))
+      tagMisreadRoads(out.owned, dids, { land: false });
+      delete out.owned;
       geom.set(p.id, { rect: z.rect, bell: bell0 });
       villages++;
       mark(p.id, addedSince(r, cp));

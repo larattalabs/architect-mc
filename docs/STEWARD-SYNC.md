@@ -20,6 +20,8 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
+| v0.90.0 | 2026-11-21 | 1.71.0 | 0.79.0 | 26 |  | not needed | ok |
+| v0.89.0 | 2026-11-20 | 1.71.0 | 0.78.0 | 26 |  | RC passed | ok |
 | v0.88.0 | 2026-11-20 | 1.71.0 | 0.77.0 | 26 |  | not needed | ok |
 | v0.87.0 | 2026-11-20 | 1.71.0 | 0.76.0 | 26 |  | RC passed | ok |
 | v0.86.0 | 2026-11-20 | 1.71.0 | 0.75.0 | 26 | `layoutRouteEdges` | RC passed | ok |
@@ -232,6 +234,13 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
 - `Regions.layout` of a `mega_bench` (and so `mega_bench_forest`) region planned from NEXT on reports its ring wall: `wall` is
   `connector.wall` (not `tile`) with gates `wall_g1`..`wall_g4` and no towers. Reporting walls now: `walled_hill`, `sky_isle`, `mega_bench`,
   `mega_bench_forest`; `crater_works`'s rubble rim stays a `tile`. No API change. CONTRACT "Slice LYW3".
+
+### New for Steward (NEXT, slice RTE4)
+- A districts region planned from NEXT on where an id would read as another district's (`b` beside `b_street`, a lone `b_street`)
+  carries `architect_mc:district: {id}` on each district's roads in its IR (IR only, as `architect_mc:route`; plans whose ids read
+  right are byte-identical). `architect_mc:land` then gives `b_street`'s part only its own roads, and district `b_street` grows on its own
+  street (was NO_ROOM). A boundary growth laid from NEXT on carries the same record on its street, and GR never continues another
+  district's such growth (b from b_1's). Regions and growths from before read exactly as v0.88.0. No API or feature change. CONTRACT "Slice RTE4".
 
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
