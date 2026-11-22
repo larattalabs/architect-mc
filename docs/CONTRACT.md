@@ -34678,6 +34678,11 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   (past the 1024-result bound) before the driver sees the stage undone: the stage's result is left out (logged). (P2) A `Busy` names its blocker as that removal's REMOVAL_FINISHED does (a whole region:
   `region`/its id; `Busy.finishedBy`). (P2) dev-start.json arms only on a development start; every test fault is disarmed at
   SERVER_STOPPED, and a start's reset disarms the previous start's kill point.
+- **Recovered revision undo drops cargo owed keys from its result (accepted for v0.91.0, REL-v0910 fix-check P2).** When an awaited
+  stage finishes after a restart or `held(decided)`, `Revisions.mergeAwaited` rebuilds its owed keys from the stage snapshot's
+  `owedParts` only, and `OwnerRemovals.groupSnapshot` doesn't carry separate cargo keys. The revision result then lists the player-block
+  owed key but not the cargo one. The owed ledger itself is unaffected: the items stay owed and auto-collect pays them. Only the
+  reported result is short. Restore: persist the full stage result in the snapshot and merge it.
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
   `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
   their behaviour is shown in game only for the holder).
