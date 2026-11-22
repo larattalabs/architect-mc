@@ -634,7 +634,9 @@ public final class InfraPlace {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
 		{
-			// (slice T4R-M) its stash's hold is born below: never over another in-flight removal's area (RemovalAreas); refused before anything
+			// (slice T4R-M) its stash's hold is born below: never over another in-flight removal's area (RemovalAreas); refused before anything.
+			// (T4R-D fix round, P1-5) an extraction whose txn retired is resolved first: it holds nothing any more
+			Extractions.resolveNow(level.getServer());
 			Sites.SiteException busy = RemovalAreas.busyRefusal(i.dimension(), List.of(i.box()), java.util.Set.of(id), "remove " + id); // (T4R-D, A7a)
 			if (busy != null) {
 				throw busy;

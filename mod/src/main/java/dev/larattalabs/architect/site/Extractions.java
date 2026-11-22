@@ -60,6 +60,7 @@ public final class Extractions {
 
 	static synchronized void read(@Nullable JsonElement e) {
 		TABLE.clear();
+		resolving = false; // (a world's load) a resolver queued by an earlier world never ran
 		if (e instanceof JsonObject o) {
 			o.entrySet().forEach(x -> TABLE.put(x.getKey(), x.getValue().getAsJsonObject()));
 		}
@@ -315,6 +316,7 @@ public final class Extractions {
 			return t.held() != null ? t.held() : "in progress";
 		}
 		if (c.cache().committed(key) == null) {
+			resolveLater(srv); // (fix round P1-5) ended aborted: the resolver marks it aborted and releases its holds
 			return "its extraction txn ended without its commit";
 		}
 		keep(at, null);
@@ -380,14 +382,102 @@ public final class Extractions {
 
 	/**
 	 * (a start) Each planned attempt with no txn: aborted (nothing of it ran: P0 is before the intent), its holds released; an open attempt's
-	 * txn recovers in the core (installed or undecided, the core's fate rule), kept once retired; one whose txn retired: kept.
+	 * txn recovers in the core (installed or undecided, the core's fate rule), kept once retired; one whose txn retired: kept. (fix round P1-5)
+	 * An attempt whose txn is still open at the start (an undecided intent the core aborts, retired only at the first tick) is resolved by the
+	 * same rule once its txn retires: the resolver runs each tick ({@link TxnServer#later}) while any attempt is planned or open.
 	 */
 	static void atStart(MinecraftServer srv) {
-		atStart(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null);
+		atStart(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null,
+			TxnServer::later);
 	}
 
-	/** (TEST seam) {@link #atStart(MinecraftServer)} with the core's open and committed keys as predicates. */
+	/** (TEST seam) {@link #atStart(MinecraftServer)} with the core's open and committed keys as predicates (no resolver scheduled). */
 	static void atStart(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey) {
+		atStart(srv, openKey, committedKey, r -> {
+		});
+	}
+
+	/** (TEST seam) {@link #atStart(MinecraftServer)} scheduling its resolver through {@code later} (the server: the next tick). */
+	static void atStart(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey,
+		java.util.function.Consumer<Runnable> later) {
+		synchronized (Extractions.class) {
+			for (JsonObject tb : TABLE.values()) {
+				for (var a : tb.getAsJsonObject("attempts").entrySet()) {
+					JsonObject at = a.getValue().getAsJsonObject();
+					if (at.get("state").getAsString().equals("planned") && openKey.test(at.get("key").getAsString())) {
+						at.addProperty("state", "open"); // (fix round P1-5) its txn's intent is durable: it is open, resolved once that txn retires
+					}
+				}
+			}
+		}
+		resolve(srv, openKey, committedKey, true);
+		resolveLater(srv, openKey, committedKey, later);
+	}
+
+	/** Whether the resolver is scheduled (one at a time; a world's load clears it with the table). */
+	private static boolean resolving;
+
+	/**
+	 * (fix round P1-5) The resolver, each tick while an attempt is planned or open: {@link #resolve} once the stores and the txn core are ready
+	 * (a load that failed decides nothing), then again next tick while one is left. Server thread.
+	 */
+	static void resolveLater(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey,
+		java.util.function.Consumer<Runnable> later) {
+		synchronized (Extractions.class) {
+			if (resolving || !anyLive()) {
+				return;
+			}
+			resolving = true;
+		}
+		later.accept(() -> {
+			synchronized (Extractions.class) {
+				resolving = false;
+			}
+			if (srv == null || ready()) {
+				resolve(srv, openKey, committedKey, false);
+			}
+			resolveLater(srv, openKey, committedKey, later);
+		});
+	}
+
+	/** The live server's resolver (an attempt left planned or open by a held or aborted drive). Server thread. */
+	static void resolveLater(MinecraftServer srv) {
+		resolveLater(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null,
+			TxnServer::later);
+	}
+
+	/** (fix round P1-5) {@link #resolve} now, at run time (a removal's admission asks it first: an attempt whose txn retired holds nothing). */
+	static void resolveNow(MinecraftServer srv) {
+		if (anyLive() && ready()) {
+			resolve(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null, false);
+		}
+	}
+
+	private static boolean ready() {
+		return CrateSettle.notReady() == null && TxnServer.core().loadFailed() == null;
+	}
+
+	/** Whether any attempt is open (its txn begun: it is resolved once that txn retires). A planned one is driven by its caller's retry. */
+	static synchronized boolean anyLive() {
+		for (JsonObject tb : TABLE.values()) {
+			for (var a : tb.getAsJsonObject("attempts").entrySet()) {
+				if (a.getValue().getAsJsonObject().get("state").getAsString().equals("open")) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The fate rule over every attempt whose txn is not open: committed (retired committed) -> kept; an open attempt whose txn ended without a
+	 * commit -> aborted (its txn ended aborted: nothing of it ran; a committed one is kept by its own snapshot before it retires); at a start
+	 * ({@code start}) also a planned one with no txn -> aborted (its intent never became durable). At run time a planned attempt with no txn
+	 * is its caller's (a begin that was held): its retry drives it. Saved confirmed when it changed anything; a refused save is redone by the
+	 * next resolve or start.
+	 */
+	static void resolve(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey,
+		boolean start) {
 		boolean changed = false;
 		synchronized (Extractions.class) {
 			for (JsonObject tb : TABLE.values()) {
@@ -395,19 +485,17 @@ public final class Extractions {
 					JsonObject at = a.getValue().getAsJsonObject();
 					String st = at.get("state").getAsString();
 					String key = at.get("key").getAsString();
-					boolean open = openKey.test(key);
-					if (open) {
+					if (st.equals("kept") || st.equals("aborted") || openKey.test(key) || !start && st.equals("planned") && !committedKey.test(key)) {
 						continue;
 					}
 					if (committedKey.test(key)) {
-						if (!st.equals("kept")) {
-							at.addProperty("state", "kept");
-							changed = true;
-						}
-					} else if (st.equals("planned") || st.equals("open")) {
+						at.addProperty("state", "kept");
+						changed = true;
+					} else {
 						at.addProperty("state", "aborted");
 						changed = true;
-						Architect.LOGGER.info("Extraction {}: no txn at the start (its intent never made durable): aborted, nothing of it ran", key);
+						Architect.LOGGER.info("Extraction {}: no txn open and none committed (its intent never made durable, or it ended aborted): aborted, nothing of it"
+							+ " ran", key);
 					}
 				}
 			}
@@ -421,7 +509,8 @@ public final class Extractions {
 			try {
 				Stockpiles.saveWithWorldConfirmed(srv);
 			} catch (IllegalStateException e) {
-				Architect.LOGGER.warn("Extractions: the start's update is not saved yet ({}): it is redone at the next start", e.getMessage());
+				Architect.LOGGER.warn("Extractions: the resolved states are not saved yet ({}): they are saved with the next save, or resolved again at the next start",
+					e.getMessage());
 			}
 		}
 	}
