@@ -2903,7 +2903,9 @@ public final class Builder {
 							int qi = r == null ? -1 : r.queuePos(m);
 							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
 							// the covering site kept stays in the world; it drops once, with the covering site's removal)
-							coverCell(r, qi, m.asLong(), WorldJournal.state(over), level.getBlockState(m), free, tally);
+							// (slice T4R-D, D3 deviation) a displaced cell's refund is booked without its cell, as before: its block no longer
+							// stands (the covering site displaced it), so a per-cell min would cap it to nothing (found in T4RM-fin: 35 lost)
+							coverCell(r, qi, WorldJournal.state(over), level.getBlockState(m), free, tally);
 							continue;
 						}
 					}
