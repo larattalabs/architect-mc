@@ -276,6 +276,14 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   "retry after a short delay", never "wait for an event".
   (Last round) A road's or region target's own removal retry is refused this way too while its own holder cargo (`removal.cargo`) is open:
   `OPERATION_IN_PROGRESS` first, then `PLAYER_BLOCKS_RETURNING` while its blocks are given back. Both are retries by time.
+- (Release fix round) A `Busy` names its blocker exactly as that removal's `REMOVAL_FINISHED` names it. Changed: a whole region's
+  removal (and its waiting ticket) is `blockingKind` `region` with the region's id; it was `group` with the backing group's id, which
+  no event names. Unchanged: another group `group`/its id; a stage `stage`/`<group>/<stage>` (its event: kind `group`, that group and
+  stage); a site `site` and a road `road` (event kind `site`). `Busy.finishedBy(RemovalFinished)` (new) says whether an event ends the
+  wait; it is always false for `PLAYER_BLOCKS_RETURNING`, `OPERATION_IN_PROGRESS` and unknown kinds (retry by time). A blocker that stops
+  without finishing fires no event, so bound the wait.
+- (Release fix round) `RemoveResult.owedParts` is now filled on every group, stage and region future (`removeGroup`, `undoStage`,
+  `Regions.remove`) and on `undoRevision`'s, as on their REMOVAL_FINISHED and `removalResult`; they were empty (owed keys only).
 - (Fix round) Auto-collect also runs after a group's, stage's, region's or revision's removal and after a road's extraction. A player's
   chest in a road or region-target cell: its stacks are taken out first, plain stacks credited into the target's pile, data stacks owed
   (reason `cargo`); a holder without slots that holds items refuses the removal ("take them out").

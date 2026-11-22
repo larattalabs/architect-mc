@@ -45,17 +45,30 @@ public final class RemovalAreas {
 				return busy;
 			}
 			String id = site.startsWith("group:") ? site.substring(6) : site;
-			String kind = site.startsWith("group:") ? id.contains("/") ? "stage" : "group" : Infras.get(id) != null || Infras.pending(id) != null ? "road" : "site";
-			String owner = null;
-			if (kind.equals("group") || kind.equals("stage")) {
-				SiteGroupRec g = Sites.group(id.contains("/") ? id.substring(0, id.indexOf('/')) : id);
-				owner = g == null ? null : g.owner();
-			} else {
-				Site x = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
-				owner = x == null ? null : x.owner();
+			if (site.startsWith("group:")) {
+				String group = id.contains("/") ? id.substring(0, id.indexOf('/')) : id;
+				SiteGroupRec g = Sites.group(group);
+				return groupBusy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, group, id.contains("/") ? id.substring(id.indexOf('/') + 1) : null,
+					g == null ? null : g.owner()); // (REL-v0910 fix round, P2-2) named as its REMOVAL_FINISHED names it
 			}
-			return new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, id, kind, owner);
+			String kind = Infras.get(id) != null || Infras.pending(id) != null ? "road" : "site";
+			Site x = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
+			return new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, id, kind, x == null ? null : x.owner());
 		}
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-2) The one Busy naming a group's or stage's removal: the identity its REMOVAL_FINISHED carries
+	 * ({@code ApiEvents.finishedRegion}, the rule {@code finishedOf} and the txn's payload use): a whole region's group as {@code region}
+	 * (the region's id), any other group as {@code group}, a stage as {@code stage} ({@code <group>/<stage>}). {@code Busy.finishedBy} matches it.
+	 */
+	static dev.larattalabs.architect.api.Busy groupBusy(dev.larattalabs.architect.api.Busy.Kind kind, String group, @Nullable String stage,
+		@Nullable String owner) {
+		String region = dev.larattalabs.architect.apiimpl.ApiEvents.finishedRegion(group, stage);
+		if (region != null) {
+			return new dev.larattalabs.architect.api.Busy(kind, region, "region", owner);
+		}
+		return new dev.larattalabs.architect.api.Busy(kind, stage == null ? group : group + "/" + stage, stage == null ? "group" : "stage", owner);
 	}
 
 	/** Pure: the first of {@code areas} in {@code dim} whose box meets one of {@code boxes} and whose site is not one of {@code self}, or null. */
@@ -153,8 +166,8 @@ public final class RemovalAreas {
 			List<Area> mine = new ArrayList<>();
 			groupAreas(t, "the removal of group " + g + " (waiting first)", mine);
 			for (Area a : mine) {
-				out.add(new Area(a.dim(), a.box(), a.who(), a.site(), new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.WAITING_BEHIND, g,
-					t.stage == null ? "group" : "stage", rec == null ? null : rec.owner())));
+				out.add(new Area(a.dim(), a.box(), a.who(), a.site(), groupBusy(dev.larattalabs.architect.api.Busy.Kind.WAITING_BEHIND, t.group, t.stage,
+					rec == null ? null : rec.owner()))); // (REL fix, P2-2) as its REMOVAL_FINISHED names it
 			}
 		}
 		for (var e : CrateSettle.durableJson().entrySet()) {

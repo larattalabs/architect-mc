@@ -208,7 +208,7 @@ final class GroupTxn {
 	/** The event's immutable source, captured at planning: who, and the removal's counts (its credits come from the result at the end). */
 	static JsonObject payload(Groups.Removal r) {
 		JsonObject o = new JsonObject();
-		String region = r.stage == null ? dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(r.group) : null;
+		String region = dev.larattalabs.architect.apiimpl.ApiEvents.finishedRegion(r.group, r.stage); // (REL fix, P2-2) the one rule
 		o.addProperty("kind", region != null ? "region" : "group");
 		o.addProperty("group", r.group);
 		if (r.stage != null) {
