@@ -111,18 +111,25 @@ public final class RemovalAreas {
 		return heldAreas(dev.larattalabs.architect.txn.TxnServer.core());
 	}
 
-	/** (TEST seam, slice T4R-N) {@link #heldAreas()} against {@code core} (the txn core whose loaded holds count). */
+	/**
+	 * (TEST seam, slice T4R-N) {@link #heldAreas()} against {@code core} (the txn core whose loaded holds count). (slice T4R-D) No ticket:
+	 * a decided removal (a group's txn begin after its committed undo) never waits behind an undecided waiter.
+	 */
 	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core) {
-		return heldAreas(core, null);
+		return heldAreas(core, null, false);
+	}
+
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind) {
+		return heldAreas(core, behind, true);
 	}
 
 	/**
 	 * {@link #heldAreas(dev.larattalabs.architect.txn.TxnCore)} with the FIFO tickets (slice T4R-D, §4.2 (f)): every waiting group's area that
 	 * holds a ticket, or (for {@code behind}, a waiting group itself) only those ahead of it in the queue.
 	 */
-	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind) {
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind, boolean tickets) {
 		List<Area> out = legacyAreas();
-		for (Groups.Removal t : Groups.tickets()) {
+		for (Groups.Removal t : tickets ? Groups.tickets() : List.<Groups.Removal>of()) {
 			if (t == behind) {
 				break; // only the tickets ahead of it
 			}

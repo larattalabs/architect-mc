@@ -2048,7 +2048,14 @@ public final class Sites {
 			} else {
 				JsonObject res = OwnerRemovals.result("site", id);
 				if (res != null && last != null) {
+					Map<String, Integer> legacy = last.returned(); // a legacy refund dropped by afterRestore (no settle): in this call's refund too
 					last = OwnerRemovals.removed(last.site(), res, last.notes());
+					if (!legacy.isEmpty()) {
+						Map<String, Integer> sum = new java.util.TreeMap<>(last.returned());
+						legacy.forEach((k, v) -> sum.merge(k, v, Integer::sum));
+						last = new Removed(last.site(), Map.copyOf(sum), last.restored(), last.kept(), last.handedDown(), last.cascaded(), last.notes(), last.owed(),
+							last.owedParts());
+					}
 				}
 			}
 		}
@@ -2246,9 +2253,18 @@ public final class Sites {
 		CrateSettle.Settled settled = CrateSettle.Settled.NONE;
 		boolean pileTxn = false;
 		boolean ownerMember = OWNER_WRITE != null && OwnerRemovals.record(OWNER_WRITE) != null && OwnerRemovals.record(OWNER_WRITE).getAsJsonObject("members").has(id);
+		Map<String, Integer> ownerDrops = Map.of();
 		if (dec != null && ownerMember) {
-			// (slice T4R-D) owned by its removal's owner record: nothing drops here (its refunds, crate and player blocks are its owner txn's)
+			// (slice T4R-D) owned by its removal's owner record: its refunds, crate and player blocks are its owner txn's. Only a legacy refund
+			// (a construction member with no crate and no pile: no settle) still drops here, as before; never the player's blocks
 			WorldJournal.kill("R4");
+			Map<String, Integer> legacy = new java.util.TreeMap<>(dec.all());
+			dec.tally().playerBlocks().forEach((k, v) -> legacy.merge(k, -v, Integer::sum));
+			legacy.values().removeIf(v -> v <= 0);
+			if (!legacy.isEmpty()) {
+				Builder.dropItems(level, dec.at(), legacy, drops);
+			}
+			ownerDrops = legacy;
 			Builder.forget(server, id);
 		} else if (dec != null) {
 			WorldJournal.kill("R4"); // (TEST, T2b txn-crash-crate) R4: the site's restore written; its refunds and its crate's stock not yet settled
@@ -2280,7 +2296,7 @@ public final class Sites {
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
 		// (slice T4R-M, found by T4RM-fin) a stockpile site's refund is its txn's credit (given below), never also the planned credit: reported()
 		// counted it twice in this call's result (the stock was credited once)
-		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null || ownerMember ? Map.of() : pileTxn ? dec.all() : dec.reported());
+		Map<String, Integer> returned = new java.util.TreeMap<>(dec == null ? Map.of() : ownerMember ? ownerDrops : pileTxn ? dec.all() : dec.reported());
 		if (settled.owed().isEmpty()) {
 			settled.given().forEach((k, v) -> returned.merge(k, v, Integer::sum)); // (T2b fix round P2-b) credited only: owed is listed apart
 		}

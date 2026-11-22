@@ -86,6 +86,7 @@ public final class OwnerRemovals {
 		RESULTS.clear();
 		LIVE.clear();
 		FINISHING.clear();
+		scheduled = false; // (a world's load) a recovery tick queued by an earlier world never ran
 		if (records instanceof JsonObject o) {
 			o.entrySet().forEach(e -> RECORDS.put(e.getKey(), e.getValue().getAsJsonObject()));
 		}

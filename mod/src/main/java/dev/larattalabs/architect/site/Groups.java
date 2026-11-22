@@ -1968,21 +1968,6 @@ public final class Groups {
 				return;
 			}
 		}
-		for (Infra inf : dropLater) {
-			it.unimi.dsi.fastutil.longs.LongOpenHashSet refused = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
-			for (long c : refused) {
-				// (slice T4R-M) a holder whose replacement a hold refused keeps its block and its contents: neither its item nor its contents'
-				// credit leaves it (eca131b6 credited both while the holder stood)
-				Credit cc = r.cargo.remove(cargoKey(inf.id(), inf.placedAt(), c));
-				Stockpiles.Pile pp = cc == null ? null : Stockpiles.get(cc.owner());
-				if (pp != null && pp.ledger().pendingKeys().contains(cc.key())) {
-					pp.ledger().dropPending(cc.key());
-					Stockpiles.changed(pp);
-				}
-				Architect.LOGGER.warn("Removal of group {}: the player block at {} in {} was not replaced (a hold refused it): it stands with its contents",
-					r.group, BlockPos.of(c).toShortString(), inf.id());
-			}
-		}
 		r.cargoApplied |= !r.cargo.isEmpty();
 		if (!r.cargo.isEmpty()) {
 			// (slice PSVLC3 fix round, GPT P1 1; T4a: no crate is taken at R1 since T2b) a player's holder replaced: the undo commits only once T0's barrier (players,

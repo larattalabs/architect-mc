@@ -2166,7 +2166,7 @@ export async function registerTCC(steps, h) {
     if (want('T4RD')) {
       const tag0 = 'T4RD';
       /** A stockpile-fed rs_hut built whole, two of its paid blocks replaced by a player's sponges ({@code placer}: a fake player's name, or the client). */
-      const t4rdFixture = async (sub, placer, top = false) => {
+      const t4rdFixture = async (sub, placer, top = false, paidTop = false) => {
         const owner = `tcc:t4rd${sub.replace(/[^a-z]/g, '')}`;
         const pg = await pileGroup(`${tag0}-${sub}`, owner, 1);
         if (!pg) return null;
@@ -2177,9 +2177,21 @@ export async function registerTCC(steps, h) {
         for (let i = 0; i < 240; i++) { if ((await siteState(site))?.state === 'built') break; await L.sleep(1000); }
         const b = await boxOf(site);
         let topId = null;
-        if (top) {
+        if (top && !paidTop) {
           const t = await later(`place cabin ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} INSTANT unowned actor 0 force layer`, 120_000).catch((e) => ({ error: String(e) }));
           topId = t?.siteId ?? null;
+        } else if (top) {
+          // (T4R-N P1-1's shape) a PAID member on top: a construction site of the same owner, LAYERed on the base and built from its pile
+          const t = await later(`place rs_hut ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} CONSTRUCTION owned actor 0 force layer owner=${owner}`, 120_000).catch((e) => ({ error: String(e) }));
+          topId = t?.siteId ?? null;
+          if (topId) {
+            for (let i = 0; i < 60; i++) { if ((await siteState(topId))?.state === 'building') break; await L.sleep(1000); }
+            const tbom = (await siteState(topId))?.bom ?? {};
+            await call('dev.crate.insert', { site: `stockpile:${owner}`, items: tbom, exact: true }, 120_000).catch(() => null);
+            await call('dev.stockpile.pause', { site: topId, paused: false }, 60_000).catch(() => null);
+            for (let i = 0; i < 240; i++) { if ((await siteState(topId))?.state === 'built') break; await L.sleep(1000); }
+          }
+          rowLog(tag0, `${sub}: paid top ${json(t).slice(0, 200)}; state ${(await siteState(topId))?.state}`);
         }
         const tb = topId ? await boxOf(topId) : null;
         const inTop = (c) => tb && c[0] >= tb[0] && c[0] <= tb[3] && c[1] >= tb[1] && c[1] <= tb[4] && c[2] >= tb[2] && c[2] <= tb[5];
@@ -2248,8 +2260,9 @@ export async function registerTCC(steps, h) {
       if (want('T4RD-cascade-R3')) {
         const tag = 'T4RD-cascade-R3';
         const placer = (await call('dev.pt.uuid', { name: 'T4RDPlayer' }, 10_000).catch(() => ({}))).uuid;
-        const f = await t4rdFixture('cascr', 'T4RDPlayer', true);
+        const f = await t4rdFixture('cascr', 'T4RDPlayer', true, true);
         if (f) {
+          check(!!f.top && (await siteState(f.top))?.state === 'built', `${tag}: the fixture: a PAID construction site built on top (${f.top})`, f);
           const o0 = await owedOf(placer);
           await call('dev.journal.killAt', { point: 'R3a' }, 10_000);
           api(`remove ${f.site} ${f.owner} noforce cascade`).catch(() => null);
@@ -2275,13 +2288,15 @@ export async function registerTCC(steps, h) {
 
       // T4RD-retire-collect (Steward P3-3) and T4RD-autocollect: the player's own blocks (placed by the client's player) come back into the
       // inventory after retirement (live); a kill between RD2 and the collect leaves them owed, collected once at the next join
-      for (const sub of ['autocollect', 'retire-collect']) {
+      for (const sub of ['autocollect', 'retire-collect', 'full']) {
         const tag = `T4RD-${sub}`;
         if (!want(tag)) continue;
         const me = (await call('dev.state', {}, 10_000).catch(() => ({}))).playerUuid ?? (await call('dev.pt.uuid', { name: 'bot' }, 10_000).catch(() => ({}))).uuid;
         const f = await t4rdFixture(sub.replace(/-/g, ''), null);
         if (!f) continue;
+        if (sub === 'full') await cmd('/give @s minecraft:dirt 2304').catch(() => null); // every main slot full: nothing fits
         const inv0 = (await groundAt(f.site)).inventory ?? {};
+        const gr0 = (await groundAt(f.site)).items ?? {};
         if (sub === 'retire-collect') await call('dev.journal.killAt', { point: 'RD2' }, 10_000);
         const r = await later(`remove ${f.site} ${f.owner} noforce keep`, 120_000).catch((e) => ({ error: String(e) }));
         if (sub === 'retire-collect') {
@@ -2300,7 +2315,15 @@ export async function registerTCC(steps, h) {
         }
         const inv = minus((await groundAt(f.site)).inventory ?? {}, inv0);
         const left = Object.values((await call('dev.stockpile.owed', {}, 30_000).catch(() => ({ owed: [] }))).owed ?? []).filter((e) => e.reason === 'player_blocks' && e.key?.includes(f.site));
-        rowLog(tag, `result ${json(r).slice(0, 300)}; inventory gained ${json(inv)}; still owed ${json(left)}`);
+        const gr = minus((await groundAt(f.site)).items ?? {}, gr0);
+        rowLog(tag, `result ${json(r).slice(0, 300)}; inventory gained ${json(inv)}; still owed ${json(left)}; ground ${json(gr)}`);
+        check(!gr['minecraft:sponge'], `${tag}: never dropped (${json(gr)})`, gr);
+        if (sub === 'full') {
+          // (parent's condition on auto-collect) a full inventory: nothing given, nothing dropped, all of it stays owed
+          check(!inv['minecraft:sponge'] && left.length === 1 && left[0].items?.['minecraft:sponge'] === 2, `${tag}: inventory full: the 2 sponges stay owed (${json(left)}), none given (${json(inv)})`, { inv, left });
+          await cmd('/clear @s minecraft:dirt').catch(() => null);
+          continue;
+        }
         check(inv['minecraft:sponge'] === 2, `${tag}: the player's 2 sponges came back into the inventory exactly once (${json(inv)})`, { inv });
         check(left.length === 0, `${tag}: nothing left owed (${json(left)})`, left);
       }
