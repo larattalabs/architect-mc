@@ -285,7 +285,7 @@ export async function registerXr(steps, h) {
       check(!!job && extras.length > 0, `K4: the halted tile's job is older than its record (stale, ${job?.siteId}) and has extra targets (${extras.join(', ')})`, out.k4);
       if (job && extras.length) {
         const arm = path.join(L.SAVES, H.world, 'architect-dev-arm.json');
-        fs.writeFileSync(arm, JSON.stringify({ killAt: 'PLR2X' }));
+        fs.writeFileSync(arm, JSON.stringify({ killAt: 'PLR2X', failNextCommit: true })); // the start's next journal commit never reaches the disk
         // the second halt: the arm file read (the start's load ran), then the server down for three polls in a row
         let second = false;
         call('dev.world.open', { name: H.world }, 150_000).catch(() => null);
