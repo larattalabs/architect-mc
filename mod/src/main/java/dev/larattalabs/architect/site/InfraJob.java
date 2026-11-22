@@ -656,6 +656,9 @@ final class InfraJob implements Placement.Job {
 					}
 					commit = null;
 					WorldJournal.kill("K4");
+					if (!extras.isEmpty()) {
+						WorldJournal.kill("K4X"); // (slice PLR2) TEST: K4 of a region tile with extra targets
+					}
 					Infra done = record.withPlacing(false);
 					if (RoadBuilder.wanted(done)) {
 						done = RoadBuilder.convert(level, done); // 6c 0c (C16): a construction road: its cells go back, queued

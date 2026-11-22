@@ -95,8 +95,8 @@ public final class JournalDev {
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
 				String point = p == null || p.isJsonNull() ? null : p.getAsString();
-				if (point != null && !point.matches("(K[1-8]|D[1-8]|RG[1-6]|RG2a|FL[1-6]|RP[12]|RV[1-4]|RVU[1-3]|RVC[12]|RD3|R2q|R1q|AD[1-4]|UA[1-4]|CM1|FK[1-4]|FKC[12]|SAC[12]|HF1|LF1|AS1|CS1|ST1|JS1|XR1|PLR2X)(\\+save)?|GW|migrate-before-commit|migrate-after-commit|TX:[a-z0-9_.]+(:[A-Za-z0-9_.!-]+)+(\\+save)?")) {
-					throw new DevBridge.DevException("point must be K1..K8, D1..D8, RG1..RG6, RG2a, FL1..FL6, RP1..RP2, RV1..RV4, RVU1..RVU3, RVC1..RVC2, RD3, R2q, R1q, AD1..AD4, UA1..UA4, CM1, FK1..FK4, FKC1..FKC2, SAC1..SAC2, HF1, LF1, AS1, CS1, ST1, JS1, XR1, PLR2X (each with +save or not), GW, migrate-before-commit, migrate-after-commit or a txn point TX:<kind>:<step> (slice T1, dev.txn.points; +save too)");
+				if (point != null && !point.matches("(K[1-8]|D[1-8]|RG[1-6]|RG2a|FL[1-6]|RP[12]|RV[1-4]|RVU[1-3]|RVC[12]|RD3|R2q|R1q|AD[1-4]|UA[1-4]|CM1|FK[1-4]|FKC[12]|SAC[12]|HF1|LF1|AS1|CS1|ST1|JS1|XR1|PLR2X|K4X)(\\+save)?|GW|migrate-before-commit|migrate-after-commit|TX:[a-z0-9_.]+(:[A-Za-z0-9_.!-]+)+(\\+save)?")) {
+					throw new DevBridge.DevException("point must be K1..K8, D1..D8, RG1..RG6, RG2a, FL1..FL6, RP1..RP2, RV1..RV4, RVU1..RVU3, RVC1..RVC2, RD3, R2q, R1q, AD1..AD4, UA1..UA4, CM1, FK1..FK4, FKC1..FKC2, SAC1..SAC2, HF1, LF1, AS1, CS1, ST1, JS1, XR1, PLR2X, K4X (each with +save or not), GW, migrate-before-commit, migrate-after-commit or a txn point TX:<kind>:<step> (slice T1, dev.txn.points; +save too)");
 				}
 				WorldJournal.killAt(point);
 				JsonObject o = new JsonObject();

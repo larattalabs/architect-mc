@@ -158,7 +158,7 @@ export async function registerXr(steps, h) {
   };
 
   /** (slice PLR2) xr_demo in survival, planned and realised with `point` armed; fed until the halt: {c, region, world, cons, down}. */
-  async function xrHalt(tag, point) {
+  async function xrHalt(tag, point, { prefeed = null, slow = false } = {}) {
     const c = await moat(tag, { creative: false, realise: false, name: 'rs/survival_village' });
     const p = await call('dev.region.plan', { program: 'xr_demo', params: {}, claim: c.s.W.claim, owner: G.OWNER, surveyLoad: 'generated:64', check: false }, 900_000);
     if (!p.planId) throw new Error(`xr_demo refused: ${JSON.stringify(p.refused).slice(0, 200)}`);
@@ -168,6 +168,10 @@ export async function registerXr(steps, h) {
     await killMobs();
     const cons = new G.Conservation(ctx, c.box);
     await cons.start();
+    // (XR1) the pavement must stand, built and paid, before the lots stage's pad tile writes its free pass over it: the stockpile is fed
+    // before the realise and the tiles are put down slowly (dev.placement.slow), so the builder lays the ground stage first
+    if (prefeed) await cons.insert(`stockpile:${G.OWNER}`, prefeed);
+    if (slow) await call('dev.placement.slow', { on: true }, 10_000);
     await call('dev.journal.killAt', { point }, 10_000);
     const rr = await call('dev.region.realise', { planId: p.planId, ...(Object.keys(entries).length ? { lots: entries } : {}) }, 300_000);
     if (!rr.region) throw new Error(`realise refused: ${JSON.stringify(rr.refused ?? rr).slice(0, 300)}`);
@@ -220,7 +224,7 @@ export async function registerXr(steps, h) {
     const out = {};
     if (want.includes('XR1')) {
       // P1 3: a crash rollback of a free pass that took up a paid block, its chunks and credits saved
-      const H = await xrHalt('xr-crash-xr1', 'XR1+save');
+      const H = await xrHalt('xr-crash-xr1', 'XR1+save', { slow: true, prefeed: { 'minecraft:stone_bricks': 640, 'minecraft:stone_brick_stairs': 8, 'minecraft:cobblestone': 128, 'minecraft:gravel': 192, 'minecraft:stone': 64, 'minecraft:spruce_planks': 16, 'minecraft:oak_planks': 256, 'minecraft:oak_log': 32, 'minecraft:glass_pane': 8, 'minecraft:oak_door': 4, 'minecraft:torch': 4, 'minecraft:copper_block': 4, 'minecraft:dirt': 128 } });
       check(H.down, 'XR1+save: a free pass took up a paid block and the server halted, its chunks and ledger saved');
       const x = H.down ? saveFile(H.world, 'architect-dev-xr1.json') : null;
       out.xr1 = { region: H.region, at: x };
@@ -257,8 +261,8 @@ export async function registerXr(steps, h) {
     if (want.includes('K4')) {
       // P1 2: a tile's ACTIVE commit with extra targets, its record saved placing, the queue file not past its job; the restart settles its
       // extras, its queue save is written, and the server halts again (PLR2X)
-      const H = await xrHalt('xr-crash-k4', 'K4');
-      check(H.down, 'K4: the kill point halted the server');
+      const H = await xrHalt('xr-crash-k4', 'K4X');
+      check(H.down, 'K4 (K4X: of a tile with extra targets): the kill point halted the server');
       const q = H.down ? saveFile(H.world, 'architect-queue.json') : null;
       const infra0 = saveFile(H.world, 'architect-sites.json')?.infra ?? [];
       const job = (q?.jobs ?? []).find((j) => j.kind === 'infra' && j.beforeRecord && infra0.some((r) => r.id === j.siteId && r.placing));
