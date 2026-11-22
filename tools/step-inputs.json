@@ -73,6 +73,7 @@
     "kit/test/fixtures/versions/**",
     "kit/test/fixtures/vocab/voc-designs.mjs",
     "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/fixtures/wm/**",
     "kit/tools/delta-fixtures.mjs",
     "kit/tools/diff.mjs",
     "kit/voxel_classes.json",

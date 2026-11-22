@@ -180,6 +180,7 @@ test {
 	inputs.dir("../kit/test/fixtures/af").withPropertyName("kitAfFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/schem").withPropertyName("kitSchemFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../kit/test/fixtures/site").withPropertyName("kitSiteFixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../kit/test/fixtures/wm").withPropertyName("kitWmFixtures").withPathSensitivity(PathSensitivity.RELATIVE) // (8c VS: ArvxLevelsTest)
 	// ((TI) the kit files outside kit/lib and kit/test/fixtures a mod test reads, missed by RTE3's list; the same paths as unit-mod's data
 	// in tools/step-inputs.json; `node tools/step-inputs.mjs check` holds every literal kit path under src/test/java to this block):
 	// RegionFluidsLintTest the lint's drain cases; SchematicTest, StyleSwapTest, SidecarJsonTest, MinLotSizeTest, MassingPredictionTest,
