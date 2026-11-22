@@ -94,6 +94,50 @@ export async function registerT4RM(steps, h) {
         check(!(await near2())['minecraft:diamond'], `${t4} gen ${gen}: no diamond dropped as an item entity`, rows);
       }
       out[t4] = { cell2, rows };
+      // T4RDN-cargo-credit (slice T4R-D narrowing round, P1): a hold over the chest (dev.removal.holdBox: as a covering removal's owner record
+      // holds it, every writer refused) while the extraction takes its contents out. The cargo's TAKE is cancelled by that hold, so nothing
+      // may be credited: the stock +0 and the 3 diamonds still in the chest, none dropped. Once the hold is gone the extraction takes them
+      // out once (+3) and writes the chest back. Red at e1a7aad7: the TAKE wrote its receipt anyway and credited +3 with the diamonds still
+      // in the chest (minted)
+      const t5 = 'T4RDN-cargo-credit';
+      const slotsAt2 = async () => {
+        const c = (await call('dev.txn.cells', { cells: [at2] }, 30_000).catch(() => ({})))[at2.join(',')] ?? {};
+        const m = {};
+        for (const v of Object.values(c.slots ?? {})) { const x = /^(\S+) x(\d+)$/.exec(String(v)); if (x) m[x[1]] = (m[x[1]] ?? 0) + Number(x[2]); }
+        return m;
+      };
+      await cmd(`/setblock ${at2.join(' ')} minecraft:chest`);
+      await cmd(`/item replace block ${at2.join(' ')} container.0 with minecraft:diamond 3`);
+      await cmd('/kill @e[type=item]');
+      const d0 = (await pile()).stock?.['minecraft:diamond'] ?? 0;
+      await call('dev.removal.holdBox', { cells: [at2] }, 10_000);
+      const held = [];
+      try {
+        for (let i = 0; i < 3; i++) { // bounded: three tries under the hold
+          const r = await call('dev.extraction.run', { target: cell2.target }, 60_000).catch((e) => ({ why: `error: ${e}` }));
+          held.push({ why: r?.why ?? null, dia: ((await pile()).stock?.['minecraft:diamond'] ?? 0) - d0, slots: await slotsAt2() });
+          await L.sleep(1000);
+        }
+      } finally {
+        await call('dev.removal.holdBox', { off: true }, 10_000).catch(() => null);
+      }
+      const mid5 = { held, dia: ((await pile()).stock?.['minecraft:diamond'] ?? 0) - d0, slots: await slotsAt2(), near: await near2() };
+      log(`  ROW ${t5} under the hold: ${json(mid5).slice(0, 600)}`);
+      check(mid5.dia === 0, `${t5}: nothing credited while the hold cancels the take (stock +${mid5.dia}, want 0)`, mid5);
+      check(mid5.slots['minecraft:diamond'] === 3, `${t5}: the 3 diamonds still in the chest under the hold (${json(mid5.slots)})`, mid5);
+      check(!mid5.near['minecraft:diamond'], `${t5}: no diamond dropped under the hold`, mid5);
+      let r5 = null;
+      for (let i = 0; i < 30; i++) { // bounded: 30 tries, 1 s apart, after the hold is gone; still waiting after that is a FAIL
+        r5 = await call('dev.extraction.run', { target: cell2.target }, 60_000).catch((e) => ({ why: `error: ${e}` }));
+        if (r5 && r5.why == null) break;
+        await L.sleep(1000);
+      }
+      const end5 = { why: r5?.why ?? null, dia: ((await pile()).stock?.['minecraft:diamond'] ?? 0) - d0, chest: await chestAt2(), near: await near2() };
+      log(`  ROW ${t5} after the hold: ${json(end5).slice(0, 400)}`);
+      check(r5 && r5.why == null, `${t5}: the extraction finished once the hold was gone (${r5?.why})`, end5);
+      check(end5.dia === 3, `${t5}: the 3 diamonds credited exactly once, after the hold (stock +${end5.dia}, want 3)`, end5);
+      check(!end5.chest && !end5.near['minecraft:diamond'], `${t5}: the chest written back, no diamond dropped`, end5);
+      out[t5] = { mid: mid5, end: end5 };
     } else {
       check(false, 'T4RDF-holder: a second built target cell for the holder row');
     }
