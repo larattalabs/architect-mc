@@ -2860,14 +2860,13 @@ public final class Groups {
 						r.cargoData.add(new dev.larattalabs.architect.txn.CargoTxn.Stack(key + "#" + i, pile.owner(), inf.dimension(), at, i, x.copy(), id));
 					}
 				}
-			} else if (st.stream().anyMatch(x -> !x.getComponentsPatch().isEmpty())) {
-				return "a player's container at " + at.toShortString() + " in " + id
-					+ " holds items with their own data (named, enchanted or filled): take them out, then remove again";
+			} else {
+				// (slice T4R-D fix round, P1-6) a holder the removal can't take items out of (no slots): it ends, the holder as it is
+				return "a player's holder at " + at.toShortString() + " in " + id + " holds items the removal can't take out: take them out, then remove again";
 			}
-			Map<String, Integer> items = cargoItems(st);
-			if (!items.isEmpty()) {
-				r.cargo.putIfAbsent(key, new Credit(pile.owner(), key, Map.copyOf(items), c));
-			}
+			// (slice T4R-D fix round, P1-6) the plain stacks are no pending credit any more (keyed per target and cell, a second extraction there
+			// replayed the first's credit): the target's extraction takes them out and credits them into the pile in its own removal.cargo txn,
+			// keyed per txn and effect, before its W writes the holder back (Extractions.takeContents)
 		}
 		return null;
 	}

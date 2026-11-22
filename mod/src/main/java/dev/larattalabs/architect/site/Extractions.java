@@ -188,6 +188,47 @@ public final class Extractions {
 		return o;
 	}
 
+	/**
+	 * (slice T4R-D fix round, P1-6) The contents of the player's holders among {@code cells} taken out before the attempt: every stack of a
+	 * holder with slots, in one {@code removal.cargo} txn (a plain stack credited into the target's pile when it has one, else owed whole to
+	 * the cell's recipient). Null when nothing is left in them; else why the attempt waits (its take held or refused) or can't go on (a holder
+	 * without slots that holds items).
+	 */
+	static @Nullable String takeContents(ServerLevel level, Infra t, String tk, List<JsonObject> cells) {
+		Stockpiles.Pile pile = Stockpiles.pileOf(t);
+		List<dev.larattalabs.architect.txn.CargoTxn.Stack> stacks = new ArrayList<>();
+		for (JsonObject c : cells) {
+			BlockPos p = BlockPos.of(c.get("pos").getAsLong());
+			var be = level.getBlockEntity(p);
+			if (Builder.holderContents(be).isEmpty()) {
+				continue;
+			}
+			if (!(be instanceof net.minecraft.world.Container box)) {
+				return "a player's holder at " + p.toShortString() + " on " + t.id() + " holds items the removal can't take out: take them out, then remove again";
+			}
+			String rec = c.has("recipient") ? c.get("recipient").getAsString() : OwedLedger.UNCLAIMED;
+			for (int i = 0; i < box.getContainerSize(); i++) {
+				net.minecraft.world.item.ItemStack x = box.getItem(i);
+				if (x.isEmpty()) {
+					continue;
+				}
+				String into = pile != null && x.getComponentsPatch().isEmpty() ? pile.owner() : null;
+				stacks.add(new dev.larattalabs.architect.txn.CargoTxn.Stack("pblocks:" + tk + ":" + p.asLong() + "#" + i, into != null ? into : rec, t.dimension(), p,
+					i, x.copy(), t.id(), into));
+			}
+		}
+		if (stacks.isEmpty()) {
+			return null;
+		}
+		String w = dev.larattalabs.architect.txn.CargoTxn.owe(level, "cargo:" + tk + "@" + level.getGameTime() + "#" + System.nanoTime(), stacks);
+		return w == null ? null : "the contents of a player's holder on " + t.id() + " are being taken out first (" + w + ")";
+	}
+
+	/** (fix round P1-6) Whether the holder at {@code p} holds any item (an extraction's W never writes it back then: left standing, unpaid). */
+	public static boolean holdsItems(ServerLevel level, BlockPos p) {
+		return !Builder.holderContents(level.getBlockEntity(p)).isEmpty();
+	}
+
 	/** The before written back at {@code pos} (txn W apply): the attempt's {@code was}. Server thread. */
 	public static boolean writeBack(ServerLevel level, long pos, String was) {
 		BlockState st;
@@ -234,6 +275,13 @@ public final class Extractions {
 			if (!c.has("recipient")) {
 				c.addProperty("recipient", OwnerRemovals.recipient(null, rec, requester));
 			}
+		}
+		// (slice T4R-D fix round, P1-6) a player's holder among them: its contents taken out first, each stack once, in one removal.cargo txn
+		// (a plain stack credited into the target's pile, else owed whole: keyed per txn and effect, so a later extraction at the same cell is a
+		// new credit); the W then writes back an empty holder only (one holding items again is left standing, unpaid)
+		String held = takeContents(level, t, tk, cells);
+		if (held != null) {
+			return held;
 		}
 		// P0: a new generation, recorded (planned) and saved confirmed before anything else: its cells are held from here
 		int gen;

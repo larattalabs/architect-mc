@@ -672,7 +672,10 @@ public final class RemovalTxn {
 					JsonObject c = el.getAsJsonObject();
 					long pos = c.get("pos").getAsLong();
 					// only a cell still holding the player's block recorded at P0 is written (one changed since stays: never paid, never overwritten)
-					if (c.get("block").getAsString().equals(CrateSettle.blockIdAt(level, BlockPos.of(pos)))) {
+					// (fix round P1-6) nor a holder that holds items again (taken out before the attempt; put back since): left standing, unpaid, never
+					// deleted by the write (its cell is not in @pgone, so nothing of it is owed); the road's retry extracts it again
+					if (c.get("block").getAsString().equals(CrateSettle.blockIdAt(level, BlockPos.of(pos))) && !dev.larattalabs.architect.site.Extractions.holdsItems(
+						level, BlockPos.of(pos))) {
 						if (!dev.larattalabs.architect.site.Extractions.writeBack(level, pos, c.get("was").getAsString())) {
 							refused[0] = true;
 						}

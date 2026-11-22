@@ -25,8 +25,15 @@ public final class CargoTxn {
 
 	public static final String KIND = "removal.cargo", TAKE = "cargo.take";
 
-	/** One data-bearing stack: its holder's cell and slot, the stack (its count included) and who it is owed to. */
-	public record Stack(String key, String recipient, String dim, BlockPos pos, int slot, ItemStack stack, @Nullable String site) {
+	/**
+	 * One stack taken out of a holder: its holder's cell and slot, the stack (its count included) and who it is owed to. (slice T4R-D fix round,
+	 * P1-6) {@code pile}: a plain stack (no data of its own) credited into that owner's pile instead (an L effect after the take); null: owed
+	 * whole (an O {@code cargo} entry).
+	 */
+	public record Stack(String key, String recipient, String dim, BlockPos pos, int slot, ItemStack stack, @Nullable String site, @Nullable String pile) {
+		public Stack(String key, String recipient, String dim, BlockPos pos, int slot, ItemStack stack, @Nullable String site) {
+			this(key, recipient, dim, pos, slot, stack, site, null);
+		}
 	}
 
 	/** The stack as JSON text (the registry's codec: every component kept). */
@@ -146,6 +153,9 @@ public final class CargoTxn {
 			if (!res.contains(r)) {
 				res.add(r);
 			}
+			if (s.pile() != null && !res.contains("pile:" + s.pile())) {
+				res.add("pile:" + s.pile()); // (fix round P1-6) the pile it credits stays while it is open
+			}
 		}
 		TxnCore.Started st = c.begin(KIND, key, res, stacks.get(0).recipient());
 		if (st.status() == TxnCore.Begin.REPLAYED) {
@@ -161,6 +171,12 @@ public final class CargoTxn {
 			c.plan(t, Effect.of(TAKE, EffectClass.B).prepare().items(items).move("holder", Effect.TRANSIT).data("dim", dim).data("pos", CrateTxn.posJson(s
 				.pos())).data("slot", s.slot()).data("stack", enc));
 			String owedKey = oweKey(t.id, t.effects.size(), s.key());
+			if (s.pile() != null && s.stack().getComponentsPatch().isEmpty()) {
+				// (fix round P1-6) a plain stack credited into the pile, once (its key: this txn's and effect's), after its take
+				c.plan(t, Effect.of(CrateTxn.PILE_CREDIT, EffectClass.L).items(items).move(Effect.TRANSIT, "stock").data("owner", s.pile()).data("key", owedKey)
+					.data("pos", CrateTxn.posJson(s.pos())));
+				continue;
+			}
 			keys.add(owedKey);
 			Effect.Builder ow = Effect.of(CrateTxn.OWE, EffectClass.O).items(items).move(Effect.TRANSIT, "owed").data("key", owedKey).data("recipient", s
 				.recipient()).data("dim", dim).data("pos", CrateTxn.posJson(s.pos())).data("reason", dev.larattalabs.architect.site.OwedLedger.CARGO).data(
@@ -265,6 +281,7 @@ public final class CargoTxn {
 			return switch (e.op()) {
 				case TAKE -> TAKER;
 				case CrateTxn.OWE -> CrateTxn.OWER;
+				case CrateTxn.PILE_CREDIT -> CrateTxn.CREDITOR; // (fix round P1-6) a plain stack into the pile
 				default -> null;
 			};
 		}
