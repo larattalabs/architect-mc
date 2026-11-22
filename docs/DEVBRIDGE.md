@@ -853,6 +853,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   txn writes the restore, W, and holds on a failure).
   (slice T4R-D last round) When the point it armed fires, `<world>/architect/dev-killed.json` (`{"point": "<point>"}`, forced to disk) is
   written right before the halt: the proof a gate's second crash requires (`tools/lib/second-crash.mjs`); the gate deletes it before arming.
+  (REL-v0910 fix round) Read only on a development start (the dev client, the headless gate server); a normal launcher's start leaves the
+  file and arms nothing. SERVER_STOPPED disarms every test fault (any `dev.journal.killAt` point and `dev.journal.failNextCommit` too), and
+  a start's reset disarms the previous start's file-armed point; a point armed over the DevBridge with no world open (gate4e) stays.
 - (slice T4b fix round, TEST) `dev.stockpile.ps {failLedgerOnly: n}`: the next n writes of the stockpile ledger fail (a save with the world
   flushes its chunks, then its ledger write is not confirmed; a barrier's ledger write is refused); the queue file and txn.json still write.
   (T4 merge) `failLedgerWrites` keeps both meanings: a count is T2b's (`DurableFile` refusals), a boolean SOFF2's switch.
