@@ -34818,3 +34818,25 @@ The v0.89.0 fix check's P3 and its corpus gaps. No API member, record or feature
   growth's window is at most 512 cells and no growPlan can lay one; only emitGrowth with a hand path does (rte3.test.mjs).
 - Units: `kit/test/rte5.test.mjs`, `kit/test/rte5-compat.test.mjs`, `DistrictLandCompat5Test` (the corpus a `kitTestFixtures` input,
   unit-mod and unit-kit data).
+
+## Slice PLR, a stray placing record after a crash (branch `slice/PLR`; 2026-11-21; DEV MODE, strict; versions NEXT; $0)
+
+**The fix.** An InfraJob COMMIT wrote `architect-sites.json` with `placing:true` at once, but `architect-queue.json` was saved
+asynchronously. After a crash in that window, the load sweep ignored the Infra, `RegionTargets.building()` kept counting the placing
+record, and the region hung. The sweep now rolls stray Infras back (`Placement.rollBackStrayInfras`), and the stray's item stays held
+until its rollback ends (`Batches.holdForRollback`, `rollbackOwnsItem`). Tests: `StrayPlacingPLRTest` and the `rp-crash` row.
+
+### Known risks (accepted 2026-11-21, Noah's delegation via the parent; the follow-up slice PLR2 is parked)
+
+The independent final review left three P1s. None touches a staged survival target, or any rollback that wrote nothing.
+1. **A broken crash rollback releases the hold.** `rolledBack` doesn't check `broken`, so the item is requeued over a partly restored
+   tile. This predates PLR.
+2. **A second crash can lose ACTIVE extras.** On the stale-ACTIVE path, an extra's async release can lose to the queue save. A second
+   crash in that narrow window rebuilds an untracked extra target.
+3. **XR refunds are not reversed by a crash rollback.** A survival free-pass tile that took up another writer's paid block refunded
+   it (`RegionOverwrites.retakeToPile`). If those chunks and credits were saved before the halt, the journal rollback restores the
+   block and the refund stands. This is the existing crash-rollback path's exposure (the class `Groups.undoStageRefusal` guards);
+   PLR extends it to the stale window.
+
+PLR2 (`slice/PLR2` 1d5c0660, kept for reference) tried all three. Its final review was NOT SAFE, with new P1s in its own refusal and
+extra-rollback code (`coord-tools/reviews/PLR2-final-1d5c0660.findings.md`). Any further round waits for Noah.

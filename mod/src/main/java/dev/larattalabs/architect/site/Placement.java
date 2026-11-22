@@ -861,6 +861,7 @@ public final class Placement {
 				JOBS.add(rb);
 			}
 		}
+		rollBackStrayInfras(srv); // (slice PLR) the same for a road or cell site
 		if (root != null || !JOBS.isEmpty()) {
 			Architect.LOGGER.info("Placement queue: {} batch(es) running, {} job(s) to resume{}", Batches.running(), JOBS.size(),
 				clean || JOBS.isEmpty() ? "" : " (the last stop was not clean: placing jobs roll back and their items queue again)");
@@ -929,6 +930,15 @@ public final class Placement {
 			Architect.LOGGER.info("Resuming the placement of {} ({}) at phase {}", pj.siteId, pj.blueprint, pj.phase);
 		} else if ("infra".equals(kind)) {
 			InfraJob ij = InfraJob.fromJson(o);
+			if (recordOutranQueue(ij.beforeRecord, clean, Infras.get(ij.siteId))) {
+				// (slice PLR) its record reached the sites file placing (P4) after this job was last saved: queued again it left the record placing
+				// for good. It rolls back, its item held PLACING until the restore ends, even when its entry is ACTIVE: a job saved before P4 can't
+				// finish (its cells are not in it, and an ACTIVE commit does not say the world's chunks were saved; the undo restores only cells
+				// that still hold its after)
+				Architect.LOGGER.warn("Cell site {}'s record was saved placing after {} last saved its job; rolling it back", ij.siteId, FILE);
+				rollBackAfterCrash(srv, ij);
+				return;
+			}
 			if (ij.beforeRecord && !clean) {
 				Batches.infraRequeue(srv, ij);
 				return;
@@ -940,19 +950,7 @@ public final class Placement {
 			if (!ij.beforeRecord && !clean && ij.phase != InfraJob.TAKE_UP) { // (T4a fix round) a placed road's take-ups only: resumed as they are
 				boolean active = SiteJournal.main(ij.siteId) != null && SiteJournal.main(ij.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
 				if (!active) {
-					// (6c RS) the extra targets wrote nothing: their entries are released and their records dropped (the main rolls back)
-					for (InfraJob.Extra e : ij.extras) {
-						try {
-							SiteJournal.release(e.record.id());
-						} catch (Sites.SiteException x) {
-							Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
-						}
-						Infras.drop(srv, e.record.id());
-					}
-					RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
-					rb.requeue = true;
-					rb.why = "the game stopped without saving while it was being placed";
-					JOBS.add(rb);
+					rollBackAfterCrash(srv, ij);
 					return;
 				}
 				ij.phase = InfraJob.AFTER_COMMIT;
@@ -964,6 +962,25 @@ public final class Placement {
 				JOBS.add(rj);
 			}
 		}
+	}
+
+	/**
+	 * A road's or cell site's job past its record after an unclean stop, its entry not placed: the extra targets wrote nothing (6c RS), their
+	 * entries are released and their records dropped; the main rolls back and its item queues again once restored.
+	 */
+	private static void rollBackAfterCrash(MinecraftServer srv, InfraJob ij) {
+		for (InfraJob.Extra e : ij.extras) {
+			try {
+				SiteJournal.release(e.record.id());
+			} catch (Sites.SiteException x) {
+				Architect.LOGGER.warn("Region target {}: its entry could not be released: {}", e.record.id(), x.getMessage());
+			}
+			Infras.drop(srv, e.record.id());
+		}
+		RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+		rb.requeue = true;
+		rb.why = "the game stopped without saving while it was being placed";
+		JOBS.add(rb);
 	}
 
 	/**
@@ -1001,6 +1018,105 @@ public final class Placement {
 			Architect.LOGGER.warn("Could not read {} for the sites check", f, e);
 		}
 		return out;
+	}
+
+	// ------------------------------------------------------------------ (slice PLR) a cell site's record saved placing past its job
+
+	/**
+	 * (slice PLR) Whether a road's or cell site's job read from an unclean stop's queue file is older than its record: the job was saved
+	 * before its record ({@code beforeRecord}), but the sites file, written at once at P4, already holds the record placing (the queue file
+	 * is written off the server thread, the latest state winning, so a halt right after P4 loses the save that cleared the flag). The record
+	 * wins: the job rolls back (its item held until the restore ends), never queued again beside a record that would stay placing for good. A
+	 * clean stop's file is current. Pure.
+	 */
+	static boolean recordOutranQueue(boolean beforeRecord, boolean clean, @Nullable Infra onDisk) {
+		return beforeRecord && !clean && onDisk != null && onDisk.placing();
+	}
+
+	/**
+	 * (slice PLR) The road and cell site records still placing that no job of the queue file covers ({@code covered}: every job's site and a
+	 * region tile job's extra targets), in record order: their job was lost with the queue file's last save. Pure.
+	 */
+	static List<String> strayPlacing(java.util.Collection<Infra> records, java.util.Set<String> covered) {
+		List<String> out = new ArrayList<>();
+		for (Infra i : records) {
+			if (i.placing() && !covered.contains(i.id())) {
+				out.add(i.id());
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (slice PLR) Whether a rollback of {@code jobSite} may settle its item (queue it again or fail it): only while the item is not done and
+	 * names that site or none. An item placed since by another site (a crash's stray record rolled back after its tile was placed again), or
+	 * placing again as another site, is left as it is. Pure.
+	 */
+	static boolean rollbackOwnsItem(dev.larattalabs.architect.batch.QItem.Status status, @Nullable String itemSite, String jobSite) {
+		return !status.terminal() && (itemSite == null || itemSite.equals(jobSite));
+	}
+
+	/** (slice PLR) The sites the queue's jobs write: every job's site and a region tile job's extra targets. */
+	private static java.util.Set<String> jobCovered() {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Job j : JOBS) {
+			out.add(j.siteId());
+			if (j instanceof InfraJob ij) {
+				out.addAll(ij.siteIds());
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (slice PLR) A road or cell site still marked placing with no job covering it (its job was lost with the queue file's last save; see
+	 * {@link #recordOutranQueue}): rolled back from the world journal over ticks like a site's, its undo handing its befores down under a
+	 * newer entry that placed the same tile again (nothing in the world changes there), its record pending until the next start settles it.
+	 * Its item is held PLACING as this site's meanwhile ({@link Batches#holdForRollback}) and queues again only while it still names this site
+	 * or none ({@link #rollbackOwnsItem}), after the attempt's last rollback ({@link #otherRollback}). With no active journal entry it wrote
+	 * nothing (K2): the record goes. Not when the queue file or the journal could not be read (the record stays as it is). Server thread.
+	 */
+	private static void rollBackStrayInfras(MinecraftServer srv) {
+		if (loadFailed || dev.larattalabs.architect.journal.WorldJournal.unavailable() != null) {
+			return;
+		}
+		for (String id : strayPlacing(Infras.all(), jobCovered())) {
+			Infra i = Infras.get(id);
+			if (i == null) {
+				continue;
+			}
+			if (SiteJournal.active(id).isEmpty()) {
+				Architect.LOGGER.warn("Cell site {} was still being placed with no job in {} and no journal entry; nothing was written, its record is dropped", id, FILE);
+				Infras.drop(srv, id);
+				continue;
+			}
+			Site.Member m = i.member();
+			Architect.LOGGER.warn("Cell site {} ({}) was still being placed and no job in {} covers it; rolling it back from the world journal", id,
+				m == null ? "no item" : m.itemKey(), FILE);
+			RestoreJob rb = new RestoreJob(id, RestoreJob.ROLLBACK, m == null ? null : m.batchId(), m == null ? null : m.itemKey());
+			rb.requeue = true;
+			rb.why = "the game stopped without saving while it was being placed";
+			JOBS.add(rb);
+			// its item (queued again from the last save) waits PLACING as this site's until the rollback ends: a retry checking the tile meanwhile
+			// would read cells the restore then writes back
+			Batches.holdForRollback(rb.batchId, rb.itemKey, id);
+		}
+	}
+
+	/**
+	 * (slice PLR) Another rollback of the same batch item still in the queue (a region tile's main and its extra targets), or null: the item
+	 * stays held until the last of its attempt's rollbacks ends.
+	 */
+	static @Nullable String otherRollback(RestoreJob done) {
+		if (done.batchId == null || done.itemKey == null) {
+			return null;
+		}
+		for (Job j : JOBS) {
+			if (j != done && j instanceof RestoreJob r && RestoreJob.ROLLBACK.equals(r.purpose) && done.batchId.equals(r.batchId) && done.itemKey.equals(r.itemKey)) {
+				return r.siteId;
+			}
+		}
+		return null;
 	}
 
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
