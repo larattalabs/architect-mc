@@ -289,7 +289,10 @@ export async function registerXr(steps, h) {
         await call('dev.world.open', { name: H.world }, 150_000).catch(() => null);
         for (let i = 0; i < 90 && !second; i++) { const s = await call('dev.state', {}, 10_000).catch(() => null); second = !!s && s.inWorld === false; if (!second) await L.sleep(2000); }
         check(second, 'K4 then PLR2X: the restart settled the extra targets, wrote its queue save and halted again');
-        await L.openWorld(H.world);
+        // the host may still be starting the server it lost: retried
+        for (let k = 0; ; k++) {
+          try { await L.openWorld(H.world); break; } catch (e) { if (k >= 20 || !/still starting/.test(String(e?.message))) throw e; await L.sleep(6000); }
+        }
         const xs = H.c.box;
         await L.tp(Math.round((xs[0] + xs[3]) / 2), xs[4], Math.round((xs[2] + xs[5]) / 2));
         const f = await feedOn(H.region, H.cons, 1_800_000);
