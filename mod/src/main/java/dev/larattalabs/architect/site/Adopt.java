@@ -1305,21 +1305,11 @@ public final class Adopt {
 		// (slice T4R-D, D1a "Adopt PT2") a paid adopted site (or one with the player's blocks in its delta cells) joins the single-removal flow:
 		// one owner record (its write: the delta cells only, the house's other cells never held), saved confirmed before the undo commits
 		String ownerKey = null;
+		com.google.gson.JsonObject stash = null;
 		if (dec != null) {
-			Map<String, com.google.gson.JsonObject> stashes = new java.util.HashMap<>();
-			stashes.put(b.id(), dec.settle());
-			Map<String, Builder.Deconstruction> decs = Map.of(b.id(), dec);
-			if (OwnerRemovals.needed(stashes, decs)) {
-				com.google.gson.JsonObject rec = OwnerRemovals.build(b.id(), group, b.dimension(), tagOwner, Sites.describe(b.id()), List.of(), List.of(b), decs,
-					stashes, Map.of());
-				rec.addProperty("kind", "adopt");
-				com.google.gson.JsonObject m = rec.getAsJsonObject("members").getAsJsonObject(b.id());
-				if (wb != null) {
-					m.add("box", OwnerRemovals.box(wb));
-				}
-				com.google.gson.JsonArray hold = new com.google.gson.JsonArray();
-				cells.forEach(hold::add);
-				m.add("hold", hold); // the delta mask: held cell by cell
+			com.google.gson.JsonObject rec = ownerRecord(b, dec, group, wb, cells, tagOwner);
+			if (rec != null) {
+				stash = rec.getAsJsonObject("members").getAsJsonObject(b.id()).get("settle") instanceof com.google.gson.JsonObject st ? st : null;
 				ownerKey = OwnerRemovals.key(b.id(), group);
 				OwnerRemovals.put(ownerKey, rec);
 				try {
@@ -1345,17 +1335,25 @@ public final class Adopt {
 			if (rec.getAsJsonObject("members").getAsJsonObject(b.id()).get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
 				dev.larattalabs.architect.txn.RemovalTxn.recordPfound(level, ownerKey + "/" + b.id(), pl);
 			}
-			CrateSettle.markRestored(b.id(), group);
 		}
 		SiteJournal.Restore r;
 		Sites.Removed done;
 		String was = Sites.OWNER_WRITE;
+		java.util.Set<String> writingWas = CrateSettle.WRITING;
 		Sites.OWNER_WRITE = ownerKey;
 		try {
-			r = SiteJournal.writeNow(level, b.id(), group);
+			if (ownerKey != null) {
+				// (fix round P1-2) the single removal's live write, the same sequence: found recorded, marked written for its W, written as its own
+				// (its delta-cell hold exempt for this write only), unmarked when a hold refused any of it (its W then writes it itself)
+				CrateSettle.WRITING = java.util.Set.of(b.id());
+				r = Sites.liveOwnWrite(level, b.id(), group, stash);
+			} else {
+				r = SiteJournal.writeNow(level, b.id(), group);
+			}
 			done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), stats, Map.of(), List.of(), List.of());
 		} finally {
 			Sites.OWNER_WRITE = was;
+			CrateSettle.WRITING = writingWas;
 		}
 		if (ownerKey != null) {
 			String held = OwnerRemovals.drive(server, ownerKey);
@@ -1383,6 +1381,33 @@ public final class Adopt {
 			}
 		}
 		return done;
+	}
+
+	/**
+	 * (slice T4R-D, D1a "Adopt PT2"; fix round P1-3) The owner record of an adopted site's removal, or null when it needs none (nothing paid,
+	 * no player cells in its delta cells): its stash is the single removal's ({@link CrateSettle#stashFor}: a stockpile-fed adopted site's
+	 * pile stash, a crate-fed one's settle), its box the delta cells' bounds and its hold the delta cells alone (the house's other cells are
+	 * never held or written). Pure of the world.
+	 */
+	static com.google.gson.@Nullable JsonObject ownerRecord(Site b, Builder.Deconstruction dec, String group, Anchors.@Nullable Bounds wb,
+		LongOpenHashSet cells, @Nullable String tagOwner) {
+		Map<String, com.google.gson.JsonObject> stashes = new java.util.HashMap<>();
+		stashes.put(b.id(), CrateSettle.stashFor(b, dec, group));
+		Map<String, Builder.Deconstruction> decs = Map.of(b.id(), dec);
+		if (!OwnerRemovals.needed(stashes, decs)) {
+			return null;
+		}
+		com.google.gson.JsonObject rec = OwnerRemovals.build(b.id(), group, b.dimension(), tagOwner, Sites.describe(b.id()), List.of(), List.of(b), decs,
+			stashes, Map.of());
+		rec.addProperty("kind", "adopt");
+		com.google.gson.JsonObject m = rec.getAsJsonObject("members").getAsJsonObject(b.id());
+		if (wb != null) {
+			m.add("box", OwnerRemovals.box(wb));
+		}
+		com.google.gson.JsonArray hold = new com.google.gson.JsonArray();
+		cells.forEach(hold::add);
+		m.add("hold", hold); // the delta mask: held cell by cell
+		return rec;
 	}
 
 	/** Whether a blocker line ("chest at 1, 2, 3 (...)") names a position among the written cells. */

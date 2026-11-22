@@ -1877,8 +1877,9 @@ public final class Sites {
 		Map<String, JsonObject> stashes = new LinkedHashMap<>();
 		decs.forEach((k, d) -> {
 			Site x0 = get(k);
-			JsonObject st = d == null ? null : d.stockpile() != null && x0 != null ? CrateSettle.pileStash(x0, d) : d.settle();
-			stashes.put(k, st == null ? null : CrateSettle.withGroup(st, group));
+			// (fix round P1-3) one stash rule, shared with Adopt (a site gone meanwhile: its crate-fed settle, as before)
+			JsonObject st = x0 != null ? CrateSettle.stashFor(x0, d, group) : d == null || d.settle() == null ? null : CrateSettle.withGroup(d.settle(), group);
+			stashes.put(k, st);
 		});
 		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
 		for (String c : cascade) {
@@ -1992,6 +1993,48 @@ public final class Sites {
 		}
 	}
 
+	/**
+	 * (slice T4R-D fix round, P1-2) A removal's live write of member {@code id}'s committed restore in {@code group}, the one sequence every
+	 * live removal path runs (a single removal's members, an adopted site's deltas, a cascaded paid road): what of its refunded cells stands
+	 * now recorded first ({@code found}, the W's min), the restore marked written for its W, then written as this removal's own write ({@code
+	 * id} in {@link CrateSettle#WRITING} for the write); a hold that refused any of it unmarks it, so its W writes it itself and never receipts
+	 * a write that did not happen. Server thread.
+	 */
+	static SiteJournal.Restore liveOwnWrite(ServerLevel level, String id, String group, @Nullable JsonObject stash) throws SiteException {
+		// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
+		CrateSettle.recordFound(level, id, group, stash);
+		CrateSettle.markRestored(id, group);
+		SiteJournal.Restore[] rr = new SiteJournal.Restore[1];
+		SiteException[] fail = new SiteException[1];
+		java.util.Set<String> was = CrateSettle.WRITING;
+		if (!was.contains(id)) {
+			java.util.Set<String> own = new java.util.HashSet<>(was);
+			own.add(id);
+			CrateSettle.WRITING = java.util.Set.copyOf(own); // its own hold (an owner member's box or delta cells) never refuses its own write
+		}
+		it.unimi.dsi.fastutil.longs.LongSet refused;
+		try {
+			refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
+				try {
+					rr[0] = SiteJournal.writeNow(level, id, group);
+				} catch (SiteException e) {
+					fail[0] = e;
+				}
+			});
+		} finally {
+			CrateSettle.WRITING = was;
+		}
+		if (fail[0] != null) {
+			CrateSettle.unmarkRestored(id, group);
+			throw fail[0];
+		}
+		SiteJournal.Restore r = rr[0];
+		if (CrateSettle.refusedIn(r, refused)) {
+			CrateSettle.unmarkRestored(id, group); // (slice T4R-L) a hold refused part of it: its W writes it itself, never receipts it
+		}
+		return r;
+	}
+
 	/** (slice T4R-D) The owner key of the single removal writing now (its afterRestore settles and drops nothing: its owner txn pays). */
 	static @Nullable String OWNER_WRITE;
 
@@ -2040,25 +2083,7 @@ public final class Sites {
 			}
 		}
 		for (Site x : all) {
-			// (T4b fix round, N3) what of its refunded cells stands now, before the write: the W receipts it as the restore's min
-			CrateSettle.recordFound(level, x.id(), group, stashes.get(x.id()));
-			CrateSettle.markRestored(x.id(), group);
-			SiteJournal.Restore[] rr = new SiteJournal.Restore[1];
-			SiteException[] fail = new SiteException[1];
-			it.unimi.dsi.fastutil.longs.LongSet refused = dev.larattalabs.architect.txn.TxnServer.refusals(() -> {
-				try {
-					rr[0] = SiteJournal.writeNow(level, x.id(), group);
-				} catch (SiteException e) {
-					fail[0] = e;
-				}
-			});
-			if (fail[0] != null) {
-				throw fail[0];
-			}
-			SiteJournal.Restore r = rr[0];
-			if (CrateSettle.refusedIn(r, refused)) {
-				CrateSettle.unmarkRestored(x.id(), group); // (slice T4R-L) a hold refused part of it: its W writes it itself, never receipts it
-			}
+			SiteJournal.Restore r = liveOwnWrite(level, x.id(), group, stashes.get(x.id()));
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),

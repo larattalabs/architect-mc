@@ -154,6 +154,17 @@ public final class CrateSettle {
 	}
 
 	/**
+	 * (slice T4R-D fix round, P1-3) The one stash choice of a removed construction site's refunds, for every removal path (a single removal,
+	 * its cascade, an adopted site's deltas): a stockpile-fed site's {@link #pileStash} (its refunds credited into the pile by the removal's
+	 * txn after its restore), else its crate-fed {@link Builder.Deconstruction#settle}; named with the undo group its removal commits. Null:
+	 * nothing to settle.
+	 */
+	static @Nullable JsonObject stashFor(Site s, Builder.@Nullable Deconstruction d, String group) {
+		JsonObject st = d == null ? null : d.stockpile() != null ? pileStash(s, d) : d.settle();
+		return st == null ? null : withGroup(st, group);
+	}
+
+	/**
 	 * (slice T4R-N, the final check of f7607b13's P1-2) {@code stash} told the player's cells in the removed box (pos, the player's block, what
 	 * it returns), saved with it before the undo commits: a removal recovered after a crash (its W restore writing the committed undo at the
 	 * next start) gives each back as the live removal does (dropped at the site), once, never lost under the restore. None: nothing added.
