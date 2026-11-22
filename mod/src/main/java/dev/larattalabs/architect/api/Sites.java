@@ -34,7 +34,7 @@ public interface Sites {
 	}
 
 	/**
-	 * A site, road or cell site by id. Since NEXT (slice T4R): a site or road whose removal is decided and not yet settled (its call answered
+	 * A site, road or cell site by id. Since 1.72.0 (slice T4R): a site or road whose removal is decided and not yet settled (its call answered
 	 * {@code SITE_BUSY held(decided)}, or its group's removal still settles it) is returned with status {@link BuildStatus#REMOVING} and reason
 	 * {@link BuildStatus#HELD_DECIDED} until its removal's txn retires; absence then means removed and settled (while {@link #loadHealthy()}
 	 * is true).
@@ -361,10 +361,10 @@ public interface Sites {
 
 	/**
 	 * (slice T2b) What Architect owes {@code recipient} (a player UUID string or an owner id), oldest first ({@link Owed#createdTick}); empty
-	 * when nothing. A recipient with a stockpile is credited there instead, so its entries are rare. Server thread. Since NEXT.
+	 * when nothing. A recipient with a stockpile is credited there instead, so its entries are rare. Server thread. Since 1.72.0.
 	 */
 	default java.util.List<Owed> owed(String recipient) {
-		throw new UnsupportedOperationException("Sites.owed needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.owed needs Architect API 1.72.0");
 	}
 
 	/**
@@ -374,29 +374,29 @@ public interface Sites {
 	 * or another recipient's, {@link Reason#SITE_BUSY} (detail {@code held(..)}) while another collect or credit of the key or the player is
 	 * under way, or this one is held (the player left: it finishes when they return), {@link Reason#JOURNAL_UNAVAILABLE} when the txn file
 	 * can't be written. A build running for the recipient never blocks it. For an owner id, the owning mod decides which player receives.
-	 * Server thread. Since NEXT.
+	 * Server thread. Since 1.72.0.
 	 */
 	default java.util.concurrent.CompletableFuture<Collected> collectOwed(String recipient, String key, net.minecraft.server.level.ServerPlayer to) {
-		throw new UnsupportedOperationException("Sites.collectOwed needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.collectOwed needs Architect API 1.72.0");
 	}
 
 	/**
 	 * (slice T2b) Credits all of entry {@code key} owed to {@code owner} into {@code owner}'s stockpile, exactly once (one ledger change: the
 	 * entry ends and the stock gains it, past capacity like a keyed refund). Never automatic: the owning mod calls it once a pile exists.
-	 * Fails as {@link #collectOwed}, and {@link Reason#NOT_ALLOWED} (detail {@code no_stockpile}) without a pile. Server thread. Since NEXT.
+	 * Fails as {@link #collectOwed}, and {@link Reason#NOT_ALLOWED} (detail {@code no_stockpile}) without a pile. Server thread. Since 1.72.0.
 	 */
 	default java.util.concurrent.CompletableFuture<Collected> creditOwedToStock(String owner, String key) {
-		throw new UnsupportedOperationException("Sites.creditOwedToStock needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.creditOwedToStock needs Architect API 1.72.0");
 	}
 
 	/**
 	 * (slice T4R-D, Steward's Q8) The last completed result of a removal begun by this build, from its immutable snapshot (written before the
 	 * removal finished, independent of any later collect or credit): {@code kind} {@code site}, {@code road}, {@code group}, {@code stage}
 	 * ({@code id} = {@code <group>/<stage>}), {@code region} or {@code revision} ({@code id} = {@code <region>#<rid>}, a revision undo's alias).
-	 * Null when none is known (a pre-T4R removal, or evicted: at most 1024 are kept per world, oldest first). Server thread. Since NEXT.
+	 * Null when none is known (a pre-T4R removal, or evicted: at most 1024 are kept per world, oldest first). Server thread. Since 1.72.0.
 	 */
 	default @org.jspecify.annotations.Nullable RemoveResult removalResult(String kind, String id) {
-		throw new UnsupportedOperationException("Sites.removalResult needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.removalResult needs Architect API 1.72.0");
 	}
 
 	/** The owner's stockpile (C24's "stock(owner)"), or empty. Server thread. Since 1.17.0. */
@@ -440,10 +440,10 @@ public interface Sites {
 	 * the message only): {@link Reason#SITE_BUSY} {@code held(other)}, another transaction holds a resource (the pile, a crate, a site,
 	 * road or group), nothing changed, retry later; {@link Reason#SITE_BUSY} {@code held(decided)}, this adoption was decided and then held
 	 * (it finishes later: re-read, don't retry); {@link Reason#JOURNAL_UNAVAILABLE} {@code txn_journal}, the txn journal failed to load
-	 * this session or the intent's write was refused, nothing changed. Server thread. Since NEXT.
+	 * this session or the intent's write was refused, nothing changed. Server thread. Since 1.72.0.
 	 */
 	default AdoptCratesResult adoptCratesResult(String owner) {
-		throw new UnsupportedOperationException("Sites.adoptCratesResult needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.adoptCratesResult needs Architect API 1.72.0");
 	}
 
 	/**
@@ -589,7 +589,7 @@ public interface Sites {
 	 * (BC, Steward GE ask) Whether the world sites store loaded cleanly: a world is running and its sites file was read (or there was none
 	 * yet). False before a world starts, after it stops, and when the file exists but could not be read (then no sites are loaded and placing
 	 * is refused): a consumer must not read "no Architect sites" as "none stand" unless this is true. Any thread. Feature
-	 * {@code "sitesLoadHealthy"}. Since 1.60.0. Since NEXT (slice T4R): false too when any store a removal settles through failed to load
+	 * {@code "sitesLoadHealthy"}. Since 1.60.0. Since 1.72.0 (slice T4R): false too when any store a removal settles through failed to load
 	 * (the queue file, the stockpiles file, the txn file): every removal is held then, and absence means nothing.
 	 */
 	default boolean loadHealthy() {

@@ -272,7 +272,7 @@ public interface SiteEvents {
 	});
 	/**
 	 * (slice T2b) A recipient's owed collectibles changed ({@link Sites#owed}): an entry owed, collected in part or whole, or credited to a
-	 * stock. At least once (after a crash it may fire again); listeners re-read {@link Sites#owed}. Server thread. Since NEXT.
+	 * stock. At least once (after a crash it may fire again); listeners re-read {@link Sites#owed}. Server thread. Since 1.72.0.
 	 */
 	Event<OwedChanged> OWED_CHANGED = EventFactory.createArrayBacked(OwedChanged.class, ls -> recipient -> {
 		for (OwedChanged l : ls) {
@@ -314,7 +314,7 @@ public interface SiteEvents {
 	/**
 	 * (slice T4c) A removal finished ({@link RemovalFinished}): a site, road or cell site, a group or a stage of it (with the revision whose
 	 * undo removed it), or a region. Fires for a removal answered at once and for a decided one that answered {@code SITE_BUSY held(decided)}
-	 * and finished by itself later; at least once (again after a restart), so listeners stay idempotent. Server thread. Since NEXT; feature
+	 * and finished by itself later; at least once (again after a restart), so listeners stay idempotent. Server thread. Since 1.72.0; feature
 	 * {@code removal_finished}.
 	 */
 	Event<RemovalFinishedListener> REMOVAL_FINISHED = EventFactory.createArrayBacked(RemovalFinishedListener.class, ls -> f -> {
@@ -368,13 +368,13 @@ public interface SiteEvents {
 		void onPhase(@org.jspecify.annotations.Nullable String planId, String phase);
 	}
 
-	/** (slice T4c) {@link #REMOVAL_FINISHED}'s listener. Since NEXT. */
+	/** (slice T4c) {@link #REMOVAL_FINISHED}'s listener. Since 1.72.0. */
 	@FunctionalInterface
 	interface RemovalFinishedListener {
 		void onFinished(RemovalFinished finished);
 	}
 
-	/** (slice T2b) {@link #OWED_CHANGED}'s listener. Since NEXT. */
+	/** (slice T2b) {@link #OWED_CHANGED}'s listener. Since 1.72.0. */
 	@FunctionalInterface
 	interface OwedChanged {
 		void onChanged(String recipient);

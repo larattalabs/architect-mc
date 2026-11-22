@@ -5,7 +5,7 @@ import net.minecraft.world.item.Item;
 
 /**
  * (slice T2b) What {@link Sites#collectOwed} or {@link Sites#creditOwedToStock} did: {@code given} (into the player's inventory, or the
- * stock), and what {@code stillOwed} under the key (a full inventory takes only what fits). Since NEXT.
+ * stock), and what {@code stillOwed} under the key (a full inventory takes only what fits). Since 1.72.0.
  */
 public record Collected(String key, Map<Item, Integer> given, Map<Item, Integer> stillOwed, boolean replayed) {
 	public Collected {

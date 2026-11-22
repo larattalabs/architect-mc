@@ -25,7 +25,7 @@ import org.jspecify.annotations.Nullable;
  * region not planned beside one); {@code land}: of ext {@code architect_mc:land} ({@link RegionLand}; null for a region that is not a
  * districts region). The ext keys stay.
  *
- * <p>(slice T4R-D A7b; Since NEXT) {@code removalWait}: while the region's removal waits on its FIFO ticket behind another removal, what it waits
+ * <p>(slice T4R-D A7b; Since 1.72.0) {@code removalWait}: while the region's removal waits on its FIFO ticket behind another removal, what it waits
  * behind; null when not waiting.
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,

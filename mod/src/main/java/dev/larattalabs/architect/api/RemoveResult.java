@@ -15,16 +15,16 @@ import net.minecraft.world.item.Item;
  * @param kept (1.5.0) CELL cells the player changed since: left as they are
  * @param handedDown (1.5.0) cells covered by a site that stays, per covering site id: they stay its blocks until it goes
  * @param cascaded (1.5.0) the covering sites a {@code CASCADE} removed first, top-down
- * @param owed (since NEXT) the owed keys ({@link Owed#key}) the removal booked: a crate-fed site's crate stock and refunds go to its owner as
+ * @param owed (since 1.72.0) the owed keys ({@link Owed#key}) the removal booked: a crate-fed site's crate stock and refunds go to its owner as
  *             owed collectibles ({@link Sites#owed}, {@link Sites#collectOwed}) instead of dropping. Listed apart: their items are never in
  *             {@code refund}, so a total is {@code refund} plus the owed entries' items. Empty when nothing was owed (a stockpile credit, an
  *             instant site, a refund-free removal)
- * @param owedParts (since NEXT, slice T4R-D) each owed key's recipient, reason and the amount the removal booked under it, snapshotted
+ * @param owedParts (since 1.72.0, slice T4R-D) each owed key's recipient, reason and the amount the removal booked under it, snapshotted
  *                  before the removal finished: immutable (a later collect or credit never changes it). A T4R removal's player blocks are
  *                  here, reason {@code player_blocks}, owed to their placer (or the site's recipient, the requester, or
  *                  {@code architect:unclaimed}).
  * <p>
- * <b>Semantic change (since NEXT, slice T4R-D; STEWARD-SYNC):</b> on a removal begun by this build, {@code refund} no longer lists the
+ * <b>Semantic change (since 1.72.0, slice T4R-D; STEWARD-SYNC):</b> on a removal begun by this build, {@code refund} no longer lists the
  * player's own blocks found in the box: they are owed ({@code owedParts}, reason {@code player_blocks}), never dropped. {@code refund} is
  * only what went back to the stockpile (and a legacy instant drop). A removal a pre-T4R build left in flight still reports v0.89.0's refund.
  */

@@ -1,9 +1,9 @@
 {
  "$comment": "(TJ CG) The binary-compatibility baselines: main's latest three releases (rolled), the anchors (GI: one older release per API minor family, never rolled, so a family stays covered once the three roll past it) and the consumer jars, read by tools/gate6a.mjs apijars (the unchanged apitest jars in game), tools/api-compat.mjs --baselines (their references, the newest mod jar's whole surface, each consumer's references) and rolled by tools/release-version.mjs at every release. Each release's files live in <main checkout>/artifacts/api-baselines/<dir>/ (untracked), built from its tag by `node tools/api-baselines-build.mjs build <tag>`; a consumer's by `node tools/api-baselines-build.mjs steward`. docs/GATES.md \"API compatibility baselines\".",
  "releases": [
+  { "tag": "v0.91.0", "mod": "0.91.0", "api": "1.72.0", "dir": "v0910" },
   { "tag": "v0.90.0", "mod": "0.90.0", "api": "1.71.0", "dir": "v0900" },
-  { "tag": "v0.89.0", "mod": "0.89.0", "api": "1.71.0", "dir": "v0890" },
-  { "tag": "v0.88.0", "mod": "0.88.0", "api": "1.71.0", "dir": "v0880" }
+  { "tag": "v0.89.0", "mod": "0.89.0", "api": "1.71.0", "dir": "v0890" }
  ],
  "anchors": [
   { "tag": "v0.62.0", "mod": "0.62.0", "api": "1.55.0", "dir": "v0620" },

@@ -18,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  *                    ({@link Sites#removeGroup}) stopped, as {@link RegionView#removalStop}: NONE (none stopped since this world loaded, or it
  *                    removed the group), NOT_STARTED (nothing written) or PARTIAL. Kept in memory: a restart answers NONE
  * @param removalStopCause (Since 1.69.0) that stop's typed cause ({@link RemovalStopCause}); null with NONE. The blockers' text is unchanged
- * @param removalWait (since NEXT, slice T4R-D A7b) while its removal waits on its FIFO ticket behind another removal: what it waits behind; null
+ * @param removalWait (since 1.72.0, slice T4R-D A7b) while its removal waits on its FIFO ticket behind another removal: what it waits behind; null
  *                    when not waiting
  */
 public record SiteGroup(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<Stage> stages, State state,

@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * refused save apart without parsing {@code waiting} (whose text is unchanged). Null when {@code waiting} is null; any other wait (a
  * revision's own write that stopped) is OTHER.
  *
- * <p>(slice T4R-D A7b; Since NEXT) {@code removalWait}: while its undo waits on its FIFO ticket behind another removal, what it waits behind;
+ * <p>(slice T4R-D A7b; Since 1.72.0) {@code removalWait}: while its undo waits on its FIFO ticket behind another removal, what it waits behind;
  * null when not waiting.
  */
 public record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,

@@ -25,7 +25,7 @@ public class ArchitectRefused extends RuntimeException {
 		this(reason, message, detail, builds, null);
 	}
 
-	/** (slice T4R-D, A7a) A {@link Reason#SITE_BUSY} refusal with its typed cause ({@link #busy()}); detail is its {@link Busy#token()}. Since NEXT. */
+	/** (slice T4R-D, A7a) A {@link Reason#SITE_BUSY} refusal with its typed cause ({@link #busy()}); detail is its {@link Busy#token()}. Since 1.72.0. */
 	public ArchitectRefused(Reason reason, String message, Busy busy) {
 		this(reason, message, busy.token(), java.util.List.of(), busy);
 	}
@@ -40,7 +40,7 @@ public class ArchitectRefused extends RuntimeException {
 
 	/**
 	 * (slice T4R-D, Steward's A7a) For a {@link Reason#SITE_BUSY} refusal because of a removal: what blocks the call, typed (kind, blocking id,
-	 * its kind, its owner); null for any other refusal. Since NEXT.
+	 * its kind, its owner); null for any other refusal. Since 1.72.0.
 	 */
 	public @org.jspecify.annotations.Nullable Busy busy() {
 		return busy;

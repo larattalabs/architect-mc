@@ -9,7 +9,7 @@ import net.minecraft.world.level.Level;
 /**
  * (slice T2b) An owed collectible: items Architect owes {@code recipient} that could not go back into a stock (instead of dropping them
  * as item entities). Collected with {@link Sites#collectOwed}, or credited into the recipient's stockpile with
- * {@link Sites#creditOwedToStock}; it never expires. Since NEXT.
+ * {@link Sites#creditOwedToStock}; it never expires. Since 1.72.0.
  *
  * @param key the source's semantic key, stable for the entry's whole life (e.g. {@code crate:<owner>@x,y,z/<siteKey>})
  * @param recipient a player UUID string, or an owner id ({@code steward_mc:settlement/<id>})

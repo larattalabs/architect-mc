@@ -153,7 +153,7 @@ public final class SaveHold {
 		}
 	}
 
-	/** (slice SOFF2, Steward's ask; NEXT) The hold's stable refusal sub-code: {@code saving_off:<dims>}, the dimension ids comma-separated. */
+	/** (slice SOFF2, Steward's ask; 1.72.0) The hold's stable refusal sub-code: {@code saving_off:<dims>}, the dimension ids comma-separated. */
 	static String detail(List<String> dims) {
 		return "saving_off:" + String.join(",", dims);
 	}

@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param reason null unless {@code state} is {@link #WAITING} or {@link #FAILED} (a batch item's wait with no typed cause, such as
  *               {@code PLAN_STALE} or {@code JOURNAL_UNAVAILABLE}, is {@code waiting} with a null reason: never guessed): {@link #MATERIALS}, {@link #BILL_CAP},
  *               {@link #FILL_BLOCKED}, {@link #TXN_HELD}, {@link #TERRAIN}, {@link #STAGE}, {@link #APPROVAL}, {@link #NOT_LOADED},
- *               {@link #OCCUPIED}, {@link #PLAYER_IN_BOX}, or (state failed) {@code failed:<Reason>}; (Since NEXT) {@link #HELD_DECIDED} with state
+ *               {@link #OCCUPIED}, {@link #PLAYER_IN_BOX}, or (state failed) {@code failed:<Reason>}; (Since 1.72.0) {@link #HELD_DECIDED} with state
  *               {@link #REMOVING}: a decided removal that finishes by itself; appended only
  * @param waitsOn always a typed id, never text: for {@link #TERRAIN} the part whose staged terrain it waits on; for {@link #STAGE} the
  *                target (site, road or item key) it waits for; for {@link #BILL_CAP}, {@link #MATERIALS}, {@link #FILL_BLOCKED} and
@@ -56,7 +56,7 @@ public record BuildStatus(String state, @Nullable String reason, @Nullable Strin
 	public static final String PLAYER_IN_BOX = "player_in_box";
 	/**
 	 * The reason of a {@link #REMOVING} status whose removal is decided and held (its txn finishes it by itself, then the site is absent; a
-	 * {@code REMOVAL_FINISHED} follows). Since NEXT.
+	 * {@code REMOVAL_FINISHED} follows). Since 1.72.0.
 	 */
 	public static final String HELD_DECIDED = "held(decided)";
 

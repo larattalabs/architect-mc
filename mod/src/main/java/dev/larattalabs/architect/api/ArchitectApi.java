@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.71.0";
+	String VERSION = "1.72.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -217,7 +217,7 @@ public interface ArchitectApi {
 	 * (LCAP, since 1.67.0) {@code "maxBillPerLot"}: {@link RealiseRequest#maxBillPerLot}, {@link ApprovedRealise#maxBillPerLot} (each lot's own
 	 * cap beside {@code maxBill}; refused {@link Reason#BILL_CAP} with detail {@code lot:<id>} or {@code unknown_lot:<id>}) and
 	 * {@link Quote#lotBill}.
-	 * (slice T2b, since NEXT) {@code "owed"}: {@link Sites#owed}, {@link Sites#collectOwed}, {@link Sites#creditOwedToStock},
+	 * (slice T2b, since 1.72.0) {@code "owed"}: {@link Sites#owed}, {@link Sites#collectOwed}, {@link Sites#creditOwedToStock},
 	 * {@link SiteEvents#OWED_CHANGED} ({@link Owed}, {@link Collected}).
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
