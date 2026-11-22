@@ -120,19 +120,6 @@ test('(SPD) coveredSuites: only the suites whose full unit step is in the run ar
   assert.deepEqual([...coveredSuites({ GATE_FULL_UNITS: 'unit-scope,unit-kitx,umt-long' })], [], 'a near name is not the full suite');
 });
 
-test('(SPD) runParallel: the jobs run at once, each line prefixed with its suite, each exit code its own, in job order', async () => {
-  const { runParallel } = await import('../../tools/unit-scope.mjs');
-  const lines = [];
-  const out = { write: (s) => { lines.push(...s.split('\n').filter(Boolean)); } };
-  const js = (code, ms, text) => ({ cmd: process.execPath, args: ['-e', `setTimeout(() => { console.log(${JSON.stringify(text)}); console.error('err-' + ${JSON.stringify(text)}.slice(0, 2)); process.exit(${code}); }, ${ms})`], cwd: process.cwd() });
-  const t0 = Date.now();
-  const r = await runParallel([{ name: 'a', ...js(0, 600, 'A1\nA2') }, { name: 'b', ...js(3, 600, 'B1') }], { out });
-  assert.ok(Date.now() - t0 < 1150, `side by side, not one after another (${Date.now() - t0} ms)`);
-  assert.deepEqual(r, [{ name: 'a', code: 0 }, { name: 'b', code: 3 }]);
-  for (const l of ['[a] A1', '[a] A2', '[a] err-A1', '[b] B1', '[b] err-B1']) assert.ok(lines.includes(l), `${l} in ${JSON.stringify(lines)}`);
-  assert.ok(!lines.some((l) => /^\[a\] B|^\[b\] A/.test(l)), 'no line under the other suite');
-});
-
 test('(SPD) --run with GATE_FULL_UNITS=unit-kit runs no kit test (one check stands for it); without it, the picks run', async () => {
   const { spawnSync } = await import('node:child_process');
   const ROOT = new URL('../../', import.meta.url).pathname;
@@ -150,5 +137,4 @@ test('(SPD) --run with GATE_FULL_UNITS=unit-kit runs no kit test (one check stan
   assert.equal(own.status, 0, own.stdout + own.stderr);
   const m = /^unit-scope --run: results tests (\d+), pass (\d+), fail 0/m.exec(own.stdout);
   assert.ok(m && Number(m[1]) > 0 && m[1] === m[2], own.stdout.slice(-400));
-  assert.match(own.stdout, /^\[kit\] /m);
 });

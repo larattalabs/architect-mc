@@ -40,5 +40,5 @@ test('(SPD) fullUnitsInRun: the full unit steps in the run or CACHED, in a fixed
   const { fullUnitsInRun } = await import('../../tools/lib/change-units.mjs');
   assert.deepEqual(fullUnitsInRun(['unit-scope', 'sim-jobs']), []);
   assert.deepEqual(fullUnitsInRun(['unit-scope', 'unit-kit', 'd-unit']), ['unit-kit']);
-  assert.deepEqual(fullUnitsInRun(['unit-sidecar'], new Map([['unit-mod', {}]])), ['unit-mod', 'unit-sidecar']);
+  assert.deepEqual(fullUnitsInRun(['unit-sidecar'], new Set(['unit-mod'])), ['unit-mod', 'unit-sidecar']);
 });

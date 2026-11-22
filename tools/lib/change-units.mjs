@@ -23,6 +23,6 @@ export function scopeChangeUnits({ want, why, steps, addW }) {
  * (SPD, docs/SPEED-CUTS.md) The full unit steps this run runs, or has CACHED (a PASS at the same key): gate-run passes them to every step
  * as GATE_FULL_UNITS, and unit-scope skips its picks of those suites (a subset of the full run at the same head).
  */
-export function fullUnitsInRun(stepIds, cachedHits = new Map()) {
-  return FULL_UNITS.filter((u) => stepIds.includes(u) || cachedHits.has(u));
+export function fullUnitsInRun(stepIds, cached = new Set()) {
+  return FULL_UNITS.filter((u) => stepIds.includes(u) || cached.has(u));
 }

@@ -2380,7 +2380,8 @@ try {
     log(`unit-kit CACHED: its JUnit report (kit tree ${runShared.kitTree.slice(0, 9)}) serves this run's kit-suite readers`);
   }
   // (SPD) the full unit suites this run runs (or has CACHED at this head): unit-scope does not run its picks of them again
-  runShared.fullUnits = fullUnitsInRun(stepIds, cachedHits);
+  // a CACHED kit or sidecar suite counts only when its report was taken above (the same trees); unit-mod's cache key is its inputs
+  runShared.fullUnits = fullUnitsInRun(stepIds, new Set([runShared.kitJunit && 'unit-kit', runShared.sidecarJunit && 'unit-sidecar', cachedHits.has('unit-mod') && 'unit-mod'].filter(Boolean)));
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   if (FROZEN) {
     const fz = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log });

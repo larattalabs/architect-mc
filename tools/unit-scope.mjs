@@ -6,7 +6,7 @@
 //   node tools/unit-scope.mjs --since <ref>        another base (three dots: since the merge base)
 //   node tools/unit-scope.mjs --range A..B         any range (A...B too), e.g. a merged slice's commits; the graph is the working tree's
 //   node tools/unit-scope.mjs <file> ...           explicit paths
-//   [--run]                                        run the picks under nice -n 10 (kit, sidecar and Gradle side by side, SPD); exit 1 if any fails
+//   [--run]                                        run the picks under nice -n 10 (kit, then sidecar, then Gradle); exit 1 if any fails
 //                                                  (SPD) a suite whose full run is in the same gate run (GATE_FULL_UNITS) is not run again
 //   [--json]                                       machine-readable
 //
@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { moduleClosure, dirtyPaths } from './lib/step-inputs.mjs';
 import { globToRe } from './gate-impact.mjs';
@@ -309,29 +309,13 @@ export function coveredSuites(env = process.env) {
   return new Set(ALL.filter((s) => have.has(UNIT_OF[s])));
 }
 
-/**
- * (SPD) Run independent suite jobs side by side ({ name, cmd, args, cwd, env }), each line of output prefixed `[name] `; resolves
- * [{ name, code }] in job order. The three suites share no files: kit and vitest write only their own arch-* temp dirs, Gradle mod/build.
- */
-export function runParallel(jobs, { out = process.stdout, spawnFn = spawn } = {}) {
-  return Promise.all(jobs.map((j) => new Promise((resolve) => {
-    out.write(`\nunit-scope --run ${j.name}: nice -n 10 ${j.cmd} ${j.args.length > 8 ? `${j.args.slice(0, 8).join(' ')} ... (${j.args.length} args)` : j.args.join(' ')} (cwd ${j.rel ?? j.cwd})\n`);
-    const child = spawnFn('nice', ['-n', '10', j.cmd, ...j.args], { cwd: j.cwd, env: { ...process.env, ...j.env }, stdio: ['ignore', 'pipe', 'pipe'] });
-    const pipe = (stream) => {
-      let buf = '';
-      stream.on('data', (d) => {
-        buf += d;
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const l of lines) out.write(`[${j.name}] ${l}\n`);
-      });
-      stream.on('end', () => { if (buf) out.write(`[${j.name}] ${buf}\n`); });
-    };
-    pipe(child.stdout);
-    pipe(child.stderr);
-    child.on('error', () => resolve({ name: j.name, code: 1 }));
-    child.on('close', (code) => resolve({ name: j.name, code: code ?? 1 }));
-  })));
+/** Runs the suite jobs ({ name, cmd, args, cwd, rel, env }) one after another under nice -n 10, output inherited; -> [{ name, code }]. */
+export function runSerial(jobs, { spawnFn = spawnSync } = {}) {
+  return jobs.map((j) => {
+    console.log(`\nunit-scope --run ${j.name}: nice -n 10 ${j.cmd} ${j.args.length > 8 ? `${j.args.slice(0, 8).join(' ')} ... (${j.args.length} args)` : j.args.join(' ')} (cwd ${j.rel ?? j.cwd})`);
+    const r = spawnFn('nice', ['-n', '10', j.cmd, ...j.args], { cwd: j.cwd, env: { ...process.env, ...j.env }, stdio: 'inherit' });
+    return { name: j.name, code: r.status ?? 1 };
+  });
 }
 
 // ------------------------------------------------------------------ CLI
@@ -407,7 +391,7 @@ if (isMain) {
     };
     const rel = (cwd) => path.relative(SRC, cwd) || '.';
     if (sel.checks.length) {
-      for (const r of await runParallel(sel.checks.map((f) => ({ name: `node --check ${f}`, cmd: 'node', args: ['--check', f], cwd: SRC, rel: '.' })))) {
+      for (const r of runSerial(sel.checks.map((f) => ({ name: `node --check ${f}`, cmd: 'node', args: ['--check', f], cwd: SRC, rel: '.' })))) {
         results.push(r);
         checks[r.code === 0 ? 'pass' : 'fail']++;
       }
@@ -449,9 +433,8 @@ if (isMain) {
         } });
       }
     }
-    // (SPD) the suites side by side, not one after another: they share no files, and the kit suite's long tail (one file's test) left
-    // the cores idle while sidecar and Gradle waited behind it
-    const ran = await runParallel(jobs);
+    // one after another, as before: side by side (each with the whole CPU share) oversubscribed the cores and failed eval.e2e (SPD bench)
+    const ran = runSerial(jobs);
     for (const [i, r] of ran.entries()) {
       results.push(r);
       jobs[i].done(r.code);
