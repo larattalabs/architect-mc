@@ -347,6 +347,30 @@ public final class SliceT5FDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.fluid.marks", 30_000, "{region} - (T5Fb) the region's fluid provenance now (architect_mc:fluid_prov): {prov, rec, "
+			+ "bodies: [{id, cells, wrote, cleared, standing, wroteStanding, takenWrote}]}", (req, mc) -> {
+				String id = req.get("region").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.region.RegionsImpl.Live l = dev.larattalabs.architect.region.RegionsImpl.live(id);
+					ServerLevel level = l == null ? null : l.level(s);
+					if (level == null) {
+						throw new DevBridge.DevException("no live region " + id);
+					}
+					return RegionFluids.marksJson(level, l);
+				});
+			});
+		DevBridge.register("dev.fluid.unprov", 30_000, "{region} - (T5Fb) TEST: the record reads as one saved before T5F: its marks removed, "
+			+ "saved without prov; the next tick adopts it (fluid.adopt) -> {marksRemoved, saved}", (req, mc) -> {
+				String id = req.get("region").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.region.RegionsImpl.Live l = dev.larattalabs.architect.region.RegionsImpl.live(id);
+					ServerLevel level = l == null ? null : l.level(s);
+					if (level == null) {
+						throw new DevBridge.DevException("no live region " + id);
+					}
+					return RegionFluids.unprovForTest(level, l);
+				});
+			});
 		DevBridge.register("dev.txn.kinds", 10_000, "{} - (T5Fa) the txn kinds registered in the core (the rows probe for kinds not built yet) -> "
 			+ "{kinds: [name]}", (req, mc) -> ServerTasks.callOnServer(s -> {
 				JsonObject o = new JsonObject();

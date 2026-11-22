@@ -103,7 +103,6 @@ class FluidCrashModelT5FTest {
 
 	@Test
 	void runtime_activeAsProof_provenanceInTheChunk() {
-		guard();
 		bound(Naive.ACTIVE_AS_PROOF, !hasClass("dev.larattalabs.architect.region.FluidProv") || hasClass(
 			"dev.larattalabs.architect.region.RegionFluids$JournalWrites"), "region.FluidProv (architect_mc:fluid_prov) present and RegionFluids.JournalWrites deleted");
 	}
@@ -131,13 +130,11 @@ class FluidCrashModelT5FTest {
 
 	@Test
 	void runtime_waterRefill_neverRefillWrote() {
-		guard();
 		bound(Naive.WATER_REFILL, !hasClass("dev.larattalabs.architect.region.FluidProv"), "region.FluidProv: writeBody's I2 rule (no mark or CLEARED, and open) for every fluid");
 	}
 
 	@Test
 	void runtime_forceInR_forceIsAW() {
-		guard();
 		boolean naive = FluidTxns.WRITE_KIND.adapter(FluidsT5FRedTest.effect("fluid.force", "W")) == null;
 		bound(Naive.FORCE_IN_R, naive, "fluid.write's fluid.force W adapter (the ticks scheduled in each chunk's W)");
 	}

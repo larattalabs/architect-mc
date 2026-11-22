@@ -131,28 +131,17 @@ class FluidsT5FRedTest {
 	// ------------------------------------------------------------------ I1 / §3: the per-cell provenance (N1)
 
 	@Test
-	void i1_fluidProvIsAPersistentChunkAttachment() {
-		guard();
+	void i1_fluidProvIsAPersistentChunkAttachment() throws ReflectiveOperationException {
+		// (T5Fb) read without initializing the store's class: its init registers the attachment, which needs Fabric's mixins (a unit has none)
 		Class<?> p = cls("dev.larattalabs.architect.region.FluidProv", "§3.1: architect_mc:fluid_prov, the only write evidence for a fluid cell (N1)");
-		Object t = null;
-		for (Field f : p.getDeclaredFields()) {
-			if (Modifier.isStatic(f.getModifiers()) && f.getType().getName().endsWith("AttachmentType")) {
-				try {
-					f.setAccessible(true);
-					t = f.get(null);
-				} catch (IllegalAccessException e) {
-					throw new AssertionError(e);
-				}
-			}
-		}
-		assertNotNull(t, "not built: FluidProv's AttachmentType field (registered like TestMove.RECEIPTS)");
-		assertTrue(String.valueOf(t).contains("architect_mc:fluid_prov") || String.valueOf(call(method(t.getClass(), "identifier", "the id"), t)).equals(
-			"architect_mc:fluid_prov"), "the attachment's id is architect_mc:fluid_prov: " + t);
+		assertEquals("architect_mc:fluid_prov", p.getDeclaredField("ID").get(null), "the attachment's id");
+		Class<?> store = Class.forName("dev.larattalabs.architect.region.FluidProv$Store", false, FluidsT5FRedTest.class.getClassLoader());
+		Field t = store.getDeclaredField("TYPE");
+		assertTrue(Modifier.isStatic(t.getModifiers()) && t.getType().getName().endsWith("AttachmentType"), "a static AttachmentType (registered like TestMove.RECEIPTS)");
 	}
 
 	@Test
 	void i1_cellIndexIsTheContractsPacking() {
-		guard();
 		Class<?> p = cls("dev.larattalabs.architect.region.FluidProv", "§3.1");
 		Method ci = method(p, "cellIndex", "§3.1: (y - minY) << 8 | lz << 4 | lx", int.class, int.class, int.class, int.class);
 		assertEquals((70 - -64) << 8 | 9 << 4 | 3, call(ci, null, -64, 35, 70, -23)); // x 35 -> lx 3, z -23 -> lz 9
@@ -161,7 +150,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void i2_theReadTableOfSection33() {
-		guard();
 		Class<?> p = cls("dev.larattalabs.architect.region.FluidProv", "§3.3");
 		Class<?> m = mark(p, "WROTE").getClass();
 		Method read = method(p, "read", "§3.3: one function for the write, the drain and the census -> {write, take, refund}", m, boolean.class,
@@ -186,7 +174,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void n2_adoptionOfARecordBuiltBeforeT5F() {
-		guard();
 		Class<?> p = cls("dev.larattalabs.architect.region.FluidProv", "§4.7 fluid.adopt");
 		Method adopt = method(p, "adopt", "N2: (our fluid stands, a tile journal entry is ACTIVE) -> Mark or null", boolean.class, boolean.class);
 		assertEquals(mark(p, "WROTE"), call(adopt, null, true, false), "N2 (a): our fluid stands -> WROTE");
@@ -202,7 +189,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void i3_receiptFieldsReader() {
-		guard();
 		// (T5F) the pure reader lives in txn.Receipts (TestMove's class init registers its chunk attachment, which a unit can't);
 		// TestMove.receiptFields(receipt, key) and receiptFields(ch, key) delegate to it
 		Class<?> tm = dev.larattalabs.architect.txn.Receipts.class;
@@ -245,17 +231,20 @@ class FluidsT5FRedTest {
 
 	@Test
 	void i6_writeHasClearPlaceAndForceWs() {
-		guard();
 		for (String op : List.of("fluid.clear", "fluid.place", "fluid.force")) {
 			assertNotNull(FluidTxns.WRITE_KIND.adapter(effect(op, "W")), "not built: fluid.write's " + op + " W (§4.2)");
 		}
 	}
 
 	@Test
-	void s45_strayAndAdoptKinds() {
-		guard();
-		kind("fluid.stray", "§4.5: the budgeted stray pass, one txn per at most 8 chunks");
+	void s45_adoptKind() {
 		kind("fluid.adopt", "§4.7: the conversion of a record built before T5F (N2)");
+	}
+
+	@Test
+	void s45_strayKind() {
+		guard(); // T5Fc
+		kind("fluid.stray", "§4.5: the budgeted stray pass, one txn per at most 8 chunks");
 	}
 
 	// ------------------------------------------------------------------ F: the deadline from the receipts, never a stored until
@@ -288,7 +277,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void s1q3_killPointLineNamesProgress() {
-		guard();
 		Class<?> kp = dev.larattalabs.architect.txn.KillPoints.class; // (a T4 file: T5Fb adds it after T4 merges)
 		method(kp, "step", "S1: a named step with its progress over the named effect's (body, chunk) Ws", String.class, boolean.class, String.class,
 			int.class, int.class);
@@ -301,7 +289,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void s4q2_removeResultFluidsTakenAndCells() {
-		guard();
 		Class<?> rr = dev.larattalabs.architect.api.RemoveResult.class; // (a T4 file: T5Fc adds them after T4 merges)
 		Method taken = method(rr, "fluidsTaken", "S4/Q2: nullable Map<Item,Integer>, what the refund would have paid for the taken cells (report only)");
 		Method cells = method(rr, "fluidsTakenCells", "Q2: nullable Integer, Σh: our written cells found taken, water included (report only)");

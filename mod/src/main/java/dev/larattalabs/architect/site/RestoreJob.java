@@ -138,6 +138,8 @@ final class RestoreJob implements Placement.Job {
 	int cellCursor;
 	/** Who waits for a removal of a road or cell site (the API). */
 	transient final List<CompletableFuture<Sites.Removed>> futures = new ArrayList<>();
+	/** (slice T5F) The fluids record whose marks this rollback's writes clear ("" none), resolved once; transient. */
+	transient @Nullable String provScope;
 	/** The infra record as it was taken down. */
 	transient @Nullable Infra infraDone;
 	/** (slice SOFF2) A road's refund as first credited (a retry after a refused credit save finds the key credited), and the refusals. */
@@ -150,13 +152,22 @@ final class RestoreJob implements Placement.Job {
 		int p0 = phase;
 		boolean r;
 		dev.larattalabs.architect.txn.TxnEntry own = Groups.txnOf(group);
+		if (ROLLBACK.equals(purpose) && provScope == null) {
+			// (slice T5F, §3.2) a rollback of record R's own fluids-stage tile clears R's fluid marks with its writes ("" : not one)
+			String rec = dev.larattalabs.architect.region.RegionFluids.provScopeOf(batchId, itemKey);
+			provScope = rec == null ? "" : rec;
+		}
+		String scope = provScope == null || provScope.isEmpty() ? null : provScope;
 		if (own != null) {
 			// (slice T4R, R1) a group member's restore is its removal.group txn's own write: the boxes that txn holds accept it
 			boolean[] out = new boolean[1];
-			dev.larattalabs.architect.txn.TxnServer.asHolder(own, () -> out[0] = step0(server, deadline));
+			dev.larattalabs.architect.txn.TxnServer.asHolder(own, () -> dev.larattalabs.architect.region.FluidProv.inScope(scope, () -> out[0] = step0(server,
+				deadline)));
 			r = out[0];
 		} else {
-			r = step0(server, deadline);
+			boolean[] out = new boolean[1];
+			dev.larattalabs.architect.region.FluidProv.inScope(scope, () -> out[0] = step0(server, deadline));
+			r = out[0];
 		}
 		if (Sites.Trace.ON) {
 			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} restore {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase,

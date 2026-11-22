@@ -117,6 +117,7 @@ public final class TxnServer {
 
 	public static void init() {
 		TestMove.init();
+		dev.larattalabs.architect.region.FluidProv.init(); // (slice T5F) architect_mc:fluid_prov
 		OwedTxn.init();
 		OwedCommands.init();
 		// (T2b fix round, GPT P1-3) an owed effect marker stays while its txn is open: only retired txns' markers are evicted

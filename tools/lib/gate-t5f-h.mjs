@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { CLAIM, OWNER, crashAt, freshFlat, planDemo, removeWait } from './gate6ch-core.mjs';
+import { CLAIM, OWNER, censusOf, crashAt, demoBox, diff, freshFlat, planDemo, realiseWait, removeWait, snap } from './gate6ch-core.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;
@@ -173,6 +173,99 @@ export async function killProgress(ctx) {
   out.k = k; out.n = n;
   check(n === chunks.size && k >= 1 && (n === 1 ? k === 1 : k < n), `KN (S1/Q3): reached (${k} of ${n}): n == the place Ws (body, chunk) ${chunks.size}, 1 <= k < n`);
   await L.leaveWorld().catch(() => null);
+  return out;
+}
+
+/**
+ * (slice T5Fb, contract §7 "TX matrix", fluid.write) h_core_demo realised and halted at each of `points` (each bare and +save): the start
+ * replays the write txn (the Ws whose receipt is missing, each chunk's writes with its forced ticks), PLACED, every body settled, every
+ * census equal, 0 fluid outside; every standing body cell carries WROTE (dev.fluid.marks: the marks reach disk with their chunk) and no
+ * mark is WROTE over a cell not standing; Regions.remove REMOVED and E-flat 0 (conservation: the world as it was).
+ */
+export async function writeTx(ctx, points) {
+  const { L, check, json } = ctx;
+  const out = {};
+  for (const p0 of points) {
+    for (const point of [`TX:fluid.write:${p0}+save`, `TX:fluid.write:${p0}`]) {
+      const bare = !point.endsWith('+save');
+      const tag = `${p0.replace(/[^a-z]/gi, '')}-${bare ? 'bare' : 'save'}`;
+      const world = `G6B H T5WX ${tag}`;
+      await freshFlat(ctx, world, 'exact');
+      const d = await planDemo(ctx, { lava: true });
+      const box = demoBox(d.bodies);
+      const file = await snap(ctx, box, `h-t5wx-${tag}`);
+      let r = null;
+      await crashAt(ctx, world, point, async () => { r = await L.realise(d.p.planId); });
+      r ??= (await L.call('dev.region.list', {}, 60_000)).regions?.at(-1)?.id;
+      const st = await L.waitRegion(r, 3_600_000);
+      const fl = st.view.ext?.['architect_mc:fluids'] ?? [];
+      let mism = 0, outside = 0;
+      for (const b of d.bodies) { const c = await censusOf(ctx, b, null, d.bodies); mism += c.mismatch.length; outside += c.outsideCount; }
+      const mk = await L.call('dev.fluid.marks', { region: r }, 30_000).catch((e) => ({ error: e.message }));
+      const bodies = mk.bodies ?? [];
+      const unmarked = bodies.reduce((a, b) => a + (b.standing - b.wroteStanding), 0);
+      const takenWrote = bodies.reduce((a, b) => a + b.takenWrote, 0);
+      const rm = await removeWait(ctx, r).catch((e) => ({ state: `error ${e.message}` }));
+      await sleep(3000);
+      const dx = await diff(ctx, box, file);
+      out[tag] = { state: st.view.state, fluids: fl.map((x) => [x.body, x.state]), mism, outside, marks: bodies.map((b) => [b.id, b.cells, b.wroteStanding, b.standing]), removal: rm.state, mismatches: dx.mismatches };
+      check(st.view.state === 'PLACED' && fl.length === 4 && fl.every((x) => x.state === 'settled') && mism === 0 && outside === 0, `WX (${point}): the start replays the write txn: ${st.view.state}, bodies ${json(out[tag].fluids)}, census mismatches ${mism}, fluid outside ${outside}`);
+      check(mk.prov === true && bodies.length === 4 && unmarked === 0 && takenWrote === 0, `WX (${point}): every standing body cell carries WROTE(R) and none over a cell not standing (I1): unmarked ${unmarked}, WROTE-not-standing ${takenWrote} (${json(out[tag].marks)})`);
+      check(rm.state === 'REMOVED' && dx.mismatches === 0, `WX (${point}) conservation: Regions.remove: ${rm.state}, E-flat ${dx.mismatches}${bare ? ' (bare: the earlier stages were saved by their barriers)' : ''}`, dx.sample);
+      await L.leaveWorld();
+    }
+  }
+  return out;
+}
+
+/**
+ * (slice T5Fb, contract §4.7 and §7 "TX matrix", fluid.adopt) h_core_demo realised, then its record made to read as one saved before T5F
+ * (dev.fluid.unprov: marks removed, prov dropped) with the player's bucket taking one pond source first; the adoption halted at each
+ * of `points` (bare and +save): after the start the record is adopted (prov), every standing cell WROTE, the bucketed cell WROTE too
+ * (N2 (b): an ACTIVE tile entry wrote it: harvested, never refilled), Architect never writes it again; Regions.remove REMOVED, the pond
+ * cell aside E-flat 0.
+ */
+export async function adoptTx(ctx, points) {
+  const { L, check, json } = ctx;
+  const out = {};
+  for (const p0 of points) {
+    for (const point of [`TX:fluid.adopt:${p0}+save`, `TX:fluid.adopt:${p0}`]) {
+      const bare = !point.endsWith('+save');
+      const tag = `${p0.replace(/[^a-z]/gi, '')}-${bare ? 'bare' : 'save'}`;
+      const world = `G6B H T5AX ${tag}`;
+      await freshFlat(ctx, world, 'exact');
+      await L.cmd('/gamerule water_source_conversion false');
+      const d = await planDemo(ctx, { lava: true });
+      const pond = d.bodies.find((b) => b.id === 'pond') ?? d.bodies.find((b) => b.fluid !== 'lava');
+      const r = await realiseWait(ctx, d.p.planId);
+      const cell = edgeCell(pond);
+      const b = await L.call('dev.player.bucket', { at: cell }, 30_000);
+      await sleep(2000);
+      await L.call('dev.stockpile.save', {}, 300_000).catch(() => null);
+      await L.cmd('/save-all flush');
+      await sleep(1500);
+      // the kill point armed first: the adoption begins on the tick after the unprov (its answer may be lost with the halt)
+      let un = null;
+      await crashAt(ctx, world, point, async () => { un = await L.call('dev.fluid.unprov', { region: r.region }, 30_000); });
+      let mk = null;
+      for (let i = 0; i < 60; i++) { mk = await L.call('dev.fluid.marks', { region: r.region }, 30_000).catch(() => null); if (mk?.prov) break; await sleep(1000); }
+      const bodies = mk?.bodies ?? [];
+      const pb = bodies.find((x) => x.id === pond.id) ?? {};
+      const unmarked = bodies.reduce((a, x) => a + (x.standing - x.wroteStanding), 0);
+      await L.call('dev.fluid.writeTrace', { on: true }, 10_000);
+      await sleep(5000);
+      const trace = (await L.call('dev.fluid.writeTrace', { on: false }, 10_000)).cells ?? [];
+      const rewrote = trace.some((c) => k3(c) === k3(cell));
+      out[tag] = { bucket: b?.result, unprov: un, prov: mk?.prov, pond: pb, unmarked, rewrote };
+      check(/success|consume/i.test(String(b?.result)) && (un === null || (un.marksRemoved > 0 && un.saved === true)), `AX (${point}): the precondition: a pond source bucketed, the record unprov'd (${json(un)}; null: the answer lost with the halt)`);
+      check(mk?.prov === true && unmarked === 0 && pb.takenWrote === 1, `AX (${point}): adopted after the start: prov ${mk?.prov}, every standing cell WROTE (unmarked ${unmarked}), the bucketed cell WROTE (N2 b: ${pb.takenWrote})`);
+      check(!rewrote, `AX (${point}): Architect never writes the bucketed cell ${k3(cell)} again (traced ${trace.length})`);
+      const rm = await removeWait(ctx, r.region).catch((e) => ({ state: `error ${e.message}` }));
+      out[tag].removal = rm.state;
+      check(rm.state === 'REMOVED', `AX (${point}): Regions.remove after the adoption: ${rm.state}`);
+      await L.leaveWorld();
+    }
+  }
   return out;
 }
 

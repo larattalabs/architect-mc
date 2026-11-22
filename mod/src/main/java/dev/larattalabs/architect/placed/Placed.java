@@ -146,6 +146,7 @@ public final class Placed {
 		long prev = writePos;
 		writePos = pos.asLong();
 		try {
+			dev.larattalabs.architect.region.FluidProv.onArchitectWrite(level, pos); // (slice T5F, §3.2) inside R's scope only
 			return level.setBlock(pos, state, flags);
 		} finally {
 			writePos = prev;

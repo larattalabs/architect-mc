@@ -834,15 +834,25 @@ public final class WorldJournal {
 	}
 
 	/** A named step of a change: halts the JVM when it is the armed kill point (no shutdown hooks, nothing saved). */
-	public static void kill(String point) {
-		kill(point, "");
-	}
-
 	/**
 	 * (slice T5F, Steward's S1) {@link #kill(String)} whose log line names the step's progress {@code progress} (e.g. {@code " (1 of 2)"}):
-	 * {@code kill point <point>[+save] reached (k of n)}.
+	 * {@code kill point <point> reached (k of n)}. Server thread.
 	 */
 	public static void kill(String point, String progress) {
+		String was = killProgress;
+		killProgress = progress;
+		try {
+			kill(point);
+		} finally {
+			killProgress = was;
+		}
+	}
+
+	/** (slice T5F) The progress the next halt's log line names ({@link #kill(String, String)}), else "". */
+	private static String killProgress = "";
+
+	public static void kill(String point) {
+		String progress = killProgress;
 		if ((point + "+save").equals(killAt)) {
 			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt
 			var sv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();

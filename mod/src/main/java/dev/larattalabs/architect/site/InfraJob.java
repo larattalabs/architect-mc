@@ -93,6 +93,8 @@ final class InfraJob implements Placement.Job {
 	transient Value[] leafAfter = new Value[0];
 	/** Phase 6a: the region tile this job writes ({@code region|stage|set|key}), or null. */
 	@Nullable String tile;
+	/** (slice T5F) The fluid provenance marker for this tile's body cells (a non-fluids tile's marks nothing); transient. */
+	private transient dev.larattalabs.architect.region.RegionFluids.@Nullable TileMarker provMarker;
 	/**
 	 * (6d RV, docs/CONTRACT.md "Phase 6d slice RV" §3.3) A revision tile's befores, kept past the PLACING commit: each cell is checked
 	 * against the world in the tick it is written, and a cell that changed since its capture (a player's block, another site placed over
@@ -627,6 +629,13 @@ final class InfraJob implements Placement.Job {
 							}
 						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
+						if (tile != null) {
+							// (slice T5F, §3.2) a fluids-stage tile's body cell: WROTE(R) in the same tick and chunk as the block
+							if (provMarker == null) {
+								provMarker = dev.larattalabs.architect.region.RegionFluids.tileMarker(tile);
+							}
+							provMarker.mark(level, p);
+						}
 						if (rb != null) {
 							wrote.add(p);
 						}

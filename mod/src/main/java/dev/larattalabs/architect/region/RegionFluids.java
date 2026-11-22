@@ -620,8 +620,27 @@ public final class RegionFluids {
 		final boolean ordered;
 		/** (6c HY) The write order (H: plan order). */
 		final List<Body> order;
-		/** (6c HY) This session cleared the bodies not yet due (after a stop, again: idempotent). */
-		boolean cleared;
+		/**
+		 * (slice T5F, §4.7) The record's cells carry fluid provenance ({@link FluidProv}): true for a record created by T5F (saved as
+		 * {@code prov}); false for one loaded without it (built before T5F), adopted by {@link FluidTxns#adoptFirst} before any write or drain.
+		 */
+		boolean prov = true;
+		/** (slice T5F) Body cell -> its body (the first that lists it), built once. */
+		it.unimi.dsi.fastutil.longs.@Nullable Long2ObjectOpenHashMap<Body> cellBody;
+
+		/** (slice T5F) The body one of whose own cells {@code p} is, or null. */
+		@Nullable Body bodyAt(long p) {
+			if (cellBody == null) {
+				var m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<Body>();
+				for (Body b : bodies) {
+					for (long c : b.cells) {
+						m.putIfAbsent(c, b);
+					}
+				}
+				cellBody = m;
+			}
+			return cellBody.get(p);
+		}
 		/** (slice DF) The record's durable file (T0's DurableFile, created at the first load or save). */
 		@Nullable DurableFile durable;
 		/**
@@ -1657,6 +1676,10 @@ public final class RegionFluids {
 			if (level == null) {
 				continue;
 			}
+			if (!st.prov) {
+				FluidTxns.adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F: its marks first, then everything else
+				continue;
+			}
 			hold(level, st, "writing".equals(st.phase) || "settling".equals(st.phase));
 			legacyLots(l, st); // (8cT last round, #5) a lot removed before 8cT, its drain maybe lost: drained again at load, in a txn
 			final RegionsImpl.Live fl = l;
@@ -1743,7 +1766,7 @@ public final class RegionFluids {
 		// (8cTc, N1) the tiles are markers: the write txn writes every due body's cells and forces it (W, receipts per chunk), then records
 		// them written and the phase settling (R), the barrier; a start replays it
 		if (!due.isEmpty()) {
-			FluidTxns.Step g = FluidTxns.write(l, st, due, true);
+			FluidTxns.Step g = FluidTxns.write(l, st, due, true, List.of());
 			if (g.kind() != FluidTxns.Step.Kind.DONE) {
 				if (g.detail() != null) {
 					Architect.LOGGER.warn("Region {}: the fluids write waits: {}", l.rec().id, g.detail());
@@ -1793,20 +1816,15 @@ public final class RegionFluids {
 			}
 			(ready ? due : waiting).add(b);
 		}
-		if (!st.cleared) {
-			st.cleared = true;
-			int n = 0;
+		// (slice T5F, §4.2) the first wave's txn clears what the tiles wrote of the waiting water bodies (fluid.clear W per chunk: WROTE ->
+		// CLEARED, in the same tick and chunk); a later wave finds them CLEARED. Lava and grate bodies are never cleared (the N1 condition)
+		boolean firstWave = st.states.values().stream().noneMatch(x -> x.writeTxn != null || x.writtenAt >= 0);
+		List<String> clear = new ArrayList<>();
+		if (firstWave) {
 			for (Body b : waiting) {
-				BodyState bs = st.states.get(b.id);
-				if (b.lava || b.grate.length > 0) {
-					continue; // (8cT last round, #1) a charged body's tile-written cells stay: they are never written again (the N1 condition)
+				if (!b.lava && b.grate.length == 0 && !st.states.get(b.id).before.isEmpty()) {
+					clear.add(b.id);
 				}
-				if (!bs.before.isEmpty()) {
-					n += drain(level, st, b, bs, false, st.othersOf(b));
-				}
-			}
-			if (n > 0) {
-				Architect.LOGGER.info("Region {}: {} body cell(s) written by the stage's tiles cleared until their bodies are due", l.rec().id, n);
 			}
 		}
 		int forced = 0;
@@ -1846,7 +1864,7 @@ public final class RegionFluids {
 		boolean more = st.states.values().stream().anyMatch(x -> "pending".equals(x.state) && !wave.contains(x == null ? "" : idOf(st, x)));
 		if (!wave.isEmpty()) {
 			// (8cTc, N1) the wave's write as a txn (W: the bodies written and forced, receipts; R: written, settling with the last wave)
-			FluidTxns.Step g = FluidTxns.write(l, st, wave, !more);
+			FluidTxns.Step g = FluidTxns.write(l, st, wave, !more, clear);
 			if (g.kind() != FluidTxns.Step.Kind.DONE) {
 				if (g.detail() != null) {
 					Architect.LOGGER.warn("Region {}: the fluids wave waits: {}", l.rec().id, g.detail());
@@ -1864,64 +1882,121 @@ public final class RegionFluids {
 		WorldJournal.kill(more ? "FL4" : "FL2"); // (6c HY) between two reaches: the downstream written, the upstream not
 	}
 
-	/**
-	 * (6c HY) A body's sources, ice cap and grate written where the cell is open (air, a fluid, ice; a grate cell's bars), no update.
-	 * (6c F3-c) Then its decor where the cell is open (after its water: a decor cell never takes a source first).
-	 */
-	static void writeBody(ServerLevel level, Body b) {
-		writeBody(level, b, p -> true, null);
+	/** (slice T5F) Whether cell {@code p} lies in chunk {@code (cx, cz)}. */
+	static boolean inChunk(long p, int cx, int cz) {
+		return BlockPos.getX(p) >> 4 == cx && BlockPos.getZ(p) >> 4 == cz;
+	}
+
+	/** (slice T5F) The chunks of a body's own cells (packed {@link #chunkKey}), sorted. */
+	static long[] cellChunks(Body b) {
+		java.util.TreeSet<Long> out = new java.util.TreeSet<>();
+		for (long p : b.cells) {
+			out.add(chunkKey(p));
+		}
+		return out.stream().mapToLong(Long::longValue).toArray();
 	}
 
 	/**
-	 * (8cT last round, #1, the N1 condition) {@link #writeBody} over the cells {@code in} accepts; with {@code jw}, a lava or grate cell a tile's
-	 * active journal entry wrote is never written again (if it is empty now, a player emptied it). Returns the cells written.
+	 * (slice T5F, I6's chunk-locality rule) The chunks that receive one of {@link #forceBodyIn}'s ticks: every own cell's, and every face
+	 * neighbour's that is not an own cell (a neighbour across a chunk border is that chunk's W), sorted.
 	 */
-	static int writeBody(ServerLevel level, Body b, java.util.function.LongPredicate in, @Nullable JournalWrites jw) {
-		int written = 0;
+	static long[] forceChunks(Body b) {
+		java.util.TreeSet<Long> out = new java.util.TreeSet<>();
+		LongOpenHashSet own = b.ownSet();
+		for (long p : b.cells) {
+			out.add(chunkKey(p));
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				long q = BlockPos.offset(p, d);
+				if (!own.contains(q)) {
+					out.add(chunkKey(q));
+				}
+			}
+		}
+		return out.stream().mapToLong(Long::longValue).toArray();
+	}
+
+	/**
+	 * (slice T5F, §4.2 {@code fluid.place}, §3.3, I2) One body's cells in chunk {@code (cx, cz)}: its sources, ice cap, grate and bubble
+	 * cells, then its decor, each written only where §3.3 writes it (no mark, or R's own {@code CLEARED}, and the cell open: air or what
+	 * the body itself would hold there, never over a block entity) and then marked {@code WROTE(R)} in the same tick and chunk. A
+	 * {@code WROTE} cell is never written again, whatever stands there (a bucketed pond cell, harvested lava, broken bars: N3). No update
+	 * is sent. Returns {written, WROTE cells found taken}.
+	 */
+	static int[] placeBody(ServerLevel level, Body b, String rec, int cx, int cz) {
+		int written = 0, taken = 0;
+		net.minecraft.world.level.chunk.LevelChunk ch = level.getChunk(cx, cz);
+		var marks = FluidProv.marks(ch, rec);
+		boolean changed = false;
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
 		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
 		BlockState bars = parse(GRATE);
 		for (long p : b.cells) {
-			if (b.decorState.containsKey(p) || !in.test(p)) {
+			if (b.decorState.containsKey(p) || !inChunk(p, cx, cz)) {
 				continue; // (6c F3-c) the decor's own cell: written below, never water first
 			}
-			if (jw != null && (b.lava && jw.wrote(p, Blocks.LAVA) || grate.contains(p) && jw.wrote(p, Blocks.IRON_BARS))) {
-				continue; // (8cT last round, #1) the tiles wrote this charged cell: never refilled
-			}
+			int idx = FluidProv.index(level, p);
+			FluidProv.Mark m = marks.get(idx);
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : b.bubble.containsKey(p) ? bubbleState(b.bubble.get(p)) : src;
+			boolean ours = ownStillOurs(b, p, now);
 			// ((8c round 2, P1-1) only into air or what the body wrote there (its fluid, ice, its grate's bars, its column): never over a block
-			// with a block entity or a waterlogged block a player placed (a chest set in a cleared reach while the one below settled))
-			boolean open = !now.hasBlockEntity() && (now.isAir() || ownStillOurs(b, p, now) || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
-			if (open && now != to) {
+			// with a block entity or a waterlogged block a player placed)
+			boolean open = !now.hasBlockEntity() && (now.isAir() || ours || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
+			FluidProv.Cell c = FluidProv.read(m, open, ours);
+			if (m == FluidProv.Mark.WROTE && !ours) {
+				taken++; // harvested, broken or replaced: never written again (I2, N3), refunded 0
+			}
+			if (c.write() && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				marks.put(idx, FluidProv.Mark.WROTE);
+				changed = true;
 				written++;
 				java.util.Set<Long> wt = writeTrace;
 				if (wt != null) {
 					wt.add(p); // (T5Fa TEST) dev.fluid.writeTrace
 				}
+			} else if (m == FluidProv.Mark.CLEARED && now == to && !b.lava && grate.isEmpty()) {
+				marks.put(idx, FluidProv.Mark.WROTE); // a cleared water cell refilled already (vanilla's infinite source): the body's again
+				changed = true;
 			}
 		}
-		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already); a bed cell's stays as the tiles
-		// wrote it (the shell's cell, never cleared))
-		LongOpenHashSet own = b.decor.length > 0 ? new LongOpenHashSet(b.cells) : null;
+		// ((6c F3-c) the decor: a body cell's where it is open (air, a fluid, ice, or its decor already), by the same marks; a bed cell's stays
+		// as the tiles wrote it (the shell's cell, never cleared))
+		LongOpenHashSet own = b.decor.length > 0 ? b.ownSet() : null;
 		for (long p : b.decor) {
-			if (!own.contains(p) || !in.test(p)) {
+			if (!own.contains(p) || !inChunk(p, cx, cz)) {
 				continue;
 			}
+			int idx = FluidProv.index(level, p);
+			FluidProv.Mark m = marks.get(idx);
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
 			BlockState to = parse(b.decorState.get(p));
-			if (openCell(b, p, now) && now != to) {
-				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+			boolean ours = ownStillOurs(b, p, now);
+			FluidProv.Cell c = FluidProv.read(m, openCell(b, p, now), ours);
+			if (m == FluidProv.Mark.WROTE && !ours) {
+				taken++;
 			}
+			if (c.write() && now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				marks.put(idx, FluidProv.Mark.WROTE);
+				changed = true;
+				written++;
+				java.util.Set<Long> wt = writeTrace;
+				if (wt != null) {
+					wt.add(p);
+				}
+			}
+		}
+		if (changed) {
+			FluidProv.put(ch, rec, marks);
 		}
 		// ((6c HY-c, §8.3) the grate's bars joined to each other and to the shell, as vanilla's own neighbour update would join them:
 		// unjoined bars are posts 2/16 wide with gaps of 14/16, which a 0.6-wide mob passes (HY-c's probe). Still no update sent.)
 		for (long p : b.grate) {
-			if (!in.test(p)) {
+			if (!inChunk(p, cx, cz)) {
 				continue;
 			}
 			BlockPos bp = BlockPos.of(p);
@@ -1932,39 +2007,150 @@ public final class RegionFluids {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, joined, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
 			}
 		}
-		return written;
+		return new int[] {written, taken};
 	}
 
 	/**
-	 * One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2); the ticks scheduled. (7a LF) A bubble
-	 * cell gets a block tick instead (BubbleColumnBlock.tick keeps the column over its base, or turns it back to water); its neighbours
-	 * outside the body get the fluid tick as any source's.
+	 * (slice T5F, §4.2 {@code fluid.clear}) A waiting water body's cells in chunk {@code (cx, cz)} that R wrote and still holds back to their
+	 * before states ({@code WROTE -> CLEARED}), so the body is written again at its wave; a cell already taken keeps {@code WROTE} (a
+	 * player's harvest is never laundered into "the stage cleared it"). Lava and grate bodies are never cleared. Fluid neighbours in this
+	 * chunk get a tick (water that isn't the body's settles back). Returns the cells written.
 	 */
-	static int forceBody(ServerLevel level, Body b) {
+	static int clearBody(ServerLevel level, Body b, BodyState bs, String rec, int cx, int cz) {
+		if (b.lava || b.grate.length > 0) {
+			return 0;
+		}
+		net.minecraft.world.level.chunk.LevelChunk ch = level.getChunk(cx, cz);
+		var marks = FluidProv.marks(ch, rec);
+		boolean changed = false;
+		int n = 0;
+		Fluid src = b.source();
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (long p : b.cells) {
+			if (!inChunk(p, cx, cz)) {
+				continue;
+			}
+			int idx = FluidProv.index(level, p);
+			if (marks.get(idx) != FluidProv.Mark.WROTE) {
+				continue;
+			}
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, false) || dev.larattalabs.architect.placed.Placed.record(level, bp) != null) {
+				continue; // taken (or a player's source there): WROTE stays
+			}
+			String before = bs.before.get(p);
+			BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
+			if (now != to) {
+				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				written.add(p);
+				n++;
+			}
+			marks.put(idx, FluidProv.Mark.CLEARED);
+			changed = true;
+		}
+		if (changed) {
+			FluidProv.put(ch, rec, marks);
+		}
+		LongOpenHashSet done = new LongOpenHashSet();
+		for (int i = 0; i < written.size(); i++) {
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				long q = BlockPos.offset(written.getLong(i), d);
+				if (!inChunk(q, cx, cz) || !done.add(q)) {
+					continue; // (I6) a tick only in this W's own chunk
+				}
+				BlockPos qp = BlockPos.of(q);
+				FluidState f = level.getBlockState(qp).getFluidState();
+				if (!f.isEmpty()) {
+					level.scheduleTick(qp, f.getType(), 1);
+				}
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2), restricted to chunk {@code (cx, cz)}
+	 * (slice T5F, I6: the {@code fluid.force} W of that chunk; {@link #forceChunks} plans one per chunk receiving a tick). (7a LF) A bubble
+	 * cell gets a block tick instead (BubbleColumnBlock.tick keeps the column over its base, or turns it back to water). Returns the ticks.
+	 */
+	static int forceBodyIn(ServerLevel level, Body b, int cx, int cz) {
 		java.util.List<String> ft = forceTrace;
 		if (ft != null) {
 			ft.add(b.id + "@" + level.getGameTime()); // (T5Fa TEST) dev.fluid.forceTrace
 		}
 		int n = 0;
-		LongOpenHashSet own = new LongOpenHashSet(b.cells);
+		LongOpenHashSet own = b.ownSet();
 		Fluid f = b.source();
 		for (long p : b.cells) {
 			BlockPos bp = BlockPos.of(p);
-			if (b.bubble.containsKey(p)) {
-				level.scheduleTick(bp, Blocks.BUBBLE_COLUMN, 1);
-			} else {
-				level.scheduleTick(bp, f, 1);
+			if (inChunk(p, cx, cz)) {
+				if (b.bubble.containsKey(p)) {
+					level.scheduleTick(bp, Blocks.BUBBLE_COLUMN, 1);
+				} else {
+					level.scheduleTick(bp, f, 1);
+				}
+				n++;
 			}
-			n++;
 			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
-				BlockPos q = bp.relative(d);
-				if (!own.contains(q.asLong())) {
-					level.scheduleTick(q, f, 1);
+				long q = BlockPos.offset(p, d);
+				if (!own.contains(q) && inChunk(q, cx, cz)) {
+					level.scheduleTick(BlockPos.of(q), f, 1);
 					n++;
 				}
 			}
 		}
 		return n;
+	}
+
+	/**
+	 * (slice T5F, §3.2) The tile hook: a fluids-stage tile ({@code region|stage|set|key}) marks each body cell it writes {@code WROTE(R)} where
+	 * the cell then holds what the body wrote, in the same call as the block. Any other tile marks nothing.
+	 */
+	public interface TileMarker {
+		void mark(ServerLevel level, long p);
+	}
+
+	static final TileMarker NO_MARKS = (level, p) -> {
+	};
+
+	public static TileMarker tileMarker(String tile) {
+		String[] t = tile.split("\\|", -1);
+		if (t.length < 2 || !STAGE.equals(Revisions.plainStage(t[1]))) {
+			return NO_MARKS;
+		}
+		RegionsImpl.Live l0 = RegionsImpl.live(t[0]);
+		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, t[1]);
+		Regional st = l == null ? null : of(l);
+		if (st == null) {
+			Architect.LOGGER.warn("Fluids tile {}: its region's fluids record is not loaded: its cells carry no provenance marks", tile);
+			return NO_MARKS;
+		}
+		String rec = FluidTxns.recKey(l);
+		return (level, p) -> {
+			Body b = st.bodyAt(p);
+			if (b != null && ownStillOurs(b, p, level.getBlockState(BlockPos.of(p)))) {
+				FluidProv.set(level, p, rec, FluidProv.Mark.WROTE);
+			}
+		};
+	}
+
+	/**
+	 * (slice T5F, §3.2) The record whose marks a rollback of item {@code itemKey} of batch {@code batchId} clears with its writes: R when the
+	 * item is a tile of R's fluids stage, else null.
+	 */
+	public static @Nullable String provScopeOf(@Nullable String batchId, @Nullable String itemKey) {
+		QBatch b = batchId == null ? null : Batches.get(batchId);
+		if (b == null || itemKey == null || !RegionItems.isRegion(b)) {
+			return null;
+		}
+		QItem it = b.items.stream().filter(i -> itemKey.equals(i.key)).findFirst().orElse(null);
+		if (it == null || it.stage == null || !STAGE.equals(Revisions.plainStage(it.stage))) {
+			return null;
+		}
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, it.stage);
+		return l == null ? null : FluidTxns.recKey(l);
 	}
 
 	/** A body's census now (§3.3): what differs from the prediction, and where fluid escaped. */
@@ -3308,9 +3494,9 @@ public final class RegionFluids {
 	/**
 	 * (8cTb, A's refund side, N2) What a survival record's removal scoops, planned once from the world before any drain write: per lava cell
 	 * and grate cell of its bodies, {lava sources, grate bars}. A body that stands (it has befores): each cell still standing. A body the
-	 * charge paid for ({@code chargedBodies}, its rid): a cell the stage's tiles never wrote (no active journal entry of the group writes the
-	 * body's lava or bars there) comes back too; a cell written and then taken (a player's bucket, broken bars) is neither. A record without
-	 * {@code chargedBodies} (charged before DF round 3) gets the standing rule only.
+	 * charge paid for ({@code chargedBodies}, its rid; N2: every lava and grate body of a record charged on main): a cell R never wrote
+	 * (slice T5F, §3.3: no {@code WROTE} mark in its chunk) comes back too; a cell written and then taken (a player's bucket, broken bars:
+	 * WROTE, not standing) is neither. The journal is never read.
 	 */
 	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group) {
 		return scoopPlan(level, l, st, group, p -> true);
@@ -3318,16 +3504,23 @@ public final class RegionFluids {
 
 	/** {@link #scoopPlan} over the cells {@code in} accepts (8cT last round, #2: one chunk's, saved with that chunk). */
 	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
+		if (!st.prov) {
+			// (slice T5F) never guessed: a record built before T5F is read by its marks only once adopted (FluidTxns.adoptFirst)
+			throw new IllegalStateException("the region's water record is adopted first (fluid.adopt): the refund waits for it");
+		}
 		java.util.Set<String> paid = new java.util.HashSet<>();
+		boolean allPaid = false;
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
 			cb.forEach(x -> paid.add(x.getAsString()));
+		} else if (l.rid() == 0 && FluidProv.mainEraPaid(l.rec().survival)) {
+			allPaid = true; // (N2) charged on main, once per region at the gate: every lava and grate body of it was paid
 		}
-		JournalWrites jw = new JournalWrites(l.rec().dimension, group);
+		String rec = FluidTxns.recKey(l);
 		int lava = 0, grates = 0;
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			boolean ours = !bs.before.isEmpty();
-			boolean charged = paid.contains(b.id);
+			boolean charged = allPaid ? b.lava || b.grate.length > 0 : paid.contains(b.id);
 			if (!ours && !charged) {
 				continue;
 			}
@@ -3338,9 +3531,9 @@ public final class RegionFluids {
 					}
 					FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
-						lava += ours || charged ? 1 : 0;
-					} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.LAVA)) { // (8cTc) a body its write txn wrote is written
 						lava++;
+					} else if (charged && FluidProv.get(level, p, rec) != FluidProv.Mark.WROTE) {
+						lava++; // (slice T5F, §3.3) paid and never delivered (no mark): refunded; WROTE and taken: 0 (A)
 					}
 				}
 			}
@@ -3350,53 +3543,12 @@ public final class RegionFluids {
 				}
 				if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
 					grates++;
-				} else if (charged && bs.writeTxn == null && !jw.wrote(p, Blocks.IRON_BARS)) {
+				} else if (charged && FluidProv.get(level, p, rec) != FluidProv.Mark.WROTE) {
 					grates++;
 				}
 			}
 		}
 		return new int[] {lava, grates};
-	}
-
-	/** (8cTb) Per section, the cells an active (written, not PLACING) journal entry of the group wrote, with the block it wrote. */
-	static final class JournalWrites {
-		private final String dim;
-		private final String group;
-		private final Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<java.util.List<net.minecraft.world.level.block.Block>>> bySection =
-			new Long2ObjectOpenHashMap<>();
-
-		JournalWrites(String dim, String group) {
-			this.dim = dim;
-			this.group = group;
-		}
-
-		boolean wrote(long pos, net.minecraft.world.level.block.Block block) {
-			long key = dev.larattalabs.architect.journal.Sections.key(pos);
-			var m = bySection.get(key);
-			if (m == null) {
-				m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
-				try {
-					var store = WorldJournal.store();
-					for (var e : WorldJournal.activeSlices(dim, key)) {
-						var meta = store.meta(e.id());
-						if (meta == null || !group.equals(meta.group()) || e.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
-							continue;
-						}
-						for (var c : e.cells()) {
-							if (c.after() != null) {
-								m.computeIfAbsent(c.pos(), x -> new java.util.ArrayList<>()).add(WorldJournal.state(c.after()).getBlock());
-							}
-						}
-					}
-				} catch (IOException | RuntimeException ex) {
-					// (8cTb review P2-8) never guessed: the removal's drain waits until the journal reads
-					throw new IllegalStateException("the journal could not be read for section " + key + " (" + ex + "): the refund waits for it");
-				}
-				bySection.put(key, m);
-			}
-			var l = m.get(pos);
-			return l != null && l.contains(block);
-		}
 	}
 
 	/** (8cTb) A cell's chunk as {@code cx << 32 | cz} (unsigned low half). */
@@ -4164,6 +4316,84 @@ public final class RegionFluids {
 		return null;
 	}
 
+	/**
+	 * (slice T5F, DevBridge {@code dev.fluid.marks}) Per body, its own cells' fluid provenance now: {@code cells}, {@code wrote},
+	 * {@code cleared}, and {@code standing} (cells holding what the body wrote), {@code wroteStanding} (both), {@code takenWrote} (WROTE, not
+	 * standing).
+	 */
+	public static JsonObject marksJson(ServerLevel level, RegionsImpl.Live l) {
+		Regional st = of(l);
+		JsonObject o = new JsonObject();
+		JsonArray bodies = new JsonArray();
+		o.add("bodies", bodies);
+		if (st == null) {
+			return o;
+		}
+		o.addProperty("prov", st.prov);
+		String rec = FluidTxns.recKey(l);
+		o.addProperty("rec", rec);
+		for (Body b : st.bodies) {
+			int wrote = 0, cleared = 0, standing = 0, ws = 0, taken = 0;
+			for (long ck : cellChunks(b)) {
+				var marks = FluidProv.marks(level.getChunk((int) (ck >> 32), (int) ck), rec);
+				for (long p : b.cells) {
+					if (chunkKey(p) != ck) {
+						continue;
+					}
+					FluidProv.Mark m = marks.get(FluidProv.index(level, p));
+					boolean ours = ownStillOurs(b, p, level.getBlockState(BlockPos.of(p)));
+					wrote += m == FluidProv.Mark.WROTE ? 1 : 0;
+					cleared += m == FluidProv.Mark.CLEARED ? 1 : 0;
+					standing += ours ? 1 : 0;
+					ws += ours && m == FluidProv.Mark.WROTE ? 1 : 0;
+					taken += !ours && m == FluidProv.Mark.WROTE ? 1 : 0;
+				}
+			}
+			JsonObject bo = new JsonObject();
+			bo.addProperty("id", b.id);
+			bo.addProperty("cells", b.cells.length);
+			bo.addProperty("wrote", wrote);
+			bo.addProperty("cleared", cleared);
+			bo.addProperty("standing", standing);
+			bo.addProperty("wroteStanding", ws);
+			bo.addProperty("takenWrote", taken);
+			bodies.add(bo);
+		}
+		return o;
+	}
+
+	/**
+	 * (slice T5F, TEST DevBridge {@code dev.fluid.unprov}) Makes a record read as one saved before T5F: every mark of it in its bodies' chunks
+	 * removed and the record saved without {@code prov}; the next tick (or write, or drain) adopts it ({@code fluid.adopt}).
+	 */
+	public static JsonObject unprovForTest(ServerLevel level, RegionsImpl.Live l) {
+		Regional st = of(l);
+		JsonObject o = new JsonObject();
+		if (st == null) {
+			o.addProperty("bodies", 0);
+			return o;
+		}
+		String rec = FluidTxns.recKey(l);
+		int n = 0;
+		LongOpenHashSet chunks = new LongOpenHashSet();
+		for (Body b : st.bodies) {
+			for (long ck : cellChunks(b)) {
+				chunks.add(ck);
+			}
+		}
+		for (long ck : chunks) {
+			net.minecraft.world.level.chunk.LevelChunk ch = level.getChunk((int) (ck >> 32), (int) ck);
+			var marks = FluidProv.marks(ch, rec);
+			n += marks.size();
+			marks.clear();
+			FluidProv.put(ch, rec, marks);
+		}
+		st.prov = false;
+		o.addProperty("marksRemoved", n);
+		o.addProperty("saved", save(l, st));
+		return o;
+	}
+
 	/** The region's fluids record as JSON (DevBridge {@code dev.fluid.state}). */
 	public static JsonObject stateJson(RegionsImpl.Live l) {
 		Regional st = of(l);
@@ -4174,6 +4404,7 @@ public final class RegionFluids {
 		}
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
+		o.addProperty("prov", st.prov); // (slice T5F) false until a record built before T5F is adopted
 		o.addProperty("ordered", st.ordered); // (6c HY)
 		if (st.owed) {
 			o.addProperty("owed", st.owedWhy == null ? "owed" : st.owedWhy); // (slice DF) the record not on disk
@@ -4218,6 +4449,9 @@ public final class RegionFluids {
 	/** Saves the record (slice DF: on DurableFile); true only when it is durably on disk (OK). */
 	static boolean save(RegionsImpl.Live l, Regional st) {
 		JsonObject o = new JsonObject();
+		if (st.prov) {
+			o.addProperty("prov", 1); // (slice T5F) its cells carry fluid provenance
+		}
 		o.addProperty("phase", st.phase);
 		o.addProperty("forcedAt", st.forcedAt);
 		if (st.removal != null) {
@@ -4439,6 +4673,7 @@ public final class RegionFluids {
 		}
 		try {
 			JsonObject o = RegionStore.readJson(f);
+			st.prov = o.has("prov"); // (slice T5F, §4.7) a record saved before T5F has no marks: adopted first
 			st.phase = RegionsImpl.str(o, "phase", "gate");
 			st.forcedAt = o.has("forcedAt") ? o.get("forcedAt").getAsLong() : -1;
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;

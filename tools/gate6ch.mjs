@@ -28,6 +28,7 @@
 //     t9rc, t9er, t9hd (8ct-rc, 8ct-er, 8ct-hd) 8cT last round: the recheck's drain durable; an escape's outcome rebuilt with its receipts
 //                                      present; a held drain answers held(other) at once
 //     t5wb, t5fz, t5kn                 slice T5Fa: T5F's failing-first rows (water bucket P2-a, force lost P2-b, kill point k of n)
+//     t5wxa, t5wxb, t5ax               slice T5Fb: the TX matrix of fluid.write (place, force; barrier:effects, written) and fluid.adopt
 //     t8rr      (8ct-rr)               8cTb review P2-7: TX:fluid.drain:apply:0+save (receipts on disk, record not): a fresh bound
 //     t8rd      (8ct-rd)               slice 8cTb: a removal halted at TX:fluid.drain:drain, bare and +save: replayed, E-flat 0
 //     rmcrash   (h-rmcrash)            the same through the removal's crash windows: FL3+save, K6+save, R2q+save (R2 durable, the queue
@@ -205,6 +206,10 @@ steps.df = async () => {
 for (const k of ['t8c', 't8e', 't8f', 't8rd', 't8wr', 't8rr', 't9rc', 't9er', 't9hd']) steps[k] = async () => { await ensure(); return await (await import('./lib/gate6ch-core.mjs'))[k](ctx); };
 // (slice T5Fa) T5F's failing-first rows on h_core_demo (tools/lib/gate-t5f-h.mjs)
 for (const [k, f] of [['t5wb', 'waterBucket'], ['t5fz', 'forceLost'], ['t5kn', 'killProgress']]) steps[k] = async () => { await ensure(); return await (await import('./lib/gate-t5f-h.mjs'))[f](ctx); };
+// (slice T5Fb) the TX matrix of fluid.write and fluid.adopt (contract §7), split in steps of about 25 min
+steps.t5wxa = async () => { await ensure(); return await (await import('./lib/gate-t5f-h.mjs')).writeTx(ctx, ['place', 'force']); };
+steps.t5wxb = async () => { await ensure(); return await (await import('./lib/gate-t5f-h.mjs')).writeTx(ctx, ['barrier:effects', 'written']); };
+steps.t5ax = async () => { await ensure(); return await (await import('./lib/gate-t5f-h.mjs')).adoptTx(ctx, ['adopt', 'barrier:effects', 'adopted']); };
 // (fix/drain-holders) a later site's block in a body cell through the whole-group drain, and the removal's crash windows
 steps.holders = async () => {
   await ensure();

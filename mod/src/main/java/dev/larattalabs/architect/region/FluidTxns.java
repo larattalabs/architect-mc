@@ -41,6 +41,8 @@ public final class FluidTxns {
 	public static final String CHARGE = "region.charge";
 	public static final String DRAIN = "fluid.drain";
 	public static final String WRITE = "fluid.write";
+	/** (slice T5F, §4.7) The adoption of a record built before T5F. */
+	public static final String ADOPT = "fluid.adopt";
 
 	/**
 	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.holdChunk}: while non-null ({@code {x, z}}), a removal drain's W apply throws (the txn holds)
@@ -67,6 +69,7 @@ public final class FluidTxns {
 		c.register(CHARGE_KIND);
 		c.register(DRAIN_KIND);
 		c.register(WRITE_KIND);
+		c.register(ADOPT_KIND); // (slice T5F)
 	}
 
 	/** The resource a fluids record's txns hold: {@code fluid:<region>#rv<rid>} (never shown: a hold's where is its chunk). */
@@ -355,6 +358,10 @@ public final class FluidTxns {
 	 * {@code drained} with a fresh bound); a Remove asked again joins it (the same key).
 	 */
 	static Step removalDrain(MinecraftServer s, ServerLevel level, RegionsImpl.Live l, RegionFluids.Regional st, String group, boolean flowing) {
+		Step adopted = adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F is adopted first (its scoop reads the marks)
+		if (adopted != null) {
+			return adopted;
+		}
 		String key = drainKey(l, st.removal == null || "draining".equals(st.removal) ? "removal" : "legacy");
 		TxnCore c = TxnServer.core();
 		TxnCore.Started started = c.begin(DRAIN, key, List.of(resource(l)), null);
@@ -508,7 +515,7 @@ public final class FluidTxns {
 				if (ch == null) {
 					return Probe.UNKNOWN;
 				}
-				if (!TestMove.receiptsOf(ch).contains(k)) {
+				if (!TestMove.hasReceipt(ch, k)) { // (slice T5F) exact, or with its fields (tx-<n>/<i>;op=..)
 					return Probe.ABSENT;
 				}
 			}
@@ -776,6 +783,10 @@ public final class FluidTxns {
 	/** Begins (or finds) one record txn: plans {@code w} then {@code r} over the record's chunks; persists; drives. */
 	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, Effect.Builder w, Effect.Builder r,
 		java.util.function.Consumer<TxnEntry> attached) {
+		Step a = adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F is adopted first
+		if (a != null) {
+			return a;
+		}
 		TxnCore c = TxnServer.core();
 		TxnCore.Started started = c.begin(kind, key, List.of(resource(l)), null);
 		switch (started.status()) {
@@ -808,15 +819,28 @@ public final class FluidTxns {
 		return after(t);
 	}
 
-	// ------------------------------------------------------------------ fluid.write (N1: the tiles are markers; the txn writes the cells)
+	// ------------------------------------------------------------------ fluid.write (slice T5F, §4.2: clear, place and force Ws per chunk)
 
 	/**
-	 * (8cTc) One wave's write as a txn: the bodies due now (an H region: every pending one) written by {@link RegionFluids#writeBody}
-	 * (only into air or what the body wrote) and forced (W, a receipt in every chunk; kill point {@code TX:fluid.write:place}, after the writes
-	 * and before the receipts), then the bodies {@code written} with {@code writeTxn} and, the last wave, the phase {@code settling} (R), the
-	 * barrier. A start replays it from the entry; its receipts are the per-cell evidence the scoop reads (A's write side).
+	 * (slice T5F, §4.2) One wave's write as a txn, decided at its persist and always rolled forward:
+	 * <ul>
+	 * <li>{@code fluid.clear} (an ordered course's first wave only): one W per chunk holding a waiting water body of {@code clear}, which
+	 * writes back what the tiles wrote of it ({@code WROTE -> CLEARED});</li>
+	 * <li>{@code fluid.place}: one W per (body, chunk), which writes the body's cells by §3.3 and marks them {@code WROTE(R)};</li>
+	 * <li>{@code fluid.force}: one W per (body, chunk) receiving a tick, after every place W, which schedules {@code forceBody}'s ticks in
+	 * that chunk (I6: physics in W, so a chunk whose snapshot is lost gets its writes and its ticks back together, P2-b);</li>
+	 * <li>the core's effects barrier, then the R {@code fluid.written}: the bodies written, {@code writeTxn}, and the phase {@code settling}
+	 * on the last wave. No physics in the R (I7).</li>
+	 * </ul>
+	 * Each W adds its receipt ({@code tx-<n>/<i>;op=..;t=..}) in the same apply, tick and chunk as its mutations (I3); its probe reads its
+	 * own chunk's receipt only (I4). Kill points {@code TX:fluid.write:clear|place|force} after the first such W and its receipt
+	 * ({@code place} logs "reached (k of n)" over the place Ws).
 	 */
-	static Step write(RegionsImpl.Live l, RegionFluids.Regional st, List<String> due, boolean last) {
+	static Step write(RegionsImpl.Live l, RegionFluids.Regional st, List<String> due, boolean last, List<String> clear) {
+		Step a = adoptFirst(l, st);
+		if (a != null) {
+			return a;
+		}
 		String key = "fluid-write:" + recKey(l) + "/" + String.join(",", due);
 		TxnCore c = TxnServer.core();
 		TxnCore.Started started = c.begin(WRITE, key, List.of(resource(l)), null);
@@ -837,27 +861,33 @@ public final class FluidTxns {
 			}
 		}
 		TxnEntry t = started.entry();
-		// (8cT last round, #1) one W per chunk: a missing receipt replays its own chunk only
-		java.util.TreeSet<Long> chunks = new java.util.TreeSet<>();
-		for (String id : due) {
+		java.util.TreeSet<Long> clearChunks = new java.util.TreeSet<>();
+		for (String id : clear) {
 			RegionFluids.Body b = st.body(id);
-			if (b == null) {
-				continue;
-			}
-			for (long[] a : new long[][] {b.cells, b.ice, b.grate, b.decor}) {
-				for (long p : a) {
-					chunks.add(RegionFluids.chunkKey(p));
+			if (b != null) {
+				for (long ck : RegionFluids.cellChunks(b)) {
+					clearChunks.add(ck);
 				}
 			}
 		}
-		for (long ck : chunks) {
-			JsonArray one = new JsonArray();
-			JsonArray a = new JsonArray();
-			a.add((int) (ck >> 32));
-			a.add((int) ck);
-			one.add(a);
-			c.plan(t, Effect.of("fluid.place", EffectClass.W).data("bodies", idsJson(due)).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec()
-				.dimension).data("group", String.valueOf(l.rec().groupId)).data("chunks", one));
+		for (long ck : clearChunks) {
+			c.plan(t, wEffect("fluid.clear", l, ck).data("bodies", idsJson(clear)));
+		}
+		for (String id : due) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				for (long ck : RegionFluids.cellChunks(b)) {
+					c.plan(t, wEffect("fluid.place", l, ck).data("body", id));
+				}
+			}
+		}
+		for (String id : due) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				for (long ck : RegionFluids.forceChunks(b)) {
+					c.plan(t, wEffect("fluid.force", l, ck).data("body", id));
+				}
+			}
 		}
 		c.plan(t, Effect.of("fluid.written", EffectClass.R).data("bodies", idsJson(due)).data("last", last ? 1 : 0).data("region", l.rec().id).data("rid", l
 			.rid()));
@@ -871,21 +901,135 @@ public final class FluidTxns {
 		return after(t);
 	}
 
+	/** (slice T5F) A W effect of one chunk of record {@code l}. */
+	static Effect.Builder wEffect(String op, RegionsImpl.Live l, long ck) {
+		JsonArray one = new JsonArray();
+		JsonArray a = new JsonArray();
+		a.add((int) (ck >> 32));
+		a.add((int) ck);
+		one.add(a);
+		return Effect.of(op, EffectClass.W).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("group", String.valueOf(l
+			.rec().groupId)).data("chunks", one);
+	}
+
+	/** (slice T5F) A per-chunk W's run: its writes in its one chunk; returns the receipt's fields (beyond {@code op} and {@code t}). */
+	interface ChunkRun {
+		Map<String, Object> run(TxnEntry t, Effect e, ServerLevel level, RegionsImpl.Live l, RegionFluids.Regional st, int cx, int cz);
+	}
+
 	/**
-	 * (8cT last round, #1) One chunk's write: the due bodies' cells in it that are still open, except a lava or grate cell a tile's journal
-	 * entry wrote (a cell written and then emptied, harvested lava or broken bars, is never refilled: the tiles' write was its only one).
+	 * (slice T5F, I3, I4) A per-chunk W adapter: probe = this effect's receipt in its own chunk (exact or with fields); apply = the writes,
+	 * then the receipt {@code tx-<n>/<i>;op=<op>;t=<gameTime>;..} in the same tick and chunk, then the kill point {@code step} (between
+	 * effects: a {@code +save} never saves a half-applied chunk, I9).
 	 */
-	static final TxnKind.Adapter FLUID_PLACE = w("place", (t, e, level, l, st) -> {
-		long[] c = chunksOf(e).get(0);
-		RegionFluids.JournalWrites jw = new RegionFluids.JournalWrites(l.rec().dimension, e.data().get("group").getAsString());
+	static TxnKind.Adapter chunkW(String op, String stepName, ChunkRun run) {
+		return new TxnKind.Adapter() {
+			@Override
+			public Probe probe(TxnEntry t, Effect e) {
+				return FLUID_DRAIN.probe(t, e);
+			}
+
+			@Override
+			public void apply(TxnEntry t, Effect e) {
+				ServerLevel level = level(e);
+				RegionsImpl.Live l = live(region(e), rid(e));
+				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
+				if (level == null || l == null || st == null) {
+					throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
+				}
+				long[] c = chunksOf(e).get(0);
+				LevelChunk ch = level.getChunk((int) c[0], (int) c[1]);
+				Map<String, Object> f = new java.util.LinkedHashMap<>();
+				f.put("op", op.substring("fluid.".length()));
+				f.put("t", level.getGameTime());
+				f.putAll(run.run(t, e, level, l, st, (int) c[0], (int) c[1]));
+				String k = e.key(t.id);
+				if (!TestMove.hasReceipt(ch, k)) {
+					TestMove.addReceiptTo(ch, dev.larattalabs.architect.txn.Receipts.of(k, f));
+				}
+				if ("fluid.place".equals(op)) {
+					int n = 0, kk = 0;
+					for (Effect x : t.effects()) {
+						if ("fluid.place".equals(x.op())) {
+							n++;
+							kk += x.i() <= e.i() ? 1 : 0;
+						}
+					}
+					KillPoints.step(t.kind, !t.live(), stepName, kk, n); // (Steward's S1, Q3) "reached (k of n)" over the place Ws
+				} else {
+					step(t, stepName);
+				}
+			}
+
+			@Override
+			public void compensate(TxnEntry t, Effect e) {
+				throw new IllegalStateException("never compensated");
+			}
+
+			@Override
+			public String where(TxnEntry t, Effect e) {
+				return FLUID_DRAIN.where(t, e);
+			}
+		};
+	}
+
+	/** (slice T5F) The body ids a write W names: {@code body} (T5F), else {@code bodies}. */
+	static List<String> bodiesOf(Effect e) {
+		if (e.data().has("body")) {
+			return List.of(e.data().get("body").getAsString());
+		}
+		return ids(e);
+	}
+
+	/** (slice T5F, §4.2) {@code fluid.clear}: the waiting water bodies' tile-written cells in this chunk cleared ({@code WROTE -> CLEARED}). */
+	static final TxnKind.Adapter FLUID_CLEAR = chunkW("fluid.clear", "clear", (t, e, level, l, st, cx, cz) -> {
 		int n = 0;
-		for (String id : ids(e)) {
+		String rec = recKey(l);
+		for (String id : bodiesOf(e)) {
 			RegionFluids.Body b = st.body(id);
-			if (b != null) {
-				n += RegionFluids.writeBody(level, b, p -> BlockPos.getX(p) >> 4 == c[0] && BlockPos.getZ(p) >> 4 == c[1], jw);
+			RegionFluids.BodyState bs = st.states.get(id);
+			if (b != null && bs != null) {
+				n += RegionFluids.clearBody(level, b, bs, rec, cx, cz);
 			}
 		}
-		return n;
+		if (n > 0) {
+			Architect.LOGGER.info("Region {}: {} body cell(s) written by the stage's tiles cleared in chunk {},{} until their bodies are due", l.rec().id, n,
+				cx, cz);
+		}
+		return Map.of("n", n);
+	});
+
+	/** (slice T5F, §4.2, §3.3) {@code fluid.place}: one body's cells in this chunk written where §3.3 writes them, marked WROTE(R). */
+	static final TxnKind.Adapter FLUID_PLACE = chunkW("fluid.place", "place", (t, e, level, l, st, cx, cz) -> {
+		int n = 0, h = 0;
+		String rec = recKey(l);
+		for (String id : bodiesOf(e)) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				int[] r = RegionFluids.placeBody(level, b, rec, cx, cz);
+				n += r[0];
+				h += r[1];
+			}
+		}
+		Map<String, Object> f = new java.util.LinkedHashMap<>();
+		f.put("n", n);
+		f.put("h", h);
+		return f;
+	});
+
+	/** (slice T5F, I6) {@code fluid.force}: one body's forced ticks in this chunk (its cells', and its outside neighbours' here). */
+	static final TxnKind.Adapter FLUID_FORCE = chunkW("fluid.force", "force", (t, e, level, l, st, cx, cz) -> {
+		int n = 0;
+		for (String id : bodiesOf(e)) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				n += RegionFluids.forceBodyIn(level, b, cx, cz);
+			}
+		}
+		if (st.forcedAt < 0 || !t.live()) {
+			st.forcedAt = level.getGameTime(); // (in memory; a replay's forced pass moves it: the settle counts from the ticks it scheduled, §4.4)
+		}
+		return Map.of("n", n);
 	});
 
 	static final TxnKind.Adapter FLUID_WRITTEN = r(new RRun() {
@@ -920,14 +1064,10 @@ public final class FluidTxns {
 				bs.spill = b.spill.length;
 				bs.writeTxn = t.id;
 			}
-			if (level != null) {
-				for (String id : ids(e)) {
-					RegionFluids.Body b = st.body(id);
-					if (b != null) {
-						RegionFluids.forceBody(level, b); // (8cT last round) the forced tick once every chunk's cells are written
-					}
-				}
-				st.forcedAt = st.forcedAt < 0 ? level.getGameTime() : st.forcedAt;
+			// (slice T5F, I6/I7) no physics here: the force Ws scheduled the ticks, each with its chunk; forcedAt is the latest force W's time
+			long forcedWas = st.forcedAt;
+			if (st.forcedAt < 0) {
+				st.forcedAt = now;
 			}
 			String phase = st.phase;
 			if (e.data().get("last").getAsInt() == 1) {
@@ -935,6 +1075,7 @@ public final class FluidTxns {
 			}
 			if (!RegionFluids.save(l, st)) {
 				st.phase = phase;
+				st.forcedAt = forcedWas;
 				was.forEach((id, w) -> {
 					RegionFluids.BodyState bs = st.states.get(id);
 					bs.state = (String) w[0];
@@ -945,6 +1086,7 @@ public final class FluidTxns {
 				});
 				throw new IllegalStateException("the fluids record could not be saved");
 			}
+			step(t, "written"); // (§4.2's point) the R durable, the txn not EFFECTS_DONE yet
 		}
 	});
 
@@ -962,12 +1104,190 @@ public final class FluidTxns {
 		@Override
 		public TxnKind.@Nullable Adapter adapter(Effect e) {
 			return switch (e.op()) {
+				case "fluid.clear" -> FLUID_CLEAR;
 				case "fluid.place" -> FLUID_PLACE;
+				case "fluid.force" -> FLUID_FORCE;
 				case "fluid.written" -> FLUID_WRITTEN;
 				default -> null;
 			};
 		}
 	};
+
+	// ------------------------------------------------------------------ fluid.adopt (slice T5F, §4.7: a record built before T5F)
+
+	/**
+	 * (slice T5F, §4.7) Whether record {@code l}'s cells carry provenance; if not (a record saved before T5F), its adoption txn is begun (or
+	 * found) and the caller waits: null once adopted (go on), else the adoption's step. Every write and drain of a record asks this first.
+	 */
+	static @Nullable Step adoptFirst(RegionsImpl.Live l, RegionFluids.Regional st) {
+		if (st.prov) {
+			return null;
+		}
+		Step a = adopt(l, st);
+		if (a.kind() == Step.Kind.DONE && st.prov) {
+			return null;
+		}
+		return a.kind() == Step.Kind.DONE ? Step.waiting() : a;
+	}
+
+	/**
+	 * (slice T5F, §4.7, Noah's N2) A legacy record's adoption, once: one W per (body, chunk) marks {@code WROTE(R)} every body cell where
+	 * our fluid (ice, bars, decor) stands now, or that an ACTIVE journal entry of the record's group wrote (harvested, or lost at a main-era
+	 * K4: never refilled, refunds 0); any other cell stays unmarked (written, or refunded when paid). Receipt {@code op=adopt;n=<marked>}.
+	 * Then the R {@code fluid.adopted} saves {@code prov}. The one place the journal is read for a fluid cell, where no co-located
+	 * evidence exists. Begun after txn recovery (the tick); an open txn on the record's resource holds it until that one retires.
+	 */
+	static Step adopt(RegionsImpl.Live l, RegionFluids.Regional st) {
+		String key = "fluid-adopt:" + recKey(l);
+		TxnCore c = TxnServer.core();
+		TxnCore.Started started = c.begin(ADOPT, key, List.of(resource(l)), null);
+		switch (started.status()) {
+			case ATTACHED -> {
+				return after(started.entry());
+			}
+			case REPLAYED -> {
+				st.prov = true; // (its R saved prov; a record read before it is caught up here)
+				return Step.done();
+			}
+			case HELD -> {
+				return new Step(Step.Kind.HELD, worded(started.detail()));
+			}
+			case UNAVAILABLE -> {
+				return new Step(Step.Kind.REFUSED, "txn_journal: " + started.detail());
+			}
+			default -> {
+			}
+		}
+		TxnEntry t = started.entry();
+		for (RegionFluids.Body b : st.bodies) {
+			for (long ck : RegionFluids.cellChunks(b)) {
+				c.plan(t, wEffect("fluid.adopt", l, ck).data("body", b.id));
+			}
+		}
+		c.plan(t, Effect.of("fluid.adopted", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()));
+		DurableFile.Outcome p = c.persist(t);
+		if (p == DurableFile.Outcome.REFUSED) {
+			return new Step(Step.Kind.REFUSED, "txn_journal: the adoption's intent could not be written");
+		}
+		Architect.LOGGER.info("Region {}: its water record (rv {}) was saved before fluid provenance: adopting its cells ({})", l.rec().id, l.rid(), t.id);
+		if (p == DurableFile.Outcome.OK) {
+			c.drive(t);
+		}
+		return after(t);
+	}
+
+	static final TxnKind.Adapter FLUID_ADOPT = chunkW("fluid.adopt", "adopt", (t, e, level, l, st, cx, cz) -> {
+		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+		if (b == null) {
+			return Map.of("n", 0);
+		}
+		LevelChunk ch = level.getChunk(cx, cz);
+		String rec = recKey(l);
+		var marks = FluidProv.marks(ch, rec);
+		TileEntries je = new TileEntries(l.rec().dimension, e.data().get("group").getAsString());
+		int n = 0;
+		for (long p : b.cells) {
+			if (!RegionFluids.inChunk(p, cx, cz)) {
+				continue;
+			}
+			int idx = FluidProv.index(level, p);
+			if (marks.containsKey(idx)) {
+				continue;
+			}
+			net.minecraft.world.level.block.state.BlockState now = level.getBlockState(BlockPos.of(p));
+			boolean stands = RegionFluids.ownStillOurs(b, p, now);
+			FluidProv.Mark m = FluidProv.adopt(stands, !stands && je.wroteAny(p));
+			if (m != null) {
+				marks.put(idx, m);
+				n++;
+			}
+		}
+		if (n > 0) {
+			FluidProv.put(ch, rec, marks);
+		}
+		return Map.of("n", n);
+	});
+
+	static final TxnKind.Adapter FLUID_ADOPTED = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			return st.prov;
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			st.prov = true;
+			if (!RegionFluids.save(l, st)) {
+				st.prov = false;
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+			Architect.LOGGER.info("Region {}: its water record (rv {}) adopted ({})", l.rec().id, l.rid(), t.id);
+			step(t, "adopted");
+		}
+	});
+
+	static final TxnKind ADOPT_KIND = new TxnKind() {
+		@Override
+		public String name() {
+			return ADOPT;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public TxnKind.@Nullable Adapter adapter(Effect e) {
+			return switch (e.op()) {
+				case "fluid.adopt" -> FLUID_ADOPT;
+				case "fluid.adopted" -> FLUID_ADOPTED;
+				default -> null;
+			};
+		}
+	};
+
+	/**
+	 * (slice T5F, N2(b), adoption only) Per section, the cells an ACTIVE journal entry of the group wrote (any block): the one read of the
+	 * journal for a fluid cell, at adoption. An unreadable section throws: the adoption holds, never guesses.
+	 */
+	static final class TileEntries {
+		private final String dim;
+		private final String group;
+		private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.LongOpenHashSet> bySection =
+			new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+
+		TileEntries(String dim, String group) {
+			this.dim = dim;
+			this.group = group;
+		}
+
+		boolean wroteAny(long pos) {
+			long key = dev.larattalabs.architect.journal.Sections.key(pos);
+			var m = bySection.get(key);
+			if (m == null) {
+				m = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+				try {
+					var store = WorldJournal.store();
+					for (var en : WorldJournal.activeSlices(dim, key)) {
+						var meta = store.meta(en.id());
+						if (meta == null || !group.equals(meta.group()) || en.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
+							continue;
+						}
+						for (var c : en.cells()) {
+							if (c.after() != null) {
+								m.add(c.pos());
+							}
+						}
+					}
+				} catch (java.io.IOException | RuntimeException ex) {
+					throw new IllegalStateException("the journal could not be read for section " + key + " (" + ex + "): the adoption waits for it");
+				}
+				bySection.put(key, m);
+			}
+			return m.contains(pos);
+		}
+	}
 
 	// ------------------------------------------------------------------ fluid.drain: escape, unsettled (and their upstream closure)
 

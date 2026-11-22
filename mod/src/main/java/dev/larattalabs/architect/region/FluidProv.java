@@ -1,0 +1,179 @@
+package dev.larattalabs.architect.region;
+
+import com.google.gson.JsonObject;
+import com.mojang.serialization.Codec;
+import dev.larattalabs.architect.Architect;
+import it.unimi.dsi.fastutil.ints.Int2ObjectLinkedOpenHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * (slice T5F, contract §3, Noah's N1) Per-cell fluid provenance: {@code architect_mc:fluid_prov}, a persistent chunk attachment (never synced)
+ * holding, per fluids record ({@code rec}, {@link FluidTxns#recKey}), the body cells that record wrote ({@link Mark#WROTE}) or its own stage
+ * cleared for a later wave ({@link Mark#CLEARED}). A mark is set in the same tick and chunk as the block it describes (I1): a chunk snapshot
+ * carries both or neither, so the journal is never write evidence for a fluid cell.
+ *
+ * <p>Only R's own writers clear R's marks (§3.2): R's txn W effects, explicitly, and a rollback of R's own fluids-stage tile, whose writes run
+ * inside {@link #scope}. Any other write leaves the mark: the cell reads as taken (refund 0).
+ */
+public final class FluidProv {
+	private FluidProv() {
+	}
+
+	/** The attachment's id. */
+	public static final String ID = "architect_mc:fluid_prov";
+
+	/** A body cell's mark. */
+	public enum Mark {
+		/** Record R wrote its fluid, ice, bars or decor here (the stage's tile or the place W). */
+		WROTE,
+		/** R's own stage cleared what it wrote (a waiting reach): written again when its body is due. */
+		CLEARED
+	}
+
+	/** One row of §3.3: whether a fluid writer writes the cell, whether the drain takes it, and its refund on a charged body. */
+	public record Cell(boolean write, boolean take, int refund) {
+	}
+
+	/**
+	 * §3.3, the one read of a body cell, for the write, the drain and the refund. {@code open}: air, or what the body itself would write
+	 * there (RegionFluids' open rule); {@code ours}: it holds what R wrote ({@code ownStillOurs}). Pure.
+	 * <ul>
+	 * <li>no mark: written when open; never taken; refunded (paid, never delivered: P1-1);</li>
+	 * <li>CLEARED: written when open; refunded while still unwritten;</li>
+	 * <li>WROTE: never written again (I2, N3); taken when ours; refunded only then (a harvested cell refunds 0: A).</li>
+	 * </ul>
+	 */
+	public static Cell read(@Nullable Mark mark, boolean open, boolean ours) {
+		if (mark == Mark.WROTE) {
+			return new Cell(false, ours, ours ? 1 : 0);
+		}
+		return new Cell(open, false, 1);
+	}
+
+	/** §3.1: a cell's index in its chunk: {@code (y - minY) << 8 | lz << 4 | lx}. */
+	public static int cellIndex(int minY, int x, int y, int z) {
+		return (y - minY) << 8 | (z & 15) << 4 | (x & 15);
+	}
+
+	/**
+	 * (§4.7, Noah's N2) A body cell of a record built before T5F, at adoption: our fluid (or bars) standing there, or absent with an ACTIVE
+	 * journal entry of the record's tiles writing it (harvested, or lost at a main-era K4: never minted), is WROTE; else unmarked.
+	 */
+	public static @Nullable Mark adopt(boolean ourFluidStands, boolean activeTileEntry) {
+		return ourFluidStands || activeTileEntry ? Mark.WROTE : null;
+	}
+
+	/** (N2) A record charged on main ({@code survival.chargedAt}): every lava and grate body of it counts as paid. */
+	public static boolean mainEraPaid(JsonObject survival) {
+		return survival.has("chargedAt") && !survival.get("chargedAt").isJsonNull();
+	}
+
+	// ------------------------------------------------------------------ the store
+
+	/** The attachment (its class init registers it: never touched by a unit). */
+	static final class Store {
+		/** rec -> packed marks ({@code cellIndex << 1 | (CLEARED ? 1 : 0)}). */
+		static final AttachmentType<Map<String, List<Integer>>> TYPE = AttachmentRegistry.<Map<String, List<Integer>>>builder().persistent(Codec
+			.unboundedMap(Codec.STRING, Codec.INT.listOf())).buildAndRegister(Architect.id("fluid_prov"));
+	}
+
+	/** Registers the attachment (mod init). */
+	public static void init() {
+		Architect.LOGGER.debug("Fluid provenance attachment {}", Store.TYPE.identifier());
+	}
+
+	/** R's marks in one chunk, by cell index (a copy). */
+	static Int2ObjectLinkedOpenHashMap<Mark> marks(LevelChunk ch, String rec) {
+		Int2ObjectLinkedOpenHashMap<Mark> out = new Int2ObjectLinkedOpenHashMap<>();
+		Map<String, List<Integer>> all = ch.getAttached(Store.TYPE);
+		List<Integer> l = all == null ? null : all.get(rec);
+		if (l != null) {
+			for (int v : l) {
+				out.put(v >>> 1, (v & 1) == 1 ? Mark.CLEARED : Mark.WROTE);
+			}
+		}
+		return out;
+	}
+
+	/** Replaces R's marks in one chunk (none: R's entry goes); marks the chunk unsaved, so the marks reach disk with its blocks. */
+	static void put(LevelChunk ch, String rec, Int2ObjectLinkedOpenHashMap<Mark> marks) {
+		Map<String, List<Integer>> all = ch.getAttached(Store.TYPE);
+		Map<String, List<Integer>> next = all == null ? new HashMap<>() : new HashMap<>(all);
+		if (marks.isEmpty()) {
+			if (next.remove(rec) == null) {
+				return;
+			}
+		} else {
+			List<Integer> l = new ArrayList<>(marks.size());
+			marks.int2ObjectEntrySet().forEach(e -> l.add(e.getIntKey() << 1 | (e.getValue() == Mark.CLEARED ? 1 : 0)));
+			next.put(rec, List.copyOf(l));
+		}
+		if (next.isEmpty()) {
+			ch.removeAttached(Store.TYPE);
+		} else {
+			ch.setAttached(Store.TYPE, Map.copyOf(next));
+		}
+		ch.markUnsaved();
+	}
+
+	static int index(Level level, long p) {
+		return cellIndex(level.getMinY(), BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p));
+	}
+
+	static LevelChunk chunkAt(Level level, long p) {
+		return level.getChunk(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
+	}
+
+	/** R's mark on one cell, or null. */
+	public static @Nullable Mark get(Level level, long p, String rec) {
+		return marks(chunkAt(level, p), rec).get(index(level, p));
+	}
+
+	/** Sets (or, with null, removes) R's mark on one cell. */
+	static void set(Level level, long p, String rec, @Nullable Mark m) {
+		LevelChunk ch = chunkAt(level, p);
+		Int2ObjectLinkedOpenHashMap<Mark> marks = marks(ch, rec);
+		int i = index(level, p);
+		if (m == null ? marks.remove(i) == null : marks.put(i, m) == m) {
+			return;
+		}
+		put(ch, rec, marks);
+	}
+
+	// ------------------------------------------------------------------ R's scope (§3.2: a rollback of R's own fluids tile)
+
+	private static @Nullable String scope;
+
+	/** Runs {@code r} with every Architect write ({@code Placed.set}) clearing R's mark on its cell; {@code rec} null: no scope. */
+	public static void inScope(@Nullable String rec, Runnable r) {
+		if (rec == null) {
+			r.run();
+			return;
+		}
+		String was = scope;
+		scope = rec;
+		try {
+			r.run();
+		} finally {
+			scope = was;
+		}
+	}
+
+	/** {@code Placed.set}'s hook: inside R's scope, the cell's R mark goes with the write (server thread). */
+	public static void onArchitectWrite(Level level, BlockPos pos) {
+		String rec = scope;
+		if (rec != null && level instanceof ServerLevel) {
+			set(level, pos.asLong(), rec, null);
+		}
+	}
+}
