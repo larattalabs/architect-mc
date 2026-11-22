@@ -254,6 +254,23 @@ public final class Views {
 	}
 
 	/** Item ids -> items (unknown ids dropped). */
+	/** A snapshot ({refund, owedParts, restored, kept, handed, cascaded}) as a dev.larattalabs.architect.api.RemoveResult. */
+	public static dev.larattalabs.architect.api.RemoveResult resultOf(com.google.gson.JsonObject r) {
+		Map<String, Integer> refund = new java.util.TreeMap<>();
+		r.getAsJsonObject("refund").entrySet().forEach(e -> refund.put(e.getKey(), e.getValue().getAsInt()));
+		Map<String, Integer> handed = new java.util.TreeMap<>();
+		r.getAsJsonObject("handed").entrySet().forEach(e -> handed.put(e.getKey(), e.getValue().getAsInt()));
+		List<String> cascaded = new java.util.ArrayList<>();
+		r.getAsJsonArray("cascaded").forEach(x -> cascaded.add(x.getAsString()));
+		List<String> owed = new java.util.ArrayList<>();
+		List<com.google.gson.JsonObject> parts = new java.util.ArrayList<>();
+		r.getAsJsonArray("owedParts").forEach(x -> {
+			owed.add(x.getAsJsonObject().get("key").getAsString());
+			parts.add(x.getAsJsonObject());
+		});
+		return new dev.larattalabs.architect.api.RemoveResult(true, List.of(), items(refund), r.get("restored").getAsInt(), r.get("kept").getAsInt(), handed, cascaded, owed, owedParts(parts));
+	}
+
 	/** (slice T4R-D) A result's owed parts ({key, recipient, reason, items}) as the API's. */
 	public static List<dev.larattalabs.architect.api.OwedPart> owedParts(List<com.google.gson.JsonObject> parts) {
 		List<dev.larattalabs.architect.api.OwedPart> out = new java.util.ArrayList<>();

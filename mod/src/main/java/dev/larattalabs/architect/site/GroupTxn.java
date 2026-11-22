@@ -125,7 +125,20 @@ final class GroupTxn {
 			int w = -1;
 			if (CrateSettle.undoneExists(id, r.undo)) {
 				try {
-					w = c.plan(t, RemovalTxn.restore(st.get("dim").getAsString(), id, r.undo, CrateSettle.chunksOf(level, id, r.undo, cells), cells).member(id)).i();
+					JsonArray player = st.get("player") instanceof JsonArray pa ? pa : new JsonArray();
+					Effect.Builder wb = RemovalTxn.restore(st.get("dim").getAsString(), id, r.undo, CrateSettle.chunksOf(level, id, r.undo, OwnerRemovals.chunkCells(
+						cells, player)), cells).member(id);
+					if (!player.isEmpty()) {
+						JsonArray pc = new JsonArray();
+						player.forEach(p -> {
+							JsonObject q = new JsonObject();
+							q.add("pos", p.getAsJsonObject().get("pos"));
+							q.add("block", p.getAsJsonObject().get("block"));
+							pc.add(q);
+						});
+						wb.data("pkey", key + "/" + id).data("pcells", pc); // (slice T4R-D, I2)
+					}
+					w = c.plan(t, wb).i();
 				} catch (Sites.SiteException e) {
 					return "the restore of " + id + " can't be read: " + e.getMessage();
 				}
@@ -133,6 +146,11 @@ final class GroupTxn {
 			c.plan(t, Effect.of(TxnCore.BARRIER, EffectClass.R).member(id));
 			for (Effect.Builder b : CrateSettle.planInto(level, st, w, id, new LinkedHashSet<>())) {
 				c.plan(t, b);
+			}
+			if (w >= 0 && st.get("player") instanceof JsonArray pl && !pl.isEmpty()) {
+				for (Effect.Builder b : OwnerRemovals.playerOwes(key, id, st.get("dim").getAsString(), w, pl)) {
+					c.plan(t, b); // (slice T4R-D, D1b) its player blocks owed, once, from its W's receipts
+				}
 			}
 			c.plan(t, Effect.of(TxnCore.BARRIER, EffectClass.R).member(id));
 		}
@@ -146,6 +164,7 @@ final class GroupTxn {
 				c.plan(t, Effect.of(TxnCore.BARRIER, EffectClass.R).member(cm));
 			}
 		}
+		c.plan(t, Effect.of(RemovalTxn.SNAPSHOT, EffectClass.R).data("owner", key)); // (slice T4R-D, D5) one aggregate snapshot
 		c.plan(t, Effect.of(RemovalTxn.GROUP_DONE, EffectClass.R).data("group", r.group));
 		c.payload(t, "removal_finished", payload(r));
 		dev.larattalabs.architect.site.DurableFile.Outcome o = c.persist(t);
@@ -200,6 +219,10 @@ final class GroupTxn {
 		}
 		if (r.revisionId != null) {
 			o.addProperty("revisionId", r.revisionId);
+			String rg = dev.larattalabs.architect.apiimpl.Views.regionOfGroupPublic(r.group);
+			if (rg != null) {
+				o.addProperty("revRegion", rg); // (slice T4R-D, Q8a) the revision undo's removalResult alias revision:<region>#<rid>
+			}
 		}
 		o.addProperty("restored", r.restoredCells);
 		o.addProperty("kept", r.keptCells);

@@ -612,8 +612,12 @@ public final class OwnerRemovals {
 	 * Writes each member's immutable result (refund: its L amounts; owed parts: its O effects' applied amounts; restored, kept, hand-down,
 	 * cascade from its record) into the results table, under {@code site:<member>} and {@code owner:<key>}; the barrier after it publishes it.
 	 */
-	public static void snapshot(TxnEntry t, String key, Map<Integer, Map<String, Integer>> amounts) {
+	public static void snapshot(TxnEntry t, String key, Map<Integer, Map<String, Integer>> amounts, @Nullable JsonObject groupPayload) {
 		JsonObject rec = record(key);
+		if (rec == null && groupPayload != null) {
+			groupSnapshot(t, key, amounts, groupPayload);
+			return;
+		}
 		JsonObject members = rec == null ? new JsonObject() : rec.getAsJsonObject("members");
 		JsonObject all = new JsonObject();
 		Map<String, JsonObject> per = new LinkedHashMap<>();
@@ -647,6 +651,55 @@ public final class OwnerRemovals {
 				putResult("site:" + m, r);
 			});
 			putResult("owner:" + key, all);
+		}
+		Stockpiles.owedChanged();
+	}
+
+	/**
+	 * (D5, D1b) A group's, stage's, region's or revision's one aggregate result: every member's L amounts and O parts summed, the counts from its
+	 * payload; under {@code group:<id>} or {@code region:<id>}, {@code stage:<group>/<stage>}, the alias {@code revision:<region>#<rid>}.
+	 */
+	static void groupSnapshot(TxnEntry t, String key, Map<Integer, Map<String, Integer>> amounts, JsonObject p) {
+		JsonObject r = fresh(new JsonObject());
+		r.addProperty("restored", p.has("restored") ? p.get("restored").getAsInt() : 0);
+		r.addProperty("kept", p.has("kept") ? p.get("kept").getAsInt() : 0);
+		r.add("handed", p.get("handed") instanceof JsonObject h ? h.deepCopy() : new JsonObject());
+		r.add("cascaded", p.get("cascaded") instanceof JsonArray c ? c.deepCopy() : new JsonArray());
+		JsonObject rf = r.getAsJsonObject("refund");
+		if (p.get("drops") instanceof JsonObject d) {
+			d.entrySet().forEach(x -> rf.addProperty(x.getKey(), x.getValue().getAsInt())); // a legacy instant member's dropped refund
+		}
+		for (Effect e : t.effects()) {
+			Map<String, Integer> a = amounts.get(e.i());
+			if (a == null) {
+				continue;
+			}
+			if (dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {
+				if (!a.isEmpty()) {
+					JsonObject q = new JsonObject();
+					q.addProperty("key", e.data().get("key").getAsString());
+					q.addProperty("recipient", e.data().get("recipient").getAsString());
+					q.addProperty("reason", e.data().get("reason").getAsString());
+					q.add("items", Builder.counts(a));
+					r.getAsJsonArray("owedParts").add(q);
+				}
+			} else {
+				a.forEach((k, v) -> rf.addProperty(k, (rf.has(k) ? rf.get(k).getAsInt() : 0) + v));
+			}
+		}
+		synchronized (OwnerRemovals.class) {
+			String group = p.get("group").getAsString();
+			if (p.has("stage")) {
+				putResult("stage:" + group + "/" + p.get("stage").getAsString(), r);
+				if (p.has("revisionId") && p.has("revRegion")) {
+					putResult("revision:" + p.get("revRegion").getAsString() + "#" + p.get("revisionId").getAsInt(), r);
+				}
+			} else if (p.has("region")) {
+				putResult("region:" + p.get("region").getAsString(), r);
+			} else {
+				putResult("group:" + group, r);
+			}
+			putResult("owner:" + key, r);
 		}
 		Stockpiles.owedChanged();
 	}

@@ -1287,6 +1287,10 @@ public final class Groups {
 				// (slice T4R, N3) what of its refunded cells stands before the write, recorded in their chunks (its W's min); the write as the txn's
 				// own (its box is held by it)
 				CrateSettle.recordFound(level, id, r.undo, stash);
+				if (stash != null && stash.get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
+					// (slice T4R-D, I2) the player's cells standing before its write (first write wins), in their chunks, the same tick as the write
+					dev.larattalabs.architect.txn.RemovalTxn.recordPfound(level, GroupTxn.key(r.group, r.stage, r.undo) + "/" + id, pl);
+				}
 				Sites.Removed[] done = new Sites.Removed[1];
 				Sites.SiteException[] fail = new Sites.SiteException[1];
 				Runnable write = () -> {
@@ -1756,12 +1760,25 @@ public final class Groups {
 			Site s = Sites.get(id);
 			if (s != null && s.construction() != null) {
 				Builder.Deconstruction d = Builder.prepareDeconstruct(level, s);
-				r.decItems.put(id, Map.copyOf(d.all()));
+				// (slice T4R-D, D1b) the player's blocks never drop on the T4R path: they are owed by the group's txn (decItems carries none)
+				Map<String, Integer> drop = new TreeMap<>(d.all());
+				d.tally().playerBlocks().forEach((k, v) -> drop.merge(k, -v, Integer::sum));
+				drop.values().removeIf(v -> v <= 0);
+				r.decItems.put(id, Map.copyOf(drop));
 				r.decAt.put(id, new long[] {d.at().asLong()});
 				// (slice T4R, R1) its settle: a stockpile's site's refund as a pile stash (its cells tallied: min(planned, found by its W)), else its
 				// crate's (T2b part 2b): either one credited or owed by the group's removal.group txn after this member's W, never as a held credit
 				JsonObject st = d.stockpile() != null ? CrateSettle.pileStash(s, d) : d.settle();
+				com.google.gson.JsonArray player = OwnerRemovals.playerOf(s, d.tally(), r.requester);
+				if (st == null && !player.isEmpty()) {
+					// (slice T4R-D) a member with player cells but no crate and no pile still gets a stash: it carries them
+					st = CrateSettle.withCells(CrateSettle.playerStash(s, d.at()), d.tally().cells(), s.restoreBox());
+				}
 				if (st != null) {
+					st.remove("player");
+					if (!player.isEmpty()) {
+						st.add("player", player); // (slice T4R-D) with recipients resolved (Q1, Q7)
+					}
 					r.decSettle.put(id, st);
 				}
 				continue;

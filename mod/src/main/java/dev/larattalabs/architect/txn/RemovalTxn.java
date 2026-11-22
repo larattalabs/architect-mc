@@ -471,7 +471,8 @@ public final class RemovalTxn {
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
-			dev.larattalabs.architect.site.OwnerRemovals.snapshot(t, e.data().get("owner").getAsString(), amounts(t));
+			dev.larattalabs.architect.site.OwnerRemovals.snapshot(t, e.data().get("owner").getAsString(), amounts(t), t.payloads.get("removal_finished")
+				instanceof JsonObject p ? p : null);
 		}
 
 		@Override
@@ -747,6 +748,22 @@ public final class RemovalTxn {
 					owed.add(x.getAsString()); // (fix round, P1-6) its data cargo's owed keys
 				}
 			});
+		}
+		JsonObject snap = t.key == null ? null : dev.larattalabs.architect.site.OwnerRemovals.result("owner", t.key);
+		if (snap != null) {
+			// (slice T4R-D, D5) the group's one aggregate result, from its immutable snapshot (owed parts with their amounts)
+			dev.larattalabs.architect.api.RemoveResult sr = dev.larattalabs.architect.apiimpl.Views.resultOf(snap);
+			java.util.List<String> all = new java.util.ArrayList<>(sr.owed());
+			owed.forEach(k -> {
+				if (!all.contains(k)) {
+					all.add(k);
+				}
+			});
+			String stage = p.has("stage") ? p.get("stage").getAsString() : null;
+			Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
+			String region = p.has("region") ? p.get("region").getAsString() : null;
+			return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, new dev.larattalabs.architect.api
+				.RemoveResult(true, List.of(), sr.refund(), sr.restored(), sr.kept(), sr.handedDown(), sr.cascaded(), all, sr.owedParts()));
 		}
 		dev.larattalabs.architect.api.RemoveResult rr = new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(
 			refund), p.has("restored") ? p.get("restored").getAsInt() : 0, p.has("kept") ? p.get("kept").getAsInt() : 0, handed, cascaded, owed);

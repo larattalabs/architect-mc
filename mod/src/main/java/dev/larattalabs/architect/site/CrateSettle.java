@@ -199,6 +199,11 @@ public final class CrateSettle {
 		return stash;
 	}
 
+	/** (slice T4R-D) A member with player cells and nothing else to settle: a stash that only carries them (no crate, no pile, no refund). */
+	static JsonObject playerStash(Site s, BlockPos at) {
+		return stashOf("player-only:" + Builder.creditKey(s), s.dimension(), at, recipientOf(s), null, s.id(), null, Map.of(), null, null, null);
+	}
+
 	/** (T4 final round, P1 3) {@code stash} told its road's footprint: the hold covers those cells, not the road's bounding rectangle. */
 	static JsonObject withFootprint(JsonObject stash, java.util.Collection<net.minecraft.core.BlockPos> cells) {
 		if (cells.isEmpty()) {
