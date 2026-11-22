@@ -160,6 +160,8 @@ public final class Groups {
 		transient boolean gtxDone;
 		/** (slice T4R-N) It waits on a pre-T4R removal's area now (its wait counts in {@link #waited}, up to {@link Groups#MAX_WAIT}). */
 		transient boolean legacyWaiting;
+		/** (slice T4R-D, D4; T4R-N's P3) The legacy wait's own counter (persisted, default 0): never the player/placing wait's {@code waited}. */
+		long legacyWaited;
 		/** (slice T4R) Why its txn waits to begin (logged once). */
 		transient @Nullable String gtxWait;
 
@@ -198,6 +200,9 @@ public final class Groups {
 				o.addProperty("current", current);
 			}
 			o.addProperty("waited", waited);
+			if (legacyWaited > 0) {
+				o.addProperty("legacyWaited", legacyWaited);
+			}
 			JsonObject r = new JsonObject();
 			refund.forEach(r::addProperty);
 			o.add("refund", r);
@@ -291,6 +296,7 @@ public final class Groups {
 			r.covered = o.has("covered") ? Sites.Covered.valueOf(o.get("covered").getAsString()) : Sites.Covered.KEEP;
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
+			r.legacyWaited = o.has("legacyWaited") ? o.get("legacyWaited").getAsLong() : 0; // (slice T4R-D, D4)
 			o.getAsJsonObject("refund").entrySet().forEach(e -> r.refund.put(e.getKey(), e.getValue().getAsInt()));
 			if (o.has("planned")) {
 				r.planned = o.get("planned").getAsString();
@@ -578,6 +584,7 @@ public final class Groups {
 		r.futures.add(f);
 		r.current = null;
 		r.waited = 0;
+		r.legacyWaited = 0; // (slice T4R-D, D4)
 		r.nextCheck = 0;
 		r.started = true;
 		// (slice PSVLC3, P1 3) a removal that stalled before its undo checks its members again: a player who entered a box meanwhile is waited
@@ -1104,7 +1111,7 @@ public final class Groups {
 		if (r.nextCheck > tick) {
 			return;
 		}
-		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy && (RemovalAreas.anyLegacy() || r.legacyWaiting)) {
+		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy && (RemovalAreas.anyLegacy() || r.legacyWaiting || r.legacyWaited > 0)) {
 			// (slice T4R-M) a removal over the area of one a pre-T4R build left in flight waits (holding nothing, planning nothing) until it ends
 			String lw = RemovalAreas.anyLegacy() ? legacyWait(r) : null;
 			if (lw != null) {
@@ -1117,16 +1124,14 @@ public final class Groups {
 				// (slice T4R-N, the final check of f7607b13's P2) never indefinite: a pre-T4R removal may be progressed by nothing this session
 				// (a single's pending record in KEEP, its J2 credit held, no job). Like a player in a box, it is waited for up to MAX_WAIT; then
 				// the call is answered stopped, nothing of it planned or changed (a retry after that removal ends goes ahead)
-				r.waited += 20;
-				if (r.waited >= MAX_WAIT) {
+				r.legacyWaited += 20; // (slice T4R-D, D4) its own counter: the player/placing wait's budget stays whole
+				if (r.legacyWaited >= MAX_WAIT) {
 					end(server, r, Removed.legacyWaitedOut(lw, Map.copyOf(r.refund)));
 				}
 				return;
 			}
-			if (r.legacyWaiting) {
-				r.legacyWaiting = false;
-				r.waited = 0; // (slice T4R-N) that wait ended: the player wait counts its own
-			}
+			r.legacyWaiting = false;
+			r.legacyWaited = 0; // that wait ended (this session or before a restart): it clears
 		}
 		if (r.undo == null && r.planner == null && !preflighted(server, r)) {
 			return;
