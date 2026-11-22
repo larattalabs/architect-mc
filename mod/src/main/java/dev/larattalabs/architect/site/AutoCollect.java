@@ -23,7 +23,7 @@ public final class AutoCollect {
 	}
 
 	static void init() {
-		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> server.execute(() -> onJoin(server, handler.getPlayer())));
+		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> server.execute(() -> joined(server, handler.getPlayer().getUUID(), 0)));
 	}
 
 	/** After owner {@code rec} retired: its {@code player_blocks} parts collected for their online recipients, by site title. */
@@ -39,6 +39,31 @@ public final class AutoCollect {
 				}
 			}
 		}
+	}
+
+	/**
+	 * At a join: once every store is loaded (the owed ledger read) and the player is in the world, the notice and the collect; retried each
+	 * second for a minute (a join answered before the start's loads finished, or a player not placed yet), never dropped.
+	 */
+	static void joined(MinecraftServer srv, java.util.UUID id, int tries) {
+		ServerPlayer p = srv.getPlayerList().getPlayer(id);
+		if (p == null) {
+			return; // left again: the next join
+		}
+		if ((CrateSettle.notReady() != null || p.isRemoved() || p.isDeadOrDying()) && tries < 60) {
+			dev.larattalabs.architect.txn.TxnServer.later(() -> srv.execute(() -> joinedLater(srv, id, tries + 1)));
+			return;
+		}
+		Architect.LOGGER.info("Auto-collect at the join of {}: {} owed entr(ies)", id, OwedLedger.of(id.toString()).size());
+		onJoin(srv, p);
+	}
+
+	private static void joinedLater(MinecraftServer srv, java.util.UUID id, int tries) {
+		if (tries % 20 != 0) {
+			dev.larattalabs.architect.txn.TxnServer.later(() -> joinedLater(srv, id, tries + 1)); // about a second between checks
+			return;
+		}
+		joined(srv, id, tries);
 	}
 
 	/** The join notice and collect: every {@code player_blocks} entry owed to {@code p}. */

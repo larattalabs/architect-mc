@@ -2303,7 +2303,7 @@ export async function registerTCC(steps, h) {
         const f = await t4rdFixture(sub.replace(/-/g, ''), myName);
         rowLog(tag, `placer ${myName} (${json(lst).slice(0, 120)})`);
         if (!f) continue;
-        if (sub === 'full') await cmd('/give @s minecraft:dirt 2304').catch(() => null); // every main slot full: nothing fits
+        if (sub === 'full') { await cmd('/clear @s').catch(() => null); await cmd('/give @s minecraft:dirt 2304').catch(() => null); } // every main slot full: nothing fits (nothing to stack on)
         const inv0 = (await groundAt(f.site)).inventory ?? {};
         const gr0 = (await groundAt(f.site)).items ?? {};
         if (sub === 'retire-collect') await call('dev.journal.killAt', { point: 'RD2' }, 10_000);
