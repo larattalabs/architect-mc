@@ -115,10 +115,11 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
+import { startHeartbeat, sumCpu } from './lib/heartbeat.mjs';
 import { junitCounts, noResultsReason } from './lib/step-counts.mjs';
 import { captureThreadDumps, dumpReason, hostSleep } from './lib/thread-dump.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
-import { scopeChangeUnits } from './lib/change-units.mjs';
+import { scopeChangeUnits, fullUnitsInRun } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { loadScaleFor, loadScaledBudget, timeoutNote, timeoutRecord } from './lib/load-timeout.mjs';
@@ -1005,6 +1006,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   // (GI2) the frozen source's classes, built at setup from this head: api-compat's fallback where no build ran (an offline lane)
   if (FROZEN && DRV !== SRC) env.GATE_FROZEN_SOURCE = DRV;
   if (CHANGED_FILES) env.GATE_CHANGED_FILES = CHANGED_FILES;
+  if (runShared.fullUnits?.length) env.GATE_FULL_UNITS = runShared.fullUnits.join(',');
   // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
   // a probe's verdict once per run (tools/lib/probe-reuse.mjs): the evidence dirs of the steps that passed so far
   if (Object.keys(runShared.evidence).length) env.GATE_STEP_EVIDENCE = JSON.stringify(runShared.evidence);
@@ -1034,7 +1036,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, unitModRun: null, unitModJunit: null, unitModTree: null, mergeBase: null, evidence: {} };
+const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, fullUnits: [], unitModRun: null, unitModJunit: null, unitModTree: null, mergeBase: null, evidence: {} };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC: DRV, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? DRV : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(DRV, c.slice(4)) : path.resolve(DRV, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -1848,6 +1850,18 @@ function runProcess(sh, step, logFile) {
       clearTimeout(killTimer);
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
     } });
+    // (HB) a heartbeat in runner.log every GATE_HEARTBEAT_MS (3 min) while the step runs: elapsed, the step log's last growth, the
+    // client/server logs' mtime and growth, the CPU% of the step's group and the shard's run-dir processes; "possibly stalled" (a log
+    // flag only) after GATE_HEARTBEAT_STALL_MIN (15) min with no growth anywhere. Unref'd; stopped on exit and on a spawn error
+    const hb = startHeartbeat({
+      label: `${step.id} on shard ${sh.name}`, stepLog: logFile, log: (m) => log(m, sh), startedMs,
+      intervalMs: Number(process.env.GATE_HEARTBEAT_MS ?? 180_000), stallMs: Number(process.env.GATE_HEARTBEAT_STALL_MIN ?? 15) * 60_000,
+      sources: () => [{ label: 'client/server stdout', file: sh.clientLog }, { label: 'latest.log', file: path.join(sh.RUN, 'mod', 'run', 'logs', 'latest.log') }],
+      cpu: () => {
+        const r = spawnSync('ps', ['-axww', '-o', 'pid=,pgid=,%cpu=,command='], { encoding: 'utf8', timeout: 5000 });
+        return r.status === 0 ? sumCpu(r.stdout, { pgid: child.pid, pids: runDirProcs(sh).map((p) => p.pid) }) : null;
+      },
+    });
     const onTimeout = (why) => {
       timedOut = true;
       timeout = timeoutRecord({ startedMs, killedMs: Date.now(), limitMin: step.effTimeoutMin, source: step.timeoutSource, loadavg: os.loadavg(), loadScale });
@@ -1877,6 +1891,7 @@ function runProcess(sh, step, logFile) {
     child.on('error', (e) => {
       clearTimeout(timer);
       stallTimer.stop();
+      hb.stop();
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
       resolve({ code: 127, timedOut: false });
     });
@@ -1884,6 +1899,7 @@ function runProcess(sh, step, logFile) {
       clearTimeout(timer);
       clearTimeout(killTimer);
       stallTimer.stop();
+      hb.stop();
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
@@ -2363,6 +2379,9 @@ try {
     runShared.kitTree = cachedHits.get('unit-kit').kitTree;
     log(`unit-kit CACHED: its JUnit report (kit tree ${runShared.kitTree.slice(0, 9)}) serves this run's kit-suite readers`);
   }
+  // (SPD) the full unit suites this run runs (or has CACHED at this head): unit-scope does not run its picks of them again
+  // a CACHED kit or sidecar suite counts only when its report was taken above (the same trees); unit-mod's cache key is its inputs
+  runShared.fullUnits = fullUnitsInRun(stepIds, new Set([runShared.kitJunit && 'unit-kit', runShared.sidecarJunit && 'unit-sidecar', cachedHits.has('unit-mod') && 'unit-mod'].filter(Boolean)));
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   if (FROZEN) {
     const fz = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log });
