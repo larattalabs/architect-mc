@@ -44,14 +44,19 @@ export async function registerT4RM(steps, h) {
     for (const stage of ['ground', 'street']) await cmd(`/apitest sapprove ${W.group} ${stage}`);
     // fed until a region target has a built cell (a cell of the plan's own block, not a cut)
     let cell = null;
-    for (let i = 0; i < 180 && !cell; i++) {
+    let cell2 = null; // (slice T4R-D fix round, P1-6) a second built cell, in another target when there is one: T4RDF-holder's
+    for (let i = 0; i < 180 && !(cell && cell2); i++) {
       const ps = await G.pileState(ctx);
       const need = {};
       for (const [it, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[it] ?? 0); if (lack > 0) need[it] = lack; }
       if (Object.keys(need).length && i % 10 === 0) await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000).catch(() => null);
       const rc = await call('dev.rs.cells', { region: W.region }, 120_000).catch(() => ({}));
-      for (const t of rc.targets ?? []) { for (const c of t.cells ?? []) if ((c[3] & 2) && !(c[3] & 4) && !(c[3] & 1)) { cell = c; break; } if (cell) break; }
-      if (!cell) await L.sleep(2000);
+      const built = [];
+      for (const t of rc.targets ?? []) for (const c of t.cells ?? []) if ((c[3] & 2) && !(c[3] & 4) && !(c[3] & 1)) built.push({ c, target: t.target });
+      cell = cell ?? built[0]?.c ?? null;
+      const other = built.find((b) => b.target !== built[0]?.target) ?? built.find((b) => b.c !== built[0]?.c);
+      if (other && other.c !== cell) cell2 = { c: other.c, target: other.target };
+      if (!(cell && cell2)) await L.sleep(2000);
     }
     check(!!cell, `T4RM-cargo: a built cell of a region target (${json(cell)})`);
     if (!cell) return out;
@@ -59,6 +64,39 @@ export async function registerT4RM(steps, h) {
     const at = cell.slice(0, 3);
     // the town's feed paused (no item moves but the removal's), the player's chest set in the target cell
     for (const t of Object.keys((await pile()).targets ?? {})) await call('dev.stockpile.pause', { owner: G.OWNER, site: t, paused: true }, 60_000).catch(() => null);
+    // T4RDF-holder (slice T4R-D fix round, P1-6): a player's chest with 3 diamonds in a built target cell, extracted twice at the same cell
+    // (dev.extraction.run: as a road's removal or a group's R1 runs it). Each time the diamonds come out of the chest into the pile exactly
+    // once (a plain stack credited, keyed per txn) and the chest is written back (its block owed as player_blocks), never deleted and never a
+    // replayed credit. Red on d004407a + the hook: the diamonds are deleted with the holder (the stock +0)
+    if (cell2) {
+      const t4 = 'T4RDF-holder';
+      const at2 = cell2.c.slice(0, 3);
+      const near2 = async () => (await call('dev.items.near', { pos: at2, radius: 16 }, 60_000).catch(() => ({}))).items ?? {};
+      const chestAt2 = async () => /chest/.test(json((await call('dev.box.hash', { min: at2, max: at2, cells: true }, 60_000).catch(() => ({}))).cells ?? []));
+      const dia0 = (await pile()).stock?.['minecraft:diamond'] ?? 0;
+      const rows = [];
+      for (const gen of [1, 2]) {
+        await cmd(`/setblock ${at2.join(' ')} minecraft:chest`);
+        await cmd(`/item replace block ${at2.join(' ')} container.0 with minecraft:diamond 3`);
+        await cmd('/kill @e[type=item]');
+        let r = null;
+        for (let i = 0; i < 30; i++) { // bounded: 30 tries, 1 s apart; still waiting after that is a FAIL
+          r = await call('dev.extraction.run', { target: cell2.target }, 60_000).catch((e) => ({ why: `error: ${e}` }));
+          if (r && r.why == null) break;
+          await L.sleep(1000);
+        }
+        const dia = ((await pile()).stock?.['minecraft:diamond'] ?? 0) - dia0;
+        rows.push({ gen, why: r?.why ?? null, chest: await chestAt2(), dia, near: await near2(), table: r?.table ?? null });
+        log(`  ROW ${t4} gen ${gen}: ${json(rows[rows.length - 1]).slice(0, 500)}`);
+        check(r && r.why == null, `${t4} gen ${gen}: the extraction attempt finished within 30 s (${r?.why})`, rows);
+        check(!(await chestAt2()), `${t4} gen ${gen}: the player's chest is written back (not standing)`, rows);
+        check(dia === 3 * gen, `${t4} gen ${gen}: the chest's 3 diamonds credited into the pile exactly once per extraction (stock +${dia}, want ${3 * gen})`, rows);
+        check(!(await near2())['minecraft:diamond'], `${t4} gen ${gen}: no diamond dropped as an item entity`, rows);
+      }
+      out[t4] = { cell2, rows };
+    } else {
+      check(false, 'T4RDF-holder: a second built target cell for the holder row');
+    }
     await cmd(`/setblock ${at.join(' ')} minecraft:chest`);
     await cmd(`/item replace block ${at.join(' ')} container.0 with minecraft:diamond_sword[custom_name="Tizona"]`);
     await cmd(`/item replace block ${at.join(' ')} container.1 with minecraft:feather 5`);

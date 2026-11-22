@@ -167,6 +167,27 @@ public final class Extractions {
 		return new ArrayList<>(by.values());
 	}
 
+	/**
+	 * (slice T4R-D fix round, TEST dev.extraction.run) {@link #run} on road or region target {@code target} now (no requester): {why: null when
+	 * done, else why it waits; table: its attempts}. Server thread.
+	 */
+	public static JsonObject devRun(MinecraftServer srv, String target) {
+		JsonObject o = new JsonObject();
+		Infra t = Infras.get(target);
+		ServerLevel level = t == null ? null : Sites.levelOf(srv, t.dimension());
+		if (t == null || level == null) {
+			o.addProperty("why", "no road or region target " + target);
+			return o;
+		}
+		String why = run(srv, level, t, null);
+		o.addProperty("why", why);
+		synchronized (Extractions.class) {
+			JsonObject tb = TABLE.get(tkey(t));
+			o.add("table", tb == null ? null : tb.deepCopy());
+		}
+		return o;
+	}
+
 	/** The before written back at {@code pos} (txn W apply): the attempt's {@code was}. Server thread. */
 	public static boolean writeBack(ServerLevel level, long pos, String was) {
 		BlockState st;

@@ -69,6 +69,10 @@ public final class TxnDev {
 			case "cells" -> cells(player, req);
 			case "owedAdd" -> owedAdd(srv, player, req);
 			case "owedList" -> owedList(req);
+			case "extractionRun" -> {
+				// (slice T4R-D fix round, P1-6, TEST) a target's extraction attempt run now, as a road's removal or a group's R1 runs it
+				yield dev.larattalabs.architect.site.Extractions.devRun(srv, req.get("target").getAsString());
+			}
 			case "removalOwners" -> {
 				// (slice T4R-D) the single removals' owner records (stockpiles.json removals), keys and members
 				JsonObject o = new JsonObject();

@@ -22,6 +22,8 @@ public final class TxnDevHooks {
 	public static void init() {
 		op("dev.stockpile.owed", "owedList", "{recipient?} - (slice T2b) owed collectibles: one recipient's (a player UUID or an owner id such as "
 			+ "steward_mc:settlement/<id>), oldest first, or every entry: owed [{key, recipient, dimension, at, items, reason, createdTick}], total");
+		op("dev.extraction.run", "extractionRun", "{target} - (slice T4R-D fix round) TEST: the target's extraction attempt run now (its player blocks written "
+			+ "back and owed, a holder's contents taken out first) -> {why: null when done, table}");
 		op("dev.removal.owners", "removalOwners", "{} - (slice T4R-D) the single removals' owner records: owners [{key, members}]");
 		op("dev.owed.add", "owedAdd", "{key, items: {item: n}, recipient?: the player, reason?, at?} - (slice T2b) TEST: an owed entry, as a source's "
 			+ "O effect writes it (published by the next ledger save)");
