@@ -115,6 +115,7 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
+import { startHeartbeat, sumCpu } from './lib/heartbeat.mjs';
 import { junitCounts, noResultsReason } from './lib/step-counts.mjs';
 import { captureThreadDumps, dumpReason, hostSleep } from './lib/thread-dump.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
@@ -1848,6 +1849,18 @@ function runProcess(sh, step, logFile) {
       clearTimeout(killTimer);
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
     } });
+    // (HB) a heartbeat in runner.log every GATE_HEARTBEAT_MS (3 min) while the step runs: elapsed, the step log's last growth, the
+    // client/server logs' mtime and growth, the CPU% of the step's group and the shard's run-dir processes; "possibly stalled" (a log
+    // flag only) after GATE_HEARTBEAT_STALL_MIN (15) min with no growth anywhere. Unref'd; stopped on exit and on a spawn error
+    const hb = startHeartbeat({
+      label: `${step.id} on shard ${sh.name}`, stepLog: logFile, log: (m) => log(m, sh), startedMs,
+      intervalMs: Number(process.env.GATE_HEARTBEAT_MS ?? 180_000), stallMs: Number(process.env.GATE_HEARTBEAT_STALL_MIN ?? 15) * 60_000,
+      sources: () => [{ label: 'client/server stdout', file: sh.clientLog }, { label: 'latest.log', file: path.join(sh.RUN, 'mod', 'run', 'logs', 'latest.log') }],
+      cpu: () => {
+        const r = spawnSync('ps', ['-axww', '-o', 'pid=,pgid=,%cpu=,command='], { encoding: 'utf8', timeout: 5000 });
+        return r.status === 0 ? sumCpu(r.stdout, { pgid: child.pid, pids: runDirProcs(sh).map((p) => p.pid) }) : null;
+      },
+    });
     const onTimeout = (why) => {
       timedOut = true;
       timeout = timeoutRecord({ startedMs, killedMs: Date.now(), limitMin: step.effTimeoutMin, source: step.timeoutSource, loadavg: os.loadavg(), loadScale });
@@ -1877,6 +1890,7 @@ function runProcess(sh, step, logFile) {
     child.on('error', (e) => {
       clearTimeout(timer);
       stallTimer.stop();
+      hb.stop();
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
       resolve({ code: 127, timedOut: false });
     });
@@ -1884,6 +1898,7 @@ function runProcess(sh, step, logFile) {
       clearTimeout(timer);
       clearTimeout(killTimer);
       stallTimer.stop();
+      hb.stop();
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);

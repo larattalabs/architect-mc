@@ -3040,6 +3040,7 @@ passes `--judge-timing`. mega-lite's bars judge here as before.
    ```
 
    At most one background wait at a time, with a timeout longer than the run's (`--plan` prints the worst case).
+   While a step runs, `runner.log` gets a `heartbeat` line every 3 min (`GATE_HEARTBEAT_MS`): elapsed, the step log's last growth, the client/server logs' mtime and growth, and the step's CPU%. `possibly stalled` means no growth in any of them for 15 min (`GATE_HEARTBEAT_STALL_MIN`); it is a log flag only, nothing is killed (`tools/lib/heartbeat.mjs`).
    A turbo run (any tier run of 20+ steps) may first wait in the queue for the machine: its run dir appears only once it has it,
    and its output names whom it waits for. Wait on the runner's pid until then (`kill -0 <pid>`), then on `summary.json`.
 4. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
