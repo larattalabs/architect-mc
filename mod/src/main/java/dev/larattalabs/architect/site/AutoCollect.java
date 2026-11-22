@@ -60,13 +60,32 @@ public final class AutoCollect {
 		for (var e : results.entrySet()) {
 			JsonObject m = members.get(e.getKey()) instanceof JsonObject x ? x : new JsonObject();
 			String title = m.has("title") ? m.get("title").getAsString() : rec.has("title") ? rec.get("title").getAsString() : e.getKey();
-			for (var el : e.getValue().getAsJsonArray("owedParts")) {
-				JsonObject p = el.getAsJsonObject();
-				if (OwedLedger.PLAYER_BLOCKS.equals(p.get("reason").getAsString())) {
-					collect(srv, p.get("recipient").getAsString(), p.get("key").getAsString(), title, false);
-				}
+			afterParts(srv, title, e.getValue().getAsJsonArray("owedParts"));
+		}
+	}
+
+	/**
+	 * (slice T4R-D fix round, P2-1) After any removal path retired (a single removal's owner, a group's, stage's, region's or revision's txn,
+	 * an extraction attempt): its {@code player_blocks} parts ({key, recipient, reason, items}) collected for their online recipients.
+	 */
+	static void afterParts(MinecraftServer srv, String title, com.google.gson.@org.jspecify.annotations.Nullable JsonArray parts) {
+		if (parts == null) {
+			return;
+		}
+		for (var el : parts) {
+			JsonObject p = el.getAsJsonObject();
+			if (OwedLedger.PLAYER_BLOCKS.equals(p.get("reason").getAsString())) {
+				collect(srv, p.get("recipient").getAsString(), p.get("key").getAsString(), title, false);
 			}
 		}
+	}
+
+	/**
+	 * (fix round P2-1) {@link #afterParts} on a later tick (outside the txn drive that retired it: a collect begins its own txn), with the parts
+	 * {@code read} then (the retired path's immutable snapshot).
+	 */
+	static void afterPartsLater(MinecraftServer srv, String title, java.util.function.Supplier<com.google.gson.JsonArray> read) {
+		dev.larattalabs.architect.txn.TxnServer.later(() -> afterParts(srv, title, read.get()));
 	}
 
 	/** The join notice and collect: every {@code player_blocks} entry owed to {@code p}. */

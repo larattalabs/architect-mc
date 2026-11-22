@@ -339,6 +339,7 @@ public final class Extractions {
 				return "held: " + s.detail();
 			case REPLAYED:
 				keep(at, null);
+				collectLater(srv, at);
 				return null;
 			case ATTACHED:
 				t = s.entry();
@@ -389,7 +390,21 @@ public final class Extractions {
 			return "its extraction txn ended without its commit";
 		}
 		keep(at, null);
+		collectLater(srv, at);
 		return null;
+	}
+
+	/**
+	 * (slice T4R-D fix round, P2-1) A kept attempt (its txn retired, its holds released): its player_blocks parts auto-collected for online
+	 * recipients, on a later tick, from its snapshot.
+	 */
+	private static void collectLater(MinecraftServer srv, JsonObject at) {
+		String target = at.get("target").getAsString();
+		AutoCollect.afterPartsLater(srv, Sites.describe(target), () -> {
+			synchronized (Extractions.class) {
+				return at.get("result") instanceof JsonObject r && r.get("owedParts") instanceof JsonArray a ? a.deepCopy() : null;
+			}
+		});
 	}
 
 	private static void keep(JsonObject at, @Nullable JsonObject result) {

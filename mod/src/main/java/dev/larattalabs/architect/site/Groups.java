@@ -2930,6 +2930,16 @@ public final class Groups {
 	}
 
 	private static void end(MinecraftServer server, Removal r, Removed given) {
+		if (given.removed() && r.undo != null) {
+			// (slice T4R-D fix round, P2-1) its txn retired (it ends removed only then): its player_blocks parts auto-collected for online
+			// recipients on a later tick, from its aggregate snapshot
+			String key = GroupTxn.key(r.group, r.stage, r.undo);
+			String title = r.stage == null ? "group " + r.group : "stage " + r.stage + " of group " + r.group;
+			AutoCollect.afterPartsLater(server, title, () -> {
+				JsonObject res = OwnerRemovals.result("owner", key);
+				return res == null || !(res.get("owedParts") instanceof com.google.gson.JsonArray a) ? null : a;
+			});
+		}
 		// (T4b, finding 5) a removal that ends stopped or failed still reports the owed keys its settles wrote so far
 		Removed result = !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given.restored(),
 			given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given;
