@@ -118,7 +118,7 @@ import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
 import { junitCounts, noResultsReason } from './lib/step-counts.mjs';
 import { captureThreadDumps, dumpReason, hostSleep } from './lib/thread-dump.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
-import { scopeChangeUnits } from './lib/change-units.mjs';
+import { scopeChangeUnits, fullUnitsInRun } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { loadScaleFor, loadScaledBudget, timeoutNote, timeoutRecord } from './lib/load-timeout.mjs';
@@ -1005,6 +1005,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   // (GI2) the frozen source's classes, built at setup from this head: api-compat's fallback where no build ran (an offline lane)
   if (FROZEN && DRV !== SRC) env.GATE_FROZEN_SOURCE = DRV;
   if (CHANGED_FILES) env.GATE_CHANGED_FILES = CHANGED_FILES;
+  if (runShared.fullUnits?.length) env.GATE_FULL_UNITS = runShared.fullUnits.join(',');
   // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
   // a probe's verdict once per run (tools/lib/probe-reuse.mjs): the evidence dirs of the steps that passed so far
   if (Object.keys(runShared.evidence).length) env.GATE_STEP_EVIDENCE = JSON.stringify(runShared.evidence);
@@ -1034,7 +1035,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, unitModRun: null, unitModJunit: null, unitModTree: null, mergeBase: null, evidence: {} };
+const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, fullUnits: [], unitModRun: null, unitModJunit: null, unitModTree: null, mergeBase: null, evidence: {} };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC: DRV, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? DRV : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(DRV, c.slice(4)) : path.resolve(DRV, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -2363,6 +2364,8 @@ try {
     runShared.kitTree = cachedHits.get('unit-kit').kitTree;
     log(`unit-kit CACHED: its JUnit report (kit tree ${runShared.kitTree.slice(0, 9)}) serves this run's kit-suite readers`);
   }
+  // (SPD) the full unit suites this run runs (or has CACHED at this head): unit-scope does not run its picks of them again
+  runShared.fullUnits = fullUnitsInRun(stepIds, cachedHits);
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   if (FROZEN) {
     const fz = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log });

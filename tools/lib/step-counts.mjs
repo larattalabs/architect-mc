@@ -71,14 +71,16 @@ export const UNIT_SCOPE_PREFIX = 'unit-scope --run: results';
  * suite ran but its counts could not be read); `checks`: { pass, fail } of the `node --check` runs. Nothing ran at all: says so, with
  * tests 0 (gate-run's no-results rule then fails the step).
  */
-export function unitScopeLine(suites = [], checks = { pass: 0, fail: 0 }) {
+export function unitScopeLine(suites = [], checks = { pass: 0, fail: 0 }, covered = []) {
   const ran = suites.filter((s) => s.error == null);
   const tests = ran.reduce((a, s) => a + s.tests, 0);
   const pass = ran.reduce((a, s) => a + s.pass, 0);
   const fail = ran.reduce((a, s) => a + s.fail, 0);
-  const nChecks = checks.pass + checks.fail;
+  // (SPD) a suite whose full unit step is in the same run counts as one passing check here, named
+  const nChecks = checks.pass + checks.fail + covered.length;
   const head = `${UNIT_SCOPE_PREFIX} tests ${tests}, pass ${pass}, fail ${fail}, checks ${nChecks}, check fail ${checks.fail}`;
   if (!suites.length && !nChecks) return `${head} (nothing ran: no suite picked and no node --check)`;
   const per = suites.map((s) => (s.error != null ? `${s.name} counts unread: ${s.error}` : `${s.name} ${s.pass}/${s.fail}`));
-  return `${head} (${[...per, ...(nChecks ? [`node --check ${checks.pass}/${checks.fail}`] : [])].join(', ')})`;
+  const own = checks.pass + checks.fail;
+  return `${head} (${[...per, ...covered.map((c) => `${c.name} covered by ${c.by}`), ...(own ? [`node --check ${checks.pass}/${checks.fail}`] : [])].join(', ')})`;
 }

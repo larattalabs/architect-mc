@@ -6,7 +6,8 @@
 //   node tools/unit-scope.mjs --since <ref>        another base (three dots: since the merge base)
 //   node tools/unit-scope.mjs --range A..B         any range (A...B too), e.g. a merged slice's commits; the graph is the working tree's
 //   node tools/unit-scope.mjs <file> ...           explicit paths
-//   [--run]                                        run the picks under nice -n 10 (kit, then sidecar, then Gradle); exit 1 if any fails
+//   [--run]                                        run the picks under nice -n 10 (kit, sidecar and Gradle side by side, SPD); exit 1 if any fails
+//                                                  (SPD) a suite whose full run is in the same gate run (GATE_FULL_UNITS) is not run again
 //   [--json]                                       machine-readable
 //
 // The selection. S0 = the changed files; D1 = the files that reference one of S0 directly (an import, a literal repo path, a
@@ -22,7 +23,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { moduleClosure, dirtyPaths } from './lib/step-inputs.mjs';
 import { globToRe } from './gate-impact.mjs';
@@ -297,6 +298,42 @@ export function fullCounts(graph) {
   return c;
 }
 
+/**
+ * (SPD, docs/SPEED-CUTS.md) The suites this gate run already runs in full: gate-run sets GATE_FULL_UNITS to the full unit steps in the
+ * run (or CACHED at this head), e.g. "unit-kit,unit-sidecar". unit-scope's picks of such a suite are a subset of that step's run at the
+ * same head in the same worktree, so they are not run a second time (they were: ~11 min of kit per change run that had unit-kit too).
+ */
+export const UNIT_OF = { kit: 'unit-kit', sidecar: 'unit-sidecar', gradle: 'unit-mod' };
+export function coveredSuites(env = process.env) {
+  const have = new Set(String(env.GATE_FULL_UNITS ?? '').split(',').map((x) => x.trim()).filter(Boolean));
+  return new Set(ALL.filter((s) => have.has(UNIT_OF[s])));
+}
+
+/**
+ * (SPD) Run independent suite jobs side by side ({ name, cmd, args, cwd, env }), each line of output prefixed `[name] `; resolves
+ * [{ name, code }] in job order. The three suites share no files: kit and vitest write only their own arch-* temp dirs, Gradle mod/build.
+ */
+export function runParallel(jobs, { out = process.stdout, spawnFn = spawn } = {}) {
+  return Promise.all(jobs.map((j) => new Promise((resolve) => {
+    out.write(`\nunit-scope --run ${j.name}: nice -n 10 ${j.cmd} ${j.args.length > 8 ? `${j.args.slice(0, 8).join(' ')} ... (${j.args.length} args)` : j.args.join(' ')} (cwd ${j.rel ?? j.cwd})\n`);
+    const child = spawnFn('nice', ['-n', '10', j.cmd, ...j.args], { cwd: j.cwd, env: { ...process.env, ...j.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const pipe = (stream) => {
+      let buf = '';
+      stream.on('data', (d) => {
+        buf += d;
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const l of lines) out.write(`[${j.name}] ${l}\n`);
+      });
+      stream.on('end', () => { if (buf) out.write(`[${j.name}] ${buf}\n`); });
+    };
+    pipe(child.stdout);
+    pipe(child.stderr);
+    child.on('error', () => resolve({ name: j.name, code: 1 }));
+    child.on('close', (code) => resolve({ name: j.name, code: code ?? 1 }));
+  })));
+}
+
 // ------------------------------------------------------------------ CLI
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -362,32 +399,41 @@ if (isMain) {
     const rep = fs.mkdtempSync(path.join(os.tmpdir(), 'unit-scope-'));
     const counts = [];
     const checks = { pass: 0, fail: 0 };
-    const run = (name, cmd, args, cwd, env) => {
-      console.log(`\nunit-scope --run ${name}: nice -n 10 ${cmd} ${args.length > 8 ? `${args.slice(0, 8).join(' ')} ... (${args.length} args)` : args.join(' ')} (cwd ${path.relative(SRC, cwd) || '.'})`);
-      const r = spawnSync('nice', ['-n', '10', cmd, ...args], { cwd, env: { ...process.env, ...env }, stdio: 'inherit' });
-      results.push({ name, code: r.status ?? 1 });
-      return r.status ?? 1;
-    };
+    const covered = coveredSuites();
+    const coveredBy = [];
     const suiteCounts = (name, c, code, missing) => {
       if (!c || (c.tests === 0 && code !== 0)) counts.push({ name, error: c ? `0 tests read, exit ${code}` : missing });
       else counts.push({ name, tests: c.tests, pass: c.tests - c.failures - c.skipped, fail: c.failures });
     };
-    for (const f of sel.checks) checks[run(`node --check ${f}`, 'node', ['--check', f], SRC) === 0 ? 'pass' : 'fail']++;
+    const rel = (cwd) => path.relative(SRC, cwd) || '.';
+    if (sel.checks.length) {
+      for (const r of await runParallel(sel.checks.map((f) => ({ name: `node --check ${f}`, cmd: 'node', args: ['--check', f], cwd: SRC, rel: '.' })))) {
+        results.push(r);
+        checks[r.code === 0 ? 'pass' : 'fail']++;
+      }
+    }
+    const jobs = [];
+    const skip = (s, n) => {
+      // (SPD) its full suite is in this run: one passing check stands for it here (that step's own result judges the suite)
+      console.log(`\nunit-scope --run ${s}: not run here (${n} picked): ${UNIT_OF[s]} runs the full suite in this gate run (GATE_FULL_UNITS)`);
+      coveredBy.push({ name: s, by: UNIT_OF[s] });
+    };
     const kitReporters = (file) => ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=junit', `--test-reporter-destination=${file}`];
     const kitTests = plan.kit.full ? [...graph.tests].filter(([, s]) => s === 'kit').map(([t]) => t).sort() : plan.kit.picked ? plan.kit.tests : [];
-    if (kitTests.length) {
+    if (kitTests.length && covered.has('kit')) skip('kit', kitTests.length);
+    else if (kitTests.length) {
       const file = path.join(rep, 'kit.xml');
-      const code = run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...kitReporters(file), ...kitTests], SRC);
-      suiteCounts('kit', junitFileCounts(file), code, 'no JUnit report written');
+      jobs.push({ name: 'kit', cmd: 'node', args: ['--test', ...testConcurrencyArgs(), ...kitReporters(file), ...kitTests], cwd: SRC, rel: rel(SRC), done: (code) => suiteCounts('kit', junitFileCounts(file), code, 'no JUnit report written') });
     }
     const sc = path.join(SRC, 'sidecar');
     const scReporters = (file) => ['--reporter=default', '--reporter=junit', `--outputFile.junit=${file}`];
-    if (plan.sidecar.full || plan.sidecar.picked) {
+    if ((plan.sidecar.full || plan.sidecar.picked) && covered.has('sidecar')) skip('sidecar', plan.sidecar.picked);
+    else if (plan.sidecar.full || plan.sidecar.picked) {
       const file = path.join(rep, 'sidecar.xml');
-      const code = run('sidecar', 'npx', ['vitest', 'run', ...scReporters(file), ...(plan.sidecar.full ? [] : plan.sidecar.tests.map((t) => path.relative('sidecar', t)))], sc);
-      suiteCounts('sidecar', junitFileCounts(file), code, 'no JUnit report written');
+      jobs.push({ name: 'sidecar', cmd: 'npx', args: ['vitest', 'run', ...scReporters(file), ...(plan.sidecar.full ? [] : plan.sidecar.tests.map((t) => path.relative('sidecar', t)))], cwd: sc, rel: rel(sc), done: (code) => suiteCounts('sidecar', junitFileCounts(file), code, 'no JUnit report written') });
     }
-    if (plan.gradle.full || plan.gradle.picked) {
+    if ((plan.gradle.full || plan.gradle.picked) && covered.has('gradle')) skip('gradle', plan.gradle.picked);
+    else if (plan.gradle.full || plan.gradle.picked) {
       const gh = process.env.GRADLE_USER_HOME ?? path.join(SRC, '.gradle-home');
       if (!fs.existsSync(gh) || path.relative(SRC, path.resolve(gh)).startsWith('..')) {
         console.error(`unit-scope: GRADLE_USER_HOME ${gh} is not this checkout's own copy (AGENTS.md "Build and test"): Gradle not run`);
@@ -396,16 +442,25 @@ if (isMain) {
         const args = plan.gradle.full ? ['--offline', '--no-daemon', 'build'] : ['--offline', '--no-daemon', 'test', ...plan.gradle.tests.flatMap((t) => ['--tests', graph.gradle.get(t)])];
         // only the XMLs this run wrote: the results directory keeps older reports, and an up-to-date test task writes none
         const since = Date.now() - 1000;
-        const code = run('gradle', './gradlew', args, path.join(SRC, 'mod'), { GRADLE_USER_HOME: path.resolve(gh) });
-        const c = junitCounts(path.join(SRC, 'mod', 'build', 'test-results', 'test'), { since });
-        suiteCounts('gradle', c && c.files ? { tests: c.tests, failures: c.failures + c.errors, skipped: c.skipped } : null, code, 'no JUnit XML written this run (the test task up to date?)');
+        const md = path.join(SRC, 'mod');
+        jobs.push({ name: 'gradle', cmd: './gradlew', args, cwd: md, rel: rel(md), env: { GRADLE_USER_HOME: path.resolve(gh) }, done: (code) => {
+          const c = junitCounts(path.join(md, 'build', 'test-results', 'test'), { since });
+          suiteCounts('gradle', c && c.files ? { tests: c.tests, failures: c.failures + c.errors, skipped: c.skipped } : null, code, 'no JUnit XML written this run (the test task up to date?)');
+        } });
       }
+    }
+    // (SPD) the suites side by side, not one after another: they share no files, and the kit suite's long tail (one file's test) left
+    // the cores idle while sidecar and Gradle waited behind it
+    const ran = await runParallel(jobs);
+    for (const [i, r] of ran.entries()) {
+      results.push(r);
+      jobs[i].done(r.code);
     }
     fs.rmSync(rep, { recursive: true, force: true });
     const bad = results.filter((r) => r.code !== 0);
     console.log(`\nunit-scope --run: ${results.map((r) => `${r.name} ${r.code === 0 ? 'PASS' : `FAIL (exit ${r.code})`}`).join(', ') || 'nothing to run'}`);
     // the one summed line gate-run parses (tools/gate-chains.json unit-scope `parse`); nothing ran: says so, with tests 0
-    console.log(unitScopeLine(counts, checks));
+    console.log(unitScopeLine(counts, checks, coveredBy));
     process.exit(bad.length ? 1 : 0);
   }
 }

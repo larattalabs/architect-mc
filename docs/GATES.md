@@ -62,6 +62,8 @@ The as-built and measured sections further down are dated records: a bare rule n
    the full suites.
 8. **Timing benchmarks are report-only** [9]: `tools/lib/bench-report.mjs` records and flags them, never fails a slice; the
    nightly tracks them. (Timing bars in `change`/`slice` are likewise recorded, not judged: "Timing bars" below.)
+8b. **Speed cuts** (Noah, 2026-11-21, relayed): speed may win over coverage. Every test, row or step dropped or weakened for
+    speed goes in **docs/SPEED-CUTS.md**, one line each: what was cut, minutes saved per run, what is no longer covered, how to restore it.
 
 **Batches and releases**
 
@@ -126,7 +128,7 @@ a fixture token in `sidecar/test/variants.test.ts`). No directory is excluded an
 
 ```sh
 node tools/unit-scope.mjs                  # what origin/main...HEAD plus the working tree picks, and why (each pick's chain)
-node tools/unit-scope.mjs --run            # run the picks under nice -n 10: kit, then sidecar vitest, then Gradle --tests; exit 1 on a failure
+node tools/unit-scope.mjs --run            # run the picks under nice -n 10: kit, sidecar vitest and Gradle --tests side by side (SPD), a suite whose full step is in the gate run skipped; exit 1 on a failure
 node tools/unit-scope.mjs --range A..B     # any range (the graph is the working tree's); <file> ... for explicit paths; --json
 ```
 
@@ -218,6 +220,18 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
   of the polish, groups, copies, follow and critique harnesses (~0.1 GB each, 6.4 GB kept per run), unchanged in size.
 - Leftovers: run dirs stay on the SSD (5-13 GB each x 4 slots > 24 GB); `kit/lib/rebuild.mjs` (shipped, try/finally) and
   `kit/tools/site-renders.mjs` (kept output) unchanged; the sidecar tests' design writes are not cut yet.
+
+### Chore SPD as built (speed sweep, 2026-11-21)
+
+- **unit-scope doesn't repeat a full suite in the same run:** gate-run passes `GATE_FULL_UNITS` (unit-kit, unit-sidecar or unit-mod in
+  the run, or CACHED), and unit-scope skips its picks of those suites. Each skipped suite counts as one passing check, named in the
+  summed line (`kit covered by unit-kit`). Change runs with unit-kit had run the whole kit suite twice, in parallel lanes.
+- **unit-scope runs its suites side by side** (kit, sidecar and Gradle at once, each output line prefixed `[kit]` etc.).
+- **districts-d3 item 1** (300 seeded towns, the kit suite's critical path) runs on up to 6 worker threads (`kit/test/d3-towns.mjs`).
+  It checks the same towns, with the same assertions and counts.
+- **fl-unit** takes its four kit files from unit-kit's report when it is exact (`kit-reuse.mjs`). `cpuShares`: unit-sidecar 4, fl-unit 3.
+- Nothing dropped or weakened (docs/SPEED-CUTS.md). Units: `unit-scope.test.mjs`, `gate-change-units.test.mjs` and `districts-d3`'s
+  split check, each revert-checked red. Measured numbers: the SPD changes file in `coord-tools/reviews/`.
 
 ### Exact-bill gates: fixtures and discriminators (lesson from slice QT, 2026-11-12)
 

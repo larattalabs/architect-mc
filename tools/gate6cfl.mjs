@@ -26,6 +26,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { kitReuse } from './lib/kit-reuse.mjs'; // (SPD) the kit files from this run's unit-kit report when it is exact
 import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,7 +106,10 @@ steps.unit = async () => {
   const slice = slicesOf(P, 'unchanged', 3);
   if (P.want('items')) {
   // items 1-3, 5, 8, 9 and the street ext (kit)
-  out.kit = nodeTest(['kit/test/fl.test.mjs', 'kit/test/fl-layouts-1.test.mjs', 'kit/test/fl-layouts-2.test.mjs', 'kit/test/fl-look.test.mjs']);
+  // (SPD) these four files are in unit-kit's suite: when this run's unit-kit (or its CACHED report) has them passing at this kit tree,
+  // their result is read from it (tools/lib/kit-reuse.mjs), else they run here as before
+  const flFiles = ['kit/test/fl.test.mjs', 'kit/test/fl-layouts-1.test.mjs', 'kit/test/fl-layouts-2.test.mjs', 'kit/test/fl-look.test.mjs'];
+  out.kit = kitReuse(root, flFiles) ?? nodeTest(flFiles);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 13, `items 1-3, 5, 8, 9: the layouts on 200 seeded claims each (0 lots overlapping or outside the mask, every entrance joined, the ring closed, the spiral's pitch, the grid's blocks, the organic turn bound), the broken variants caught, the fl/ answers and their wouldFits re-checked alone, KC, catalogue 10, the five asks, plan v1's shape, the street ext: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   for (const n of out.kit.notes) log(`  ${n}`);
   // the mod: Ir reads a road's ext (S-FL-5)

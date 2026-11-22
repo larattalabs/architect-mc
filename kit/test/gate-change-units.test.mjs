@@ -35,3 +35,10 @@ test('the chain config: change runs unit-scope (uncacheable), slice and release 
   assert.match(cfg.steps['unit-scope'].shell, /GATE_CHANGED_FILES/);
   assert.ok(cache.uncacheable['unit-scope']);
 });
+
+test('(SPD) fullUnitsInRun: the full unit steps in the run or CACHED, in a fixed order; nothing else', async () => {
+  const { fullUnitsInRun } = await import('../../tools/lib/change-units.mjs');
+  assert.deepEqual(fullUnitsInRun(['unit-scope', 'sim-jobs']), []);
+  assert.deepEqual(fullUnitsInRun(['unit-scope', 'unit-kit', 'd-unit']), ['unit-kit']);
+  assert.deepEqual(fullUnitsInRun(['unit-sidecar'], new Map([['unit-mod', {}]])), ['unit-mod', 'unit-sidecar']);
+});
