@@ -97,7 +97,8 @@ public final class Extractions {
 
 	/**
 	 * (slice T4R-D fix round, P1-5) The keys of {@code t}'s planned and open attempts: its own removal's admission excludes them (they are
-	 * that removal's prerequisite, driven by its retry), so a retry always reaches {@link #run}, never refused by its own attempt.
+	 * that removal's prerequisite, driven by its retry), so a retry always reaches {@link #run}, never refused by its own attempt. (slice
+	 * T4R-D last round, P1) Never its own holder cargo: a retry waits for an open cargo txn like any other's ({@link #ownCargo}).
 	 */
 	static synchronized java.util.Set<String> keysOf(Infra t) {
 		java.util.Set<String> out = new java.util.HashSet<>();
@@ -111,7 +112,6 @@ public final class Extractions {
 				}
 			}
 		}
-		out.add(cargoSelf(tkey(t))); // (narrowing round, P1) and its own holder cargo
 		return out;
 	}
 
@@ -121,11 +121,19 @@ public final class Extractions {
 	}
 
 	/**
-	 * (narrowing round, P1) How admission names target {@code tk}'s holder cargo txns ({@code txn:<cargoPrefix>}, {@link RemovalAreas#coreHolds}):
-	 * in its own retry's {@code self}, so it is never refused by its own cargo (driven again by that retry); every other removal is. Pure.
+	 * (slice T4R-D last round, P1) Target {@code tk}'s open (or retiring) holder cargo txn in {@code c}, or null. {@link #run} waits while one
+	 * is open: an undecided one may still put its stack back into the holder (its compensation), and a P0 saved now would hold that holder
+	 * against it (the extraction's W waiting on the cargo's cell, the cargo's compensation on P0's hold, for good). Every caller of run (a
+	 * standalone road's, a cascade's, a group's retry, which has no admission) goes through it.
 	 */
-	static String cargoSelf(String tk) {
-		return "txn:" + cargoPrefix(tk);
+	static @Nullable TxnEntry ownCargo(TxnCore c, String tk) {
+		String prefix = cargoPrefix(tk);
+		for (TxnEntry t : c.open()) {
+			if (dev.larattalabs.architect.txn.CargoTxn.KIND.equals(t.kind) && t.key != null && t.key.startsWith(prefix)) {
+				return t;
+			}
+		}
+		return null;
 	}
 
 	/** Admission areas of the planned and open attempts (§4.2 (b)). */
@@ -308,6 +316,12 @@ public final class Extractions {
 			if (!c.has("recipient")) {
 				c.addProperty("recipient", OwnerRemovals.recipient(null, rec, requester));
 			}
+		}
+		// (slice T4R-D last round, P1) never while one of its own holder cargo txns is open: it may still put its stack back (see ownCargo)
+		TxnEntry cargo = ownCargo(TxnServer.core(), tk);
+		if (cargo != null) {
+			return "the contents of a player's holder on " + t.id() + " are still being taken out (" + cargo.id + (cargo.held() != null ? ": " + cargo
+				.held() : "") + ")";
 		}
 		// (slice T4R-D fix round, P1-6) a player's holder among them: its contents taken out first, each stack once, in one removal.cargo txn
 		// (a plain stack credited into the target's pile, else owed whole: keyed per txn and effect, so a later extraction at the same cell is a

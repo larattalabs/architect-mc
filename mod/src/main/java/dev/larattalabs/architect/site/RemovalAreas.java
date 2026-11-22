@@ -232,23 +232,16 @@ public final class RemovalAreas {
 		}
 	}
 
-	/**
-	 * (narrowing round, P1) The site an open txn's cell areas name: {@code txn:<key>}; a {@code removal.cargo} txn's key up to its last
-	 * {@code @} (its owner's {@link Extractions#cargoPrefix}: {@code cargo:<target>@<placedAt>@}), so the target's own retry names it in its
-	 * self ({@link Extractions#cargoSelf}) and no other removal does.
-	 */
+	/** The site an open txn's cell areas name: {@code txn:<key>}, which no removal's {@code self} holds (slice T4R-D last round, P1). */
 	static String areaSite(dev.larattalabs.architect.txn.TxnEntry t) {
-		if (dev.larattalabs.architect.txn.CargoTxn.KIND.equals(t.kind) && t.key != null && t.key.lastIndexOf('@') > 0) {
-			return "txn:" + t.key.substring(0, t.key.lastIndexOf('@') + 1);
-		}
 		return "txn:" + t.key;
 	}
 
 	/**
 	 * (fix round P1-4) Whether an open txn of {@code kind} is represented by its durable record's areas: a single removal's owner txn (its
 	 * owner record), an extraction (its attempt). (slice T4R-D narrowing round, P1) A {@code removal.cargo} txn has no such record (a
-	 * standalone road's runs before its attempt exists): its cells count as every other open txn's, live and as loaded; a target's own cargo
-	 * is in its own retry's {@code self} ({@link Extractions#keysOf}).
+	 * standalone road's runs before its attempt exists): its cells count as every other open txn's, live and as loaded, for its own
+	 * target's retry too (slice T4R-D last round, P1: no own-cargo exemption; {@link Extractions#ownCargo}).
 	 */
 	static boolean ownAreas(String kind) {
 		return dev.larattalabs.architect.txn.RemovalTxn.SITE.equals(kind) || Extractions.KIND.equals(kind);
