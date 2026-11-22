@@ -2292,7 +2292,7 @@ export async function registerTCC(steps, h) {
         const tag = `T4RD-${sub}`;
         if (!want(tag)) continue;
         const me = (await call('dev.state', {}, 10_000).catch(() => ({}))).playerUuid ?? (await call('dev.pt.uuid', { name: 'bot' }, 10_000).catch(() => ({}))).uuid;
-        const f = await t4rdFixture(sub.replace(/-/g, ''), null);
+        const f = await t4rdFixture(sub.replace(/-/g, ''), 'bot'); // the client's own player places them (online: auto-collect)
         if (!f) continue;
         if (sub === 'full') await cmd('/give @s minecraft:dirt 2304').catch(() => null); // every main slot full: nothing fits
         const inv0 = (await groundAt(f.site)).inventory ?? {};
