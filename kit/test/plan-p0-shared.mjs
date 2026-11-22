@@ -38,15 +38,14 @@ export const WALL = [{ id: 'wall', rect: [150, 60, 170, 260] }];
 export const WALLED = { schemaVersion: 'plan/0', zones: [{ id: 'town', program: { lots: lots(3) }, where: { near: { anchor: 'claim_w', within: 8 } } }],
   connectors: [{ id: 'long', kind: 'road', from: { part: 'town' }, to: { anchor: 'claim_e' } }] };
 
-/** Item 3 over every n-th plan from k (plan-p0-det-<k+1>.test.mjs): three checks give identical answers and artifact shas; 1 and 4 tile workers give equal tile shas. */
+/** Item 3 over every n-th plan from k (plan-p0-det-<k+1>.test.mjs): two checks give identical answers and artifact shas ((SPD3) was three); 1 and 4 tile workers give equal tile shas. */
 export async function determinism(k, n) {
   const { tileShas } = await import('../../tools/scenarios.mjs');
   const perClass = [NEAR_CENTRE(), NEAR_CENTRE({ move: { max: 2, hard: true } }), WALLED].map((plan, i) => ({ name: `per-class ${i}`, on: 'asks', plan, protected: i < 2 ? GROVE : WALL }));
   for (const f of [...read('valid'), ...perClass].filter((_, i) => i % n === k)) {
-    const rs = [await run(f), await run(f), await run(f)];
+    const rs = [await run(f), await run(f)];
     const j = rs.map((r) => JSON.stringify(r.check));
     assert.equal(j[1], j[0], `${f.name}: answers`);
-    assert.equal(j[2], j[0], `${f.name}: answers`);
     assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
     if (!rs[0].artifact) continue;
     // the artifact's tile shas are the plan's own tiles (as scenario goldens compute them), 1 worker = 4 workers

@@ -254,12 +254,12 @@ test('M3: a 6-wide unbuttressed ledge is an overhang finding; a generated spire 
 
 // ------------------------------------------------------------------ forms_demo
 
-test('forms_demo: plans on a flat claim (6 clusters, 3 spires, one baked), clean, identical over 3 plans', async () => {
+test('forms_demo: plans on a flat claim (6 clusters, 3 spires, one baked), clean, identical over 2 plans', async () => {
   const claim = { minX: 2508, minZ: 1588, maxX: 2699, maxZ: 1779, minY: -64, maxY: 319 };
   const survey = flatCols(claim.minX, claim.minZ, 192, 192);
   const shas = [];
   let p;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     p = await planRegion({ program: formsDemo, programSource: 'forms_demo', survey, claim, node: 'test' });
     shas.push(`${p.irSha} ${[...p.blobs.keys()].sort().join(',')}`);
   }

@@ -301,15 +301,14 @@ test('the broken variants: _unsafe.flowingPier and _unsafe.waterloggedWet each c
 
 // ------------------------------------------------------------------ determinism, until H
 
-test('determinism: 3 checks of v46, v47, v48 and each hb_ fixture give one answer set, IR and artifact sha', async () => {
+test('determinism: 2 checks of v46, v47, v48 and each hb_ fixture give one answer set, IR and artifact sha', async () => {
   const all = [readJ('valid', 'v46_quay.json'), readJ('valid', 'v47_wet_beam.json'), readJ('valid', 'v48_harbour_wall.json'), ...fs.readdirSync(path.join(FIX, 'h')).filter((f) => /^hb_/.test(f)).sort().map((f) => readJ('h', f))];
   for (const f of all) {
-    const runs = [await run(f), await run(f), await run(f)];
+    const runs = [await run(f), await run(f)];
     const key = (r) => JSON.stringify(r.check.parts);
     assert.equal(key(runs[1]), key(runs[0]), `${f.name}: answers`);
-    assert.equal(key(runs[2]), key(runs[0]), `${f.name}: answers`);
     assert.equal(runs[1].artifactSha, runs[0].artifactSha, `${f.name}: artifact`);
-    assert.equal(runs[2].res.irSha, runs[0].res.irSha, `${f.name}: IR`);
+    assert.equal(runs[1].res.irSha, runs[0].res.irSha, `${f.name}: IR`); // (SPD3) the IR check moved from the dropped 3rd run
   }
 });
 

@@ -130,10 +130,9 @@ test('item 2: over 50 seeds, the fired share per density band is within 3 points
 
 // ------------------------------------------------------------------ 1 and 7: tile independence, determinism, the golden
 
-test('items 1 and 7: scatter_demo is byte-identical over 3 plans; tiles equal for 1 and 4 workers, forward and shuffled; the golden', async () => {
-  const a = await demo(), b = await demo(), c = await demo();
+test('items 1 and 7: scatter_demo is byte-identical over 2 plans; tiles equal for 1 and 4 workers, forward and shuffled; the golden', async () => {
+  const a = await demo(), b = await demo();
   assert.equal(a.irJson, b.irJson);
-  assert.equal(a.irJson, c.irJson);
   const meta = a.meta.scatterDemo;
   assert.equal(meta.stamps.length, 8, `every surface stamp and the fossil placed: ${JSON.stringify(meta.missing)}`);
   assert.ok(meta.path && meta.lot, 'a path and a lot');

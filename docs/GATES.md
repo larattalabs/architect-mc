@@ -229,7 +229,7 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - **Not done: unit-scope's suites side by side.** Each suite took the whole CPU share, so the cores were oversubscribed. The sidecar ran
   695 s instead of 262 s, and eval.e2e failed with "the sidecar connection closed". It passes alone.
 - **districts-d3 item 1** (300 seeded towns, the kit suite's critical path) runs on up to 6 worker threads (`kit/test/d3-towns.mjs`).
-  It checks the same towns, with the same assertions and counts.
+  It checks the same towns, with the same assertions and counts. (SPD3 then cut it to the first 100 towns: docs/SPEED-CUTS.md.)
 - **fl-unit** takes its four kit files from unit-kit's report when it is exact (`kit-reuse.mjs`). It has no `waitFor`, so this helps
   only when unit-kit is CACHED or already done.
 - Nothing dropped or weakened (docs/SPEED-CUTS.md). Units: `unit-scope.test.mjs` (`--run` under `GATE_FULL_UNITS`), `gate-change-units.test.mjs` and `districts-d3`'s

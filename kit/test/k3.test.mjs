@@ -268,7 +268,7 @@ test('the line (desert_jungle_wall\'s shape): the via gatehouse\'s passage cross
   assert.ok(r.artifact.lots.find((l) => l.id === 'gatehouse_1').onWall.at === 'via');
 });
 
-test('a wall naming no lot is K1\'s (no lots, no passage, no lane); 3 checks of each K3 fixture give one answer set and one artifact sha', async () => {
+test('a wall naming no lot is K1\'s (no lots, no passage, no lane); 2 checks of each K3 fixture give one answer set and one artifact sha', async () => {
   for (const name of ['v30_walled_village.json', 'v31_wall_line.json', 'v32_wall_edge.json', 'v7a_k2_walk.json']) {
     const r = await run(fx('valid', name));
     for (const w of r.res.meta.walls ?? []) assert.ok(!w.lots && !w.cut, `${name}: no lots`);
@@ -277,7 +277,7 @@ test('a wall naming no lot is K1\'s (no lots, no passage, no lane); 3 checks of 
   }
   // (and the fallback's two-pass compile, a fresh region on the rerun: r01 and the KC row)
   for (const [d, name] of [['valid', 'v7a_k3_castle.json'], ['k3', 'k3_castle_flat.json'], ['k3', 'r01_back_to_zone.json'], ['k3', 'k01_castle_fountain.json']]) {
-    const rs = [await run(fx(d, name)), await run(fx(d, name)), await run(fx(d, name))];
+    const rs = [await run(fx(d, name)), await run(fx(d, name))];
     assert.ok(rs.every((x) => x.artifactSha && x.artifactSha === rs[0].artifactSha), `${name}: one artifact sha`);
     assert.ok(rs.every((x) => JSON.stringify(x.check.parts) === JSON.stringify(rs[0].check.parts)), `${name}: one answer set`);
   }

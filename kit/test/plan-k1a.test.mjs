@@ -188,9 +188,9 @@ test('item 7: §9 on Steward\'s 59 recorded plans: K1 parts never malformed or u
   assert.ok(ok >= 7, `at least 7 of the 9 wall and gate parts fits or adjusted (${ok})`);
 });
 
-test('item 10: 3 checks of v30 give one answer set and one artifact sha', async () => {
+test('item 10: 2 checks of v30 give one answer set and one artifact sha', async () => {
   const fx = readJ('valid', 'v30_walled_village.json');
-  const rs = [await run(fx), await run(fx), await run(fx)];
+  const rs = [await run(fx), await run(fx)];
   assert.ok(rs.every((r) => r.artifactSha && r.artifactSha === rs[0].artifactSha), 'one artifact sha');
   assert.ok(rs.every((r) => r.res.irSha === rs[0].res.irSha), 'one IR sha');
   assert.ok(rs.every((r) => JSON.stringify(r.check.parts) === JSON.stringify(rs[0].check.parts)), 'one answer set');

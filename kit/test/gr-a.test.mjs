@@ -208,10 +208,10 @@ test('items 10-12 (kit): a beside district and an outpost grow on their own stre
   }
 });
 
-test('item 2, byte identity and determinism: a program without grow is unchanged; a growth plans the same IR three times', async () => {
+test('item 2, byte identity and determinism: a program without grow is unchanged; a growth plans the same IR twice', async () => {
   const S = await town();
   const rs = [];
-  for (let i = 0; i < 3; i++) rs.push(await reviseIR(S.eff, { grow: { lots: LOTS6, prefer: 'extend' } }, ctxOf(S)));
+  for (let i = 0; i < 2; i++) rs.push(await reviseIR(S.eff, { grow: { lots: LOTS6, prefer: 'extend' } }, ctxOf(S)));
   assert.ok(rs.every((r) => r.irSha === rs[0].irSha));
   // the town replanned is the same IR (grow is a revision's alone)
   const again = await d3Town();

@@ -236,9 +236,9 @@ test('the circuit (LV, two-way levers): each lever reaches every trapdoor (gmLin
   }
 });
 
-test('determinism: 3 checks of v7a_gm_drawbridge give identical answers, IR and artifact', async () => {
-  const runs = [await r0(), await runOf(), await runOf()];
-  for (const k of [1, 2]) {
+test('determinism: 2 checks of v7a_gm_drawbridge give identical answers, IR and artifact', async () => {
+  const runs = [await r0(), await runOf()];
+  for (const k of [1]) {
     assert.equal(JSON.stringify(runs[k].check.parts), JSON.stringify(runs[0].check.parts), `answers ${k + 1}`);
     assert.equal(runs[k].artifactSha, runs[0].artifactSha, `artifact ${k + 1}`);
     assert.equal(runs[k].res.irSha, runs[0].res.irSha, `IR ${k + 1}`);

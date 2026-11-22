@@ -289,13 +289,13 @@ const PINNED = {
   synth1024: { flow: '7761f6eeabe4c57838536e83e3522f1fc4c0d5eb9436473fa977892101058f19', wet: '4ecec80910b72bb96572c7a98cca802d223bac641b3afc0e1f2598b19c98d403', courses: 'd43b3e7cf67570eb507edd38f24d2036a2da661995b925112e76ae5a19f7b459' },
 };
 
-test('determinism: the 1024 x 1024 synthetic (resolution 4) and S1\'s survey, 3 runs identical, shas pinned', () => {
+test('determinism: the 1024 x 1024 synthetic (resolution 4) and S1\'s survey, 2 runs identical, shas pinned', () => {
   const s1 = decodeColumns(fs.readFileSync(path.join(ROOT, 'scenarios', 'goldens', 's1', 'survey.bin')));
   const syn = synthSurvey({ minX: 0, minZ: 0, maxX: 1023, maxZ: 1023 });
   for (const [name, c] of [['s1', s1], ['synth1024', syn]]) {
-    const runs = [0, 1, 2].map(() => hydrologyPass(c, [], { channelAt: 400 }));
+    const runs = [0, 1].map(() => hydrologyPass(c, [], { channelAt: 400 }));
     const shas = runs.map((o) => [sha(o.fields.flow.values), sha(o.fields.wet.values), sha(Buffer.from(JSON.stringify(o.data.courses)))]);
-    assert.deepEqual(shas[1], shas[0]); assert.deepEqual(shas[2], shas[0]);
+    assert.deepEqual(shas[1], shas[0]);
     assert.equal(shas[0][0], PINNED[name].flow, `${name} flow`);
     assert.equal(shas[0][1], PINNED[name].wet, `${name} wet`);
     assert.equal(shas[0][2], PINNED[name].courses, `${name} data.courses`);

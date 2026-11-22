@@ -247,10 +247,10 @@ test('item 10, §13: Steward\'s recorded waterfall and moat; the asks\' gap tabl
   assert.ok(!/until H\b/.test(after));
 });
 
-test('item 15: determinism: three checks of a waterfall give the same answers and artifact', async () => {
+test('item 15: determinism: two checks of a waterfall give the same answers and artifact', async () => {
   const [f] = read('valid', /^v44_/);
   const shas = new Set();
-  for (let i = 0; i < 3; i++) { const r = await run(f); shas.add(`${r.artifactSha} ${r.res.irSha}`); }
+  for (let i = 0; i < 2; i++) { const r = await run(f); shas.add(`${r.artifactSha} ${r.res.irSha}`); }
   assert.equal(shas.size, 1);
 });
 

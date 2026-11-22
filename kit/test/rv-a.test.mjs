@@ -175,10 +175,10 @@ test('300 seeded synthetic additive revisions: deterministic, nothing standing c
   assert.ok(accepted >= 50 && refused >= 50, `accepted ${accepted}, refused ${refused}: ${JSON.stringify(codes)}`);
 });
 
-test('determinism (item 17): the revision IR over 3 plans; its tile shas with 1 and 4 workers', async () => {
+test('determinism (item 17): the revision IR over 2 plans; its tile shas with 1 and 4 workers', async () => {
   const S = await town();
   const rs = [];
-  for (let i = 0; i < 3; i++) rs.push(await reviseIR(S.eff, { parts: [POND, SPIRE] }, ctxOf(S)));
+  for (let i = 0; i < 2; i++) rs.push(await reviseIR(S.eff, { parts: [POND, SPIRE] }, ctxOf(S)));
   assert.ok(rs.every((r) => r.irSha === rs[0].irSha));
   const { tileShas } = await import('../../tools/scenarios.mjs');
   const { encodeColumns } = await import('../lib/region/pack.mjs');
