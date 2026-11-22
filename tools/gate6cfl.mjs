@@ -9,7 +9,7 @@
 //                                      engine and each layout on 200 seeded claims, the fl/ answers with their wouldFits re-checked alone,
 //                                      KC, catalogue 10, the asks, plan v1's shape, the street ext); item 4 (byte identity against the
 //                                      merge base, kitVersion and the street ext normalised; the untouched files); item 8 (the asks before
-//                                      and after); item 10 (3 checks of each FL fixture: identical answers and artifact shas); item 11
+//                                      and after); item 10 (2 checks of each FL fixture: identical answers and artifact shas); item 11
 //                                      (timing, recorded); item 12 (api-compat --gate6cfl, the compact plan/0's size; $0); the mod's
 //                                      IrRoadExtTest
 //     ingame    (fl-ingame)            item 6 (tools/lib/gate6cfl-game.mjs): v66, v67, v68, v70, v71 and s01 through Regions.checkPlan and
@@ -130,16 +130,16 @@ steps.unit = async () => {
   if (P.want('items')) {
   out.untouched = K.untouched(root, { check });
   out.asks = await K.asks(root, { check, write: false });
-  // item 10: 3 checks of each FL fixture: identical answers and artifact shas
+  // item 10: 2 checks of each FL fixture: identical answers and artifact shas ((SPD3, Noah 2026-11-22) was 3; docs/SPEED-CUTS.md)
   const h = await import(pathToFileURL(path.join(KIT, 'test', 'plan-p0-shared.mjs')).href);
   const det = {};
   for (const f of [...h.read('valid').filter((x) => /^v(6[6-9]|7[01])_/.test(x.name)), ...h.read('fl').filter((x) => x.expect?.part)]) {
-    const rs = [await h.run(f), await h.run(f), await h.run(f)];
+    const rs = [await h.run(f), await h.run(f)];
     const j = rs.map((r) => JSON.stringify(r.check));
-    det[f.name] = j[1] === j[0] && j[2] === j[0] && rs.every((r) => r.artifactSha === rs[0].artifactSha);
+    det[f.name] = j[1] === j[0] && rs.every((r) => r.artifactSha === rs[0].artifactSha);
   }
   out.determinism = det;
-  check(Object.values(det).every(Boolean), `item 10: 3 checks of each FL fixture: identical answers and artifact shas (${Object.keys(det).length} fixtures; macOS here, Linux in kit CI)`, Object.entries(det).filter(([, v]) => !v));
+  check(Object.values(det).every(Boolean), `item 10: 2 checks of each FL fixture: identical answers and artifact shas (${Object.keys(det).length} fixtures; macOS here, Linux in kit CI)`, Object.entries(det).filter(([, v]) => !v));
   // item 11 (recorded): timing
   out.timing = await K.timing(root);
   for (const [k, v] of Object.entries(out.timing)) bar(true, `item 11 (recorded): ${k} on a 256 x 256 claim with 40 lots: median ${v.medianMs} ms of 3 (${v.class}, ${v.lots} lots, ${v.unplaced} unplaced; ${v.notes.join(' | ')})`);

@@ -215,14 +215,13 @@ test('§9: the gap tables (committed before and after); no recorded part changes
   assert.equal(gaps['tunnel.under'], undefined);
 });
 
-test('determinism: 3 checks of v35, v36, v39 and each refusal fixture give identical answers, IR and artifact shas', async () => {
+test('determinism: 2 checks of v35, v36, v39 and each refusal fixture give identical answers, IR and artifact shas', async () => {
   for (const f of [...read('valid', /^v3[56]_/), ...read('t3a', /^(v39|r0[1-6])/)]) {
-    const runs = [await run(f), await run(f), await run(f)];
+    const runs = [await run(f), await run(f)];
     const key = (r) => JSON.stringify(r.check.parts);
     assert.equal(key(runs[1]), key(runs[0]), `${f.name}: answers 2`);
-    assert.equal(key(runs[2]), key(runs[0]), `${f.name}: answers 3`);
     assert.equal(runs[1].artifactSha, runs[0].artifactSha, `${f.name}: artifact 2`);
-    assert.equal(runs[2].res.irSha, runs[0].res.irSha, `${f.name}: IR 3`);
+    assert.equal(runs[1].res.irSha, runs[0].res.irSha, `${f.name}: IR 2`); // (SPD3) the IR check moved from the dropped 3rd run
   }
 });
 

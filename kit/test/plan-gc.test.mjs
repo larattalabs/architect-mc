@@ -59,10 +59,9 @@ test('a lot that already writes its mechanism keeps GM\'s own note (no second hi
 test('the notes are the same on every run, and the plan checked is the plan given', async () => {
   const f = variantOf({ size: [11, 13], lots: base().plan.connectors.find((c) => c.kind === 'wall').lots.filter((q) => q.lot !== 'tower_4') });
   const before = JSON.stringify(f.plan);
-  const rs = [await run(f), await run(f), await run(f)];
+  const rs = [await run(f), await run(f)];
   assert.equal(JSON.stringify(f.plan), before);
   assert.equal(JSON.stringify(rs[1].check), JSON.stringify(rs[0].check));
-  assert.equal(JSON.stringify(rs[2].check), JSON.stringify(rs[0].check));
   assert.equal(rs[1].artifactSha, rs[0].artifactSha);
 });
 

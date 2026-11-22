@@ -217,10 +217,10 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   for (const id of ['connector.ladder', 'connector.stair', 'connector.switchback']) { const e = golden.entries.find((x) => x.id === id); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.41.0', `${id}: ${e.sinceApi}`); assert.equal(e.state, 'supported'); } // (released in v0.44.0 at API 1.41.0: a later release's golden.api moves on, the stamp stays)
 });
 
-test('§10 item 13: determinism: three checks of each valid climb fixture identical (answers, IR, artifact sha)', async () => {
+test('§10 item 13: determinism: two checks of each valid climb fixture identical (answers, IR, artifact sha)', async () => {
   for (const f of read('valid', /^v7a_cl_/)) {
     const shas = [];
-    for (let i = 0; i < 3; i++) { const r = await run(f); shas.push(JSON.stringify([r.check.parts, r.res.irJson, r.artifactSha])); assert.match(r.artifactSha ?? '', /^[0-9a-f]{64}$/); }
+    for (let i = 0; i < 2; i++) { const r = await run(f); shas.push(JSON.stringify([r.check.parts, r.res.irJson, r.artifactSha])); assert.match(r.artifactSha ?? '', /^[0-9a-f]{64}$/); }
     assert.ok(shas.every((x) => x === shas[0]), f.name);
   }
 });

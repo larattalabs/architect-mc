@@ -189,10 +189,10 @@ test('the GM stub gatehouse (roof option) binds: its frame\'s passage is the lan
   assert.notEqual(bp.nameAt(2, 11, 3) ?? 'minecraft:air', 'minecraft:air', 'the deck at row 10 (design y 11)');
 });
 
-test('determinism: 3 checks of each GM fixture give one artifact sha', async () => {
+test('determinism: 2 checks of each GM fixture give one artifact sha', async () => {
   for (const n of ['gm_castle_13x7', 'gm_castle_swing']) {
-    const a = await runOf(n), b = await run(fx(n)), c = await run(fx(n));
-    assert.ok(a.artifactSha && a.artifactSha === b.artifactSha && b.artifactSha === c.artifactSha, n);
+    const a = await runOf(n), b = await run(fx(n));
+    assert.ok(a.artifactSha && a.artifactSha === b.artifactSha, n);
   }
 });
 

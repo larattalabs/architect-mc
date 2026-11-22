@@ -128,16 +128,16 @@ test('the CLI: plan writes ir.json (its sha is irSha) and plan.json; exit codes 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('mega_bench: 3 plan runs in 3 processes give byte-identical IRs; about 10M cells; 200 lots, 50 per lots stage', async () => {
+test('mega_bench: 2 plan runs in 2 processes give byte-identical IRs; about 10M cells; 200 lots, 50 per lots stage', async () => {
   const dir = tmp();
   const claim = { minX: -500, minZ: -500, maxX: 499, maxZ: 499, minY: -64, maxY: 319 };
   fs.writeFileSync(path.join(dir, 'survey.bin'), encodeColumns(synthSurvey(claim, 'determinism')));
   const args = (o) => [CLI, 'plan', path.join(KIT, 'regions', 'mega_bench.mjs'), '--survey', path.join(dir, 'survey.bin'), '--claim', '-500,-500,499,499,-64,319', '--out', path.join(dir, o), '--json'];
-  const runs = await Promise.all(['a', 'b', 'c'].map((o) => run(process.execPath, args(o))));
+  const runs = await Promise.all(['a', 'b'].map((o) => run(process.execPath, args(o))));
   const shas = runs.map((r) => JSON.parse(r.stdout.trim().split('\n').pop()).irSha);
   assert.equal(new Set(shas).size, 1, shas.join(' '));
-  const bytes = ['a', 'b', 'c'].map((o) => fs.readFileSync(path.join(dir, o, 'ir.json'), 'utf8'));
-  assert.ok(bytes[0] === bytes[1] && bytes[1] === bytes[2]);
+  const bytes = ['a', 'b'].map((o) => fs.readFileSync(path.join(dir, o, 'ir.json'), 'utf8'));
+  assert.ok(bytes[0] === bytes[1]);
   const ir = JSON.parse(bytes[0]);
   assert.ok(ir.budget.cells > 7e6 && ir.budget.cells < 13e6, `about 10M cells (${ir.budget.cells})`);
   assert.equal(ir.lots.length, 200);

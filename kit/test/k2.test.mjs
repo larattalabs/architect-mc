@@ -319,10 +319,10 @@ test('items 2, 3: a wall without along or walk is K1a\'s; castle_city reads its 
   assert.deepEqual([m.reached, m.accessesUp, m.accessesDown, m.edges.bad, m.headroom.bad, m.dark], [m.cells, m.accesses, m.accesses, 0, 0, 0]);
 });
 
-test('item 12: 3 checks of each K2 fixture give one answer set and one artifact sha', async () => {
+test('item 12: 2 checks of each K2 fixture give one answer set and one artifact sha', async () => {
   for (const name of ['v7a_k2_along_edge.json', 'v7a_k2_along_shore.json', 'v7a_k2_walk.json']) {
     const fx = readJ('valid', name);
-    const rs = [await run(fx), await run(fx), await run(fx)];
+    const rs = [await run(fx), await run(fx)];
     assert.ok(rs.every((r) => r.artifactSha && r.artifactSha === rs[0].artifactSha), `${name}: one artifact sha`);
     assert.ok(rs.every((r) => JSON.stringify(r.check.parts) === JSON.stringify(rs[0].check.parts)), `${name}: one answer set`);
   }

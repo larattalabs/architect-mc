@@ -47,13 +47,12 @@ function shuffled(arr, seed) {
   return a;
 }
 
-test('format-2 determinism: IR byte-identical over 3 plans; tile shas for 1 and 4 workers, forward and shuffled, equal the golden', async () => {
+test('format-2 determinism: IR byte-identical over 2 plans; tile shas for 1 and 4 workers, forward and shuffled, equal the golden', async () => {
   const goldenFile = path.join(FIX, 'regions-6b.golden.json');
   const now = {};
   for (const id of Object.keys(CASES)) {
-    const a = await plan(id), b = await plan(id), c = await plan(id);
+    const a = await plan(id), b = await plan(id);
     assert.equal(a.irJson, b.irJson, `${id}: plan 2`);
-    assert.equal(a.irJson, c.irJson, `${id}: plan 3`);
     const blobs = Object.fromEntries([...a.blobs].map(([k, v]) => [k, v]));
     const jobs = [];
     for (const stage of a.ir.stages) for (const set of ['terrain', 'path']) for (const key of a.ir.tiles[stage][set]) jobs.push({ key, stage, set });

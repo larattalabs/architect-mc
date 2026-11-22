@@ -148,12 +148,11 @@ test('floatingIsland over 50 param sets: bounds, per-tile = whole, one component
   }
 });
 
-test('floatingIsland determinism: 3 runs give the same IR; golden IR shas over 20 param sets', async () => {
+test('floatingIsland determinism: 2 runs give the same IR; golden IR shas over 20 param sets', async () => {
   const shas = [];
   for (let k = 0; k < 20; k++) {
-    const a = await plan(SETS[k]), b = await plan(SETS[k]), c = await plan(SETS[k]);
+    const a = await plan(SETS[k]), b = await plan(SETS[k]);
     assert.equal(a.p.irSha, b.p.irSha);
-    assert.equal(a.p.irSha, c.p.irSha);
     shas.push(a.p.irSha);
   }
   if (process.env.UPDATE_GOLDEN === '1') fs.writeFileSync(GOLDEN, `${JSON.stringify({ note: 'floatingIsland v1: IR shas of the island_test program over param sets 0..19 (node pinned to "golden")', shas }, null, 1)}\n`);

@@ -179,9 +179,9 @@ test('the default: a wall that does not name gateMech (or names none) plans as b
   assert.equal(gatesOf(named).filter((g) => g.auto && g.mechanism).length, 0);
 });
 
-test('determinism: 3 checks of an opted-in wall give one artifact sha', async () => {
+test('determinism: 2 checks of an opted-in wall give one artifact sha', async () => {
   const shas = new Set();
-  for (let i = 0; i < 3; i++) shas.add((await runOf(autos())).check.artifactSha);
+  for (let i = 0; i < 2; i++) shas.add((await runOf(autos())).check.artifactSha);
   assert.equal(shas.size, 1);
 });
 

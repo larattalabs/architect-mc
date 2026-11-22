@@ -169,12 +169,11 @@ test('§9: secret_tunnels\' three tunnels answer refused NO_FEATURE {tunnel.unde
   assert.ok(!(g.notes ?? []).some((n) => n.startsWith('params.width')), 'params.width is read');
 });
 
-test('determinism: three checks of v37 and of each refusal give identical answers and artifact shas', async () => {
+test('determinism: two checks of v37 and of each refusal give identical answers and artifact shas', async () => {
   for (const f of [v37(), ...read('tunnel').filter((x) => /tn0[1-5]|tn1[34]/.test(x.name))]) {
-    const rs = [await run(f), await run(f), await run(f)];
+    const rs = [await run(f), await run(f)];
     const j = rs.map((r) => JSON.stringify(r.check));
     assert.equal(j[1], j[0], `${f.name}: answers`);
-    assert.equal(j[2], j[0], `${f.name}: answers`);
     assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
   }
 });

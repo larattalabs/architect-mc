@@ -207,7 +207,7 @@ test('the broken variants: the lining off (M3:gravity: the sand over the roof fa
   assert.ok(c2.findings.some((f) => f.rule === 'M5' && /rock stair/.test(f.message)));
 });
 
-test('item 10: the catalogue flip (connector.rock_stair reserved -> supported, limits.volume), e15 off it; three checks identical (determinism)', async () => {
+test('item 10: the catalogue flip (connector.rock_stair reserved -> supported, limits.volume), e15 off it; two checks identical (determinism)', async () => {
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
   const e = golden.entries.find((x) => x.id === 'connector.rock_stair');
@@ -220,7 +220,7 @@ test('item 10: the catalogue flip (connector.rock_stair reserved -> supported, l
   const e15 = JSON.parse(fs.readFileSync(path.join(FIX, 'extension', 'e15_every_reserved_a.json'), 'utf8'));
   assert.ok(!JSON.stringify(e15.plan).includes('rock_stair'));
   const shas = [];
-  for (let k = 0; k < 3; k++) { const r = await run(ridge()); shas.push(`${r.artifactSha} ${r.volumes[0].sha}`); }
+  for (let k = 0; k < 2; k++) { const r = await run(ridge()); shas.push(`${r.artifactSha} ${r.volumes[0].sha}`); }
   assert.equal(new Set(shas).size, 1, shas.join(' / '));
 });
 

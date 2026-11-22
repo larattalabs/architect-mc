@@ -144,8 +144,8 @@ test('item 1 (§2.2): the choice: cheapest by T2 cost, the lead (3 straight cell
   assert.equal(besideStanding('rg9', [0, 0, 95, 95], { ...irW, parts: [] }).walls, undefined);
 });
 
-test('item 1: 300 seeded synthetic towns: every chosen join\'s reach cells unheld (but its terrain-held contact columns), outside the footprint and bodies; deterministic', async () => {
-  // (SPD) the 300 towns on worker threads (kit/test/d3-towns.mjs checkTowns: the same seeded sequence, town n on worker n % W)
+test('item 1: 100 seeded synthetic towns: every chosen join\'s reach cells unheld (but its terrain-held contact columns), outside the footprint and bodies; deterministic', async () => {
+  // (SPD) the towns (TOWNS, 100 since SPD3) on worker threads (kit/test/d3-towns.mjs checkTowns: the same seeded sequence, town n on worker n % W)
   const W = Math.max(2, Math.min(6, os.availableParallelism() - 1));
   const parts = await Promise.all(Array.from({ length: W }, (_, k) => new Promise((resolve, reject) => {
     const w = new Worker(new URL('./d3-towns.mjs', import.meta.url), { workerData: { d3towns: true, k, workers: W, total: TOWNS } });
@@ -156,9 +156,10 @@ test('item 1: 300 seeded synthetic towns: every chosen join\'s reach cells unhel
   const sum = (f) => parts.reduce((a, p) => a + p[f], 0);
   const joined = sum('joined'), refused = sum('refused'), sides = sum('sides'), holds = sum('holds');
   assert.equal(sum('checked'), TOWNS, `every town checked once (${parts.map((p) => p.checked).join(' + ')})`);
-  assert.ok(joined >= 200, `${joined} joined, ${refused} refused`);
+  // (SPD3) at least two thirds joined, as the 300-town bound (200) was: 67 of 100 (measured: 100 of 100 joined, 300 of 300 before)
+  assert.ok(joined >= Math.ceil(TOWNS * 2 / 3), `${joined} joined, ${refused} refused`);
   assert.ok(sides > 0 && holds > 0, `${sides} side joins, ${holds} hold cells`);
-  console.log(`# 300 synthetic towns: ${joined} joined (${sides} at a side), ${refused} refused NO_JOIN, ${holds} terrain-held contact cells`);
+  console.log(`# ${TOWNS} synthetic towns: ${joined} joined (${sides} at a side), ${refused} refused NO_JOIN, ${holds} terrain-held contact cells`);
 });
 
 test('(SPD) item 1\'s split: the towns checked on 3 workers are the one-thread sequence\'s (same counts over the first 8 towns)', () => {
@@ -380,10 +381,10 @@ test('§9: a later plan keeps off a standing district\'s reach (plan/0 standing 
   for (const l of r.res.ir.lots) for (let z = l.box.minZ; z <= l.box.maxZ; z++) for (let x = l.box.minX; x <= l.box.maxX; x++) assert.ok(!reach.has(`${x},${z}`), `lot ${l.id} on the reach at ${x},${z}`);
 });
 
-test('item 17 (kit half): a reach plan plans to one IR sha three times', async () => {
+test('item 17 (kit half): a reach plan plans to one IR sha twice', async () => {
   const town = await d3Town();
   const R = reachInputs({ ir: town.p.ir, world: town.world, claim: town.claim });
   const shas = [];
-  for (let i = 0; i < 3; i++) shas.push((await planBeside({ town, districts: ONE('north'), claimB: NORTH, besideReach: R.besideReach })).irSha);
+  for (let i = 0; i < 2; i++) shas.push((await planBeside({ town, districts: ONE('north'), claimB: NORTH, besideReach: R.besideReach })).irSha);
   assert.equal(new Set(shas).size, 1);
 });

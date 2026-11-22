@@ -135,14 +135,12 @@ test('§9: swamp_stilts\' rope bridges refuse NO_GAP (no water across their appr
   for (const a of udr) { assert.equal(a.class, 'refused'); assert.equal(a.reasons[0].code, 'NO_GAP'); assert.match(a.reasons[0].message, /one place/); }
 });
 
-test('determinism: 3 checks of v33 and of each refusal fixture give identical answers and artifact shas', async () => {
+test('determinism: 2 checks of v33 and of each refusal fixture give identical answers and artifact shas', async () => {
   for (const f of [...read('valid').filter((x) => /^v3[34]_/.test(x.name)), ...read('rope')]) {
-    const runs = [await run(f), await run(f), await run(f)];
+    const runs = [await run(f), await run(f)];
     const key = (r) => JSON.stringify(r.check.parts);
     assert.equal(key(runs[1]), key(runs[0]), `${f.name}: answers 2`);
-    assert.equal(key(runs[2]), key(runs[0]), `${f.name}: answers 3`);
     assert.equal(runs[1].artifactSha, runs[0].artifactSha, `${f.name}: artifact 2`);
-    assert.equal(runs[2].artifactSha, runs[0].artifactSha, `${f.name}: artifact 3`);
     assert.equal(runs[1].res.irSha, runs[0].res.irSha, `${f.name}: IR 2`);
   }
 });
