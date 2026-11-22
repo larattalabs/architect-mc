@@ -637,8 +637,8 @@ public final class InfraPlace {
 			// (slice T4R-M) its stash's hold is born below: never over another in-flight removal's area (RemovalAreas); refused before anything.
 			// (T4R-D fix round, P1-5) an extraction whose txn retired is resolved first: it holds nothing any more
 			Extractions.resolveNow(level.getServer());
-			java.util.Set<String> self = new java.util.HashSet<>(Extractions.keysOf(i)); // (fix round P1-5) its own attempts: driven below, never its blocker
-			self.add(id);
+			// (fix round P1-5; REL fix P1: the one self rule) its own attempts: driven below, never its blocker
+			java.util.Set<String> self = RemovalAreas.withOwnAttempts(java.util.Set.of(id), List.of(id));
 			Sites.SiteException busy = RemovalAreas.busyRefusal(i.dimension(), List.of(i.box()), self, "remove " + id); // (T4R-D, A7a)
 			if (busy != null) {
 				throw busy;

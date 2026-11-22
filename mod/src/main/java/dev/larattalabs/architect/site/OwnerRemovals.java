@@ -682,21 +682,10 @@ public final class OwnerRemovals {
 		if (p.get("drops") instanceof JsonObject d) {
 			d.entrySet().forEach(x -> rf.addProperty(x.getKey(), x.getValue().getAsInt())); // a legacy instant member's dropped refund
 		}
+		r.add("owedParts", owedPartsOf(t, amounts)); // (REL-v0910 fix round, P2-1) the one rule a group's end reports by too
 		for (Effect e : t.effects()) {
 			Map<String, Integer> a = amounts.get(e.i());
-			if (a == null) {
-				continue;
-			}
-			if (dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {
-				if (!a.isEmpty()) {
-					JsonObject q = new JsonObject();
-					q.addProperty("key", e.data().get("key").getAsString());
-					q.addProperty("recipient", e.data().get("recipient").getAsString());
-					q.addProperty("reason", e.data().get("reason").getAsString());
-					q.add("items", Builder.counts(a));
-					r.getAsJsonArray("owedParts").add(q);
-				}
-			} else {
+			if (a != null && !dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {
 				a.forEach((k, v) -> rf.addProperty(k, (rf.has(k) ? rf.get(k).getAsInt() : 0) + v));
 			}
 		}
@@ -715,6 +704,40 @@ public final class OwnerRemovals {
 			putResult("owner:" + key, r);
 		}
 		Stockpiles.owedChanged();
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-1) The owed parts of {@code t}: one {key, recipient, reason, items} per O effect with a non-empty applied amount
+	 * in {@code amounts}, in effect order. The group's aggregate snapshot and its end ({@code Groups.withOwedParts}) both use it. Pure.
+	 */
+	public static JsonArray owedPartsOf(TxnEntry t, Map<Integer, Map<String, Integer>> amounts) {
+		JsonArray out = new JsonArray();
+		for (Effect e : t.effects()) {
+			Map<String, Integer> a = amounts.get(e.i());
+			if (a != null && !a.isEmpty() && dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {
+				JsonObject q = new JsonObject();
+				q.addProperty("key", e.data().get("key").getAsString());
+				q.addProperty("recipient", e.data().get("recipient").getAsString());
+				q.addProperty("reason", e.data().get("reason").getAsString());
+				q.add("items", Builder.counts(a));
+				out.add(q);
+			}
+		}
+		return out;
+	}
+
+	/** (REL-v0910 fix round, P2-1) The applied amount of each of {@code t}'s O effects applied so far (its marker's), by effect index. */
+	public static Map<Integer, Map<String, Integer>> appliedOwes(TxnEntry t) {
+		Map<Integer, Map<String, Integer>> out = new java.util.TreeMap<>();
+		for (Effect e : t.effects()) {
+			if (dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {
+				Map<String, Integer> a = OwedLedger.amountOf(e.key(t.id));
+				if (a != null) {
+					out.put(e.i(), a);
+				}
+			}
+		}
+		return out;
 	}
 
 	private static JsonObject fresh(JsonObject member) {

@@ -25,6 +25,12 @@ public final class RemovalAreas {
 	}
 
 	/**
+	 * (TEST seam, REL-v0910 fix round) The txn core whose open txns the server-thread entry points read: the live one ({@code TxnServer}'s).
+	 * A unit test sets its own (TxnServer itself needs the game's attachments).
+	 */
+	static java.util.function.Supplier<dev.larattalabs.architect.txn.TxnCore> CORE = dev.larattalabs.architect.txn.TxnServer::core;
+
+	/**
 	 * One area: its dimension, box and whose it is (for the reason). (slice T4R-D, A7a) {@code busy}: what kind of answer it gives a NEW
 	 * attempt it blocks (its blocking id, kind and owner), null for a generic one.
 	 */
@@ -39,17 +45,30 @@ public final class RemovalAreas {
 				return busy;
 			}
 			String id = site.startsWith("group:") ? site.substring(6) : site;
-			String kind = site.startsWith("group:") ? id.contains("/") ? "stage" : "group" : Infras.get(id) != null || Infras.pending(id) != null ? "road" : "site";
-			String owner = null;
-			if (kind.equals("group") || kind.equals("stage")) {
-				SiteGroupRec g = Sites.group(id.contains("/") ? id.substring(0, id.indexOf('/')) : id);
-				owner = g == null ? null : g.owner();
-			} else {
-				Site x = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
-				owner = x == null ? null : x.owner();
+			if (site.startsWith("group:")) {
+				String group = id.contains("/") ? id.substring(0, id.indexOf('/')) : id;
+				SiteGroupRec g = Sites.group(group);
+				return groupBusy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, group, id.contains("/") ? id.substring(id.indexOf('/') + 1) : null,
+					g == null ? null : g.owner()); // (REL-v0910 fix round, P2-2) named as its REMOVAL_FINISHED names it
 			}
-			return new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, id, kind, owner);
+			String kind = Infras.get(id) != null || Infras.pending(id) != null ? "road" : "site";
+			Site x = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
+			return new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, id, kind, x == null ? null : x.owner());
 		}
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-2) The one Busy naming a group's or stage's removal: the identity its REMOVAL_FINISHED carries
+	 * ({@code ApiEvents.finishedRegion}, the rule {@code finishedOf} and the txn's payload use): a whole region's group as {@code region}
+	 * (the region's id), any other group as {@code group}, a stage as {@code stage} ({@code <group>/<stage>}). {@code Busy.finishedBy} matches it.
+	 */
+	static dev.larattalabs.architect.api.Busy groupBusy(dev.larattalabs.architect.api.Busy.Kind kind, String group, @Nullable String stage,
+		@Nullable String owner) {
+		String region = dev.larattalabs.architect.apiimpl.ApiEvents.finishedRegion(group, stage);
+		if (region != null) {
+			return new dev.larattalabs.architect.api.Busy(kind, region, "region", owner);
+		}
+		return new dev.larattalabs.architect.api.Busy(kind, stage == null ? group : group + "/" + stage, stage == null ? "group" : "stage", owner);
 	}
 
 	/** Pure: the first of {@code areas} in {@code dim} whose box meets one of {@code boxes} and whose site is not one of {@code self}, or null. */
@@ -108,7 +127,7 @@ public final class RemovalAreas {
 	 * (begun this session, or open in the txn core as loaded from disk: slice T4R-N).
 	 */
 	static List<Area> heldAreas() {
-		return heldAreas(dev.larattalabs.architect.txn.TxnServer.core());
+		return heldAreas(CORE.get());
 	}
 
 	/**
@@ -147,8 +166,8 @@ public final class RemovalAreas {
 			List<Area> mine = new ArrayList<>();
 			groupAreas(t, "the removal of group " + g + " (waiting first)", mine);
 			for (Area a : mine) {
-				out.add(new Area(a.dim(), a.box(), a.who(), a.site(), new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.WAITING_BEHIND, g,
-					t.stage == null ? "group" : "stage", rec == null ? null : rec.owner())));
+				out.add(new Area(a.dim(), a.box(), a.who(), a.site(), groupBusy(dev.larattalabs.architect.api.Busy.Kind.WAITING_BEHIND, t.group, t.stage,
+					rec == null ? null : rec.owner()))); // (REL fix, P2-2) as its REMOVAL_FINISHED names it
 			}
 		}
 		for (var e : CrateSettle.durableJson().entrySet()) {
@@ -324,7 +343,7 @@ public final class RemovalAreas {
 	 * site, its cells one by one), or null. {@code self}: the record's own members. Server thread.
 	 */
 	public static Sites.@Nullable SiteException footprintRefusal(List<com.google.gson.JsonObject> holds, Set<String> self, String what) {
-		return footprintRefusal(holds, self, what, dev.larattalabs.architect.txn.TxnServer.core());
+		return footprintRefusal(holds, self, what, CORE.get());
 	}
 
 	/** (TEST seam) {@link #footprintRefusal(List, Set, String)} against {@code core} (the txn core whose open txns count). */
@@ -363,7 +382,7 @@ public final class RemovalAreas {
 	 * there), or null. Server thread.
 	 */
 	public static @Nullable String overlapWhy(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
-		return overlapWhy(dim, boxes, self, dev.larattalabs.architect.txn.TxnServer.core());
+		return overlapWhy(dim, boxes, self, CORE.get());
 	}
 
 	/** (TEST seam, slice T4R-N) {@link #overlapWhy(String, Collection, Set)} against {@code core}. */
@@ -374,7 +393,7 @@ public final class RemovalAreas {
 
 	/** (slice T4R-D, A7a) The first in-flight removal's area (tickets included) meeting {@code boxes}, or null. Server thread. */
 	public static @Nullable Area overlapArea(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
-		return first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null), dim, boxes, self);
+		return first(heldAreas(CORE.get(), null), dim, boxes, self);
 	}
 
 	/**
@@ -382,7 +401,7 @@ public final class RemovalAreas {
 	 * {@link #busyRefusal} over the removals' footprints, attempts and tickets only, never another open txn's cells (a delivery's crate).
 	 */
 	public static Sites.@Nullable SiteException placementRefusal(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, String what) {
-		Area a = first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null, true, false), dim, boxes, self);
+		Area a = first(heldAreas(CORE.get(), null, true, false), dim, boxes, self);
 		return a == null ? null : new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "Not yet: " + a.who() + " is still in progress over "
 			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
 	}
@@ -394,10 +413,30 @@ public final class RemovalAreas {
 			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
 	}
 
+	/**
+	 * (REL-v0910 fix round, P1) The one self rule of a removal's admission: {@code self} plus the live (planned or open) extraction attempts of
+	 * its own {@code targets} (each a road or region target, live or pending). Those attempts are the removal's prerequisites, driven by its own
+	 * retry ({@link Extractions#driveLive}), never its blockers: a road's ({@code InfraPlace}), a cascade's ({@code Sites}) and a group's or
+	 * stage's ({@link #admissionOf}) admission all use it. Only attempt keys are added: a target's own holder cargo is an open txn whose cells
+	 * are named {@code txn:<key>} ({@link #areaSite}), never exempted (T4R-D last round, {@link Extractions#ownCargo}).
+	 */
+	static Set<String> withOwnAttempts(Set<String> self, java.util.Collection<String> targets) {
+		Set<String> out = new java.util.HashSet<>(self);
+		for (String id : targets) {
+			Infra t = Infras.get(id) != null ? Infras.get(id) : Infras.pending(id);
+			if (t != null) {
+				out.addAll(Extractions.keysOf(t));
+			}
+		}
+		return out;
+	}
+
 	/** (slice T4R-D, §4.2 FIFO) A waiting group's admission: the first area ahead of it (tickets ahead included) meeting its members, or null. */
 	static @Nullable Area admissionOf(Groups.Removal r) {
-		Set<String> self = Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
-		List<Area> held = heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), r);
+		java.util.Set<String> members = new java.util.LinkedHashSet<>(r.undoSites);
+		members.addAll(r.sites);
+		Set<String> self = withOwnAttempts(Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage)), members); // (REL fix, P1)
+		List<Area> held = heldAreas(CORE.get(), r);
 		for (Area f : footprintOf(r)) { // (fix round P1-4) its members' boxes and every crate cell its settles touch
 			Area a = first(held, f.dim(), List.of(f.box()), self);
 			if (a != null) {

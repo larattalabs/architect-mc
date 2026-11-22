@@ -8,7 +8,12 @@ import org.jspecify.annotations.Nullable;
  * site, road, group, region or extraction target id); {@code blockingKind}: {@code site}, {@code road}, {@code group}, {@code region},
  * {@code stage} or {@code extraction}; {@code blockingOwner}: that removal's owner id (null when it has none). (slice T4R-D narrowing round)
  * For {@link Kind#OPERATION_IN_PROGRESS} the blocker is no removal: {@code blockingId} is its txn's id and {@code blockingKind} its txn kind,
- * and no {@code REMOVAL_FINISHED} follows. The matching stable {@link ArchitectRefused#detail()} token is {@link #token()}. Since 1.72.0.
+ * and no {@code REMOVAL_FINISHED} follows. The matching stable {@link ArchitectRefused#detail()} token is {@link #token()}. Since NEXT.
+ * <p>
+ * (Since NEXT, release fix round) The blocker is named exactly as its {@code REMOVAL_FINISHED} names it ({@link #finishedBy}): a whole
+ * region's removal is {@code region} with the region's id (never its backing group's id); another group's {@code group} with the group's id;
+ * a stage's {@code stage} with {@code <group>/<stage>} (its event: kind {@code group}, that group, that stage); a site's {@code site} and a
+ * road's {@code road} (their event: kind {@code site}, the same id).
  */
 public record Busy(Kind kind, String blockingId, String blockingKind, @Nullable String blockingOwner) {
 	/**
@@ -31,6 +36,25 @@ public record Busy(Kind kind, String blockingId, String blockingKind, @Nullable 
 	public Busy {
 		blockingId = blockingId == null ? "" : blockingId;
 		blockingKind = blockingKind == null ? "" : blockingKind;
+	}
+
+	/**
+	 * (Since NEXT, release fix round) Whether {@code f} is the completion that ends a wait on this blocker: for
+	 * {@link Kind#REMOVAL_IN_PROGRESS}, {@link Kind#WAITING_BEHIND} and {@link Kind#HELD_DECIDED}, the REMOVAL_FINISHED naming this removal
+	 * (see the class comment); always false for {@link Kind#PLAYER_BLOCKS_RETURNING}, {@link Kind#OPERATION_IN_PROGRESS} and a kind a caller
+	 * does not know (retry after a short delay). A blocker that stops without finishing fires no event: a waiting caller still bounds its wait.
+	 */
+	public boolean finishedBy(RemovalFinished f) {
+		if (f == null || !(kind == Kind.REMOVAL_IN_PROGRESS || kind == Kind.WAITING_BEHIND || kind == Kind.HELD_DECIDED)) {
+			return false;
+		}
+		return switch (blockingKind) {
+			case "site", "road" -> RemovalFinished.SITE.equals(f.kind()) && blockingId.equals(f.id());
+			case "group" -> RemovalFinished.GROUP.equals(f.kind()) && f.stage() == null && blockingId.equals(f.id());
+			case "stage" -> RemovalFinished.GROUP.equals(f.kind()) && f.stage() != null && blockingId.equals(f.id() + "/" + f.stage());
+			case "region" -> RemovalFinished.REGION.equals(f.kind()) && blockingId.equals(f.id());
+			default -> false;
+		};
 	}
 
 	/** The stable detail token: {@code <kind_lower>:<blockingId>}, and {@code held(decided)} for {@link Kind#HELD_DECIDED}. */

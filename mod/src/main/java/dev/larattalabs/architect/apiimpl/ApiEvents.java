@@ -78,9 +78,24 @@ public final class ApiEvents {
 	/** (slice T4c) A group's or a stage's removal finished (removed); a region's id when the group is a region's. */
 	public static void removalFinished(String group, @org.jspecify.annotations.Nullable String stage, @org.jspecify.annotations.Nullable Integer revisionId,
 		dev.larattalabs.architect.site.Groups.Removed r) {
-		RemoveResult res = new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed());
-		String region = stage == null ? Views.regionOfGroupPublic(group) : null;
+		RemoveResult res = resultOf(r);
+		String region = finishedRegion(group, stage);
 		finished(finishedOf(group, stage, revisionId, region, res));
+	}
+
+	/** (REL-v0910 fix round, P2-1) The one mapping of a group's, stage's or region's result to the API's: its owed parts included. */
+	public static RemoveResult resultOf(dev.larattalabs.architect.site.Groups.Removed r) {
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed(), Views
+			.owedParts(r.owedParts()));
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-2) The region a group's or stage's REMOVAL_FINISHED names (kind {@code region}): the group's region when the
+	 * whole group is removed ({@code stage} null), else null (kind {@code group}). The one rule for the event (here and the txn's payload) and
+	 * for the Busy a blocked caller gets ({@code RemovalAreas.groupBusy}).
+	 */
+	public static @org.jspecify.annotations.Nullable String finishedRegion(String group, @org.jspecify.annotations.Nullable String stage) {
+		return stage == null ? Views.regionOfGroupPublic(group) : null;
 	}
 
 	/**

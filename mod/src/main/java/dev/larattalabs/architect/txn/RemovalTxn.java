@@ -877,8 +877,17 @@ public final class RemovalTxn {
 			return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, new dev.larattalabs.architect.api
 				.RemoveResult(true, List.of(), sr.refund(), sr.restored(), sr.kept(), sr.handedDown(), sr.cascaded(), all, sr.owedParts()));
 		}
+		// (REL-v0910 fix round, P2-1) no snapshot (evicted before a redelivery): the same parts by the snapshot's own rule, from its O effects
+		java.util.List<com.google.gson.JsonObject> parts = new java.util.ArrayList<>();
+		dev.larattalabs.architect.site.OwnerRemovals.owedPartsOf(t, dev.larattalabs.architect.site.OwnerRemovals.appliedOwes(t)).forEach(x -> {
+			parts.add(x.getAsJsonObject());
+			if (!owed.contains(x.getAsJsonObject().get("key").getAsString())) {
+				owed.add(x.getAsJsonObject().get("key").getAsString());
+			}
+		});
 		dev.larattalabs.architect.api.RemoveResult rr = new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(
-			refund), p.has("restored") ? p.get("restored").getAsInt() : 0, p.has("kept") ? p.get("kept").getAsInt() : 0, handed, cascaded, owed);
+			refund), p.has("restored") ? p.get("restored").getAsInt() : 0, p.has("kept") ? p.get("kept").getAsInt() : 0, handed, cascaded, owed, dev.larattalabs
+				.architect.apiimpl.Views.owedParts(parts));
 		String stage = p.has("stage") ? p.get("stage").getAsString() : null;
 		Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
 		String region = p.has("region") ? p.get("region").getAsString() : null;

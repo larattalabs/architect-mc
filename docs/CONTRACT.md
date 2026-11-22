@@ -34664,6 +34664,20 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   record names (none known) would not be admitted against. (Narrowing round) A refusal by an open txn that is not a removal answers
   `Busy(OPERATION_IN_PROGRESS, <txn id>, <txn kind>, <owner>)`, a retry by time (no `REMOVAL_FINISHED` follows); an extraction attempt's
   auto-collect is queued at its one transition into `kept` (whoever makes it) and runs once its txn has retired.
+- **Release fix round (REL-v0910):** (P1) one self rule for every removal's admission (`RemovalAreas.withOwnAttempts`): its own
+  targets' planned or open extraction attempts are its prerequisites, never its blockers (a road's, a cascade's, a group's or stage's);
+  a group drives them (`Extractions.driveLive`) before anything of its R1, so an attempt left `planned` by a refused intent save is driven
+  by the group's next check. Own holder cargo stays a blocker (its cells are `txn:<key>` areas; `run` checks `ownCargo` before any take or
+  P0), and no group data cargo begins while an own attempt is live. Remaining risk: an attempt left planned whose target nobody removes
+  again holds its cells until the next start (which aborts it) or the target's next removal; other callers get `PLAYER_BLOCKS_RETURNING`
+  (a retry by time) meanwhile. The group's wait on its own attempt (a txn.json that keeps refusing) has no `MAX_WAIT` and no
+  `RemovalWait`, as R1's extraction wait in `prepareTail` never had: it was a FIFO ticket bounded by `WAITING_BEHIND` before.
+  (P2) Group, stage, region and revision futures carry `owedParts` (the aggregate snapshot's rule, `OwnerRemovals.owedPartsOf`; also the
+  txn event's fallback with no snapshot). A revision undo records the stages it awaits in its manifest; one that finished by itself
+  (`held(decided)`, or resumed after a restart) joins its result once from its `stage:` snapshot. Remaining risk: that snapshot evicted
+  (past the 1024-result bound) before the driver sees the stage undone: the stage's result is left out (logged). (P2) A `Busy` names its blocker as that removal's REMOVAL_FINISHED does (a whole region:
+  `region`/its id; `Busy.finishedBy`). (P2) dev-start.json arms only on a development start; every test fault is disarmed at
+  SERVER_STOPPED, and a start's reset disarms the previous start's kill point.
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
   `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
   their behaviour is shown in game only for the holder).

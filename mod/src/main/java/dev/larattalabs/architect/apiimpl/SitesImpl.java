@@ -515,7 +515,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	}
 
 	private static RemoveResult result(Groups.Removed r) {
-		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed());
+		return ApiEvents.resultOf(r); // (REL-v0910 fix round, P2-1) its owed parts too (a region's removal inherits it)
 	}
 
 	// ------------------------------------------------------------------ 6c SCH: a site as a Sponge schematic
