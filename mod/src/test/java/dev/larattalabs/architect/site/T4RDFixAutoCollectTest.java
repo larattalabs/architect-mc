@@ -20,6 +20,8 @@ class T4RDFixAutoCollectTest {
 		int remove = gr.indexOf("REMOVALS.remove(r);", end);
 		assertTrue(end > 0 && gr.substring(end, remove).contains("AutoCollect.afterPartsLater("), "T4RDF-group-collect: a group's end (its txn retired) auto-collects");
 		String ex = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Extractions.java"));
-		assertTrue(ex.contains("collectLater(srv, at);"), "T4RDF-group-collect: a kept extraction attempt auto-collects");
+		// (narrowing round, P2-2) at the one place an attempt becomes kept, whoever keeps it (T4RDNExtractionCollectTest asserts the behaviour)
+		int keep = ex.indexOf("private static void keep(JsonObject at, @Nullable JsonObject result) {");
+		assertTrue(keep > 0 && ex.substring(keep, ex.indexOf("\n\t}", keep)).contains("collectAfterRetire(at);"), "T4RDF-group-collect: a kept extraction attempt auto-collects");
 	}
 }

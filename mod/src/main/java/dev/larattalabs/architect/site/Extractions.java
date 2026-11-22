@@ -372,7 +372,6 @@ public final class Extractions {
 				return "held: " + s.detail();
 			case REPLAYED:
 				keep(at, null);
-				collectLater(srv, at);
 				return null;
 			case ATTACHED:
 				t = s.entry();
@@ -422,26 +421,53 @@ public final class Extractions {
 			resolveLater(srv); // (fix round P1-5) ended aborted: the resolver marks it aborted and releases its holds
 			return "its extraction txn ended without its commit";
 		}
-		keep(at, null);
-		collectLater(srv, at);
+		keep(at, null); // kept already by its snapshot (the transition, and its collect, happened there)
 		return null;
 	}
 
 	/**
-	 * (slice T4R-D fix round, P2-1) A kept attempt (its txn retired, its holds released): its player_blocks parts auto-collected for online
-	 * recipients, on a later tick, from its snapshot.
+	 * (slice T4R-D narrowing round, P2-2; TEST seams) Where a kept attempt's collect is queued (the server: the next tick), whether a txn key is
+	 * still open (the live core), and the collect itself ({@code target}, its owed parts: {@link AutoCollect#afterParts} for the online
+	 * recipients).
 	 */
-	private static void collectLater(MinecraftServer srv, JsonObject at) {
+	static java.util.function.Consumer<Runnable> collectQueue = TxnServer::later;
+	static java.util.function.Predicate<String> txnOpen = k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key));
+	static java.util.function.BiConsumer<String, @Nullable JsonArray> collector = (target, parts) -> {
+		MinecraftServer srv = SiteDeltas.serverOrNull();
+		if (srv != null) {
+			AutoCollect.afterParts(srv, Sites.describe(target), parts);
+		}
+	};
+
+	/**
+	 * (slice T4R-D fix round, P2-1; narrowing round, P2-2) An attempt's transition into {@code kept} (whoever made it: its caller's drive, a
+	 * later core tick's snapshot, a replay, the resolver) queues its auto-collect once: on a later tick, once its txn is no longer open (its
+	 * holds released; re-queued each tick until then), its player_blocks parts from its snapshot collected for the online recipients. The
+	 * transition happens once per attempt, and a collect of a key already collected gives nothing: exactly once.
+	 */
+	private static void collectAfterRetire(JsonObject at) {
+		String key = at.get("key").getAsString();
 		String target = at.get("target").getAsString();
-		AutoCollect.afterPartsLater(srv, Sites.describe(target), () -> {
-			synchronized (Extractions.class) {
-				return at.get("result") instanceof JsonObject r && r.get("owedParts") instanceof JsonArray a ? a.deepCopy() : null;
+		collectQueue.accept(new Runnable() {
+			@Override
+			public void run() {
+				if (txnOpen.test(key)) {
+					collectQueue.accept(this); // still retiring: next tick
+					return;
+				}
+				JsonArray parts;
+				synchronized (Extractions.class) {
+					parts = at.get("result") instanceof JsonObject r && r.get("owedParts") instanceof JsonArray a ? a.deepCopy() : null;
+				}
+				collector.accept(target, parts);
 			}
 		});
 	}
 
 	private static void keep(JsonObject at, @Nullable JsonObject result) {
+		boolean now;
 		synchronized (Extractions.class) {
+			now = !at.get("state").getAsString().equals("kept");
 			at.addProperty("state", "kept");
 			if (result != null) {
 				at.add("result", result);
@@ -449,6 +475,9 @@ public final class Extractions {
 		}
 		Stockpiles.owedChanged();
 		CrateSettle.boxesChanged();
+		if (now) {
+			collectAfterRetire(at); // (narrowing round, P2-2) the one place an attempt becomes kept
+		}
 	}
 
 	/** (the probe of {@code extraction.snapshot}) Whether attempt {@code key} of target {@code tk} is kept. */
@@ -596,6 +625,7 @@ public final class Extractions {
 	static void resolve(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey,
 		boolean start) {
 		boolean changed = false;
+		List<JsonObject> kept = new ArrayList<>();
 		synchronized (Extractions.class) {
 			for (JsonObject tb : TABLE.values()) {
 				for (var a : tb.getAsJsonObject("attempts").entrySet()) {
@@ -606,7 +636,7 @@ public final class Extractions {
 						continue;
 					}
 					if (committedKey.test(key)) {
-						at.addProperty("state", "kept");
+						kept.add(at); // (narrowing round, P2-2) kept through keep(): its collect queued once
 						changed = true;
 					} else {
 						at.addProperty("state", "aborted");
@@ -617,6 +647,7 @@ public final class Extractions {
 				}
 			}
 		}
+		kept.forEach(at -> keep(at, null));
 		if (changed) {
 			Stockpiles.owedChanged();
 			CrateSettle.boxesChanged();
