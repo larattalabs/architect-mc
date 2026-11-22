@@ -18,9 +18,12 @@ import org.jspecify.annotations.Nullable;
  *                    ({@link Sites#removeGroup}) stopped, as {@link RegionView#removalStop}: NONE (none stopped since this world loaded, or it
  *                    removed the group), NOT_STARTED (nothing written) or PARTIAL. Kept in memory: a restart answers NONE
  * @param removalStopCause (Since 1.69.0) that stop's typed cause ({@link RemovalStopCause}); null with NONE. The blockers' text is unchanged
+ * @param removalWait (since NEXT, slice T4R-D A7b) while its removal waits on its FIFO ticket behind another removal: what it waits behind; null
+ *                    when not waiting
  */
 public record SiteGroup(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<Stage> stages, State state,
-	Optional<BlockPos> crate, Optional<Long> removedAt, RemovalStop removalStop, @Nullable RemovalStopCause removalStopCause) {
+	Optional<BlockPos> crate, Optional<Long> removedAt, RemovalStop removalStop, @Nullable RemovalStopCause removalStopCause,
+	@Nullable RemovalWait removalWait) {
 	public SiteGroup {
 		removalStop = removalStop == null ? RemovalStop.NONE : removalStop;
 		removalStopCause = removalStop == RemovalStop.NONE ? null : removalStopCause == null ? RemovalStopCause.OTHER : removalStopCause;
@@ -28,6 +31,12 @@ public record SiteGroup(String id, @Nullable String owner, JsonObject ext, List<
 		ext = ext == null ? new JsonObject() : ext;
 		sites = List.copyOf(sites);
 		stages = List.copyOf(stages);
+	}
+
+	/** The 1.69.0 constructor: not waiting. */
+	public SiteGroup(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<Stage> stages, State state, Optional<BlockPos> crate,
+		Optional<Long> removedAt, RemovalStop removalStop, @Nullable RemovalStopCause removalStopCause) {
+		this(id, owner, ext, sites, stages, state, crate, removedAt, removalStop, removalStopCause, null);
 	}
 
 	/** The 1.14.0 constructor: no removal stop (NONE). */

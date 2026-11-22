@@ -18,16 +18,27 @@ import org.jspecify.annotations.Nullable;
  * removal's cause ({@link RemovalStopCause}: SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, else OTHER), so a caller tells a
  * refused save apart without parsing {@code waiting} (whose text is unchanged). Null when {@code waiting} is null; any other wait (a
  * revision's own write that stopped) is OTHER.
+ *
+ * <p>(slice T4R-D A7b; Since NEXT) {@code removalWait}: while its undo waits on its FIFO ticket behind another removal, what it waits behind;
+ * null when not waiting.
  */
 public record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,
 	List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact, boolean survivalAllowed, @Nullable String waiting,
-	List<String> sites, @Nullable RemovalStopCause removalStopCause) {
+	List<String> sites, @Nullable RemovalStopCause removalStopCause, @Nullable RemovalWait removalWait) {
 	public RevisionView {
 		removalStopCause = waiting == null ? null : removalStopCause == null ? RemovalStopCause.OTHER : removalStopCause;
 		stages = List.copyOf(stages);
 		lotsAdded = List.copyOf(lotsAdded);
 		lotsRefilled = List.copyOf(lotsRefilled);
 		sites = sites == null ? List.of() : List.copyOf(sites);
+	}
+
+	/** The 1.70.0 constructor: not waiting on a FIFO ticket. */
+	public RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,
+		List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact, boolean survivalAllowed, @Nullable String waiting,
+		List<String> sites, @Nullable RemovalStopCause removalStopCause) {
+		this(rid, position, parentRid, planId, irSha, state, createdAt, stages, lotsAdded, lotsRefilled, cells, artifact, survivalAllowed, waiting, sites,
+			removalStopCause, null);
 	}
 
 	/** The 1.43.0 constructor: no typed stop cause (since 1.70.0: null when not waiting, else OTHER). */

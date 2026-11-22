@@ -13,11 +13,13 @@ package dev.larattalabs.architect.api;
  * taken.</li>
  * <li>{@link #THINGS_IN_BOX}: the owner's things stand in a member's box (containers they filled, pets, item frames, dropped items): the
  * blockers name them; a forced removal loses them.</li>
+ * <li>{@link #WAITING_BEHIND} (since NEXT, slice T4R-D A7b): it waited on its FIFO ticket behind another removal for {@code MAX_WAIT} while
+ * nothing ahead made progress; nothing of it was written.</li>
  * <li>{@link #OTHER}: anything else (the owner rule, a journal not readable, a member still being placed, an unloaded dimension, a
  * failure).</li>
  * </ul>
  * Append-only: a caller treats a value it does not know as {@link #OTHER}.
  */
 public enum RemovalStopCause {
-	SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, OTHER
+	SAVE_REFUSED, PLAYER_IN_BOX, COVERED, CARGO, THINGS_IN_BOX, OTHER, WAITING_BEHIND
 }

@@ -24,12 +24,16 @@ import org.jspecify.annotations.Nullable;
  * <p>(8b, Steward's S-8b-8; Since 1.69.0) {@code besideNote}: the typed home of ext {@code architect_mc:beside} ({@link BesideNote}; null for a
  * region not planned beside one); {@code land}: of ext {@code architect_mc:land} ({@link RegionLand}; null for a region that is not a
  * districts region). The ext keys stay.
+ *
+ * <p>(slice T4R-D A7b; Since NEXT) {@code removalWait}: while the region's removal waits on its FIFO ticket behind another removal, what it waits
+ * behind; null when not waiting.
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
 	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
 	@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
-	@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land) {
+	@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land,
+	@Nullable RemovalWait removalWait) {
 	public RegionView {
 		removalStop = removalStop == null ? RemovalStop.NONE : removalStop;
 		ext = ext == null ? new JsonObject() : ext;
@@ -39,6 +43,16 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		actions = actions == null ? List.of() : List.copyOf(actions);
 		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
 		revisions = revisions == null ? List.of() : List.copyOf(revisions);
+	}
+
+	/** The 1.69.0 constructor: not waiting on a FIFO ticket. */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
+		@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions, RemovalStop removalStop,
+		@Nullable String removalStopReason, @Nullable RemovalStopCause removalStopCause, @Nullable BesideNote besideNote, @Nullable RegionLand land) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, buildHits,
+			beside, build, position, busy, revisions, removalStop, removalStopReason, removalStopCause, besideNote, land, null);
 	}
 
 	/** The 1.67.0 constructor: no typed stop cause (null). */

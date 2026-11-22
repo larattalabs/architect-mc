@@ -389,6 +389,16 @@ public interface Sites {
 		throw new UnsupportedOperationException("Sites.creditOwedToStock needs Architect API NEXT");
 	}
 
+	/**
+	 * (slice T4R-D, Steward's Q8) The last completed result of a removal begun by this build, from its immutable snapshot (written before the
+	 * removal finished, independent of any later collect or credit): {@code kind} {@code site}, {@code road}, {@code group}, {@code stage}
+	 * ({@code id} = {@code <group>/<stage>}), {@code region} or {@code revision} ({@code id} = {@code <region>#<rid>}, a revision undo's alias).
+	 * Null when none is known (a pre-T4R removal, or evicted: at most 1024 are kept per world, oldest first). Server thread. Since NEXT.
+	 */
+	default @org.jspecify.annotations.Nullable RemoveResult removalResult(String kind, String id) {
+		throw new UnsupportedOperationException("Sites.removalResult needs Architect API NEXT");
+	}
+
 	/** The owner's stockpile (C24's "stock(owner)"), or empty. Server thread. Since 1.17.0. */
 	default Optional<Stockpile> stockpile(String owner) {
 		throw new UnsupportedOperationException("Sites.stockpile needs Architect API 1.17.0");
