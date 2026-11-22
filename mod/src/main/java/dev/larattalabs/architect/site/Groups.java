@@ -1186,6 +1186,18 @@ public final class Groups {
 				r.waitBehind = null;
 				r.gtxWait = null;
 			}
+			// (REL-v0910 fix round, P1) its own targets' live extraction attempts (a planned one left by a refused intent save, an open one) are
+			// its first prerequisite: driven here, before anything of its R1 (no data cargo, no take, no plan while one is live), never waited
+			// behind (admission leaves them out: RemovalAreas.withOwnAttempts). Holding nothing of its own, it retries each check until each is kept
+			String own = driveOwnAttempts(server, r);
+			if (own != null) {
+				if (!own.equals(r.gtxWait)) {
+					Architect.LOGGER.info("Removal of group {}: drives its own player blocks' return first: {}", r.group, own);
+				}
+				r.gtxWait = own;
+				r.nextCheck = tick + 20;
+				return;
+			}
 		}
 		if (r.undo == null && r.planner == null && !preflighted(server, r)) {
 			return;
@@ -1946,6 +1958,26 @@ public final class Groups {
 			}
 		}
 		prepareTail(server, level, r, ids, dropLater);
+	}
+
+	/**
+	 * (REL-v0910 fix round, P1) Drives the live extraction attempts of {@code r}'s own targets (its members that are road or region targets):
+	 * null when none is left live, else why the first waits ({@link Extractions#driveLive}).
+	 */
+	static @Nullable String driveOwnAttempts(@Nullable MinecraftServer server, Removal r) {
+		java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.undoSites);
+		ids.addAll(r.sites);
+		for (String id : ids) {
+			Infra inf = Infras.get(id) != null ? Infras.get(id) : Infras.pending(id);
+			if (inf == null) {
+				continue;
+			}
+			String why = Extractions.driveLive(server, inf);
+			if (why != null) {
+				return why;
+			}
+		}
+		return null;
 	}
 
 	/**

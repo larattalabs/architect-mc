@@ -400,9 +400,29 @@ public final class RemovalAreas {
 			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
 	}
 
+	/**
+	 * (REL-v0910 fix round, P1) The one self rule of a removal's admission: {@code self} plus the live (planned or open) extraction attempts of
+	 * its own {@code targets} (each a road or region target, live or pending). Those attempts are the removal's prerequisites, driven by its own
+	 * retry ({@link Extractions#driveLive}), never its blockers: a road's ({@code InfraPlace}), a cascade's ({@code Sites}) and a group's or
+	 * stage's ({@link #admissionOf}) admission all use it. Only attempt keys are added: a target's own holder cargo is an open txn whose cells
+	 * are named {@code txn:<key>} ({@link #areaSite}), never exempted (T4R-D last round, {@link Extractions#ownCargo}).
+	 */
+	static Set<String> withOwnAttempts(Set<String> self, java.util.Collection<String> targets) {
+		Set<String> out = new java.util.HashSet<>(self);
+		for (String id : targets) {
+			Infra t = Infras.get(id) != null ? Infras.get(id) : Infras.pending(id);
+			if (t != null) {
+				out.addAll(Extractions.keysOf(t));
+			}
+		}
+		return out;
+	}
+
 	/** (slice T4R-D, §4.2 FIFO) A waiting group's admission: the first area ahead of it (tickets ahead included) meeting its members, or null. */
 	static @Nullable Area admissionOf(Groups.Removal r) {
-		Set<String> self = Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
+		java.util.Set<String> members = new java.util.LinkedHashSet<>(r.undoSites);
+		members.addAll(r.sites);
+		Set<String> self = withOwnAttempts(Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage)), members); // (REL fix, P1)
 		List<Area> held = heldAreas(CORE.get(), r);
 		for (Area f : footprintOf(r)) { // (fix round P1-4) its members' boxes and every crate cell its settles touch
 			Area a = first(held, f.dim(), List.of(f.box()), self);

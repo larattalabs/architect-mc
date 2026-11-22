@@ -199,6 +199,9 @@ class T4RDFixExtractionAbortTest {
 		self.addAll(own);
 		assertEquals(null, RemovalAreas.first(areas, "minecraft:overworld", List.of(r1.box()), self), "T4RDF-abort-hold: its own attempt is no blocker of its retry");
 		String src = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/InfraPlace.java"));
-		assertTrue(src.contains("Extractions.keysOf(i)"), "T4RDF-abort-hold: the road's admission excludes its own attempts");
+		// (REL-v0910 fix round, P1) through the one self rule every removal's admission uses (RemovalAreas.withOwnAttempts: Extractions.keysOf)
+		String areasSrc = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/RemovalAreas.java"));
+		assertTrue(src.contains("RemovalAreas.withOwnAttempts(java.util.Set.of(id), List.of(id))") && areasSrc.contains("out.addAll(Extractions.keysOf(t))"),
+			"T4RDF-abort-hold: the road's admission excludes its own attempts");
 	}
 }

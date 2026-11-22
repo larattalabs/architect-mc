@@ -1835,9 +1835,9 @@ public final class Sites {
 				Infra ci = Infras.get(c);
 				if (ci != null) {
 					boxes.add(ci.box());
-					self.addAll(Extractions.keysOf(ci)); // (fix round P1-7) a cascaded road's own attempts: driven below, never its blocker
 				}
 			}
+			self = RemovalAreas.withOwnAttempts(self, cascade); // (fix round P1-7; REL fix P1) a cascaded road's own attempts: driven below, never its blocker
 			SiteException busy = RemovalAreas.busyRefusal(b.dimension(), boxes, self, "remove " + id); // (slice T4R-D, A7a) typed
 			if (busy != null) {
 				throw busy;

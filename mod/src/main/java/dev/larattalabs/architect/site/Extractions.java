@@ -293,20 +293,9 @@ public final class Extractions {
 	static @Nullable String run(MinecraftServer srv, ServerLevel level, Infra t, @Nullable String requester) {
 		String tk = tkey(t);
 		JsonObject tb;
-		synchronized (Extractions.class) {
-			tb = TABLE.get(tk);
-		}
-		if (tb != null) {
-			for (var a : tb.getAsJsonObject("attempts").entrySet()) {
-				JsonObject at = a.getValue().getAsJsonObject();
-				String st = at.get("state").getAsString();
-				if (st.equals("planned") || st.equals("open")) {
-					String why = drive(srv, level, tk, at);
-					if (why != null) {
-						return why;
-					}
-				}
-			}
+		String live = driveLive(srv, t);
+		if (live != null) {
+			return live;
 		}
 		List<JsonObject> cells = extractable(level, t);
 		if (cells.isEmpty()) {
@@ -366,11 +355,45 @@ public final class Extractions {
 		}
 		dev.larattalabs.architect.journal.WorldJournal.kill("P0");
 		dev.larattalabs.architect.journal.WorldJournal.kill("P0b");
-		return drive(srv, level, tk, at);
+		return drive(srv, tk, at);
+	}
+
+	/**
+	 * (REL-v0910 fix round, P1) Drives {@code t}'s live (planned or open) attempts, oldest first, and nothing else (no new generation, no take):
+	 * null when none is left live (each kept, or none), else why the first waits. A planned attempt (P0 saved, its intent refused or its begin
+	 * held) is driven only by its target's own retry: {@link #run} (a standalone road, a cascade, a group's R1) and a group before anything of
+	 * its R1 ({@code Groups.tick}), whose admission never counts its own targets' attempts ({@link RemovalAreas#withOwnAttempts}).
+	 */
+	static @Nullable String driveLive(@Nullable MinecraftServer srv, Infra t) {
+		String tk = tkey(t);
+		JsonObject tb;
+		synchronized (Extractions.class) {
+			tb = TABLE.get(tk);
+		}
+		if (tb == null) {
+			return null;
+		}
+		List<JsonObject> live = new ArrayList<>();
+		synchronized (Extractions.class) {
+			for (var a : tb.getAsJsonObject("attempts").entrySet()) {
+				JsonObject at = a.getValue().getAsJsonObject();
+				String st = at.get("state").getAsString();
+				if (st.equals("planned") || st.equals("open")) {
+					live.add(at);
+				}
+			}
+		}
+		for (JsonObject at : live) {
+			String why = drive(srv, tk, at);
+			if (why != null) {
+				return why;
+			}
+		}
+		return null;
 	}
 
 	/** Begins (or attaches to) attempt {@code at}'s txn and drives it; marks it kept once retired. Null when kept; else why it waits. */
-	static @Nullable String drive(MinecraftServer srv, ServerLevel level, String tk, JsonObject at) {
+	static @Nullable String drive(@Nullable MinecraftServer srv, String tk, JsonObject at) {
 		String key = at.get("key").getAsString();
 		TxnCore c = CORE.get();
 		JsonArray cells = at.getAsJsonArray("cells");
