@@ -24,12 +24,15 @@
 //                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
 //                                                       stand and refund nothing; Regions.remove E-flat 0
 //   node tools/gate6dgr.mjs txncrashadopt (txn-crash-adopt) slice T3a: the T3 design §4's failing-first adoption cases, written red
-//                                                       (the T3a block at the end; GATE_T3A_CASES=a,b picks cases)
+//                                                       (the T3a block at the end; GATE_T3A_CASES=a,b picks cases). Chore TXA: the T3 fixture built
+//                                                       once, each case a clone; a split step (2 parts, the matrix halts round-robin);
+//                                                       +save twins only where they differ (GATE_T3B_ALL_TWINS=1: all)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { gatePart, inSlice, sliceSections, slicesOf } from './gate-part.mjs';
 
 export async function registerSAD(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, growPlan, rvState, rvWait, root, cellsOf, diff, haltWait, removeRegion, ig } = h;
@@ -642,18 +645,37 @@ export async function registerSAD(steps, h) {
     const loaded = async ([x, y, z]) => { const r = await L.cmd(`/execute if loaded ${x} ${y} ${z}`).catch(() => null); return !!(r?.success || Number(r?.result) > 0); };
     const entitiesNear = async (pos, radius = 12) => (await call('dev.items.near', { pos, radius }, 30_000));
     const noEntities = (n) => sum(n?.items ?? {}) === 0;
-    /** A fresh Supplied town with a stockpile: the shared crate's cell, tag and ledger, the conservation baseline. */
+    // (chore TXA, cut 1) the T3 fixture (b1, b2, the part-built house_4, the stockpile: ~50 s) is built once per process in FIXTURE and
+    // left cleanly (a full save); every case opens its own APFS clone of it. Before, each of 6 cases built it again in a fresh world.
+    const FIXTURE = 'G6B T3 Fixture';
+    let fixture = null;
+    /** A Supplied town with a stockpile (a clone of the fixture): the shared crate's cell, tag and ledger, the conservation baseline. */
     async function t3Town(name) {
       const out = {};
-      const W = await world(name);
-      const town = await suppliedTown('T3', W);
-      const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
-      check(!cr.refused, `T3: a stockpile of 4 crates for ${OWNER}`);
+      if (!fixture) {
+        const t0 = Date.now();
+        const W0 = await world(FIXTURE);
+        const town = await suppliedTown('T3', W0);
+        const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W0.gy) }, 120_000);
+        check(!cr.refused, `T3: a stockpile of 4 crates for ${OWNER}`);
+        await L.leaveWorld();
+        fixture = { gy: W0.gy, town, buildSec: Math.round((Date.now() - t0) / 1000) };
+        log(`   T3 fixture built once in ${fixture.buildSec} s (${FIXTURE}); each case opens a clone of it`);
+      }
+      const t1 = Date.now();
+      await L.leaveWorld();
+      L.copyWorld(FIXTURE, name);
+      await L.openWorld(name);
+      await call('dev.pr.guide', { event: 'decline' }).catch(() => {});
+      await L.tp(CX + 80, 80, CZ + 48);
+      const W = { gy: fixture.gy, dir: path.join(L.SAVES, name) };
+      const town = fixture.town;
       const s40 = await siteState(town.ids.house_4);
       const at = [s40.crate?.x, s40.crate?.y, s40.crate?.z];
       const tag = `group:${town.b2.group}`;
       const got = await tagOf(at);
       out.crate = { at, tag, got, stock: s40.ledger?.stock };
+      out.fixture = { buildSec: fixture.buildSec, cloneOpenSec: Math.round((Date.now() - t1) / 1000) };
       check(s40.crate?.present === true && got.includes(tag) && sum(s40.ledger?.stock) > 0, `T3: the shared crate at ${json(at)} stands, owned by ${tag}, holding ${sum(s40.ledger?.stock)} items`, out.crate);
       const area = T3_BOX(W.gy);
       const H0 = standing(await audit(area));
@@ -680,8 +702,13 @@ export async function registerSAD(steps, h) {
     steps.txncrashadopt = async () => {
       await ensure();
       const rows = [];
-      const only = (process.env.GATE_T3A_CASES ?? '').split(',').filter(Boolean);
-      const want = (c) => !only.length || only.includes(c);
+      // (chore TXA, cut 2) the cases are sections of a split step (tools/lib/gate-part.mjs; gate-chains.json txn-crash-adopt `split`): the
+      // kill matrix in two round-robin slices, each part on its own shard's headless server. Whole (no GATE_PART_SECTIONS) every case runs
+      const MATRIX = 'adopt-kill-matrix';
+      const SECTIONS = ['adopt-overflow-async', 'adopt-road-unloaded', 'adopt-defer-retagged', 'adopt-crate-held', ...sliceSections(MATRIX, 2), 'legacy-finish-at-start', 'gone-save-refused'];
+      const only = (process.env.GATE_T3A_CASES ?? '').split(',').filter(Boolean).flatMap((c) => (c === MATRIX ? sliceSections(MATRIX, 2) : [c]));
+      const P = gatePart(SECTIONS, { log, legacy: only.length ? only : null });
+      const want = (c) => (c === MATRIX ? sliceSections(MATRIX, 2).some((s) => P.want(s)) : P.want(c));
 
       if (want('adopt-overflow-async')) await rowOf('adopt-overflow-async', rows, async () => {
         const F = await t3Town('G6B T3 Overflow');
@@ -887,35 +914,55 @@ export async function registerSAD(steps, h) {
       // BUILT, house_4 building): the world copied once after its setup and restored before each halt; after the restart recovery runs once
       // (open 0): before the decision rolled back (the crate stands with its stock, nothing credited), from it rolled forward (the crate gone,
       // its whole stock in the stock, both references cleared, house_4 in the feed order); conservation against the setup's baseline
-      if (want('adopt-kill-matrix')) await rowOf('adopt-kill-matrix', rows, async () => {
+      // (chore TXA) the world is the fixture's clone (cut 1: each halt restores the fixture, the base the matrix copied before); the halts are
+      // sliced round-robin over the split's two parts (cut 2); the +save twin runs only where it differs from the bare point (cut 3, below)
+      if (want(MATRIX)) await rowOf(MATRIX, rows, async () => {
         const F = await t3Town('G6B T3 Kill');
         const { out, W, ids, at, s40, conserve } = F;
         const S = s40.ledger?.stock ?? {};
-        const base = `${W.dir}.t3base`;
         const name = path.basename(W.dir);
-        await cmd('/save-all flush').catch(() => null);
-        await L.leaveWorld();
-        fs.rmSync(base, { recursive: true, force: true });
-        fs.cpSync(W.dir, base, { recursive: true });
-        const restore = () => { fs.rmSync(W.dir, { recursive: true, force: true }); fs.cpSync(base, W.dir, { recursive: true }); };
+        const restore = () => L.copyWorld(FIXTURE, name);
         const open = async () => { await L.openWorld(name); await L.tp(CX + 80, 80, CZ + 48); await sleep(2000); };
-        await open();
+        await sleep(2000);
         await call('dev.txn.trace', { on: true }, 10_000);
         const a0 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
         const points = ((await call('dev.txn.trace', { on: false }, 10_000)).trace ?? []).filter((p) => p.startsWith('TX:pile.adopt:'));
         out.trace = { adopt: a0, points };
         check(!a0.refused && points.length >= 10 && points.includes('TX:pile.adopt:decided'), `matrix: a traced adoption (${json(a0.joined ?? a0.refused)}): ${points.length} kill points: ${points.join(' ')}`, out.trace);
         await L.leaveWorld();
-        const cases = [];
+        // (chore TXA, cut 3; Noah 2026-11-22, docs/SPEED-CUTS.md) a point's +save twin (WorldJournal.kill: every chunk saved, the ledger with
+        // it, then the halt) differs from the bare point only while an applied effect is not yet durable: from an `apply:N`/`comp:N` point
+        // until the next `barrier:*` point (TxnCore kills there after env.barrier() made players, chunks and the ledger durable;
+        // journal.release and record.clear confirm their own writes). Before the first effect (intent) and after a barrier with nothing
+        // applied since (prepared, decided, effects, emit:*, retiring, done) the save rewrites what is already on disk: the twin is skipped.
+        // GATE_T3B_ALL_TWINS=1 runs every twin (as before)
+        const allTwins = process.env.GATE_T3B_ALL_TWINS === '1';
         const only = (process.env.GATE_T3B_POINTS ?? '').split(',').filter(Boolean);
-        let decided = false;
-        let emitted = false;
-        for (const p of points) {
-          decided ||= p === 'TX:pile.adopt:decided';
-          emitted ||= p.startsWith('TX:pile.adopt:emit:');
-          for (const v of ['', '+save']) {
-            const point = p + v;
-            if (only.length && !only.includes(point)) continue;
+        const plan = [];
+        const skipped = [];
+        {
+          let decided = false, emitted = false, dirty = false;
+          for (const p of points) {
+            decided ||= p === 'TX:pile.adopt:decided';
+            emitted ||= p.startsWith('TX:pile.adopt:emit:');
+            const stepName = p.slice('TX:pile.adopt:'.length);
+            if (/^(apply|comp):/.test(stepName)) dirty = true;
+            else if (stepName.startsWith('barrier:')) dirty = false;
+            for (const v of ['', '+save']) {
+              if (v && !dirty && !allTwins) { skipped.push(p + v); continue; }
+              plan.push({ point: p + v, decided, emitted });
+            }
+          }
+        }
+        const sl = slicesOf(P, MATRIX, 2);
+        const mine = plan.filter((c, i) => inSlice(i, sl) && (!only.length || only.includes(c.point)));
+        out.twins = { rule: allTwins ? 'all (GATE_T3B_ALL_TWINS=1)' : '+save only from an apply:/comp: point to the next barrier:', skipped, halts: plan.length,
+          slice: sl ? sl.map((s) => `${s.k}/${s.n}`).join(',') : null, here: mine.map((c) => c.point) };
+        log(`  matrix: ${plan.length} halts (${skipped.length} +save twins skipped: ${skipped.join(' ')}); this part ${mine.length}${sl ? ` (slice ${out.twins.slice})` : ''}`);
+        const cases = [];
+        for (const { point, decided, emitted } of mine) {
+          {
+            const tc = Date.now();
             restore();
             await open();
             await call('dev.journal.killAt', { point }, 10_000);
@@ -934,12 +981,12 @@ export async function registerSAD(steps, h) {
             const s3 = await siteState(ids.house_3);
             const back = stands && G.same(c.ledger?.stock ?? {}, S) && sum(moved) === 0 && c.crate?.x === at[0] && s3.crate?.x === at[0];
             const fwd = !stands && G.same(moved, S) && c.crate?.x === undefined && s3.crate?.x === undefined && (p1.feedOrder ?? []).includes(ids.house_4);
-            const want = decided ? 'forward' : 'back';
+            const expect = decided ? 'forward' : 'back';
             const got = back ? 'back' : fwd ? 'forward' : 'torn';
-            const n = { point, open: st.openCount, held: st.heldCount, quarantined: (st.quarantined ?? []).length, got, want, stands, moved, crateStock: c.ledger?.stock };
+            const n = { point, open: st.openCount, held: st.heldCount, quarantined: (st.quarantined ?? []).length, got, want: expect, stands, moved, crateStock: c.ledger?.stock };
             cases.push(n);
-            log(`  ${point}: open ${n.open}, ${got} (want ${want})`);
-            check(st.openCount === 0 && got === want, `${point}: recovered exactly once (open ${st.openCount}): ${got}, want ${want} (stands ${stands}, moved ${json(moved)})`, n);
+            log(`  ${point}: open ${n.open}, ${got} (want ${expect})`);
+            check(st.openCount === 0 && got === expect, `${point}: recovered exactly once (open ${st.openCount}): ${got}, want ${expect} (stands ${stands}, moved ${json(moved)})`, n);
             if (decided && !emitted) {
               // (T3b fix round, GPT P2-4) committed and halted before its event fired: recovery fires STOCKPILE_CHANGED (from the persisted payload)
               n.events = st.events ?? [];
@@ -947,13 +994,13 @@ export async function registerSAD(steps, h) {
             }
             await conserve(point);
             await L.leaveWorld();
+            n.sec = Math.round((Date.now() - tc) / 1000);
           }
         }
         out.cases = cases;
         out.summary = { points: points.length, cases: cases.length, back: cases.filter((c) => c.got === 'back').length, forward: cases.filter((c) => c.got === 'forward').length,
           wrong: cases.filter((c) => c.got !== c.want).length };
         log(`  matrix: ${json(out.summary)}`);
-        fs.rmSync(base, { recursive: true, force: true });
         await open();
         return out;
       });
@@ -1016,7 +1063,10 @@ export async function registerSAD(steps, h) {
         return out;
       });
 
-      const out = { rows, red: rows.filter((r) => r.result === 'red').map((r) => r.case), green: rows.filter((r) => r.result === 'green').map((r) => r.case) };
+      const out = { part: P.part, sections: P.sections, fixtureBuildSec: fixture?.buildSec ?? null, rows, red: rows.filter((r) => r.result === 'red').map((r) => r.case), green: rows.filter((r) => r.result === 'green').map((r) => r.case) };
+      await L.leaveWorld().catch(() => null);
+      fs.rmSync(path.join(L.SAVES, FIXTURE), { recursive: true, force: true }); // (chore TXA) the fixture lives for this step only
+      fixture = null;
       log(`T3a rows: ${rows.map((r) => `${r.case} ${r.result.toUpperCase()}${r.failed ? ` (${r.failed})` : ''}`).join('; ')}`);
       spendZero();
       return out;
