@@ -437,7 +437,10 @@ export async function registerDRS(steps, h) {
       check(!sv?.view?.state || sv.view.state === 'REMOVED', `${tag}: the region removed (${sv?.view?.state ?? 'gone'})`);
       if (W.sponge) {
         const near = (await call('dev.items.near', { pos: W.sponge, radius: 48 }, 60_000)).items ?? {};
-        check((near['minecraft:sponge'] ?? 0) >= 1, `${tag}: (after DR12) the later removal works: the player's sponge dropped at its cell as before (${json(near)})`);
+        // (slice T4R-D, re-pointed) the player's block is owed (player_blocks), never dropped
+        const ow = ((await call('dev.stockpile.owed', {}, 30_000).catch(() => ({}))).owed ?? []).filter((e) => e.reason === 'player_blocks')
+          .reduce((n, e) => n + (e.items?.['minecraft:sponge'] ?? 0), 0);
+        check(ow >= 1 && !(near['minecraft:sponge'] ?? 0), `${tag}: (after DR12) the later removal works: the player's sponge owed (${ow}), not dropped (${json(near)})`);
       }
       const restored = await hash(H.b);
       const wb = westOf(H.b, gy);
