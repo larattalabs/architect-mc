@@ -40,6 +40,33 @@ This file is the current rulebook. Superseded rule text and dated process histor
 Steward RC on every release (its areas follow what changed), test-tooling slices allowed when they save more wall time than they
 cost, and the full set in the nightly.
 
+## Recurring review findings: design checklist
+
+GPT reviews keep finding the same classes of bug. The full list, with Architect examples, is `docs/REVIEW-PATTERNS.md`. Use it at
+three points:
+- **Strict contract or design.** Before its GPT design review, it carries a "Crash safety and scope" section that answers each
+  question below. "N/A" is allowed only with a one-line reason. A coordinator brief for a strict slice asks for that section.
+  - Which one durable record decides each fact?
+  - What is persisted before each world, stock or credit change?
+  - What happens on a second crash during each recovery path?
+  - Is each key per operation?
+  - Do holds and admission see full footprints and holds loaded from disk?
+  - Are refunds priced from what was actually removed?
+  - Does the design avoid converting old in-flight state?
+  - Is it one provable rule, not a list of cases (else narrow it and record a known risk)?
+  - Which older saved worlds and plans does it read?
+- **Builder self-check, before asking for the early GPT review.** Revert only the fix, rerun every failing-first row, and confirm
+  each goes red again. Record the red run's commit and run dir in the changes file. Check also that each row:
+  - asserts saved state or world state, not a log line;
+  - actually reaches its window (add a dev-only fault point if needed, gated to dev or headless starts and disarmed when the
+    server stops);
+  - has a bound on every wait, where a timeout is a FAIL.
+- **Every GPT review prompt** (design, slice, fix-check, release) includes the "For review prompts" block from
+  `docs/REVIEW-PATTERNS.md` as "known failure classes, check these first".
+
+When two rounds in a row find new edges in the same area, stop patching: redesign or narrow the scope, and use the review guard
+(speed rule 4).
+
 ## Where things are decided
 
 - `docs/PLAN.md`: status per phase, decisions, queued asks, process. Read its latest sections first.
