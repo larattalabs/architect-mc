@@ -274,6 +274,8 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   `blockingOwner` its owner or recipient; token `operation_in_progress:<txn id>`. No `REMOVAL_FINISHED` follows: retry after a few seconds.
   It replaces the `REMOVAL_IN_PROGRESS` with a made-up `txn:<key>` id such a refusal gave. A `Busy.Kind` a caller does not know now means
   "retry after a short delay", never "wait for an event".
+  (Last round) A road's or region target's own removal retry is refused this way too while its own holder cargo (`removal.cargo`) is open:
+  `OPERATION_IN_PROGRESS` first, then `PLAYER_BLOCKS_RETURNING` while its blocks are given back. Both are retries by time.
 - (Fix round) Auto-collect also runs after a group's, stage's, region's or revision's removal and after a road's extraction. A player's
   chest in a road or region-target cell: its stacks are taken out first, plain stacks credited into the target's pile, data stacks owed
   (reason `cargo`); a holder without slots that holds items refuses the removal ("take them out").

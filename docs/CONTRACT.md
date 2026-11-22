@@ -34650,9 +34650,15 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   run in one call unless a barrier holds the attempt): items a player puts into such a holder in between, in a *group's* attempt, stand in
   the holder when the group's own restore writes that cell, and go as v0.89.0's restore treats container contents (not paid).
   (Narrowing round) An open `removal.cargo` txn's cells count in removal admission like any other open txn's, live and as loaded from
-  `txn.json` (a target's own cargo is its own retry's self); a TAKE (and its compensation) writes its receipt only after a verified write
+  `txn.json` (last round: a target's own cargo too, see below); a TAKE (and its compensation) writes its receipt only after a verified write
   (the slot held exactly the planned stack before and is empty after), so a hold that cancels the write aborts the cargo and nothing is
   credited or owed for a stack that stayed in the holder.
+  (Last round) No own-cargo exemption: while one of a target's own `removal.cargo` txns is open (undecided, its stack possibly in transit,
+  its compensation still to put it back), the target's retry is refused by it (`OPERATION_IN_PROGRESS`, the cargo's txn id) and
+  `Extractions.run` itself waits before its holder take and its P0 (`Extractions.ownCargo`; a group's retry calls run with no admission).
+  So no extraction hold is ever saved over a holder its own cargo may still write: the exempted cycle (the extraction's W waiting on the
+  cargo's cell, the cargo's compensation on P0's hold, across restarts) cannot form. Remaining risk: a cargo held for good (an unreadable
+  probe) keeps its target's removal waiting, typed and retryable, until ops resolves the txn.
 - **Admission (fix round P1-4):** over exactly the footprint a record holds (member boxes and every crate cell, a historical crate
   included), against every open txn's cell resources too (§4.2 (c)). Remaining risk: a crate cell some future settle touches that no
   record names (none known) would not be admitted against. (Narrowing round) A refusal by an open txn that is not a removal answers
