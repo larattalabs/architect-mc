@@ -2752,7 +2752,7 @@ public final class Stockpiles {
 					saveWithWorld(srv);
 					Path f = d.resolve(FILE);
 					boolean written = saves > before;
-					if (!written && !(PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f))) {
+					if (!written && !(nothingDurable() && !Files.exists(f))) {
 						throw new IllegalStateException("dev.stockpile.save: " + f + " was not written (the log says why)");
 					}
 					o.addProperty("written", written);
@@ -3976,6 +3976,16 @@ public final class Stockpiles {
 	/** (slice T4b fix round, TEST dev.stockpile.ps failLedgerOnly) The next n ledger writes fail (the chunks flush; the queue file is untouched). */
 	static final java.util.concurrent.atomic.AtomicInteger TEST_FAIL_LEDGER = new java.util.concurrent.atomic.AtomicInteger();
 
+	/**
+	 * (slice T4R-D fix round, P1-1) Whether nothing {@link #toJson} writes holds state: no stockpile, no owed entry, no crate stash, no owner
+	 * record or removal result, no extraction attempt. Only then may a world without {@code stockpiles.json} skip making it (0.17.0 worlds load
+	 * unchanged). Every table {@link #toJson} writes is in this one rule, so a first owner record (or attempt, or result) is never
+	 * acknowledged unsaved.
+	 */
+	static boolean nothingDurable() {
+		return PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && OwnerRemovals.empty() && Extractions.json() == null;
+	}
+
 	static boolean save() {
 		Path d = dir;
 		if (d == null) {
@@ -4020,7 +4030,7 @@ public final class Stockpiles {
 		}
 		Path f = d.resolve(FILE);
 		try {
-			if (PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f)) {
+			if (nothingDurable() && !Files.exists(f)) {
 				return true; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
 			SaveTiming.at(SaveTiming.WRITE);
@@ -4118,7 +4128,7 @@ public final class Stockpiles {
 			return new DurableFile.Result(DurableFile.Outcome.REFUSED, 0, "the ledger failed to load this session");
 		}
 		Path f = d.resolve(FILE);
-		if (PILES.isEmpty() && OwedLedger.isEmpty() && CrateSettle.durableEmpty() && !Files.exists(f)) {
+		if (nothingDurable() && !Files.exists(f)) {
 			return new DurableFile.Result(DurableFile.Outcome.OK, 0, null);
 		}
 		try {
