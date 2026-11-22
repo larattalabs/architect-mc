@@ -34642,9 +34642,19 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   (rev-3 P1-2): not paid from receipts.
 - **Teleport and enderman:** a dragon egg teleports into or out of a held cell, an enderman takes or places there (rev-2 P1-1).
 - **Deferred work:** no `deferred.json`; nothing is replayed at release (rev-3 P1-3 and P2 do not arise: there is no deferral).
-- **Not built (declared in the changes):** the extraction's holder-content L credits and its `pile:` hold (holder contents keep the
-  existing pending-credit path); the `r1`/`pblockKeys` association of extraction results into the removal's own result; `RevisionView`'s
-  wait; a mutant per row.
+- **Holder contents (fix round P1-6, built differently from §2):** an extraction takes a player holder's contents out first, in its own
+  `removal.cargo` txn (each stack once: a plain stack credited into the target's pile, keyed per txn and effect; a data stack, or any stack
+  with no pile, owed whole), for a standalone road and a group's R1 alike; the group's per-cell pending cargo credit is gone. Not an L
+  effect of the `removal.pblocks` txn itself. A holder with items but no slots (no `Container`) is refused ("take them out"). A holder
+  refilled after the take is left standing by the W, unpaid; the road's retry extracts it again. Remaining risk (narrow: the take and the W
+  run in one call unless a barrier holds the attempt): items a player puts into such a holder in between, in a *group's* attempt, stand in
+  the holder when the group's own restore writes that cell, and go as v0.89.0's restore treats container contents (not paid).
+- **Admission (fix round P1-4):** over exactly the footprint a record holds (member boxes and every crate cell, a historical crate
+  included), against every open txn's cell resources too (§4.2 (c)). Remaining risk: a crate cell some future settle touches that no
+  record names (none known) would not be admitted against.
+- **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
+  `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
+  their behaviour is shown in game only for the holder).
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 

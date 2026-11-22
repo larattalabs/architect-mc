@@ -266,7 +266,12 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   `group`, `stage` (`<group>/<stage>`), `region`, alias `revision` (`<region>#<rid>`); at most 1024 per world, oldest out).
 - `ArchitectRefused.busy()` = `Busy(kind, blockingId, blockingKind, blockingOwner)`, kinds `REMOVAL_IN_PROGRESS`, `WAITING_BEHIND`,
   `PLAYER_BLOCKS_RETURNING`, `HELD_DECIDED`; `detail()` = `<kind_lower>:<blockingId>` or `held(decided)`. `Sites.remove` now fails with it
-  (it answered a `RemoveResult` with the "Not yet" text in `blockers`).
+  (it answered a `RemoveResult` with the "Not yet" text in `blockers`). (Fix round P2-2) Every route does: a site that is a pending member
+  of a live removal fails `HELD_DECIDED` (it answered "No site"); a road's or cell site's removal fails typed, from the call or its future
+  (a road answered `RemoveResult(false)` with the text); a held single removal after its commit fails `HELD_DECIDED` with the removal's base.
+- (Fix round) Auto-collect also runs after a group's, stage's, region's or revision's removal and after a road's extraction. A player's
+  chest in a road or region-target cell: its stacks are taken out first, plain stacks credited into the target's pile, data stacks owed
+  (reason `cargo`); a holder without slots that holds items refuses the removal ("take them out").
 - `RemovalStopCause.WAITING_BEHIND` (appended); `SiteGroup.removalWait()`, `RegionView.removalWait()` (`RemovalWait(cause, blocking,
   sinceTick)`), null when not waiting. `RevisionView.removalWait()` exists and is null (a revision undo's wait shows on its region's view).
 - REMOVAL_FINISHED: a standalone cascade fires one event per member, each from its own snapshot; group, region and revision one aggregate.
