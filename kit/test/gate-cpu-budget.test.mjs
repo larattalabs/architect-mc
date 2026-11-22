@@ -72,6 +72,9 @@ test('the chain shells that run node --test pass the share, and only when the ru
     for (const m of (s.shell ?? '').matchAll(/node --test\b(.{0,80})/g)) assert.match(m[1], /^ \$\{GATE_TEST_CONCURRENCY:\+--test-concurrency=\$GATE_TEST_CONCURRENCY\}/, `${id}: ${m[0]}`);
   }
   assert.equal(cfg.steps['unit-kit'].cpuShares, 6);
+  // (SPD2) unit-sidecar takes 3 shares: 9 vitest forks at a share of 3 (measured next to unit-kit, docs/SPEED-CUTS.md "Not cuts")
+  assert.equal(cfg.steps['unit-sidecar'].cpuShares, 3);
+  assert.equal(budgetEnv({ cores: 18, share: 3 }, { shares: cfg.steps['unit-sidecar'].cpuShares }).VITEST_MAX_WORKERS, '9');
   const { GATE_TEST_CONCURRENCY, ...base } = process.env; // (unit-kit itself runs with the runner's share set)
   const echo = (env) => spawnSync('sh', ['-c', 'echo node --test ${GATE_TEST_CONCURRENCY:+--test-concurrency=$GATE_TEST_CONCURRENCY} a.test.mjs'], { encoding: 'utf8', env: { ...base, ...env } }).stdout.trim();
   assert.equal(echo({}), 'node --test a.test.mjs');

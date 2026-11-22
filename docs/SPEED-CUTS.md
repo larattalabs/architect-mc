@@ -22,6 +22,23 @@ confirm them directly.
   suite's critical path, a single test of ~770 s under load.
 - **fl-unit reads its four kit files from unit-kit's report** when it is exact (`kit-reuse.mjs`), instead of running them again.
   It has no `waitFor`, so this helps only when unit-kit is CACHED or already finished.
+- **unit-sidecar takes 3 CPU shares** (chore SPD2; `cpuShares` 3 in `tools/gate-chains.json`: 9 vitest forks at the usual share of 3,
+  was 3). The same 953 tests. Measured with `budgetEnv`'s env under `nice -n 10`, next to the whole kit suite at unit-kit's 6 shares
+  (17 workers), the worst case: in a gate run unit-sidecar normally follows unit-kit on the same shard. Two pairs, A B A B:
+
+  | sample | sidecar 3 forks | sidecar 9 forks | unit-kit next to it (3 / 9) | 1-min load start -> end |
+  |---|---|---|---|---|
+  | pair 1 | 756 s | 634 s | 827 s / 624 s | 5.6 -> 35 / 17.6 -> 17 |
+  | pair 2 | 856 s | 743 s | 909 s / 704 s | 17 -> 41 / 23.9 -> 24.5 |
+  | median | 806 s | 689 s (-2 min) | 868 s / 664 s (not slower) | |
+
+  953/953 and kit 1683/0 in all four; no "connection closed" and no eval.e2e failure at 9 forks. The ceiling is the slowest file,
+  polish.test.ts (~100 s of 806 s of tests). Restore: drop the `cpuShares` key.
+- **fl-unit's `cpuShares` 3 was measured and not applied** (SPD2). Item 4's cold loop (926 plans, a fresh plan store, a base dir
+  whose trees force the full loop), next to unit-kit: 4 workers 1389 s and 1164 s (median 1276 s); 9 workers 1739 s (load 80-90
+  from other gates) and 853 s (median 1296 s). unit-kit beside it: 1241/945 s before, 1945/1067 s after. No median gain, and pair 1's
+  after-run slowed unit-kit, so the default stays. Pair 2 alone (similar load) suggests -5 min; re-measure on a quiet box before
+  retrying. A warm gate run reads the shared plan store and does not plan at all.
 
 ## Proposed (measured, not applied)
 
@@ -34,6 +51,6 @@ confirm them directly.
 | t4-crash T4-2nd: the fixed `L.sleep(200_000)` race against the open that never completes; race with `haltWait` instead | ~3 | nothing (waste) |
 | txn-crash-adopt: the T3 fixture (builds b1, b2, part-built house_4, ~50 s) rebuilt for each of 5 cases; copy one prepared world snapshot | ~3 | nothing (waste) |
 | txn-crash-adopt: the 34 kill-matrix restarts (~16 min) split over 2 headless servers | ~8 wall | nothing; one more server |
-| unit-sidecar `cpuShares` 3-4 (3 vitest forks now: 841 s of tests in 5-10 min) | ~3-6 | nothing; needs a measurement next to unit-kit x6 (SPD's oversubscribed run failed eval.e2e) |
-| fl-unit `cpuShares` 3 (item 4's 926 corpus plans took 1013 s on 4 workers under load) | ~5 at load | nothing; unmeasured |
+| unit-sidecar `cpuShares` 3-4: **applied as 3 in SPD2** (median 806 -> 689 s next to unit-kit; "Not cuts") | ~2 measured | nothing |
+| fl-unit `cpuShares` 3: **measured in SPD2, not applied** (no median gain under shifting load; "Not cuts") | 0-5 | nothing |
 | plan-k1a item 7 and plan-p0-asks item 11 both plan Steward's 59 recorded plans (~250-400 s each under load): share one planning | ~4 CPU-min | nothing (waste) |

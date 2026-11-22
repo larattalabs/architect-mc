@@ -2307,7 +2307,7 @@ logs which (`kitReaderSlowPath`).
 
 **The CPU budget** (`tools/lib/cpu-budget.mjs`, `cpu` in `gate-chains.json`). The machine's cores (`GATE_CPU_CORES`; 18 here)
 are split over the run's workers: a turbo run's shards and lanes, a shared run's shards but at least `--slots`. Each worker gets
-`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6)
+`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6, unit-sidecar 3 since SPD2)
 through the environment, on steps only: client starts and setup builds keep their defaults.
 - `GATE_TEST_CONCURRENCY` sets `--test-concurrency` on every `node --test` the gates run. That covers the drivers'
   `testConcurrencyArgs()` (outside kitReuse's file list, which would refuse any flag) and the unit-kit and water-lint shells.
