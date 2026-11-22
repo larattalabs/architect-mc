@@ -2227,7 +2227,8 @@ export async function registerTCC(steps, h) {
           const arch = path.join(W.dir, 'architect');
           fs.mkdirSync(arch, { recursive: true });
           fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ killAt: 'TX:recover:removal.site:barrier:member' }));
-          await L.openWorld(name).catch(() => null);
+          // the world halts during its start (the recovery runs at the load): openWorld would poll for 15 minutes, so it is raced with a minute
+          await Promise.race([L.openWorld(name).catch(() => null), L.sleep(60_000)]);
           down = await haltWait();
           rowLog(tag, `second crash at the recovered member barrier: ${down}`);
         }
