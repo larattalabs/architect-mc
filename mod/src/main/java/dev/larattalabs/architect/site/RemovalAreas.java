@@ -219,10 +219,14 @@ public final class RemovalAreas {
 			}
 			// (slice T4R-D fix round, P1-4; design §4.2 (c)) any other open txn's cell resources (a crate settle, a take, a delivery, a standalone
 			// road's removal txn, an adoption), as loaded from disk: no new removal saves a footprint over a cell such a txn holds or writes
+			// (slice T4R-D narrowing round, P2-3) no removal stands behind such a txn, so its blocked caller gets no REMOVAL_FINISHED to wait on:
+			// its Busy names the txn (id, kind) as OPERATION_IN_PROGRESS, a retry by time, never a made-up removal id
+			dev.larattalabs.architect.api.Busy busy = new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.OPERATION_IN_PROGRESS,
+				t.id, t.kind, t.who);
 			for (String res : t.resources) {
 				Area cell = resourceArea(res);
 				if (cell != null) {
-					out.add(new Area(cell.dim(), cell.box(), "txn " + t.id + " (" + t.kind + ")", areaSite(t)));
+					out.add(new Area(cell.dim(), cell.box(), "txn " + t.id + " (" + t.kind + ")", areaSite(t), busy));
 				}
 			}
 		}
