@@ -35643,3 +35643,75 @@ Read only. Steward is at main 46a5f2b, pinned to Architect 0.79.0. The `held(dec
   byte identity against fa0bf596d1. Region/txn units 414/0.
 - **Leftovers:** P2-9 (earlier round); the in-flight group/undo future still completes only when a held drain finishes (new asks are
   answered at once); no TxnCrashModel per kind.
+
+## Slice T5F: region fluids on the TXN layer, redesigned (contract: the coordinator's T5F draft of 2026-11-19 with Noah's N1-N6, Steward's S1-S4 and the coordinator's Q1-Q3; strict)
+
+The binding text is the coordinator's T5F contract (§0-§11). Its one rule: every piece of fluid evidence lives in the same chunk, in the
+same tick, as the mutation it describes. T5Fa (rows, units, hooks) was built on slice/8cT dc814bb1; T5F merges it into release/v0.91.0
+(T4R inside) and builds T5Fb on it. T5Fc (drain per (body, chunk), region.scoop, the deadline from receipts, fluid.stray, flowingWater
+advertised) is not built: `flowingWater` stays unadvertised.
+
+### Slice T5Fa after T4 (recorded 2026-11-22)
+
+- Merge 9c19a4fe (origin/slice/T5Fa 06527671 into 604e109d): RVU1 stays the T4R stage removal txn's decision with DF round 2's confirmed
+  commit save kept; the REMOVING save is DF's confirmed save (a refused one restores `removalStopCause` too); `RegionView.fluidsRemoval`
+  appended after `removalWait` (the 1.72.0 constructor kept); SOFF's `admits` gate also covers DF's owed retry. Merge fix 31ccdf6d: 8c's
+  `kit/test/fixtures/wm` declared as the mod test task's input.
+- The items held for after T4 (53dfa712): the 14 `t5-*` gate steps in the "8c in-game lane"; DEVBRIDGE text; `txn.Receipts.fields` and
+  `TestMove.receiptFields(receipt, key)`/`(ch, key)`/`hasReceipt`; `KillPoints.step(.., k, n)`/`reachedLine`, `WorldJournal.kill(point,
+  progress)`; `RemoveResult.fluidsTaken()`/`fluidsTakenCells()` (nullable report-only methods, Since NEXT, null until T5Fc), in
+  `dev.region.remove`'s JSON. No behaviour change.
+- Red units on the merged head (`-Dred.T5F=true`): 19 of 31 red (s1q3 and s4q2 green once their seams exist), each "not built".
+
+### Slice T5Fb as built (815a0078; recorded 2026-11-22)
+
+- **Provenance** (`region.FluidProv`, `architect_mc:fluid_prov`): per record `rec` (`FluidTxns.recKey`) the cells it wrote (`WROTE`) or
+  its stage cleared (`CLEARED`), packed `cellIndex << 1 | cleared`; persistent, never synced; one read for every user (`FluidProv.read`,
+  §3.3). Writers: the fluids-stage tile (InfraJob, right after each cell's `Placed.set`: `RegionFluids.tileMarker`), the place W, the clear
+  W. Only R's own writers clear R's marks: its W effects, and a rollback of R's own fluids tile (`RestoreJob` ROLLBACK resolves R from its
+  batch item, `RegionFluids.provScopeOf`; `Placed.set` clears inside `FluidProv.inScope(R)` only).
+- **fluid.write** (§4.2): `fluid.clear` (an ordered course's first wave: one W per chunk of the waiting water bodies, WROTE -> CLEARED;
+  lava and grate bodies never), `fluid.place` (one W per (body, chunk): §3.3; never writes a WROTE cell, any fluid; marks what it wrote),
+  `fluid.force` (one W per (body, chunk) receiving a tick, the chunk-locality rule: `forceChunks` includes the neighbours' chunks), the
+  core barrier, then `fluid.written` (R, no physics; `forcedAt` moves with a replay's force W in memory). Receipts `tx-<n>/<i>;op=..;t=..
+  [;n=..;h=..]` in the same apply and chunk; probes read their own chunk, exact or with fields. Points `TX:fluid.write:clear|place|force|
+  written`; `place` logs "reached (k of n)" over the place Ws only (S1, Q3).
+- **fluid.adopt** (§4.7, N2): a record whose fluids.json has no `prov` (saved before T5F) is adopted once before any write or drain
+  (`FluidTxns.adoptFirst` in `write`, `record`, `removalDrain` and the tick): one W per (body, chunk) marks WROTE where our fluid stands or
+  an ACTIVE journal entry of the group wrote the cell (N2 b), receipt `op=adopt;n=..`; then the R saves `prov`. The journal's one read for a
+  fluid cell (`FluidTxns.TileEntries`). A record created by T5F saves `prov` with its first save (before any tile writes, DF's rule).
+- **Deleted:** `RegionFluids.JournalWrites`, `writeBody`'s journal check, `forceBody` in the R, `st.cleared`. The scoop's never-delivered
+  count (`scoopPlan`) reads the marks: a paid cell without WROTE is refunded, WROTE and taken refunds 0 (A's write side and P1-1's refund);
+  with no `chargedBodies`, a record charged on main (`chargedAt`) counts every lava and grate body as paid (N2). The drain itself, `@seen`,
+  the aggregate W and the scoop in the drain txn are T5Fc's.
+- **Units:** `FluidsT5FbTest` (4), the T5Fb-owned red units unguarded (i1, i2, n2, i3, i6, s1q3, s4q2, s45 adopt; runtime ACTIVE_AS_PROOF,
+  WATER_REFILL, FORCE_IN_R); T5Fc's 10 stay behind `-Dred.T5F`. Full mod suite 1958 tests, 0 failed after the kill-marker fix (the progress
+  variant sets the line's suffix and calls `kill(point)`, so both halts stay in `kill(String)`).
+- **Owed (in-game, paused by the coordinator 2026-11-22 for the v0.91.0 release gate):** the red record on 53dfa712 (t5-tile-k4, -rm,
+  t5-water-bucket, t5-grate-broken, t5-force-lost, t5-kn), which is also the revert check (the rows did not change between it and
+  815a0078); the green run of the same rows plus `t5-write-tx-a`, `t5-write-tx-b`, `t5-adopt-tx`.
+
+#### Crash safety and scope (AGENTS.md "Recurring review findings")
+
+- **Which durable record decides each fact?** Whether R wrote a fluid cell: that cell's chunk's `fluid_prov` mark, in the same snapshot as
+  the block (I1; reading `reading_i6i9`). Whether a W applied: its receipt in its own chunk. Bodies written and the phase: fluids.json (the
+  R). Whether a record is adopted: fluids.json's `prov`. The journal decides no fluid cell (N2's adoption aside).
+- **Persisted before each world change?** The txn intent (txn.json) before any clear, place, force or adopt W; fluids.json durable before
+  any fluids tile writes (DF). A mark is never ahead of its block: both in one call, one chunk. No ledger change in T5Fb.
+- **A second crash during recovery?** Each W is probed by its own chunk's receipt, so a replay redoes only the chunks whose snapshot was
+  lost, writes and ticks together; a redone place reads its marks again (a WROTE cell is never written, CLEARED stays until written); a
+  redone adopt skips marked cells. The R probes `writeTxn` / `prov`.
+- **Is each key per operation?** Write: `fluid-write:<rec>/<due ids>` (a wave); adopt: `fluid-adopt:<rec>`; receipts per (txn, effect),
+  one chunk each; marks per record (`<region>@<createdAt>#rv<rid>`), so a revision's marks are its own.
+- **Holds and admission?** Every fluid txn of a record holds `fluid:<region>#rv<rid>`; adoption takes the same resource and every write or
+  drain waits for it (`adoptFirst`). Marks are read from the chunk as loaded from disk.
+- **Refunds priced from what was removed?** The scoop counts what stands plus paid cells with no WROTE mark; a taken WROTE cell is 0. Its
+  amount is still 8cT's (summed per chunk at the drain's apply) until T5Fc moves it to the drain receipts and `region.scoop`.
+- **Old in-flight state?** None converted: main has no fluid txns; an 8cT-era `fluid.place` effect naming `bodies` is still applied by
+  `bodiesOf`. A legacy record is adopted by its own txn, never rewritten in place.
+- **One provable rule?** Yes: §3.3's table (`FluidProv.read`) for every writer and refund, with I1's co-location. Known risks, narrowed:
+  a tile whose record is not loaded when it writes marks nothing (logged; its cells then read as never written: written or refunded, as a
+  lost write); a removal's restore of a fluids tile (not a rollback) leaves R's marks (the record is retired; T5Fc's drain deletes them);
+  a harvest while a tile is still PLACING (contract §1 "Out").
+- **Older saved worlds and plans read?** fluids.json without `prov` (main, DF and 8cT eras): adopted (N2); a main-era `chargedAt` charge:
+  every lava and grate body paid. Chunks without the attachment read as no marks.
