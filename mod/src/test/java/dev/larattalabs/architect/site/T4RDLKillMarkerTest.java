@@ -30,7 +30,7 @@ class T4RDLKillMarkerTest {
 	void disarm() throws Exception {
 		dev.larattalabs.architect.journal.WorldJournal.killAt(null);
 		Path empty = Files.createTempDirectory("t4rdl-km-empty");
-		DevStart.arm(empty); // no dev-start.json: nothing armed for the start
+		DevStart.arm(empty, true); // no dev-start.json: nothing armed for the start
 		Files.deleteIfExists(empty);
 	}
 
@@ -53,7 +53,7 @@ class T4RDLKillMarkerTest {
 		Path arch = Files.createDirectories(world.resolve("architect"));
 		Path f = arch.resolve("dev-killed.json");
 		Files.writeString(arch.resolve("dev-start.json"), "{\"killAt\": \"" + POINT + "\"}", StandardCharsets.UTF_8);
-		DevStart.arm(world);
+		DevStart.arm(world, true);
 		assertFalse(Files.exists(arch.resolve("dev-start.json")), "dev-start.json consumed at the start");
 		m.invoke(null, "TX:removal.site:apply:1+save");
 		assertFalse(Files.exists(f), "T4RDL-kill-marker: another point (the first crash's, armed over the DevBridge) writes no start marker");
@@ -64,7 +64,7 @@ class T4RDLKillMarkerTest {
 		assertEquals(POINT, point, "T4RDL-kill-marker: the marker names the point that fired");
 		Files.delete(f);
 		Path other = Files.createTempDirectory("t4rdl-km-none");
-		DevStart.arm(other); // the next start, no dev-start.json
+		DevStart.arm(other, true); // the next start, no dev-start.json
 		m.invoke(null, POINT);
 		assertFalse(Files.exists(f), "a start without dev-start.json writes no marker");
 		assertFalse(Files.exists(other.resolve("architect").resolve("dev-killed.json")), "anywhere");

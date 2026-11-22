@@ -34,14 +34,40 @@ public final class DevStart {
 	private static volatile @org.jspecify.annotations.Nullable String startKill;
 	private static volatile @org.jspecify.annotations.Nullable Path startWorld;
 
-	/** Reads and deletes {@code <world>/architect/dev-start.json}, arming what it names. */
+	/** Reads and deletes {@code <world>/architect/dev-start.json}, arming what it names: on a development start only ({@link #development}). */
 	static void arm(Path worldDir) {
+		arm(worldDir, development());
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-3) Whether this start may arm test faults: a development environment, as the DevBridge (the dev client) and the
+	 * devserver (the headless gate server, run from runServer's classpath) require. A built jar in a player's launcher never reads the file.
+	 */
+	static boolean development() {
+		return net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment();
+	}
+
+	/**
+	 * The start's reset, then {@code <world>/architect/dev-start.json} read and deleted when {@code development} (else left as it is, nothing
+	 * armed). (REL-v0910 fix round, P2-3) The reset disarms what the previous start's file armed, its kill point in {@code WorldJournal}
+	 * included, so a point it never reached can't fire in this world. A kill point armed over the DevBridge for this start (gate4e's
+	 * migration kills, armed with no world open) is not the previous start's and stays.
+	 */
+	static void arm(Path worldDir, boolean development) {
+		String previous = startKill;
+		if (previous != null && previous.equals(WorldJournal.armed())) {
+			WorldJournal.killAt(null);
+		}
 		failWriteNow = false;
 		startGrace = 0;
 		startKill = null;
 		startWorld = worldDir;
 		Path f = worldDir.resolve("architect").resolve(FILE);
 		if (!Files.exists(f)) {
+			return;
+		}
+		if (!development) {
+			Architect.LOGGER.warn("TEST {}: ignored (not a development start); nothing armed", FILE);
 			return;
 		}
 		try {
@@ -81,6 +107,18 @@ public final class DevStart {
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("TEST {}: could not be written ({})", KILLED, e.toString()); // no marker: the gate's row FAILS
 		}
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-3) SERVER_STOPPED: every test fault is disarmed (this start's dev-start.json state, any {@code WorldJournal} kill
+	 * point and next-commit failure, armed by the file or over the DevBridge), so nothing armed in this world outlives its server.
+	 */
+	static void stopped() {
+		failWriteNow = false;
+		startGrace = 0;
+		startKill = null;
+		startWorld = null;
+		WorldJournal.disarm();
 	}
 
 	/** (TEST, slice T4R hooks) Placement's start grace for this start: 0 (the default) or the ticks dev-start.json named. */

@@ -819,6 +819,15 @@ public final class WorldJournal {
 		return killAt;
 	}
 
+	/** (REL-v0910 fix round, P2-3) Disarms the kill point and the next-commit failure (the server stopped: none outlives its world). */
+	public static void disarm() {
+		if (killAt != null || failNext) {
+			Architect.LOGGER.warn("World journal: disarmed at the server's stop (kill point {}, failNextCommit {})", killAt, failNext);
+		}
+		killAt = null;
+		failNext = false;
+	}
+
 	/** The next commit fails at its first file write (as on a full disk). */
 	public static void failNextCommit() {
 		failNext = true;

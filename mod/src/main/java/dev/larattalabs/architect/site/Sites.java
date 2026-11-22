@@ -271,6 +271,7 @@ public final class Sites {
 		dev.larattalabs.architect.journal.JournalMigration.init();
 		dev.larattalabs.architect.site.roads.RoadSync.init();
 		Protected.init(); // 6c 0c (C17)
+		ServerLifecycleEvents.SERVER_STOPPED.register(s -> DevStart.stopped()); // (REL-v0910 fix round, P2-3) no test fault outlives its server
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			DevStart.arm(worldDir); // (TEST, slice T4a) dev-start.json: a kill point or fault armed before the world's own start runs
