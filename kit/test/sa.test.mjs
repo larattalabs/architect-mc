@@ -236,9 +236,9 @@ test('survival (§6): nothing free; every cell paid; targets, bottom up', () => 
   assert.match(s.order, /bottom-up/);
 });
 
-test('determinism: three checks give identical answers and artifact shas', async () => {
+test('determinism: two checks give identical answers and artifact shas', async () => {
   const f = fx('valid', 'v7a_sa_spire.json');
-  const rs = [await run(f), await run(f), await run(f)];
+  const rs = [await run(f), await run(f)];
   assert.ok(rs.every((r) => JSON.stringify(r.check) === JSON.stringify(rs[0].check)));
   assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha));
 });

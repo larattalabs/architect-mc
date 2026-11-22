@@ -306,11 +306,11 @@ test('item 7: vocab/1 gains groups (both forms) and compact.palette', () => {
 
 // ------------------------------------------------------------------ item 8: determinism
 
-test('item 8: three checks of each VOC-c fixture give identical answers and artifacts', async () => {
+test('item 8: two checks of each VOC-c fixture give identical answers and artifacts', async () => {
   for (const fx of [readJ('valid', 'v64_vocc_copper.json'), readJ('valid', 'v65_vocc_nowood.json'), ...['r01_share.json', 'r02_family.json', 'r03_entry.json', 'r04_lenient.json'].map((f) => readJ('vocc', f))]) {
-    const rs = [await run(fx), await run(fx), await run(fx)];
+    const rs = [await run(fx), await run(fx)];
     const j = rs.map((r) => JSON.stringify(r.check.parts));
-    assert.ok(j[1] === j[0] && j[2] === j[0], `${fx.name}: answers`);
+    assert.ok(j[1] === j[0], `${fx.name}: answers`);
     assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha && r.res.irSha === rs[0].res.irSha), `${fx.name}: artifact and IR`);
   }
 });

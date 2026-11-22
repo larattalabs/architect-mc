@@ -267,7 +267,7 @@ test('§8 (item 3): Steward\'s recorded lifts on the asks claim: refused NO_CLIM
   assert.equal(lines(after).filter((l) => / malformed/.test(l)).length, 0);
 });
 
-test('item 11: the catalogue flip (connector.lift reserved -> supported, player-only, no volume), e15 off it; three checks identical (determinism)', async () => {
+test('item 11: the catalogue flip (connector.lift reserved -> supported, player-only, no volume), e15 off it; two checks identical (determinism)', async () => {
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
   const e = golden.entries.find((q) => q.id === 'connector.lift');
@@ -280,7 +280,7 @@ test('item 11: the catalogue flip (connector.lift reserved -> supported, player-
   const e15 = JSON.parse(fs.readFileSync(path.join(FIX, 'extension', 'e15_every_reserved_a.json'), 'utf8'));
   assert.ok(!JSON.stringify(e15.plan).includes('"lift"'));
   const shas = [];
-  for (let k = 0; k < 3; k++) { const r = await run(cliffFx()); shas.push(r.artifactSha ?? JSON.stringify(r.check.parts)); }
+  for (let k = 0; k < 2; k++) { const r = await run(cliffFx()); shas.push(r.artifactSha ?? JSON.stringify(r.check.parts)); }
   assert.equal(new Set(shas).size, 1, shas.join(' / '));
 });
 

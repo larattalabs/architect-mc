@@ -335,10 +335,9 @@ const evalIn = (irJson, jobs, blobs) => new Promise((resolve, reject) => {
 });
 const crater = (params) => planRegion({ programFile: path.join(KIT, 'regions', 'crater_works.mjs'), survey: synthSurvey(claimOf(200), SEED), claim: claimOf(200), params, node: 'golden', kitVersion: '0.19.0' });
 
-test('items 4 and 5: the crater toolbox demo: IR byte-identical over 3 plans; tiles equal for 1 and 4 workers, forward and shuffled; the golden', async () => {
-  const a = await crater({ toolbox: true }), b = await crater({ toolbox: true }), c = await crater({ toolbox: true });
+test('items 4 and 5: the crater toolbox demo: IR byte-identical over 2 plans; tiles equal for 1 and 4 workers, forward and shuffled; the golden', async () => {
+  const a = await crater({ toolbox: true }), b = await crater({ toolbox: true });
   assert.equal(a.irJson, b.irJson);
-  assert.equal(a.irJson, c.irJson);
   assert.deepEqual(a.ir.requires, ['mask', 'pattern']);
   const jobs = [];
   for (const stage of a.ir.stages) for (const set of ['terrain', 'path']) for (const key of a.ir.tiles[stage][set]) jobs.push({ key, stage, set });

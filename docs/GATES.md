@@ -229,7 +229,7 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - **Not done: unit-scope's suites side by side.** Each suite took the whole CPU share, so the cores were oversubscribed. The sidecar ran
   695 s instead of 262 s, and eval.e2e failed with "the sidecar connection closed". It passes alone.
 - **districts-d3 item 1** (300 seeded towns, the kit suite's critical path) runs on up to 6 worker threads (`kit/test/d3-towns.mjs`).
-  It checks the same towns, with the same assertions and counts.
+  It checks the same towns, with the same assertions and counts. (SPD3 then cut it to the first 100 towns: docs/SPEED-CUTS.md.)
 - **fl-unit** takes its four kit files from unit-kit's report when it is exact (`kit-reuse.mjs`). It has no `waitFor`, so this helps
   only when unit-kit is CACHED or already done.
 - Nothing dropped or weakened (docs/SPEED-CUTS.md). Units: `unit-scope.test.mjs` (`--run` under `GATE_FULL_UNITS`), `gate-change-units.test.mjs` and `districts-d3`'s
@@ -2307,7 +2307,7 @@ logs which (`kitReaderSlowPath`).
 
 **The CPU budget** (`tools/lib/cpu-budget.mjs`, `cpu` in `gate-chains.json`). The machine's cores (`GATE_CPU_CORES`; 18 here)
 are split over the run's workers: a turbo run's shards and lanes, a shared run's shards but at least `--slots`. Each worker gets
-`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6)
+`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6, unit-sidecar 3 since SPD2)
 through the environment, on steps only: client starts and setup builds keep their defaults.
 - `GATE_TEST_CONCURRENCY` sets `--test-concurrency` on every `node --test` the gates run. That covers the drivers'
   `testConcurrencyArgs()` (outside kitReuse's file list, which would refuse any flag) and the unit-kit and water-lint shells.

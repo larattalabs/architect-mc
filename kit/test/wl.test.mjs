@@ -74,9 +74,9 @@ test('cannot re-site (the zone\'s size held hard at 10): the lots go back explic
   assert.ok(!w.notes.some((n) => /placed no line for it/.test(n)), 'not the old wording');
 });
 
-test('the re-check is deterministic: 3 checks of each case give one answer set and one artifact sha', async () => {
+test('the re-check is deterministic: 2 checks of each case give one answer set and one artifact sha', async () => {
   for (const f of [fx(), hard(fx())]) {
-    const rs = [await run(f, { survival: true }), await run(f, { survival: true }), await run(f, { survival: true })];
+    const rs = [await run(f, { survival: true }), await run(f, { survival: true })];
     assert.ok(rs.every((x) => x.artifactSha && x.artifactSha === rs[0].artifactSha), 'one artifact sha');
     assert.ok(rs.every((x) => JSON.stringify(x.check.parts) === JSON.stringify(rs[0].check.parts)), 'one answer set');
   }

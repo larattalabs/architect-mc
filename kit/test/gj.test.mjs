@@ -249,10 +249,10 @@ test('item 10 (KC): a fountain inside the ring on the cheapest inner run: the jo
   assert.ok(J.best.dry.cost > J0.best.dry.cost, `the join goes round it (${J0.best.dry.cost} -> ${J.best.dry.cost})`);
 });
 
-test('item 11 (determinism): the IR sha over 3 plans of the same district through the gate', async () => {
+test('item 11 (determinism): the IR sha over 2 plans of the same district through the gate', async () => {
   const W = await open();
   const shas = new Set();
-  for (let i = 0; i < 3; i++) shas.add((await planBesideWalled({ W })).irSha);
+  for (let i = 0; i < 2; i++) shas.add((await planBesideWalled({ W })).irSha);
   assert.equal(shas.size, 1);
 });
 

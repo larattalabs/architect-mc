@@ -119,7 +119,7 @@ steps.unit = async () => {
   check(okAll(item(/item 1:/)), `item 1: mix shares within 2 points over 50 seeds x 10k cells (${out.mp.notes.find((l) => /mix/.test(l)) ?? ''})`, item(/item 1:/));
   check(okAll(item(/item 2:/)) && item(/item 2:/).length === 2, `item 2: gradients monotone over 1,000 columns; no straight boundary run of 6 (${out.mp.notes.find((l) => /gradient/.test(l)) ?? ''})`, item(/item 2:/));
   check(okAll(item(/item 3:/)) && item(/item 3:/).length === 2, 'item 3: 500 masks x 2,000 cells through evalTile and 500 x 2,000 through compileMask equal the brute-force reference: 100%', item(/item 3:/));
-  check(okAll(item(/items 4 and 5:/)), 'items 4 and 5 (kit): the crater toolbox demo\'s IR byte-identical over 3 plans; tile shas for 1 and 4 workers, forward and shuffled, equal the committed kit golden', item(/items 4 and 5:/));
+  check(okAll(item(/items 4 and 5:/)), 'items 4 and 5 (kit): the crater toolbox demo\'s IR byte-identical over 2 plans; tile shas for 1 and 4 workers, forward and shuffled, equal the committed kit golden', item(/items 4 and 5:/));
   check(okAll(item(/item 6:/)), 'item 6 (kit): the drift fixture (200 generated specs) is current', item(/item 6:/));
   check(okAll(item(/item 8:/)), 'item 8: crater_works without the toolbox: the same IR with or without toolbox: false (left out of the params)', item(/item 8:/));
   check(out.mp.code === 0 && out.mp.fail === 0, `kit/test/mp.test.mjs: ${out.mp.pass} pass, ${out.mp.fail} fail`, out.mp.failing);

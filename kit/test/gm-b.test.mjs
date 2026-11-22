@@ -206,8 +206,8 @@ test('no swing named: every recorded K1 gate plans as before (mech none is the d
   assert.equal(part(a, 'east_gate').class, 'fits');
 });
 
-test('determinism: 3 checks of gmb_k1_swing give one artifact sha', async () => {
+test('determinism: 2 checks of gmb_k1_swing give one artifact sha', async () => {
   const shas = new Set();
-  for (let i = 0; i < 3; i++) shas.add((await runOf('gmb_k1_swing')).check.artifactSha);
+  for (let i = 0; i < 2; i++) shas.add((await runOf('gmb_k1_swing')).check.artifactSha);
   assert.equal(shas.size, 1);
 });

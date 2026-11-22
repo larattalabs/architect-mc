@@ -7,7 +7,7 @@
 //     start [world] | stop | base      the client (or server) and the base worlds
 //     unit                              items 1, 2, 10 and 11's kit half: gj.test (the third step, the gates and their cells, the traverse,
 //                                       the broken variant, narrowing, the refusal's list, 100 seeded walled towns, plan/0's
-//                                       v7a_gj_endpoint, the IR sha over 3 plans), D3's parity and the plan fixtures (byte identity), the
+//                                       v7a_gj_endpoint, the IR sha over 2 plans), D3's parity and the plan fixtures (byte identity), the
 //                                       Java parity (GateJoinTest, DistrictLandTest, ApiGJTest); item 11's api-compat
 //     ingame                            items 3, 4, 6, 7 and 9 on d3_walled (D3's town with a GATED C38 ring round it, gates.min's gate facing
 //                                       its street end): checkBeside then Regions.plan through the gate, realise, the gate's cells unchanged,
@@ -116,7 +116,7 @@ function nodeTest(files) {
 steps.unit = async () => {
   const out = {};
   out.gj = nodeTest(['kit/test/gj.test.mjs']);
-  check(out.gj.code === 0 && out.gj.fail === 0 && out.gj.pass >= 12, `items 1, 2, 5 (plan/0), 10, 11 (kit): the third step only on [wall], the gates and their cells (besideGates = K1a's meta), two legs and the traverse never written or held, M28:beside on the broken variant, a narrow gate and a double door, the refusal's list (sealed, a fence gate, a gate walled up), 100 seeded walled towns, v7a_gj_endpoint through the gate, the IR sha over 3 plans, the fountain kept clear: ${out.gj.pass} pass, ${out.gj.fail} fail`, out.gj.failing);
+  check(out.gj.code === 0 && out.gj.fail === 0 && out.gj.pass >= 12, `items 1, 2, 5 (plan/0), 10, 11 (kit): the third step only on [wall], the gates and their cells (besideGates = K1a's meta), two legs and the traverse never written or held, M28:beside on the broken variant, a narrow gate and a double door, the refusal's list (sealed, a fence gate, a gate walled up), 100 seeded walled towns, v7a_gj_endpoint through the gate, the IR sha over 2 plans, the fountain kept clear: ${out.gj.pass} pass, ${out.gj.fail} fail`, out.gj.failing);
   out.bytes = nodeTest(['kit/test/districts-d3-parity.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/districts-d.test.mjs']);
   check(out.bytes.code === 0 && out.bytes.fail === 0, `item 2: D3's parity fixture, the plan fixtures (v17-v23, v7x_d3_*) and D1's districts unchanged (D3's own suites are d3-unit's): ${out.bytes.pass} pass, ${out.bytes.fail} fail`, out.bytes.failing);
   const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*GateJoinTest', '--tests', '*DistrictLandTest', '--tests', '*ApiGJTest', '--tests', '*ApiRulesTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env: { ...process.env, JAVA_HOME, GRADLE_USER_HOME: path.join(root, '.gradle-home') }, timeout: 1_800_000 }));

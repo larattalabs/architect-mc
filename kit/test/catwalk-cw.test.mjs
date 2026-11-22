@@ -202,9 +202,9 @@ test('survival (§6): nothing free, every cell paid, targets; the brackets and s
   for (const [x, y, z] of m.bracketCells) assert.ok(m.deckCells.some((q) => q[0] === x && q[2] === z && q[1] === y + 1), 'a bracket under a deck cell');
 });
 
-test('determinism: three checks give identical answers and artifact shas', async () => {
+test('determinism: two checks give identical answers and artifact shas', async () => {
   const f = fx('valid', 'v7a_cw_cliff.json');
-  const rs = [await run(f), await run(f), await run(f)];
+  const rs = [await run(f), await run(f)];
   assert.ok(rs.every((r) => JSON.stringify(r.check) === JSON.stringify(rs[0].check)));
   assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha));
 });

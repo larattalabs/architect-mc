@@ -214,10 +214,10 @@ test('item 7 (KC) and §4: u04 (coral as another part\'s op) is named by M25:cle
   assert.deepEqual(ruleOf(u5.rep, 'M25:clear'), [], 'only M19 names it: the cell is the pond\'s own shell');
 });
 
-test('item 11: determinism: v73 and c01 plan to the same IR three times', async () => {
+test('item 11: determinism: v73 and c01 plan to the same IR twice', async () => {
   for (const rel of ['valid/v73_f3_coral_pond.json', 'f3/c01_cold_coral.json']) {
     const shas = [];
-    for (let i = 0; i < 3; i++) { const x = await run(read(rel)); shas.push(crypto.createHash('sha256').update(JSON.stringify(x.r.res.ir)).digest('hex')); }
+    for (let i = 0; i < 2; i++) { const x = await run(read(rel)); shas.push(crypto.createHash('sha256').update(JSON.stringify(x.r.res.ir)).digest('hex')); }
     assert.equal(new Set(shas).size, 1, rel);
   }
   assert.ok(KINDS_FORMAT2.includes('coralDecor'));

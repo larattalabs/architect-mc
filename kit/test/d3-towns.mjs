@@ -1,7 +1,9 @@
-// 6c D3 item 1's synthetic towns (kit/test/districts-d3.test.mjs): the town builder and the 300 seeded towns, run on worker threads.
+// 6c D3 item 1's synthetic towns (kit/test/districts-d3.test.mjs): the town builder and the seeded towns, run on worker threads.
 // (SPD) The 300 towns were one test on one thread (~370 s of CPU, the kit suite's critical path at ~13 min under load). Their inputs
 // come from one prng sequence, drawn only before each town's chooseReach, so every worker draws the whole sequence (cheap) and checks
-// the towns n with n % workers === k: the same 300 towns, the same assertions, the same counts, summed by the test.
+// the towns n with n % workers === k: the same towns, the same assertions, the same counts, summed by the test.
+// (SPD3, Noah 2026-11-22: speed over coverage) TOWNS 300 -> 100: the first 100 towns of the same sequence (seed TOWN_SEED), so a
+// failing town n < 100 still reproduces. Towns 100-299 are no longer checked; restore with TOWNS = 300 (docs/SPEED-CUTS.md).
 import assert from 'node:assert/strict';
 import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { besideStanding, keyRuns, runKeys } from '../lib/region/beside.mjs';
@@ -49,9 +51,9 @@ export function joinColumns(J) {
   return footprintOf(J.best.path, 3).filter(([x, z]) => (x - gx) * fx + (z - gz) * fz >= 0).map(([x, z]) => `${x},${z}`);
 }
 
-// ------------------------------------------------------------------ item 1: 300 seeded synthetic towns
+// ------------------------------------------------------------------ item 1: 100 seeded synthetic towns ((SPD3) was 300)
 
-export const TOWNS = 300;
+export const TOWNS = 100;
 export const TOWN_SEED = 20261023;
 
 /**
