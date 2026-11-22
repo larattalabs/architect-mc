@@ -1761,8 +1761,16 @@ public final class Revisions {
 				}
 				dev.larattalabs.architect.api.Stage.State state = g.state(st);
 				if (state != dev.larattalabs.architect.api.Stage.State.PLACED && state != dev.larattalabs.architect.api.Stage.State.PARTIAL) {
+					// (REL-v0910 fix round, P2-1) a stage this undo started that finished by itself (held(decided), or resumed after a restart:
+					// no future reached this driver): its result joins the aggregate from its durable stage snapshot, once
+					if (mergeAwaited(op, st, state == dev.larattalabs.architect.api.Stage.State.UNDONE ? dev.larattalabs.architect.site.OwnerRemovals.result(
+						"stage", rec.groupId + "/" + st) : null)) {
+						writeUndo(l, op);
+					}
 					continue; // undone already, or it never placed anything
 				}
+				awaitStage(op, st);
+				writeUndo(l, op); // (REL fix, P2-1) the stage this undo waits on, durable before its removal starts
 				UNDO_INFLIGHT.add(opId);
 				Integer revOf = null; // (slice T4c) the revision whose undo removes this stage: REMOVAL_FINISHED names it
 				for (Rev rv : rec.revisions) {
@@ -1805,6 +1813,7 @@ public final class Revisions {
 						return;
 					}
 					addStageResult(cur.getAsJsonObject("result"), res);
+					unawait(cur, st); // (REL fix, P2-1) merged from its future: never again from its snapshot
 					writeUndo(l, cur);
 					undoStep(s, l, cur);
 				}));
@@ -1991,6 +2000,59 @@ public final class Revisions {
 		com.google.gson.JsonArray parts = agg.get("owedParts") instanceof com.google.gson.JsonArray a ? a : new com.google.gson.JsonArray();
 		res.owedParts().forEach(p -> parts.add(p.deepCopy()));
 		agg.add("owedParts", parts);
+	}
+
+	/** (REL-v0910 fix round, P2-1) Records in the undo manifest that it started stage {@code st}'s removal (its result is still to merge). */
+	static void awaitStage(JsonObject op, String st) {
+		com.google.gson.JsonArray a = op.get("awaited") instanceof com.google.gson.JsonArray x ? x : new com.google.gson.JsonArray();
+		if (!a.contains(new com.google.gson.JsonPrimitive(st))) {
+			a.add(st);
+		}
+		op.add("awaited", a);
+	}
+
+	static void unawait(JsonObject op, String st) {
+		if (op.get("awaited") instanceof com.google.gson.JsonArray a) {
+			a.remove(new com.google.gson.JsonPrimitive(st));
+		}
+	}
+
+	/**
+	 * (REL-v0910 fix round, P2-1) Stage {@code st}, awaited by undo {@code op} and now undone without its future reaching the driver (it answered
+	 * held(decided) and finished by itself, or resumed after a restart), joins the aggregate once from its stage snapshot {@code snap}
+	 * ({@code stage:<group>/<stage>}: refund, counts, hand-downs, owed parts). True when {@code op} changed (save it). A snapshot gone (evicted
+	 * past the results bound) merges nothing: logged, the stage no longer awaited.
+	 */
+	static boolean mergeAwaited(JsonObject op, String st, @org.jspecify.annotations.Nullable JsonObject snap) {
+		if (!(op.get("awaited") instanceof com.google.gson.JsonArray a) || !a.contains(new com.google.gson.JsonPrimitive(st))) {
+			return false;
+		}
+		if (snap == null) {
+			Architect.LOGGER.warn("Revision undo: stage {} finished by itself and its result snapshot is gone: the undo's result leaves it out", st);
+		} else {
+			Map<String, Integer> rf = new LinkedHashMap<>();
+			if (snap.get("refund") instanceof JsonObject h) {
+				h.entrySet().forEach(e -> rf.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			Map<String, Integer> hd = new LinkedHashMap<>();
+			if (snap.get("handed") instanceof JsonObject h) {
+				h.entrySet().forEach(e -> hd.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			List<String> owed = new ArrayList<>();
+			List<JsonObject> parts = new ArrayList<>();
+			if (snap.get("owedParts") instanceof com.google.gson.JsonArray ps) {
+				ps.forEach(x -> {
+					owed.add(x.getAsJsonObject().get("key").getAsString());
+					parts.add(x.getAsJsonObject());
+				});
+			}
+			JsonObject agg = op.get("result") instanceof JsonObject r ? r : new JsonObject();
+			addStageResult(agg, new dev.larattalabs.architect.site.Groups.Removed(true, List.of(), rf, snap.has("restored") ? snap.get("restored").getAsInt()
+				: 0, hd, List.of(), snap.has("kept") ? snap.get("kept").getAsInt() : 0, null, owed, parts));
+			op.add("result", agg);
+		}
+		unawait(op, st);
+		return true;
 	}
 
 	/** (REL-v0910 fix round, P2-1) A revision undo's result from its aggregate (an undo manifest saved before has no owed keys or parts: none). */

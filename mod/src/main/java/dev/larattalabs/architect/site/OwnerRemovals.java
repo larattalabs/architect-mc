@@ -710,7 +710,7 @@ public final class OwnerRemovals {
 	 * (REL-v0910 fix round, P2-1) The owed parts of {@code t}: one {key, recipient, reason, items} per O effect with a non-empty applied amount
 	 * in {@code amounts}, in effect order. The group's aggregate snapshot and its end ({@code Groups.withOwedParts}) both use it. Pure.
 	 */
-	static JsonArray owedPartsOf(TxnEntry t, Map<Integer, Map<String, Integer>> amounts) {
+	public static JsonArray owedPartsOf(TxnEntry t, Map<Integer, Map<String, Integer>> amounts) {
 		JsonArray out = new JsonArray();
 		for (Effect e : t.effects()) {
 			Map<String, Integer> a = amounts.get(e.i());
@@ -727,7 +727,7 @@ public final class OwnerRemovals {
 	}
 
 	/** (REL-v0910 fix round, P2-1) The applied amount of each of {@code t}'s O effects applied so far (its marker's), by effect index. */
-	static Map<Integer, Map<String, Integer>> appliedOwes(TxnEntry t) {
+	public static Map<Integer, Map<String, Integer>> appliedOwes(TxnEntry t) {
 		Map<Integer, Map<String, Integer>> out = new java.util.TreeMap<>();
 		for (Effect e : t.effects()) {
 			if (dev.larattalabs.architect.txn.CrateTxn.OWE.equals(e.op())) {

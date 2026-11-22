@@ -34670,10 +34670,12 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   by the group's next check. Own holder cargo stays a blocker (its cells are `txn:<key>` areas; `run` checks `ownCargo` before any take or
   P0), and no group data cargo begins while an own attempt is live. Remaining risk: an attempt left planned whose target nobody removes
   again holds its cells until the next start (which aborts it) or the target's next removal; other callers get `PLAYER_BLOCKS_RETURNING`
-  (a retry by time) meanwhile. (P2) Group, stage, region and revision futures carry `owedParts` (the aggregate snapshot's rule,
-  `OwnerRemovals.owedPartsOf`). Remaining risk: a stage whose undo answered `held(decided)` or resumed after a restart finishes by
-  itself, and the revision undo's aggregate leaves that stage's result out (refund and counts too, as before); its own REMOVAL_FINISHED and
-  `removalResult("stage"|"revision")` carry it. (P2) A `Busy` names its blocker as that removal's REMOVAL_FINISHED does (a whole region:
+  (a retry by time) meanwhile. The group's wait on its own attempt (a txn.json that keeps refusing) has no `MAX_WAIT` and no
+  `RemovalWait`, as R1's extraction wait in `prepareTail` never had: it was a FIFO ticket bounded by `WAITING_BEHIND` before.
+  (P2) Group, stage, region and revision futures carry `owedParts` (the aggregate snapshot's rule, `OwnerRemovals.owedPartsOf`; also the
+  txn event's fallback with no snapshot). A revision undo records the stages it awaits in its manifest; one that finished by itself
+  (`held(decided)`, or resumed after a restart) joins its result once from its `stage:` snapshot. Remaining risk: that snapshot evicted
+  (past the 1024-result bound) before the driver sees the stage undone: the stage's result is left out (logged). (P2) A `Busy` names its blocker as that removal's REMOVAL_FINISHED does (a whole region:
   `region`/its id; `Busy.finishedBy`). (P2) dev-start.json arms only on a development start; every test fault is disarmed at
   SERVER_STOPPED, and a start's reset disarms the previous start's kill point.
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
