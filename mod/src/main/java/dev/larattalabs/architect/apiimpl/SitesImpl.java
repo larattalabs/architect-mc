@@ -338,6 +338,31 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		}).thenCompose(f -> f);
 	}
 
+	/** (slice T4R-D, Q8) The last completed result of {@code kind:id}, from its immutable snapshot; null when none. */
+	@Override
+	public @org.jspecify.annotations.Nullable RemoveResult removalResult(String kind, String id) {
+		com.google.gson.JsonObject r = dev.larattalabs.architect.site.OwnerRemovals.result(kind, id);
+		return r == null ? null : resultOf(r);
+	}
+
+	/** A snapshot ({refund, owedParts, restored, kept, handed, cascaded}) as a RemoveResult. */
+	public static RemoveResult resultOf(com.google.gson.JsonObject r) {
+		Map<String, Integer> refund = new java.util.TreeMap<>();
+		r.getAsJsonObject("refund").entrySet().forEach(e -> refund.put(e.getKey(), e.getValue().getAsInt()));
+		Map<String, Integer> handed = new java.util.TreeMap<>();
+		r.getAsJsonObject("handed").entrySet().forEach(e -> handed.put(e.getKey(), e.getValue().getAsInt()));
+		List<String> cascaded = new ArrayList<>();
+		r.getAsJsonArray("cascaded").forEach(x -> cascaded.add(x.getAsString()));
+		List<String> owed = new ArrayList<>();
+		List<com.google.gson.JsonObject> parts = new ArrayList<>();
+		r.getAsJsonArray("owedParts").forEach(x -> {
+			owed.add(x.getAsJsonObject().get("key").getAsString());
+			parts.add(x.getAsJsonObject());
+		});
+		return new RemoveResult(true, List.of(), Views.items(refund), r.get("restored").getAsInt(), r.get("kept").getAsInt(), handed, cascaded, owed, Views
+			.owedParts(parts));
+	}
+
 	static RemoveResult result(Sites.Removed done) {
 		return new RemoveResult(true, List.of(), Views.items(done.returned()), done.restored(), done.kept(), done.handedDown(), done.cascaded(),
 			done.owed(), Views.owedParts(done.owedParts()));

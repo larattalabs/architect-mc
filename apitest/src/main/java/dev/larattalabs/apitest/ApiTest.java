@@ -155,6 +155,14 @@ public class ApiTest implements ModInitializer {
 				if (c instanceof dev.larattalabs.architect.api.ArchitectRefused ar) {
 					err.addProperty("reason", ar.reason().name());
 					err.addProperty("detail", ar.detail());
+					if (ar.busy() != null) { // (slice T4R-D, A7a) the typed busy cause
+						JsonObject bz = new JsonObject();
+						bz.addProperty("kind", ar.busy().kind().name());
+						bz.addProperty("blockingId", ar.busy().blockingId());
+						bz.addProperty("blockingKind", ar.busy().blockingKind());
+						bz.addProperty("blockingOwner", ar.busy().blockingOwner());
+						err.add("busy", bz);
+					}
 				}
 				RESULTS.put(key, err);
 			} else {
@@ -527,6 +535,11 @@ public class ApiTest implements ModInitializer {
 				PREVIEW.set(a[1].equals("clear") ? new String[] {"clear"} : Arrays.copyOfRange(a, 1, a.length));
 				return later("preview", new CompletableFuture<>());
 			}
+			case "removalResult": {
+				// removalResult <kind> <id>: (slice T4R-D, Q8) Sites.removalResult, null when none
+				RemoveResult rr = api.sites(server).removalResult(a[1], a[2]);
+				return rr == null ? com.google.gson.JsonNull.INSTANCE : removeJson(rr);
+			}
 			case "get": {
 				JsonElement v = RESULTS.get(a[1]);
 				JsonObject o = new JsonObject();
@@ -687,6 +700,16 @@ public class ApiTest implements ModInitializer {
 		JsonArray ow = new JsonArray();
 		r.owed().forEach(ow::add); // (T2b) owed keys, listed apart from the refund
 		o.add("owed", ow);
+		JsonArray op = new JsonArray(); // (slice T4R-D) each owed key's recipient, reason and booked amount
+		for (dev.larattalabs.architect.api.OwedPart p : r.owedParts()) {
+			JsonObject x = new JsonObject();
+			x.addProperty("key", p.key());
+			x.addProperty("recipient", p.recipient());
+			x.addProperty("reason", p.reason());
+			x.add("items", items(p.items()));
+			op.add(x);
+		}
+		o.add("owedParts", op);
 		return o;
 	}
 

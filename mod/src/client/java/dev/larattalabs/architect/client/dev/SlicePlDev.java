@@ -216,6 +216,24 @@ public final class SlicePlDev {
 		JsonArray c = new JsonArray();
 		r.cascaded().forEach(c::add);
 		o.add("cascaded", c);
+		JsonObject rf = new JsonObject(); // (slice T4R-D, A3) the refund, owed keys and owed parts (dev.rv.undo)
+		r.refund().forEach((k, v) -> rf.addProperty(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(k).toString(), v));
+		o.add("refund", rf);
+		JsonArray ow = new JsonArray();
+		r.owed().forEach(ow::add);
+		o.add("owed", ow);
+		JsonArray op = new JsonArray();
+		for (dev.larattalabs.architect.api.OwedPart p : r.owedParts()) {
+			JsonObject x = new JsonObject();
+			x.addProperty("key", p.key());
+			x.addProperty("recipient", p.recipient());
+			x.addProperty("reason", p.reason());
+			JsonObject it = new JsonObject();
+			p.items().forEach((k, v) -> it.addProperty(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(k).toString(), v));
+			x.add("items", it);
+			op.add(x);
+		}
+		o.add("owedParts", op);
 		return o;
 	}
 
