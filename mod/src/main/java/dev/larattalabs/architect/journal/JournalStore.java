@@ -662,6 +662,17 @@ public final class JournalStore {
 	 * superseded files go). The future completes when it is durable, or fails (then the view is back to the durable state).
 	 * Server thread.
 	 */
+	/** (slice PLR2) TEST: the commit writer stalls for good (until the JVM halts): no later commit reaches the disk. */
+	public void stallIo() {
+		io.execute(() -> {
+			try {
+				Thread.sleep(Long.MAX_VALUE);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		});
+	}
+
 	public synchronized CompletableFuture<Void> submit(Txn t) {
 		if (closed) {
 			return CompletableFuture.failedFuture(new IOException("the journal is closed"));

@@ -824,6 +824,14 @@ public final class WorldJournal {
 		failNext = true;
 	}
 
+	/** (slice PLR2) TEST: no later commit reaches the disk (the writer stalls until the JVM halts). */
+	public static void stallCommits() {
+		JournalStore s = store;
+		if (s != null) {
+			s.stallIo();
+		}
+	}
+
 	/** A named step of a change: halts the JVM when it is the armed kill point (no shutdown hooks, nothing saved). */
 	public static void kill(String point) {
 		if ((point + "+save").equals(killAt)) {

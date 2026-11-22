@@ -915,7 +915,7 @@ public final class Placement {
 	/**
 	 * (slice PLR2) TEST, dev only: {@code architect-dev-arm.json} in the world's folder, read once (and deleted) as the world starts, before
 	 * the queue file is resumed, arms a fault for the start's own recovery (a kill point is in-JVM, and a crash test's restart is a new JVM):
-	 * {@code killAt} ({@link WorldJournal#killAt}), {@code failNextCommit} ({@link WorldJournal#failNextCommit}), {@code failRollback} ({@link RestoreJob#failRollback}). Read only on a dev or headless
+	 * {@code killAt} ({@link WorldJournal#killAt}), {@code stallJournal} ({@link WorldJournal#stallCommits}), {@code failRollback} ({@link RestoreJob#failRollback}). Read only on a dev or headless
 	 * gate host (ARCHITECT_HEADLESS or ARCHITECT_DEV_TOKEN set).
 	 */
 	private static void devArm(MinecraftServer srv) {
@@ -932,8 +932,8 @@ public final class Placement {
 			if (o.has("killAt")) {
 				WorldJournal.killAt(o.get("killAt").getAsString());
 			}
-			if (o.has("failNextCommit") && o.get("failNextCommit").getAsBoolean()) {
-				WorldJournal.failNextCommit(); // the start's next journal commit is not durable (as on a full disk)
+			if (o.has("stallJournal") && o.get("stallJournal").getAsBoolean()) {
+				WorldJournal.stallCommits(); // no commit of this start reaches the disk before its halt
 			}
 			if (o.has("failRollback")) {
 				RestoreJob.failRollback = o.get("failRollback").getAsInt();
