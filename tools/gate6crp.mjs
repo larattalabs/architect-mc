@@ -394,6 +394,38 @@ steps.ingame = async () => {
 
 // ------------------------------------------------------------------ crash: the record against the journal after a halt
 
+/**
+ * (PLR-U) The queue file's text with its "infra" jobs taken out of the top-level "jobs" array, every other byte as it was (a parse and
+ * stringify in JS would round its longs past 2^53), and the dropped jobs' sites.
+ */
+function dropInfraJobs(raw) {
+  const at = raw.indexOf('"jobs"');
+  const open = raw.indexOf('[', at);
+  if (at < 0 || open < 0) throw new Error('no jobs array in the queue file');
+  const elems = [];
+  let depth = 0, str = false, esc = false, start = -1, close = -1;
+  for (let k = open + 1; k < raw.length && close < 0; k++) {
+    const c = raw[k];
+    if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue; }
+    if (c === '"') { str = true; if (depth === 0 && start < 0) start = k; continue; }
+    if (c === '{' || c === '[') { if (depth === 0) start = k; depth++; continue; }
+    if (c === '}' || c === ']') {
+      if (depth === 0) { if (start >= 0) elems.push(raw.slice(start, k).trim()); close = k; continue; }
+      depth--;
+      if (depth === 0) { elems.push(raw.slice(start, k + 1)); start = -1; }
+      continue;
+    }
+    if (c === ',' && depth === 0) start = -1;
+  }
+  if (close < 0) throw new Error('the queue file\'s jobs array does not close');
+  const keep = [], dropped = [];
+  for (const e of elems) {
+    const j = JSON.parse(e); // read only for kind and siteId; the kept text is the original slice
+    if (j.kind === 'infra') dropped.push(j.siteId); else keep.push(e);
+  }
+  return { text: raw.slice(0, open + 1) + keep.join(',') + raw.slice(close), dropped };
+}
+
 steps.crash = async () => {
   await ensure();
   const out = {};
@@ -426,12 +458,13 @@ steps.crash = async () => {
     const atHalt = fs.existsSync(recDir) ? fs.readdirSync(recDir).filter((f) => f.endsWith('.bin')) : [];
     if (point.endsWith('/nojob')) {
       const qf = path.join(L.SAVES, world, 'architect-queue.json');
-      const q = JSON.parse(fs.readFileSync(qf, 'utf8'));
-      const dropped = (q.jobs ?? []).filter((j) => j.kind === 'infra').map((j) => j.siteId);
-      q.jobs = (q.jobs ?? []).filter((j) => j.kind !== 'infra');
-      fs.writeFileSync(qf, JSON.stringify(q));
+      // spliced out of the raw text: a JSON round trip in JS would round the file's longs (maxWaitTicks Long.MAX_VALUE) past 2^53
+      const raw = fs.readFileSync(qf, 'utf8');
+      const { text, dropped } = dropInfraJobs(raw);
+      fs.writeFileSync(qf, text);
       out[`${tag}_dropped`] = dropped;
-      check(dropped.length >= 1, `${point}: the halted tile's job taken out of the queue file (${dropped.join(', ')})`);
+      check(dropped.length >= 1 && JSON.stringify(JSON.parse(text).jobs.filter((j) => j.kind === 'infra')) === '[]',
+        `${point}: the halted tile's job taken out of the queue file (${dropped.join(', ')}), the rest of the file as it was`);
     }
     const undoLeavesNothing = async ({ open = true } = {}) => {
       // (PLR-U, Steward's B092L-1 undo ask) halt mid-forms, restart, then undo: the removal completes and, after a clean stop and one more
