@@ -8,7 +8,7 @@
 //     unit      (cl-unit)               offline: item 1 (kit/test/cl.test.mjs: the profiles change only their edges, the post-check, rest
 //                                       landings, the top gate, the face rule, every refusal with its evidence and wouldFit re-checked
 //                                       alone, the broken variants, climbs_demo flat and natural by the kit's movers (the behavioural test's
-//                                       kit half), KC's stair beside a fountain (item 9), the catalogue's three flips (item 12), 3 checks
+//                                       kit half), KC's stair beside a fountain (item 9), the catalogue's three flips (item 12), 2 checks
 //                                       identical (item 13)); the foundation's, P0's, K1's and T3's tests; the Java ApiCLTest; item 2 (byte
 //                                       identity: every committed plan fixture as on the merge base but the named exceptions); item 3 (the
 //                                       59 asks: fixtures/plan/cl/asks-gap-before.txt and -after.txt re-made here and on the merge base);
@@ -135,7 +135,7 @@ steps.unit = async () => {
   const out = {};
   // item 1 (and 9, 12, 13): the kit's CL tests, the foundation's, P0's, K1's and T3's
   out.kit = kitOnce(['kit/test/cl.test.mjs', 'kit/test/f7a-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/k1-foundation.test.mjs', 'kit/test/t3-foundation.test.mjs']);
-  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 25, `items 1, 9, 12, 13 (kit): the profiles change only their edges; NO_CLIMB and the climb deviation; rest landings at every rest; the top gate; the face rule; every refusal (NO_CLIMB, MOVER, ANCHOR, SPAN, UNREACHABLE) with evidence and its wouldFit re-checked alone; the broken variants; climbs_demo flat and natural (the kit movers: the mesa's bed unreached by villagers, the stair's reached); a stair beside a fountain M25:clear 0; the catalogue's three flips; 3 checks identical; the foundation's, P0's, K1's and T3's tests: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 25, `items 1, 9, 12, 13 (kit): the profiles change only their edges; NO_CLIMB and the climb deviation; rest landings at every rest; the top gate; the face rule; every refusal (NO_CLIMB, MOVER, ANCHOR, SPAN, UNREACHABLE) with evidence and its wouldFit re-checked alone; the broken variants; climbs_demo flat and natural (the kit movers: the mesa's bed unreached by villagers, the stair's reached); a stair beside a fountain M25:clear 0; the catalogue's three flips; 2 checks identical; the foundation's, P0's, K1's and T3's tests: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // the Java: the feature (ApiCLTest)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
   // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
