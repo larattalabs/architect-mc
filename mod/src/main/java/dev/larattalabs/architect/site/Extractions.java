@@ -383,6 +383,11 @@ public final class Extractions {
 	 * txn recovers in the core (installed or undecided, the core's fate rule), kept once retired; one whose txn retired: kept.
 	 */
 	static void atStart(MinecraftServer srv) {
+		atStart(srv, k -> TxnServer.core().open().stream().anyMatch(t -> k.equals(t.key)), k -> TxnServer.core().cache().committed(k) != null);
+	}
+
+	/** (TEST seam) {@link #atStart(MinecraftServer)} with the core's open and committed keys as predicates. */
+	static void atStart(@Nullable MinecraftServer srv, java.util.function.Predicate<String> openKey, java.util.function.Predicate<String> committedKey) {
 		boolean changed = false;
 		synchronized (Extractions.class) {
 			for (JsonObject tb : TABLE.values()) {
@@ -390,11 +395,11 @@ public final class Extractions {
 					JsonObject at = a.getValue().getAsJsonObject();
 					String st = at.get("state").getAsString();
 					String key = at.get("key").getAsString();
-					boolean open = TxnServer.core().open().stream().anyMatch(t -> key.equals(t.key));
+					boolean open = openKey.test(key);
 					if (open) {
 						continue;
 					}
-					if (TxnServer.core().cache().committed(key) != null) {
+					if (committedKey.test(key)) {
 						if (!st.equals("kept")) {
 							at.addProperty("state", "kept");
 							changed = true;
@@ -410,6 +415,9 @@ public final class Extractions {
 		if (changed) {
 			Stockpiles.owedChanged();
 			CrateSettle.boxesChanged();
+			if (srv == null) {
+				return;
+			}
 			try {
 				Stockpiles.saveWithWorldConfirmed(srv);
 			} catch (IllegalStateException e) {
