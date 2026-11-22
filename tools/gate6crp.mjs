@@ -398,14 +398,17 @@ steps.crash = async () => {
   await ensure();
   const out = {};
   // (slice PLR) RG4 without a save too (Steward's halt had none); GATE6CRP_POINTS (comma list) runs a subset
-  const points = ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'RG4', 'K4+save', 'RP1'];
+  // (PLR-U) RG4/nojob: RG4 with the tile's job gone from the queue file too (its last save never held it: Steward's B092L-1 worlds), so
+  // the load's stray sweep, not the job's resume, must roll the record back
+  const points = ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'RG4', 'RG4/nojob', 'K4+save', 'RP1'];
   const only = (process.env.GATE6CRP_POINTS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   for (const point of only.length ? points.filter((x) => only.includes(x)) : points) {
-    const tag = point.replace('+', '_');
+    const tag = point.replace('+', '_').replace('/', '_');
+    const kill = point.split('/')[0];
     const world = `G6B RP Crash ${tag}`;
     await freshFlat(world);
     const p = await planDemo();
-    await call('dev.journal.killAt', { point }, 10_000);
+    await call('dev.journal.killAt', { point: kill }, 10_000);
     let region = null;
     L.realise(p.planId).then((r) => { region = r; }).catch(() => null);
     let down = false;
@@ -421,9 +424,53 @@ steps.crash = async () => {
     const rid = region ?? fs.readdirSync(regionsDir).filter((d) => fs.existsSync(path.join(regionsDir, d, 'region.json'))).sort().at(-1);
     const recDir = path.join(regionsDir, rid, 'realised', 'L0');
     const atHalt = fs.existsSync(recDir) ? fs.readdirSync(recDir).filter((f) => f.endsWith('.bin')) : [];
+    if (point.endsWith('/nojob')) {
+      const qf = path.join(L.SAVES, world, 'architect-queue.json');
+      const q = JSON.parse(fs.readFileSync(qf, 'utf8'));
+      const dropped = (q.jobs ?? []).filter((j) => j.kind === 'infra').map((j) => j.siteId);
+      q.jobs = (q.jobs ?? []).filter((j) => j.kind !== 'infra');
+      fs.writeFileSync(qf, JSON.stringify(q));
+      out[`${tag}_dropped`] = dropped;
+      check(dropped.length >= 1, `${point}: the halted tile's job taken out of the queue file (${dropped.join(', ')})`);
+    }
+    const undoLeavesNothing = async ({ open = true } = {}) => {
+      // (PLR-U, Steward's B092L-1 undo ask) halt mid-forms, restart, then undo: the removal completes and, after a clean stop and one more
+      // start, no record of the region is left (a stray placing record is never a group member, so the removal never takes it: without the
+      // load's rollback it stays placing for good, its journal entry covering the tile the removal restored)
+      if (open) {
+        await L.openWorld(world);
+        await L.tp(CX, 40, CZ - 10);
+      }
+      const t0 = Date.now();
+      const rm = await call('dev.region.remove', { region: rid, requester: OWNER }, 3_600_000).catch((e) => ({ error: String(e.message ?? e) }));
+      let rs = null;
+      for (let i = 0; i < 1200; i++) {
+        const s = await call('dev.region.state', { region: rid }, 60_000).catch(() => null);
+        rs = s?.view?.state ?? 'REMOVED';
+        if (rs === 'REMOVED' || rs === 'PARTIAL' || rs === 'FAILED' || rm.removed === false || rm.error) break;
+        await sleep(500);
+      }
+      check(rs === 'REMOVED' && !rm.error, `${point}: the undo after the restart completes (region ${rs} in ${((Date.now() - t0) / 1000).toFixed(1)} s${rm.error ? `; ${rm.error}` : ''})`, rm);
+      await L.leaveWorld();
+      await L.openWorld(world);
+      await L.leaveWorld();
+      const sf = path.join(L.SAVES, world, 'architect-sites.json');
+      const infra3 = (fs.existsSync(sf) ? (JSON.parse(fs.readFileSync(sf, 'utf8')).infra ?? []) : []).filter((r) => r.ext?.['architect_mc:region'] === rid);
+      out[tag] ??= { region: rid };
+      out[tag].afterUndo = infra3.map((r) => `${r.id}${r.placing ? ' placing' : ''}${r.pendingSince != null ? ' pending' : ''}`);
+      check(infra3.length === 0, `${point}: after the undo, a clean stop and one more start no road or cell site record of the region is left (${infra3.length}: ${out[tag].afterUndo.join(', ')})`);
+    };
     await L.openWorld(world);
     await L.tp(CX, 40, CZ - 10);
-    const st = await L.waitRegion(rid, 3_600_000);
+    let st;
+    try {
+      st = await L.waitRegion(rid, point.endsWith('/nojob') ? 600_000 : 3_600_000);
+    } catch (e) {
+      // (PLR-U) the stray's item held PLACING with no job and no rollback: the region never finishes (Steward's B092L-1 stall)
+      check(false, `${point}: after the restart the region finishes (${String(e?.message ?? e)})`);
+      await undoLeavesNothing({ open: false }); // (the world is still open)
+      continue;
+    }
     // (settle: a record reads pending until its item is marked placed)
     let rv = await realised(rid, { verify: true });
     // (speed audit B) polled every 500 ms, at most the 30 s the six 5 s sleeps made
@@ -457,6 +504,7 @@ steps.crash = async () => {
     const items2 = rv2.tiles.map((t) => `${t.stage}/${t.set}/${t.key}=${t.site}`).sort().join(' ');
     out[tag].afterRestart2 = { records: infra2.map((r) => r.id), placingLeftover: rv2.verify.placingLeftover, ok: rv2.verify.ok };
     check(back.length === 0 && rv2.verify.placingLeftover === 0 && rv2.verify.ok && items1 === items2, `${point}: after one more start the rolled-back record(s) are settled (${pendingIds.length ? pendingIds.join(', ') + ' gone' : 'none'}; ${back.length} back or placing), no entry PLACING (${rv2.verify.placingLeftover}), the record verifies, each tile still counted once by the same site (${rv2.tiles.length} tiles)`, { back: back.map((r) => r.id), items1, items2 });
+    if (kill === 'RG4' && !point.includes('+')) await undoLeavesNothing();
     if (point === 'RP1+save') {
       // the record of the tile that halted was written for a site whose commit never happened: rewritten for the site that did
       check(atHalt.length >= 1, `${point}: the halted tile's record was on disk before its PLACING commit (${atHalt.join(', ')})`);
