@@ -59,6 +59,11 @@ public final class TxnEntry {
 	/** (slice T4R) The highest member barrier ({@link TxnCore#BARRIER}) a drive passed this session: every effect before it is durable. */
 	int passed = -1;
 
+	/** (slice T4R-D, P2-6) A progress signature: a waiting removal's counter advances only while this stays the same between checks. */
+	public long progress() {
+		return ((long) passed * 31 + (phase == null ? 0 : phase.ordinal())) * 31 + (dirty ? 1 : 0) + 7L * emitted.size() + 13L * (held == null ? 0 : 1);
+	}
+
 	/** (slice T4R) Whether every effect up to {@code i} is durable: a member barrier at or after it was passed, or its effects are done. */
 	public boolean durableThrough(int i) {
 		return passed >= i || phase == Phase.EFFECTS_DONE || phase == Phase.RETIRING;

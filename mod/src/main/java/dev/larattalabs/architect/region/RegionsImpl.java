@@ -3063,7 +3063,8 @@ public final class RegionsImpl implements Regions {
 			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
 			r.position, r.busy, Revisions.views(r), r.removalStop, r.removalStopReason, r.removalStop == dev.larattalabs.architect.api.RemovalStop.NONE ? null
 				: r.removalStopCause == null ? dev.larattalabs.architect.api.RemovalStopCause.OTHER : r.removalStopCause,
-			dev.larattalabs.architect.apiimpl.StatusViews.beside(r.ext), dev.larattalabs.architect.apiimpl.StatusViews.land(r.ext));
+			dev.larattalabs.architect.apiimpl.StatusViews.beside(r.ext), dev.larattalabs.architect.apiimpl.StatusViews.land(r.ext), r.groupId == null ? null
+				: dev.larattalabs.architect.site.Groups.waitOfAny(r.groupId)); // (slice T4R-D, A7b)
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */

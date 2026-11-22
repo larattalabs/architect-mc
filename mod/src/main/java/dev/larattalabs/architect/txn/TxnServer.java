@@ -68,6 +68,7 @@ public final class TxnServer {
 	}
 
 	private static void register(TxnCore c) {
+		TxnCore.BEGIN_GUARD = dev.larattalabs.architect.site.RemovalAreas::beginGuard; // (slice T4R-D, §4.2)
 		c.register(TestMove.KIND);
 		c.register(OwedTxn.COLLECT_KIND); // (slice T2b)
 		c.register(OwedTxn.CREDIT_KIND);

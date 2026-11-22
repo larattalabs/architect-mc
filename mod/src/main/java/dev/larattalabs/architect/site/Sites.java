@@ -716,6 +716,11 @@ public final class Sites {
 		default void add(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) throws SiteException {
 			add(reason, message);
 		}
+
+		/** (slice T4R-D, A7a) A typed SITE_BUSY refusal: thrown as it is by a placement, listed by a verdict. */
+		default void busy(SiteException e) throws SiteException {
+			add(e.reason(), e.getMessage());
+		}
 	}
 
 	private static final Refusals THROW = new Refusals() {
@@ -727,6 +732,11 @@ public final class Sites {
 		@Override
 		public void add(Reason r, String m, List<dev.larattalabs.architect.api.BuildHit> b) throws SiteException {
 			throw new SiteException(r, m, b);
+		}
+
+		@Override
+		public void busy(SiteException e) throws SiteException {
+			throw e;
 		}
 	};
 
@@ -877,6 +887,15 @@ public final class Sites {
 			Infra met = style == null || road == null ? null : Infras.get(road);
 			String what = style == null || met != null && met.road() ? "road " + road : road == null ? "a walk surface" : "walk surface of " + road;
 			layerNotes.add(step > 1 ? "approach meets " + what + " with a step of " + step : "approach meets " + what);
+		}
+		{
+			// (slice T4R-D, §4.2 placement pre-check, Q14) refused before any pin, quote, charge or write when its box meets a removal in flight
+			// (an owner record's footprint, a begun group) or a waiting ticket: typed, never refused cell by cell mid-job
+			SiteException busy = RemovalAreas.busyRefusal(dimensionId(level), List.of(snapBox), moving == null ? java.util.Set.of() : java.util.Set.of(moving
+				.id()), "place it");
+			if (busy != null) {
+				out.busy(busy);
+			}
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		tr.mark("overlap");
@@ -1793,9 +1812,9 @@ public final class Sites {
 					boxes.add(ci.box());
 				}
 			}
-			String busy = RemovalAreas.overlapWhy(b.dimension(), boxes, self);
+			SiteException busy = RemovalAreas.busyRefusal(b.dimension(), boxes, self, "remove " + id); // (slice T4R-D, A7a) typed
 			if (busy != null) {
-				throw new SiteException(Reason.SITE_BUSY, "Not yet: " + busy + "; remove " + id + " again once it is done");
+				throw busy;
 			}
 		}
 		// (6c IRR, S-IRR-4) an irrigated farm lot's sources leave with it: drained first and exactly, before anything is restored

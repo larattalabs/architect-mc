@@ -24,8 +24,32 @@ public final class RemovalAreas {
 	private RemovalAreas() {
 	}
 
-	/** One area: its dimension, box and whose it is (for the reason). */
-	record Area(String dim, Anchors.Bounds box, String who, String site) {
+	/**
+	 * One area: its dimension, box and whose it is (for the reason). (slice T4R-D, A7a) {@code busy}: what kind of answer it gives a NEW
+	 * attempt it blocks (its blocking id, kind and owner), null for a generic one.
+	 */
+	record Area(String dim, Anchors.Bounds box, String who, String site, dev.larattalabs.architect.api.@Nullable Busy busy) {
+		Area(String dim, Anchors.Bounds box, String who, String site) {
+			this(dim, box, who, site, null);
+		}
+
+		/** The typed busy answer of this area (REMOVAL_IN_PROGRESS of its removal, unless it says otherwise). */
+		dev.larattalabs.architect.api.Busy busyOrDefault() {
+			if (busy != null) {
+				return busy;
+			}
+			String id = site.startsWith("group:") ? site.substring(6) : site;
+			String kind = site.startsWith("group:") ? id.contains("/") ? "stage" : "group" : Infras.get(id) != null || Infras.pending(id) != null ? "road" : "site";
+			String owner = null;
+			if (kind.equals("group") || kind.equals("stage")) {
+				SiteGroupRec g = Sites.group(id.contains("/") ? id.substring(0, id.indexOf('/')) : id);
+				owner = g == null ? null : g.owner();
+			} else {
+				Site x = Sites.get(id) != null ? Sites.get(id) : Sites.pendingRecord(id);
+				owner = x == null ? null : x.owner();
+			}
+			return new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.REMOVAL_IN_PROGRESS, id, kind, owner);
+		}
 	}
 
 	/** Pure: the first of {@code areas} in {@code dim} whose box meets one of {@code boxes} and whose site is not one of {@code self}, or null. */
@@ -89,7 +113,28 @@ public final class RemovalAreas {
 
 	/** (TEST seam, slice T4R-N) {@link #heldAreas()} against {@code core} (the txn core whose loaded holds count). */
 	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core) {
+		return heldAreas(core, null);
+	}
+
+	/**
+	 * {@link #heldAreas(dev.larattalabs.architect.txn.TxnCore)} with the FIFO tickets (slice T4R-D, §4.2 (f)): every waiting group's area that
+	 * holds a ticket, or (for {@code behind}, a waiting group itself) only those ahead of it in the queue.
+	 */
+	static List<Area> heldAreas(dev.larattalabs.architect.txn.@Nullable TxnCore core, Groups.@Nullable Removal behind) {
 		List<Area> out = legacyAreas();
+		for (Groups.Removal t : Groups.tickets()) {
+			if (t == behind) {
+				break; // only the tickets ahead of it
+			}
+			String g = t.group + (t.stage == null ? "" : "/" + t.stage);
+			SiteGroupRec rec = Sites.group(t.group);
+			List<Area> mine = new ArrayList<>();
+			groupAreas(t, "the removal of group " + g + " (waiting first)", mine);
+			for (Area a : mine) {
+				out.add(new Area(a.dim(), a.box(), a.who(), a.site(), new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.WAITING_BEHIND, g,
+					t.stage == null ? "group" : "stage", rec == null ? null : rec.owner())));
+			}
+		}
 		for (var e : CrateSettle.durableJson().entrySet()) {
 			com.google.gson.JsonObject st = e.getValue().getAsJsonObject();
 			if (st.get("box") instanceof com.google.gson.JsonArray b && b.size() == 6 && st.has("dim")) {
@@ -197,6 +242,89 @@ public final class RemovalAreas {
 	static @Nullable String overlapWhy(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, dev.larattalabs.architect.txn.TxnCore core) {
 		Area a = first(heldAreas(core), dim, boxes, self);
 		return a == null ? null : a.who() + " is still in progress over " + Anchors.str(a.box());
+	}
+
+	/** (slice T4R-D, A7a) The first in-flight removal's area (tickets included) meeting {@code boxes}, or null. Server thread. */
+	public static @Nullable Area overlapArea(String dim, Collection<Anchors.Bounds> boxes, Set<String> self) {
+		return first(heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), null), dim, boxes, self);
+	}
+
+	/** (slice T4R-D, A7a) {@link #overlapArea} as a typed SITE_BUSY refusal ("Not yet: ..."), or null when free. */
+	public static Sites.@Nullable SiteException busyRefusal(String dim, Collection<Anchors.Bounds> boxes, Set<String> self, String what) {
+		Area a = overlapArea(dim, boxes, self);
+		return a == null ? null : new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "Not yet: " + a.who() + " is still in progress over "
+			+ Anchors.str(a.box()) + "; " + what + " again once it is done", a.busyOrDefault());
+	}
+
+	/** (slice T4R-D, §4.2 FIFO) A waiting group's admission: the first area ahead of it (tickets ahead included) meeting its members, or null. */
+	static @Nullable Area admissionOf(Groups.Removal r) {
+		Set<String> self = Set.of("group:" + r.group + (r.stage == null ? "" : "/" + r.stage));
+		List<Area> held = heldAreas(dev.larattalabs.architect.txn.TxnServer.core(), r);
+		java.util.Set<String> ids = new java.util.LinkedHashSet<>(r.undoSites);
+		ids.addAll(r.sites);
+		for (String id : ids) {
+			Anchors.Bounds b = Groups.boxOf(id);
+			String dim = Groups.dimensionOfMember(id);
+			if (b != null && dim != null) {
+				Area a = first(held, dim, List.of(b), self);
+				if (a != null) {
+					return a;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (slice T4R-D, §4.2 begin guard) Why a NEW txn of {@code kind} over {@code resources} may not begin: one of its cells ({@code crate:},
+	 * {@code cell:}, {@code rbox:} resources) meets an owner record's footprint or a waiting ticket's area. Removal txns (their own admission)
+	 * and a removal's cargo (a ticket holder's prerequisite) are exempt; ATTACHED, REPLAYED and recovery never reach it. Server thread.
+	 */
+	public static @Nullable String beginGuard(String kind, @Nullable String key, List<String> resources) {
+		if (kind.startsWith("removal.") || kind.startsWith("owed.")) {
+			return null;
+		}
+		List<Area> areas = new ArrayList<>();
+		OwnerRemovals.areas(areas);
+		for (Groups.Removal t : Groups.tickets()) {
+			groupAreas(t, "the removal of group " + t.group + " (waiting first)", areas);
+		}
+		if (areas.isEmpty()) {
+			return null;
+		}
+		for (String res : resources) {
+			Area cell = resourceArea(res);
+			if (cell == null) {
+				continue;
+			}
+			Area a = first(areas, cell.dim(), List.of(cell.box()), Set.of());
+			if (a != null) {
+				return "SITE_BUSY " + a.busyOrDefault().token() + ": " + a.who() + " is in progress over " + Anchors.str(a.box());
+			}
+		}
+		return null;
+	}
+
+	/** A cell resource ({@code crate:<dim>@x,y,z}, {@code cell:<dim>@x,y,z}) or a removal box as an area; null for any other. Pure. */
+	static @Nullable Area resourceArea(String res) {
+		if (res.startsWith("rbox:")) {
+			return rboxArea(res, res, "");
+		}
+		int c = res.indexOf(':');
+		int at = res.lastIndexOf('@');
+		if (c < 0 || at < c || !(res.startsWith("crate:") || res.startsWith("cell:"))) {
+			return null;
+		}
+		String[] p = res.substring(at + 1).split(",");
+		if (p.length != 3) {
+			return null;
+		}
+		try {
+			int x = Integer.parseInt(p[0]), y = Integer.parseInt(p[1]), z = Integer.parseInt(p[2]);
+			return new Area(res.substring(c + 1, at), new Anchors.Bounds(x, y, z, x, y, z), res, "");
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	/** {@link #overlapWhy} against the pre-T4R removals in flight only (a new group's wait before it plans). Server thread. */

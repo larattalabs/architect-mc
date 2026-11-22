@@ -240,7 +240,8 @@ public final class Views {
 		};
 		return new dev.larattalabs.architect.api.SiteGroup(g.id(), g.owner(), g.ext(), g.sites(), g.stages().stream().map(Views::stage).toList(), state,
 			g.crate() == null ? Optional.empty() : Optional.of(new BlockPos(g.crate().x(), g.crate().y(), g.crate().z())),
-			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty(), stopOf(g.id()), causeOf(g.id()));
+			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty(), stopOf(g.id()), causeOf(g.id()), dev.larattalabs.architect.site.Groups.waitOf(g
+				.id(), null)); // (slice T4R-D, A7b)
 	}
 
 	private static dev.larattalabs.architect.api.RemovalStop stopOf(String group) {

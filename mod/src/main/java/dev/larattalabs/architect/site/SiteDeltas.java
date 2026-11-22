@@ -990,12 +990,28 @@ public final class SiteDeltas {
 
 	/** Applies a delta now (instant). Throws with the first refusal when the check refuses. */
 	public static Result apply(ServerLevel level, Request r) throws Sites.SiteException {
+		busyCheck(r.siteId(), "apply the update");
 		Check c = check(level, r);
 		if (!c.ok()) {
 			Refusal f = c.refusals().get(0);
 			throw new Sites.SiteException(f.reason(), f.message());
 		}
 		return applyChecked(level, c, r.edits() == DeltaPlanner.Edits.OVERWRITE, "delta");
+	}
+
+	/**
+	 * (slice T4R-D, §4.2 placement pre-check) An update or revert of {@code siteId} refused up front, typed, before any pin, quote, charge or
+	 * write, while its restore box meets a removal in flight or a waiting ticket.
+	 */
+	static void busyCheck(String siteId, String what) throws Sites.SiteException {
+		Site b = Sites.get(siteId);
+		if (b == null) {
+			return;
+		}
+		Sites.SiteException e = RemovalAreas.busyRefusal(b.dimension(), List.of(b.restoreBox()), java.util.Set.of(siteId), what);
+		if (e != null) {
+			throw e;
+		}
 	}
 
 	/** D1-D8 of a checked delta; {@code kind}: {@code delta} or {@code forward} (a revert done as a forward delta). */
@@ -1310,6 +1326,7 @@ public final class SiteDeltas {
 		if (b == null) {
 			throw new Sites.SiteException("No site " + siteId);
 		}
+		busyCheck(siteId, "revert it");
 		if (SiteFit.bound(b.ext())) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, SiteFit.fixedMessage(siteId, "a revert")); // (7b PL)
 		}

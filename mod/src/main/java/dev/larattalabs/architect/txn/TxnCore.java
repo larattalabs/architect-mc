@@ -341,10 +341,25 @@ public final class TxnCore {
 		if (why != null) {
 			return new Started(Begin.HELD, null, null, why);
 		}
+		// (slice T4R-D, §4.2) the begin guard: a NEW attempt whose cells meet a removal's footprint or a waiting ticket is refused, holding
+		// nothing; checked after the attach and replay above, so an ATTACHED or REPLAYED txn and every recovery drive are never refused
+		BeginGuard g = BEGIN_GUARD;
+		String busy = g == null ? null : g.refuse(kindName, key, resources);
+		if (busy != null) {
+			return new Started(Begin.HELD, null, null, busy);
+		}
 		TxnEntry t = new TxnEntry("tx-" + next++, kindName, k.kv(), key, env.tick(), env.wall(), who, resources, k.decider());
 		t.live = true;
 		return new Started(Begin.NEW, t, null, null);
 	}
+
+	/** (slice T4R-D) Why a NEW txn may not begin over {@code resources} (null: it may). */
+	public interface BeginGuard {
+		@org.jspecify.annotations.Nullable String refuse(String kind, @org.jspecify.annotations.Nullable String key, List<String> resources);
+	}
+
+	/** (slice T4R-D) The server's begin guard (RemovalAreas.beginGuard); null in model tests. */
+	public static volatile @org.jspecify.annotations.Nullable BeginGuard BEGIN_GUARD;
 
 	/** R-1: adds one planned effect (every amount) to a NEW entry. */
 	public Effect plan(TxnEntry t, Effect.Builder b) {

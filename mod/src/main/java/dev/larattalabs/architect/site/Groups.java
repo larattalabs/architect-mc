@@ -162,6 +162,14 @@ public final class Groups {
 		transient boolean legacyWaiting;
 		/** (slice T4R-D, D4; T4R-N's P3) The legacy wait's own counter (persisted, default 0): never the player/placing wait's {@code waited}. */
 		long legacyWaited;
+		/** (slice T4R-D, §4.2 P2-6) The admission wait's own counter (persisted, default 0): advances only while nothing ahead progresses. */
+		long admitWaited;
+		/** (slice T4R-D) Waiting on admission behind another removal: its FIFO ticket (rebuilt from the queue's order at each check). */
+		transient boolean ticket;
+		/** (slice T4R-D) What it waits behind (A7b), since when, and the progress signature of the last check. */
+		transient dev.larattalabs.architect.api.@Nullable Busy waitBehind;
+		transient long waitSince;
+		transient long progressSig;
 		/** (slice T4R) Why its txn waits to begin (logged once). */
 		transient @Nullable String gtxWait;
 
@@ -202,6 +210,9 @@ public final class Groups {
 			o.addProperty("waited", waited);
 			if (legacyWaited > 0) {
 				o.addProperty("legacyWaited", legacyWaited);
+			}
+			if (admitWaited > 0) {
+				o.addProperty("admitWaited", admitWaited);
 			}
 			JsonObject r = new JsonObject();
 			refund.forEach(r::addProperty);
@@ -297,6 +308,7 @@ public final class Groups {
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
 			r.legacyWaited = o.has("legacyWaited") ? o.get("legacyWaited").getAsLong() : 0; // (slice T4R-D, D4)
+			r.admitWaited = o.has("admitWaited") ? o.get("admitWaited").getAsLong() : 0; // (slice T4R-D, P2-6)
 			o.getAsJsonObject("refund").entrySet().forEach(e -> r.refund.put(e.getKey(), e.getValue().getAsInt()));
 			if (o.has("planned")) {
 				r.planned = o.get("planned").getAsString();
@@ -447,6 +459,12 @@ public final class Groups {
 		 * (slice T4R-N) A member over the area of a removal a pre-T4R build left in flight past the wait ({@link Groups#MAX_WAIT}): stopped before
 		 * anything of it was planned (remove again once that one is done).
 		 */
+		/** (slice T4R-D, A7b) Waited {@code MAX_WAIT} on its FIFO ticket while nothing ahead progressed: stopped, nothing written. */
+		static Removed waitedBehind(String why, Map<String, Integer> refund) {
+			return new Removed("Not yet: " + why + " (waited 10 minutes with no progress ahead); remove again once it is done", refund,
+				dev.larattalabs.architect.api.RemovalStopCause.WAITING_BEHIND);
+		}
+
 		static Removed legacyWaitedOut(String why, Map<String, Integer> refund) {
 			return new Removed("Not yet: " + why + " (waited 10 minutes); remove again once it is done", refund,
 				dev.larattalabs.architect.api.RemovalStopCause.OTHER);
@@ -585,6 +603,7 @@ public final class Groups {
 		r.current = null;
 		r.waited = 0;
 		r.legacyWaited = 0; // (slice T4R-D, D4)
+		r.admitWaited = 0;
 		r.nextCheck = 0;
 		r.started = true;
 		// (slice PSVLC3, P1 3) a removal that stalled before its undo checks its members again: a player who entered a box meanwhile is waited
@@ -1132,6 +1151,41 @@ public final class Groups {
 			}
 			r.legacyWaiting = false;
 			r.legacyWaited = 0; // that wait ended (this session or before a restart): it clears
+		}
+		if (r.undo == null && r.planned == null && r.planner == null && !r.legacy) {
+			// (slice T4R-D, §4.2) admission before it plans anything: a group whose members meet another removal's footprint (an owner record, a
+			// begun group) or an older ticket's area waits on its own FIFO ticket, holding nothing; NEW conflicting attempts are refused meanwhile.
+			// Its counter advances only on checks where nothing ahead made progress (P2-6); at MAX_WAIT it stops WAITING_BEHIND
+			RemovalAreas.Area a = RemovalAreas.admissionOf(r);
+			if (a != null) {
+				long sig = progressSignature();
+				if (!r.ticket) {
+					r.ticket = true;
+					r.waitSince = tick;
+					r.progressSig = sig;
+					Architect.LOGGER.info("Removal of group {}: waits behind {} (FIFO ticket)", r.group, a.who());
+				} else if (sig == r.progressSig) {
+					r.admitWaited += 20;
+				} else {
+					r.progressSig = sig;
+					r.admitWaited = 0; // something ahead progressed (a W, L or O applied, a member retired, a ticket admitted)
+				}
+				r.waitBehind = a.busyOrDefault();
+				r.gtxWait = "waits behind " + a.who();
+				r.nextCheck = tick + 20;
+				if (r.admitWaited >= MAX_WAIT) {
+					r.ticket = false;
+					end(server, r, Removed.waitedBehind(a.who() + " is still in progress over " + dev.larattalabs.architect.placement.Anchors.str(a.box()), Map
+						.copyOf(r.refund)));
+				}
+				return;
+			}
+			if (r.ticket) {
+				r.ticket = false;
+				r.admitWaited = 0;
+				r.waitBehind = null;
+				r.gtxWait = null;
+			}
 		}
 		if (r.undo == null && r.planner == null && !preflighted(server, r)) {
 			return;
@@ -2408,6 +2462,55 @@ public final class Groups {
 	}
 
 	/** (slice T4R-M) The removals in flight: queued and stalled ({@link RemovalAreas}). */
+	/** (slice T4R-D, §4.2) The group removals holding a FIFO ticket (waiting on admission), oldest first (queue order). Server thread. */
+	static List<Removal> tickets() {
+		List<Removal> out = new ArrayList<>();
+		for (Removal r : REMOVALS) {
+			if (r.ticket) {
+				out.add(r);
+			}
+		}
+		return out;
+	}
+
+	/** (slice T4R-D, A7b) What the removal of {@code group} ({@code stage}: null for the whole group) waits behind now, or null. */
+	public static dev.larattalabs.architect.api.@Nullable RemovalWait waitOf(String group, @Nullable String stage) {
+		for (Removal r : REMOVALS) {
+			if (r.ticket && r.waitBehind != null && r.group.equals(group) && java.util.Objects.equals(r.stage, stage)) {
+				return new dev.larattalabs.architect.api.RemovalWait(dev.larattalabs.architect.api.RemovalStopCause.WAITING_BEHIND, r.waitBehind, r.waitSince);
+			}
+		}
+		return null;
+	}
+
+	/** (slice T4R-D, A7b) {@link #waitOf} for the group's whole removal or any of its stages (a region's removal or a revision undo). */
+	public static dev.larattalabs.architect.api.@Nullable RemovalWait waitOfAny(String group) {
+		for (Removal r : REMOVALS) {
+			if (r.ticket && r.waitBehind != null && r.group.equals(group)) {
+				return new dev.larattalabs.architect.api.RemovalWait(dev.larattalabs.architect.api.RemovalStopCause.WAITING_BEHIND, r.waitBehind, r.waitSince);
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (slice T4R-D, P2-6) A signature of the progress of everything a waiting removal can wait behind: each open txn's applied effects and
+	 * barrier, the owner records, the begun groups' remaining members and the tickets. Unchanged between two checks: nothing ahead progressed.
+	 */
+	static long progressSignature() {
+		long h = 17;
+		for (dev.larattalabs.architect.txn.TxnEntry t : dev.larattalabs.architect.txn.TxnServer.core().open()) {
+			h = h * 31 + t.id.hashCode();
+			h = h * 31 + t.progress();
+		}
+		h = h * 31 + OwnerRemovals.records().keySet().hashCode();
+		for (Removal r : REMOVALS) {
+			h = h * 31 + r.sites.size();
+			h = h * 31 + (r.ticket ? 1 : 0);
+		}
+		return h;
+	}
+
 	static List<Removal> inFlight() {
 		List<Removal> out = new ArrayList<>(REMOVALS);
 		out.addAll(STALLED);

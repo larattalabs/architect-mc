@@ -635,9 +635,9 @@ public final class InfraPlace {
 		}
 		{
 			// (slice T4R-M) its stash's hold is born below: never over another in-flight removal's area (RemovalAreas); refused before anything
-			String busy = RemovalAreas.overlapWhy(i.dimension(), List.of(i.box()), java.util.Set.of(id));
+			Sites.SiteException busy = RemovalAreas.busyRefusal(i.dimension(), List.of(i.box()), java.util.Set.of(id), "remove " + id); // (T4R-D, A7a)
 			if (busy != null) {
-				throw new Sites.SiteException(Reason.SITE_BUSY, "Not yet: " + busy + "; remove " + id + " again once it is done");
+				throw busy;
 			}
 		}
 		RoadBuilder.Removing removing = RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
