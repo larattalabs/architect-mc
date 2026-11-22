@@ -1302,12 +1302,72 @@ public final class Adopt {
 		// (T2b part 2b) its own crate's CRATE entry stays out of the undo: the removal's crate.settle (afterRestore) restores that cell
 		List<String> keep = CrateSettle.excluded(b, dec == null ? null : dec.settle());
 		List<String> undoIds = keep.isEmpty() ? ids : ids.stream().filter(i -> !keep.contains(i)).toList();
+		// (slice T4R-D, D1a "Adopt PT2") a paid adopted site (or one with the player's blocks in its delta cells) joins the single-removal flow:
+		// one owner record (its write: the delta cells only, the house's other cells never held), saved confirmed before the undo commits
+		String ownerKey = null;
+		if (dec != null) {
+			Map<String, com.google.gson.JsonObject> stashes = new java.util.HashMap<>();
+			stashes.put(b.id(), dec.settle());
+			Map<String, Builder.Deconstruction> decs = Map.of(b.id(), dec);
+			if (OwnerRemovals.needed(stashes, decs)) {
+				com.google.gson.JsonObject rec = OwnerRemovals.build(b.id(), group, b.dimension(), tagOwner, Sites.describe(b.id()), List.of(), List.of(b), decs,
+					stashes, Map.of());
+				rec.addProperty("kind", "adopt");
+				com.google.gson.JsonObject m = rec.getAsJsonObject("members").getAsJsonObject(b.id());
+				if (wb != null) {
+					m.add("box", OwnerRemovals.box(wb));
+				}
+				com.google.gson.JsonArray hold = new com.google.gson.JsonArray();
+				cells.forEach(hold::add);
+				m.add("hold", hold); // the delta mask: held cell by cell
+				ownerKey = OwnerRemovals.key(b.id(), group);
+				OwnerRemovals.put(ownerKey, rec);
+				try {
+					Stockpiles.saveWithWorldConfirmed(server);
+				} catch (IllegalStateException e) {
+					OwnerRemovals.forget(ownerKey);
+					throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, "The removal of " + b.id() + " was not started: "
+						+ e.getMessage());
+				}
+			}
+		}
 		SiteJournal.Undone undone = SiteJournal.undoEntries(level, undoIds, group);
 		SiteJournal.await(undone.commit(), "the removal of " + b.id());
-		Sites.markPending(server, b, "removed", dec == null ? null : dec.settle());
-		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
-		Sites.Removed done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), Sites.statsOf(undone.work(), b.id()), Map.of(), List.of(),
-			List.of());
+		Sites.markPending(server, b, "removed", dec == null || ownerKey != null ? null : dec.settle());
+		Journal.Stats stats = Sites.statsOf(undone.work(), b.id());
+		if (ownerKey != null) {
+			com.google.gson.JsonObject rec = OwnerRemovals.record(ownerKey);
+			com.google.gson.JsonObject fin = new com.google.gson.JsonObject();
+			fin.addProperty("restored", stats.restored());
+			fin.addProperty("kept", stats.changed());
+			rec.getAsJsonObject("members").getAsJsonObject(b.id()).add("fin", fin);
+			OwnerRemovals.put(ownerKey, rec);
+			if (rec.getAsJsonObject("members").getAsJsonObject(b.id()).get("player") instanceof com.google.gson.JsonArray pl && !pl.isEmpty()) {
+				dev.larattalabs.architect.txn.RemovalTxn.recordPfound(level, ownerKey + "/" + b.id(), pl);
+			}
+			CrateSettle.markRestored(b.id(), group);
+		}
+		SiteJournal.Restore r;
+		Sites.Removed done;
+		String was = Sites.OWNER_WRITE;
+		Sites.OWNER_WRITE = ownerKey;
+		try {
+			r = SiteJournal.writeNow(level, b.id(), group);
+			done = Sites.afterRestore(level, b, dec, drops, force, false, r.ring(), stats, Map.of(), List.of(), List.of());
+		} finally {
+			Sites.OWNER_WRITE = was;
+		}
+		if (ownerKey != null) {
+			String held = OwnerRemovals.drive(server, ownerKey);
+			if (held != null) {
+				OwnerRemovals.startLater(server);
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "held(decided) " + b.id() + ": " + held);
+			}
+			com.google.gson.JsonObject res = OwnerRemovals.result("site", b.id());
+			if (res != null) {
+				done = OwnerRemovals.removed(done.site(), res, done.notes());
+			}
+		}
 		// the adopt entry: released (its blocks stay for good, the house is the player's again)
 		JournalStore js = WorldJournal.storeOrNull();
 		if (js != null) {

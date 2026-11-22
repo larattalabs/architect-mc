@@ -256,6 +256,9 @@ public final class OwnerRemovals {
 					h.addProperty("dim", dim);
 					h.addProperty("site", e.getKey());
 					h.add("box", b.deepCopy());
+					if (m.get("hold") instanceof JsonArray hc) {
+						h.add("hold", hc.deepCopy()); // (Adopt PT2) its delta cells only
+					}
 					out.add(h);
 				}
 				if (m.get("settle") instanceof JsonObject st && CrateSettle.hasCrate(st)) {
