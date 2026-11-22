@@ -55,6 +55,8 @@ export async function registerTCC(steps, h) {
     }
     return false;
   };
+  // (slice T4R-D fix round, SPD) the host has no server process now (a headless host's phase 'title'; a client: not in a world)
+  const serverGone = async () => { const st = await call('dev.state', {}, 10_000).catch(() => null); return !!st && (st.headless ? st.phase === 'title' : st.inWorld === false); };
   const siteState = async (site) => call('dev.site.state', { site }, 60_000).catch(() => null);
   const owedAll = async () => (await call('dev.stockpile.owed', {}, 30_000).catch(() => null)) ?? { owed: [], total: {} };
   const txn = async () => call('dev.txn.state', {}, 30_000).catch(() => ({ openCount: -1 }));
@@ -886,18 +888,20 @@ export async function registerTCC(steps, h) {
       if (after) after();
       let halts = 0;
       if (start?.killAt?.startsWith('TX:')) {
-        // (T4b fix round) a txn point on the first ticks after the start: the world opens, then it halts there; then the world again
+        // (T4b fix round) a txn point on the first ticks after the start: the world opens, then it halts there; then the world again.
+        // (slice T4R-D fix round, SPD) openWorld fails as soon as the host has no server process (it used to poll 15 minutes past the halt)
         await L.openWorld(name).catch(() => null);
-        const again = await haltWait();
+        const again = await haltWait() && await serverGone();
         halts += again ? 1 : 0;
         check(again, `${tag}: the start's removal txn halted at ${start.killAt}`);
         await L.sleep(3000);
         await L.openWorld(name);
       } else if (start?.killAt) {
-        // the start itself halts (SERVER_STARTED, before the world is ready): the open never completes; raced, then opened again
+        // the start itself halts (SERVER_STARTED, before the world is ready): the open never completes. (slice T4R-D fix round, SPD) openWorld
+        // fails as soon as the headless host has no server process; 200 s is only its bound now (a timeout is a FAIL, never a halt)
         const op = L.openWorld(name).then(() => 'open', (e) => `error: ${String(e?.message ?? e).slice(0, 120)}`);
         const r0 = await Promise.race([op, L.sleep(200_000).then(() => 'timeout')]);
-        const again = r0 !== 'open';
+        const again = r0.startsWith('error') && await serverGone();
         halts += again ? 1 : 0;
         check(again, `${tag}: the start halted at ${start.killAt} (the open answered ${r0})`);
         await L.sleep(3000);

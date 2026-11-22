@@ -212,6 +212,9 @@ export async function openWorld(name, opts = {}) {
     await sleep(500);
     const st = await call('dev.state').catch(() => ({}));
     if (st.inWorld && st.ready) { await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {}); await sleep(2000); return; }
+    // (slice T4R-D fix round, SPD) a headless host with no server process (phase 'title': it exited, e.g. a start halted by a test kill
+    // point) will never open this world: fail now, not after the whole 15-minute poll
+    if (st.headless === true && st.phase === 'title' && i >= 1) throw new Error(`world ${name} did not open: the headless server exited`);
   }
   throw new Error(`world ${name} did not open`);
 }
