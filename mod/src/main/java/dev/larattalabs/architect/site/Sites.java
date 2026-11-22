@@ -1881,6 +1881,35 @@ public final class Sites {
 			JsonObject st = x0 != null ? CrateSettle.stashFor(x0, d, group) : d == null || d.settle() == null ? null : CrateSettle.withGroup(d.settle(), group);
 			stashes.put(k, st);
 		});
+		// (slice T4R-D fix round, P1-7) a paid road or cell site in the cascade is a paid member of the owner record, as its standalone removal is:
+		// a stockpile road's player blocks are given back first (its extraction; until it is kept the call answers PLAYER_BLOCKS_RETURNING),
+		// then its refunds planned (nothing changed) into its stash; it leaves the feed only once that stash is saved
+		List<Infra> paidInfra = new ArrayList<>();
+		for (String c : cascade) {
+			Infra ci = Infras.get(c);
+			if (ci == null || ci.construction() == null) {
+				continue;
+			}
+			if (Stockpiles.pileOf(ci) != null) {
+				String ew = Extractions.run(server, level, ci, tagOwner);
+				if (ew != null) {
+					Stockpiles.dropPendingCredits(decs.values());
+					for (Site y : all) {
+						if (y.construction() != null && Fills.phase(y) != null) {
+							Fills.writeBack(level, y);
+						}
+					}
+					throw new SiteException(Reason.SITE_BUSY, "Not yet: the blocks of yours on " + c + " are being given back first (" + ew + "); remove " + id
+						+ " again in a moment", new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.PLAYER_BLOCKS_RETURNING, c, "road", ci
+							.owner()));
+				}
+			}
+			RoadBuilder.Removing rm = RoadBuilder.plan(level, ci);
+			if (rm.settle() != null) {
+				stashes.put(c, CrateSettle.withGroup(rm.settle(), group));
+			}
+			paidInfra.add(ci);
+		}
 		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
 		for (String c : cascade) {
 			if (Infras.get(c) != null) {
@@ -1973,6 +2002,9 @@ public final class Sites {
 				throw new SiteException(Reason.JOURNAL_UNAVAILABLE, "The removal of " + id + " was not started: " + e.getMessage());
 			}
 			WorldJournal.kill("FKC1");
+		}
+		for (Infra ci : paidInfra) {
+			RoadBuilder.leave(server, ci); // (fix round P1-7) its stash saved: it leaves the feed
 		}
 		Anchors.Bounds u = all.get(0).restoreBox();
 		for (Site x : all) {
@@ -2095,7 +2127,12 @@ public final class Sites {
 		}
 		for (String c : cascade) {
 			if (Infras.get(c) == null && Infras.pending(c) != null) {
-				Infras.finishRemoval(level, c, group, true);
+				if (ownerKey != null && stashes.get(c) != null) {
+					// (fix round P1-7) a paid road member: the single removal's live write (found first, marked for its W, its own hold exempt)
+					Infras.removedEvent(level, c, liveOwnWrite(level, c, group, stashes.get(c)));
+				} else {
+					Infras.finishRemoval(level, c, group, true);
+				}
 			}
 		}
 		for (Site x : all) {

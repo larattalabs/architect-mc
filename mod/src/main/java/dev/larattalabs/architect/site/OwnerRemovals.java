@@ -204,9 +204,13 @@ public final class OwnerRemovals {
 			}
 			order.add(c);
 			JsonObject m = new JsonObject();
-			m.addProperty("paid", false);
+			JsonObject st = stashes.get(c); // (fix round P1-7) a paid road's stash, as its standalone removal's: its refunds settle in this txn
+			m.addProperty("paid", st != null);
 			m.addProperty("infra", true);
 			m.add("box", box(inf.box()));
+			if (st != null) {
+				m.add("settle", st.deepCopy());
+			}
 			m.add("player", new JsonArray());
 			members.add(c, m);
 		}

@@ -661,6 +661,17 @@ public final class RoadBuilder {
 	}
 
 	static Removing beforeRemove(ServerLevel level, Infra road) {
+		Removing r = plan(level, road);
+		leave(level.getServer(), road);
+		return r;
+	}
+
+	/**
+	 * (slice T4R-D fix round, P1-7) A construction road's removal, planned and nothing changed: its refunds tallied per cell and its stash (a
+	 * stockpile road's pile stash and C29 credit; a crate-fed road's settle, with its group's crate when it is the last to build from it). A
+	 * site's CASCADE plans its paid roads with this, saves their stashes on its owner record, and only then lets them {@link #leave}.
+	 */
+	static Removing plan(ServerLevel level, Infra road) {
 		Construction c = road.construction();
 		if (c == null) {
 			return Removing.NONE;
@@ -676,14 +687,6 @@ public final class RoadBuilder {
 			dev.larattalabs.architect.survival.Refunds.Tally pt = tallyOf(level, road, skip);
 			Map<String, Integer> refund = pt.refund();
 			Builder.Run foot = run(srv, road); // (T4 final round) its footprint, for the removal's hold
-			Builder.Run r = RUNS.get(road.id());
-			if (r != null) {
-				Builder.sendClear(srv, r, false);
-			}
-			RUNS.remove(road.id());
-			BEFORE.remove(road.id());
-			PROGRESS.remove(road.id());
-			RegionTargets.forget(road.id());
 			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
 			// (T4b fix round, finding 5) also a removal.road stash: its refund credited by the txn after its restore, its intent durable before
 			// the job is queued (a refused credit save never loses it). The legacy credit stays for the group removals (T4c)
@@ -707,16 +710,30 @@ public final class RoadBuilder {
 			CrateSettle.withCells(settle, rt.cells(), road.box());
 			CrateSettle.withFootprint(settle, footprint(r, rt.cells())); // (T4 final round, P1 3) its hold: the road's cells, not its rectangle
 		}
+		Architect.LOGGER.info("Construction road {} removing: refunds {}{} settle once its restore is written", road.id(), refund, last ? " and its group's crate"
+			: "");
+		return new Removing(null, settle);
+	}
+
+	/** (fix round P1-7) A construction road planned for removal leaves the feed: its run cleared, its progress and waits forgotten. */
+	static void leave(MinecraftServer srv, Infra road) {
+		Construction c = road.construction();
+		if (c == null) {
+			return;
+		}
+		boolean pile = Stockpiles.pileOf(road) != null;
+		Builder.Run r = pile ? RUNS.get(road.id()) : run(srv, road);
 		if (r != null) {
 			Builder.sendClear(srv, r, false);
 		}
 		RUNS.remove(road.id());
 		BEFORE.remove(road.id());
 		PROGRESS.remove(road.id());
-		SiteWaits.ended(srv, road.id());
-		Architect.LOGGER.info("Construction road {} removing: refunds {}{} settle once its restore is written", road.id(), refund, last ? " and its group's crate"
-			: "");
-		return new Removing(null, settle);
+		if (pile) {
+			RegionTargets.forget(road.id());
+		} else {
+			SiteWaits.ended(srv, road.id());
+		}
 	}
 
 	/** 6c Y: the credit key of a road's removal (this placement of the road). */

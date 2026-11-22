@@ -154,8 +154,15 @@ public final class Infras {
 	/** R4 of a road or cell site removed with others (a cascade, a group): its writes at once, then the rest. */
 	static void finishRemoval(ServerLevel level, String id, String group, boolean event) throws Sites.SiteException {
 		SiteJournal.Restore r = SiteJournal.writeNow(level, id, group);
+		if (event) {
+			removedEvent(level, id, r);
+		}
+	}
+
+	/** (slice T4R-D fix round, P1-7) A pending road's or cell site's removal event, its restore written ({@code r}). */
+	static void removedEvent(ServerLevel level, String id, SiteJournal.Restore r) {
 		Infra i = pending.get(id);
-		if (event && i != null) {
+		if (i != null) {
 			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(level.getServer(), i, r.cells().size());
 		}
 	}
