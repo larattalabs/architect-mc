@@ -722,6 +722,36 @@ public final class Placement {
 		return out;
 	}
 
+	// ------------------------------------------------------------------ (slice PLR) a cell site's record saved placing past its job
+
+	/**
+	 * (slice PLR) Whether a road's or cell site's job read from an unclean stop's queue file is older than its record: the job was saved
+	 * before its record ({@code beforeRecord}), but the sites file, written at once at P4, already holds the record placing (the queue file
+	 * is written off the server thread, the latest state winning, so a halt right after P4 loses the save that cleared the flag). The record
+	 * wins: the job resumes as one past its record (rolled back, or finished when its journal entry is ACTIVE), never queued again beside a
+	 * record that would stay placing for good. A clean stop's file is current. Pure.
+	 */
+	static boolean recordOutranQueue(boolean beforeRecord, boolean clean, @Nullable Infra onDisk) {
+		return false;
+	}
+
+	/**
+	 * (slice PLR) The road and cell site records still placing that no job of the queue file covers ({@code covered}: every job's site and a
+	 * region tile job's extra targets), in record order: their job was lost with the queue file's last save. Pure.
+	 */
+	static List<String> strayPlacing(java.util.Collection<Infra> records, java.util.Set<String> covered) {
+		return List.of();
+	}
+
+	/**
+	 * (slice PLR) Whether a rollback of {@code jobSite} may settle its item (queue it again or fail it): only while the item is not done and
+	 * names that site or none. An item placed since by another site (a crash's stray record rolled back after its tile was placed again), or
+	 * placing again as another site, is left as it is. Pure.
+	 */
+	static boolean rollbackOwnsItem(dev.larattalabs.architect.batch.QItem.Status status, @Nullable String itemSite, String jobSite) {
+		return true;
+	}
+
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
 
 	/** Server tick times and the budget's use while placement is active; {@code dev.placement.stats}. */

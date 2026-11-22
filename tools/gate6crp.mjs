@@ -12,9 +12,11 @@
 //                                      WRITTEN or NOOP cell that is its key's last writer holds its intent, every skipped cell holds what
 //                                      stood before; dev.region.realised verify (journal and world); the mod's audit lines
 //     crash     (rp-crash)             kill points with a save: RP1+save (the record written, the PLACING commit not), RP2+save (a tile with
-//                                      nothing to write: the record written, the item not placed), K2+save, RG4+save, K4+save, and RP1
+//                                      nothing to write: the record written, the item not placed), K2+save, RG4+save, K4+save, and RP1 and
+//                                      (PLR) RG4
 //                                      without a save: after the restart the region completes and its record verifies (every tile committed,
-//                                      none stale or unrecorded, the journal and the world agree)
+//                                      none stale or unrecorded, the journal and the world agree); (PLR) no tile entry left PLACING and no
+//                                      record of the region still placing after a clean stop
 //     audit                            the audit lines of a gate run's shards (ARCHITECT_RP_AUDIT dir): per step and region, ok or not
 //     report                            REPORT.md over the step JSONs
 //
@@ -395,7 +397,10 @@ steps.ingame = async () => {
 steps.crash = async () => {
   await ensure();
   const out = {};
-  for (const point of ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'K4+save', 'RP1']) {
+  // (slice PLR) RG4 without a save too (Steward's halt had none); GATE6CRP_POINTS (comma list) runs a subset
+  const points = ['RP1+save', 'RP2+save', 'K2+save', 'RG4+save', 'RG4', 'K4+save', 'RP1'];
+  const only = (process.env.GATE6CRP_POINTS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  for (const point of only.length ? points.filter((x) => only.includes(x)) : points) {
     const tag = point.replace('+', '_');
     const world = `G6B RP Crash ${tag}`;
     await freshFlat(world);
@@ -427,12 +432,19 @@ steps.crash = async () => {
     out[tag] = { region: rid, atHalt, state: st.view.state, status: v.status, unrecorded: v.unrecorded, placingLeftover: v.placingLeftover, notHeld: v.notHeld, cellsChecked: v.cellsChecked, problems: v.problems.slice(0, 8), tiles: rv.tiles.map((t) => [t.stage, t.set, t.key, t.site, t.status]) };
     const allCommitted = Object.keys(v.status).every((s) => s === 'committed');
     check(st.view.state === 'PLACED' && v.ok && allCommitted && rv.tiles.length === 5, `${point}: ${atHalt.length} record(s) on disk at the halt; after the restart the region ${st.view.state}, ${rv.tiles.length} records all committed (${json(v.status)}), unrecorded ${v.unrecorded}, the journal and the world agree over ${v.cellsChecked} cells (${v.notHeld} not held)`, v.problems);
-    if (v.placingLeftover) check(true, `${point} (recorded, main's behaviour): ${v.placingLeftover} tile entry(ies) of the group left PLACING after the restart while the item ran again; not in the record (only committed attempts are)`);
+    // (slice PLR) a halt after P4 (the record saved placing, the queue file not past its job) left the tile's record placing and its entry
+    // PLACING for good while the item ran again (a survival region's fluids then waited on it forever); the load now rolls it back
+    check(v.placingLeftover === 0, `${point}: no tile entry of the group left PLACING after the restart (${v.placingLeftover} left)`);
+    await L.leaveWorld();
+    const sitesFile = path.join(L.SAVES, world, 'architect-sites.json');
+    const infra = fs.existsSync(sitesFile) ? (JSON.parse(fs.readFileSync(sitesFile, 'utf8')).infra ?? []) : [];
+    const stray = infra.filter((r) => r.placing && r.member?.group && (r.ext?.['architect_mc:region'] === rid));
+    out[tag].strayPlacing = stray.map((r) => `${r.id} ${r.member.itemKey}`);
+    check(stray.length === 0, `${point}: no road or cell site record of the region still placing after the region PLACED and a clean stop (${stray.length}: ${stray.map((r) => r.id).join(', ')})`);
     if (point === 'RP1+save') {
       // the record of the tile that halted was written for a site whose commit never happened: rewritten for the site that did
       check(atHalt.length >= 1, `${point}: the halted tile's record was on disk before its PLACING commit (${atHalt.join(', ')})`);
     }
-    await L.leaveWorld();
   }
   return out;
 };
