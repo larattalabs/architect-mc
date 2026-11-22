@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
  * <li>the TAKE wrote its receipt without checking that its {@code setItem} took effect, so with that hold cancelling the write the cargo
  * credited the pile with the stack still in the chest.</li>
  * </ul>
- * The rule now: every open txn's cells count in admission (the target's own cargo excepted for its own retry), and a TAKE (or its
+ * The rule now: every open txn's cells count in admission (since the last round, the target's own cargo too: T4RDLCargoRetryTest), and a TAKE (or its
  * compensation) has a receipt only when the slot held exactly the planned stack before and holds nothing (or the stack again) after.
  */
 class T4RDNCargoTest {
@@ -74,27 +74,6 @@ class T4RDNCargoTest {
 		assertNotNull(restarted.holds().cellHolder(DIM, 1, 65, 1), "T4RDN-cargo-admit: the loaded cargo holds the chest's cell");
 		assertNull(m.invoke(null, OwnerRemovals.holdsOf(T4RDFixAdmissionTest.rec("d", 30, null, "sameOwner")), Set.of("d"), "remove d", restarted),
 			"elsewhere: admitted");
-	}
-
-	@Test
-	void aTargetsOwnCargoNeverRefusesItsOwnRetry() throws Exception {
-		System.out.println("ROW T4RDN-cargo-self (unit)");
-		Method own = null;
-		try {
-			own = Extractions.class.getDeclaredMethod("cargoSelf", String.class);
-			own.setAccessible(true);
-		} catch (NoSuchMethodException e) {
-			// red: no rule for the target's own cargo
-		}
-		assertNotNull(own, "T4RDN-cargo-self: the target's own cargo txns are named for its own retry's admission (Extractions.cargoSelf)");
-		TxnCore c = core();
-		openCargo(c);
-		JsonObject a = T4RDFixAdmissionTest.rec("roadB", 0, null, "sameOwner");
-		Method m = T4RDFixAdmissionTest.refusal();
-		assertNotNull(m.invoke(null, OwnerRemovals.holdsOf(a), Set.of("roadB", (String) own.invoke(null, "roadB@10")), "remove roadB", c),
-			"another target's (roadB@10) self does not exempt roadB@1's cargo");
-		assertNull(m.invoke(null, OwnerRemovals.holdsOf(a), Set.of("roadB", (String) own.invoke(null, "roadB@1")), "remove roadB", c),
-			"T4RDN-cargo-self: roadB@1's retry is not refused by its own cargo");
 	}
 
 	@Test
