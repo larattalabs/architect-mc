@@ -289,6 +289,11 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		if (busy != null) {
 			return CompletableFuture.completedFuture(refused(busy)); // (6d AD) SITE_BUSY while an adoption moves it
 		}
+		// (slice T4R-D fix round, P2-2) a pending member of a live owner record (a site or a road): typed held(decided), never "No site"
+		Sites.SiteException held = Sites.heldDecided(siteId);
+		if (held != null) {
+			return answer(held);
+		}
 		// (7c CM-b) a composite placement's handle is its group's id: Sites.remove takes it for the whole (every module)
 		if (Sites.get(siteId) == null && dev.larattalabs.architect.site.Composites.groupEntry(Sites.group(siteId)) != null) {
 			return removeGroup(siteId, o);
@@ -299,7 +304,8 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return onServer(() -> {
 			Site s = Sites.get(siteId);
 			if (s == null) {
-				return CompletableFuture.completedFuture(refused("No site " + siteId));
+				Sites.SiteException h = Sites.heldDecided(siteId); // (fix round P2-2) it became pending meanwhile
+				return h != null ? answer(h) : CompletableFuture.completedFuture(refused("No site " + siteId));
 			}
 			String owner = ApiRules.removeRefusal(siteId, s.owner(), o == null ? null : o.requester(), o != null && o.force());
 			if (owner != null) {
@@ -320,22 +326,42 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			try {
 				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o), tagOwner);
 				if (large != null) {
-					return large.thenApply(SitesImpl::result);
+					return large.thenApply(SitesImpl::result).exceptionallyCompose(SitesImpl::answerFailure);
 				}
 				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o), tagOwner);
 				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
-				if (e.busy() != null) {
-					// (slice T4R-D, A7a) a removal in the way: failed typed (ArchitectRefused.busy()), the caller retries on its REMOVAL_FINISHED
-					return CompletableFuture.<RemoveResult>failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), e.busy()));
-				}
-				if (e.getMessage() != null && e.getMessage().startsWith("held(decided)")) {
-					// (T4b fix round, P2) decided and written, its refunds not yet settled: it finishes by itself
-					return CompletableFuture.<RemoveResult>failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), "held(decided)"));
-				}
-				return CompletableFuture.completedFuture(refused(e.getMessage()));
+				return answer(e);
 			}
 		}).thenCompose(f -> f);
+	}
+
+	/**
+	 * (slice T4R-D, A7a; fix round P2-2) The one mapping of a removal's refusal for every public route (a site, a road or cell site, either
+	 * synchronously or from its future): a typed busy fails with {@code ArchitectRefused.busy()} (the caller retries on its REMOVAL_FINISHED);
+	 * held(decided) without a type fails SITE_BUSY with its detail; anything else is a {@code RemoveResult(false)} with its text.
+	 */
+	static CompletableFuture<RemoveResult> answer(Sites.SiteException e) {
+		if (e.busy() != null) {
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), e.busy()));
+		}
+		if (e.getMessage() != null && e.getMessage().startsWith("held(decided)")) {
+			// (T4b fix round, P2) decided and written, its refunds not yet settled: it finishes by itself
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), "held(decided)"));
+		}
+		return CompletableFuture.completedFuture(refused(e.getMessage()));
+	}
+
+	/** (fix round P2-2) A removal future's failure: a typed or held(decided) {@link Sites.SiteException} (bare or wrapped) through {@link #answer}; anything else as is. */
+	static CompletableFuture<RemoveResult> answerFailure(Throwable t) {
+		Throwable c = t;
+		while ((c instanceof java.util.concurrent.CompletionException || c instanceof java.util.concurrent.ExecutionException) && c.getCause() != null) {
+			c = c.getCause();
+		}
+		if (c instanceof Sites.SiteException se && (se.busy() != null || se.getMessage() != null && se.getMessage().startsWith("held(decided)"))) {
+			return answer(se);
+		}
+		return CompletableFuture.failedFuture(t); // any other failure as before
 	}
 
 	/** (slice T4R-D, Q8) The last completed result of {@code kind:id}, from its immutable snapshot; null when none. */
@@ -362,9 +388,11 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			return CompletableFuture.completedFuture(refused(i.dimension() + " is not loaded"));
 		}
 		try {
-			return dev.larattalabs.architect.site.InfraApi.remove(level, siteId, covered(o)).thenApply(SitesImpl::result);
+			// (fix round P2-2) typed refusals (busy, held(decided)) fail typed, from the call or from its future (a cascade's chain)
+			return dev.larattalabs.architect.site.InfraApi.remove(level, siteId, covered(o)).thenApply(SitesImpl::result).exceptionallyCompose(
+				SitesImpl::answerFailure);
 		} catch (Sites.SiteException e) {
-			return CompletableFuture.completedFuture(refused(e.getMessage()));
+			return answer(e);
 		}
 	}
 

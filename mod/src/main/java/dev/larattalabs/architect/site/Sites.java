@@ -1721,17 +1721,38 @@ public final class Sites {
 		return removeDetailed(level, id, force, covered, null);
 	}
 
+	/**
+	 * (slice T4R-D, Steward's A2; fix round P2-2) {@code id} is no standing site or road but a member of a live owner record (decided, not yet
+	 * finished): the typed held(decided) answer ({@code Busy(HELD_DECIDED, base, kind, owner)}); null otherwise. Every public removal route
+	 * asks this before it answers "No site", so the caller always gets the typed refusal.
+	 */
+	public static @Nullable SiteException heldDecided(String id) {
+		if (get(id) != null || Infras.get(id) != null) {
+			return null;
+		}
+		String own = OwnerRemovals.ownerOf(id);
+		if (own == null) {
+			return null;
+		}
+		return heldDecidedOf(id, own);
+	}
+
+	/** (fix round P2-2) The typed held(decided) refusal of {@code id}, a member of owner {@code own} (a live record, or its key). */
+	static SiteException heldDecidedOf(String id, String own) {
+		String[] w = OwnerRemovals.who(own);
+		String base = w == null ? id : w[0];
+		String kind = Infras.get(base) != null || Infras.pending(base) != null ? "road" : "site";
+		return new SiteException(Reason.SITE_BUSY, "held(decided) " + id + " is being removed with " + base + "; it finishes by itself",
+			new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.HELD_DECIDED, base, kind, w == null ? null : w[1]));
+	}
+
 	/** {@link #removeDetailed}; {@code tagOwner} (6c 0c, C18): the requester, whose tagged entities don't block. */
 	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered, @Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
-			String own = OwnerRemovals.ownerOf(id);
-			if (own != null) {
-				// (slice T4R-D, Steward's A2) a pending member of a decided removal not finished yet: held(decided), typed
-				String[] w = OwnerRemovals.who(own);
-				throw new SiteException(Reason.SITE_BUSY, "held(decided) " + id + " is being removed with " + (w == null ? own : w[0]) + "; it finishes by itself",
-					new dev.larattalabs.architect.api.Busy(dev.larattalabs.architect.api.Busy.Kind.HELD_DECIDED, w == null ? own : w[0], "site", w == null ? null
-						: w[1]));
+			SiteException held = heldDecided(id);
+			if (held != null) {
+				throw held;
 			}
 			throw new SiteException("No site " + id + " (see /architect list)");
 		}
@@ -1985,6 +2006,12 @@ public final class Sites {
 			// held(decided), never removed with a refund it has not paid
 			String why = String.join("; ", HELD_NOW);
 			HELD_NOW.clear();
+			String own = OWNER_WRITE;
+			if (own != null) {
+				// (fix round P2-2) typed: the caller gets Busy(HELD_DECIDED) with the removal's base, never a bare text
+				SiteException typed = heldDecidedOf(id, own);
+				throw new SiteException(Reason.SITE_BUSY, "held(decided) " + why, typed.busy());
+			}
 			throw new SiteException(Reason.SITE_BUSY, "held(decided) " + why);
 		}
 		return r0;

@@ -1361,7 +1361,8 @@ public final class Adopt {
 			String held = OwnerRemovals.drive(server, ownerKey);
 			if (held != null) {
 				OwnerRemovals.startLater(server);
-				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "held(decided) " + b.id() + ": " + held);
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.SITE_BUSY, "held(decided) " + b.id() + ": " + held, Sites.heldDecidedOf(b.id(),
+					ownerKey).busy()); // (fix round P2-2) typed
 			}
 			com.google.gson.JsonObject res = OwnerRemovals.result("site", b.id());
 			if (res != null) {
