@@ -203,8 +203,10 @@ class FluidsT5FRedTest {
 	@Test
 	void i3_receiptFieldsReader() {
 		guard();
-		Class<?> tm = dev.larattalabs.architect.txn.TestMove.class; // (a T4 file: T5Fb adds it after T4 merges)
-		Method rf = method(tm, "receiptFields", "§4: the per-chunk receipt reader (a string overload of receiptFields(ch, key))", String.class,
+		// (T5F) the pure reader lives in txn.Receipts (TestMove's class init registers its chunk attachment, which a unit can't);
+		// TestMove.receiptFields(receipt, key) and receiptFields(ch, key) delegate to it
+		Class<?> tm = dev.larattalabs.architect.txn.Receipts.class;
+		Method rf = method(tm, "fields", "§4: the per-chunk receipt reader (TestMove.receiptFields(ch, key) reads through it)", String.class,
 			String.class);
 		@SuppressWarnings("unchecked")
 		Map<String, String> f = (Map<String, String>) call(rf, null, "tx-5/2;op=drain;t=100;l=3,1;u=1,0;h=1", "tx-5/2");

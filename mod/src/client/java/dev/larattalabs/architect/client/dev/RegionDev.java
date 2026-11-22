@@ -414,6 +414,10 @@ public final class RegionDev {
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().remove(region, new RemoveOptions(force, requester, cp))).thenCompose(x -> wrap(x,
 					r -> {
 						JsonObject o = json(r);
+						// (slice T5F, S4/Q2) the report-only taken counts are methods, not components: added by name (null: not reported)
+						o.add("fluidsTaken", r.fluidsTaken() == null ? com.google.gson.JsonNull.INSTANCE : json(r.fluidsTaken()));
+						o.add("fluidsTakenCells", r.fluidsTakenCells() == null ? com.google.gson.JsonNull.INSTANCE : new com.google.gson.JsonPrimitive(r
+							.fluidsTakenCells()));
 						o.addProperty("seconds", (System.nanoTime() - t0) / 1e9);
 						return o;
 					}));

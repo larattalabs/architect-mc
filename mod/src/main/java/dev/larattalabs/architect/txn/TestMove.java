@@ -311,6 +311,27 @@ public final class TestMove {
 		addReceipt(ch, key);
 	}
 
+	/** (slice T5F, contract §4) {@link Receipts#fields}: one receipt's fields when it is effect {@code key}'s, else null. */
+	public static java.util.@Nullable Map<String, String> receiptFields(String receipt, String key) {
+		return Receipts.fields(receipt, key);
+	}
+
+	/** (slice T5F) Effect {@code key}'s receipt in the chunk, with its fields ({@link #receiptFields(String, String)}), or null: none there. */
+	public static java.util.@Nullable Map<String, String> receiptFields(LevelChunk ch, String key) {
+		for (String r : receipts(ch)) {
+			java.util.Map<String, String> f = receiptFields(r, key);
+			if (f != null) {
+				return f;
+			}
+		}
+		return null;
+	}
+
+	/** (slice T5F) Whether the chunk holds effect {@code key}'s receipt, exact or with fields. */
+	public static boolean hasReceipt(LevelChunk ch, String key) {
+		return receiptFields(ch, key) != null;
+	}
+
 	static void addReceipt(LevelChunk ch, String key) {
 		List<String> r = new ArrayList<>(receipts(ch));
 		r.add(key);

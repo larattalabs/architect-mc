@@ -835,18 +835,26 @@ public final class WorldJournal {
 
 	/** A named step of a change: halts the JVM when it is the armed kill point (no shutdown hooks, nothing saved). */
 	public static void kill(String point) {
+		kill(point, "");
+	}
+
+	/**
+	 * (slice T5F, Steward's S1) {@link #kill(String)} whose log line names the step's progress {@code progress} (e.g. {@code " (1 of 2)"}):
+	 * {@code kill point <point>[+save] reached (k of n)}.
+	 */
+	public static void kill(String point, String progress) {
 		if ((point + "+save").equals(killAt)) {
 			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt
 			var sv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();
 			if (sv != null) {
 				dev.larattalabs.architect.site.SaveEvidence.asAutosave(() -> sv.saveAllChunks(true, true, true)); // (SOFF) as before: the ledger with it
 			}
-			Architect.LOGGER.error("World journal: kill point {} reached after a save; halting the JVM (dev.journal.killAt)", killAt);
+			Architect.LOGGER.error("World journal: kill point {} reached{} after a save; halting the JVM (dev.journal.killAt)", killAt, progress);
 			dev.larattalabs.architect.site.DevStart.markKilled(point + "+save"); // (T4R-D last round, P2) a start-armed kill's proof, then the halt
 			Runtime.getRuntime().halt(7);
 		}
 		if (point.equals(killAt)) {
-			Architect.LOGGER.error("World journal: kill point {} reached; halting the JVM (dev.journal.killAt)", point);
+			Architect.LOGGER.error("World journal: kill point {} reached{}; halting the JVM (dev.journal.killAt)", point, progress);
 			dev.larattalabs.architect.site.DevStart.markKilled(point); // (T4R-D last round, P2) a start-armed kill's proof, then the halt
 			Runtime.getRuntime().halt(7);
 		}

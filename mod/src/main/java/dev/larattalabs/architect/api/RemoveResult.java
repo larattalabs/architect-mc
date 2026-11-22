@@ -55,4 +55,21 @@ public record RemoveResult(boolean removed, List<String> blockers, Map<Item, Int
 	public RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> refund) {
 		this(removed, blockers, refund, 0, 0, Map.of(), List.of());
 	}
+
+	/**
+	 * (slice T5F, Steward's S4, 8cS Q2; Since NEXT) What the refund would have paid for the region's written fluid cells found taken before
+	 * the removal: lava buckets (one per lava cell) and iron bars (the bars the grate's cells cost); water left out. Report only, never part
+	 * of {@link #refund}. Null: not reported (filled by the fluids removal with feature {@code flowingWater}).
+	 */
+	public @org.jspecify.annotations.Nullable Map<Item, Integer> fluidsTaken() {
+		return null;
+	}
+
+	/**
+	 * (slice T5F, 8cS Q2; Since NEXT) How many of the region's written fluid cells, every body (water included), were found taken before the
+	 * removal. Report only. Null: not reported.
+	 */
+	public @org.jspecify.annotations.Nullable Integer fluidsTakenCells() {
+		return null;
+	}
 }

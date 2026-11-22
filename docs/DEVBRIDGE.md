@@ -892,3 +892,22 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - **2026-11-19 (slice 8cTc):** txn kind `fluid.write` (`TX:fluid.write:place`, the wave written and forced, its receipts not: Steward's
   S3 write row; the core's points too); `fluid.drain` also carries escape/unsettled (`TX:fluid.drain:drain`, FLe after its R) and lot drains
   (FL6d after its W).
+- **2026-11-20 (slice T5Fa, hooks only; TEST, dev starts only):**
+  - `dev.chunk.drop {chunks: [[x, z]]} | {off}`: those chunks' block-storage writes are skipped while armed (`ChunkDebt.TEST_DROP`, consumed
+    in `IOWorkerDebtMixin.write`). Arm it right before a `+save` kill point or `dev.chunk.halt {save}`: the halt leaves those chunks at their
+    last save. Never leave it armed without a halt (the skipped write is never re-owed); a dropped write is acknowledged, so barriers go on.
+  - `dev.chunk.save {chunks}`: writes those chunks' snapshots now (`SerializableChunkData.copyOf`, then the chunk map's write, awaited);
+    followed by a bare halt it leaves a mixed state. `dev.chunk.halt {save?}`: halts the JVM (after `saveAllChunks` with `save`); no answer.
+  - `dev.fluid.holdChunk {x, z} | {off} | {}`: a removal drain's W throws (and holds) when it reaches that chunk; `before` lists the chunks
+    whose receipts were written before it.
+  - `dev.fluid.writeTrace {on?}`: every body cell Architect's fluid writer writes; `dev.fluid.forceTrace {on?}`: `<body>@<gameTime>` per
+    forced-tick pass.
+  - `dev.fluid.saveAtGate {drop?: [x0, z0, x1, z1]}`: once, at the next fluids gate, every chunk is saved; with `drop`, the box's chunks are
+    then armed as `dev.chunk.drop`.
+  - `<gameDir>/architect/t5f-test-flags.json` (no bridge op): `{holdDrain?, holdWrite?, holdSettle?, holdChunk?, writeTrace?, forceTrace?}`,
+    applied once by the next txn core's registration (`FluidTxns.register`, before recovery), then deleted: a crash row's restart holds.
+  - `dev.player.bucket {at}` (a real empty-bucket use from above, the filled bucket kept), `dev.player.break {at}` (a real `destroyBlock`
+    with an iron pickaxe, drops into the inventory), `dev.dispense {at, item, fromPlayer?} | {read}` (a real dispenser fire from above,
+    powered by a redstone block; `read` answers its contents), `dev.blocks.find {box, block}`, `dev.txn.kinds {}`.
+  - Gate steps (gate6crs/gate6ch `t5*`): `t5-tile-k4`, `t5-tile-k4-rm`, `t5-drain-hold`, `t5-drain-fl5`, `t5-drain-mixed`,
+    `t5-scoop-barrier`, `t5-grate-broken`, `t5-s3a`, `t5-s3b`, `t5-taken`, `t5-tombstone`, `t5-water-bucket`, `t5-force-lost`, `t5-kn`.

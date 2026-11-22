@@ -44,6 +44,21 @@ public final class KillPoints {
 		dev.larattalabs.architect.journal.WorldJournal.kill(point);
 	}
 
+	/**
+	 * (slice T5F, Steward's S1, 8cS Q3) {@link #step(String, boolean, String)} with its progress: {@code k} of the {@code n} Ws of the effect
+	 * the step names are applied with their receipts; the halt's log line reads {@link #reachedLine}.
+	 */
+	public static void step(String kind, boolean recovering, String step, int k, int n) {
+		String point = name(kind, recovering, step);
+		reached(kind, point);
+		dev.larattalabs.architect.journal.WorldJournal.kill(point, " (" + k + " of " + n + ")");
+	}
+
+	/** (slice T5F) The halt's log line for a step with progress: {@code kill point <point> reached (k of n)}. */
+	public static String reachedLine(String point, int k, int n) {
+		return "kill point " + point + " reached (" + k + " of " + n + ")";
+	}
+
 	/** Every point of {@code kind} reached this session, in first-reached order. */
 	public static synchronized List<String> points(String kind) {
 		return List.copyOf(SEEN.getOrDefault(kind, Set.of()));
