@@ -780,7 +780,7 @@ export async function registerTCC(steps, h) {
       const after = await parts([b.site], b.cp, b.items);
       const owedNew = sum(after.owed) - sum(before.owed);
       R[tag] = { before, after, owedNew };
-      log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}`);
+      log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}; parts: stock ${json(after.stock)}, owed ${json(after.owed)}, ground ${json(after.ground)}, inventory ${json(after.inventory)}; entries ${json((after.owedEntries ?? []).map((e) => [e.key, e.reason, e.items?.['minecraft:oak_door'] ?? 0]))}; before ${json(before.placed)} stock ${json(before.stock)}`);
       check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock)`, R[tag]);
       check(sum(after.placed) === 0 || owedNew === 0, `${tag}: no refund owed while the building stands (standing ${sum(after.placed)}, owed new ${owedNew})`, R[tag]);
     }
