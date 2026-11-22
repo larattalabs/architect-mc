@@ -34649,9 +34649,15 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   refilled after the take is left standing by the W, unpaid; the road's retry extracts it again. Remaining risk (narrow: the take and the W
   run in one call unless a barrier holds the attempt): items a player puts into such a holder in between, in a *group's* attempt, stand in
   the holder when the group's own restore writes that cell, and go as v0.89.0's restore treats container contents (not paid).
+  (Narrowing round) An open `removal.cargo` txn's cells count in removal admission like any other open txn's, live and as loaded from
+  `txn.json` (a target's own cargo is its own retry's self); a TAKE (and its compensation) writes its receipt only after a verified write
+  (the slot held exactly the planned stack before and is empty after), so a hold that cancels the write aborts the cargo and nothing is
+  credited or owed for a stack that stayed in the holder.
 - **Admission (fix round P1-4):** over exactly the footprint a record holds (member boxes and every crate cell, a historical crate
   included), against every open txn's cell resources too (§4.2 (c)). Remaining risk: a crate cell some future settle touches that no
-  record names (none known) would not be admitted against.
+  record names (none known) would not be admitted against. (Narrowing round) A refusal by an open txn that is not a removal answers
+  `Busy(OPERATION_IN_PROGRESS, <txn id>, <txn kind>, <owner>)`, a retry by time (no `REMOVAL_FINISHED` follows); an extraction attempt's
+  auto-collect is queued at its one transition into `kept` (whoever makes it) and runs once its txn has retired.
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
   `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
   their behaviour is shown in game only for the holder).

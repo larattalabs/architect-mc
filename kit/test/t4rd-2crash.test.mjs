@@ -51,3 +51,14 @@ test('T4RDN-2crash-wait: txnOpenOnDisk reads the open txns of a kind from txn.js
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('T4RDN-2crash-wait: the T4RD-2crash row judges its second crash with secondCrash and FAILS (skips its checks) without it', () => {
+  const src = fs.readFileSync(new URL('../../tools/lib/gatetxncc.mjs', import.meta.url), 'utf8');
+  const a = src.indexOf("if (sub === '2crash') {", src.indexOf('// T4RD-2crash'));
+  const b = src.indexOf('await reopen();', a);
+  const branch = src.slice(a, b);
+  assert.ok(a > 0 && b > a, 'the 2crash branch');
+  assert.match(branch, /await secondCrash\(/, 'judged by secondCrash');
+  assert.match(branch, /check\(down,/, 'a missing second crash is a check, not a log line');
+  assert.match(branch, /if \(!down\) \{.*continue; \}/, 'and the row stops there');
+});

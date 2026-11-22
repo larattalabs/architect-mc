@@ -269,6 +269,11 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   (it answered a `RemoveResult` with the "Not yet" text in `blockers`). (Fix round P2-2) Every route does: a site that is a pending member
   of a live removal fails `HELD_DECIDED` (it answered "No site"); a road's or cell site's removal fails typed, from the call or its future
   (a road answered `RemoveResult(false)` with the text); a held single removal after its commit fails `HELD_DECIDED` with the removal's base.
+- (Narrowing round) `Busy.Kind.OPERATION_IN_PROGRESS` (appended): another operation that is not a removal (a crate settlement, a take,
+  a delivery, a holder's contents being taken out) holds one of the call's cells. `blockingId` is its txn id, `blockingKind` its txn kind,
+  `blockingOwner` its owner or recipient; token `operation_in_progress:<txn id>`. No `REMOVAL_FINISHED` follows: retry after a few seconds.
+  It replaces the `REMOVAL_IN_PROGRESS` with a made-up `txn:<key>` id such a refusal gave. A `Busy.Kind` a caller does not know now means
+  "retry after a short delay", never "wait for an event".
 - (Fix round) Auto-collect also runs after a group's, stage's, region's or revision's removal and after a road's extraction. A player's
   chest in a road or region-target cell: its stacks are taken out first, plain stacks credited into the target's pile, data stacks owed
   (reason `cargo`); a holder without slots that holds items refuses the removal ("take them out").
