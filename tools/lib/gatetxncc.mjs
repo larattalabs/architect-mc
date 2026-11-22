@@ -24,7 +24,7 @@
 //   GATE_TCC_PARTS=S,G,P1,MF (default all) or a list of row tags limits the rows.
 // Evidence: <out>/txncrashcrate.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import path from 'node:path';
-import { secondCrash, txnOpenOnDisk } from './second-crash.mjs';
+import { secondCrash, txnOpenOnDisk, killMarker, KILL_MARKER } from './second-crash.mjs';
 
 export async function registerTCC(steps, h) {
   const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, cellsOf } = h;
@@ -2248,14 +2248,17 @@ export async function registerTCC(steps, h) {
           const fs = await import('node:fs');
           const arch = path.join(W.dir, 'architect');
           fs.mkdirSync(arch, { recursive: true });
-          fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ killAt: 'TX:recover:removal.site:barrier:member' }));
+          // (slice T4R-D last round, P2) the start-armed kill's proof: no old marker counts, only the one this start writes at its halt
+          const point = 'TX:recover:removal.site:barrier:member';
+          fs.rmSync(path.join(arch, KILL_MARKER), { force: true });
+          fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ killAt: point }));
           // the world halts during its start (the recovery runs at the load). (slice T4R-D fix round, SPD) openWorld fails as soon as the
           // headless host has no server; 5 minutes is only its bound, and the halt is the host showing no server (a fixed minute, then a
           // not-in-world check, passed while a slow start was still going and the next open found it starting)
           // (slice T4R-D narrowing round, P2-4) it counts only when it happened: the open refused (not timed out, not opened), no server
           // left, and the recovered removal.site txn still open in txn.json on disk; anything else FAILS the row
           const sc = await secondCrash({ open: () => L.openWorld(name), sleep: L.sleep, serverGone, boundMs: 300_000,
-            txnOpen: () => txnOpenOnDisk(path.join(arch, 'txn.json'), 'removal.site') });
+            txnOpen: () => txnOpenOnDisk(path.join(arch, 'txn.json'), 'removal.site'), marker: () => killMarker(arch), point });
           down = sc.down;
           rowLog(tag, `second crash at the recovered member barrier: ${down} (${sc.why})`);
           check(down, `${tag}: the second crash happened at the recovered member barrier (${sc.why})`, sc);

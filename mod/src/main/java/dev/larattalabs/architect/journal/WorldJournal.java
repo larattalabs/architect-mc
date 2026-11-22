@@ -833,10 +833,12 @@ public final class WorldJournal {
 				dev.larattalabs.architect.site.SaveEvidence.asAutosave(() -> sv.saveAllChunks(true, true, true)); // (SOFF) as before: the ledger with it
 			}
 			Architect.LOGGER.error("World journal: kill point {} reached after a save; halting the JVM (dev.journal.killAt)", killAt);
+			dev.larattalabs.architect.site.DevStart.markKilled(point + "+save"); // (T4R-D last round, P2) a start-armed kill's proof, then the halt
 			Runtime.getRuntime().halt(7);
 		}
 		if (point.equals(killAt)) {
 			Architect.LOGGER.error("World journal: kill point {} reached; halting the JVM (dev.journal.killAt)", point);
+			dev.larattalabs.architect.site.DevStart.markKilled(point); // (T4R-D last round, P2) a start-armed kill's proof, then the halt
 			Runtime.getRuntime().halt(7);
 		}
 	}
