@@ -1346,6 +1346,11 @@ public final class Batches {
 		if (i == null) {
 			return;
 		}
+		if (!Placement.rollbackOwnsItem(i.status, i.siteId, job.siteId)) {
+			// (slice PLR) a stray record rolled back after its item was placed (or started) again as another site: the item is that site's
+			Architect.LOGGER.info("Batch {}: item {} is {} as {}; the rollback of {} leaves it as it is", b.id, i.key, i.status, i.siteId, job.siteId);
+			return;
+		}
 		untickItem(server, b, "job:" + i.key);
 		if (job.requeue && b.running() && !b.cancelling) {
 			i.status = QItem.Status.QUEUED;

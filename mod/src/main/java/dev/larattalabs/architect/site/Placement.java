@@ -586,6 +586,7 @@ public final class Placement {
 				JOBS.add(rb);
 			}
 		}
+		rollBackStrayInfras(srv); // (slice PLR) the same for a road or cell site
 		if (root != null || !JOBS.isEmpty()) {
 			Architect.LOGGER.info("Placement queue: {} batch(es) running, {} job(s) to resume{}", Batches.running(), JOBS.size(),
 				clean || JOBS.isEmpty() ? "" : " (the last stop was not clean: placing jobs roll back and their items queue again)");
@@ -648,6 +649,12 @@ public final class Placement {
 			Architect.LOGGER.info("Resuming the placement of {} ({}) at phase {}", pj.siteId, pj.blueprint, pj.phase);
 		} else if ("infra".equals(kind)) {
 			InfraJob ij = InfraJob.fromJson(o);
+			if (recordOutranQueue(ij.beforeRecord, clean, Infras.get(ij.siteId))) {
+				// (slice PLR) its record reached the sites file placing (P4) after this job was last saved: past its record, it rolls back (or
+				// finishes when its entry is ACTIVE) below; queued again it left the record placing for good
+				Architect.LOGGER.warn("Cell site {}'s record was saved placing after {} last saved its job; it resumes from its record", ij.siteId, FILE);
+				ij.beforeRecord = false;
+			}
 			if (ij.beforeRecord && !clean) {
 				Batches.infraRequeue(srv, ij);
 				return;
@@ -732,7 +739,7 @@ public final class Placement {
 	 * record that would stay placing for good. A clean stop's file is current. Pure.
 	 */
 	static boolean recordOutranQueue(boolean beforeRecord, boolean clean, @Nullable Infra onDisk) {
-		return false;
+		return beforeRecord && !clean && onDisk != null && onDisk.placing();
 	}
 
 	/**
@@ -740,7 +747,13 @@ public final class Placement {
 	 * region tile job's extra targets), in record order: their job was lost with the queue file's last save. Pure.
 	 */
 	static List<String> strayPlacing(java.util.Collection<Infra> records, java.util.Set<String> covered) {
-		return List.of();
+		List<String> out = new ArrayList<>();
+		for (Infra i : records) {
+			if (i.placing() && !covered.contains(i.id())) {
+				out.add(i.id());
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -749,7 +762,50 @@ public final class Placement {
 	 * placing again as another site, is left as it is. Pure.
 	 */
 	static boolean rollbackOwnsItem(dev.larattalabs.architect.batch.QItem.Status status, @Nullable String itemSite, String jobSite) {
-		return true;
+		return !status.terminal() && (itemSite == null || itemSite.equals(jobSite));
+	}
+
+	/** (slice PLR) The sites the queue's jobs write: every job's site and a region tile job's extra targets. */
+	private static java.util.Set<String> jobCovered() {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		for (Job j : JOBS) {
+			out.add(j.siteId());
+			if (j instanceof InfraJob ij) {
+				out.addAll(ij.siteIds());
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (slice PLR) A road or cell site still marked placing with no job covering it (its job was lost with the queue file's last save; see
+	 * {@link #recordOutranQueue}): rolled back from the world journal over ticks like a site's, its undo handing its befores down under a
+	 * newer entry that placed the same tile again (nothing in the world changes there), its record pending until the next start settles it.
+	 * Its item queues again only while it still names this site or none ({@link #rollbackOwnsItem}). With no active journal entry it wrote
+	 * nothing (K2): the record goes. Not when the queue file or the journal could not be read (the record stays as it is). Server thread.
+	 */
+	private static void rollBackStrayInfras(MinecraftServer srv) {
+		if (loadFailed || dev.larattalabs.architect.journal.WorldJournal.unavailable() != null) {
+			return;
+		}
+		for (String id : strayPlacing(Infras.all(), jobCovered())) {
+			Infra i = Infras.get(id);
+			if (i == null) {
+				continue;
+			}
+			if (SiteJournal.active(id).isEmpty()) {
+				Architect.LOGGER.warn("Cell site {} was still being placed with no job in {} and no journal entry; nothing was written, its record is dropped", id, FILE);
+				Infras.drop(srv, id);
+				continue;
+			}
+			Site.Member m = i.member();
+			Architect.LOGGER.warn("Cell site {} ({}) was still being placed and no job in {} covers it; rolling it back from the world journal", id,
+				m == null ? "no item" : m.itemKey(), FILE);
+			RestoreJob rb = new RestoreJob(id, RestoreJob.ROLLBACK, m == null ? null : m.batchId(), m == null ? null : m.itemKey());
+			rb.requeue = true;
+			rb.why = "the game stopped without saving while it was being placed";
+			JOBS.add(rb);
+		}
 	}
 
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
