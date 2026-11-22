@@ -361,6 +361,14 @@ restart the composite's batch resumes from the queue file (gate step cmb-crash).
 after its last module. The apitest mod's `compinfo <entry>` answers `CompositeInfo.of(entry)`'s wire and whether the feature
 `composites` is advertised.
 
+(slice PLR2) `dev.journal.killAt` also takes XR1 (`+save` too: the chunks and the ledger saved first): a survival region tile's free pass
+took up another writer's paid block (its items given back) and wrote the cell; the cell is noted in `architect-dev-xr1.json` in the
+world's folder. PLR2X fires at a start whose crash rollbacks settled a region tile's extra targets, once that start's queue save is
+written. A crash test's restart is a new JVM, so a fault for the restart's own recovery is armed by a file:
+`architect-dev-arm.json` in the world's folder (`{killAt?, failRollback?}`), read once and deleted as the world starts, only on a
+headless or dev host (ARCHITECT_HEADLESS or ARCHITECT_DEV_TOKEN set). `failRollback: n` lets n crash rollbacks start, then breaks
+the next before its undo (gate steps rp-crash `RG4!broken`, xr-crash).
+
 ### Regions (phase 6b)
 
 | hook | arguments, result |

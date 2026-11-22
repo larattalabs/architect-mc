@@ -352,6 +352,34 @@ public final class RegionOverwrites {
 	 */
 	static @Nullable String crashRollbackRefusal(String siteId, boolean freePass, @Nullable Boolean survival, @Nullable String region, long[] written,
 		List<Live> others, List<dev.larattalabs.architect.placement.Anchors.Bounds> unread) {
+		if (!freePass || Boolean.FALSE.equals(survival)) {
+			return null;
+		}
+		for (long c : written) {
+			BlockPos p = BlockPos.of(c);
+			String by = null;
+			for (Live l : others) {
+				int q = l.run().queuePos(p);
+				if (q >= 0 && l.paid(q)) {
+					by = l.id();
+					break;
+				}
+			}
+			if (by == null) {
+				for (var b : unread) {
+					if (b.contains(p.getX(), p.getY(), p.getZ())) {
+						by = "a writer whose plan could not be read";
+						break;
+					}
+				}
+			}
+			if (by != null) {
+				return "its crash rollback is refused: " + siteId + " wrote over " + p.toShortString() + ", a cell " + by + " paid for in survival region "
+					+ region + "; that block's items may have been given back to the stockpile, so writing it back would make them twice. " + siteId
+					+ " is kept as it stands (its journal entries committed, its record placed) and the tile is not placed again; removing the region"
+					+ " takes it down";
+			}
+		}
 		return null;
 	}
 

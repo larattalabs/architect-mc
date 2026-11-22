@@ -1377,10 +1377,23 @@ public final class Batches {
 			case FAIL -> {
 				untickItem(server, b, "job:" + i.key);
 				boolean cancel = b.cancelling;
-				String msg = cancel ? "cancelled: rolled back from its snapshot" : "rolled back: " + (job.why.isEmpty() ? "it could not be placed" : job.why);
+				String msg = job.broken != null ? rollbackBrokenMessage(job.siteId, job.broken)
+					: cancel ? "cancelled: rolled back from its snapshot" : "rolled back: " + (job.why.isEmpty() ? "it could not be placed" : job.why);
 				fail(b, i, cancel ? Reason.CANCELLED : Reason.OTHER, msg);
 			}
 		}
+	}
+
+	/**
+	 * (slice PLR2) A failed item's message when the rollback of {@code siteId} stopped before its box was restored: the cells it did not
+	 * restore stay recorded under the site (the next start rolls a crash's placing record back again), so the item is not placed again.
+	 */
+	static String rollbackBrokenMessage(String siteId, String broken) {
+		if (broken.startsWith("its crash rollback is refused")) {
+			return "not placed again: " + broken; // (XR) kept as it stands, the cause in full
+		}
+		return "not placed again: the rollback of " + siteId + " did not finish (" + broken + "); what it did not restore stays recorded under "
+			+ siteId;
 	}
 
 	/** A placement failed before its first block and its record (its journal commit failed): its item fails. */

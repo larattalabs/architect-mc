@@ -7,7 +7,7 @@
 //                                 (dev.rs.overwrites), E-flat 0, no item dropped; one fixture also removed mid-build after a retake
 //   xcrash  (xr-crash, PLR2)      xr_demo in survival, halted twice (GATE_XR_CRASH: XR1, K4; default both): XR1+save, its free pass's first
 //                                 take-up of a paid block written and saved with the ledger: the restart's crash rollback is refused (the
-//                                 item FAILED with the cause, the cell keeps the free pass's block, the record and entry kept), then
+//                                 item FAILED with the cause, the cell keeps the free pass's block, the tile kept as it stands: entries committed, record placed), then
 //                                 conservation exact and Regions.remove; K4 (a tile's ACTIVE commit, its record saved placing, the queue
 //                                 file not past its job), then PLR2X (the restart's queue save written, its extra targets just settled):
 //                                 after the next start no extra target of the halted attempt is live and the region builds
@@ -253,8 +253,8 @@ export async function registerXr(steps, h) {
         const item = itemOf(H.world, x.item);
         const rec = (saveFile(H.world, 'architect-sites.json')?.infra ?? []).find((r) => r.id === x.site);
         out.xr1.after = { now, item, record: rec ? { placing: rec.placing, pending: rec.pendingSince != null } : null, conservation: p0 };
-        check(item?.status === 'FAILED' && /given back|paid/.test(item?.message ?? '') && blockId(now) !== blockId(x.was) && rec?.placing === true && rec?.pendingSince == null,
-          `XR1+save: the restart refused ${x.site}'s crash rollback (${x.item} ${item?.status}: ${item?.message}); ${x.pos.join(',')} keeps the free pass's block (${blockId(now)}, ${blockId(x.was)} was given back: ${json(x.back)}), its record kept placing (${json(out.xr1.after.record)})`, out.xr1.after);
+        check(item?.status === 'FAILED' && /rollback is refused/.test(item?.message ?? '') && blockId(now) !== blockId(x.was) && rec && rec.placing !== true && rec.pendingSince == null,
+          `XR1+save: the restart refused ${x.site}'s crash rollback (${x.item} ${item?.status}: ${item?.message}); ${x.pos.join(',')} keeps the free pass's block (${blockId(now)}, ${blockId(x.was)} was given back: ${json(x.back)}), its record kept as it stands, not placing (${json(out.xr1.after.record)})`, out.xr1.after);
         check(G.exact(p0), `XR1+save: conservation exact after the restart: ${json(p0.diff)} (identity ${p0.identity})`, p0);
         // the region builds on (the parked tile's item failed), then Regions.remove: nothing given back twice
         await L.openWorld(H.world);

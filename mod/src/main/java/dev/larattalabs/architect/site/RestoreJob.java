@@ -66,6 +66,9 @@ final class RestoreJob implements Placement.Job {
 	@Nullable String broken;
 	/** (6c X, C22) DevBridge {@code dev.undo.failRestore}: let this many removal restores finish their writes, then break the next one mid-removal (-1: off). */
 	public static volatile int failSkip = -1;
+	/** (slice PLR2) A refused crash rollback's commit of its entries (then the record is kept as it stands), and the refusal. */
+	private transient @Nullable CompletableFuture<Void> keep;
+	private transient String keptWhy = "";
 	/** (slice PLR2) TEST ({@code architect-dev-arm.json}): let this many crash rollbacks start, then break the next before its undo (-1: off). */
 	static volatile int failRollback = -1;
 	private transient boolean failCounted;
@@ -421,14 +424,36 @@ final class RestoreJob implements Placement.Job {
 		}
 		try {
 			if (phase == PLAN) {
+				if (keep != null) {
+					// (slice PLR2) the refused rollback's entries committed: the record is kept as it stands (no longer placing), the item fails
+					CompletableFuture<Void> f = keep;
+					if (!PlaceJob.waitFor(f, deadline)) {
+						return false;
+					}
+					keep = null;
+					if (f.isCompletedExceptionally()) {
+						broken = keptWhy + " (its journal entries could not be committed; the next start tries again)";
+						return true;
+					}
+					Infra cur = Infras.get(siteId);
+					if (cur != null && cur.placing()) {
+						Infras.put(server, cur.withPlacing(false));
+					}
+					broken = keptWhy;
+					return true;
+				}
 				if (planner == null) {
 					if (requeue && ROLLBACK.equals(purpose)) {
 						// (slice PLR2) a crash rollback of a survival region tile's free pass is refused when it could write back a block whose
-						// items the free pass gave back (XR); the item fails with the cause, the record and its entry are kept as they are
+						// items the free pass gave back (XR): its entries are committed, then its record kept as it stands (never placing for good:
+						// a group removal waits on a placing member), and the item fails with the cause. Not saved: a stop before the end runs
+						// the same decision again at the next start
 						String no = RegionOverwrites.crashRollbackRefusal(server, inf);
 						if (no != null) {
-							broken = no;
-							return true;
+							keptWhy = no;
+							keep = SiteJournal.complete(siteId, WorldJournal.empty(new dev.larattalabs.architect.placement.Anchors.Bounds(0, 0, 0, 0, 0, 0)), null);
+							dev.larattalabs.architect.Architect.LOGGER.warn("Cell site {}: {}", siteId, no);
+							return false;
 						}
 					}
 					group = SiteJournal.group(purpose + "-" + siteId);

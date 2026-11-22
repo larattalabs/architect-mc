@@ -886,6 +886,15 @@ public final class Placement {
 	 */
 	static RollbackEnd rollbackEnd(dev.larattalabs.architect.batch.QItem.Status status, @Nullable String itemSite, String jobSite, boolean itemSiteLive,
 		@Nullable String broken, boolean otherRollback, boolean requeue, boolean batchOpen) {
+		if (status.terminal()) {
+			return RollbackEnd.LEAVE;
+		}
+		if (broken != null) {
+			// (slice PLR2) stopped before its box was restored: the item fails now (never queued again, its hold never handed on), unless a new
+			// attempt of another site places it (PLR's c49); a sibling rollback of the same attempt (the item held as the main's) is no such attempt
+			boolean another = itemSite != null && !itemSite.equals(jobSite) && itemSiteLive;
+			return another ? RollbackEnd.LEAVE : RollbackEnd.FAIL;
+		}
 		if (!rollbackOwnsItem(status, itemSite, jobSite)) {
 			return RollbackEnd.LEAVE;
 		}
@@ -903,7 +912,7 @@ public final class Placement {
 	 * sites file) is rolled back by its own tracked job rather than released with its record dropped. Pure.
 	 */
 	static boolean extraRollsBack(dev.larattalabs.architect.journal.Journal.@Nullable Status entry, boolean recordOnDisk) {
-		return false;
+		return entry == dev.larattalabs.architect.journal.Journal.Status.ACTIVE && recordOnDisk;
 	}
 
 	/** (slice PLR2) Whether a placement job (a site's or a road's or cell site's) of {@code siteId} runs. */
