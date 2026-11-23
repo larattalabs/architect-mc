@@ -851,7 +851,14 @@ public final class WorldJournal {
 	/** (slice T5F) The progress the next halt's log line names ({@link #kill(String, String)}), else "". */
 	private static String killProgress = "";
 
+	/** (T5Fc fix round, TEST) Sees every named step before its halt check (a unit's crash or its probe of the saved state); null: none. */
+	static volatile java.util.function.@org.jspecify.annotations.Nullable Consumer<String> killProbe;
+
 	public static void kill(String point) {
+		var probe = killProbe;
+		if (probe != null) {
+			probe.accept(point);
+		}
 		String progress = killProgress;
 		if ((point + "+save").equals(killAt)) {
 			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt

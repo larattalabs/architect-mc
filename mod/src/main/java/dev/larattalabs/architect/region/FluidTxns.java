@@ -38,6 +38,23 @@ public final class FluidTxns {
 	private FluidTxns() {
 	}
 
+	/** (T5Fc fix round, TEST) The core a unit drives (TxnCoreTest's kind of env); null: the server's. */
+	static volatile @Nullable TxnCore testCore;
+
+	/** (T5Fc fix round, TEST) A unit's stockpile ledger by owner (the scoop's L reads and credits it); null: the world's stockpiles. */
+	static volatile java.util.function.@Nullable Function<String, dev.larattalabs.architect.survival.StockLedger> testLedger;
+
+	/** The core the record's txns run on: the server's, or a unit's ({@link #testCore}). */
+	static TxnCore core() {
+		TxnCore c = testCore;
+		return c != null ? c : TxnServer.core();
+	}
+
+	/** The server, or null in a unit that runs on its own world ({@link #testWorld}). */
+	static @Nullable MinecraftServer server() {
+		return testWorld != null ? null : TxnServer.server();
+	}
+
 	public static final String CHARGE = "region.charge";
 	public static final String DRAIN = "fluid.drain";
 	public static final String WRITE = "fluid.write";
@@ -99,7 +116,7 @@ public final class FluidTxns {
 	/** (8cTb) The open drain txn of a record (any reason), or null. */
 	static @Nullable TxnEntry openDrain(RegionsImpl.Live l) {
 		String r = resource(l);
-		for (TxnEntry t : TxnServer.core().open()) {
+		for (TxnEntry t : core().open()) {
 			if (DRAIN.equals(t.kind) && t.resources.contains(r)) {
 				return t;
 			}
@@ -123,7 +140,7 @@ public final class FluidTxns {
 
 	/** An open txn of {@code kind} under {@code key}, or null. */
 	static @Nullable TxnEntry open(String kind, String key) {
-		for (TxnEntry t : TxnServer.core().open()) {
+		for (TxnEntry t : core().open()) {
 			if (kind.equals(t.kind) && key.equals(t.key)) {
 				return t;
 			}
@@ -168,7 +185,7 @@ public final class FluidTxns {
 
 	/** The outcome of an attempt that began (or found) an entry: done once it retired, else held with its where, else waiting. */
 	static Step after(TxnEntry t) {
-		return after(TxnServer.core(), t);
+		return after(core(), t);
 	}
 
 	/** {@link #after(TxnEntry)} over a given core (a unit's). */
@@ -204,7 +221,7 @@ public final class FluidTxns {
 	/** (8cTc, Steward's ask) An open fluid txn of the region (any record) that is held, as {@code held(other) tx-<n>: <where>}, else null. */
 	public static @Nullable String heldAny(String regionId, @Nullable String kind) {
 		String pre = "fluid:" + regionId + "#rv";
-		for (TxnEntry t : TxnServer.core().open()) {
+		for (TxnEntry t : core().open()) {
 			if ((kind == null ? t.kind.startsWith("fluid.") : kind.equals(t.kind)) && t.held() != null && t.resources.stream().anyMatch(r -> r.startsWith(pre))) {
 				return "held(other) " + t.id + ": " + where(t);
 			}
@@ -221,7 +238,7 @@ public final class FluidTxns {
 	 */
 	public static Step charge(MinecraftServer s, RegionsImpl.Live l, Map<String, Integer> items, JsonArray bodies, long now) {
 		String key = RegionFluids.chargeKey(l);
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started st = c.begin(CHARGE, key, List.of("charge:" + key), null);
 		switch (st.status()) {
 			case ATTACHED -> {
@@ -267,7 +284,7 @@ public final class FluidTxns {
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
-			MinecraftServer s = TxnServer.server();
+			MinecraftServer s = server();
 			if (s == null || !Stockpiles.charge(s, e.data().get("owner").getAsString(), e.items(), e.data().get("key").getAsString(), e.data().get("rid")
 				.getAsInt())) {
 				throw new IllegalStateException("the stockpile no longer holds " + e.items());
@@ -369,7 +386,7 @@ public final class FluidTxns {
 			return adopted;
 		}
 		String key = drainKey(l, st.removal == null || "draining".equals(st.removal) ? "removal" : "legacy");
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(DRAIN, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -412,17 +429,17 @@ public final class FluidTxns {
 	static final TxnKind.Adapter PILE_SCOOP = new TxnKind.Adapter() {
 		@Override
 		public Probe probe(TxnEntry t, Effect e) {
-			var pile = Stockpiles.get(e.data().get("owner").getAsString());
-			if (pile == null) {
+			dev.larattalabs.architect.survival.StockLedger led = ledgerOf(e.data().get("owner").getAsString());
+			if (led == null) {
 				return Probe.APPLIED; // no pile: the scoop has nowhere to go (as Stockpiles.scoop: nothing)
 			}
-			boolean legacy = e.data().has("legacyKey") && pile.ledger().credited(e.data().get("legacyKey").getAsString());
-			return legacy || pile.ledger().credited(e.data().get("key").getAsString()) ? Probe.APPLIED : Probe.ABSENT;
+			boolean legacy = e.data().has("legacyKey") && led.credited(e.data().get("legacyKey").getAsString());
+			return legacy || led.credited(e.data().get("key").getAsString()) ? Probe.APPLIED : Probe.ABSENT;
 		}
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
-			MinecraftServer s = TxnServer.server();
+			MinecraftServer s = server();
 			if (s == null) {
 				throw new IllegalStateException("no server");
 			}
@@ -458,8 +475,24 @@ public final class FluidTxns {
 	};
 
 
+	/** The record's level, or null (no server: a unit). */
+	static @Nullable ServerLevel levelOf(RegionsImpl.Live l) {
+		MinecraftServer s = server();
+		return s == null ? null : l.level(s);
+	}
+
+	/** The owner's stockpile ledger (a unit's, {@link #testLedger}), or null: no pile. */
+	static dev.larattalabs.architect.survival.@Nullable StockLedger ledgerOf(String owner) {
+		var tl = testLedger;
+		if (tl != null) {
+			return tl.apply(owner);
+		}
+		var pile = Stockpiles.get(owner);
+		return pile == null ? null : pile.ledger();
+	}
+
 	static @Nullable ServerLevel level(Effect e) {
-		MinecraftServer s = TxnServer.server();
+		MinecraftServer s = server();
 		return s == null ? null : dev.larattalabs.architect.site.Sites.levelOf(s, e.data().get("dim").getAsString());
 	}
 
@@ -591,7 +624,7 @@ public final class FluidTxns {
 			long wasUntil = st.until;
 			JsonArray wasIdx = st.drainReceipts;
 			int[] wasTaken = st.taken;
-			ServerLevel lv = testWorld != null ? null : l.level(TxnServer.server());
+			ServerLevel lv = testWorld != null ? null : levelOf(l);
 			if (e.data().has("v")) {
 				drainedV2(t, l, st); // (T5Fc) the receipt index and the taken counts; the deadline from the receipts (§4.4)
 				st.until = -1;
@@ -653,7 +686,7 @@ public final class FluidTxns {
 	 */
 	static Step scoop(RegionsImpl.Live l, RegionFluids.Regional st) {
 		String key = "scoop:" + scoopKey(l);
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(SCOOP, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -701,7 +734,7 @@ public final class FluidTxns {
 	 */
 	static Step stray(RegionsImpl.Live l, RegionFluids.Regional st, String group, List<Long> chunks) {
 		String key = "fluid-stray:" + recKey(l) + "/" + chunks.get(0);
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(STRAY, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -830,7 +863,7 @@ public final class FluidTxns {
 		if (tw != null) {
 			return tw.apply(null);
 		}
-		ServerLevel level = l.level(TxnServer.server());
+		ServerLevel level = levelOf(l);
 		return level == null ? null : FluidWorld.of(level);
 	}
 
@@ -843,12 +876,22 @@ public final class FluidTxns {
 
 		@Override
 		public void apply(TxnEntry t, Effect e) {
-			MinecraftServer s = TxnServer.server();
-			if (s == null) {
-				throw new IllegalStateException("no server");
+			MinecraftServer s = server();
+			Map<String, Integer> got;
+			var tl = testLedger;
+			if (tl != null) {
+				// (TEST) a unit's ledger: the scoop's pure ledger step, keyed, as Stockpiles.scoop runs it
+				var c = Stockpiles.scoopInto(tl.apply(e.data().get("owner").getAsString()), e.data().get("key").getAsString(), e.data().get("lava").getAsInt(), e
+					.data().get("grates").getAsInt(), 1000, x -> 64, new java.util.TreeMap<>());
+				got = new java.util.TreeMap<>(c.returned());
+				c.overflow().forEach((k, v) -> got.merge(k, v, Integer::sum));
+			} else {
+				if (s == null) {
+					throw new IllegalStateException("no server");
+				}
+				got = Stockpiles.scoop(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.data().get("lava").getAsInt(), e.data().get(
+					"grates").getAsInt());
 			}
-			Map<String, Integer> got = Stockpiles.scoop(s, e.data().get("owner").getAsString(), e.data().get("key").getAsString(), e.data().get("lava")
-				.getAsInt(), e.data().get("grates").getAsInt());
 			RegionsImpl.Live l = live(region(e), rid(e));
 			RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
 			if (st != null) {
@@ -974,7 +1017,7 @@ public final class FluidTxns {
 
 	/** (T5Fc) The R of a drain planned by T5Fc ({@code v}: 2): drained, its receipt index, the taken counts; no {@code until} (§4.4). */
 	static void drainedV2(TxnEntry t, RegionsImpl.Live l, RegionFluids.Regional st) {
-		FluidWorld w = testWorld != null ? testWorld.apply(null) : l.level(TxnServer.server()) == null ? null : FluidWorld.of(l.level(TxnServer.server()));
+		FluidWorld w = testWorld != null ? testWorld.apply(null) : levelOf(l) == null ? null : FluidWorld.of(levelOf(l));
 		JsonArray idx = new JsonArray();
 		int[] taken = new int[3];
 		for (Effect x : t.effects()) {
@@ -1174,7 +1217,7 @@ public final class FluidTxns {
 		if (a != null) {
 			return a;
 		}
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(kind, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -1237,7 +1280,7 @@ public final class FluidTxns {
 			return a;
 		}
 		String key = "fluid-write:" + recKey(l) + "/" + String.join(",", due);
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(WRITE, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -1462,7 +1505,7 @@ public final class FluidTxns {
 
 		@Override
 		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
-			ServerLevel level = l.level(TxnServer.server());
+			ServerLevel level = levelOf(l);
 			long now = level == null ? 0L : level.getGameTime();
 			Map<String, Object[]> was = new java.util.HashMap<>();
 			for (String id : ids(e)) {
@@ -1558,7 +1601,7 @@ public final class FluidTxns {
 	 */
 	static Step adopt(RegionsImpl.Live l, RegionFluids.Regional st) {
 		String key = "fluid-adopt:" + recKey(l);
-		TxnCore c = TxnServer.core();
+		TxnCore c = core();
 		TxnCore.Started started = c.begin(ADOPT, key, List.of(resource(l)), null);
 		switch (started.status()) {
 			case ATTACHED -> {
@@ -1727,7 +1770,7 @@ public final class FluidTxns {
 
 			@Override
 			public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
-				ServerLevel level = l.level(TxnServer.server());
+				ServerLevel level = levelOf(l);
 				if (level != null) {
 					FluidWorld fw = FluidWorld.of(level);
 					for (String id : ids(e)) {
@@ -1859,7 +1902,7 @@ public final class FluidTxns {
 		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
 			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
 			RegionFluids.Body b = st.body(e.data().get("body").getAsString());
-			ServerLevel level = l.level(TxnServer.server());
+			ServerLevel level = levelOf(l);
 			if (b != null && level != null && e.data().has("why")) {
 				// (8cT last round, P2) the outcome rebuilt from the entry (a start that found the W's receipts skipped its writes and lost their
 				// state): the body and its upstream closure drained with their reasons, the typed why, the escaped cells

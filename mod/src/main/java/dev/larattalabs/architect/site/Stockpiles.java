@@ -1647,7 +1647,7 @@ public final class Stockpiles {
 	 * buckets, never more: no bucket is minted), the grates' iron bars credited, all of it once under {@code key}. {@code over}: the
 	 * consumed buckets' overflow (none: a consume returns nothing); the returned credit's overflow is the caller's to drop.
 	 */
-	static StockLedger.Credit scoopInto(StockLedger led, String key, int lavaSources, int grates, int cap, java.util.function.ToIntFunction<String> maxStack,
+	public static StockLedger.Credit scoopInto(StockLedger led, String key, int lavaSources, int grates, int cap, java.util.function.ToIntFunction<String> maxStack,
 		Map<String, Integer> over) {
 		if (led.credited(key)) {
 			return new StockLedger.Credit(Map.of(), Map.of(), true);
