@@ -850,6 +850,7 @@ export async function registerTCC(steps, h) {
         const arch = path.join(W.dir, 'architect');
         fs.mkdirSync(arch, { recursive: true });
         fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ entityHide: 1200, entityHideBox: [bx[0] - 24, bx[2] - 24, bx[3] + 24, bx[5] + 24] }));
+        const shownBy = Date.now() + 1200 * 50 + 10_000; // the window (from the arm, after this write) is over by then
         await L.openWorld(name);
         const refusals = [];
         let rm = null;
@@ -860,6 +861,8 @@ export async function registerTCC(steps, h) {
           if (!/entities/.test(json(rm))) break; // any other refusal: judged below
           await L.sleep(3000);
         }
+        // judged only once the hidden entities show: an item a blind removal popped is hidden until then
+        await L.sleep(Math.max(0, shownBy - Date.now()));
         await L.tp(...W.at);
         await wait(4000);
         const after = await parts([b.site], b.cp, b.items);
