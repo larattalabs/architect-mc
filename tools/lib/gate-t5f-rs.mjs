@@ -221,7 +221,10 @@ export async function drainHold(H) {
     const standing = counted ? await lavaAt(H, C.cells) : [];
     if (counted && standing.length) bucket = await L.call('dev.player.bucket', { at: top(standing) }, 30_000);
     out.bucket = bucket;
-    check(counted && bucket?.hand === 'minecraft:lava_bucket', `DH: the precondition: the drain held at ${tried.at(-1)} with the pit's chunk ${key(C.chunk)} counted before it (${json(before)}); the player bucketed a source there (${json(bucket)})`);
+    // (T5Fc fix round) on T5F a chunk's count and its drain are one apply: a chunk counted before the hold holds no source of ours to take,
+    // so the 8cT window (counted, then harvested) is closed by construction; the conservation below still gates
+    out.closedByConstruction = counted && !standing.length;
+    check(counted && (bucket?.hand === 'minecraft:lava_bucket' || out.closedByConstruction), `DH: the precondition: the drain held at ${tried.at(-1)} with the pit's chunk ${key(C.chunk)} counted before it (${json(before)}); the player bucketed a source there (${json(bucket)}), or none stands (T5F: counted = drained in one apply)`);
     await L.call('dev.fluid.holdChunk', { off: true }, 10_000);
     out.final = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
     await L.settle(2000);
@@ -446,7 +449,7 @@ export async function s3a(H) {
   const s0 = await lavaStock(H);
   await L.call('dev.txn.trace', { on: true }, 10_000);
   const r = await L.call('dev.region.remove', { region: p.region, requester: H.G.OWNER }, 3_600_000);
-  const trace = (await L.call('dev.txn.trace', { on: false }, 10_000)).points ?? [];
+  const trace = (await L.call('dev.txn.trace', { on: false }, 10_000)).trace ?? []; // (T5Fc fix round) the hook answers `trace`
   const got = (await lavaStock(H)) - s0;
   const refundLava = r.refund?.['minecraft:lava_bucket'] ?? null;
   const out = { scoopDone: trace.includes('TX:region.scoop:effects'), refundLava, got, charged: p.charged };
