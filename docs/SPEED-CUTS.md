@@ -51,8 +51,9 @@ speed-over-coverage cuts SPD finds." Chore SPD3 applied the first and the third;
   world, not the live one they built (the matrix always did). Restore: build per case in `t3Town` (drop the `fixture` cache).
 - **txn-crash-adopt is a split step** (chore TXA): two parts on two shards' headless servers (`split` in `gate-chains.json`,
   `tools/lib/gate-part.mjs` sections): p1 the matrix's odd halts, overflow, road, retagged; p2 the even halts, held, legacy-finish,
-  gone-save. Each part builds its own fixture and traces its own adoption. It splits only in a run that splits (turbo, `--split`
-  or `--only txn-crash-adopt/p1`); a non-turbo run without `--split` runs the step whole, as before. Measured: the two parts took 8m35s and 8m08s (16m43s of step time) in 8m35s of wall: -8.1 min wall, at the cost of the second part's fixture build (~1 min) and a second server. Restore: drop the
+  gone-save. Each part builds its own fixture and traces its own adoption. It splits in a run that splits (turbo, `--split`,
+  `--only txn-crash-adopt/p1`, or since chore TXS a fixed `--shards N` >= 2, so the release verifiers' `--no-turbo --shards 2`
+  runs split too); one shard (or `--no-split`) runs the step whole. Measured: the two parts took 8m35s and 8m08s (16m43s of step time) in 8m35s of wall: -8.1 min wall, at the cost of the second part's fixture build (~1 min) and a second server. Restore: drop the
   `split` key.
 
 - **txn-crash-adopt before and after, all three cuts** (chore TXA): before, 604e109d whole on one server: 24m45s, 205/0, load p50 12.6,

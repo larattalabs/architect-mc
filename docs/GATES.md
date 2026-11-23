@@ -601,7 +601,7 @@ release tier's 60 plus what a batch's slice run covered (0.41.0's integration sl
    `unit-kit` is the exception: when it is CACHED, its recorded JUnit report for the same kit tree is copied into the run and serves
    the kit-suite readers (kit-reuse.mjs checks the tree).
 
-**Split steps** (turbo, docs/GATES.md "Turbo"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
+**Split steps** (a run that splits: turbo, `--split` or a fixed `--shards N` >= 2; "Split steps"): each part `<id>/p<k>` has its own key (its own entry: the section env) over its
 parent's input set, and is CACHED or run on its own; a canary or a bench the bench rule runs takes all its parts.
 
 **`--full`** runs every candidate, every rotation option and every judged bench but the nightly-only 6a-heap (megaB's full walk; the
@@ -2228,6 +2228,14 @@ every live ticket's, so the order is the order of enqueueing.
 A long step whose driver runs independent sections (worlds, fixtures, seeds, scenario variants, item groups) declares `split` in
 `gate-chains.json`: a part's env (its sections, `GATE_PART_SECTIONS`), or its own `shell` (a shell chain split by its commands),
 an env every part gets (`${PART}` = p1, p2, ...: each part's own evidence dir) and an estimate.
+- **When a run splits** (`splitDecision` in `tools/lib/step-split.mjs`, first rule that applies): `--only <id>/p<k>` names a
+  part; `--split`; not with `--no-split`; turbo; **a fixed `--shards N` with N >= 2** (chore TXS: a `--no-turbo` run such as a
+  release verifier's `--shards 2 --ports A:B,C:D`); otherwise (one shard, `--shards auto` or omitted, where N is not known when
+  the plan is cut) whole. Under a fixed N each part takes one of the run's own shards (its run dir, server and port pair from
+  `--ports`): no extra port, no slot beyond the run's one; parts beyond N queue for a shard (each repeats its setup, e.g. the
+  fixture build). The `--only` explicit-list cache looks each part up by its own key; `--no-cache` runs every part. `--plan`
+  prints the reason in its `split (...)` note. Every step that declares `split` follows it; they all already ran split under
+  turbo.
 - **Ids.** The parent keeps its id everywhere a step is named (the impact rules, the tiers, `supersededBy`, `--only`); after the
   selection a splitting run replaces it by `<id>/p1` .. `<id>/pN`. `--only <id>/p2` runs that part alone. A step that `waitFor`s
   the parent waits for every part; `after` a split step is not allowed (the config check refuses it). The history records each
@@ -2967,7 +2975,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--turbo`, `--no-turbo` | | turbo for a tier run of at least 20 steps (`shards.turbo.minSteps`): the whole machine ("Turbo") |
 | `--lanes N` | | turbo: `shards.turbo.offlineLanes` (3) offline lanes for the client-less steps |
 | `--no-frozen-source` | | the drivers run from the frozen source `<run dir>-src` at HEAD ("Frozen source and the CPU budget"); this flag: from this checkout's working tree |
-| `--split`, `--no-split` | | split steps run as parts in turbo runs; `--split` outside turbo too |
+| `--split`, `--no-split` | | split steps run as parts in turbo runs and in runs with a fixed `--shards N` >= 2 (chore TXS); `--split` on one shard too; `--no-split` keeps them whole |
 | `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (6; 9 before 2026-10-24, "Frozen source and the CPU budget"), N at most 6; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
 | `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
 | | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |

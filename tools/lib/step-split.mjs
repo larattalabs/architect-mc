@@ -70,6 +70,25 @@ export function validateSplits(steps) {
 }
 
 /**
+ * Whether a run splits its split steps (chore TXS; docs/GATES.md "Split steps"), first rule that applies:
+ *   1. `--only <id>/p<k>` names a part: split (that part alone; even with --no-split)
+ *   2. `--split`: split          3. `--no-split`: whole          4. turbo: split
+ *   5. a fixed `--shards N` with N >= 2 (a non-turbo run, e.g. a release verifier's `--shards 2 --ports A:B,C:D`): split, so each
+ *      part takes one of the run's own shards (its port pair from --ports, its server); no extra port, no slot beyond the run's
+ *   6. otherwise (one shard, `--shards auto` or omitted: the shard count is not known when the plan is cut): whole
+ * -> { on, why }. `shardsArg` is the raw --shards value (undefined when omitted).
+ */
+export function splitDecision({ onlyParts = 0, split = false, noSplit = false, turbo = false, shardsArg } = {}) {
+  if (onlyParts > 0) return { on: true, why: '--only names a part' };
+  if (split) return { on: true, why: '--split' };
+  if (noSplit) return { on: false, why: '--no-split' };
+  if (turbo) return { on: true, why: 'turbo' };
+  const n = /^\d+$/.test(String(shardsArg ?? '')) ? Number(shardsArg) : 0;
+  if (n >= 2) return { on: true, why: `--shards ${n} (fixed): one part per shard` };
+  return { on: false, why: shardsArg === undefined ? 'one shard' : n === 1 ? '--shards 1' : `--shards ${shardsArg}: not a fixed count` };
+}
+
+/**
  * Expands the split parents among `ids` (the selection, in order) into their parts, in place of the parent.
  * -> { ids, parts: { parent: [part ids] }, defs: { partId: entry } }. `waitFor` naming a split parent is rewritten to its parts.
  */

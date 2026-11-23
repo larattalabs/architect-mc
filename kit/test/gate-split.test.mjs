@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { aggregateProblems, entryOf, expandSplits, parentResults, partEntryOf, planOrder, resultOf, sectionsOf, validateSplits } from '../../tools/lib/step-split.mjs';
+import { aggregateProblems, entryOf, expandSplits, parentResults, partEntryOf, planOrder, resultOf, sectionsOf, splitDecision, validateSplits } from '../../tools/lib/step-split.mjs';
 import { gatePart } from '../../tools/lib/gate-part.mjs';
 import { IRR_SECTIONS } from '../../tools/lib/gate6cirr-game.mjs';
 
@@ -183,4 +183,28 @@ test('parentResults/aggregateProblems: a run of fewer parts than configured is P
   assert.equal(parentResults({ a: ['a/p1', 'a/p2'] }, [row('a/p1'), row('a/p2')], [], { total: { a: 2 } }).a.status, 'PASS');
   // a superseded step that ran itself (--only names it) stands on its own row
   assert.deepEqual(aggregateProblems({ rows: [row('x-flat')], superseded: { 'x-flat': 'x' } }), []);
+});
+
+// chore TXS: a non-turbo run with a fixed --shards of 2 or more splits by default (the release verifiers' --shards 2 --ports A:B,C:D)
+test('splitDecision: 2 fixed shards split; 1 shard, auto and omitted stay whole; --no-split opts out; the old rules keep their order', () => {
+  assert.deepEqual(splitDecision({ shardsArg: '2' }).on, true, '--no-turbo --shards 2: split');
+  assert.equal(splitDecision({ shardsArg: '3' }).on, true);
+  assert.equal(splitDecision({ shardsArg: '1' }).on, false, 'one shard: whole');
+  assert.equal(splitDecision({}).on, false, '--shards omitted: whole');
+  assert.equal(splitDecision({ shardsArg: 'auto' }).on, false, 'auto: N unknown when the plan is cut, whole');
+  assert.equal(splitDecision({ shardsArg: '2', noSplit: true }).on, false, '--no-split opts out');
+  assert.equal(splitDecision({ shardsArg: '2', noSplit: true }).why, '--no-split');
+  assert.equal(splitDecision({ turbo: true }).on, true, 'turbo still splits');
+  assert.equal(splitDecision({ turbo: true, noSplit: true }).on, false, 'turbo --no-split: whole');
+  assert.equal(splitDecision({ split: true, shardsArg: '1' }).on, true, '--split splits on one shard too');
+  assert.equal(splitDecision({ split: true, noSplit: true }).on, true, '--split wins over --no-split, as before');
+  assert.equal(splitDecision({ onlyParts: 1, noSplit: true }).on, true, '--only <id>/p<k> always splits');
+  assert.match(splitDecision({ shardsArg: '2' }).why, /--shards 2 \(fixed\)/);
+});
+
+test('gate-run decides the split with splitDecision, from the raw --shards (before the shard count is built)', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'gate-run.mjs'), 'utf8');
+  assert.match(src, /const SPLIT_WHY = splitDecision\(\{ onlyParts: onlyParts\.length, split: flag\('--split'\), noSplit: flag\('--no-split'\), turbo: TURBO, shardsArg: opt\('--shards'\) \}\);/);
+  assert.match(src, /const SPLIT = SPLIT_WHY\.on;/);
+  assert.match(src, /split \(\$\{SPLIT_WHY\.why\}\)/, 'the plan note says why it split');
 });

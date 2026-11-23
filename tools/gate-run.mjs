@@ -12,6 +12,7 @@
 //   node tools/gate-run.mjs release [--release <tag>] [--since <ref>] [--shards N] [--plan]  everything, duplicates rotated, the
 //                                   cached steps skipped (below); --full runs every candidate and every rotation option
 //   [--turbo | --no-turbo] [--lanes N] [--split | --no-split]   turbo: the whole machine (default for tier runs of 20+ steps)
+//                                   split steps run as parts under turbo, --split or a fixed --shards N >= 2; --no-split: whole
 //   node tools/gate-run.mjs --list                  the chains and tiers
 //   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
 //
@@ -66,7 +67,8 @@
 // shared run as before). A turbo run queues (FIFO, tools/lib/turbo.mjs) until no other run holds a slot, then holds every slot file,
 // runs up to shards.turbo.max in-game shards (auto: the plan, memory and ports bound it; no cpu cap) plus --lanes N offline lanes
 // (shards.turbo.offlineLanes) that take the client-less steps beside them, and splits the `split` steps into parallel parts
-// (tools/lib/step-split.mjs; --no-split keeps them whole, --split splits outside turbo too). Every run (turbo or not) samples the
+// (tools/lib/step-split.mjs; --no-split keeps them whole, --split splits outside turbo too; a non-turbo run with a fixed
+// --shards N >= 2 splits them too, one part per shard, chore TXS). Every run (turbo or not) samples the
 // machine to machine.jsonl (summary.machine).
 // The kit suite runs once: unit-kit writes a JUnit report to GATE_KIT_RESULTS (tools/lib/kit-reuse.mjs), and the drivers'
 // kit-suite and goldens checks read it when exact; the runner also passes GATE_UNIT_MOD_RUN (where unit-mod built this head).
@@ -113,7 +115,7 @@ import { applyNightlyFulls, benchConf, decideBench, fullBenches, latestNightlyRe
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
-import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
+import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, splitDecision, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
 import { startHeartbeat, sumCpu } from './lib/heartbeat.mjs';
 import { junitCounts, noResultsReason } from './lib/step-counts.mjs';
@@ -505,9 +507,11 @@ if (tierInfo.superseded && (opt('--only') || opt('--from'))) {
 // and the client-less steps on their own offline lanes (--lanes N, default shards.turbo.offlineLanes).
 const TC = turboConfig(cfg);
 const TURBO = !flag('--no-turbo') && (flag('--turbo') || (TIERS.includes(chainName) && stepIds.length >= TC.minSteps));
-// split steps (tools/lib/step-split.mjs): a turbo run (or --split) runs a split step as its parts, in parallel; --no-split keeps
-// every step whole. The selection above names parents only; the parts replace them here.
-const SPLIT = onlyParts.length > 0 || flag('--split') || (TURBO && !flag('--no-split'));
+// split steps (tools/lib/step-split.mjs splitDecision): a turbo run, a run with a fixed --shards of 2 or more (chore TXS: the
+// release verifiers' --no-turbo --shards 2) or --split runs a split step as its parts, in parallel; --no-split keeps every step
+// whole. The selection above names parents only; the parts replace them here.
+const SPLIT_WHY = splitDecision({ onlyParts: onlyParts.length, split: flag('--split'), noSplit: flag('--no-split'), turbo: TURBO, shardsArg: opt('--shards') });
+const SPLIT = SPLIT_WHY.on;
 let splitParts = {};
 // every split parent's configured part count (a parent with fewer parts in the run is PARTIAL)
 const splitTotals = () => Object.fromEntries(Object.keys(splitParts).map((k) => [k, cfg.steps[k]?.split?.parts?.length ?? splitParts[k].length]));
@@ -519,7 +523,7 @@ if (SPLIT) {
   for (const [k, v] of Object.entries(splitParts)) {
     if (tierInfo.why?.[k]) for (const id of v) tierInfo.why[id] = [...tierInfo.why[k], `part of the split step ${k}`];
   }
-  if (Object.keys(splitParts).length) tierInfo.notes = [...(tierInfo.notes ?? []), `split: ${Object.entries(splitParts).map(([k, v]) => `${k} -> ${v.length} parts`).join(', ')} (--no-split keeps them whole)`];
+  if (Object.keys(splitParts).length) tierInfo.notes = [...(tierInfo.notes ?? []), `split (${SPLIT_WHY.why}): ${Object.entries(splitParts).map(([k, v]) => `${k} -> ${v.length} parts`).join(', ')} (--no-split keeps them whole)`];
 }
 
 const PLAN = flag('--plan') || flag('--dry-run');
