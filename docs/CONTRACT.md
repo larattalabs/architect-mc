@@ -35858,7 +35858,9 @@ regression guards.
 One structure for P1-1..P1-4: a paid cell's entitlement lives in its chunk, in the same accepted write that removes it, and its count
 lives in the receipt of the apply that deletes it. Units: `FluidsT5FcFixTest` (17) through the real adapters on `MemFluidWorld` and a real
 `TxnCore` (`FluidTxns.testCore`, an in-memory txn.json, a refusable barrier that flushes the chunks, a crash at a named point, a reload).
-Red: 17 of 17 on the seam commit aae02fde; revert check: each fix reverted alone (a mutation per finding), its test red again (16 of 16).
+Revert check (the stronger evidence): each fix reverted alone (one mutation per finding, on 580f989c), its test red again: 16 of 16. Red: the
+final test file against aae02fde's main sources, 17 of 17 red, each with the reason its message names (four "not built": restartRedrains,
+abortFlowing(FluidWorld..), mergeAwaitedWith, and p1_4's hold path needing a level; the integration test at its `drained` point, absent).
 - **P1-1, P1-2, P1-4 (one rule).** A third mark, `DRAINED(R)` (packed `~cellIndex`: a save before T5Fc has no negative value). Every
   per-chunk drain W (removal, escape, unsettled, upstream, held, recheck, lot, stray) runs in its chunk's `RegionFluids.DrainCtx`: before the
   writes it reads R's cells R delivered (WROTE, `ownDelivered`, no `Placed` record), the only own cells any drain takes (I8: a dispensed or
@@ -35897,10 +35899,13 @@ Red: 17 of 17 on the seam commit aae02fde; revert check: each fix reverted alone
   77611839 (`green3/20261123-050343-change`): PASS t5-scoop-barrier 3/0, t5-s3b 2/0, t5-taken 3/0, t5-tombstone 4/0, t5-drain-tx 12/0,
   t5-scoop-tx 12/0. Two row drivers fixed at 03fe3489 (t5-s3a read `points`, the hook answers `trace`; t5-drain-hold's precondition: on T5F a
   chunk counted before the hold is drained in the same apply), re-run (`green4/20261123-052906-change`): PASS both (conservation 10 == 10).
-  **Not green, by construction of the rows:** t5-drain-fl5 and t5-drain-mixed act through a dispenser while the drain txn is open; the
-  removal's held box seals dispensers (`TxnHoldDispenserMixin`, `Fills.heldBox`), on ffea3bd5 as on the head, so the take never happens
-  (fl5's conservation is exact, 10 == 10) and mixed's sealed lava bucket comes back with the dispenser's player-block extraction (11 == 10:
-  the scoop credited 10). Their P1-2a/b windows are covered by units (FluidsT5FcTest, `p1_2_*`).
+  t5-drain-hold now passes on conservation only (on T5F nothing stands in a counted chunk to harvest). **Still FAIL:** t5-drain-fl5
+  (precondition: the dispenser took nothing, on ffea3bd5 as on the head; conservation exact, 10 == 10) and t5-drain-mixed (precondition: its
+  `apply:0` halt is not the pit's W on T5F, so the pit stood at the restart; conservation 11 == 10 charged, on ffea3bd5 too, while the server
+  log shows the scoop crediting exactly 10 lava: the 11th bucket's source is not found). A dispenser seal by the removal's held box
+  (`TxnHoldDispenserMixin` -> `TxnServer.boxHeld`) is the likely cause of fl5's precondition, not verified. Both rows need a driver rework.
+- **Coverage gaps:** the stray pass's EFFECTS_DONE wait (P2-9's second half) has no unit; P1-6 is tested as its predicate, not through
+  `gateFlowing`; the abort's frozen take is unit-tested only through `abortFlowing(FluidWorld..)` (no flowing record in the units).
 
 #### Crash safety and scope (T5Fc fix round)
 

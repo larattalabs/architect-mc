@@ -36,7 +36,7 @@ Contract: the coordinator's T5F draft (side-session notes, architect-T5F-contrac
 - Units: FluidsT5FcFixTest 17/17 red on aae02fde, green on 580f989c; per-finding revert check 16/16 red (mutation script kept outside the
   repo); mod suite 2005 tests, 0 failed, 1 skipped.
 - In-game (3 runs used): red3 on ffea3bd5 8/8 FAIL; green3 on 77611839 6 PASS (incl. t5-drain-tx, t5-scoop-tx); green4 on 03fe3489 t5-s3a and
-  t5-drain-hold PASS after two driver fixes. t5-drain-fl5 and t5-drain-mixed stay FAIL: their dispenser is sealed by the removal's held box
-  (red and green alike); the rows need a non-dispenser actor or an unsealed window (a later slice). Record: CONTRACT "fix round as built".
+  t5-drain-hold PASS after two driver fixes (hold: conservation only). t5-drain-fl5 and t5-drain-mixed stay FAIL on their preconditions (red
+  and green alike; mixed's 11 == 10 unexplained, the scoop credited 10); both need a driver rework. Record: CONTRACT "fix round as built".
 - Not done here: the coverage rows (t5-escape-closure, t5-held-future, t5-lot-multi, t5-lot-barrier-crash, t5-rc-strict); flowingWater
   stays unadvertised; the GPT fix-check (the coordinator's).
