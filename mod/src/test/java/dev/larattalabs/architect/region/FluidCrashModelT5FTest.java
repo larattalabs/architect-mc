@@ -109,13 +109,13 @@ class FluidCrashModelT5FTest {
 
 	@Test
 	void runtime_seenAhead_noSeenReceipt() {
-		
+
 		bound(Naive.SEEN_AHEAD, hasMethod(FluidTxns.class, "seenOf"), "FluidTxns.seenOf (the @seen receipt) deleted; counts in the drain W's own receipt");
 	}
 
 	@Test
 	void runtime_aggregateW_perChunkDrainEffects() {
-		
+
 		// 8cT's drain W carries every chunk ("chunks"), its probe ABSENT when any lacks the receipt; T5F plans one W per (body, chunk) ("chunk")
 		bound(Naive.AGGREGATE_W, !hasMethod(FluidTxns.class, "drainEffects"),
 			"FluidTxns.drainEffects (the per-(body, chunk) drain plan, each effect's data naming its one chunk)");
@@ -123,7 +123,7 @@ class FluidCrashModelT5FTest {
 
 	@Test
 	void runtime_lBeforeBarrier_noLedgerEffectInTheDrain() {
-		
+
 		boolean naive = FluidTxns.DRAIN_KIND.adapter(FluidsT5FRedTest.effect("pile.scoop", "L")) != null;
 		bound(Naive.L_BEFORE_BARRIER, naive, "fluid.drain has no pile.scoop (L) adapter; region.scoop is its own kind");
 	}
@@ -141,7 +141,7 @@ class FluidCrashModelT5FTest {
 
 	@Test
 	void runtime_storedUntil_deadlineFromReceipts() {
-		
+
 		bound(Naive.STORED_UNTIL, !hasMethod(RegionFluids.class, "settleDeadline"),
 			"RegionFluids.settleDeadline (max(receipt t) + bound over the drain's receipts), and no stored until read (FluidsT5FRedTest.f_*)");
 	}
