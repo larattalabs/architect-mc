@@ -1295,6 +1295,8 @@ public final class Adopt {
 				throw new Sites.SiteException(Sites.blockersMessage(b.id(), blockers));
 			}
 		}
+		// (slice LR2-FIX fix round, P1-3) its drop snapshot below: refused (retryable) before any change until the entities there are loaded
+		EntityWait.requireLive(level, "live:unadopt:" + b.id(), wb != null ? wb : b.restoreBox(), "Removing " + b.id());
 		LongPredicate only = cells::contains;
 		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, only) : null;
 		Sites.Drops drops = Sites.Drops.before(level, wb != null ? wb : b.restoreBox());

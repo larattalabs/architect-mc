@@ -1785,6 +1785,8 @@ public final class Sites {
 				"taking_up");
 		}
 		if (b.placing()) {
+			// (slice LR2-FIX fix round, P1-3) its rollback clears what it pops: refused (retryable) until its entities are loaded and visible
+			EntityWait.requireLive(level, "live:rollback:" + id, b.restoreBox(), "Removing " + id);
 			// Remove during placing cancels the job and restores the box (phase 4d): it was never placed
 			Placement.abort(server, id, "removed while it was being placed");
 			drainIrrigation(level, b); // (6c IRR, S-IRR-4) a farm lot's sources leave with it, drained first
@@ -1825,6 +1827,15 @@ public final class Sites {
 					throw new SiteException(blockersMessage(x.id(), blockers));
 				}
 			}
+		}
+		{
+			// (slice LR2-FIX fix round, P1-3) the drop snapshot below reads the union of every removed box: refused (retryable, NOT_LOADED) before
+			// any change until the entities there are loaded and visible (a chunk's blocks can stand loaded with its entities still pending)
+			Anchors.Bounds dropArea = all.get(0).restoreBox();
+			for (Site x : all) {
+				dropArea = union(dropArea, x.restoreBox());
+			}
+			EntityWait.requireLive(level, "live:remove:" + id, dropArea, "Removing " + id);
 		}
 		tr.mark("checks");
 		{
@@ -2675,6 +2686,7 @@ public final class Sites {
 			throw new SiteException("The saved terrain of " + id + " is not in the world journal; it can't be moved (forget drops the record)");
 		}
 		refusePlayerIn(oldLevel, b.restoreBox(), id, "moving it");
+		EntityWait.requireLive(oldLevel, "live:move:" + id, b.restoreBox(), "Moving " + id); // (slice LR2-FIX fix round, P1-3) before build writes
 		if (!force) {
 			List<String> blockers = removalBlockers(oldLevel, b);
 			if (!blockers.isEmpty()) {

@@ -146,6 +146,11 @@ final class RestoreJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		// (slice LR2-FIX fix round, P2-4) done, broken or thrown (Placement drops a job that threw without aborted): its entity-wait ticket goes
+		return EntityWait.guard(entityKey(), () -> step1(server, deadline));
+	}
+
+	private boolean step1(MinecraftServer server, long deadline) {
 		long t0 = System.nanoTime();
 		int p0 = phase;
 		boolean r;
@@ -161,9 +166,6 @@ final class RestoreJob implements Placement.Job {
 		if (Sites.Trace.ON) {
 			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} restore {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase,
 				(System.nanoTime() - t0) / 1e6, r ? " done" : "");
-		}
-		if (r) {
-			EntityWait.release(entityKey()); // (slice LR2-FIX) done or broken: its entity-wait ticket goes
 		}
 		return r;
 	}
@@ -199,7 +201,8 @@ final class RestoreJob implements Placement.Job {
 		}
 		if ((phase == PLAN && planner == null || phase == WRITE && writer == null) && !EntityWait.ready(level, entityKey(), s.restoreBox(), true)) {
 			// (slice LR2-FIX) its drop snapshot (PLAN's, or WRITE's when resumed without one) and its clears only once its drop area's entities are
-			// loaded and visible: a job resumed at world start, or with no player near, waits here under a ticket, kept until the job ends
+			// loaded and visible: a job resumed at world start, or with no player near, waits here. Its ticket is taken at this first check, ready
+			// or not, and kept until the job retires (fix round P1-1: a player leaving mid-plan or mid-write can't hide them before the clears)
 			return false;
 		}
 		try {

@@ -18,12 +18,15 @@ import org.jspecify.annotations.Nullable;
  * entities load (a restore rolled forward at world start, or a job resumed with no player near), its {@code before} snapshot misses a player's
  * own items there (a later clear then takes them) and its clears miss what the write pops (one item minted: the LR-2s restart pop).
  *
- * <p>One rule: no {@code Drops} snapshot or write of a gated restore while any chunk of its drop area (its box inflated by 1, as {@code Drops}
- * reads it) has entities not loaded or not visible. A restore that has to wait takes a loading ticket on those chunks ({@link ChunkTickets},
- * the placement ticket, so the counts stay one per chunk), so the wait ends without a player near. A one-tick write lets go
- * {@link #RELEASE_TICKS} after it passed (past {@code Drops}' later pass); a job that writes over ticks ({@code keep}) lets go when it ends. A
- * wait no one retried for {@link #STALE_TICKS} lets go by itself. Tickets are not saved: a world stop drops them, and the next start waits again.
- * Server thread.
+ * <p>One rule: no {@code Drops} snapshot or write of a gated restore while any chunk vanilla's entity query searches for its drop area (its
+ * box inflated by 1, as {@code Drops} reads it, plus the query's 2-block margin: an entity centred in a neighbouring chunk whose bounding box
+ * reaches in is found too) has entities not loaded or not visible; and every gated restore holds a loading ticket on those chunks from its
+ * gate until its drop cleanup is past ({@link ChunkTickets}, the placement ticket, so the counts stay one per chunk), ready or not, so a player
+ * leaving can't hide them in between and a wait ends without a player near. A one-tick write lets go {@link #RELEASE_TICKS} after it passed
+ * (past {@code Drops}' later pass); a job that writes over ticks ({@code keep}) lets go when it retires ({@link #guard}: done, broken or
+ * thrown; {@link #release} on a cancel). A wait no one retried for {@link #STALE_TICKS} lets go by itself. A live synchronous restore refuses
+ * ({@link #requireLive}, NOT_LOADED, retryable) instead of waiting. Tickets are not saved: a world stop drops them, and the next start waits
+ * again. Server thread.
  */
 public final class EntityWait {
 	/** The world side (a seam for tests). */
@@ -65,11 +68,18 @@ public final class EntityWait {
 	private EntityWait() {
 	}
 
-	/** The chunks (packed) of {@code box}'s drop area: the box inflated by 1, as {@code Sites.Drops} reads it. */
+	/** Vanilla's entity query margin in x and z ({@code EntitySectionStorage.forEachAccessibleNonEmptySection}: the box grown by 2.0). */
+	static final int QUERY_MARGIN = 2;
+
+	/**
+	 * The chunks (packed) vanilla's entity query searches for {@code box}'s drop area: the area is {@code Occupancy.aabb(box).inflate(1)}, x in
+	 * [minX - 1, maxX + 2), and the query walks sections from floor(minX - 1 - 2) to floor(maxX + 2 + 2).
+	 */
 	public static List<Long> chunks(Anchors.Bounds box) {
 		List<Long> out = new ArrayList<>();
-		for (int cx = (box.minX() - 1) >> 4; cx <= (box.maxX() + 1) >> 4; cx++) {
-			for (int cz = (box.minZ() - 1) >> 4; cz <= (box.maxZ() + 1) >> 4; cz++) {
+		int m = 1 + QUERY_MARGIN;
+		for (int cx = (box.minX() - m) >> 4; cx <= (box.maxX() + 1 + m) >> 4; cx++) {
+			for (int cz = (box.minZ() - m) >> 4; cz <= (box.maxZ() + 1 + m) >> 4; cz++) {
 				out.add(ChunkPos.pack(cx, cz));
 			}
 		}
@@ -87,28 +97,64 @@ public final class EntityWait {
 	}
 
 	/**
-	 * Whether {@code key}'s restore may snapshot and write now. Not ready: its ticket is taken (once per key; a retry only renews it) and it waits.
-	 * Ready: a one-tick write's ticket goes {@link #RELEASE_TICKS} later; a {@code keep} one stays until {@link #release}.
+	 * Whether {@code key}'s restore may snapshot and write now. Its ticket is taken on the first call, ready or not (once per key; a retry
+	 * renews it). Not ready: it waits. Ready: a one-tick write's ticket goes {@link #RELEASE_TICKS} later; a {@code keep} one stays until its
+	 * job retires.
 	 */
 	static boolean ready(World w, String key, List<Long> chunks, boolean keep) {
 		Long missing = notReady(w, chunks);
 		Held h = HELD.get(key);
+		if (h == null) {
+			ChunkTickets.acquire(w.dimension(), chunks, w.tickets());
+			h = new Held(w.dimension(), List.copyOf(chunks), w.tickets(), keep, w.now());
+			HELD.put(key, h);
+			if (missing != null) {
+				Architect.LOGGER.info("Restore {} waits for the entities of {} chunk(s) (e.g. chunk {}, {}) to load; a ticket holds them", key,
+					chunks.size(), ChunkPos.getX(missing), ChunkPos.getZ(missing));
+			}
+		}
+		h.touched = w.now();
 		if (missing == null) {
-			if (h != null && !h.keep) {
+			if (!h.keep) {
 				h.releaseAt = w.now() + RELEASE_TICKS;
 			}
 			return true;
 		}
-		if (h == null) {
-			ChunkTickets.acquire(w.dimension(), chunks, w.tickets());
-			HELD.put(key, new Held(w.dimension(), List.copyOf(chunks), w.tickets(), keep, w.now()));
-			Architect.LOGGER.info("Restore {} waits for the entities of {} chunk(s) (e.g. chunk {}, {}) to load; a ticket holds them", key, chunks.size(),
-				ChunkPos.getX(missing), ChunkPos.getZ(missing));
-		} else {
-			h.touched = w.now();
-			h.releaseAt = -1;
-		}
+		h.releaseAt = -1;
 		return false;
+	}
+
+	/**
+	 * A job's step under its entity wait: when the step ends the job (true) or throws, {@code key}'s ticket goes (the one retirement path of a
+	 * job that writes over ticks: Placement drops a job that threw without {@code aborted}).
+	 */
+	public static boolean guard(String key, java.util.function.BooleanSupplier step) {
+		boolean done = true;
+		try {
+			done = step.getAsBoolean();
+			return done;
+		} finally {
+			if (done) {
+				release(key);
+			}
+		}
+	}
+
+	/**
+	 * A live synchronous restore's admission: ready, its ticket kept past its cleanup; not ready, it is refused NOT_LOADED (retryable: the
+	 * ticket taken now loads the entities) before any snapshot or change.
+	 */
+	static void requireLive(World w, String key, List<Long> chunks, String what) throws Sites.SiteException {
+		if (!ready(w, key, chunks, false)) {
+			Long missing = notReady(w, chunks);
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_LOADED, what + " waits for the entities around it to load" + (missing
+				== null ? "" : " (chunk " + ChunkPos.getX(missing) + "," + ChunkPos.getZ(missing) + ")") + "; nothing was changed, try again in a moment");
+		}
+	}
+
+	/** {@link #requireLive} over {@code box}'s drop area in {@code level}. */
+	public static void requireLive(ServerLevel level, String key, Anchors.Bounds box, String what) throws Sites.SiteException {
+		requireLive(world(level), key, chunks(box), what);
 	}
 
 	/**

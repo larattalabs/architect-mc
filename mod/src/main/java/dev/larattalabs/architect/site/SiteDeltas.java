@@ -1452,6 +1452,8 @@ public final class SiteDeltas {
 			Placement.add(server, j);
 			return new Result(true, siteId, from, k, 0, List.of(), 0, List.of(), List.of("pending: reverting over ticks"), b, null);
 		}
+		// (slice LR2-FIX fix round, P1-3) its drop snapshot below: refused (retryable) before any change until the entities there are loaded
+		EntityWait.requireLive(level, "live:revert:" + siteId, b.restoreBox(), "Reverting " + siteId);
 		WorldJournal.kill("K5");
 		String group = SiteJournal.group(siteId + "-r" + k);
 		SiteJournal.Undone undone = SiteJournal.undoEntries(level, ids, group);

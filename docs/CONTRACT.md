@@ -34699,21 +34699,29 @@ only against direct writes (M1) and the existing block-entity, piston and explos
 
 ## Slice LR2-FIX: restores wait for their entities (as built, slice/LR2-FIX; strict; $0)
 
-- **Rule.** No `Sites.Drops` snapshot and no write of a clearing restore while any chunk of its drop area (its box inflated by 1, as
-  `Drops` reads it) has entities not loaded (`ServerLevel.areEntitiesLoaded`) or entity sections not accessible (the manager's chunk
-  visibility, `EntityVisibilityMixin`). `EntityWait` holds it, takes a placement ticket on those chunks through `ChunkTickets` (one count
-  per chunk, so the hold clears with no player near), and lets go 5 ticks after the write passed (past `Drops`' 3-tick later pass), when a
-  job ends, or after 1200 ticks without a retry. Gated: the single removal's W (`CrateSettle.restoreSite` with `clear`: it throws
+- **Rule.** No `Sites.Drops` snapshot and no write of a clearing restore while any chunk vanilla's entity query searches for its drop
+  area (its box inflated by 1, as `Drops` reads it, plus the query's 2-block margin, so an item centred in a neighbouring chunk that
+  reaches in counts) has entities not loaded (`ServerLevel.areEntitiesLoaded`) or entity sections not accessible (the manager's chunk
+  visibility, `EntityVisibilityMixin`). Every gated restore takes a placement ticket on those chunks through `ChunkTickets` at its gate,
+  ready or not (one count per chunk; the hold clears with no player near, and a player leaving can't hide them before the cleanup), and
+  lets go 5 ticks after a one-tick write passed (past `Drops`' 3-tick later pass), when a job retires (`EntityWait.guard`: done, broken or
+  thrown; `aborted` on a cancel), or after 1200 ticks without a retry. Gated: the single removal's W (`CrateSettle.restoreSite` with `clear`: it throws
   "entities not loaded at chunk x,z", a plain txn hold), `RestoreJob` at PLAN start and WRITE start (resumed queue jobs, the start's
   ROLLBACK jobs from `Placement`, a group's road members, ticket kept to the job's end), and a group's construction member write
   (`Groups`, both loops; this covers `Groups.writeAgain`).
-- **Checked, not gated (live, the player's own action, entities near):** `Sites.abortPlacement`, `build`, `removeDetailed`,
-  `rollbackNow`, `move`, `beginPlacing`, `Adopt.undoDeltas`, `SiteDeltas.applyChecked`/`undoSuffix`. `InfraJob` and `PlaceJob` are placements
-  (their snapshot is taken live and saved in the queue); a placement resumed at world start keeps the blind spot (known risk, below).
-- **Tests.** `EntityWaitLR2Test` (LR2F-area, -hold, -ready, -stale, -keep; reflection, red on the failing-first commit). In game
+- **Live synchronous restores (fix round P1-3)** are refused NOT_LOADED (retryable; the ticket taken loads the entities) before any
+  snapshot or change: `Sites.removeDetailed` (over the union of every removed box, as its snapshot reads it), its placing-site rollback
+  (`rollbackNow`), `move` (the old box, before `build` writes), `Adopt.undoDeltas`, `SiteDeltas.undoSuffix`. Not gated: placements
+  (`build`, `beginPlacing`, `SiteDeltas.applyChecked`, `PlaceJob`, `InfraJob`) and `abortPlacement` (a failed placement's same-tick
+  rollback); a placement resumed at world start keeps the blind spot (known risk, below).
+- **Tests.** `EntityWaitLR2Test` (LR2F-area, -margin, -hold, -ready, -guard, -live, -stale, -keep; reflection; the first five red on
+  the failing-first commit, the fix round's -area, -margin, -ready, -guard and -live red on 03f717a1). In game
   (`GATE_TCC_PARTS=LR-2s,LR-2p`): dev-start.json `entityHide` keeps every chunk's entities hidden and unloaded for 100 ticks after the
   start; `entityHideAfterW: 0` ends it right after the first clearing W write. LR-2s: K6+save, restarted under the window: paid exactly
-  once. LR-2p: the same with a player's 3 diamonds in the box (no pickup, no despawn): still there after the restart.
+  once. LR-2p: the same with a player's 3 diamonds in the box (no pickup, no despawn) and 2 emeralds centred just outside the drop area
+  reaching in: all still there after the restart. Both fail when the txn is still open 30 s after the restart, and assert the committed
+  removal completed (site gone, nothing standing, refund owed). LR-2l: a paid site removed at once after a restart under `entityHide`
+  1200: refused NOT_LOADED until the entities load, then removed, paid exactly once, nothing on the ground.
 
 ### Crash safety and scope
 
@@ -34724,7 +34732,9 @@ only against direct writes (M1) and the existing block-entity, piston and explos
 - **Per-operation keys?** The wait's key is per W (`w:<site>|<group>`), per job instance, per group member; tickets are counted per chunk.
 - **Holds and footprints from disk?** The drop area is the record's restore box, read from the loaded records, as `Drops` uses it.
 - **Refunds priced from what was removed?** Unchanged (the receipts); the fix only stops a popped block's item from staying on the ground.
-- **Converting in-flight state?** None: a W, job or group member in flight waits at its next step; nothing saved changes shape.
+- **Converting in-flight state?** None: a W, job or group member in flight waits at its next step; nothing saved changes shape. A
+  `RestoreJob` saved by an older build with a blind `dropsBefore` keeps it (its write may already have popped items; retaking it would
+  count those as the player's): known risk, older queues only.
 - **One rule?** Yes, the rule above, at every restore that clears what it pops and can run with its chunks' entities not loaded.
 - **Older worlds and plans?** Read as before; nothing new is saved.
 - **Known risk.** A placement (`PlaceJob`, `InfraJob`) resumed at world start clears its pops with the same blind spot (a terrain block's
