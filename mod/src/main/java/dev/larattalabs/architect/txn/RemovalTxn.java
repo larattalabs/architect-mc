@@ -874,8 +874,9 @@ public final class RemovalTxn {
 			String stage = p.has("stage") ? p.get("stage").getAsString() : null;
 			Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
 			String region = p.has("region") ? p.get("region").getAsString() : null;
-			return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, new dev.larattalabs.architect.api
-				.RemoveResult(true, List.of(), sr.refund(), sr.restored(), sr.kept(), sr.handedDown(), sr.cascaded(), all, sr.owedParts()));
+			return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, dev.larattalabs.architect.apiimpl
+				.ApiEvents.withFluids(p.get("group").getAsString(), stage, new dev.larattalabs.architect.api.RemoveResult(true, List.of(), sr.refund(), sr
+					.restored(), sr.kept(), sr.handedDown(), sr.cascaded(), all, sr.owedParts()))); // (slice T5Fc) its fluids removal merged once
 		}
 		// (REL-v0910 fix round, P2-1) no snapshot (evicted before a redelivery): the same parts by the snapshot's own rule, from its O effects
 		java.util.List<com.google.gson.JsonObject> parts = new java.util.ArrayList<>();
@@ -891,7 +892,8 @@ public final class RemovalTxn {
 		String stage = p.has("stage") ? p.get("stage").getAsString() : null;
 		Integer rid = p.has("revisionId") ? p.get("revisionId").getAsInt() : null;
 		String region = p.has("region") ? p.get("region").getAsString() : null;
-		return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, rr);
+		return dev.larattalabs.architect.apiimpl.ApiEvents.finishedOf(p.get("group").getAsString(), stage, rid, region, dev.larattalabs.architect.apiimpl
+			.ApiEvents.withFluids(p.get("group").getAsString(), stage, rr));
 	}
 
 	/** (slice T4R fix round) Whether {@code t} removes a site whose own removal writes now ({@link CrateSettle#WRITING}): its boxes accept it. */

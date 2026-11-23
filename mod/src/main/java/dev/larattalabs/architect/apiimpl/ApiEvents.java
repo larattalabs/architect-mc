@@ -85,8 +85,48 @@ public final class ApiEvents {
 
 	/** (REL-v0910 fix round, P2-1) The one mapping of a group's, stage's or region's result to the API's: its owed parts included. */
 	public static RemoveResult resultOf(dev.larattalabs.architect.site.Groups.Removed r) {
+		com.google.gson.JsonObject f = r.fluids(); // (slice T5Fc, S4/Q2) a region's fluids removal: its taken counts, report only
 		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed(), Views
-			.owedParts(r.owedParts()));
+			.owedParts(r.owedParts()), f == null ? null : Views.items(takenOf(f)), f == null || !f.has("takenCells") ? null : f.get("takenCells").getAsInt());
+	}
+
+	static java.util.Map<String, Integer> takenOf(com.google.gson.JsonObject f) {
+		java.util.Map<String, Integer> m = new java.util.TreeMap<>();
+		if (f.get("taken") instanceof com.google.gson.JsonObject t) {
+			t.entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return m;
+	}
+
+	/**
+	 * (slice T5Fc, S3 (b)/(c)) A REMOVAL_FINISHED built from a txn's payload (after a restart): its region's fluids removal merged once (the
+	 * scoop's refund into refund, the taken counts); a result that already reports them is as given.
+	 */
+	public static RemoveResult withFluids(String group, @org.jspecify.annotations.Nullable String stage, RemoveResult r) {
+		var h = dev.larattalabs.architect.site.Groups.FLUIDS_EXTRAS;
+		if (!r.removed() || r.fluidsTakenCells() != null || h == null) {
+			return r;
+		}
+		var s = dev.larattalabs.architect.txn.TxnServer.server();
+		if (s == null) {
+			return r;
+		}
+		com.google.gson.JsonObject f = h.of(s, group, stage);
+		if (f == null) {
+			return r;
+		}
+		java.util.Map<net.minecraft.world.item.Item, Integer> refund = new java.util.HashMap<>(r.refund());
+		if (f.get("refund") instanceof com.google.gson.JsonObject rf) {
+			Views.items(takenOf(wrap(rf))).forEach((k, v) -> refund.merge(k, v, Integer::sum));
+		}
+		return new RemoveResult(r.removed(), r.blockers(), refund, r.restored(), r.kept(), r.handedDown(), r.cascaded(), r.owed(), r.owedParts(), Views.items(
+			takenOf(f)), f.has("takenCells") ? f.get("takenCells").getAsInt() : null);
+	}
+
+	static com.google.gson.JsonObject wrap(com.google.gson.JsonObject m) {
+		com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+		o.add("taken", m);
+		return o;
 	}
 
 	/**

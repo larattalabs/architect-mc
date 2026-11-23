@@ -143,6 +143,21 @@ public final class RegionsImpl implements Regions {
 	/** (6c X, C20) {@link RegionKeys#scope} of (owner, "region.plan", key) -> the plan (loaded from the plans' key files at world start). */
 	/** (6c X, C22) Removed regions (removed.json): their tombstones, loaded at world start. */
 	private static final Map<String, RegionRec> TOMBS = new ConcurrentHashMap<>();
+
+	/** (slice T5Fc) The record of the region (live or removed) of group {@code group}, else null. */
+	static @Nullable RegionRec regionOfGroup(String group) {
+		for (Live l : REGIONS.values()) {
+			if (group.equals(l.rec().groupId)) {
+				return l.rec();
+			}
+		}
+		for (RegionRec r : TOMBS.values()) {
+			if (group.equals(r.groupId)) {
+				return r;
+			}
+		}
+		return null;
+	}
 	private static final Map<String, KeyedPlan> PLAN_KEYS = new ConcurrentHashMap<>();
 	/** (6c X, C20) Realises starting with a key (before their region exists; after that REGIONS holds the key). Server thread. */
 	private static final Map<String, KeyedRealise> REALISE_KEYS = new HashMap<>();
@@ -165,6 +180,7 @@ public final class RegionsImpl implements Regions {
 
 	public static void init() {
 		dev.larattalabs.architect.site.Groups.GROUP_ENDED = RegionsImpl::groupEnded;
+		dev.larattalabs.architect.site.Groups.FLUIDS_EXTRAS = RegionFluids::removalExtras; // (slice T5Fc, S3/S4)
 		SiteEvents.SITE_REMOVED.register(Revisions::siteRemoved); // (6d RV, §4.6) a region's lot removed alone reads `removed`
 		DamageLog.init(); // (6c H) dev.entity.damage (a villager stand's drowning)
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(RegionsImpl::started);

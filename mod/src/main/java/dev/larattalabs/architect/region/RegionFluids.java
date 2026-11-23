@@ -3595,6 +3595,7 @@ public final class RegionFluids {
 		}
 		st.barrierTriedAt = 0;
 		st.removal = "done";
+		freezeRows(l, st); // (T5Fc, 8cS Q1) the rows the tombstone keeps: the removal's final truth
 		st.barrierDone = true;
 		if (!save(l, st)) {
 			st.barrierDone = false;
@@ -4028,6 +4029,153 @@ public final class RegionFluids {
 		return st.until;
 	}
 
+	/**
+	 * (slice T5Fc, S3 (a)-(c), S4/Q2) A region's fluids removal for its result, read from its records on disk (a REMOVED region keeps them):
+	 * {refund: what its scoops' ledger credits returned, taken: {lava bucket: taken lava cells, iron bars: taken grate cells}, takenCells:
+	 * every taken written cell}; a stage's ({@code stage}) only for that record's fluids stage. Null: nothing to report.
+	 */
+	public static @Nullable JsonObject removalExtras(MinecraftServer s, String group, @Nullable String stage) {
+		RegionRec rr = RegionsImpl.regionOfGroup(group);
+		if (rr == null) {
+			return null;
+		}
+		String id = rr.id;
+		String file;
+		java.util.Set<String> undone = new java.util.HashSet<>();
+		for (Revisions.Rev rv : rr.revisions) {
+			if ("UNDONE".equals(rv.state)) {
+				undone.add("fluids-rv" + rv.rid + ".json"); // (an undo reported its own fluids already)
+			}
+		}
+		if (stage == null) {
+			file = null; // every record of the region still standing at the removal
+		} else if (STAGE.equals(Revisions.plainStage(stage))) {
+			file = stage.equals(STAGE) ? "fluids.json" : "fluids-" + stage.substring(0, stage.indexOf(':')) + ".json";
+		} else {
+			return null;
+		}
+		return extrasIn(RegionStore.region(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT), id), file, undone, id);
+	}
+
+	/** (slice T5Fc) {@link #removalExtras} over a region's directory: {@code file} one record, null every one but {@code undone}'s. */
+	static @Nullable JsonObject extrasIn(Path dir, @Nullable String file, java.util.Set<String> undone, String id) {
+		JsonObject refund = new JsonObject();
+		int[] taken = new int[3];
+		boolean any = false;
+		try (var files = Files.isDirectory(dir) ? Files.list(dir) : java.util.stream.Stream.<Path>empty()) {
+			for (Path f : files.toList()) {
+				String n = f.getFileName().toString();
+				if (!(file == null ? n.startsWith("fluids") && n.endsWith(".json") && !undone.contains(n) : n.equals(file))) {
+					continue;
+				}
+				JsonObject o = RegionStore.readJson(f);
+				if (o.get("scoopCredited") instanceof JsonObject sc) {
+					any = true;
+					sc.entrySet().forEach(e -> {
+						if (!"planned".equals(e.getKey())) {
+							refund.addProperty(e.getKey(), (refund.has(e.getKey()) ? refund.get(e.getKey()).getAsInt() : 0) + e.getValue().getAsInt());
+						}
+					});
+				}
+				if (o.get("taken") instanceof JsonArray tk && tk.size() == 3) {
+					any = true;
+					for (int i = 0; i < 3; i++) {
+						taken[i] += tk.get(i).getAsInt();
+					}
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Region {}: its fluids records could not be read for the removal's result ({})", id, e.toString());
+			return null;
+		}
+		if (!any) {
+			return null;
+		}
+		JsonObject out = new JsonObject();
+		out.add("refund", refund);
+		JsonObject tk = new JsonObject();
+		if (taken[0] > 0) {
+			tk.addProperty("minecraft:lava_bucket", taken[0]);
+		}
+		if (taken[1] > 0) {
+			tk.addProperty("minecraft:iron_bars", taken[1]);
+		}
+		out.add("taken", tk);
+		out.addProperty("takenCells", taken[2]);
+		return out;
+	}
+
+	/**
+	 * (T5Fc, 8cS Q1) A region removal's done: every body of the record reads its final state (drained, "removed with its region" where its
+	 * placement state stood), and the rows are reported into the record's ext, which the tombstone keeps (removed.json) for as long as it is
+	 * readable. A revision's undo leaves its region's rows to the region.
+	 */
+	static void freezeRows(RegionsImpl.Live l, Regional st) {
+		if (l.rec().state != dev.larattalabs.architect.api.RegionState.REMOVING) {
+			return;
+		}
+		for (Body b : st.bodies) {
+			BodyState bs = st.states.get(b.id);
+			if (!"drained".equals(bs.state)) {
+				bs.state = "drained";
+				bs.reason = "removed with its region";
+			}
+		}
+		report(l, st);
+	}
+
+	/** (T5Fc, §4.5) At most this many chunks per fluid.stray txn. */
+	static final int STRAY_CHUNKS_PER_TXN = 8;
+
+	/**
+	 * (T5Fc, §4.5) One fluid.stray W: the stray pass's work in chunk {@code (cx, cz)} (the take judged over the whole flow as it stands, W5,
+	 * read only; the writes and ticks in this chunk), each cell back to its before state (or the foreign water's own level) where the body's
+	 * flow still stands (I8). Returns the cells written.
+	 */
+	static int strayChunk(ServerLevel level, Regional st, int cx, int cz, java.util.function.LongPredicate held) {
+		java.util.function.LongFunction<@Nullable Wet> at = k -> {
+			BlockState bs = level.getBlockState(BlockPos.of(k));
+			FluidState f = bs.getFluidState();
+			return f.isEmpty() || !f.getType().isSame(Fluids.WATER) ? null : new Wet(f.getAmount(), f.isSource(), bs.getBlock() instanceof LiquidBlock);
+		};
+		long[][] work = strayWork(st, strayTake(st, at, p -> true), at);
+		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (long[] c : work) {
+			long p = c[0];
+			if (!inChunk(p, cx, cz)) {
+				continue;
+			}
+			Body b = st.order.get((int) c[1]);
+			BlockPos bp = BlockPos.of(p);
+			BlockState now = level.getBlockState(bp);
+			if (held.test(p) || !flowStillOurs(b, now)) {
+				continue;
+			}
+			BlockState to;
+			if (c[2] > 0) {
+				to = flowingState(b.source(), (int) c[2]);
+			} else {
+				String was = st.states.get(b.id).before.get(p);
+				if (was == null) {
+					was = beforeAny(st, p);
+				}
+				to = was == null ? Blocks.AIR.defaultBlockState() : parse(was);
+			}
+			if (now != to && dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS)) {
+				written.add(p);
+			}
+		}
+		var was = tickOnly;
+		tickOnly = q -> inChunk(q, cx, cz);
+		try {
+			tickAround(level, written);
+		} finally {
+			tickOnly = was;
+		}
+		st.strayDone += written.size();
+		return written.size();
+	}
+
 	/** (8cTb) Every chunk a removal's drain may write: the bodies' cells, ice, grates, spill, watch and predicted cells, escaped cells. */
 	static long[] drainChunks(Regional st) {
 		LongOpenHashSet c = new LongOpenHashSet();
@@ -4185,9 +4333,27 @@ public final class RegionFluids {
 			}
 		}
 		if ("restoring".equals(st.removal)) {
-			Holders held = new Holders(l.rec().dimension, group, st);
-			if (!strayStep(level, l, st, held)) {
-				return false; // ((8c fix round, P2-11) the pass goes on next tick)
+			// (T5Fc, §4.5) the stray pass as fluid.stray txns of at most 8 chunks (a W per chunk, receipted; the R saves the chunks left):
+			// one txn a tick; done follows the world barrier below, once no chunk is left
+			hold(level, st, true);
+			if (st.strayChunks == null) {
+				st.strayChunks = watchChunks(st);
+			}
+			if (!strayReady(st, k -> level.getChunkSource().hasChunk(ChunkPos.getX(k), ChunkPos.getZ(k)))) {
+				return false; // (the ticket loads them: the pass waits, never seeds from loaded chunks only)
+			}
+			if (!st.strayChunks.isEmpty()) {
+				long[] left = st.strayChunks.toLongArray();
+				java.util.Arrays.sort(left);
+				List<Long> next = new ArrayList<>();
+				for (int i = 0; i < left.length && i < STRAY_CHUNKS_PER_TXN; i++) {
+					next.add(left[i]);
+				}
+				FluidTxns.Step g = FluidTxns.stray(l, st, group, next);
+				if (g.kind() != FluidTxns.Step.Kind.DONE && g.detail() != null) {
+					Architect.LOGGER.warn("Region {}: the stray pass waits: {}", l.rec().id, g.detail());
+				}
+				return false; // (the pass goes on next tick)
 			}
 			int n = st.strayDone;
 			// ((8c fix round, P1-4) `done` is recorded only once the drain's chunks are durable: the T0 barrier (players, chunks forced, the
@@ -4203,6 +4369,7 @@ public final class RegionFluids {
 				return false;
 			}
 			st.removal = "done";
+			freezeRows(l, st); // (T5Fc, 8cS Q1)
 			st.barrierDone = true; // (merge with DF round 3) done saved after the barrier: trusted at a start
 			if (!save(l, st)) {
 				st.removal = "restoring";

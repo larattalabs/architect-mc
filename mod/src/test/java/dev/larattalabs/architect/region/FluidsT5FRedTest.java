@@ -207,7 +207,7 @@ class FluidsT5FRedTest {
 
 	@Test
 	void i4_drainPlansOneWPerBodyAndChunk() {
-		guard();
+		
 		method(FluidTxns.class, "drainEffects", "§4.3: the drain planned as one W per (body, chunk), reverse write order, each effect's data naming its chunk",
 			List.class, List.class);
 	}
@@ -216,13 +216,13 @@ class FluidsT5FRedTest {
 
 	@Test
 	void i5_drainCarriesNoLedgerEffect() {
-		guard();
+		
 		assertNull(FluidTxns.DRAIN_KIND.adapter(effect("pile.scoop", "L")), "not built: fluid.drain still plans pile.scoop (L) with its Ws (P1-2c)");
 	}
 
 	@Test
 	void i5_regionScoopIsItsOwnKind() {
-		guard();
+		
 		TxnKind k = kind("region.scoop", "§4.6 (N4): the scoop's own txn, begun after the drain's EFFECTS_DONE");
 		assertNotNull(k.adapter(effect("pile.scoop", "L")), "region.scoop's L: pile.scoop");
 	}
@@ -243,7 +243,6 @@ class FluidsT5FRedTest {
 
 	@Test
 	void s45_strayKind() {
-		guard(); // T5Fc
 		kind("fluid.stray", "§4.5: the budgeted stray pass, one txn per at most 8 chunks");
 	}
 
@@ -251,7 +250,7 @@ class FluidsT5FRedTest {
 
 	@Test
 	void f_aStoredUntilIsNeverRead() throws IOException {
-		guard();
+		
 		JsonObject ir = JsonParser.parseString(RegionFluidsTest.IR).getAsJsonObject();
 		RegionRec rec = new RegionRec("t5fu", "p1", "sha", "steward", new JsonObject(), "minecraft:overworld", new int[] {0, 60, 0, 15, 90, 15}, 1L);
 		RegionsImpl.Live l = new RegionsImpl.Live(rec, Ir.lenient(ir, rec.claim), world);
@@ -303,7 +302,7 @@ class FluidsT5FRedTest {
 
 	@Test
 	void q1_tombstoneKeepsTheFinalFluidsRows() {
-		guard();
+		
 		// (Q1) a REMOVED tombstone keeps its last architect_mc:fluids rows, frozen as the removal's last txn wrote done (a capped removal's
 		// foreign and foreignCount included); fluidsRemoval goes null, the rows do not. On dc814bb1 the tombstone (removed.json) keeps rows,
 		// but stale: every body still reads its placement state (settled), never the removal's (row t5-tombstone). The seam: the rows

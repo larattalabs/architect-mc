@@ -28,15 +28,28 @@ import net.minecraft.world.item.Item;
  * player's own blocks found in the box: they are owed ({@code owedParts}, reason {@code player_blocks}), never dropped. {@code refund} is
  * only what went back to the stockpile (and a legacy instant drop). A removal a pre-T4R build left in flight still reports v0.89.0's refund.
  */
+/*
+ * (slice T5F, Steward's S4, 8cS Q2; Since NEXT) fluidsTaken: what the refund would have paid for the region's written fluid cells found taken
+ * before the removal (lava buckets, one per lava cell; iron bars, one per grate cell; water left out); fluidsTakenCells: how many of its
+ * written cells, every body (water included), were found taken. Both report only, never part of refund; null: not reported.
+ */
 public record RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> refund, int restored, int kept, Map<String, Integer> handedDown,
-	List<String> cascaded, List<String> owed, List<OwedPart> owedParts) {
+	List<String> cascaded, List<String> owed, List<OwedPart> owedParts, @org.jspecify.annotations.Nullable Map<Item, Integer> fluidsTaken,
+	@org.jspecify.annotations.Nullable Integer fluidsTakenCells) {
 	public RemoveResult {
+		fluidsTaken = fluidsTaken == null ? null : Map.copyOf(fluidsTaken);
 		owedParts = owedParts == null ? List.of() : List.copyOf(owedParts);
 		blockers = List.copyOf(blockers);
 		refund = Map.copyOf(refund);
 		handedDown = Map.copyOf(handedDown);
 		cascaded = List.copyOf(cascaded);
 		owed = List.copyOf(owed);
+	}
+
+	/** The 1.72.0 constructor: no fluids taken reported (null). */
+	public RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> refund, int restored, int kept, Map<String, Integer> handedDown,
+		List<String> cascaded, List<String> owed, List<OwedPart> owedParts) {
+		this(removed, blockers, refund, restored, kept, handedDown, cascaded, owed, owedParts, null, null);
 	}
 
 	/** The constructor before T4R-D (no owed parts). */
@@ -56,20 +69,4 @@ public record RemoveResult(boolean removed, List<String> blockers, Map<Item, Int
 		this(removed, blockers, refund, 0, 0, Map.of(), List.of());
 	}
 
-	/**
-	 * (slice T5F, Steward's S4, 8cS Q2; Since NEXT) What the refund would have paid for the region's written fluid cells found taken before
-	 * the removal: lava buckets (one per lava cell) and iron bars (the bars the grate's cells cost); water left out. Report only, never part
-	 * of {@link #refund}. Null: not reported (filled by the fluids removal with feature {@code flowingWater}).
-	 */
-	public @org.jspecify.annotations.Nullable Map<Item, Integer> fluidsTaken() {
-		return null;
-	}
-
-	/**
-	 * (slice T5F, 8cS Q2; Since NEXT) How many of the region's written fluid cells, every body (water included), were found taken before the
-	 * removal. Report only. Null: not reported.
-	 */
-	public @org.jspecify.annotations.Nullable Integer fluidsTakenCells() {
-		return null;
-	}
 }

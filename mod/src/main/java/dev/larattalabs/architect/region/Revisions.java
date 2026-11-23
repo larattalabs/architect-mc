@@ -2061,6 +2061,16 @@ public final class Revisions {
 		com.google.gson.JsonArray parts = agg.get("owedParts") instanceof com.google.gson.JsonArray a ? a : new com.google.gson.JsonArray();
 		res.owedParts().forEach(p -> parts.add(p.deepCopy()));
 		agg.add("owedParts", parts);
+		if (res.fluids() != null) {
+			// (slice T5Fc, S4) a fluids stage's taken counts, summed (its scoop's refund is in its refund already)
+			JsonObject tk = agg.get("fluidsTaken") instanceof JsonObject h ? h : new JsonObject();
+			if (res.fluids().get("taken") instanceof JsonObject t) {
+				t.entrySet().forEach(e -> tk.addProperty(e.getKey(), (tk.has(e.getKey()) ? tk.get(e.getKey()).getAsInt() : 0) + e.getValue().getAsInt()));
+			}
+			agg.add("fluidsTaken", tk);
+			agg.addProperty("fluidsTakenCells", (agg.has("fluidsTakenCells") ? agg.get("fluidsTakenCells").getAsInt() : 0) + (res.fluids().has("takenCells") ? res
+				.fluids().get("takenCells").getAsInt() : 0));
+		}
 	}
 
 	/** (REL-v0910 fix round, P2-1) Records in the undo manifest that it started stage {@code st}'s removal (its result is still to merge). */
@@ -2134,9 +2144,14 @@ public final class Revisions {
 		if (agg.get("owedParts") instanceof com.google.gson.JsonArray a) {
 			a.forEach(x -> parts.add(x.getAsJsonObject()));
 		}
+		Map<String, Integer> tk = new LinkedHashMap<>();
+		if (agg.get("fluidsTaken") instanceof JsonObject h) {
+			h.entrySet().forEach(e -> tk.put(e.getKey(), e.getValue().getAsInt()));
+		}
 		return new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(rf), agg.has("restored") ? agg.get(
 			"restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd, List.of(), owed, dev.larattalabs.architect.apiimpl.Views.owedParts(
-				parts));
+				parts), agg.has("fluidsTakenCells") ? dev.larattalabs.architect.apiimpl.Views.items(tk) : null, agg.has("fluidsTakenCells") ? agg.get(
+					"fluidsTakenCells").getAsInt() : null); // (slice T5Fc, S4) the suffix's fluids stages' taken counts
 	}
 
 	private static void completeUndo(String opId, dev.larattalabs.architect.api.RemoveResult r) {

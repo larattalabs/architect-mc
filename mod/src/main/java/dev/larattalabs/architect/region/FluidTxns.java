@@ -45,6 +45,8 @@ public final class FluidTxns {
 	public static final String ADOPT = "fluid.adopt";
 	/** (T5Fc, §4.6) A survival removal's scoop, its own txn after the drain's EFFECTS_DONE. */
 	public static final String SCOOP = "region.scoop";
+	/** (T5Fc, §4.5) A flowing region's stray pass, at most 8 chunks per txn. */
+	public static final String STRAY = "fluid.stray";
 
 	/**
 	 * (slice T5Fa) TEST, DevBridge {@code dev.fluid.holdChunk}: while non-null ({@code {x, z}}), a removal drain's W apply throws (the txn holds)
@@ -73,6 +75,7 @@ public final class FluidTxns {
 		c.register(WRITE_KIND);
 		c.register(ADOPT_KIND); // (slice T5F)
 		c.register(SCOOP_KIND); // (T5Fc)
+		c.register(STRAY_KIND);
 	}
 
 	/** The resource a fluids record's txns hold: {@code fluid:<region>#rv<rid>} (never shown: a hold's where is its chunk). */
@@ -690,6 +693,113 @@ public final class FluidTxns {
 		}
 		return after(t);
 	}
+
+	/**
+	 * (T5Fc, §4.5) One fluid.stray txn over {@code chunks} (at most 8): a W per chunk ({@link RegionFluids#strayChunk}, receipt
+	 * {@code op=stray}), then the R {@code fluid.strayed} saving the chunks still left (the record's {@code strayChunks} less these). Points
+	 * {@code TX:fluid.stray:stray} (FL9's alias after the first), {@code :strayed}.
+	 */
+	static Step stray(RegionsImpl.Live l, RegionFluids.Regional st, String group, List<Long> chunks) {
+		String key = "fluid-stray:" + recKey(l) + "/" + chunks.get(0);
+		TxnCore c = TxnServer.core();
+		TxnCore.Started started = c.begin(STRAY, key, List.of(resource(l)), null);
+		switch (started.status()) {
+			case ATTACHED -> {
+				return after(started.entry());
+			}
+			case REPLAYED -> {
+				chunks.forEach(st.strayChunks::remove);
+				return Step.done();
+			}
+			case HELD -> {
+				return new Step(Step.Kind.HELD, worded(started.detail()));
+			}
+			case UNAVAILABLE -> {
+				return new Step(Step.Kind.REFUSED, "txn_journal: " + started.detail());
+			}
+			default -> {
+			}
+		}
+		TxnEntry t = started.entry();
+		JsonArray done = new JsonArray();
+		for (long ck : chunks) {
+			c.plan(t, wEffect("fluid.stray", l, ck).data("group", group));
+			done.add(ck);
+		}
+		c.plan(t, Effect.of("fluid.strayed", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("done", done));
+		DurableFile.Outcome p = c.persist(t);
+		if (p == DurableFile.Outcome.REFUSED) {
+			return new Step(Step.Kind.REFUSED, "txn_journal: the stray pass's intent could not be written");
+		}
+		if (p == DurableFile.Outcome.OK) {
+			c.drive(t);
+		}
+		return after(t);
+	}
+
+	static final TxnKind.Adapter FLUID_STRAY = chunkW("fluid.stray", "stray", (t, e, w, l, st, cx, cz) -> {
+		ServerLevel level = level(e);
+		if (level == null) {
+			throw new IllegalStateException("not loaded");
+		}
+		int n = RegionFluids.strayChunk(level, st, cx, cz, new RegionFluids.Holders(l.rec().dimension, e.data().get("group").getAsString(), st));
+		if (e.i() == 0) {
+			WorldJournal.kill("FL9"); // (8c CR's point, an alias) the stray pass half done: one chunk's cells restored, the next not
+		}
+		return Map.of("n", n);
+	});
+
+	static final TxnKind.Adapter FLUID_STRAYED = r(new RRun() {
+		@Override
+		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+			if (st.strayChunks == null) {
+				return false;
+			}
+			for (JsonElement x : e.data().getAsJsonArray("done")) {
+				if (st.strayChunks.contains(x.getAsLong())) {
+					return false;
+				}
+			}
+			return true; // (the saved list no longer names them: this R's save is on disk)
+		}
+
+		@Override
+		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet was = st.strayChunks == null ? null : new it.unimi.dsi.fastutil.longs.LongOpenHashSet(st.strayChunks);
+			if (st.strayChunks == null) {
+				st.strayChunks = RegionFluids.watchChunks(st);
+			}
+			for (JsonElement x : e.data().getAsJsonArray("done")) {
+				st.strayChunks.remove(x.getAsLong());
+			}
+			if (!RegionFluids.save(l, st)) {
+				st.strayChunks = was;
+				throw new IllegalStateException("the fluids record could not be saved");
+			}
+			step(t, "strayed");
+		}
+	});
+
+	static final TxnKind STRAY_KIND = new TxnKind() {
+		@Override
+		public String name() {
+			return STRAY;
+		}
+
+		@Override
+		public int kv() {
+			return 1;
+		}
+
+		@Override
+		public TxnKind.@Nullable Adapter adapter(Effect e) {
+			return switch (e.op()) {
+				case "fluid.stray" -> FLUID_STRAY;
+				case "fluid.strayed" -> FLUID_STRAYED;
+				default -> null;
+			};
+		}
+	};
 
 	/** (T5Fc) Where the last {@link #scoopSum} found a receipt missing ({@code chunk x,z}). */
 	static @Nullable String scoopMissing;

@@ -419,7 +419,17 @@ public final class Groups {
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
 		List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed,
-		List<com.google.gson.JsonObject> owedParts) {
+		List<com.google.gson.JsonObject> owedParts, com.google.gson.@Nullable JsonObject fluids) {
+		/**
+		 * (slice T5Fc, S3/S4) {@code fluids}: a region's fluids removal merged into this result once ({@link #withFluids}): {taken: {item: n},
+		 * takenCells}; null when none (the scoop's refund is in {@code refund}).
+		 */
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded, int kept, dev.larattalabs.architect.api.@Nullable RemovalStopCause cause, List<String> owed,
+			List<com.google.gson.JsonObject> owedParts) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, kept, cause, owed, owedParts, null);
+		}
+
 		/**
 		 * (REL-v0910 fix round, P2-1) {@code owedParts}: each owed key's {key, recipient, reason, items} as the removal's aggregate snapshot
 		 * records it ({@link Groups#withOwedParts}); empty when nothing was owed.
@@ -2991,8 +3001,8 @@ public final class Groups {
 		}
 		// (T4b, finding 5) a removal that ends stopped or failed still reports the owed keys its settles wrote so far
 		// (REL-v0910 fix round, P2-1) with its owed parts: the future, the event and removalResult agree
-		Removed result = withOwedParts(r, !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(), given.blockers(), given.refund(), given
-			.restored(), given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given);
+		Removed result = withFluids(server, r.group, r.stage, withOwedParts(r, !r.owed.isEmpty() && given.owed().isEmpty() ? new Removed(given.removed(),
+			given.blockers(), given.refund(), given.restored(), given.handedDown(), given.cascaded(), given.kept(), given.cause(), List.copyOf(r.owed)) : given));
 		REMOVALS.remove(r);
 		// (slice T4c) once its undo committed (the decision), a group's or stage's removal never answers PARTIAL: it is held(decided), kept and
 		// retried by itself (Groups.tick), and REMOVAL_FINISHED fires once it is removed
@@ -3111,6 +3121,34 @@ public final class Groups {
 			dev.larattalabs.architect.txn.TxnServer.core().drive(r.gtx);
 		}
 		Placement.lap("end:futures", t0);
+	}
+
+	/**
+	 * (slice T5Fc, S3 (a)-(c), S4) The hook a region's fluids removal fills: {refund: {item: n} (what its scoop's ledger credit returned),
+	 * taken: {item: n}, takenCells} of group {@code group} (a stage: {@code stage}), read from the records on disk; null: none.
+	 */
+	public static volatile @Nullable FluidsExtras FLUIDS_EXTRAS;
+
+	public interface FluidsExtras {
+		com.google.gson.@Nullable JsonObject of(MinecraftServer s, String group, @Nullable String stage);
+	}
+
+	/** (slice T5Fc) {@code given} with its region's fluids removal merged once (the scoop's refund into refund; the taken counts): S3 (c). */
+	static Removed withFluids(MinecraftServer server, String group, @Nullable String stage, Removed given) {
+		FluidsExtras h = FLUIDS_EXTRAS;
+		if (!given.removed() || given.fluids() != null || h == null) {
+			return given;
+		}
+		com.google.gson.JsonObject x = h.of(server, group, stage);
+		if (x == null) {
+			return given;
+		}
+		Map<String, Integer> refund = new java.util.TreeMap<>(given.refund());
+		if (x.get("refund") instanceof com.google.gson.JsonObject rf) {
+			rf.entrySet().forEach(e -> refund.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+		}
+		return new Removed(given.removed(), given.blockers(), refund, given.restored(), given.handedDown(), given.cascaded(), given.kept(), given.cause(), given
+			.owed(), given.owedParts(), x);
 	}
 
 	/**

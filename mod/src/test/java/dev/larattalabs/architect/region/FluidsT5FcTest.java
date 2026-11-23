@@ -156,4 +156,25 @@ class FluidsT5FcTest {
 		assertNull(FluidTxns.DRAIN_KIND.adapter(Effect.fromJson(FluidsT5FFixTest.eff(0, "pile.scoop", "L", new JsonObject()))), "I5: no L in a T5Fc drain");
 		assertNotNull(FluidTxns.SCOOP_KIND.adapter(Effect.fromJson(FluidsT5FFixTest.eff(0, "pile.scoop", "L", new JsonObject()))));
 	}
+
+	@Test
+	void s3s4_theRemovalResultReadsTheRecordsOnDiskOnce() throws java.io.IOException {
+		java.nio.file.Path dir = world.resolve("rgn");
+		java.nio.file.Files.createDirectories(dir);
+		RegionStore.writeJson(dir.resolve("fluids.json"), JsonParser.parseString(
+			"{\"scoopCredited\":{\"minecraft:lava_bucket\":2,\"minecraft:iron_bars\":3},\"taken\":[1,2,4]}").getAsJsonObject());
+		RegionStore.writeJson(dir.resolve("fluids-rv2.json"), JsonParser.parseString("{\"scoopCredited\":{\"minecraft:lava_bucket\":1,\"planned\":true},"
+			+ "\"taken\":[0,0,1]}").getAsJsonObject());
+		RegionStore.writeJson(dir.resolve("fluids-rv3.json"), JsonParser.parseString("{\"scoopCredited\":{\"minecraft:lava_bucket\":9},\"taken\":[9,9,9]}")
+			.getAsJsonObject());
+		JsonObject x = RegionFluids.extrasIn(dir, null, java.util.Set.of("fluids-rv3.json"), "rgn");
+		assertEquals(3, x.getAsJsonObject("refund").get("minecraft:lava_bucket").getAsInt(), "rv3 was undone (reported by its undo): never twice");
+		assertEquals(3, x.getAsJsonObject("refund").get("minecraft:iron_bars").getAsInt());
+		assertEquals(1, x.getAsJsonObject("taken").get("minecraft:lava_bucket").getAsInt());
+		assertEquals(2, x.getAsJsonObject("taken").get("minecraft:iron_bars").getAsInt());
+		assertEquals(5, x.get("takenCells").getAsInt(), "Σh over every standing record, water included");
+		JsonObject one = RegionFluids.extrasIn(dir, "fluids-rv2.json", java.util.Set.of(), "rgn");
+		assertEquals(1, one.getAsJsonObject("refund").get("minecraft:lava_bucket").getAsInt());
+		assertNull(RegionFluids.extrasIn(world.resolve("none"), null, java.util.Set.of(), "none"));
+	}
 }
