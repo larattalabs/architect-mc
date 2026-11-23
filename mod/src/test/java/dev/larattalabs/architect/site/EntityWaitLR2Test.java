@@ -105,14 +105,34 @@ class EntityWaitLR2Test {
 	}
 
 	@Test
-	void theDropAreaIsTheBoxInflatedByOne() throws Throwable {
+	void theDropAreaIsTheChunksVanillasEntityQuerySearches() throws Throwable {
 		System.out.println("ROW LR2F-area (unit)");
-		// x 15..30, z 0..14: inflated, x 14..31 (chunks 0, 1), z -1..15 (chunks -1, 0)
-		assertEquals(Set.of(pack(0, -1), pack(0, 0), pack(1, -1), pack(1, 0)), new HashSet<>(chunks(new Anchors.Bounds(15, 64, 0, 30, 70, 14))));
-		// maxX 15: maxX+1 = 16 crosses into chunk 1; minX 16: minX-1 = 15 reaches back into chunk 0
-		assertTrue(chunks(new Anchors.Bounds(1, 64, 1, 15, 64, 14)).contains(pack(1, 0)), "maxX+1 across the chunk edge");
-		assertTrue(chunks(new Anchors.Bounds(16, 64, 1, 20, 64, 14)).contains(pack(0, 0)), "minX-1 across the chunk edge");
-		assertEquals(1, chunks(new Anchors.Bounds(1, 64, 1, 14, 64, 14)).size(), "inside one chunk");
+		// x 15..30, z 0..14: the drop area x [14, 32), z [-1, 16); vanilla's query adds 2: x 12..34 (chunks 0..2), z -3..18 (chunks -1..1)
+		Set<Long> want = new HashSet<>();
+		for (int x = 0; x <= 2; x++) {
+			for (int z = -1; z <= 1; z++) {
+				want.add(pack(x, z));
+			}
+		}
+		assertEquals(want, new HashSet<>(chunks(new Anchors.Bounds(15, 64, 0, 30, 70, 14))));
+		assertTrue(chunks(new Anchors.Bounds(20, 64, 20, 27, 64, 27)).equals(List.of(pack(1, 1))), "well inside one chunk: that chunk only");
+	}
+
+	/** Vanilla's rule: an item (0.25 wide) is found when its bounding box intersects the area; it lives in the chunk of its centre. */
+	static boolean found(double cx, double areaMin, double areaMax) {
+		return cx + 0.125 > areaMin && cx - 0.125 < areaMax;
+	}
+
+	@Test
+	void anItemCentredInANeighbourChunkButReachingInIsCovered() throws Throwable {
+		System.out.println("ROW LR2F-margin (unit)");
+		// (fix round P1-2) box x 1..14: the drop area x [0, 16). An item centred at x = -0.05 (chunk -1) or 16.05 (chunk 1) reaches into it
+		Anchors.Bounds b = new Anchors.Bounds(1, 64, 1, 14, 64, 14);
+		assertTrue(found(-0.05, 0, 16) && found(16.05, 0, 16), "the probe items do reach into the drop area");
+		List<Long> cs = chunks(b);
+		assertTrue(cs.contains(pack(Math.floorDiv((int) Math.floor(-0.05), 16), 0)), "LR2F-margin: chunk -1 (an item centred at x = -0.05) is waited for: " + cs);
+		assertTrue(cs.contains(pack((int) Math.floor(16.05) >> 4, 0)), "LR2F-margin: chunk 1 (an item centred at x = 16.05) is waited for: " + cs);
+		assertTrue(cs.contains(pack(0, -1)) && cs.contains(pack(0, 1)), "LR2F-margin: the same in z: " + cs);
 	}
 
 	@Test
@@ -153,13 +173,64 @@ class EntityWaitLR2Test {
 	}
 
 	@Test
-	void aReadyWorldTakesNoTicket() throws Throwable {
+	void aReadyWriteStillHoldsItsTicketThroughItsCleanup() throws Throwable {
 		System.out.println("ROW LR2F-ready (unit)");
+		// (fix round P1-1) ready or not, a gated restore holds its chunks until its drop cleanup is past: a player leaving can't hide them
 		Fake f = new Fake();
 		List<Long> cs = chunks(new Anchors.Bounds(0, 64, 0, 40, 70, 40));
 		f.ready.addAll(cs);
 		assertEquals("x", call(m("gated", WORLD, String.class, List.class, Supplier.class), f.world(), "s|g", cs, (Supplier<String>) () -> "x"));
-		assertTrue(f.log.isEmpty(), "a live write with its entities loaded takes no ticket");
+		assertEquals(new HashSet<>(cs), f.ticket, "LR2F-ready: the chunks are ticketed from the gate, ready or not");
+		call(m("tick", int.class), f.now + 3);
+		assertEquals(new HashSet<>(cs), f.ticket, "LR2F-ready: kept through Drops' later pass");
+		call(m("tick", int.class), f.now + 5);
+		assertTrue(f.ticket.isEmpty(), "LR2F-ready: released after it");
+		Method ready = m("ready", WORLD, String.class, List.class, boolean.class);
+		assertTrue((Boolean) call(ready, f.world(), "job:x", cs, true));
+		call(m("tick", int.class), f.now + 5000);
+		assertEquals(new HashSet<>(cs), f.ticket, "LR2F-ready: a job ready at its first check keeps its ticket over its writes");
+	}
+
+	@Test
+	void aJobThatThrowsLetsItsTicketGo() throws Throwable {
+		System.out.println("ROW LR2F-guard (unit)");
+		// (fix round P2-4) Placement drops a job that threw without aborted(): the job's retirement path lets the ticket go
+		Fake f = new Fake();
+		List<Long> cs = chunks(new Anchors.Bounds(1, 64, 1, 14, 64, 14));
+		assertFalse((Boolean) call(m("ready", WORLD, String.class, List.class, boolean.class), f.world(), "job:t", cs, true));
+		Method guard = m("guard", String.class, java.util.function.BooleanSupplier.class);
+		assertFalse((Boolean) call(guard, "job:t", (java.util.function.BooleanSupplier) () -> false));
+		assertFalse(f.ticket.isEmpty(), "LR2F-guard: a step that goes on keeps it");
+		try {
+			call(guard, "job:t", (java.util.function.BooleanSupplier) () -> {
+				throw new IllegalStateException("writer failed");
+			});
+			throw new AssertionError("LR2F-guard: the exception was swallowed");
+		} catch (IllegalStateException e) {
+			assertEquals("writer failed", e.getMessage());
+		}
+		assertTrue(f.ticket.isEmpty(), "LR2F-guard: a step that threw let the ticket go: " + f.log);
+		assertEquals(0, call(m("held")));
+	}
+
+	@Test
+	void aLiveRestoreWithEntitiesPendingIsRefusedRetryably() throws Throwable {
+		System.out.println("ROW LR2F-live (unit)");
+		// (fix round P1-3) a synchronous remove: refused NOT_LOADED before any snapshot or change, its ticket taken so the retry passes
+		Fake f = new Fake();
+		List<Long> cs = chunks(new Anchors.Bounds(1, 64, 1, 14, 64, 14));
+		Method live = m("requireLive", WORLD, String.class, List.class, String.class);
+		try {
+			call(live, f.world(), "live:remove:a", cs, "Removing a");
+			throw new AssertionError("LR2F-live: a live removal went on with entities not loaded");
+		} catch (Sites.SiteException e) {
+			assertEquals(dev.larattalabs.architect.api.Reason.NOT_LOADED, e.reason(), e.getMessage());
+		}
+		assertEquals(new HashSet<>(cs), f.ticket, "LR2F-live: its ticket loads them for the retry");
+		f.ready.addAll(cs);
+		call(live, f.world(), "live:remove:a", cs, "Removing a");
+		call(m("tick", int.class), f.now + 5);
+		assertTrue(f.ticket.isEmpty(), "LR2F-live: released after the retry's cleanup");
 	}
 
 	@Test

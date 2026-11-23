@@ -773,11 +773,14 @@ export async function registerTCC(steps, h) {
       if (!want(tag)) continue;
       const b = await builtPaid(tag);
       if (!b) continue;
-      let own = null;
+      let own = null, edge = null;
       if (x === 'p') {
         const bx = await boxOf(b.site);
         own = [Math.floor((bx[0] + bx[3]) / 2) + 0.5, bx[1] + 1, Math.floor((bx[2] + bx[5]) / 2) + 0.5];
         await cmd(`/summon minecraft:item ${own.join(' ')} {Item:{id:"minecraft:diamond",count:3},PickupDelay:32767,Age:-32768}`);
+        // (fix round P1-2) 2 emeralds centred 0.1 outside the drop area (the box inflated by 1), their bounding box reaching into it
+        edge = [bx[0] - 1.1, bx[1] + 1, own[2]];
+        await cmd(`/summon minecraft:item ${edge.join(' ')} {Item:{id:"minecraft:emerald",count:2},PickupDelay:32767,Age:-32768,NoGravity:1b,Motion:[0.0,0.0,0.0]}`);
         await wait(1500);
       }
       await cmd('/save-all flush').catch(() => null);
@@ -798,7 +801,9 @@ export async function registerTCC(steps, h) {
       }
       await L.openWorld(name);
       await L.tp(...W.at);
-      await settleWait([b.site], b.cp, null, 30_000);
+      const sw = await settleWait([b.site], b.cp, null, 30_000);
+      // (fix round P2-5) a restore held for ever must fail here, never pass as "nothing changed"
+      check(sw.txn?.openCount === 0, `${tag}: the removal's txn retired within 30 s of the restart (open ${sw.txn?.openCount})`, sw);
       await wait(x ? 8000 : 3000); // past the 100-tick hide window and the later pass
       const after = await parts([b.site], b.cp, b.items);
       const owedNew = sum(after.owed) - sum(before.owed);
@@ -807,8 +812,51 @@ export async function registerTCC(steps, h) {
       log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}; parts: stock ${json(after.stock)}, owed ${json(after.owed)}, ground ${json(after.ground)}, inventory ${json(after.inventory)}; entries ${json((after.owedEntries ?? []).map((e) => [e.key, e.reason, e.items?.['minecraft:oak_door'] ?? 0]))}; before ${json(before.placed)} stock ${json(before.stock)}${own ? `; the player's diamonds ${ownBefore} -> ${ownAfter}` : ''}`);
       check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock + ground)`, R[tag]);
       check(sum(after.placed) === 0 || owedNew === 0, `${tag}: no refund owed while the building stands (standing ${sum(after.placed)}, owed new ${owedNew})`, R[tag]);
+      if (x) check(!after.states[b.site] && sum(after.placed) === 0 && owedNew > 0, `${tag}: the committed removal completed: the site gone (${json(after.states)}), none of its blocks standing (${sum(after.placed)}), its refund owed (${owedNew})`, R[tag]);
       if (own) check(ownAfter === 3, `${tag}: the player's own 3 diamonds in the restored area are still there after the restart (${ownAfter})`, R[tag]);
+      if (edge) {
+        const em = ((await call('dev.items.near', { pos: edge.map(Math.floor), radius: 3 }, 30_000)).items ?? {})['minecraft:emerald'] ?? 0;
+        R[tag].edge = em;
+        check(em === 2, `${tag}: the player's 2 emeralds reaching into the drop area from outside it are still there (${em})`, R[tag]);
+      }
       if (own) await cmd('/kill @e[type=minecraft:item,distance=..40]').catch(() => null);
+    }
+    // ---------------------------------------------------------------- LR-2l (slice LR2-FIX fix round, P1-3): a live removal while entities load
+    // A paid built site; the world closed and opened again under dev-start.json entityHide (1200 ticks: its chunks' blocks loaded, their
+    // entities still pending); the site removed at once. On 03f717a1 the synchronous removal snapshots its drops blind and its popped door
+    // stays on the ground (one minted). After the fix it is refused NOT_LOADED (retryable, nothing changed) until they load; retried, bounded.
+    if (want('LR-2l')) {
+      const tag = 'LR-2l';
+      const b = await builtPaid(tag);
+      if (b) {
+        await cmd('/save-all flush').catch(() => null);
+        await wait(2000);
+        const before = await parts([b.site], b.cp, b.items);
+        await L.leaveWorld();
+        const fs = await import('node:fs');
+        const arch = path.join(W.dir, 'architect');
+        fs.mkdirSync(arch, { recursive: true });
+        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ entityHide: 1200 }));
+        await L.openWorld(name);
+        await L.tp(...W.at);
+        const refusals = [];
+        let rm = null;
+        for (const end = Date.now() + 120_000; Date.now() < end;) {
+          rm = await call('dev.site.deconstruct', { site: b.site }, 60_000).catch((e) => ({ error: String(e?.message ?? e).slice(0, 200) }));
+          if (rm?.removed === true) break;
+          refusals.push(json(rm).slice(0, 200));
+          if (!/entities/.test(json(rm))) break; // any other refusal: judged below
+          await L.sleep(3000);
+        }
+        await wait(4000);
+        const after = await parts([b.site], b.cp, b.items);
+        const owedNew = sum(after.owed) - sum(before.owed);
+        R[tag] = { before, after, owedNew, removal: rm, refusals };
+        log(`  ${tag}: ${refusals.length} refusal(s) while the entities loaded (${refusals[0] ?? 'none'}); removed ${rm?.removed}; after ${json(after.total)}, ground ${json(after.ground)}, owed new ${owedNew}`);
+        check(rm?.removed === true, `${tag}: the removal went through once its entities loaded, within 120 s (${json(rm).slice(0, 160)})`, R[tag]);
+        check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock + ground)`, R[tag]);
+        check(sum(after.ground) === 0, `${tag}: nothing it popped left on the ground (${json(after.ground)})`, R[tag]);
+      }
     }
     // ---------------------------------------------------------------- LR-3 (P1 3): a paid road killed after its restore, before its settle's intent, its queue write failing
     for (const v of ['', '+save']) {
