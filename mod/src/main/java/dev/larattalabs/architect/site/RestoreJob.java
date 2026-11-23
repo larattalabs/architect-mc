@@ -146,7 +146,8 @@ final class RestoreJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
-		// (slice LR2-FIX fix round, P2-4) done, broken or thrown (Placement drops a job that threw without aborted): its entity-wait ticket goes
+		// (slice LR2-FIX fix round, P2-4) done, broken or thrown (Placement drops a job that threw without aborted): its entity-wait ticket retires,
+		// kept past its last write's delayed Drops clear (fix-check P1-1)
 		return EntityWait.guard(entityKey(), () -> step1(server, deadline));
 	}
 
@@ -171,7 +172,7 @@ final class RestoreJob implements Placement.Job {
 	}
 
 	/** (slice LR2-FIX) This job's {@link EntityWait} key. */
-	private String entityKey() {
+	String entityKey() {
 		return "job:" + purpose + ":" + siteId + "@" + System.identityHashCode(this);
 	}
 

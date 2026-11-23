@@ -52,6 +52,13 @@ public interface Sites {
 	 * Removes (in survival: deconstructs) a site and restores its terrain exactly. A site owned by someone other than
 	 * {@code o.requester()} needs {@code o.force()}. Things in the box the site did not bring (the player's chests, pets,
 	 * dropped items) always refuse with {@code blockers}: the API never destroys them, force or not.
+	 *
+	 * <p>Since NEXT: a removal clears the item entities its restore pops, so it needs the entities of the chunks around the site (its
+	 * restore box grown by 3 blocks, as vanilla's entity query searches it) loaded and visible. While they are still loading (a chunk's
+	 * blocks can be loaded with its entities pending, e.g. right after a start or with no player near) the future fails with
+	 * {@link ArchitectRefused} of {@link Reason#NOT_LOADED}, before anything is changed. Architect then holds a loading ticket on those chunks
+	 * for a while, so the same call made again a moment later (a second or a few; no player needed) goes through. Retry it; don't treat it
+	 * as a final refusal.
 	 */
 	CompletableFuture<RemoveResult> remove(String siteId, RemoveOptions o);
 

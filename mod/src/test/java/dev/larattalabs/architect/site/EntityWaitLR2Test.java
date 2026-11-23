@@ -209,6 +209,7 @@ class EntityWaitLR2Test {
 		} catch (IllegalStateException e) {
 			assertEquals("writer failed", e.getMessage());
 		}
+		call(m("tick", int.class), f.now + 5); // (fix-check P1-1) retired: it goes after the delayed clear's window
 		assertTrue(f.ticket.isEmpty(), "LR2F-guard: a step that threw let the ticket go: " + f.log);
 		assertEquals(0, call(m("held")));
 	}
@@ -259,5 +260,55 @@ class EntityWaitLR2Test {
 		assertFalse(f.ticket.isEmpty(), "LR2F-keep: a job writing over ticks keeps its ticket");
 		call(m("release", String.class), "job:s");
 		assertTrue(f.ticket.isEmpty(), "LR2F-keep: released when the job ends");
+	}
+
+	@Test
+	void aRetiredJobKeepsItsTicketThroughItsLastDelayedClear() throws Throwable {
+		System.out.println("ROW LR2F-retire (unit, production RestoreJob.step)");
+		// (fix-check P1-1) the job's last write clears its drops again 3 ticks later (Drops.LATER): the player leaving right after the job ends
+		// must not let the chunks' entities go hidden before that clear. Driven through RestoreJob.step itself (a job with no record: it ends
+		// broken at once), so reverting its retirement call site goes red too.
+		Fake f = new Fake();
+		List<Long> cs = chunks(new Anchors.Bounds(1, 64, 1, 14, 64, 14));
+		f.ready.addAll(cs);
+		RestoreJob job = new RestoreJob("lr2f-none", RestoreJob.REMOVE, null, null);
+		assertTrue((Boolean) call(m("ready", WORLD, String.class, List.class, boolean.class), f.world(), job.entityKey(), cs, true));
+		call(m("tick", int.class), f.now);
+		assertTrue(job.step(null, Long.MAX_VALUE), "the job ends (no record)");
+		f.ready.clear(); // the player leaves
+		call(m("tick", int.class), f.now + 3);
+		assertEquals(new HashSet<>(cs), f.ticket, "LR2F-retire: held through the delayed clear 3 ticks after the job ended: " + f.log);
+		call(m("tick", int.class), f.now + 5);
+		assertTrue(f.ticket.isEmpty(), "LR2F-retire: released after it: " + f.log);
+	}
+
+	@Test
+	void aRemovalRefusedUnderKeepThenRetriedAsCascadeTicketsTheLargerFootprint() throws Throwable {
+		System.out.println("ROW LR2F-footprint (unit)");
+		// (fix-check P2-2) one live key ("live:remove:<site>"), two footprints: the retry's own chunks are ticketed, so it never loops NOT_LOADED
+		Fake f = new Fake();
+		Method live = m("requireLive", WORLD, String.class, List.class, String.class);
+		List<Long> keep = chunks(new Anchors.Bounds(1, 64, 1, 14, 64, 14));
+		List<Long> cascade = chunks(new Anchors.Bounds(1, 64, 1, 60, 64, 14));
+		try {
+			call(live, f.world(), "live:remove:a", keep, "Removing a");
+			throw new AssertionError("refused");
+		} catch (Sites.SiteException e) {
+			assertEquals(dev.larattalabs.architect.api.Reason.NOT_LOADED, e.reason());
+		}
+		f.now++;
+		try {
+			call(live, f.world(), "live:remove:a", cascade, "Removing a");
+			throw new AssertionError("refused");
+		} catch (Sites.SiteException e) {
+			assertEquals(dev.larattalabs.architect.api.Reason.NOT_LOADED, e.reason());
+		}
+		assertEquals(new HashSet<>(cascade), f.ticket, "LR2F-footprint: the CASCADE retry's whole footprint is ticketed (the KEEP lease's extra gone): " + f.log);
+		f.ready.addAll(f.ticket); // what is ticketed loads
+		f.now++;
+		call(live, f.world(), "live:remove:a", cascade, "Removing a"); // no loop: it passes
+		call(m("tick", int.class), f.now + 5);
+		assertTrue(f.ticket.isEmpty(), "LR2F-footprint: released after its cleanup: " + f.log);
+		assertEquals(0, call(m("held")));
 	}
 }

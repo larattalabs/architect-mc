@@ -47,14 +47,16 @@ public final class EntityWait {
 	static final int STALE_TICKS = 1200;
 
 	private static final class Held {
+		final String base;
 		final String dimension;
 		final List<Long> chunks;
 		final ChunkTickets.Source source;
-		final boolean keep;
+		boolean keep;
 		int touched;
 		int releaseAt = -1;
 
-		Held(String dimension, List<Long> chunks, ChunkTickets.Source source, boolean keep, int now) {
+		Held(String base, String dimension, List<Long> chunks, ChunkTickets.Source source, boolean keep, int now) {
+			this.base = base;
 			this.dimension = dimension;
 			this.chunks = chunks;
 			this.source = source;
@@ -63,8 +65,20 @@ public final class EntityWait {
 		}
 	}
 
+	/** The leases, by {@link #leaseKey}: one per caller key, dimension and footprint (fix-check P2-2). */
 	private static final Map<String, Held> HELD = new HashMap<>();
+	/** The last server tick seen ({@link #tick} and {@link #ready}): the clock a retirement's delayed release counts from. */
+	private static int clock;
 
+	/**
+	 * (fix-check P2-2) A lease is one caller key over one dimension and one footprint: a removal refused under KEEP and retried as CASCADE
+	 * (more chunks) gets a lease of its own on the larger footprint, never the old one's tickets with the new one's checks.
+	 */
+	static String leaseKey(String key, String dimension, List<Long> chunks) {
+		long[] cs = chunks.stream().mapToLong(Long::longValue).sorted().toArray();
+		return key + "#" + dimension + "#" + cs.length + ":" + Long.toHexString(java.util.Arrays.hashCode(cs)) + ":" + (cs.length == 0 ? 0 : Long
+			.toHexString(cs[0] ^ cs[cs.length - 1] * 31));
+	}
 	private EntityWait() {
 	}
 
@@ -102,12 +116,23 @@ public final class EntityWait {
 	 * job retires.
 	 */
 	static boolean ready(World w, String key, List<Long> chunks, boolean keep) {
+		clock = w.now();
 		Long missing = notReady(w, chunks);
-		Held h = HELD.get(key);
+		String lease = leaseKey(key, w.dimension(), chunks);
+		Held h = HELD.get(lease);
 		if (h == null) {
+			// the same caller key's waiting leases on another footprint were refused attempts (nothing snapshot, nothing written): they go now; a
+			// lease past its write (its cleanup window, or a job's) stays until its own release
+			for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
+				Held o = it.next().getValue();
+				if (o.base.equals(key) && !o.keep && o.releaseAt < 0) {
+					it.remove();
+					ChunkTickets.release(o.dimension, o.chunks, o.source);
+				}
+			}
 			ChunkTickets.acquire(w.dimension(), chunks, w.tickets());
-			h = new Held(w.dimension(), List.copyOf(chunks), w.tickets(), keep, w.now());
-			HELD.put(key, h);
+			h = new Held(key, w.dimension(), List.copyOf(chunks), w.tickets(), keep, w.now());
+			HELD.put(lease, h);
 			if (missing != null) {
 				Architect.LOGGER.info("Restore {} waits for the entities of {} chunk(s) (e.g. chunk {}, {}) to load; a ticket holds them", key,
 					chunks.size(), ChunkPos.getX(missing), ChunkPos.getZ(missing));
@@ -125,8 +150,9 @@ public final class EntityWait {
 	}
 
 	/**
-	 * A job's step under its entity wait: when the step ends the job (true) or throws, {@code key}'s ticket goes (the one retirement path of a
-	 * job that writes over ticks: Placement drops a job that threw without {@code aborted}).
+	 * A job's step under its entity wait: when the step ends the job (true) or throws, {@code key}'s leases retire (the one retirement path of
+	 * a job that writes over ticks: Placement drops a job that threw without {@code aborted}). (fix-check P1-1) Retired, not released: its
+	 * last write's {@code Drops} clear runs again 3 ticks later, so the tickets stay {@link #RELEASE_TICKS} past the retirement.
 	 */
 	public static boolean guard(String key, java.util.function.BooleanSupplier step) {
 		boolean done = true;
@@ -135,7 +161,18 @@ public final class EntityWait {
 			return done;
 		} finally {
 			if (done) {
-				release(key);
+				retire(key);
+			}
+		}
+	}
+
+	/** {@code key}'s leases go {@link #RELEASE_TICKS} after the last tick seen (past a final write's delayed {@code Drops} clear). */
+	static void retire(String key) {
+		for (Held h : HELD.values()) {
+			if (h.base.equals(key)) {
+				h.keep = false;
+				int at = clock + RELEASE_TICKS;
+				h.releaseAt = h.releaseAt < 0 ? at : Math.max(h.releaseAt, at);
 			}
 		}
 	}
@@ -179,16 +216,20 @@ public final class EntityWait {
 		return ready(world(level), key, chunks(box), keep);
 	}
 
-	/** {@code key}'s ticket goes now (a job that writes over ticks ended, or broke). */
+	/** {@code key}'s leases go now (a job cancelled before it wrote). */
 	public static void release(String key) {
-		Held h = HELD.remove(key);
-		if (h != null) {
-			ChunkTickets.release(h.dimension, h.chunks, h.source);
+		for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
+			Held h = it.next().getValue();
+			if (h.base.equals(key)) {
+				it.remove();
+				ChunkTickets.release(h.dimension, h.chunks, h.source);
+			}
 		}
 	}
 
 	/** Each server tick: tickets past their release, and waits no one retried for {@link #STALE_TICKS}, let go. */
 	static void tick(int now) {
+		clock = now;
 		for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
 			Map.Entry<String, Held> e = it.next();
 			Held h = e.getValue();

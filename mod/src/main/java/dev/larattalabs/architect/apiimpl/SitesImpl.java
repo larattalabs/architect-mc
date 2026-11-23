@@ -349,6 +349,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			// (T4b fix round, P2) decided and written, its refunds not yet settled: it finishes by itself
 			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.SITE_BUSY, e.getMessage(), "held(decided)"));
 		}
+		if (e.reason() == Reason.NOT_LOADED) {
+			// (slice LR2-FIX, fix-check P2-3) the entities of its drop area are still loading: nothing was changed; typed, so a caller retries
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.NOT_LOADED, e.getMessage()));
+		}
 		return CompletableFuture.completedFuture(refused(e.getMessage()));
 	}
 
@@ -358,7 +362,8 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		while ((c instanceof java.util.concurrent.CompletionException || c instanceof java.util.concurrent.ExecutionException) && c.getCause() != null) {
 			c = c.getCause();
 		}
-		if (c instanceof Sites.SiteException se && (se.busy() != null || se.getMessage() != null && se.getMessage().startsWith("held(decided)"))) {
+		if (c instanceof Sites.SiteException se && (se.busy() != null || se.reason() == Reason.NOT_LOADED || se.getMessage() != null && se.getMessage()
+			.startsWith("held(decided)"))) {
 			return answer(se);
 		}
 		return CompletableFuture.failedFuture(t); // any other failure as before

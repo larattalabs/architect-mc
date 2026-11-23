@@ -34739,6 +34739,13 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   count those as the player's): known risk, older queues only.
 - **One rule?** Yes, the rule above, at every restore that clears what it pops and can run with its chunks' entities not loaded.
 - **Older worlds and plans?** Read as before; nothing new is saved.
+- **Second round (fix-check of 8449eebd, Noah's one narrow round).** (P1) A job's retirement (`EntityWait.guard`: done, broken or thrown)
+  retires its leases instead of releasing them: they stay 5 ticks past the last tick, through its last write's delayed `Drops` clear. (P2)
+  A lease is one caller key, dimension and footprint (`EntityWait.leaseKey`): a removal refused under KEEP and retried as CASCADE gets a
+  lease on the larger footprint (the refused one's waiting lease goes), never a NOT_LOADED loop. (P2) The API's remove route maps
+  NOT_LOADED to `ArchitectRefused(NOT_LOADED)` (sync and from a future), documented in `api.Sites.remove` (retry; a ticket loads the
+  entities). Units LR2F-retire (through `RestoreJob.step`), LR2F-footprint, LR2F-api; revert checks, each red: `RestoreJob.step` without
+  its guard, retire back to release, `EntityWait` and `SitesImpl` back to 8449eebd.
 - **Red and green runs** (artifacts/gate-runs, ports 9068/9069): red LR-2s (door minted) and LR-2p (the player's diamonds cleared) on
   75bbc138 (dbc83ddd + the hook and row fixes), 20261123-022617-change; red LR-2l (door minted by a live removal) on a095bf82 (03f717a1 +
   rows + hook), 20261123-024155-change; LR-2s/LR-2p green on 03f717a1's fix, 20261123-022917-change; LR-2l green on da17d614,
