@@ -35891,7 +35891,16 @@ Red: 17 of 17 on the seam commit aae02fde; revert check: each fix reverted alone
 - **P2-14.** FL5, FL9, FL6d and `w()`'s step fire after the receipt (`FluidTxns.AFTER_RECEIPT`). `p2_14_*`.
 - **Integration:** `drainThenScoopThroughTheCore_aCrashAtEachStep_conservation`: drain, then scoop, through TxnCore, crashed at `drain`,
   `barrier:effects`, `drained`, `effects`, `scoop`, `scooped` and none: charged 3 = refunded 2 + held 1, exactly once, no mark left.
-- **Units:** mod 2005 tests, 0 failed, 1 skipped. In-game: see the run record below.
+- **Units:** mod 2005 tests, 0 failed, 1 skipped.
+- **In-game** (ports 9050-9053; `_work/architect-mc-T5F-runs/`): red on ffea3bd5 (`red3/20261123-045025-change`): all 8 FAIL (t5-drain-hold
+  minted 1, t5-scoop-barrier minted 1, t5-s3a/s3b/t5-taken not built, t5-tombstone 8 rows still settled; fl5 and mixed preconditions). Green on
+  77611839 (`green3/20261123-050343-change`): PASS t5-scoop-barrier 3/0, t5-s3b 2/0, t5-taken 3/0, t5-tombstone 4/0, t5-drain-tx 12/0,
+  t5-scoop-tx 12/0. Two row drivers fixed at 03fe3489 (t5-s3a read `points`, the hook answers `trace`; t5-drain-hold's precondition: on T5F a
+  chunk counted before the hold is drained in the same apply), re-run (`green4/20261123-052906-change`): PASS both (conservation 10 == 10).
+  **Not green, by construction of the rows:** t5-drain-fl5 and t5-drain-mixed act through a dispenser while the drain txn is open; the
+  removal's held box seals dispensers (`TxnHoldDispenserMixin`, `Fills.heldBox`), on ffea3bd5 as on the head, so the take never happens
+  (fl5's conservation is exact, 10 == 10) and mixed's sealed lava bucket comes back with the dispenser's player-block extraction (11 == 10:
+  the scoop credited 10). Their P1-2a/b windows are covered by units (FluidsT5FcTest, `p1_2_*`).
 
 #### Crash safety and scope (T5Fc fix round)
 
