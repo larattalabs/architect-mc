@@ -538,3 +538,37 @@ export async function tombstone(H) {
   check(fr === null, `Q1: fluidsRemoval is null on the tombstone (${json(fr)})`);
   return out;
 }
+
+/**
+ * (slice T5Fc, contract §7 TX matrix: fluid.drain and region.scoop on rs03 in survival) rs03 placed (lava and grate charged), removed and
+ * halted at each point, +save and bare: the restart replays the open txns; the region ends REMOVED, the lava refunded exactly once
+ * (the pile's lava buckets back by the charge: no mint, no loss) and one REMOVAL_FINISHED carrying it (S3 c).
+ */
+export async function removeTx(H, points) {
+  const { L, check, log, json } = H;
+  const out = {};
+  for (const p0 of points) {
+    for (const point of [`${p0}+save`, p0]) {
+      const tag = `rs03t5rx${p0.replace(/[^a-z]/gi, '').slice(-12)}${point.endsWith('+save') ? 's' : 'b'}`;
+      const p = await placed(H, tag);
+      const s0 = await lavaStock(H);
+      await L.call('dev.journal.killAt', { point }, 10_000);
+      L.call('dev.region.remove', { region: p.region, requester: H.G.OWNER }, 3_600_000).catch(() => null);
+      const halted = await H.waitHalt(point);
+      if (!halted) {
+        check(false, `RX (${point}): the precondition: the kill point halted the server`);
+        continue;
+      }
+      await reopen(H, p.s.world);
+      const fin = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
+      await L.settle(2000);
+      const got = (await lavaStock(H)) - s0;
+      const ev = (await L.call('dev.api.removalEvents', { region: p.region }, 10_000).catch(() => ({ events: [] }))).events ?? [];
+      out[tag] = { fin, got, charged: p.charged, events: ev.length };
+      log(`  RX: ${json(out[tag])}`);
+      check(fin === 'REMOVED' && got === p.charged, `RX (${point}): replayed once: ${fin}, lava refunded ${got} == ${p.charged} charged`);
+      check(ev.length <= 1 && ev.every((e) => (e.refund?.['minecraft:lava_bucket'] ?? 0) === p.charged), `RX (${point}): at most one REMOVAL_FINISHED this session, carrying the whole refund (S3 c): ${json(ev.map((e) => e.refund))}`);
+    }
+  }
+  return out;
+}

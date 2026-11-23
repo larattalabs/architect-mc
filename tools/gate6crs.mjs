@@ -19,6 +19,7 @@
 //     t8a       (8ct-a)                 slice 8cTa row A: tile-written lava, never forced, one taken: the refund + taken == charged
 //     t8b       (8ct-b)                 slice 8cTa row B: FLc+save, the charge settled at the start, never written, removed: refunded
 //     t5k4 t5k4rm t5dh t5fl5 t5dm t5sb t5gb t5s3a t5s3b t5tk t5q1   slice T5Fa: T5F's failing-first rows on rs03 (tools/lib/gate-t5f-rs.mjs)
+//     t5rxd t5rxs                       slice T5Fc: the TX matrix of the removal drain and the scoop on rs03 (survival)
 //     toggle    (rs-toggle)             item 18 (fix/survival-off-storm): /architect survival off mid-build: 0 chunks generated or charged
 //                                       outside claim + 2, a forceloaded chunk not charged, built in its mode as its twin, E-flat 0
 //     report                            REPORT.md over the step JSONs
@@ -1223,6 +1224,9 @@ steps.t5s3a = async () => { await ensure(); return T5.s3a(H5()); };
 steps.t5s3b = async () => { await ensure(); return T5.s3b(H5()); };
 steps.t5tk = async () => { await ensure(); return T5.taken(H5()); };
 steps.t5q1 = async () => { await ensure(); return T5.tombstone(H5()); };
+// (slice T5Fc) the TX matrix on rs03 in survival: the removal drain's points and the scoop's (contract §7)
+steps.t5rxd = async () => { await ensure(); return T5.removeTx(H5(), ['TX:fluid.drain:drain', 'TX:fluid.drain:barrier:effects', 'TX:fluid.drain:effects']); };
+steps.t5rxs = async () => { await ensure(); return T5.removeTx(H5(), ['TX:region.scoop:scoop', 'TX:region.scoop:scooped', 'TX:region.scoop:effects']); };
 
 steps.t9s2 = async () => { await ensure(); return seenRow('rs03t9s2', true); };
 
