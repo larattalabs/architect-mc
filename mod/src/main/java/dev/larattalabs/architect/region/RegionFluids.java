@@ -4601,7 +4601,7 @@ public final class RegionFluids {
 
 	/**
 	 * (slice T5F, DevBridge {@code dev.fluid.marks}) Per body, its own cells' fluid provenance now: {@code cells}, {@code wrote},
-	 * {@code cleared}, and {@code standing} (cells holding what the body wrote), {@code wroteStanding} (both), {@code takenWrote} (WROTE, not
+	 * {@code cleared}, and {@code standing} (cells holding what the body delivered: a fluid cell as a source), {@code wroteStanding} (both), {@code takenWrote} (WROTE, not
 	 * standing).
 	 */
 	public static JsonObject marksJson(ServerLevel level, RegionsImpl.Live l) {
@@ -4624,7 +4624,7 @@ public final class RegionFluids {
 						continue;
 					}
 					FluidProv.Mark m = marks.get(FluidProv.index(level, p));
-					boolean ours = ownStillOurs(b, p, level.getBlockState(BlockPos.of(p)));
+					boolean ours = ownDelivered(b, p, level.getBlockState(BlockPos.of(p))); // (a source: flow into a taken cell is not standing)
 					wrote += m == FluidProv.Mark.WROTE ? 1 : 0;
 					cleared += m == FluidProv.Mark.CLEARED ? 1 : 0;
 					standing += ours ? 1 : 0;

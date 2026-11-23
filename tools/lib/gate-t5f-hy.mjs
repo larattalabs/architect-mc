@@ -107,6 +107,9 @@ export async function clearTx(ctx) {
     const ck = await checkCourse(ctx, `t5clx-${tag}`);
     const box = boxOf(g);
     const file = await snap(ctx, box, `hy-t5clx-${tag}`);
+    // the natural lake beside the course's head (freshCourse's /fill): fluid that was there before, as hy-crash reads it
+    const lake = await L.call('dev.fluid.census', { box }, 600_000);
+    const before = new Map(lake.fluids.map(([x, y, z, s0]) => [`${x},${y},${z}`, s0]));
     let region = null;
     await L.call('dev.journal.killAt', { point }, 10_000);
     L.call('dev.region.realiseApproved', { sha: ck.artifactSha }, 300_000).then((x) => { region = x.region; }).catch(() => null);
@@ -119,7 +122,7 @@ export async function clearTx(ctx) {
     const st = await L.waitRegion(region, 3_600_000);
     const r = await regionOf(ctx, region);
     let outside = 0, mism = 0;
-    for (const b of r.bodies) { const c = await censusOf(ctx, b, null, r.bodies); outside += c.outsideCount; mism += c.mismatch.length; }
+    for (const b of r.bodies) { const c = await censusOf(ctx, b, before, r.bodies); outside += c.outsideCount; mism += c.mismatch.length; }
     const mk = await L.call('dev.fluid.marks', { region }, 30_000);
     const unmarked = (mk.bodies ?? []).reduce((a, x) => a + (x.standing - x.wroteStanding), 0);
     const cleared = (mk.bodies ?? []).reduce((a, x) => a + x.cleared, 0);

@@ -1227,7 +1227,7 @@ public final class FluidTxns {
 				continue;
 			}
 			net.minecraft.world.level.block.state.BlockState now = w.get(p);
-			boolean stands = RegionFluids.ownStillOurs(b, p, now);
+			boolean stands = RegionFluids.ownDelivered(b, p, now); // (round 2, P1-b) a source, never residual flow into a harvested cell
 			// (fix round, P2-5) the evidence is the record's own fluids tile writing the body's own block there (never an air carve)
 			FluidProv.Mark m = FluidProv.adopt(stands, !stands && je.after(p) == RegionFluids.expectedBlock(b, p));
 			if (m != null) {
