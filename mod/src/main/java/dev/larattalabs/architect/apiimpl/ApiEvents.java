@@ -155,8 +155,15 @@ public final class ApiEvents {
 	}
 
 	private static void finished(dev.larattalabs.architect.api.RemovalFinished f) {
+		SEEN.add(f); // (slice T5Fc, TEST dev.api.removalEvents) this session's events, the last 64
+		while (SEEN.size() > 64) {
+			SEEN.remove(0);
+		}
 		guard("REMOVAL_FINISHED", () -> SiteEvents.REMOVAL_FINISHED.invoker().onFinished(f));
 	}
+
+	/** (slice T5Fc, TEST) The REMOVAL_FINISHED events delivered this session (at most the last 64), oldest first. */
+	public static final java.util.List<dev.larattalabs.architect.api.RemovalFinished> SEEN = new java.util.concurrent.CopyOnWriteArrayList<>();
 
 	/** A site moved to another version of its entry (phase 5b: an apply or a revert; SITE_UPDATED, wired with API 1.7.0). */
 	public static void siteUpdated(MinecraftServer server, dev.larattalabs.architect.site.SiteDeltas.Result r) {

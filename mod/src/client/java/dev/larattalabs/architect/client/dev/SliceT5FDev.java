@@ -371,6 +371,35 @@ public final class SliceT5FDev {
 					return RegionFluids.unprovForTest(level, l);
 				});
 			});
+		DevBridge.register("dev.api.removalEvents", 10_000, "{region?} - (T5Fc) TEST: the REMOVAL_FINISHED events delivered this session (the last 64), "
+			+ "a region's only with region -> {events: [{kind, id, stage, revisionId, removed, refund, fluidsTaken, fluidsTakenCells}]}", (req, mc) -> {
+				String region = req.has("region") ? req.get("region").getAsString() : null;
+				JsonArray a = new JsonArray();
+				for (var f : dev.larattalabs.architect.apiimpl.ApiEvents.SEEN) {
+					if (region != null && !(dev.larattalabs.architect.api.RemovalFinished.REGION.equals(f.kind()) && region.equals(f.id()))) {
+						continue;
+					}
+					JsonObject o = new JsonObject();
+					o.addProperty("kind", f.kind());
+					o.addProperty("id", f.id());
+					o.addProperty("stage", f.stage());
+					o.addProperty("revisionId", f.revisionId());
+					o.addProperty("removed", f.result().removed());
+					JsonObject rf = new JsonObject();
+					f.result().refund().forEach((k, v) -> rf.addProperty(BuiltInRegistries.ITEM.getKey(k).toString(), v));
+					o.add("refund", rf);
+					if (f.result().fluidsTaken() != null) {
+						JsonObject tk = new JsonObject();
+						f.result().fluidsTaken().forEach((k, v) -> tk.addProperty(BuiltInRegistries.ITEM.getKey(k).toString(), v));
+						o.add("fluidsTaken", tk);
+					}
+					o.addProperty("fluidsTakenCells", f.result().fluidsTakenCells());
+					a.add(o);
+				}
+				JsonObject out = new JsonObject();
+				out.add("events", a);
+				return CompletableFuture.completedFuture(out);
+			});
 		DevBridge.register("dev.txn.kinds", 10_000, "{} - (T5Fa) the txn kinds registered in the core (the rows probe for kinds not built yet) -> "
 			+ "{kinds: [name]}", (req, mc) -> ServerTasks.callOnServer(s -> {
 				JsonObject o = new JsonObject();
