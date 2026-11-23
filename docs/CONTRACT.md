@@ -34683,6 +34683,16 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   `owedParts` only, and `OwnerRemovals.groupSnapshot` doesn't carry separate cargo keys. The revision result then lists the player-block
   owed key but not the cargo one. The owed ledger itself is unaffected: the items stay owed and auto-collect pays them. Only the
   reported result is short. Restore: persist the full stage result in the snapshot and merge it.
+- **A crash during a paid site's removal can pop one support-dependent block as a ground item at restart (accepted for v0.91.0,
+  verifier row LR-2s).** After a kill at K6 (between the undo commit and the record going pending), the restart rolls the removal
+  forward at world start. The W restore (`CrateSettle` W apply, `Sites.restoreTemplate` with plain `FLAGS`) breaks a door's lower
+  half, or a bed, lantern or plant, through vanilla shape updates. `Drops.clearNew` can't see the item yet because the chunk's entity
+  section isn't loaded; under load its 3-tick later pass also misses it. The player is then owed the full refund and the item lies on
+  the ground: one item minted, seen in 2 of 3 gate runs. It needs the server to die in a sub-millisecond window, so a player can't
+  trigger it. The same blind spot means a `before` snapshot taken while entities are hidden could clear a player's own items lying
+  in the restored area. v0.90.0 has no world-start restore on K6, but its interrupted-restore resume (`RestoreJob`,
+  `Groups.writeAgain`) may share the blind spot (unchecked). Restore: hold the W until `areEntitiesLoaded` holds for every chunk of
+  the write area inflated by 1, with a loading ticket, before `Drops.before` (slice LR2-FIX).
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
   `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
   their behaviour is shown in game only for the holder).
