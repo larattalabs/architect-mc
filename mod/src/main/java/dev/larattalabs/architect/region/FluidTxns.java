@@ -1083,10 +1083,26 @@ public final class FluidTxns {
 					throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
 				}
 				List<LevelChunk> chunks = new ArrayList<>();
-				for (long[] c : chunksOf(e)) {
+				List<long[]> cs = chunksOf(e);
+				for (long[] c : cs) {
 					chunks.add(level.getChunk((int) c[0], (int) c[1]));
 				}
-				run.run(t, e, level, l, st);
+				if (cs.size() == 1) {
+					// (T5Fc, I4) a per-chunk W (T5Fc's plans): its drains write and tick only its own chunk; an 8cT-era W over every chunk as it was
+					int cx = (int) cs.get(0)[0], cz = (int) cs.get(0)[1];
+					var wasF = RegionFluids.chunkFilter;
+					var wasT = RegionFluids.tickOnly;
+					RegionFluids.chunkFilter = p -> RegionFluids.inChunk(p, cx, cz);
+					RegionFluids.tickOnly = RegionFluids.chunkFilter;
+					try {
+						run.run(t, e, level, l, st);
+					} finally {
+						RegionFluids.chunkFilter = wasF;
+						RegionFluids.tickOnly = wasT;
+					}
+				} else {
+					run.run(t, e, level, l, st);
+				}
 				step(t, stepName);
 				String k = e.key(t.id);
 				for (LevelChunk ch : chunks) {
@@ -1152,7 +1168,7 @@ public final class FluidTxns {
 	}
 
 	/** Begins (or finds) one record txn: plans {@code w} then {@code r} over the record's chunks; persists; drives. */
-	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, Effect.Builder w, Effect.Builder r,
+	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.Supplier<Effect.Builder> w, Effect.Builder r,
 		java.util.function.Consumer<TxnEntry> attached) {
 		Step a = adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F is adopted first
 		if (a != null) {
@@ -1178,7 +1194,15 @@ public final class FluidTxns {
 			}
 		}
 		TxnEntry t = started.entry();
-		c.plan(t, w.data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", chunksJson(st)));
+		// (T5Fc, I4) one W per chunk (the same op and data, its one chunk): a replay redoes only the chunks whose receipt is missing
+		for (long ck : RegionFluids.drainChunks(st)) {
+			JsonArray one = new JsonArray();
+			JsonArray xz = new JsonArray();
+			xz.add((int) (ck >> 32));
+			xz.add((int) ck);
+			one.add(xz);
+			c.plan(t, w.get().data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", one));
+		}
 		c.plan(t, r.data("region", l.rec().id).data("rid", l.rid()));
 		DurableFile.Outcome p = c.persist(t);
 		if (p == DurableFile.Outcome.REFUSED) {
@@ -1803,7 +1827,7 @@ public final class FluidTxns {
 			cells.add(a);
 		}
 		String key = "fluid-drain:" + recKey(l) + "/" + why + ":" + b.id;
-		return record(DRAIN, key, l, st, Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), Effect.of(
+		return record(DRAIN, key, l, st, () -> Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), Effect.of(
 			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), t -> {
 			});
 	}
@@ -1870,7 +1894,7 @@ public final class FluidTxns {
 	 */
 	static Step lot(RegionsImpl.Live l, RegionFluids.Regional st, String lotId, List<String> bodies) {
 		String key = "fluid-drain:" + recKey(l) + "/lot:" + lotId;
-		return record(DRAIN, key, l, st, Effect.of("fluid.lotdrain", EffectClass.W).data("lot", lotId).data("group", String.valueOf(l.rec().groupId)).data(
+		return record(DRAIN, key, l, st, () -> Effect.of("fluid.lotdrain", EffectClass.W).data("lot", lotId).data("group", String.valueOf(l.rec().groupId)).data(
 			"bodies", idsJson(bodies)), Effect.of("fluid.lotdrained", EffectClass.R).data("lot", lotId).data("bodies", idsJson(bodies)), t -> {
 			});
 	}
@@ -1946,7 +1970,7 @@ public final class FluidTxns {
 			cells.add(a);
 		}
 		String key = "fluid-drain:" + recKey(l) + "/held:" + b.id;
-		return record(DRAIN, key, l, st, Effect.of("fluid.hold", EffectClass.W).data("body", b.id), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
+		return record(DRAIN, key, l, st, () -> Effect.of("fluid.hold", EffectClass.W).data("body", b.id), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
 			.data("why", typed).data("reason", reason).data("at", cells), t -> {
 			});
 	}

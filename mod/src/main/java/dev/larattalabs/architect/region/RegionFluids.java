@@ -2596,7 +2596,9 @@ public final class RegionFluids {
 	 * {@code t}; {@code level} is read only by an irrigation body's breach judgement (none: it may be null).
 	 */
 	static int drain(DrainTarget t, @Nullable ServerLevel level, Regional st, Body b, BodyState bs, boolean strays, LongOpenHashSet others,
-		java.util.function.LongPredicate held, boolean removal) {
+		java.util.function.LongPredicate held0, boolean removal) {
+		var cf = chunkFilter; // (T5Fc) a per-chunk W's drain writes only its own chunk
+		java.util.function.LongPredicate held = cf == null ? held0 : p -> held0.test(p) || !cf.test(p);
 		int n = 0;
 		Fluid src = b.source();
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
@@ -2731,6 +2733,12 @@ public final class RegionFluids {
 	 * isn't the body's (a lake, a player's source) settles back into its own level by vanilla's ticks (a raised cell goes to the foreign-only
 	 * level; an own-only cell stays dry).
 	 */
+	/**
+	 * (T5Fc, I4) While set (a per-chunk escape, unsettled, upstream, held or lot drain W's apply, server thread): the drains write only the
+	 * cells it accepts (that W's chunk).
+	 */
+	static java.util.function.@Nullable LongPredicate chunkFilter;
+
 	/** (T5Fc, I6) While set (a per-chunk drain W's apply, server thread): the drains' ticks only where it accepts (its own chunk). */
 	static java.util.function.@Nullable LongPredicate tickOnly;
 
@@ -4435,7 +4443,9 @@ public final class RegionFluids {
 	 * (8c WU) One body's sources (its cells, ice and grate) back to their before states where they hold a fluid or ice, then a fluid tick
 	 * on each face neighbour holding fluid that isn't a cell of the body: the flow they fed dies by vanilla's own ticks.
 	 */
-	static int drainSources(ServerLevel level, Body b, BodyState bs, java.util.function.LongPredicate held) {
+	static int drainSources(ServerLevel level, Body b, BodyState bs, java.util.function.LongPredicate held0) {
+		var cf = chunkFilter; // (T5Fc) a per-chunk W's drain writes only its own chunk
+		java.util.function.LongPredicate held = cf == null ? held0 : p -> held0.test(p) || !cf.test(p);
 		int n = 0;
 		LongOpenHashSet own = b.ownSet();
 		LongOpenHashSet tick = new LongOpenHashSet();
