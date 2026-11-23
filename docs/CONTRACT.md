@@ -35787,3 +35787,16 @@ regression guards.
 - **Units:** mod 1981 tests, 0 failed, 11 skipped; devserver compiles. Still no in-game run (paused).
 - **Still not covered by a unit:** `LegacyV1`'s apply on a live level, `Placed.set`'s hook itself (its parts, `scopeOf` and
   `clearsOnWrite`, are), and `MemFluidWorld` runs no physics (its ticks are recorded, not executed).
+
+### Slice T5Fb in-game record (2026-11-23, after v0.91.0; ports 9050-9053)
+
+- **Red on 53dfa712** (detached probe worktree; also the revert check: the rows' drivers only gained code since):
+  `_work/architect-mc-T5F-runs/red2/20261123-023741-change`. t5-tile-k4 FAIL 3/2 (0 of 10 lost lava rewritten, refunded 0 of 10),
+  t5-tile-k4-rm FAIL 2/1 (refunded 0 of 10 lost), t5-water-bucket FAIL 1/1 (the bucketed cell written again), t5-force-lost FAIL 2/1
+  (forced passes []), t5-kn FAIL 1/1 (no "(k of n)"), t5-grate-broken PASS 3/0 (a regression row, as on 8cT).
+- **Green at 081d5c53** (`.../green/20261123-025429-change`): the six rows PASS (5/0, 3/0, 3/0, 2/0, 3/0, 2/0), t5-write-tx-a 12/0,
+  t5-write-tx-b 12/0, t5-water-bucket-hy 6/0. Two FAIL, both read in the row, then fixed at 7c05870c:
+  - t5-adopt-tx 18/6: the bucketed pond cell had flow in it, which adoption read as "our fluid stands". Adoption and `dev.fluid.marks`
+    now read a delivered source (`ownDelivered`, P1-b's rule), so N2 (b) adopts it from the record's own tile entry;
+  - t5-write-tx-clear 6/2: the row's census missed the course's natural lake (98 cells "outside"); it now reads it as before, as hy-crash.
+- **Re-run of the two at 7c05870c** (`.../green2/20261123-031709-change`): t5-adopt-tx PASS 24/0, t5-write-tx-clear PASS 8/0.
