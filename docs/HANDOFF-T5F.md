@@ -6,8 +6,13 @@ Contract: the coordinator's T5F draft (side-session notes, architect-T5F-contrac
 ## Done
 - T5Fa (merged with T4R), T5Fb (+ two fix rounds, in-game green at 7c05870c; record in CONTRACT).
 - T5Fc must-fixes (a)-(c) from T5Fb's last GPT pass: 8ffeecc6.
+- T5Fc part 1 (eb9a8b7c): drain per (body, chunk) with counted receipts and mark deletion; region.scoop txn (scoopStep in gateOne and
+  gateFlowing, after the drain); deadline from receipts (settleDeadline; until never read/saved); legacy 8cT drain adapters kept.
+  Units FluidsT5FcTest. Still to unguard in FluidsT5FRedTest/FluidCrashModelT5FTest: i4, i5 x2, f_, runtime SEEN_AHEAD, AGGREGATE_W,
+  L_BEFORE_BARRIER, STORED_UNTIL (green now).
 
-## T5Fc, next (in order; each red first on MemFluidWorld units, `FluidsT5Fc*Test`)
+## T5Fc, next (part 2: RemoveResult plumbing via Groups.Removed + ApiEvents + RemovalTxn payload + undoResult, reading fluids.json
+## scoopCredited/taken (fluids.json survives REMOVED: only region.json is deleted); Q1 freezeRows; fluid.stray; escape/held/lot per chunk)
 1. Units red, no runtime change: drain W per (body, chunk) counting l/u/h at its apply; only a lost chunk replayed; region.scoop from receipts
    (an UNKNOWN chunk holds); deadline from receipt t; stray txn; escape/lot per chunk; freezeRows (Q1); fluidsTaken/Cells; no R mark left.
 2. Row drivers and hooks (no runtime change): dev.api.removalEvents (t5-s3b); coverage rows t5-escape-closure, t5-held-future, t5-lot-multi,
