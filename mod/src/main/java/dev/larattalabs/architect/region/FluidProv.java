@@ -152,16 +152,20 @@ public final class FluidProv {
 
 	// ------------------------------------------------------------------ R's scope (§3.2: a rollback of R's own fluids tile)
 
-	private static @Nullable String scope;
+	/** R's scope: its record, and whether a cell's state before a write was R's own (what R's body wrote there). */
+	public record Scope(String rec, java.util.function.BiPredicate<Long, net.minecraft.world.level.block.state.BlockState> ours) {
+	}
 
-	/** Runs {@code r} with every Architect write ({@code Placed.set}) clearing R's mark on its cell; {@code rec} null: no scope. */
-	public static void inScope(@Nullable String rec, Runnable r) {
-		if (rec == null) {
+	private static @Nullable Scope scope;
+
+	/** Runs {@code r} with every Architect write ({@code Placed.set}) inside R's scope; {@code sc} null: no scope. */
+	public static void inScope(@Nullable Scope sc, Runnable r) {
+		if (sc == null) {
 			r.run();
 			return;
 		}
-		String was = scope;
-		scope = rec;
+		Scope was = scope;
+		scope = sc;
 		try {
 			r.run();
 		} finally {
@@ -169,11 +173,31 @@ public final class FluidProv {
 		}
 	}
 
-	/** {@code Placed.set}'s hook: inside R's scope, the cell's R mark goes with the write (server thread). */
-	public static void onArchitectWrite(Level level, BlockPos pos) {
-		String rec = scope;
-		if (rec != null && level instanceof ServerLevel) {
-			set(level, pos.asLong(), rec, null);
+	/**
+	 * (fix round, P1-2 and the PLACING harvest) Whether a write in R's scope clears the cell's R mark: only when the cell held R's own before
+	 * the write ({@code prevOurs}) and the write took ({@code accepted}), or the cell already holds its target (a verified completion). A
+	 * refused write keeps the mark; a cell taken before the rollback (harvested while its tile was PLACING) keeps WROTE, so the tile's retry
+	 * never delivers it again. Pure.
+	 */
+	public static boolean clearsOnWrite(boolean prevOurs, boolean accepted, boolean nowIsTarget) {
+		return prevOurs && (accepted || nowIsTarget);
+	}
+
+	/** {@code Placed.set}'s hook before the write: inside R's scope, whether the cell holds R's own now (else null: no scope). */
+	public static @Nullable Boolean beforeArchitectWrite(Level level, BlockPos pos) {
+		Scope sc = scope;
+		if (sc == null || !(level instanceof ServerLevel)) {
+			return null;
+		}
+		return sc.ours().test(pos.asLong(), level.getBlockState(pos));
+	}
+
+	/** {@code Placed.set}'s hook after the write ({@code prevOurs} from {@link #beforeArchitectWrite}). */
+	public static void afterArchitectWrite(Level level, BlockPos pos, @Nullable Boolean prevOurs, net.minecraft.world.level.block.state.BlockState target,
+		boolean accepted) {
+		Scope sc = scope;
+		if (sc != null && prevOurs != null && clearsOnWrite(prevOurs, accepted, level.getBlockState(pos) == target)) {
+			set(level, pos.asLong(), sc.rec(), null);
 		}
 	}
 }

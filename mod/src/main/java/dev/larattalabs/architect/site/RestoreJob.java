@@ -138,8 +138,9 @@ final class RestoreJob implements Placement.Job {
 	int cellCursor;
 	/** Who waits for a removal of a road or cell site (the API). */
 	transient final List<CompletableFuture<Sites.Removed>> futures = new ArrayList<>();
-	/** (slice T5F) The fluids record whose marks this rollback's writes clear ("" none), resolved once; transient. */
-	transient @Nullable String provScope;
+	/** (slice T5F) The fluids record whose marks this rollback's writes clear (null: none), resolved once; transient. */
+	transient dev.larattalabs.architect.region.FluidProv.@Nullable Scope provScope;
+	transient boolean provResolved;
 	/** The infra record as it was taken down. */
 	transient @Nullable Infra infraDone;
 	/** (slice SOFF2) A road's refund as first credited (a retry after a refused credit save finds the key credited), and the refusals. */
@@ -152,12 +153,12 @@ final class RestoreJob implements Placement.Job {
 		int p0 = phase;
 		boolean r;
 		dev.larattalabs.architect.txn.TxnEntry own = Groups.txnOf(group);
-		if (ROLLBACK.equals(purpose) && provScope == null) {
-			// (slice T5F, §3.2) a rollback of record R's own fluids-stage tile clears R's fluid marks with its writes ("" : not one)
-			String rec = dev.larattalabs.architect.region.RegionFluids.provScopeOf(batchId, itemKey);
-			provScope = rec == null ? "" : rec;
+		if (ROLLBACK.equals(purpose) && !provResolved) {
+			// (slice T5F, §3.2) a rollback of record R's own fluids-stage tile clears R's fluid marks with its accepted writes over R's own cells
+			provScope = dev.larattalabs.architect.region.RegionFluids.provScopeOf(batchId, itemKey);
+			provResolved = true;
 		}
-		String scope = provScope == null || provScope.isEmpty() ? null : provScope;
+		var scope = provScope;
 		if (own != null) {
 			// (slice T4R, R1) a group member's restore is its removal.group txn's own write: the boxes that txn holds accept it
 			boolean[] out = new boolean[1];

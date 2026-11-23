@@ -890,7 +890,7 @@ public final class FluidTxns {
 			}
 		}
 		c.plan(t, Effect.of("fluid.written", EffectClass.R).data("bodies", idsJson(due)).data("last", last ? 1 : 0).data("region", l.rec().id).data("rid", l
-			.rid()));
+			.rid()).data("v", 2)); // (fix round, P1-3) T5F's written: no physics (an 8cT-era written, without v, replays with its own adapter)
 		DurableFile.Outcome p = c.persist(t);
 		if (p == DurableFile.Outcome.REFUSED) {
 			return new Step(Step.Kind.REFUSED, "txn_journal: the intent could not be written");
@@ -914,7 +914,19 @@ public final class FluidTxns {
 
 	/** (slice T5F) A per-chunk W's run: its writes in its one chunk; returns the receipt's fields (beyond {@code op} and {@code t}). */
 	interface ChunkRun {
-		Map<String, Object> run(TxnEntry t, Effect e, ServerLevel level, RegionsImpl.Live l, RegionFluids.Regional st, int cx, int cz);
+		Map<String, Object> run(TxnEntry t, Effect e, FluidWorld w, RegionsImpl.Live l, RegionFluids.Regional st, int cx, int cz);
+	}
+
+	/** (slice T5F fix round, P2-7, TEST) The world a per-chunk W reads and writes in a unit; null: the effect's level. */
+	static volatile java.util.function.@Nullable Function<Effect, FluidWorld> testWorld;
+
+	static @Nullable FluidWorld worldOf(Effect e) {
+		var tw = testWorld;
+		if (tw != null) {
+			return tw.apply(e);
+		}
+		ServerLevel level = level(e);
+		return level == null ? null : FluidWorld.of(level);
 	}
 
 	/**
@@ -926,26 +938,28 @@ public final class FluidTxns {
 		return new TxnKind.Adapter() {
 			@Override
 			public Probe probe(TxnEntry t, Effect e) {
-				return FLUID_DRAIN.probe(t, e);
+				FluidWorld w = worldOf(e);
+				long[] c = chunksOf(e).get(0);
+				return w == null ? Probe.UNKNOWN : w.hasReceipt((int) c[0], (int) c[1], e.key(t.id)) ? Probe.APPLIED : Probe.ABSENT;
 			}
 
 			@Override
 			public void apply(TxnEntry t, Effect e) {
-				ServerLevel level = level(e);
+				FluidWorld w = worldOf(e);
 				RegionsImpl.Live l = live(region(e), rid(e));
 				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
-				if (level == null || l == null || st == null) {
+				if (w == null || l == null || st == null) {
 					throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
 				}
 				long[] c = chunksOf(e).get(0);
-				LevelChunk ch = level.getChunk((int) c[0], (int) c[1]);
+				int cx = (int) c[0], cz = (int) c[1];
 				Map<String, Object> f = new java.util.LinkedHashMap<>();
 				f.put("op", op.substring("fluid.".length()));
-				f.put("t", level.getGameTime());
-				f.putAll(run.run(t, e, level, l, st, (int) c[0], (int) c[1]));
+				f.put("t", w.gameTime());
+				f.putAll(run.run(t, e, w, l, st, cx, cz));
 				String k = e.key(t.id);
-				if (!TestMove.hasReceipt(ch, k)) {
-					TestMove.addReceiptTo(ch, dev.larattalabs.architect.txn.Receipts.of(k, f));
+				if (!w.hasReceipt(cx, cz, k)) {
+					w.addReceipt(cx, cz, dev.larattalabs.architect.txn.Receipts.of(k, f));
 				}
 				if ("fluid.place".equals(op)) {
 					int n = 0, kk = 0;
@@ -982,14 +996,14 @@ public final class FluidTxns {
 	}
 
 	/** (slice T5F, §4.2) {@code fluid.clear}: the waiting water bodies' tile-written cells in this chunk cleared ({@code WROTE -> CLEARED}). */
-	static final TxnKind.Adapter FLUID_CLEAR = chunkW("fluid.clear", "clear", (t, e, level, l, st, cx, cz) -> {
+	static final TxnKind.Adapter FLUID_CLEAR = chunkW("fluid.clear", "clear", (t, e, w, l, st, cx, cz) -> {
 		int n = 0;
 		String rec = recKey(l);
 		for (String id : bodiesOf(e)) {
 			RegionFluids.Body b = st.body(id);
 			RegionFluids.BodyState bs = st.states.get(id);
 			if (b != null && bs != null) {
-				n += RegionFluids.clearBody(level, b, bs, rec, cx, cz);
+				n += RegionFluids.clearBody(w, b, bs, rec, cx, cz);
 			}
 		}
 		if (n > 0) {
@@ -1000,13 +1014,13 @@ public final class FluidTxns {
 	});
 
 	/** (slice T5F, §4.2, §3.3) {@code fluid.place}: one body's cells in this chunk written where §3.3 writes them, marked WROTE(R). */
-	static final TxnKind.Adapter FLUID_PLACE = chunkW("fluid.place", "place", (t, e, level, l, st, cx, cz) -> {
+	static final TxnKind.Adapter FLUID_PLACE = chunkW("fluid.place", "place", (t, e, w, l, st, cx, cz) -> {
 		int n = 0, h = 0;
 		String rec = recKey(l);
 		for (String id : bodiesOf(e)) {
 			RegionFluids.Body b = st.body(id);
 			if (b != null) {
-				int[] r = RegionFluids.placeBody(level, b, rec, cx, cz);
+				int[] r = RegionFluids.placeBody(w, b, rec, cx, cz);
 				n += r[0];
 				h += r[1];
 			}
@@ -1018,21 +1032,25 @@ public final class FluidTxns {
 	});
 
 	/** (slice T5F, I6) {@code fluid.force}: one body's forced ticks in this chunk (its cells', and its outside neighbours' here). */
-	static final TxnKind.Adapter FLUID_FORCE = chunkW("fluid.force", "force", (t, e, level, l, st, cx, cz) -> {
+	static final TxnKind.Adapter FLUID_FORCE = chunkW("fluid.force", "force", (t, e, w, l, st, cx, cz) -> {
 		int n = 0;
 		for (String id : bodiesOf(e)) {
 			RegionFluids.Body b = st.body(id);
 			if (b != null) {
-				n += RegionFluids.forceBodyIn(level, b, cx, cz);
+				n += RegionFluids.forceBodyIn(w, b, cx, cz);
+				RegionFluids.BodyState bs = st.states.get(id);
+				if (bs != null) {
+					bs.forcedAt = Math.max(bs.forcedAt, w.gameTime()); // (fix round, P2-6) a replayed force restarts its settle bound
+				}
 			}
 		}
 		if (st.forcedAt < 0 || !t.live()) {
-			st.forcedAt = level.getGameTime(); // (in memory; a replay's forced pass moves it: the settle counts from the ticks it scheduled, §4.4)
+			st.forcedAt = w.gameTime(); // (in memory; a replay's forced pass moves it: the settle counts from the ticks it scheduled, §4.4)
 		}
 		return Map.of("n", n);
 	});
 
-	static final TxnKind.Adapter FLUID_WRITTEN = r(new RRun() {
+	static final RRun WRITTEN_RUN = new RRun() {
 		@Override
 		public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
 			for (String id : ids(e)) {
@@ -1088,7 +1106,9 @@ public final class FluidTxns {
 			}
 			step(t, "written"); // (§4.2's point) the R durable, the txn not EFFECTS_DONE yet
 		}
-	});
+	};
+
+	static final TxnKind.Adapter FLUID_WRITTEN = r(WRITTEN_RUN);
 
 	static final TxnKind WRITE_KIND = new TxnKind() {
 		@Override
@@ -1103,11 +1123,12 @@ public final class FluidTxns {
 
 		@Override
 		public TxnKind.@Nullable Adapter adapter(Effect e) {
+			// (fix round, P1-3) an entry planned before T5F (8cT's: a place naming its bodies, a written without v) replays with 8cT's adapters
 			return switch (e.op()) {
 				case "fluid.clear" -> FLUID_CLEAR;
-				case "fluid.place" -> FLUID_PLACE;
+				case "fluid.place" -> e.data().has("body") ? FLUID_PLACE : LegacyV1.PLACE;
 				case "fluid.force" -> FLUID_FORCE;
-				case "fluid.written" -> FLUID_WRITTEN;
+				case "fluid.written" -> e.data().has("v") ? FLUID_WRITTEN : LegacyV1.WRITTEN;
 				default -> null;
 			};
 		}
@@ -1176,34 +1197,43 @@ public final class FluidTxns {
 		return after(t);
 	}
 
-	static final TxnKind.Adapter FLUID_ADOPT = chunkW("fluid.adopt", "adopt", (t, e, level, l, st, cx, cz) -> {
+	/** (slice T5F fix round, P2-7, TEST) The adoption's journal evidence in a unit; null: the world journal's ({@link TileEntries}). */
+	static volatile java.util.function.@Nullable Function<Effect, AdoptEvidence> testEvidence;
+
+	/** (N2 b) The block an ACTIVE journal entry wrote in cell {@code p} (its after state's block), or null: none. */
+	interface AdoptEvidence {
+		net.minecraft.world.level.block.@Nullable Block after(long p);
+	}
+
+	static final TxnKind.Adapter FLUID_ADOPT = chunkW("fluid.adopt", "adopt", (t, e, w, l, st, cx, cz) -> {
 		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
 		if (b == null) {
 			return Map.of("n", 0);
 		}
-		LevelChunk ch = level.getChunk(cx, cz);
 		String rec = recKey(l);
-		var marks = FluidProv.marks(ch, rec);
-		TileEntries je = new TileEntries(l.rec().dimension, e.data().get("group").getAsString());
+		var marks = w.marks(cx, cz, rec);
+		var te = testEvidence;
+		AdoptEvidence je = te != null ? te.apply(e) : new TileEntries(l.rec().dimension, e.data().get("group").getAsString(), RegionFluids.stageOf(l))::after;
 		int n = 0;
 		for (long p : b.cells) {
 			if (!RegionFluids.inChunk(p, cx, cz)) {
 				continue;
 			}
-			int idx = FluidProv.index(level, p);
+			int idx = w.index(p);
 			if (marks.containsKey(idx)) {
 				continue;
 			}
-			net.minecraft.world.level.block.state.BlockState now = level.getBlockState(BlockPos.of(p));
+			net.minecraft.world.level.block.state.BlockState now = w.get(p);
 			boolean stands = RegionFluids.ownStillOurs(b, p, now);
-			FluidProv.Mark m = FluidProv.adopt(stands, !stands && je.wroteAny(p));
+			// (fix round, P2-5) the evidence is the record's own fluids tile writing the body's own block there (never an air carve)
+			FluidProv.Mark m = FluidProv.adopt(stands, !stands && je.after(p) == RegionFluids.expectedBlock(b, p));
 			if (m != null) {
 				marks.put(idx, m);
 				n++;
 			}
 		}
 		if (n > 0) {
-			FluidProv.put(ch, rec, marks);
+			w.putMarks(cx, cz, rec, marks);
 		}
 		return Map.of("n", n);
 	});
@@ -1248,35 +1278,102 @@ public final class FluidTxns {
 	};
 
 	/**
+	 * (slice T5F fix round, P1-3) 8cT's {@code fluid.write} adapters, kept only for entries planned before T5F (recovered after the upgrade,
+	 * before the record's adoption, which waits for them on the record's resource): its place writes the due bodies' open cells in its
+	 * chunks except a lava or grate cell an ACTIVE entry of the record's fluids tiles wrote (8cT's journal rule), and its written forces every
+	 * body (the physics 8cT put in the R). New plans never use them.
+	 */
+	static final class LegacyV1 {
+		private LegacyV1() {
+		}
+
+		static final TxnKind.Adapter PLACE = w("place", (t, e, level, l, st) -> {
+			TileEntries jw = new TileEntries(l.rec().dimension, e.data().get("group").getAsString(), RegionFluids.stageOf(l));
+			FluidWorld fw = FluidWorld.of(level);
+			int n = 0;
+			for (long[] c : chunksOf(e)) {
+				for (String id : ids(e)) {
+					RegionFluids.Body b = st.body(id);
+					if (b != null) {
+						n += RegionFluids.writeBodyV1(fw, b, (int) c[0], (int) c[1], p -> b.lava && jw.after(p) == net.minecraft.world.level.block.Blocks.LAVA
+							|| b.gratePos(p) && jw.after(p) == net.minecraft.world.level.block.Blocks.IRON_BARS);
+					}
+				}
+			}
+			return n;
+		});
+
+		static final TxnKind.Adapter WRITTEN = r(new RRun() {
+			@Override
+			public boolean applied(TxnEntry t, Effect e, RegionFluids.Regional st) {
+				return WRITTEN_RUN.applied(t, e, st);
+			}
+
+			@Override
+			public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
+				ServerLevel level = l.level(TxnServer.server());
+				if (level != null) {
+					FluidWorld fw = FluidWorld.of(level);
+					for (String id : ids(e)) {
+						RegionFluids.Body b = st.body(id);
+						if (b != null) {
+							for (long ck : RegionFluids.forceChunks(b)) {
+								RegionFluids.forceBodyIn(fw, b, (int) (ck >> 32), (int) ck); // 8cT's forced tick, every chunk, in the R
+							}
+						}
+					}
+				}
+				WRITTEN_RUN.run(t, e, l, st);
+			}
+		});
+	}
+
+	/**
 	 * (slice T5F, N2(b), adoption only) Per section, the cells an ACTIVE journal entry of the group wrote (any block): the one read of the
 	 * journal for a fluid cell, at adoption. An unreadable section throws: the adoption holds, never guesses.
 	 */
 	static final class TileEntries {
 		private final String dim;
 		private final String group;
-		private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.LongOpenHashSet> bySection =
+		private final String stage;
+		private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.block.Block>> bySection =
 			new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 
-		TileEntries(String dim, String group) {
+		/** (fix round, P2-5) Only the ACTIVE entries of the group's sites that are tiles of the record's fluids stage {@code stage}. */
+		TileEntries(String dim, String group, String stage) {
 			this.dim = dim;
 			this.group = group;
+			this.stage = stage;
 		}
 
-		boolean wroteAny(long pos) {
+		/** Whether a journal entry's site is a region tile of the record's fluids stage (its infra record's {@code architect_mc:tile}). */
+		boolean fluidsTile(String siteId) {
+			var in = dev.larattalabs.architect.site.Infras.get(siteId);
+			if (in == null) {
+				in = dev.larattalabs.architect.site.Infras.pending(siteId);
+			}
+			if (in == null || !(in.ext().get(dev.larattalabs.architect.site.RegionItems.EXT_TILE) instanceof JsonElement t) || !t.isJsonPrimitive()) {
+				return false;
+			}
+			return stage.equals(t.getAsString().split("\\|", -1)[0]);
+		}
+
+		net.minecraft.world.level.block.@Nullable Block after(long pos) {
 			long key = dev.larattalabs.architect.journal.Sections.key(pos);
 			var m = bySection.get(key);
 			if (m == null) {
-				m = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+				m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 				try {
 					var store = WorldJournal.store();
 					for (var en : WorldJournal.activeSlices(dim, key)) {
 						var meta = store.meta(en.id());
-						if (meta == null || !group.equals(meta.group()) || en.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE) {
+						if (meta == null || !group.equals(meta.group()) || en.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE || !fluidsTile(meta
+							.site())) {
 							continue;
 						}
 						for (var c : en.cells()) {
 							if (c.after() != null) {
-								m.add(c.pos());
+								m.putIfAbsent(c.pos(), WorldJournal.state(c.after()).getBlock());
 							}
 						}
 					}
@@ -1285,7 +1382,7 @@ public final class FluidTxns {
 				}
 				bySection.put(key, m);
 			}
-			return m.contains(pos);
+			return m.get(pos);
 		}
 	}
 

@@ -146,8 +146,13 @@ public final class Placed {
 		long prev = writePos;
 		writePos = pos.asLong();
 		try {
-			dev.larattalabs.architect.region.FluidProv.onArchitectWrite(level, pos); // (slice T5F, §3.2) inside R's scope only
-			return level.setBlock(pos, state, flags);
+			// (slice T5F, §3.2; fix round P1-2) inside R's scope only: R's mark goes after the write took, never before
+			Boolean prevOurs = dev.larattalabs.architect.region.FluidProv.beforeArchitectWrite(level, pos);
+			boolean ok = level.setBlock(pos, state, flags);
+			if (prevOurs != null) {
+				dev.larattalabs.architect.region.FluidProv.afterArchitectWrite(level, pos, prevOurs, state, ok);
+			}
+			return ok;
 		} finally {
 			writePos = prev;
 		}

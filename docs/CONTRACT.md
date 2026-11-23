@@ -35726,3 +35726,38 @@ advertised) is not built: `flowingWater` stays unadvertised.
   the clear W runs in the first wave's txn, after that wave's emission checks (before T5F the clear ran before them).
 - **Older saved worlds and plans read?** fluids.json without `prov` (main, DF and 8cT eras): adopted (N2); a main-era `chargedAt` charge:
   every lava and grate body paid. Chunks without the attachment read as no marks.
+
+### Slice T5Fb fix round as built (GPT review of 53dfa712..d06fb9be NOT SAFE: 4 P1, 3 P2; one round; recorded 2026-11-22)
+
+Seam first: the fluid Ws read and write through `region.FluidWorld` (blocks, marks, receipts, ticks; the level in game,
+`MemFluidWorld` in units, with per-chunk save and loss). `FluidsT5FFixTest` runs the real adapters through `FluidTxns.testWorld` and
+`testEvidence`. Red before the fixes on the seam commit's code (scratch record): 10 of 11 red, the 11th (`place_aTakenWroteCell..`)
+green as a regression; the two P2-7 behaviour tests added after are coverage, green on both sides.
+- **P1-1** `chargedAt` alone no longer proves payment. The gate writes `chargedBodies` with `chargedAt` always, an empty set when nothing
+  was charged (`markCharged`). A record without it (main era) counts its lava and grate bodies paid only with an acknowledged charge (the
+  record's settled `charged` items, else the ledger's keyed charge), and the refund is capped by what that charge took. Red:
+  `p1_1_chargedAtAloneIsNoEvidenceOfPayment` (2 refunded, 0 charged), `p1_1_aChargeWritesItsPaidBodiesEvenWhenEmpty`.
+- **P1-2** Marks change only after an accepted write or a verified completion. Place and clear count refused cells, mark none of them,
+  and throw after the chunk's accepted ones: the W holds with no receipt and runs again. In a rollback scope, `Placed.set` clears R's mark
+  after the write, only when the cell held R's own before it and the write took or the cell already holds the target
+  (`FluidProv.clearsOnWrite`). The tile marks a cell only when its write took. Red: `p1_2_aRefusedPlace..`, `p1_2_aRefusedClear..`,
+  `p1_2_theRollbackScope..`.
+- **P1-3** In-flight 8cT entries keep 8cT's adapters: a `fluid.place` naming `bodies` (8cT's journal rule, `LegacyV1.PLACE`) and a
+  `fluid.written` without `v` (forces every body, `LegacyV1.WRITTEN`). New plans carry `body` and `v: 2`; adoption waits on the record's
+  resource until they retire. Red: `p1_3_aV1EntryKeepsItsLegacyAdapters`.
+- **P1-4** A record not yet adopted is refunded by 8cT's journal rule in `scoopPlan` (a paid cell no write txn and no ACTIVE entry of the
+  record's fluids tiles wrote), never a throw: an old drain finishes, then adoption runs. Red: `p1_4_aRecordNotYetAdopted..` (it threw).
+- **P2-5** Adoption evidence is an ACTIVE entry of the record's own fluids-stage tiles (the site's `architect_mc:tile` stage) writing the
+  body's expected block in that cell (`expectedBlock`); an air carve or another stage's write is not delivery. Red:
+  `p2_5_adoptionCountsOnlyTheBodysOwnBlockAsWritten`.
+- **P2-6** A force W records its time on each body (`BodyState.forcedAt`, this session); the census counts the bound from
+  `settleBase = max(writtenAt or the region's forcedAt, the latest force W)`, so a replayed force restarts it even when the R probes
+  APPLIED. Red: `p2_6_aReplayedForceRestartsTheSettle`.
+- **P2-7** `p2_7_mixedSnapshotsAndASecondCrashDuringRecovery` (chunk A receipted on disk and harvested, chunk B lost twice, once during
+  recovery: B written once per lost snapshot, A never again, ticks back with B, refund 1 + held 1 == charged 2),
+  `p2_7_waterRefill..`, `p2_7_forceInW..` (ticks only in the W's own chunk).
+- **The PLACING harvest** is guarded, not narrowed: a fluids tile skips a body cell R marked WROTE that no longer holds R's own
+  (`RegionFluids.tileSkips`), and a rollback keeps WROTE on a cell taken before it (P1-2's rule). Red: `placing_aTileNeverWrites..`.
+- **Units:** mod 1972 tests, 0 failed, 11 skipped (devserver compiles). No in-game run (paused by the coordinator). Owed as listed above.
+- **Not exercised by a unit:** `LegacyV1`'s apply (it needs a level; only its dispatch is tested), and the Infra-tile filter of
+  `TileEntries` (the units supply the evidence).

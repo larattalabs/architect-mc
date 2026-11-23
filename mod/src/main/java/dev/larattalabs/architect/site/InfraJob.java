@@ -636,9 +636,15 @@ final class InfraJob implements Placement.Job {
 								}
 							}
 						}
-						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
-						if (provMarker != null) {
-							provMarker.mark(level, p); // (slice T5F, §3.2) a fluids-stage tile's body cell: WROTE(R), same tick and chunk
+						if (provMarker != null && provMarker.skip(level, p)) {
+							// (T5F fix round, the PLACING harvest) R wrote this body cell and it was taken since: never written again (I2)
+							cursor++;
+							n++;
+							continue;
+						}
+						boolean wroteCell = dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
+						if (provMarker != null && wroteCell) {
+							provMarker.mark(level, p); // (slice T5F, §3.2) a fluids-stage tile's body cell: WROTE(R), same tick and chunk, once taken
 						}
 						if (rb != null) {
 							wrote.add(p);

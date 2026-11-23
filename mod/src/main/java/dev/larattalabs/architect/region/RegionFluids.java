@@ -512,6 +512,11 @@ public final class RegionFluids {
 		boolean lotDrained;
 		/** (6c HY) When an ordered region wrote and forced this body (game time), else -1 (the region's forcedAt). */
 		long writtenAt = -1;
+		/**
+		 * (slice T5F fix round, P2-6) When a {@code fluid.force} W last scheduled this body's ticks this session (a replay's included), else -1:
+		 * the census counts the settle bound from it too ({@link RegionFluids#settleBase}). Not saved: the force receipts are its record.
+		 */
+		long forcedAt = -1;
 		/** (8cTc) The {@code fluid.write} txn that wrote this body (its R effect), else null. Saved. */
 		@Nullable String writeTxn;
 		/** (8cTc) The {@code fluid.drain} txn (escape, unsettled, upstream or lot) whose R effect recorded this body drained, else null. Saved. */
@@ -1201,9 +1206,8 @@ public final class RegionFluids {
 					return false;
 				}
 			}
-			if (!l.rec().survival.has("chargedAt")) {
-				l.rec().survival.addProperty("chargedAt", level.getGameTime());
-			}
+			// (fix round, P1-1) chargedAt with its paid bodies, an empty set when nothing was charged (the charge txn's R wrote them otherwise)
+			markCharged(l.rec().survival, new JsonArray(), level.getGameTime());
 			RegionsImpl.saveRec(l);
 		}
 		st.phase = "writing";
@@ -1922,10 +1926,9 @@ public final class RegionFluids {
 	 * {@code WROTE} cell is never written again, whatever stands there (a bucketed pond cell, harvested lava, broken bars: N3). No update
 	 * is sent. Returns {written, WROTE cells found taken}.
 	 */
-	static int[] placeBody(ServerLevel level, Body b, String rec, int cx, int cz) {
-		int written = 0, taken = 0;
-		net.minecraft.world.level.chunk.LevelChunk ch = level.getChunk(cx, cz);
-		var marks = FluidProv.marks(ch, rec);
+	static int[] placeBody(FluidWorld w, Body b, String rec, int cx, int cz) {
+		int written = 0, taken = 0, refused = 0;
+		var marks = w.marks(cx, cz, rec);
 		boolean changed = false;
 		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
 		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
@@ -1935,10 +1938,9 @@ public final class RegionFluids {
 			if (b.decorState.containsKey(p) || !inChunk(p, cx, cz)) {
 				continue; // (6c F3-c) the decor's own cell: written below, never water first
 			}
-			int idx = FluidProv.index(level, p);
+			int idx = w.index(p);
 			FluidProv.Mark m = marks.get(idx);
-			BlockPos bp = BlockPos.of(p);
-			BlockState now = level.getBlockState(bp);
+			BlockState now = w.get(p);
 			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : b.bubble.containsKey(p) ? bubbleState(b.bubble.get(p)) : src;
 			boolean ours = ownStillOurs(b, p, now);
 			// ((8c round 2, P1-1) only into air or what the body wrote there (its fluid, ice, its grate's bars, its column): never over a block
@@ -1949,7 +1951,10 @@ public final class RegionFluids {
 				taken++; // harvested, broken or replaced: never written again (I2, N3), refunded 0
 			}
 			if (c.write() && now != to) {
-				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				if (!w.set(p, to)) {
+					refused++; // (fix round, P1-2) a hold refused it: no mark, no receipt; the W holds and runs again
+					continue;
+				}
 				marks.put(idx, FluidProv.Mark.WROTE);
 				changed = true;
 				written++;
@@ -1969,10 +1974,9 @@ public final class RegionFluids {
 			if (!own.contains(p) || !inChunk(p, cx, cz)) {
 				continue;
 			}
-			int idx = FluidProv.index(level, p);
+			int idx = w.index(p);
 			FluidProv.Mark m = marks.get(idx);
-			BlockPos bp = BlockPos.of(p);
-			BlockState now = level.getBlockState(bp);
+			BlockState now = w.get(p);
 			BlockState to = parse(b.decorState.get(p));
 			boolean ours = ownStillOurs(b, p, now);
 			FluidProv.Cell c = FluidProv.read(m, openCell(b, p, now), ours);
@@ -1980,7 +1984,10 @@ public final class RegionFluids {
 				taken++;
 			}
 			if (c.write() && now != to) {
-				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				if (!w.set(p, to)) {
+					refused++; // (fix round, P1-2) a hold refused it: no mark, no receipt; the W holds and runs again
+					continue;
+				}
 				marks.put(idx, FluidProv.Mark.WROTE);
 				changed = true;
 				written++;
@@ -1991,7 +1998,10 @@ public final class RegionFluids {
 			}
 		}
 		if (changed) {
-			FluidProv.put(ch, rec, marks);
+			w.putMarks(cx, cz, rec, marks);
+		}
+		if (refused > 0) {
+			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + refused + " cell(s) of body " + b.id + " refused the write (a hold): the place waits");
 		}
 		// ((6c HY-c, §8.3) the grate's bars joined to each other and to the shell, as vanilla's own neighbour update would join them:
 		// unjoined bars are posts 2/16 wide with gaps of 14/16, which a 0.6-wide mob passes (HY-c's probe). Still no update sent.)
@@ -1999,15 +2009,57 @@ public final class RegionFluids {
 			if (!inChunk(p, cx, cz)) {
 				continue;
 			}
-			BlockPos bp = BlockPos.of(p);
-			BlockState now = level.getBlockState(bp);
+			BlockState now = w.get(p);
 			if (!now.is(Blocks.IRON_BARS)) continue;
-			BlockState joined = Block.updateFromNeighbourShapes(now, level, bp);
+			BlockState joined = w.joined(p, now);
 			if (joined != now && joined.is(Blocks.IRON_BARS)) {
-				dev.larattalabs.architect.placed.Placed.set(level, bp, joined, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				w.set(p, joined);
 			}
 		}
 		return new int[] {written, taken};
+	}
+
+	/** (fix round, P2-5) The block a body writes in its own cell {@code p}: its decor's, bars, ice, a bubble column, else its fluid's. */
+	static Block expectedBlock(Body b, long p) {
+		String d = b.decorState.get(p);
+		if (d != null) {
+			return parse(d).getBlock();
+		}
+		if (b.grate.length > 0 && b.gratePos(p)) {
+			return Blocks.IRON_BARS;
+		}
+		if (b.ice.length > 0 && b.iceSet().contains(p)) {
+			return Blocks.ICE;
+		}
+		if (b.bubble.containsKey(p)) {
+			return Blocks.BUBBLE_COLUMN;
+		}
+		return b.lava ? Blocks.LAVA : Blocks.WATER;
+	}
+
+	/**
+	 * (fix round, P1-3) 8cT's write of one body's cells in chunk {@code (cx, cz)}, for an entry planned before T5F only: every open cell
+	 * (air, the body's own, ice) is written except a charged cell {@code journaled} says the record's tiles wrote; no marks (the record is
+	 * adopted after). Returns the cells written.
+	 */
+	static int writeBodyV1(FluidWorld w, Body b, int cx, int cz, java.util.function.LongPredicate journaled) {
+		int written = 0;
+		LongOpenHashSet grate = new LongOpenHashSet(b.grate);
+		LongOpenHashSet ice = new LongOpenHashSet(b.ice);
+		BlockState src = (b.lava ? Blocks.LAVA : Blocks.WATER).defaultBlockState();
+		BlockState bars = parse(GRATE);
+		for (long p : b.cells) {
+			if (b.decorState.containsKey(p) || !inChunk(p, cx, cz) || journaled.test(p)) {
+				continue;
+			}
+			BlockState now = w.get(p);
+			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : b.bubble.containsKey(p) ? bubbleState(b.bubble.get(p)) : src;
+			boolean open = !now.hasBlockEntity() && (now.isAir() || ownStillOurs(b, p, now) || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
+			if (open && now != to && w.set(p, to)) {
+				written++;
+			}
+		}
+		return written;
 	}
 
 	/**
@@ -2016,33 +2068,34 @@ public final class RegionFluids {
 	 * player's harvest is never laundered into "the stage cleared it"). Lava and grate bodies are never cleared. Fluid neighbours in this
 	 * chunk get a tick (water that isn't the body's settles back). Returns the cells written.
 	 */
-	static int clearBody(ServerLevel level, Body b, BodyState bs, String rec, int cx, int cz) {
+	static int clearBody(FluidWorld w, Body b, BodyState bs, String rec, int cx, int cz) {
 		if (b.lava || b.grate.length > 0) {
 			return 0;
 		}
-		net.minecraft.world.level.chunk.LevelChunk ch = level.getChunk(cx, cz);
-		var marks = FluidProv.marks(ch, rec);
+		var marks = w.marks(cx, cz, rec);
 		boolean changed = false;
-		int n = 0;
+		int n = 0, refused = 0;
 		Fluid src = b.source();
 		it.unimi.dsi.fastutil.longs.LongArrayList written = new it.unimi.dsi.fastutil.longs.LongArrayList();
 		for (long p : b.cells) {
 			if (!inChunk(p, cx, cz)) {
 				continue;
 			}
-			int idx = FluidProv.index(level, p);
+			int idx = w.index(p);
 			if (marks.get(idx) != FluidProv.Mark.WROTE) {
 				continue;
 			}
-			BlockPos bp = BlockPos.of(p);
-			BlockState now = level.getBlockState(bp);
-			if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, false) || dev.larattalabs.architect.placed.Placed.record(level, bp) != null) {
+			BlockState now = w.get(p);
+			if (!ownStillOurs(b, p, now) || !bodyWrote(b, p, now, src, false) || w.playerPlaced(p)) {
 				continue; // taken (or a player's source there): WROTE stays
 			}
 			String before = bs.before.get(p);
 			BlockState to = before == null ? Blocks.AIR.defaultBlockState() : parse(before);
 			if (now != to) {
-				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
+				if (!w.set(p, to)) {
+					refused++; // (fix round, P1-2) the water still stands: it stays WROTE; the W holds and runs again
+					continue;
+				}
 				written.add(p);
 				n++;
 			}
@@ -2050,7 +2103,10 @@ public final class RegionFluids {
 			changed = true;
 		}
 		if (changed) {
-			FluidProv.put(ch, rec, marks);
+			w.putMarks(cx, cz, rec, marks);
+		}
+		if (refused > 0) {
+			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + refused + " cell(s) of body " + b.id + " refused the clear (a hold): the clear waits");
 		}
 		LongOpenHashSet done = new LongOpenHashSet();
 		for (int i = 0; i < written.size(); i++) {
@@ -2059,10 +2115,9 @@ public final class RegionFluids {
 				if (!inChunk(q, cx, cz) || !done.add(q)) {
 					continue; // (I6) a tick only in this W's own chunk
 				}
-				BlockPos qp = BlockPos.of(q);
-				FluidState f = level.getBlockState(qp).getFluidState();
+				FluidState f = w.get(q).getFluidState();
 				if (!f.isEmpty()) {
-					level.scheduleTick(qp, f.getType(), 1);
+					w.tick(q, f.getType());
 				}
 			}
 		}
@@ -2074,28 +2129,27 @@ public final class RegionFluids {
 	 * (slice T5F, I6: the {@code fluid.force} W of that chunk; {@link #forceChunks} plans one per chunk receiving a tick). (7a LF) A bubble
 	 * cell gets a block tick instead (BubbleColumnBlock.tick keeps the column over its base, or turns it back to water). Returns the ticks.
 	 */
-	static int forceBodyIn(ServerLevel level, Body b, int cx, int cz) {
+	static int forceBodyIn(FluidWorld w, Body b, int cx, int cz) {
 		java.util.List<String> ft = forceTrace;
 		if (ft != null) {
-			ft.add(b.id + "@" + level.getGameTime()); // (T5Fa TEST) dev.fluid.forceTrace
+			ft.add(b.id + "@" + w.gameTime()); // (T5Fa TEST) dev.fluid.forceTrace
 		}
 		int n = 0;
 		LongOpenHashSet own = b.ownSet();
 		Fluid f = b.source();
 		for (long p : b.cells) {
-			BlockPos bp = BlockPos.of(p);
 			if (inChunk(p, cx, cz)) {
 				if (b.bubble.containsKey(p)) {
-					level.scheduleTick(bp, Blocks.BUBBLE_COLUMN, 1);
+					w.blockTick(p, Blocks.BUBBLE_COLUMN);
 				} else {
-					level.scheduleTick(bp, f, 1);
+					w.tick(p, f);
 				}
 				n++;
 			}
 			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
 				long q = BlockPos.offset(p, d);
 				if (!own.contains(q) && inChunk(q, cx, cz)) {
-					level.scheduleTick(BlockPos.of(q), f, 1);
+					w.tick(q, f);
 					n++;
 				}
 			}
@@ -2109,10 +2163,23 @@ public final class RegionFluids {
 	 */
 	public interface TileMarker {
 		void mark(ServerLevel level, long p);
+
+		/** (fix round, the PLACING harvest) Whether the tile must not write cell {@code p}: R wrote it and it was taken since. */
+		default boolean skip(ServerLevel level, long p) {
+			return false;
+		}
 	}
 
 	static final TileMarker NO_MARKS = (level, p) -> {
 	};
+
+	/**
+	 * (slice T5F fix round, the PLACING harvest) A fluids tile's write of a body cell that R marked WROTE and that no longer holds R's own
+	 * (harvested while the tile was PLACING, then a saved crash and the tile's retry): never written again (I2), refunded 0. Pure.
+	 */
+	static boolean tileSkips(Body b, long p, FluidProv.@Nullable Mark m, BlockState now) {
+		return m == FluidProv.Mark.WROTE && !ownStillOurs(b, p, now);
+	}
 
 	/**
 	 * The tile's marker: {@link #NO_MARKS} for a tile of another stage or a record with no bodies; null while the tile's region is not loaded
@@ -2135,10 +2202,19 @@ public final class RegionFluids {
 			return NO_MARKS;
 		}
 		String rec = FluidTxns.recKey(l);
-		return (level, p) -> {
-			Body b = st.bodyAt(p);
-			if (b != null && ownStillOurs(b, p, level.getBlockState(BlockPos.of(p)))) {
-				FluidProv.set(level, p, rec, FluidProv.Mark.WROTE);
+		return new TileMarker() {
+			@Override
+			public void mark(ServerLevel level, long p) {
+				Body b = st.bodyAt(p);
+				if (b != null && ownStillOurs(b, p, level.getBlockState(BlockPos.of(p)))) {
+					FluidProv.set(level, p, rec, FluidProv.Mark.WROTE);
+				}
+			}
+
+			@Override
+			public boolean skip(ServerLevel level, long p) {
+				Body b = st.bodyAt(p);
+				return b != null && tileSkips(b, p, FluidProv.get(level, p, rec), level.getBlockState(BlockPos.of(p)));
 			}
 		};
 	}
@@ -2147,7 +2223,7 @@ public final class RegionFluids {
 	 * (slice T5F, §3.2) The record whose marks a rollback of item {@code itemKey} of batch {@code batchId} clears with its writes: R when the
 	 * item is a tile of R's fluids stage, else null.
 	 */
-	public static @Nullable String provScopeOf(@Nullable String batchId, @Nullable String itemKey) {
+	public static FluidProv.@Nullable Scope provScopeOf(@Nullable String batchId, @Nullable String itemKey) {
 		QBatch b = batchId == null ? null : Batches.get(batchId);
 		if (b == null || itemKey == null || !RegionItems.isRegion(b)) {
 			return null;
@@ -2158,7 +2234,14 @@ public final class RegionFluids {
 		}
 		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
 		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, it.stage);
-		return l == null ? null : FluidTxns.recKey(l);
+		Regional st = l == null ? null : of(l);
+		if (st == null) {
+			return null;
+		}
+		return new FluidProv.Scope(FluidTxns.recKey(l), (p, prev) -> {
+			Body body = st.bodyAt(p);
+			return body != null && ownStillOurs(body, p, prev);
+		});
 	}
 
 	/** A body's census now (§3.3): what differs from the prediction, and where fluid escaped. */
@@ -2296,7 +2379,7 @@ public final class RegionFluids {
 			if (c == null) {
 				continue; // ((8c fix round, P2-11) a river's census spans census ticks: judged once a whole sweep is done)
 			}
-			long t0 = bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt;
+			long t0 = settleBase(st, bs);
 			if (!c.escaped().isEmpty()) {
 				// (8cTc, E) the escape drain is a txn: drained (W), the record saved (R; FLe), the barrier; a start replays it
 				FluidTxns.Step g = FluidTxns.escape(l, st, b, "escaped", "escaped", c.escaped());
@@ -3512,18 +3595,27 @@ public final class RegionFluids {
 
 	/** {@link #scoopPlan} over the cells {@code in} accepts (8cT last round, #2: one chunk's, saved with that chunk). */
 	static int[] scoopPlan(ServerLevel level, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
-		if (!st.prov) {
-			// (slice T5F) never guessed: a record built before T5F is read by its marks only once adopted (FluidTxns.adoptFirst)
-			throw new IllegalStateException("the region's water record is adopted first (fluid.adopt): the refund waits for it");
-		}
+		return scoopPlan(FluidWorld.of(level), l, st, group, in);
+	}
+
+	/** {@link #scoopPlan} through a {@link FluidWorld} (slice T5F fix round, P2-7: the units' world). */
+	static int[] scoopPlan(FluidWorld w, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
 		java.util.Set<String> paid = new java.util.HashSet<>();
 		boolean allPaid = false;
+		int[] cap = null;
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
-			cb.forEach(x -> paid.add(x.getAsString()));
+			cb.forEach(x -> paid.add(x.getAsString())); // (fix round, P1-1) the explicit paid set, an empty one included
 		} else if (l.rid() == 0 && FluidProv.mainEraPaid(l.rec().survival)) {
-			allPaid = true; // (N2) charged on main, once per region at the gate: every lava and grate body of it was paid
+			// (N2; fix round, P1-1) charged on main, once per region at the gate: every lava and grate body counts as paid, bounded by what the
+			// acknowledged charge took (chargedAt alone is no evidence: a gate whose every body failed charged nothing)
+			cap = acknowledgedCharge(l);
+			allPaid = cap != null;
 		}
 		String rec = FluidTxns.recKey(l);
+		// (fix round, P1-4) a record not yet adopted (an old drain recovering before fluid.adopt can take the record) keeps 8cT's accounting:
+		// a paid cell the record's tiles' ACTIVE journal entries never wrote, and no write txn wrote, is refunded
+		FluidTxns.AdoptEvidence legacy = st.prov ? null : testLegacyJournal != null ? testLegacyJournal : new FluidTxns.TileEntries(l.rec().dimension, group,
+			stageOf(l))::after;
 		int lava = 0, grates = 0;
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
@@ -3537,10 +3629,10 @@ public final class RegionFluids {
 					if (!in.test(p)) {
 						continue;
 					}
-					FluidState f = level.getBlockState(BlockPos.of(p)).getFluidState();
+					FluidState f = w.get(p).getFluidState();
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
 						lava++;
-					} else if (charged && FluidProv.get(level, p, rec) != FluidProv.Mark.WROTE) {
+					} else if (charged && neverDelivered(w, p, rec, legacy, bs, Blocks.LAVA)) {
 						lava++; // (slice T5F, §3.3) paid and never delivered (no mark): refunded; WROTE and taken: 0 (A)
 					}
 				}
@@ -3549,14 +3641,82 @@ public final class RegionFluids {
 				if (!in.test(p)) {
 					continue;
 				}
-				if (level.getBlockState(BlockPos.of(p)).is(Blocks.IRON_BARS)) {
+				if (w.get(p).is(Blocks.IRON_BARS)) {
 					grates++;
-				} else if (charged && FluidProv.get(level, p, rec) != FluidProv.Mark.WROTE) {
+				} else if (charged && neverDelivered(w, p, rec, legacy, bs, Blocks.IRON_BARS)) {
 					grates++;
 				}
 			}
 		}
+		if (cap != null) {
+			lava = Math.min(lava, cap[0]);
+			grates = Math.min(grates, cap[1]);
+		}
 		return new int[] {lava, grates};
+	}
+
+	/** (fix round) A paid cell not standing: never delivered by its marks (§3.3), or, before adoption, by 8cT's journal rule. */
+	static boolean neverDelivered(FluidWorld w, long p, String rec, FluidTxns.@Nullable AdoptEvidence legacy, BodyState bs,
+		net.minecraft.world.level.block.Block block) {
+		if (legacy == null) {
+			return markOf(w, p, rec) != FluidProv.Mark.WROTE;
+		}
+		return bs.writeTxn == null && legacy.after(p) != block;
+	}
+
+	/** (fix round, P1-4, TEST) The legacy journal a unit reads; null: the world journal. */
+	static volatile FluidTxns.@Nullable AdoptEvidence testLegacyJournal;
+
+	/**
+	 * (fix round, P1-1) What a main-era record's acknowledged fluids charge took, as {lava buckets, iron bars}: the record's settled
+	 * {@code charged} items, else the ledger's keyed charge; null when neither shows one.
+	 */
+	static int @Nullable [] acknowledgedCharge(RegionsImpl.Live l) {
+		Map<String, Integer> items = null;
+		if (l.rec().survival.get("charged") instanceof JsonObject c) {
+			items = new java.util.HashMap<>();
+			for (var e : c.entrySet()) {
+				items.put(e.getKey(), e.getValue().getAsInt());
+			}
+		} else {
+			try {
+				var pile = l.rec().owner == null ? null : dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
+				var ch = pile == null ? null : pile.ledger().charged(chargeKey(l));
+				items = ch == null ? null : ch.items();
+			} catch (RuntimeException e) {
+				items = null;
+			}
+		}
+		if (items == null) {
+			return null;
+		}
+		return new int[] {items.getOrDefault("minecraft:lava_bucket", 0), items.getOrDefault("minecraft:iron_bars", 0)};
+	}
+
+	/** (slice T5F) R's mark on one cell of a fluid world. */
+	static FluidProv.@Nullable Mark markOf(FluidWorld w, long p, String rec) {
+		return w.marks(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4, rec).get(w.index(p));
+	}
+
+	/**
+	 * (slice T5F fix round, P2-6) From when a written body's settle bound counts: its write (or the region's forced pass), and no earlier than
+	 * the latest force W that scheduled its ticks this session (a recovery that redid a lost chunk's force W restarts the bound).
+	 */
+	static long settleBase(Regional st, BodyState bs) {
+		return Math.max(bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt, bs.forcedAt);
+	}
+
+	/**
+	 * (slice T5F fix round, P1-1) The survival record charged: {@code chargedAt}, and {@code chargedBodies}, the bodies the charge paid for,
+	 * always written, an empty set included (a gate whose every lava and grate body failed charges nothing). Each kept when present.
+	 */
+	static void markCharged(JsonObject survival, JsonArray bodies, long now) {
+		if (!survival.has("chargedAt")) {
+			survival.addProperty("chargedAt", now);
+		}
+		if (!survival.has(CHARGED_BODIES)) {
+			survival.add(CHARGED_BODIES, bodies.deepCopy());
+		}
 	}
 
 	/** (8cTb) A cell's chunk as {@code cx << 32 | cz} (unsigned low half). */
