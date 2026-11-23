@@ -832,13 +832,18 @@ export async function registerTCC(steps, h) {
         await cmd('/save-all flush').catch(() => null);
         await wait(2000);
         const before = await parts([b.site], b.cp, b.items);
+        // the player 7 chunks east of the site (vanilla's spawn waits for the entities 3 chunks around it; its view distance keeps the
+        // site's blocks loaded): only the site's chunks (its box grown by 24) are hidden, so the world opens and the site's blocks stand
+        // loaded with their entities pending
+        const bx = await boxOf(b.site);
+        await L.tp(bx[3] + 112, W.at[1], W.at[2]);
+        await wait(2000);
         await L.leaveWorld();
         const fs = await import('node:fs');
         const arch = path.join(W.dir, 'architect');
         fs.mkdirSync(arch, { recursive: true });
-        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ entityHide: 1200 }));
+        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify({ entityHide: 1200, entityHideBox: [bx[0] - 24, bx[2] - 24, bx[3] + 24, bx[5] + 24] }));
         await L.openWorld(name);
-        await L.tp(...W.at);
         const refusals = [];
         let rm = null;
         for (const end = Date.now() + 120_000; Date.now() < end;) {
@@ -848,6 +853,7 @@ export async function registerTCC(steps, h) {
           if (!/entities/.test(json(rm))) break; // any other refusal: judged below
           await L.sleep(3000);
         }
+        await L.tp(...W.at);
         await wait(4000);
         const after = await parts([b.site], b.cp, b.items);
         const owedNew = sum(after.owed) - sum(before.owed);
