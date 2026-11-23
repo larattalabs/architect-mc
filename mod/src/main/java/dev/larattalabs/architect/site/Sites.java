@@ -298,7 +298,10 @@ public final class Sites {
 		RemovalSeal.init(); // (slice LC3) a removal's boxes take no item
 		Builder.init();
 		Adopt.init(); // 6c PT2: adopted builds (its start-time repair runs after the sites and the build index are loaded)
-		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			Drops.tick();
+			EntityWait.tick(server.getTickCount()); // (slice LR2-FIX) entity-wait tickets past their write's later pass
+		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			SiteDeltas.server = null;
 			state = State.EMPTY;
@@ -307,6 +310,7 @@ public final class Sites {
 			RegionIds.clear();
 			reports.clear();
 			Drops.reset();
+			EntityWait.reset();
 			SiteDeltas.cleanStop(worldDir);
 			worldDir = null;
 			durable = null; // (T3b fix round) the next world's sites file gets its own

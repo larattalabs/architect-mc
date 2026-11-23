@@ -162,7 +162,15 @@ final class RestoreJob implements Placement.Job {
 			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} restore {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase,
 				(System.nanoTime() - t0) / 1e6, r ? " done" : "");
 		}
+		if (r) {
+			EntityWait.release(entityKey()); // (slice LR2-FIX) done or broken: its entity-wait ticket goes
+		}
 		return r;
+	}
+
+	/** (slice LR2-FIX) This job's {@link EntityWait} key. */
+	private String entityKey() {
+		return "job:" + purpose + ":" + siteId + "@" + System.identityHashCode(this);
 	}
 
 	private boolean step0(MinecraftServer server, long deadline) {
@@ -188,6 +196,11 @@ final class RestoreJob implements Placement.Job {
 		if (s == null || level == null) {
 			broken = s == null ? "no site " + siteId : s.dimension() + " is not loaded";
 			return true;
+		}
+		if ((phase == PLAN && planner == null || phase == WRITE && writer == null) && !EntityWait.ready(level, entityKey(), s.restoreBox(), true)) {
+			// (slice LR2-FIX) its drop snapshot (PLAN's, or WRITE's when resumed without one) and its clears only once its drop area's entities are
+			// loaded and visible: a job resumed at world start, or with no player near, waits here under a ticket, kept until the job ends
+			return false;
 		}
 		try {
 			if (phase == PLAN) {
@@ -670,6 +683,7 @@ final class RestoreJob implements Placement.Job {
 	@Override
 	public void aborted(MinecraftServer server) {
 		held.clear();
+		EntityWait.release(entityKey());
 	}
 
 	@Override

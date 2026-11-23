@@ -550,7 +550,9 @@ public final class CrateSettle {
 		// (slice T4R-D) a single removal's members each have their own W in the owner txn: no cascade is written here, and no player's block is
 		// given back (the player's cells are paid once from receipts, owed: never dropped)
 		dev.larattalabs.architect.placement.Anchors.Bounds area = clear ? writeArea(site) : null;
-		Sites.Drops drops = area == null ? null : Sites.Drops.before(level, area);
+		// (slice LR2-FIX) no drop snapshot and no write until every chunk of its drop area has its entities loaded and visible (a ticket loads
+		// them; at world start they are not): else it throws "entities not loaded" and the W holds, retried next tick
+		Sites.Drops drops = area == null ? null : EntityWait.gated(level, "w:" + site + "|" + group, area, () -> Sites.Drops.before(level, area));
 		java.util.Set<String> was = WRITING;
 		java.util.Set<String> own = new java.util.HashSet<>(WRITING);
 		own.add(site);

@@ -1354,6 +1354,9 @@ public final class Groups {
 			r.sites.remove(0);
 			return;
 		}
+		if (s.construction() != null && !EntityWait.ready(level, "group:" + r.group + "|" + id, s.restoreBox(), false)) {
+			return; // (slice LR2-FIX) a construction member's drop snapshot and clear only once its drop area's entities are loaded and visible
+		}
 		Map<String, Integer> handedHere = r.handed;
 		r.handed = Map.of();
 		if (s.construction() != null) {
@@ -1473,6 +1476,9 @@ public final class Groups {
 		if (s == null || level == null) {
 			r.sites.remove(0);
 			return;
+		}
+		if (s.construction() != null && !EntityWait.ready(level, "group:" + r.group + "|" + id, s.restoreBox(), false)) {
+			return; // (slice LR2-FIX) a construction member's drop snapshot and clear only once its drop area's entities are loaded and visible
 		}
 		Map<String, Integer> handedHere = r.handed;
 		r.handed = Map.of();

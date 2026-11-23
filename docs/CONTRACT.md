@@ -34692,10 +34692,44 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   trigger it. The same blind spot means a `before` snapshot taken while entities are hidden could clear a player's own items lying
   in the restored area. v0.90.0 has no world-start restore on K6, but its interrupted-restore resume (`RestoreJob`,
   `Groups.writeAgain`) may share the blind spot (unchecked). Restore: hold the W until `areEntitiesLoaded` holds for every chunk of
-  the write area inflated by 1, with a loading ticket, before `Drops.before` (slice LR2-FIX).
+  the write area inflated by 1, with a loading ticket, before `Drops.before` (slice LR2-FIX). Built in slice LR2-FIX (its as-built section below).
 - **Not built (declared in the changes):** the `r1`/`pblockKeys` association of extraction results into the removal's own result;
   `RevisionView`'s wait; a mutant per row (fix-round rows have revert checks; T4RDF-adopt-write and T4RDF-holder's unit parts are structural,
   their behaviour is shown in game only for the holder).
+
+## Slice LR2-FIX: restores wait for their entities (as built, slice/LR2-FIX; strict; $0)
+
+- **Rule.** No `Sites.Drops` snapshot and no write of a clearing restore while any chunk of its drop area (its box inflated by 1, as
+  `Drops` reads it) has entities not loaded (`ServerLevel.areEntitiesLoaded`) or entity sections not accessible (the manager's chunk
+  visibility, `EntityVisibilityMixin`). `EntityWait` holds it, takes a placement ticket on those chunks through `ChunkTickets` (one count
+  per chunk, so the hold clears with no player near), and lets go 5 ticks after the write passed (past `Drops`' 3-tick later pass), when a
+  job ends, or after 1200 ticks without a retry. Gated: the single removal's W (`CrateSettle.restoreSite` with `clear`: it throws
+  "entities not loaded at chunk x,z", a plain txn hold), `RestoreJob` at PLAN start and WRITE start (resumed queue jobs, the start's
+  ROLLBACK jobs from `Placement`, a group's road members, ticket kept to the job's end), and a group's construction member write
+  (`Groups`, both loops; this covers `Groups.writeAgain`).
+- **Checked, not gated (live, the player's own action, entities near):** `Sites.abortPlacement`, `build`, `removeDetailed`,
+  `rollbackNow`, `move`, `beginPlacing`, `Adopt.undoDeltas`, `SiteDeltas.applyChecked`/`undoSuffix`. `InfraJob` and `PlaceJob` are placements
+  (their snapshot is taken live and saved in the queue); a placement resumed at world start keeps the blind spot (known risk, below).
+- **Tests.** `EntityWaitLR2Test` (LR2F-area, -hold, -ready, -stale, -keep; reflection, red on the failing-first commit). In game
+  (`GATE_TCC_PARTS=LR-2s,LR-2p`): dev-start.json `entityHide` keeps every chunk's entities hidden and unloaded for 100 ticks after the
+  start; `entityHideAfterW: 0` ends it right after the first clearing W write. LR-2s: K6+save, restarted under the window: paid exactly
+  once. LR-2p: the same with a player's 3 diamonds in the box (no pickup, no despawn): still there after the restart.
+
+### Crash safety and scope
+
+- **Which record decides?** Unchanged: the txn journal decides the W; the gate adds no record (tickets are memory only).
+- **Persisted before each change?** Unchanged; the gate only delays a W or a job before its snapshot and write, never between them.
+- **Second crash during recovery?** A crash while waiting: nothing written, nothing snapshot; the next start rolls forward and waits again.
+  A crash after the write: as before (the W's receipts in the chunk decide).
+- **Per-operation keys?** The wait's key is per W (`w:<site>|<group>`), per job instance, per group member; tickets are counted per chunk.
+- **Holds and footprints from disk?** The drop area is the record's restore box, read from the loaded records, as `Drops` uses it.
+- **Refunds priced from what was removed?** Unchanged (the receipts); the fix only stops a popped block's item from staying on the ground.
+- **Converting in-flight state?** None: a W, job or group member in flight waits at its next step; nothing saved changes shape.
+- **One rule?** Yes, the rule above, at every restore that clears what it pops and can run with its chunks' entities not loaded.
+- **Older worlds and plans?** Read as before; nothing new is saved.
+- **Known risk.** A placement (`PlaceJob`, `InfraJob`) resumed at world start clears its pops with the same blind spot (a terrain block's
+  item can stay on the ground). The hide hook proves the start-time window; the "no player near" case is shown by the unit (the ticket),
+  not in game (the gate player rejoins at the site).
 
 ## Slice SOFF2: the saving-off fix round (as built, slice/SOFF2; strict; versions NEXT; $0)
 
