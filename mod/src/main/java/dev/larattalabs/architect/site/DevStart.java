@@ -14,13 +14,16 @@ import java.nio.file.Path;
  * {@code <world>/architect/dev-start.json} while the world is closed, then opens it. The file is read once and deleted at SERVER_STARTED,
  * before the stores load and before the Sites check, so a halt it arms never repeats at the next start.
  *
- * <pre>{"killAt": "KS1" | "KS1+save" | any kill point, "failWriteNow": true, "startGrace": ticks, "entityHide": ticks, "entityHideAfterW": ticks}</pre>
+ * <pre>{"killAt": "KS1" | "KS1+save" | any kill point, "failWriteNow": true, "startGrace": ticks, "entityHide": ticks, "entityHideAfterW": ticks,
+ *  "entityHideBox": [minX, minZ, maxX, maxZ]}</pre>
  *
  * {@code KS1}: the Sites check's outcome is on disk (its journal release flushed, its pending records saved) and a restore it wrote at the
  * start is not saved with the chunks yet. {@code failWriteNow}: the check's write of a committed restore (a K6 construction removal that reads restored)
  * fails. {@code startGrace} (slice T4R hooks): Placement's start grace in ticks (40 when absent), so a gate can act inside it. Nothing here
- * runs without the file. {@code entityHide} (slice LR2-FIX): for that many ticks after the start, chunks' entity sections stay hidden and their
- * stored entities unloaded ({@code EntityVisibilityMixin}), as a chunk loaded at world start before its entities load; {@code entityHideAfterW}
+ * runs without the file. {@code entityHide} (slice LR2-FIX): for that many ticks' worth of wall-clock time (50 ms each, from the arm: vanilla's
+ * player spawn blocks the server thread in {@code waitForEntities}, so no tick-counted window could end) chunks' entity sections stay hidden
+ * and their stored entities unloaded ({@code EntityVisibilityMixin}), as a chunk loaded at world start before its entities load; only the
+ * chunks touching {@code entityHideBox} (blocks) when it is given; {@code entityHideAfterW}
  * ends that window that many ticks after the first clearing W restore of a single removal wrote ({@link #wrote}).
  */
 public final class DevStart {
@@ -35,8 +38,9 @@ public final class DevStart {
 	/** (slice LR2-FIX) The entity-hide window: its length in ticks (0: off), the tick it began (-1: not yet), its end after a W write (-1: none). */
 	private static volatile int entityHide;
 	private static volatile int entityHideAfterW = -1;
-	private static volatile int hideFrom = -1;
-	private static volatile int hideUntilW = Integer.MAX_VALUE;
+	private static volatile long hideEnd;
+	private static volatile long hideEndW = Long.MAX_VALUE;
+	private static volatile int @org.jspecify.annotations.Nullable [] hideBox;
 	/** (last round, P2) The kill point this start's dev-start.json armed, and its world: only that point writes the marker. */
 	private static volatile @org.jspecify.annotations.Nullable String startKill;
 	private static volatile @org.jspecify.annotations.Nullable Path startWorld;
@@ -89,6 +93,10 @@ public final class DevStart {
 			startGrace = o.has("startGrace") ? o.get("startGrace").getAsInt() : 0;
 			entityHide = o.has("entityHide") ? o.get("entityHide").getAsInt() : 0;
 			entityHideAfterW = o.has("entityHideAfterW") ? o.get("entityHideAfterW").getAsInt() : -1;
+			hideEnd = System.nanoTime() + entityHide * 50_000_000L;
+			if (o.get("entityHideBox") instanceof com.google.gson.JsonArray hb && hb.size() == 4) {
+				hideBox = new int[] {hb.get(0).getAsInt() >> 4, hb.get(1).getAsInt() >> 4, hb.get(2).getAsInt() >> 4, hb.get(3).getAsInt() >> 4};
+			}
 			Architect.LOGGER.warn("TEST {}: armed {} for this start", FILE, o);
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("TEST {}: could not be read ({})", FILE, e.toString());
@@ -140,39 +148,38 @@ public final class DevStart {
 	private static void disarmHide() {
 		entityHide = 0;
 		entityHideAfterW = -1;
-		hideFrom = -1;
-		hideUntilW = Integer.MAX_VALUE;
+		hideEnd = 0;
+		hideEndW = Long.MAX_VALUE;
+		hideBox = null;
 	}
 
 	/**
-	 * (TEST, slice LR2-FIX) Whether chunks' entity sections are kept hidden now: inside this start's {@code entityHide} window (counted from the
-	 * first tick it is asked with a server running), and not past {@code entityHideAfterW} ticks after the first clearing W write.
+	 * (TEST, slice LR2-FIX) Whether {@code chunk}'s entity sections are kept hidden now: inside this start's {@code entityHide} window (wall
+	 * clock from the arm), not past {@code entityHideAfterW} after the first clearing W write, and inside {@code entityHideBox} when given.
 	 */
-	public static boolean entitiesHidden() {
+	public static boolean entitiesHidden(long chunk) {
 		if (entityHide <= 0) {
 			return false;
 		}
-		net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
-		if (srv == null) {
+		long now = System.nanoTime();
+		if (now >= hideEnd || now >= hideEndW) {
+			return false;
+		}
+		int[] b = hideBox;
+		if (b == null) {
 			return true;
 		}
-		int now = srv.getTickCount();
-		if (hideFrom < 0) {
-			hideFrom = now;
-		}
-		return now < hideFrom + entityHide && now < hideUntilW;
+		int cx = net.minecraft.world.level.ChunkPos.getX(chunk), cz = net.minecraft.world.level.ChunkPos.getZ(chunk);
+		return cx >= b[0] && cz >= b[1] && cx <= b[2] && cz <= b[3];
 	}
 
 	/** (TEST, slice LR2-FIX) A single removal's clearing W restore wrote: an armed {@code entityHideAfterW} ends the window that many ticks later. */
 	static void wrote() {
-		if (entityHide <= 0 || entityHideAfterW < 0 || hideUntilW != Integer.MAX_VALUE) {
+		if (entityHide <= 0 || entityHideAfterW < 0 || hideEndW != Long.MAX_VALUE) {
 			return;
 		}
-		net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
-		if (srv != null) {
-			hideUntilW = srv.getTickCount() + entityHideAfterW;
-			Architect.LOGGER.warn("TEST {}: the first W restore wrote; entities shown from tick {}", FILE, hideUntilW);
-		}
+		hideEndW = System.nanoTime() + entityHideAfterW * 50_000_000L;
+		Architect.LOGGER.warn("TEST {}: the first W restore wrote; entities shown {} ms later", FILE, entityHideAfterW * 50);
 	}
 
 	/** Whether the start's write of a committed restore is to fail (TEST). */
