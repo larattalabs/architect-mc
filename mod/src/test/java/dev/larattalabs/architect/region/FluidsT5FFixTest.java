@@ -326,6 +326,7 @@ class FluidsT5FFixTest {
 		int[] sc = RegionFluids.scoopPlan(w, l, st, "g1", p -> true);
 		assertEquals(0, sc[0], "no chargedBodies and no acknowledged charge: the never-written lava is not refunded (P1-1)");
 		l.rec().survival = JsonParser.parseString("{\"on\":true,\"chargedAt\":5,\"charged\":{\"minecraft:lava_bucket\":1}}").getAsJsonObject();
+		st.states.get("pit").before.put(PIT_A, "minecraft:air"); // (T5Fc (a)) the gate charged it: its befores captured
 		sc = RegionFluids.scoopPlan(w, l, st, "g1", p -> true);
 		assertEquals(1, sc[0], "a main-era record: refunded up to what its acknowledged charge took");
 	}

@@ -3652,14 +3652,16 @@ public final class RegionFluids {
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
 			cb.forEach(x -> paid.add(x.getAsString())); // (fix round, P1-1) the explicit paid set, an empty one included
 		} else if (l.rid() == 0 && FluidProv.mainEraPaid(l.rec().survival)) {
-			// (N2; fix rounds 1-2, P1-1, P1-a) charged on main, once per region at the gate, for the bodies still pending there: a body the gate's
-			// check refused (uncontained) or held paid nothing; any other lava or grate body counts as paid, and never-delivered cells are
+			// (N2; fix rounds 1-2, P1-1, P1-a; T5Fc (a)) charged on main, once per region at the gate, for the bodies still pending there (the
+			// ones whose befores it captured): a body its check refused or held paid nothing; those bodies count as paid, and never-delivered cells are
 			// refunded only within what the acknowledged charge took net of what was delivered (chargedAt alone is no evidence)
 			cap = acknowledgedCharge(l);
 			if (cap != null) {
 				for (Body b : st.bodies) {
 					BodyState bs = st.states.get(b.id);
-					if ((b.lava || b.grate.length > 0) && !bs.uncontained && !bs.held) {
+					// (T5Fc (a)) the gate's durable evidence: it captured the befores of exactly the bodies it charged (pending, past its
+					// check); a later recheck's uncontained or a later hold never takes that payment back
+					if ((b.lava || b.grate.length > 0) && !bs.before.isEmpty()) {
 						paid.add(b.id);
 					}
 				}
