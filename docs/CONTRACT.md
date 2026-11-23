@@ -34746,6 +34746,13 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   NOT_LOADED to `ArchitectRefused(NOT_LOADED)` (sync and from a future), documented in `api.Sites.remove` (retry; a ticket loads the
   entities). Units LR2F-retire (through `RestoreJob.step`), LR2F-footprint, LR2F-api; revert checks, each red: `RestoreJob.step` without
   its guard, retire back to release, `EntityWait` and `SitesImpl` back to 8449eebd.
+- **State at the stop (2026-11-23, Noah: wrap up for tonight).** All 3 second-round findings are coded in 74405a15, with units and revert
+  checks red then green; the scoped units pass (1235/0). Not done: the in-game rerun on the head. Run 20261123-062704-change (LR-2s, LR-2p,
+  LR-2l on 74405a15) was stopped by its runner PID before any row ran (aborted); no in-game evidence for the second round yet. Next:
+  check `uptime` (1-min load <= 25), then from this worktree run
+  `GATE_TCC_PARTS=LR-2s,LR-2p,LR-2l node tools/gate-run.mjs change --since 02c05b24 --only txn-crash-crate --ports 9068:9069,9070:9071
+  --run-dir ../architect-mc-LR2FIX-gate-run --lock ../architect-mc/artifacts/gate-runs/gate-run-LR2FIX.lock --no-cache`, wait on its
+  summary.json, record the run dir here, push, then the coordinator's GPT check.
 - **Red and green runs** (artifacts/gate-runs, ports 9068/9069): red LR-2s (door minted) and LR-2p (the player's diamonds cleared) on
   75bbc138 (dbc83ddd + the hook and row fixes), 20261123-022617-change; red LR-2l (door minted by a live removal) on a095bf82 (03f717a1 +
   rows + hook), 20261123-024155-change; LR-2s/LR-2p green on 03f717a1's fix, 20261123-022917-change; LR-2l green on da17d614,
