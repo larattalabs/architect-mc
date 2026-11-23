@@ -42,6 +42,12 @@ public final class StockLedger {
 	private final Map<String, Integer> refundOverflow = new TreeMap<>();
 	private final Set<String> credited = new LinkedHashSet<>();
 	/**
+	 * (slice T5Fc fix round, P2-10) Per key, what a credit booked under it actually returned (returned plus overflow), for the keys whose
+	 * caller asks ({@link #noteCredited}: a region's fluids scoop), booked in the same ledger mutation as the key and saved with it. A key
+	 * credited by an older ledger has none: its amount is unknown, never guessed.
+	 */
+	private final Map<String, Map<String, Integer>> creditedItems = new TreeMap<>();
+	/**
 	 * (slice JR) Per target (its credit key: {@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}), what the feed consumed for it and
 	 * no refund or retake has given back yet. Booked with {@link #consumed} and saved with it, so after a crash it is what the saved
 	 * ledger says that target took: a keyed refund never credits more ({@link #credit}). Only {@code site:} and {@code road:} keys (the
@@ -281,6 +287,16 @@ public final class StockLedger {
 
 	public boolean credited(String key) {
 		return credited.contains(key);
+	}
+
+	/** (T5Fc fix round, P2-10) Books what a keyed credit returned, beside its key (same mutation, same save). */
+	public void noteCredited(String key, Map<String, Integer> items) {
+		creditedItems.put(key, Map.copyOf(new TreeMap<>(items)));
+	}
+
+	/** (T5Fc fix round, P2-10) What the credit under {@code key} returned, or null: not credited, or credited without its amount. */
+	public @Nullable Map<String, Integer> creditedAmount(String key) {
+		return credited.contains(key) ? creditedItems.get(key) : null;
 	}
 
 	/** Every item the identity names: no stock below 0. */
@@ -865,6 +881,11 @@ public final class StockLedger {
 		if (legacySince > 0) {
 			o.addProperty("legacySince", legacySince); // (JR-b) additive
 		}
+		if (!creditedItems.isEmpty()) {
+			JsonObject ci = new JsonObject();
+			creditedItems.forEach((key, m) -> ci.add(key, counts(new TreeMap<>(m))));
+			o.add("creditedItems", ci); // (T5Fc fix round, P2-10) additive
+		}
 		if (!filled.isEmpty()) {
 			JsonArray f = new JsonArray();
 			filled.forEach(f::add);
@@ -978,6 +999,15 @@ public final class StockLedger {
 		}
 		if (o.has("filled") && o.get("filled").isJsonArray()) {
 			o.getAsJsonArray("filled").forEach(e -> l.filled.add(e.getAsString()));
+		}
+		if (o.get("creditedItems") instanceof JsonObject ci) {
+			ci.entrySet().forEach(e -> {
+				if (e.getValue().isJsonObject()) {
+					Map<String, Integer> m = new TreeMap<>();
+					read(e.getValue().getAsJsonObject(), m);
+					l.creditedItems.put(e.getKey(), Map.copyOf(m));
+				}
+			});
 		}
 		if (o.has("custody") && o.get("custody").isJsonObject()) {
 			o.getAsJsonObject("custody").entrySet().forEach(e -> {

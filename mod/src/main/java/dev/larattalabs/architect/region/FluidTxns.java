@@ -407,9 +407,16 @@ public final class FluidTxns {
 		}
 		TxnEntry t = started.entry();
 		// (T5Fc, §4.3, I4) one W per (body, chunk), the bodies in reverse write order, each over every chunk it writes or ticks in; no ledger
-		// effect (I5: the scoop is its own txn, begun once this one is EFFECTS_DONE); the R last
+		// effect (I5: the scoop is its own txn, begun once this one is EFFECTS_DONE); the R last. (fix round, P1-3) the never-delivered
+		// entitlement frozen here, read from the marks before any W changes one: each W carries its own chunk's cells
+		FluidWorld fw = worldFor(l);
+		if (fw == null) {
+			return Step.waiting();
+		}
+		// (a record a T5Fc drain counted already, drained again: its first receipts hold the entitlement, so nothing is frozen twice)
+		Map<String, it.unimi.dsi.fastutil.longs.LongOpenHashSet> nd = st.drainReceipts != null ? Map.of() : RegionFluids.neverDelivered(fw, l, st);
 		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
-		for (Effect.Builder w : drainEffects(st.order, l, group, flowing)) {
+		for (Effect.Builder w : drainEffects(st.order, l, group, flowing, nd)) {
 			c.plan(t, w);
 		}
 		c.plan(t, Effect.of("fluid.drained", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("flowing", flowing ? 1 : 0).data("bound",
@@ -640,6 +647,7 @@ public final class FluidTxns {
 				throw new IllegalStateException("the fluids record could not be saved");
 			}
 			st.drainTxnOnDisk = t.id;
+			step(t, "drained"); // (§4.3's point) the R durable, the barrier not passed
 		}
 
 		@Override
@@ -658,12 +666,30 @@ public final class FluidTxns {
 	 * writes or ticks in ({@link RegionFluids#drainChunksOf}), each naming its body and its one chunk.
 	 */
 	static List<Effect.Builder> drainEffects(List<RegionFluids.Body> order, RegionsImpl.Live l, String group, boolean flowing) {
+		return drainEffects(order, l, group, flowing, Map.of());
+	}
+
+	/** (fix round, P1-3) {@link #drainEffects}, each W with its chunk's frozen never-delivered cells ({@code u}: packed positions). */
+	static List<Effect.Builder> drainEffects(List<RegionFluids.Body> order, RegionsImpl.Live l, String group, boolean flowing, Map<String,
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet> nd) {
 		RegionFluids.Regional st = RegionFluids.of(l);
 		List<Effect.Builder> out = new ArrayList<>();
 		for (int i = order.size() - 1; i >= 0; i--) {
 			RegionFluids.Body b = order.get(i);
 			for (long ck : RegionFluids.drainChunksOf(st, b)) {
-				out.add(wEffect("fluid.drain", l, ck).data("body", b.id).data("group", group).data("flowing", flowing ? 1 : 0));
+				Effect.Builder e = wEffect("fluid.drain", l, ck).data("body", b.id).data("group", group).data("flowing", flowing ? 1 : 0);
+				JsonArray u = new JsonArray();
+				var cells = nd.get(b.id);
+				if (cells != null) {
+					long[] cs = cells.toLongArray();
+					java.util.Arrays.sort(cs);
+					for (long p : cs) {
+						if (RegionFluids.chunkKey(p) == ck) {
+							u.add(p);
+						}
+					}
+				}
+				out.add(e.data("u", u));
 			}
 		}
 		return out;
@@ -706,7 +732,8 @@ public final class FluidTxns {
 			}
 		}
 		int[] sum = scoopSum(st, worldFor(l));
-		if (sum == null) {
+		int[] tk = takenSum(st, worldFor(l)); // (fix round, P2-11) from the final receipts: the drain is EFFECTS_DONE
+		if (sum == null || tk == null) {
 			return new Step(Step.Kind.WAIT, "held(decided): " + scoopMissing);
 		}
 		TxnEntry t = started.entry();
@@ -716,7 +743,12 @@ public final class FluidTxns {
 			sb.data("legacyKey", "region:" + l.rec().id + "@" + l.rec().createdAt + ":fluids");
 		}
 		c.plan(t, sb);
-		c.plan(t, Effect.of("region.scooped", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("lava", sum[0]).data("grates", sum[1]));
+		JsonArray tkj = new JsonArray();
+		for (int x : tk) {
+			tkj.add(x);
+		}
+		c.plan(t, Effect.of("region.scooped", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("lava", sum[0]).data("grates", sum[1]).data(
+			"taken", tkj).data("owner", String.valueOf(l.rec().owner)).data("key", scoopKey(l)));
 		DurableFile.Outcome p = c.persist(t);
 		if (p == DurableFile.Outcome.REFUSED) {
 			return new Step(Step.Kind.REFUSED, "txn_journal: the scoop's intent could not be written");
@@ -756,7 +788,9 @@ public final class FluidTxns {
 		TxnEntry t = started.entry();
 		JsonArray done = new JsonArray();
 		for (long ck : chunks) {
-			c.plan(t, wEffect("fluid.stray", l, ck).data("group", group));
+			// (fix round, P1-5) the record's stray chunks are ChunkPos.pack keys (x low); a W's chunk is [x, z] (RegionFluids.chunkKey: x high)
+			long xz = (long) net.minecraft.world.level.ChunkPos.getX(ck) << 32 | net.minecraft.world.level.ChunkPos.getZ(ck) & 0xffffffffL;
+			c.plan(t, wEffect("fluid.stray", l, xz).data("group", group));
 			done.add(ck);
 		}
 		c.plan(t, Effect.of("fluid.strayed", EffectClass.R).data("region", l.rec().id).data("rid", l.rid()).data("done", done));
@@ -770,14 +804,36 @@ public final class FluidTxns {
 		return after(t);
 	}
 
+	/** (fix round, P2-9) Whether a stray txn of the record is still open (its R may have saved the chunks left; its barrier not passed). */
+	static boolean strayOpen(RegionsImpl.Live l) {
+		String r = resource(l);
+		for (TxnEntry t : core().open()) {
+			if (STRAY.equals(t.kind) && t.resources.contains(r)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static final TxnKind.Adapter FLUID_STRAY = chunkW("fluid.stray", "stray", (t, e, w, l, st, cx, cz) -> {
 		ServerLevel level = level(e);
 		if (level == null) {
 			throw new IllegalStateException("not loaded");
 		}
-		int n = RegionFluids.strayChunk(level, st, cx, cz, new RegionFluids.Holders(l.rec().dimension, e.data().get("group").getAsString(), st));
+		RegionFluids.DrainCtx dc = new RegionFluids.DrainCtx(w, recKey(l), cx, cz, List.of()); // (fix round) a refused cell holds the W
+		var was = RegionFluids.drainCtx;
+		RegionFluids.drainCtx = dc;
+		int n;
+		try {
+			n = RegionFluids.strayChunk(level, st, cx, cz, new RegionFluids.Holders(l.rec().dimension, e.data().get("group").getAsString(), st));
+		} finally {
+			RegionFluids.drainCtx = was;
+		}
+		if (dc.refused > 0) {
+			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + dc.refused + " stray cell(s) refused (a hold): the stray pass waits");
+		}
 		if (e.i() == 0) {
-			WorldJournal.kill("FL9"); // (8c CR's point, an alias) the stray pass half done: one chunk's cells restored, the next not
+			FluidTxns.AFTER_RECEIPT.add("FL9"); // (8c CR's point, an alias) the stray pass half done: (fix round, P2-14) after this chunk's receipt
 		}
 		return Map.of("n", n);
 	});
@@ -857,6 +913,27 @@ public final class FluidTxns {
 		return new int[] {lava, bars};
 	}
 
+	/** (fix round, P2-11) Σh over the drain's receipt index (lava, bars, cells), or null when a receipt is missing (held, never guessed). */
+	static int @Nullable [] takenSum(RegionFluids.Regional st, @Nullable FluidWorld w) {
+		if (w == null || st.drainReceipts == null) {
+			return null;
+		}
+		int[] taken = new int[3];
+		for (JsonElement x : st.drainReceipts) {
+			JsonArray a = x.getAsJsonArray();
+			Map<String, String> f = receiptOf(w, a.get(1).getAsInt(), a.get(2).getAsInt(), a.get(0).getAsString());
+			if (f == null || f.get("h") == null) {
+				scoopMissing = "chunk " + a.get(1).getAsInt() + "," + a.get(2).getAsInt();
+				return null;
+			}
+			String[] h = f.get("h").split(",");
+			for (int i = 0; i < 3 && i < h.length; i++) {
+				taken[i] += Integer.parseInt(h[i]);
+			}
+		}
+		return taken;
+	}
+
 	/** (T5Fc) The world a record's txns read outside an effect: the unit's, else the record's level. */
 	static @Nullable FluidWorld worldFor(RegionsImpl.Live l) {
 		var tw = testWorld;
@@ -921,24 +998,30 @@ public final class FluidTxns {
 		public void run(TxnEntry t, Effect e, RegionsImpl.Live l, RegionFluids.Regional st) {
 			String was = st.scooped;
 			JsonObject wasCredited = st.scoopCredited;
+			int[] wasTaken = st.taken;
+			// (fix round, P2-10) what the ledger credited under the scoop's key, booked with that key in the same ledger mutation (S3): never
+			// the plan. No pile, or a key an older ledger credited without its amount: nothing reported
 			JsonObject cr = new JsonObject();
-			if (st.scoopCreditedNow != null) {
-				st.scoopCreditedNow.forEach(cr::addProperty); // what the ledger credited this session
-			} else {
-				// (a crash after the L's ledger save, before this R: its answer is gone; the planned amounts, recorded as planned)
-				if (e.data().get("lava").getAsInt() > 0) {
-					cr.addProperty("minecraft:lava_bucket", e.data().get("lava").getAsInt());
+			Effect le = t.effects().stream().filter(x -> "pile.scoop".equals(x.op())).findFirst().orElse(null);
+			if (le != null) {
+				var led = ledgerOf(le.data().get("owner").getAsString());
+				Map<String, Integer> got = led == null ? null : led.creditedAmount(le.data().get("key").getAsString());
+				if (got == null && led != null && le.data().has("legacyKey")) {
+					got = led.creditedAmount(le.data().get("legacyKey").getAsString());
 				}
-				if (e.data().get("grates").getAsInt() > 0) {
-					cr.addProperty("minecraft:iron_bars", e.data().get("grates").getAsInt());
+				if (got != null) {
+					got.forEach(cr::addProperty);
 				}
-				cr.addProperty("planned", true);
 			}
 			st.scooped = t.id;
 			st.scoopCredited = cr;
+			if (e.data().get("taken") instanceof JsonArray tk && tk.size() == 3) {
+				st.taken = new int[] {tk.get(0).getAsInt(), tk.get(1).getAsInt(), tk.get(2).getAsInt()}; // (P2-11) from the final receipts
+			}
 			if (!RegionFluids.save(l, st)) {
 				st.scooped = was;
 				st.scoopCredited = wasCredited;
+				st.taken = wasTaken;
 				throw new IllegalStateException("the fluids record could not be saved");
 			}
 			st.scoopCreditedNow = null;
@@ -996,7 +1079,11 @@ public final class FluidTxns {
 		}
 		String group = e.data().get("group").getAsString();
 		java.util.function.LongPredicate held = level == null ? RegionFluids.NOT_HELD : new RegionFluids.Holders(l.rec().dimension, group, st);
-		Map<String, Object> f = RegionFluids.drainBodyChunk(w, level, l, st, b, cx, cz, group, e.data().get("flowing").getAsInt() == 1, held);
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet u = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		if (e.data().get("u") instanceof JsonArray ua) {
+			ua.forEach(x -> u.add(x.getAsLong())); // (fix round, P1-3) the intent's frozen never-delivered cells of this chunk
+		}
+		Map<String, Object> f = RegionFluids.drainBodyChunk(w, level, l, st, b, cx, cz, group, e.data().get("flowing").getAsInt() == 1, held, u);
 		st.until = -1; // (§4.4) the deadline is rebuilt from the receipts' t (this W's included)
 		st.redrained = true;
 		if (st.ordered) {
@@ -1009,7 +1096,7 @@ public final class FluidTxns {
 			Effect first = t.effects().get(0);
 			if (b.id.equals(first.data().get("body").getAsString()) && next != null && "fluid.drain".equals(next.op()) && !b.id.equals(next.data().get("body")
 				.getAsString())) {
-				WorldJournal.kill("FL5"); // (6c HY's point, an alias) the head drained, the rest of the course not yet
+				FluidTxns.AFTER_RECEIPT.add("FL5"); // (6c HY's point, an alias) the head drained, the rest of the course not yet: (fix round, P2-14) after its receipt
 			}
 		}
 		return f;
@@ -1018,8 +1105,8 @@ public final class FluidTxns {
 	/** (T5Fc) The R of a drain planned by T5Fc ({@code v}: 2): drained, its receipt index, the taken counts; no {@code until} (§4.4). */
 	static void drainedV2(TxnEntry t, RegionsImpl.Live l, RegionFluids.Regional st) {
 		FluidWorld w = testWorld != null ? testWorld.apply(null) : levelOf(l) == null ? null : FluidWorld.of(levelOf(l));
-		JsonArray idx = new JsonArray();
-		int[] taken = new int[3];
+		// (fix round) appended to an index a T5Fc drain of this record saved before (never replaced: its receipts are the scoop's too)
+		JsonArray idx = st.drainReceipts == null ? new JsonArray() : st.drainReceipts.deepCopy();
 		for (Effect x : t.effects()) {
 			if (!"fluid.drain".equals(x.op())) {
 				continue;
@@ -1029,17 +1116,11 @@ public final class FluidTxns {
 			one.add(x.key(t.id));
 			one.add(c[0]);
 			one.add(c[1]);
-			idx.add(one);
-			Map<String, String> f = w == null ? null : receiptOf(w, (int) c[0], (int) c[1], x.key(t.id));
-			if (f != null && f.get("h") != null) {
-				String[] h = f.get("h").split(",");
-				for (int i = 0; i < 3 && i < h.length; i++) {
-					taken[i] += Integer.parseInt(h[i]);
-				}
+			if (!idx.contains(one)) {
+				idx.add(one);
 			}
 		}
-		st.drainReceipts = idx;
-		st.taken = taken;
+		st.drainReceipts = idx; // (fix round, P2-11) taken is no longer the R's: the scoop (or a creative removal's step) reads the final receipts
 	}
 
 	/** (T5Fc) Effect {@code key}'s receipt fields in a chunk of {@code w}, or null. */
@@ -1085,9 +1166,12 @@ public final class FluidTxns {
 
 	// ------------------------------------------------------------------ (8cTc) generic W and R adapters over a record
 
-	/** A W effect's world writes on a record (loaded, its chunks loaded); returns the cells written. */
+	/**
+	 * A W effect's world writes on a record (its chunks loaded); returns the cells written. {@code level}: null in a unit (its own
+	 * {@code w}); (fix round) a per-chunk W writes through {@code w}, the level's own fluid world in game.
+	 */
 	interface WRun {
-		int run(TxnEntry t, Effect e, ServerLevel level, RegionsImpl.Live l, RegionFluids.Regional st);
+		int run(TxnEntry t, Effect e, @Nullable ServerLevel level, FluidWorld w, RegionsImpl.Live l, RegionFluids.Regional st);
 	}
 
 	/** An R effect over a record: whether it is on the record now, and its write (durable, or it throws and leaves memory as it was). */
@@ -1109,50 +1193,84 @@ public final class FluidTxns {
 		return chunks;
 	}
 
-	/** A W adapter: probe = this effect's receipt in every chunk; apply = the writes, the kill point {@code step}, then the receipts. */
+	/**
+	 * A W adapter: probe = this effect's receipt in every chunk; apply = the writes, then the receipts, then the kill point {@code step}
+	 * and any alias its run reached (fix round, P2-14: a {@code +save} holds the chunk with its receipt, I9). (fix round, P1-1/P1-4, P2-8) A
+	 * per-chunk W (T5Fc's plans) runs inside its chunk's {@link RegionFluids.DrainCtx}: its drains take only what R delivered, each accepted
+	 * take of R's cell becomes DRAINED in the same apply (a held, escaped, rechecked or lot drain keeps the paid cell's entitlement for the
+	 * removal's scoop), a refused write holds the W after those marks, and the W's bodies get their ticks from geometry. An 8cT-era W over
+	 * every chunk runs as it was.
+	 */
 	static TxnKind.Adapter w(String stepName, WRun run) {
 		return new TxnKind.Adapter() {
 			@Override
 			public Probe probe(TxnEntry t, Effect e) {
-				return FLUID_DRAIN.probe(t, e);
+				FluidWorld fw = worldOf(e);
+				if (fw == null) {
+					return Probe.UNKNOWN;
+				}
+				for (long[] c : chunksOf(e)) {
+					if (!fw.hasReceipt((int) c[0], (int) c[1], e.key(t.id))) {
+						return Probe.ABSENT;
+					}
+				}
+				return Probe.APPLIED;
 			}
 
 			@Override
 			public void apply(TxnEntry t, Effect e) {
 				ServerLevel level = level(e);
+				FluidWorld fw = worldOf(e);
 				RegionsImpl.Live l = live(region(e), rid(e));
 				RegionFluids.Regional st = l == null ? null : RegionFluids.of(l);
-				if (level == null || l == null || st == null) {
+				if (fw == null || l == null || st == null) {
 					throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
 				}
-				List<LevelChunk> chunks = new ArrayList<>();
+				AFTER_RECEIPT.clear();
 				List<long[]> cs = chunksOf(e);
-				for (long[] c : cs) {
-					chunks.add(level.getChunk((int) c[0], (int) c[1]));
+				if (level != null) {
+					for (long[] c : cs) {
+						level.getChunk((int) c[0], (int) c[1]);
+					}
 				}
 				if (cs.size() == 1) {
 					// (T5Fc, I4) a per-chunk W (T5Fc's plans): its drains write and tick only its own chunk; an 8cT-era W over every chunk as it was
 					int cx = (int) cs.get(0)[0], cz = (int) cs.get(0)[1];
+					RegionFluids.DrainCtx dc = new RegionFluids.DrainCtx(fw, recKey(l), cx, cz, st.bodies);
 					var wasF = RegionFluids.chunkFilter;
 					var wasT = RegionFluids.tickOnly;
+					var wasC = RegionFluids.drainCtx;
 					RegionFluids.chunkFilter = p -> RegionFluids.inChunk(p, cx, cz);
 					RegionFluids.tickOnly = RegionFluids.chunkFilter;
+					RegionFluids.drainCtx = dc;
 					try {
-						run.run(t, e, level, l, st);
+						run.run(t, e, level, fw, l, st);
 					} finally {
 						RegionFluids.chunkFilter = wasF;
 						RegionFluids.tickOnly = wasT;
+						RegionFluids.drainCtx = wasC;
+					}
+					dc.close();
+					for (RegionFluids.Body b : wBodies(e, st)) {
+						RegionFluids.tickBodyIn(fw, st, b, cx, cz);
+					}
+					if (dc.refused > 0) {
+						throw new IllegalStateException("chunk " + cx + "," + cz + ": " + dc.refused + " cell(s) refused the drain (a hold): the drain waits");
 					}
 				} else {
-					run.run(t, e, level, l, st);
+					if (level == null) {
+						throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
+					}
+					run.run(t, e, level, fw, l, st);
 				}
-				step(t, stepName);
 				String k = e.key(t.id);
-				for (LevelChunk ch : chunks) {
-					if (!TestMove.receiptsOf(ch).contains(k)) {
-						TestMove.addReceiptTo(ch, k);
+				for (long[] c : cs) {
+					if (!fw.hasReceipt((int) c[0], (int) c[1], k)) {
+						fw.addReceipt((int) c[0], (int) c[1], k);
 					}
 				}
+				step(t, stepName);
+				afterReceipt();
 			}
 
 			@Override
@@ -1162,9 +1280,42 @@ public final class FluidTxns {
 
 			@Override
 			public String where(TxnEntry t, Effect e) {
-				return FLUID_DRAIN.where(t, e);
+				FluidWorld fw = worldOf(e);
+				for (long[] c : chunksOf(e)) {
+					if (fw == null || !fw.hasReceipt((int) c[0], (int) c[1], e.key(t.id))) {
+						return "chunk " + c[0] + "," + c[1];
+					}
+				}
+				return "region " + region(e);
 			}
 		};
+	}
+
+	/** (fix round, P2-8) The bodies a record W drains: an escape's body and its frozen closure, a hold's body and its upstream, a lot's bodies. */
+	static List<RegionFluids.Body> wBodies(Effect e, RegionFluids.Regional st) {
+		java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+		if (e.data().has("body")) {
+			ids.add(e.data().get("body").getAsString());
+		}
+		for (String m : new String[] {"closure", "bodies"}) {
+			if (e.data().get(m) instanceof JsonArray a) {
+				a.forEach(x -> ids.add(x.getAsString()));
+			}
+		}
+		if ("fluid.hold".equals(e.op()) && e.data().has("body")) {
+			RegionFluids.Body b = st.body(e.data().get("body").getAsString());
+			if (b != null) {
+				RegionFluids.upstreamOf(st, b).forEach(u -> ids.add(u.id));
+			}
+		}
+		List<RegionFluids.Body> out = new ArrayList<>();
+		for (String id : ids) {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				out.add(b);
+			}
+		}
+		return out;
 	}
 
 	static TxnKind.Adapter r(RRun run) {
@@ -1213,6 +1364,18 @@ public final class FluidTxns {
 	/** Begins (or finds) one record txn: plans {@code w} then {@code r} over the record's chunks; persists; drives. */
 	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.Supplier<Effect.Builder> w, Effect.Builder r,
 		java.util.function.Consumer<TxnEntry> attached) {
+		return record(kind, key, l, st, ck -> w.get(), r, attached);
+	}
+
+	/** (fix round, P2-7) {@link #record} with each chunk's W built for its chunk ({@code ck}: {@link RegionFluids#chunkKey}). */
+	static Step recordPerChunk(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.LongFunction<Effect.Builder> w,
+		Effect.Builder r) {
+		return record(kind, key, l, st, w, r, t -> {
+		});
+	}
+
+	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.LongFunction<Effect.Builder> w, Effect.Builder r,
+		java.util.function.Consumer<TxnEntry> attached) {
 		Step a = adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F is adopted first
 		if (a != null) {
 			return a;
@@ -1244,7 +1407,7 @@ public final class FluidTxns {
 			xz.add((int) (ck >> 32));
 			xz.add((int) ck);
 			one.add(xz);
-			c.plan(t, w.get().data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", one));
+			c.plan(t, w.apply(ck).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", one));
 		}
 		c.plan(t, r.data("region", l.rec().id).data("rid", l.rid()));
 		DurableFile.Outcome p = c.persist(t);
@@ -1391,6 +1554,7 @@ public final class FluidTxns {
 				}
 				long[] c = chunksOf(e).get(0);
 				int cx = (int) c[0], cz = (int) c[1];
+				AFTER_RECEIPT.clear();
 				Map<String, Object> f = new java.util.LinkedHashMap<>();
 				f.put("op", op.substring("fluid.".length()));
 				f.put("t", w.gameTime());
@@ -1399,6 +1563,7 @@ public final class FluidTxns {
 				if (!w.hasReceipt(cx, cz, k)) {
 					w.addReceipt(cx, cz, dev.larattalabs.architect.txn.Receipts.of(k, f));
 				}
+				afterReceipt(); // (fix round, P2-14) FL5, FL9: a +save holds the chunk with its receipt (I9)
 				if ("fluid.place".equals(op) || "fluid.drain".equals(op)) {
 					int n = 0, kk = 0;
 					for (Effect x : t.effects()) {
@@ -1423,6 +1588,15 @@ public final class FluidTxns {
 				return FLUID_DRAIN.where(t, e);
 			}
 		};
+	}
+
+	/** (fix round, P2-14) The alias kill points a W's run reached, fired after its receipt (server thread). */
+	static final java.util.ArrayDeque<String> AFTER_RECEIPT = new java.util.ArrayDeque<>();
+
+	static void afterReceipt() {
+		while (!AFTER_RECEIPT.isEmpty()) {
+			WorldJournal.kill(AFTER_RECEIPT.poll());
+		}
 	}
 
 	/** (slice T5F) The body ids a write W names: {@code body} (T5F), else {@code bodies}. */
@@ -1746,7 +1920,7 @@ public final class FluidTxns {
 		private LegacyV1() {
 		}
 
-		static final TxnKind.Adapter PLACE = w("place", (t, e, level, l, st) -> {
+		static final TxnKind.Adapter PLACE = w("place", (t, e, level, fw0, l, st) -> {
 			TileEntries jw = new TileEntries(l.rec().dimension, e.data().get("group").getAsString(), RegionFluids.stageOf(l));
 			FluidWorld fw = FluidWorld.of(level);
 			int n = 0;
@@ -1870,25 +2044,89 @@ public final class FluidTxns {
 			cells.add(a);
 		}
 		String key = "fluid-drain:" + recKey(l) + "/" + why + ":" + b.id;
-		return record(DRAIN, key, l, st, () -> Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), Effect.of(
-			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), t -> {
-			});
+		// (fix round, P2-7) the W is a function of its intent and its chunk: the upstream closure (upstream first), how each body goes (an
+		// abort of a flowing body, or a drain, with its strays), and an abort's stray take judged once now over the flow as it stands, each
+		// W carrying its own chunk's cells. The record's state is the R's
+		JsonArray closure = new JsonArray();
+		JsonArray abort = new JsonArray();
+		JsonArray noStrays = new JsonArray();
+		Map<Long, JsonArray> work = new java.util.HashMap<>();
+		FluidWorld fw = worldFor(l);
+		List<RegionFluids.Body> all = new ArrayList<>(RegionFluids.upstreamOf(st, b));
+		for (RegionFluids.Body u : all) {
+			closure.add(u.id);
+		}
+		all.add(b);
+		for (RegionFluids.Body u : all) {
+			RegionFluids.BodyState us = st.states.get(u.id);
+			boolean self = u == b;
+			boolean ab = st.flowingRegion() && u.flowing() && (self ? !"drained".equals(us.state) : !"pending".equals(us.state) && !"drained".equals(us.state));
+			if (!self && "pending".equals(us.state)) {
+				noStrays.add(u.id);
+			}
+			if (ab && fw != null && !us.before.isEmpty()) {
+				abort.add(u.id);
+				int oi = st.order.indexOf(u);
+				for (long[] c : RegionFluids.abortWork(fw, st, u, p -> true)) {
+					JsonArray one = new JsonArray();
+					one.add(c[0]);
+					one.add(oi);
+					one.add(c[2]);
+					work.computeIfAbsent(RegionFluids.chunkKey(c[0]), k -> new JsonArray()).add(one);
+				}
+			}
+		}
+		return recordPerChunk(DRAIN, key, l, st, ck -> Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at",
+			cells).data("closure", closure).data("abort", abort).data("noStrays", noStrays).data("work", work.getOrDefault(ck, new JsonArray())), Effect.of(
+			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells));
 	}
 
-	static final TxnKind.Adapter FLUID_ESCAPE = w("drain", (t, e, level, l, st) -> {
+	static final TxnKind.Adapter FLUID_ESCAPE = w("drain", (t, e, level, fw, l, st) -> {
 		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
 		if (b == null) {
 			return 0;
 		}
-		List<long[]> at = new ArrayList<>();
-		for (JsonElement x : e.data().getAsJsonArray("at")) {
-			JsonArray a = x.getAsJsonArray();
-			at.add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+		if (!e.data().has("closure")) {
+			// (an entry planned before the fix round: its writes as they were, by the record's state)
+			if (level == null) {
+				throw new IllegalStateException("not loaded");
+			}
+			RegionFluids.BodyState bs = st.states.get(b.id);
+			List<long[]> at = new ArrayList<>();
+			for (JsonElement x : e.data().getAsJsonArray("at")) {
+				JsonArray a = x.getAsJsonArray();
+				at.add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+			}
+			RegionFluids.escape(level, l, st, b, bs, e.data().get("why").getAsString(), at);
+			bs.why = e.data().get("typed").getAsString();
+			return at.size();
 		}
-		RegionFluids.BodyState bs = st.states.get(b.id);
-		RegionFluids.escape(level, l, st, b, bs, e.data().get("why").getAsString(), at);
-		bs.why = e.data().get("typed").getAsString();
-		return at.size();
+		java.util.Set<String> abort = new java.util.HashSet<>(), noStrays = new java.util.HashSet<>();
+		e.data().getAsJsonArray("abort").forEach(x -> abort.add(x.getAsString()));
+		e.data().getAsJsonArray("noStrays").forEach(x -> noStrays.add(x.getAsString()));
+		Map<Integer, List<long[]>> work = new java.util.HashMap<>();
+		for (JsonElement x : e.data().getAsJsonArray("work")) {
+			JsonArray a = x.getAsJsonArray();
+			work.computeIfAbsent(a.get(1).getAsInt(), k -> new ArrayList<>()).add(new long[] {a.get(0).getAsLong(), a.get(1).getAsLong(), a.get(2).getAsLong()});
+		}
+		List<String> ids = new ArrayList<>();
+		e.data().getAsJsonArray("closure").forEach(x -> ids.add(x.getAsString()));
+		ids.add(b.id);
+		int n = 0;
+		for (String id : ids) {
+			RegionFluids.Body u = st.body(id);
+			RegionFluids.BodyState us = u == null ? null : st.states.get(id);
+			if (u == null || us.before.isEmpty()) {
+				continue;
+			}
+			if (abort.contains(id)) {
+				n += RegionFluids.abortFlowingIn(fw, st, u, us, work.getOrDefault(st.order.indexOf(u), List.of()).toArray(long[][]::new), p -> true);
+			} else {
+				n += RegionFluids.drain(RegionFluids.drainTarget(fw, new int[1]), level, st, u, us, !noStrays.contains(id), st.othersOf(u), RegionFluids.NOT_HELD,
+					false);
+			}
+		}
+		return n;
 	});
 
 	static final TxnKind.Adapter FLUID_ESCAPED = r(new RRun() {
@@ -1903,7 +2141,7 @@ public final class FluidTxns {
 			RegionFluids.BodyState bs = st.states.get(e.data().get("body").getAsString());
 			RegionFluids.Body b = st.body(e.data().get("body").getAsString());
 			ServerLevel level = levelOf(l);
-			if (b != null && level != null && e.data().has("why")) {
+			if (b != null && e.data().has("why")) { // (fix round, P2-7) the outcome only: no level needed (no writes)
 				// (8cT last round, P2) the outcome rebuilt from the entry (a start that found the W's receipts skipped its writes and lost their
 				// state): the body and its upstream closure drained with their reasons, the typed why, the escaped cells
 				List<long[]> at = new ArrayList<>();
@@ -1942,12 +2180,15 @@ public final class FluidTxns {
 			});
 	}
 
-	static final TxnKind.Adapter FLUID_LOTDRAIN = w("drain", (t, e, level, l, st) -> {
+	static final TxnKind.Adapter FLUID_LOTDRAIN = w("drain", (t, e, level, fw, l, st) -> {
 		if (RegionFluids.holdDrain) {
 			throw new IllegalStateException("TEST: dev.fluid.hold drain");
 		}
+		if (level == null) {
+			throw new IllegalStateException("not loaded");
+		}
 		int n = RegionFluids.lotDrainWrites(level, l, st, e.data().get("lot").getAsString(), ids(e));
-		WorldJournal.kill("FL6d"); // (DF round 3's point, an alias) the lot's sources drained, the record not saved yet
+		FluidTxns.AFTER_RECEIPT.add("FL6d"); // (DF round 3's point, an alias) the lot's sources drained, the record not saved yet: (fix round, P2-14) after the receipt
 		return n;
 	});
 
@@ -2013,22 +2254,47 @@ public final class FluidTxns {
 			cells.add(a);
 		}
 		String key = "fluid-drain:" + recKey(l) + "/held:" + b.id;
-		return record(DRAIN, key, l, st, () -> Effect.of("fluid.hold", EffectClass.W).data("body", b.id), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
+		JsonArray closure = new JsonArray(); // (fix round, P2-7) the pending upstream reaches it drains, frozen: the R changes their state
+		for (RegionFluids.Body u : RegionFluids.upstreamOf(st, b)) {
+			RegionFluids.BodyState us = st.states.get(u.id);
+			if (!us.before.isEmpty() && !"settled".equals(us.state) && !"written".equals(us.state)) {
+				closure.add(u.id);
+			}
+		}
+		return record(DRAIN, key, l, st, () -> Effect.of("fluid.hold", EffectClass.W).data("body", b.id).data("closure", closure), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
 			.data("why", typed).data("reason", reason).data("at", cells), t -> {
 			});
 	}
 
-	static final TxnKind.Adapter FLUID_HOLD = w("drain", (t, e, level, l, st) -> {
+	static final TxnKind.Adapter FLUID_HOLD = w("drain", (t, e, level, fw, l, st) -> {
 		RegionFluids.Body b = st.body(e.data().get("body").getAsString());
 		if (b == null) {
 			return 0;
 		}
 		RegionFluids.BodyState bs = st.states.get(b.id);
-		int n = bs.before.isEmpty() ? 0 : RegionFluids.drain(level, st, b, bs, false, st.othersOf(b));
-		for (RegionFluids.Body u : RegionFluids.upstreamOf(st, b)) {
+		// (fix round) through the W's fluid world: an accepted take of R's delivered cell is DRAINED (P1-4), a refused one holds
+		int n = bs.before.isEmpty() ? 0 : RegionFluids.drain(RegionFluids.drainTarget(fw, new int[1]), level, st, b, bs, false, st.othersOf(b),
+			RegionFluids.NOT_HELD, false);
+		List<RegionFluids.Body> ups = new ArrayList<>();
+		if (e.data().get("closure") instanceof JsonArray ca) {
+			ca.forEach(x -> {
+				RegionFluids.Body u = st.body(x.getAsString());
+				if (u != null) {
+					ups.add(u);
+				}
+			});
+		} else {
+			for (RegionFluids.Body u : RegionFluids.upstreamOf(st, b)) { // (an entry planned before the fix round)
+				RegionFluids.BodyState us = st.states.get(u.id);
+				if (!us.before.isEmpty() && !"settled".equals(us.state) && !"written".equals(us.state)) {
+					ups.add(u);
+				}
+			}
+		}
+		for (RegionFluids.Body u : ups) {
 			RegionFluids.BodyState us = st.states.get(u.id);
-			if (!us.before.isEmpty() && !"settled".equals(us.state) && !"written".equals(us.state)) {
-				n += RegionFluids.drain(level, st, u, us, false, st.othersOf(u)); // its tile-written cells (a pending reach)
+			if (!us.before.isEmpty()) {
+				n += RegionFluids.drain(RegionFluids.drainTarget(fw, new int[1]), level, st, u, us, false, st.othersOf(u), RegionFluids.NOT_HELD, false); // its tile-written cells (a pending reach)
 			}
 		}
 		return n;

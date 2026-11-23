@@ -3134,13 +3134,18 @@ public final class Groups {
 	}
 
 	/** (slice T5Fc) {@code given} with its region's fluids removal merged once (the scoop's refund into refund; the taken counts): S3 (c). */
-	static Removed withFluids(MinecraftServer server, String group, @Nullable String stage, Removed given) {
+	public static Removed withFluids(MinecraftServer server, String group, @Nullable String stage, Removed given) {
 		FluidsExtras h = FLUIDS_EXTRAS;
 		if (!given.removed() || given.fluids() != null || h == null) {
 			return given;
 		}
 		com.google.gson.JsonObject x = h.of(server, group, stage);
-		if (x == null) {
+		return x == null ? given : withFluidsFrom(given, x);
+	}
+
+	/** (T5Fc fix round, P2-12) {@code given} with the fluids removal {@code x} merged once (the scoop's refund into refund; the taken counts). */
+	public static Removed withFluidsFrom(Removed given, com.google.gson.JsonObject x) {
+		if (!given.removed() || given.fluids() != null) {
 			return given;
 		}
 		Map<String, Integer> refund = new java.util.TreeMap<>(given.refund());

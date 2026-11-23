@@ -37,7 +37,13 @@ public final class FluidProv {
 		/** Record R wrote its fluid, ice, bars or decor here (the stage's tile or the place W). */
 		WROTE,
 		/** R's own stage cleared what it wrote (a waiting reach): written again when its body is due. */
-		CLEARED
+		CLEARED,
+		/**
+		 * (T5Fc fix round) R delivered here and an Architect drain of R took it back, set in the same accepted write: the cell's refund
+		 * entitlement, kept with its block until R's removal drain counts it into its receipt (and deletes it in that same apply). Never
+		 * written again (I2), never read as taken.
+		 */
+		DRAINED
 	}
 
 	/** One row of §3.3: whether a fluid writer writes the cell, whether the drain takes it, and its refund on a charged body. */
@@ -54,6 +60,9 @@ public final class FluidProv {
 	 * </ul>
 	 */
 	public static Cell read(@Nullable Mark mark, boolean open, boolean ours) {
+		if (mark == Mark.DRAINED) {
+			return new Cell(false, false, 1); // (T5Fc fix round) drained by Architect: never written again, refunded by the removal's drain
+		}
 		if (mark == Mark.WROTE) {
 			return new Cell(false, ours, ours ? 1 : 0);
 		}
@@ -82,7 +91,7 @@ public final class FluidProv {
 
 	/** The attachment (its class init registers it: never touched by a unit). */
 	static final class Store {
-		/** rec -> packed marks ({@code cellIndex << 1 | (CLEARED ? 1 : 0)}). */
+		/** rec -> packed marks ({@code cellIndex << 1 | (CLEARED ? 1 : 0)}; (T5Fc fix round) DRAINED as {@code ~cellIndex}, negative). */
 		static final AttachmentType<Map<String, List<Integer>>> TYPE = AttachmentRegistry.<Map<String, List<Integer>>>builder().persistent(Codec
 			.unboundedMap(Codec.STRING, Codec.INT.listOf())).buildAndRegister(Architect.id("fluid_prov"));
 	}
@@ -99,7 +108,11 @@ public final class FluidProv {
 		List<Integer> l = all == null ? null : all.get(rec);
 		if (l != null) {
 			for (int v : l) {
-				out.put(v >>> 1, (v & 1) == 1 ? Mark.CLEARED : Mark.WROTE);
+				if (v < 0) {
+					out.put(~v, Mark.DRAINED);
+				} else {
+					out.put(v >>> 1, (v & 1) == 1 ? Mark.CLEARED : Mark.WROTE);
+				}
 			}
 		}
 		return out;
@@ -115,7 +128,7 @@ public final class FluidProv {
 			}
 		} else {
 			List<Integer> l = new ArrayList<>(marks.size());
-			marks.int2ObjectEntrySet().forEach(e -> l.add(e.getIntKey() << 1 | (e.getValue() == Mark.CLEARED ? 1 : 0)));
+			marks.int2ObjectEntrySet().forEach(e -> l.add(pack(e.getIntKey(), e.getValue())));
 			next.put(rec, List.copyOf(l));
 		}
 		if (next.isEmpty()) {
@@ -124,6 +137,11 @@ public final class FluidProv {
 			ch.setAttached(Store.TYPE, Map.copyOf(next));
 		}
 		ch.markUnsaved();
+	}
+
+	/** One mark packed: WROTE {@code idx << 1}, CLEARED {@code idx << 1 | 1}, DRAINED {@code ~idx} (negative: a save before T5Fc has none). */
+	static int pack(int idx, Mark m) {
+		return m == Mark.DRAINED ? ~idx : idx << 1 | (m == Mark.CLEARED ? 1 : 0);
 	}
 
 	static int index(Level level, long p) {

@@ -78,6 +78,7 @@ class FluidsT5FcFixTest {
 		w = new MemFluidWorld();
 		FluidTxns.testWorld = e -> w;
 		env = new Env();
+		env.onBarrier = () -> w.saveAll(); // (the core's barrier: every chunk flushed)
 		wasGuard = TxnCore.BEGIN_GUARD;
 		TxnCore.BEGIN_GUARD = null;
 		newCore(null);
@@ -289,14 +290,20 @@ class FluidsT5FcFixTest {
 	@Test
 	void p2_7_anEscapePlansItsClosureAndEachWLeavesTheRecordAlone() {
 		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
-		env.barrierOk = false; // the Ws apply, the barrier holds the txn: the R has not run
+		List<String> state = new ArrayList<>();
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) p -> {
+			if (p.endsWith("fluid.drain:drain") && state.isEmpty()) {
+				state.add(st.states.get("pit").state); // the record as the first W left it
+			}
+		});
+		env.okLeft = 1; // the effects barrier refuses: the txn stays open to read its intent
 		FluidTxns.escape(l, st, st.body("pit"), "escaped", "escaped", List.of(new long[] {18, 60, 5}));
 		TxnEntry t = open(FluidTxns.DRAIN);
 		assertNotNull(t);
 		Effect w0 = t.effects().stream().filter(e -> "fluid.escape".equals(e.op())).findFirst().orElseThrow();
 		assertTrue(w0.data().has("closure"), "the upstream closure is in the intent (red: recomputed at each W)");
 		assertEquals(AIR, w.get(A));
-		assertEquals("settled", st.states.get("pit").state, "a W writes the world only; the record is the R's (red: the first W set drained, steering the next)");
+		assertEquals(List.of("settled"), state, "a W writes the world only; the record is the R's (red: the first W set drained, steering the next)");
 	}
 
 	@Test
@@ -327,7 +334,7 @@ class FluidsT5FcFixTest {
 	void p2_9_theScoopStepWaitsWhileItsTxnIsOpen() {
 		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
 		assertEquals(FluidTxns.Step.Kind.DONE, drain().kind());
-		env.barrierOk = false; // the scoop's L and R apply; its effects barrier refuses: the txn stays open, held
+		env.okLeft = 1; // the scoop's prepare barrier passes, its L and R apply, its effects barrier refuses: the txn stays open, held
 		boolean first = RegionFluids.scoopStep(l, st);
 		assertFalse(first);
 		TxnEntry t = open(FluidTxns.SCOOP);
@@ -340,7 +347,7 @@ class FluidsT5FcFixTest {
 		}
 		assertNotNull(st.scooped, "the R ran before the barrier");
 		assertFalse(RegionFluids.scoopStep(l, st), "scooped is no completion: the txn is not EFFECTS_DONE (red: true)");
-		env.barrierOk = true;
+		env.okLeft = Integer.MAX_VALUE;
 		core.open().forEach(core::drive);
 		assertTrue(RegionFluids.scoopStep(l, st));
 	}
@@ -385,7 +392,8 @@ class FluidsT5FcFixTest {
 	@Test
 	void p2_11_takenIsReadFromTheFinalReceiptsAfterAReplay() throws Exception {
 		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
-		env.crashAt = "barrier:effects"; // the drain's Ws and R applied, the barrier not passed
+		env.crashAt = "drained"; // the drain's Ws and R applied, the barrier not passed
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) env::kill);
 		try {
 			drain();
 		} catch (Crash expected) {
@@ -407,7 +415,7 @@ class FluidsT5FcFixTest {
 
 	@Test
 	void p2_12_aStageFinishedByItselfMergesItsFluidsToo() {
-		var m = method(Revisions.class, "mergeAwaited", JsonObject.class, String.class, JsonObject.class, java.util.function.UnaryOperator.class);
+		var m = method(Revisions.class, "mergeAwaitedWith", JsonObject.class, String.class, JsonObject.class, java.util.function.UnaryOperator.class);
 		JsonObject op = new JsonObject();
 		JsonArray aw = new JsonArray();
 		aw.add("fluids:rv2");
@@ -473,9 +481,11 @@ class FluidsT5FcFixTest {
 
 	@Test
 	void drainThenScoopThroughTheCore_aCrashAtEachStep_conservation() throws Exception {
-		for (String at : new String[] {"apply:0", "barrier:effects", "drained", "effects", "scoop", "scooped", null}) {
+		Path root = world;
+		for (String at : new String[] {"drain", "barrier:effects", "drained", "effects", "scoop", "scooped", null}) {
 			tearDown();
 			setUp();
+			world = java.nio.file.Files.createDirectories(root.resolve(String.valueOf(at).replace(':', '_'))); // (a fresh world per crash point)
 			pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
 			w.put(A, AIR); // the player took A before the removal: it is theirs (3 charged = 2 refunded + 1 held)
 			w.saveAll();
@@ -484,19 +494,28 @@ class FluidsT5FcFixTest {
 			setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) env::kill);
 			try {
 				drain();
-				RegionFluids.scoopStep(l, st);
+				if (!RegionFluids.needsDrain(l, st)) {
+					RegionFluids.scoopStep(l, st);
+				}
 			} catch (Crash expected) {
 				// a bare crash: the chunks as last saved
 			}
 			if (at != null) {
-				for (long ck : RegionFluids.drainChunks(st)) {
+				assertNull(env.crashAt, at + ": the crash point was reached");
+				for (long ck : RegionFluids.drainChunksOf(st, st.body("pit"))) {
+					w.lose((int) (ck >> 32), (int) ck); // a bare crash: every chunk as the last barrier (or the setup) saved it
+				}
+				for (long ck : RegionFluids.drainChunksOf(st, st.body("pool"))) {
 					w.lose((int) (ck >> 32), (int) ck);
 				}
 				restart();
 			}
 			for (int i = 0; i < 4 && (st.drainTxn == null || st.scooped == null || open(FluidTxns.SCOOP) != null); i++) {
-				drain();
-				RegionFluids.scoopStep(l, st);
+				if (RegionFluids.needsDrain(l, st)) { // (gateOne's order: the drain until it retired, then the scoop)
+					drain();
+				} else {
+					RegionFluids.scoopStep(l, st);
+				}
 				core.open().forEach(core::drive);
 			}
 			assertTrue(RegionFluids.scoopStep(l, st), at + ": the scoop done");
@@ -513,7 +532,8 @@ class FluidsT5FcFixTest {
 
 	// ------------------------------------------------------------------ the core's environment
 
-	static final class Crash extends RuntimeException {
+	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */
+	static final class Crash extends Error {
 		Crash(String at) {
 			super("TEST crash at " + at);
 		}
@@ -521,8 +541,12 @@ class FluidsT5FcFixTest {
 
 	static final class Env implements TxnEnv {
 		JsonObject disk;
-		boolean barrierOk = true;
+		/** Barriers that pass before the rest are refused (MAX: every one passes). */
+		int okLeft = Integer.MAX_VALUE;
 		String crashAt;
+		/** What a passed barrier makes durable (the world's chunks). */
+		Runnable onBarrier = () -> {
+		};
 
 		@Override
 		public TxnStore store() {
@@ -547,7 +571,14 @@ class FluidsT5FcFixTest {
 
 		@Override
 		public Barrier barrier() {
-			return barrierOk ? Barrier.ok(List.of()) : Barrier.refused("TEST barrier refused");
+			if (okLeft <= 0) {
+				return Barrier.refused("TEST barrier refused");
+			}
+			if (okLeft != Integer.MAX_VALUE) {
+				okLeft--;
+			}
+			onBarrier.run();
+			return Barrier.ok(List.of());
 		}
 
 		@Override

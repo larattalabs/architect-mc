@@ -1810,8 +1810,8 @@ public final class Revisions {
 				if (state != dev.larattalabs.architect.api.Stage.State.PLACED && state != dev.larattalabs.architect.api.Stage.State.PARTIAL) {
 					// (REL-v0910 fix round, P2-1) a stage this undo started that finished by itself (held(decided), or resumed after a restart:
 					// no future reached this driver): its result joins the aggregate from its durable stage snapshot, once
-					if (mergeAwaited(op, st, state == dev.larattalabs.architect.api.Stage.State.UNDONE ? dev.larattalabs.architect.site.OwnerRemovals.result(
-						"stage", rec.groupId + "/" + st) : null)) {
+					if (mergeAwaitedWith(op, st, state == dev.larattalabs.architect.api.Stage.State.UNDONE ? dev.larattalabs.architect.site.OwnerRemovals.result(
+						"stage", rec.groupId + "/" + st) : null, r -> dev.larattalabs.architect.site.Groups.withFluids(s, rec.groupId, st, r))) {
 						writeUndo(l, op);
 					}
 					continue; // undone already, or it never placed anything
@@ -2095,6 +2095,16 @@ public final class Revisions {
 	 * past the results bound) merges nothing: logged, the stage no longer awaited.
 	 */
 	static boolean mergeAwaited(JsonObject op, String st, @org.jspecify.annotations.Nullable JsonObject snap) {
+		return mergeAwaitedWith(op, st, snap, java.util.function.UnaryOperator.identity());
+	}
+
+	/**
+	 * (T5Fc fix round, P2-12) {@link #mergeAwaited(JsonObject, String, JsonObject)} with the stage's fluids removal merged by {@code fluids}
+	 * (the same merge the stage's future carries: its scoop's refund and taken counts from the records on disk), so a stage finished by
+	 * itself reports what one finished under this driver does.
+	 */
+	static boolean mergeAwaitedWith(JsonObject op, String st, @org.jspecify.annotations.Nullable JsonObject snap, java.util.function.UnaryOperator<
+		dev.larattalabs.architect.site.Groups.Removed> fluids) {
 		if (!(op.get("awaited") instanceof com.google.gson.JsonArray a) || !a.contains(new com.google.gson.JsonPrimitive(st))) {
 			return false;
 		}
@@ -2118,8 +2128,8 @@ public final class Revisions {
 				});
 			}
 			JsonObject agg = op.get("result") instanceof JsonObject r ? r : new JsonObject();
-			addStageResult(agg, new dev.larattalabs.architect.site.Groups.Removed(true, List.of(), rf, snap.has("restored") ? snap.get("restored").getAsInt()
-				: 0, hd, List.of(), snap.has("kept") ? snap.get("kept").getAsInt() : 0, null, owed, parts));
+			addStageResult(agg, fluids.apply(new dev.larattalabs.architect.site.Groups.Removed(true, List.of(), rf, snap.has("restored") ? snap.get("restored")
+				.getAsInt() : 0, hd, List.of(), snap.has("kept") ? snap.get("kept").getAsInt() : 0, null, owed, parts)));
 			op.add("result", agg);
 		}
 		unawait(op, st);

@@ -110,7 +110,8 @@ class FluidsT5FcTest {
 		assertNull(w.mark(PIT_A, rec));
 		assertNull(w.mark(PIT_B, rec), "no R mark left in any chunk of the drained record");
 		assertNotNull(st.drainReceipts);
-		assertTrue(st.taken[0] == 1 && st.taken[1] == 0 && st.taken[2] == 1, "Σh: 1 lava cell, 0 bars, 1 cell");
+		int[] tk = FluidTxns.takenSum(st, w); // (fix round, P2-11) from the final receipts, by the scoop's plan
+		assertTrue(tk[0] == 1 && tk[1] == 0 && tk[2] == 1, "Σh: 1 lava cell, 0 bars, 1 cell");
 		int[] sum = FluidTxns.scoopSum(st, w);
 		assertEquals(1, sum[0], "the scoop sums the receipts: 1 (A); charged 2 = 1 refunded + 1 held by the player");
 	}

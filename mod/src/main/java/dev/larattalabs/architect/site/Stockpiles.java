@@ -1663,7 +1663,14 @@ public final class Stockpiles {
 		if (grates > 0) {
 			items.put("minecraft:iron_bars", grates);
 		}
-		return led.credit(key, items, cap, maxStack);
+		StockLedger.Credit c = led.credit(key, items, cap, maxStack);
+		if (!c.already()) {
+			// (T5Fc fix round, P2-10) what it returned, booked beside the key in this same mutation: the scoop's record reads it back after any crash
+			Map<String, Integer> got = new TreeMap<>(c.returned());
+			c.overflow().forEach((k, v) -> got.merge(k, v, Integer::sum));
+			led.noteCredited(key, got);
+		}
+		return c;
 	}
 
 	/**
