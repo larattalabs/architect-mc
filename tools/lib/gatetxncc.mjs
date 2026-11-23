@@ -788,8 +788,14 @@ export async function registerTCC(steps, h) {
       const before = await parts([b.site], b.cp, b.items);
       const ownBefore = own ? ((await call('dev.items.near', { pos: own.map(Math.floor), radius: 6 }, 30_000)).items ?? {})['minecraft:diamond'] ?? 0 : 0;
       if (own) check(ownBefore === 3, `${tag}: the player's 3 diamonds lie in the site's box before the removal (${ownBefore})`);
+      // (slice LR2-FIX) the hidden rows: the player waits 7 chunks east (its view distance keeps the site loaded), so at the restart vanilla's
+      // spawn (which blocks the server thread until the entities 3 chunks around the player load) never waits on the hidden site chunks and
+      // the ticks, Drops' later pass among them, go on inside the window
+      const hb = x ? await boxOf(b.site) : null;
+      if (hb) { await L.tp(hb[3] + 112, W.at[1], W.at[2]); await wait(2000); }
       await call('dev.journal.killAt', { point: 'K6' + v }, 10_000);
-      const m = await call('dev.site.deconstruct', { site: b.site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+      // LR-2p: force (the player's items lie in the box: a plain removal refuses them as blockers)
+      const m = await call('dev.site.deconstruct', { site: b.site, force: x === 'p' }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
       const down = await haltWait();
       check(down, `${tag}: halted at K6${v} in the built site's removal (${json(m).slice(0, 120)})`);
       if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
@@ -797,7 +803,8 @@ export async function registerTCC(steps, h) {
         const fs = await import('node:fs');
         const arch = path.join(W.dir, 'architect');
         fs.mkdirSync(arch, { recursive: true });
-        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(x === 'p' ? { entityHide: 100, entityHideAfterW: 0 } : { entityHide: 100 }));
+        const box = [hb[0] - 24, hb[2] - 24, hb[3] + 24, hb[5] + 24]; // only the site's chunks
+        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(x === 'p' ? { entityHide: 100, entityHideAfterW: 0, entityHideBox: box } : { entityHide: 100, entityHideBox: box }));
       }
       await L.openWorld(name);
       await L.tp(...W.at);
