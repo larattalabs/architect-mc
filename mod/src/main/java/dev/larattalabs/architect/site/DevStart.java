@@ -14,12 +14,14 @@ import java.nio.file.Path;
  * {@code <world>/architect/dev-start.json} while the world is closed, then opens it. The file is read once and deleted at SERVER_STARTED,
  * before the stores load and before the Sites check, so a halt it arms never repeats at the next start.
  *
- * <pre>{"killAt": "KS1" | "KS1+save" | any kill point, "failWriteNow": true, "startGrace": ticks}</pre>
+ * <pre>{"killAt": "KS1" | "KS1+save" | any kill point, "failWriteNow": true, "startGrace": ticks, "entityHide": ticks, "entityHideAfterW": ticks}</pre>
  *
  * {@code KS1}: the Sites check's outcome is on disk (its journal release flushed, its pending records saved) and a restore it wrote at the
  * start is not saved with the chunks yet. {@code failWriteNow}: the check's write of a committed restore (a K6 construction removal that reads restored)
  * fails. {@code startGrace} (slice T4R hooks): Placement's start grace in ticks (40 when absent), so a gate can act inside it. Nothing here
- * runs without the file.
+ * runs without the file. {@code entityHide} (slice LR2-FIX): for that many ticks after the start, chunks' entity sections stay hidden and their
+ * stored entities unloaded ({@code EntityVisibilityMixin}), as a chunk loaded at world start before its entities load; {@code entityHideAfterW}
+ * ends that window that many ticks after the first clearing W restore of a single removal wrote ({@link #wrote}).
  */
 public final class DevStart {
 	private DevStart() {
@@ -30,6 +32,11 @@ public final class DevStart {
 	static final String KILLED = "dev-killed.json";
 	private static volatile boolean failWriteNow;
 	private static volatile int startGrace;
+	/** (slice LR2-FIX) The entity-hide window: its length in ticks (0: off), the tick it began (-1: not yet), its end after a W write (-1: none). */
+	private static volatile int entityHide;
+	private static volatile int entityHideAfterW = -1;
+	private static volatile int hideFrom = -1;
+	private static volatile int hideUntilW = Integer.MAX_VALUE;
 	/** (last round, P2) The kill point this start's dev-start.json armed, and its world: only that point writes the marker. */
 	private static volatile @org.jspecify.annotations.Nullable String startKill;
 	private static volatile @org.jspecify.annotations.Nullable Path startWorld;
@@ -60,6 +67,7 @@ public final class DevStart {
 		}
 		failWriteNow = false;
 		startGrace = 0;
+		disarmHide();
 		startKill = null;
 		startWorld = worldDir;
 		Path f = worldDir.resolve("architect").resolve(FILE);
@@ -79,6 +87,8 @@ public final class DevStart {
 			}
 			failWriteNow = o.has("failWriteNow") && o.get("failWriteNow").getAsBoolean();
 			startGrace = o.has("startGrace") ? o.get("startGrace").getAsInt() : 0;
+			entityHide = o.has("entityHide") ? o.get("entityHide").getAsInt() : 0;
+			entityHideAfterW = o.has("entityHideAfterW") ? o.get("entityHideAfterW").getAsInt() : -1;
 			Architect.LOGGER.warn("TEST {}: armed {} for this start", FILE, o);
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("TEST {}: could not be read ({})", FILE, e.toString());
@@ -116,6 +126,7 @@ public final class DevStart {
 	static void stopped() {
 		failWriteNow = false;
 		startGrace = 0;
+		disarmHide();
 		startKill = null;
 		startWorld = null;
 		WorldJournal.disarm();
@@ -124,6 +135,44 @@ public final class DevStart {
 	/** (TEST, slice T4R hooks) Placement's start grace for this start: 0 (the default) or the ticks dev-start.json named. */
 	static int startGrace() {
 		return startGrace;
+	}
+
+	private static void disarmHide() {
+		entityHide = 0;
+		entityHideAfterW = -1;
+		hideFrom = -1;
+		hideUntilW = Integer.MAX_VALUE;
+	}
+
+	/**
+	 * (TEST, slice LR2-FIX) Whether chunks' entity sections are kept hidden now: inside this start's {@code entityHide} window (counted from the
+	 * first tick it is asked with a server running), and not past {@code entityHideAfterW} ticks after the first clearing W write.
+	 */
+	public static boolean entitiesHidden() {
+		if (entityHide <= 0) {
+			return false;
+		}
+		net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
+		if (srv == null) {
+			return true;
+		}
+		int now = srv.getTickCount();
+		if (hideFrom < 0) {
+			hideFrom = now;
+		}
+		return now < hideFrom + entityHide && now < hideUntilW;
+	}
+
+	/** (TEST, slice LR2-FIX) A single removal's clearing W restore wrote: an armed {@code entityHideAfterW} ends the window that many ticks later. */
+	static void wrote() {
+		if (entityHide <= 0 || entityHideAfterW < 0 || hideUntilW != Integer.MAX_VALUE) {
+			return;
+		}
+		net.minecraft.server.MinecraftServer srv = dev.larattalabs.architect.placed.Placed.server();
+		if (srv != null) {
+			hideUntilW = srv.getTickCount() + entityHideAfterW;
+			Architect.LOGGER.warn("TEST {}: the first W restore wrote; entities shown from tick {}", FILE, hideUntilW);
+		}
 	}
 
 	/** Whether the start's write of a committed restore is to fail (TEST). */

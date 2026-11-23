@@ -763,29 +763,52 @@ export async function registerTCC(steps, h) {
       }
     }
     // ---------------------------------------------------------------- LR-2 (P1 2): K6 on a completed paid site, brought back: no refund
-    for (const v of ['', '+save']) {
-      const tag = `LR-2${v ? 's' : ''}`;
+    // (slice LR2-FIX) LR-2s restarts with dev-start.json entityHide: the chunks' entities stay unloaded and hidden for 100 ticks after the
+    // start, so the removal's W restore rolled forward at world start meets them as a chunk loaded before its entities does (on 02c05b24 the
+    // door it pops is never cleared: one item minted, every run). LR-2p: a player's own item (3 diamonds, no pickup, no despawn) lies in the
+    // restored area at the crash; the window ends right after the W's write (entityHideAfterW 0), so a drop snapshot taken blind would let
+    // the later clear take them. After the restart they must still lie there.
+    for (const [v, x] of [['', ''], ['+save', 's'], ['+save', 'p']]) {
+      const tag = `LR-2${x}`;
       if (!want(tag)) continue;
       const b = await builtPaid(tag);
       if (!b) continue;
+      let own = null;
+      if (x === 'p') {
+        const bx = await boxOf(b.site);
+        own = [Math.floor((bx[0] + bx[3]) / 2) + 0.5, bx[1] + 1, Math.floor((bx[2] + bx[5]) / 2) + 0.5];
+        await cmd(`/summon minecraft:item ${own.join(' ')} {Item:{id:"minecraft:diamond",count:3},PickupDelay:32767,Age:-32768}`);
+        await wait(1500);
+      }
       await cmd('/save-all flush').catch(() => null);
       await wait(2000);
       const before = await parts([b.site], b.cp, b.items);
+      const ownBefore = own ? ((await call('dev.items.near', { pos: own.map(Math.floor), radius: 6 }, 30_000)).items ?? {})['minecraft:diamond'] ?? 0 : 0;
+      if (own) check(ownBefore === 3, `${tag}: the player's 3 diamonds lie in the site's box before the removal (${ownBefore})`);
       await call('dev.journal.killAt', { point: 'K6' + v }, 10_000);
       const m = await call('dev.site.deconstruct', { site: b.site }, 60_000).catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
       const down = await haltWait();
       check(down, `${tag}: halted at K6${v} in the built site's removal (${json(m).slice(0, 120)})`);
       if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+      if (x) {
+        const fs = await import('node:fs');
+        const arch = path.join(W.dir, 'architect');
+        fs.mkdirSync(arch, { recursive: true });
+        fs.writeFileSync(path.join(arch, 'dev-start.json'), JSON.stringify(x === 'p' ? { entityHide: 100, entityHideAfterW: 0 } : { entityHide: 100 }));
+      }
       await L.openWorld(name);
       await L.tp(...W.at);
       await settleWait([b.site], b.cp, null, 30_000);
-      await wait(3000);
+      await wait(x ? 8000 : 3000); // past the 100-tick hide window and the later pass
       const after = await parts([b.site], b.cp, b.items);
       const owedNew = sum(after.owed) - sum(before.owed);
-      R[tag] = { before, after, owedNew };
-      log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}; parts: stock ${json(after.stock)}, owed ${json(after.owed)}, ground ${json(after.ground)}, inventory ${json(after.inventory)}; entries ${json((after.owedEntries ?? []).map((e) => [e.key, e.reason, e.items?.['minecraft:oak_door'] ?? 0]))}; before ${json(before.placed)} stock ${json(before.stock)}`);
-      check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock)`, R[tag]);
+      const ownAfter = own ? ((await call('dev.items.near', { pos: own.map(Math.floor), radius: 8 }, 30_000)).items ?? {})['minecraft:diamond'] ?? 0 : 0;
+      R[tag] = { before, after, owedNew, ownBefore, ownAfter };
+      log(`  ${tag}: after the restart: ${json(after.states)}, standing ${json(after.placed)}, owed new ${owedNew}; parts: stock ${json(after.stock)}, owed ${json(after.owed)}, ground ${json(after.ground)}, inventory ${json(after.inventory)}; entries ${json((after.owedEntries ?? []).map((e) => [e.key, e.reason, e.items?.['minecraft:oak_door'] ?? 0]))}; before ${json(before.placed)} stock ${json(before.stock)}${own ? `; the player's diamonds ${ownBefore} -> ${ownAfter}` : ''}`);
+      check(G.same(after.total, before.total), `${tag}: paid exactly once: ${json(after.total)} = ${json(before.total)} (blocks standing + owed + stock + ground)`, R[tag]);
       check(sum(after.placed) === 0 || owedNew === 0, `${tag}: no refund owed while the building stands (standing ${sum(after.placed)}, owed new ${owedNew})`, R[tag]);
+      if (own) check(ownAfter === 3, `${tag}: the player's own 3 diamonds in the restored area are still there after the restart (${ownAfter})`, R[tag]);
+      if (own) await cmd('/kill @e[type=minecraft:item,distance=..40]').catch(() => null);
     }
     // ---------------------------------------------------------------- LR-3 (P1 3): a paid road killed after its restore, before its settle's intent, its queue write failing
     for (const v of ['', '+save']) {

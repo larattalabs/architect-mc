@@ -571,6 +571,7 @@ public final class CrateSettle {
 			int cleared = drops != null ? drops.clearNewCounted(level) : 0; // what its writes popped, as afterRestore clears it (v0.89.0 behaviour)
 			if (clear) {
 				Architect.LOGGER.info("W restore of {} ({}): {} popped item(s) cleared", site, group, cleared);
+				DevStart.wrote(); // (TEST, slice LR2-FIX) dev-start.json entityHideAfterW: the entity-hide window ends after this write
 			}
 		}
 		if (fail[0] != null) {
