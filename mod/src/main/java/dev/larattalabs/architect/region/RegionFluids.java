@@ -632,6 +632,15 @@ public final class RegionFluids {
 		 * {@code prov}); false for one loaded without it (built before T5F), adopted by {@link FluidTxns#adoptFirst} before any write or drain.
 		 */
 		boolean prov = true;
+		/** (T5Fc, §4.3) The removal drain's receipt index: [effect key, cx, cz] per drain W of its txn. Saved; the scoop and the deadline read it. */
+		@Nullable JsonArray drainReceipts;
+		/** (T5Fc, S4/Q2) Σh of the removal drain's receipts: taken lava cells, grate cells, all cells. Saved. */
+		int @Nullable [] taken;
+		/** (T5Fc, §4.6) The region.scoop txn that refunded this record, else null; and what its ledger credit returned. Saved. */
+		@Nullable String scooped;
+		@Nullable JsonObject scoopCredited;
+		/** (T5Fc) What this session's scoop L credited (the ledger's answer), for its R. */
+		transient @Nullable Map<String, Integer> scoopCreditedNow;
 		/** (slice T5F) Body cell -> its body (the first that lists it), built once. */
 		it.unimi.dsi.fastutil.longs.@Nullable Long2ObjectOpenHashMap<Body> cellBody;
 
@@ -2722,13 +2731,17 @@ public final class RegionFluids {
 	 * isn't the body's (a lake, a player's source) settles back into its own level by vanilla's ticks (a raised cell goes to the foreign-only
 	 * level; an own-only cell stays dry).
 	 */
+	/** (T5Fc, I6) While set (a per-chunk drain W's apply, server thread): the drains' ticks only where it accepts (its own chunk). */
+	static java.util.function.@Nullable LongPredicate tickOnly;
+
 	static void tickAround(ServerLevel level, it.unimi.dsi.fastutil.longs.LongArrayList written) {
 		LongOpenHashSet done = new LongOpenHashSet();
+		var only = tickOnly;
 		for (int i = 0; i < written.size(); i++) {
 			long p = written.getLong(i);
 			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
 				long q = BlockPos.offset(p, d);
-				if (!done.add(q)) {
+				if (!done.add(q) || only != null && !only.test(q)) {
 					continue;
 				}
 				BlockPos bp = BlockPos.of(q);
@@ -3537,9 +3550,13 @@ public final class RegionFluids {
 			WorldJournal.kill("FL3"); // drained (its txn retired: the writes durable), before the solids
 			return false;
 		}
+		if (!scoopStep(l, st)) {
+			return false; // (T5Fc, §4.6) the scoop's own txn, after the drain's EFFECTS_DONE: drain, scoop, settle, solids
+		}
 		hold(level, st, true);
 		int bound = st.bodies.stream().mapToInt(b -> b.settleTicks).max().orElse(0);
 		long now = level.getGameTime();
+		settleDeadline(FluidWorld.of(level), st, bound, now);
 		boolean ticking = false;
 		if (now >= st.until) {
 			for (Body b : st.bodies) {
@@ -3608,6 +3625,25 @@ public final class RegionFluids {
 		return st.drainTxn == null || FluidTxns.openDrain(l) != null;
 	}
 
+	/**
+	 * (T5Fc, §4.6, I5, N4) A survival record's scoop: its own {@code region.scoop} txn, begun once the drain txn is EFFECTS_DONE (its
+	 * receipts durable), its amount summed from them. True when done, or nothing to scoop (creative; a drain from before T5Fc scooped in its txn).
+	 */
+	static boolean scoopStep(RegionsImpl.Live l, Regional st) {
+		if (!l.rec().survival() || st.scooped != null || st.drainReceipts == null) {
+			return true;
+		}
+		FluidTxns.Step g = FluidTxns.scoop(l, st);
+		if (g.kind() == FluidTxns.Step.Kind.DONE) {
+			return true;
+		}
+		if (g.detail() != null && !g.detail().equals(st.drainHeldAt)) {
+			st.drainHeldAt = g.detail();
+			Architect.LOGGER.warn("Region {}: the removal's scoop waits: {}", l.rec().id, g.detail());
+		}
+		return false;
+	}
+
 	/** (8cTb) Runs (or joins) the drain txn; true once it retired. While held, the view's {@code heldAt} and a revision's waiting say where. */
 	static boolean drainStep(MinecraftServer s, ServerLevel level, RegionsImpl.Live l, Regional st, String group, boolean flowing) {
 		FluidTxns.Step g = FluidTxns.removalDrain(s, level, l, st, group, flowing);
@@ -3647,6 +3683,15 @@ public final class RegionFluids {
 
 	/** {@link #scoopPlan} through a {@link FluidWorld} (slice T5F fix round, P2-7: the units' world). */
 	static int[] scoopPlan(FluidWorld w, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
+		int[] s = scoopSplit(w, l, st, group, in);
+		return new int[] {s[0] + s[2], s[1] + s[3]};
+	}
+
+	/**
+	 * (T5Fc, §4.3's counts) {@link #scoopPlan} split: {standing lava, standing bars, never-delivered lava, never-delivered bars} over the
+	 * cells {@code in} accepts (a drain W's: one body's cells in its chunk).
+	 */
+	static int[] scoopSplit(FluidWorld w, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
 		java.util.Set<String> paid = new java.util.HashSet<>();
 		int[] cap = null;
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
@@ -3709,7 +3754,7 @@ public final class RegionFluids {
 				barsOk.add((long) barsNd.get(i));
 			}
 		}
-		int lava = 0, grates = 0;
+		int lava = 0, grates = 0, uLava = 0, uBars = 0;
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			boolean ours = !bs.before.isEmpty();
@@ -3726,7 +3771,7 @@ public final class RegionFluids {
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
 						lava++;
 					} else if (charged && !delivered(w, p, rec, legacy, bs, Blocks.LAVA) && (lavaOk == null || lavaOk.contains(p))) {
-						lava++; // (slice T5F, §3.3) paid and never delivered (no mark): refunded; WROTE and taken: 0 (A)
+						uLava++; // (slice T5F, §3.3) paid and never delivered (no mark): refunded; WROTE and taken: 0 (A)
 					}
 				}
 			}
@@ -3737,11 +3782,11 @@ public final class RegionFluids {
 				if (w.get(p).is(Blocks.IRON_BARS)) {
 					grates++;
 				} else if (charged && !delivered(w, p, rec, legacy, bs, Blocks.IRON_BARS) && (barsOk == null || barsOk.contains(p))) {
-					grates++;
+					uBars++;
 				}
 			}
 		}
-		return new int[] {lava, grates};
+		return new int[] {lava, grates, uLava, uBars};
 	}
 
 	/** (fix rounds) Whether R delivered a paid cell (standing or taken since): its WROTE mark, or, before adoption, 8cT's journal rule. */
@@ -3841,6 +3886,148 @@ public final class RegionFluids {
 		return (long) (BlockPos.getX(p) >> 4) << 32 | (BlockPos.getZ(p) >> 4) & 0xffffffffL;
 	}
 
+	/**
+	 * (T5Fc, §4.3, I6) The chunks body {@code b}'s removal drain writes or ticks in: its cells, ice, grates, spill, watch and predicted cells,
+	 * its escaped cells, an irrigation lot's breach box, and each of those cells' face neighbours (a drain's tick there is that chunk's W).
+	 */
+	static long[] drainChunksOf(Regional st, Body b) {
+		LongOpenHashSet c = new LongOpenHashSet();
+		java.util.function.LongConsumer add = p -> {
+			c.add(chunkKey(p));
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				c.add(chunkKey(BlockPos.offset(p, d)));
+			}
+		};
+		for (long[] a : new long[][] {b.cells, b.ice, b.grate, b.spill, b.watch}) {
+			for (long p : a) {
+				add.accept(p);
+			}
+		}
+		for (long p : b.predicted.keySet()) {
+			add.accept(p);
+		}
+		for (long p : st.states.get(b.id).escapedCells) {
+			add.accept(p);
+		}
+		int[] lot = st.irrigation.get(b.id);
+		if (lot != null) {
+			for (int x = (lot[0] - BREACH_REACH - 1) >> 4; x <= (lot[2] + BREACH_REACH + 1) >> 4; x++) {
+				for (int z = (lot[1] - BREACH_REACH - 1) >> 4; z <= (lot[3] + BREACH_REACH + 1) >> 4; z++) {
+					c.add((long) x << 32 | z & 0xffffffffL);
+				}
+			}
+		}
+		long[] out = c.toLongArray();
+		java.util.Arrays.sort(out);
+		return out;
+	}
+
+	/** (T5Fc) A drain target over a fluid world; {@code refused} counts the writes the world refused (a hold). */
+	static DrainTarget drainTarget(FluidWorld w, int[] refused) {
+		return new DrainTarget() {
+			@Override
+			public BlockState get(BlockPos p) {
+				return w.get(p.asLong());
+			}
+
+			@Override
+			public void set(BlockPos p, BlockState s, int flags) {
+				if (!w.set(p.asLong(), s)) {
+					refused[0]++;
+				}
+			}
+
+			@Override
+			public boolean playerPlaced(BlockPos p) {
+				return w.playerPlaced(p.asLong());
+			}
+		};
+	}
+
+	/**
+	 * (T5Fc, §4.3) One removal drain W: body {@code b} in chunk {@code (cx, cz)}, in one apply: its cells classified by §3.3 and counted
+	 * ({@code l}: our standing lava and bars, {@code u}: paid cells never delivered, {@code h}: WROTE cells found taken, as lava, bars and
+	 * cells), its writes (sources, ice and bars where R's own stand, the spill, watch and stray cells by the ownership rules; a flowing
+	 * region's sources only), R's marks of the body's cells in the chunk deleted, all in the same tick and chunk; the caller adds the receipt.
+	 * A cell a hold refuses holds the W (no receipt). Returns the receipt's fields.
+	 */
+	static Map<String, Object> drainBodyChunk(FluidWorld w, @Nullable ServerLevel level, RegionsImpl.Live l, Regional st, Body b, int cx, int cz, String group,
+		boolean flowing, java.util.function.LongPredicate held) {
+		BodyState bs = st.states.get(b.id);
+		String rec = FluidTxns.recKey(l);
+		java.util.function.LongPredicate inB = p -> inChunk(p, cx, cz) && (b.ownSet().contains(p) || b.gratePos(p));
+		int[] split = l.rec().survival() ? scoopSplit(w, l, st, group, inB) : new int[4];
+		var marks = w.marks(cx, cz, rec);
+		int hLava = 0, hBars = 0, hCells = 0;
+		for (long p : b.cells) {
+			if (!inChunk(p, cx, cz)) {
+				continue;
+			}
+			if (marks.get(w.index(p)) == FluidProv.Mark.WROTE && !ownDelivered(b, p, w.get(p))) {
+				hCells++;
+				hLava += b.lava ? 1 : 0;
+				hBars += b.gratePos(p) ? 1 : 0;
+			}
+		}
+		int n = 0;
+		int[] refused = {0};
+		if (!bs.before.isEmpty()) {
+			java.util.function.LongPredicate h2 = p -> held.test(p) || !inChunk(p, cx, cz);
+			var was = tickOnly;
+			tickOnly = q -> inChunk(q, cx, cz);
+			try {
+				if (flowing && level != null) {
+					n = drainSources(level, b, bs, h2);
+				} else {
+					n = drain(drainTarget(w, refused), level, st, b, bs, true, new LongOpenHashSet(), h2, true);
+				}
+			} finally {
+				tickOnly = was;
+			}
+		}
+		if (refused[0] > 0) {
+			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + refused[0] + " cell(s) of body " + b.id + " refused the drain (a hold): the drain waits");
+		}
+		boolean changed = false;
+		for (long p : b.cells) {
+			if (inChunk(p, cx, cz) && marks.remove(w.index(p)) != null) {
+				changed = true; // (§4.3) R's marks go with the drain, in the same tick and chunk
+			}
+		}
+		if (changed) {
+			w.putMarks(cx, cz, rec, marks);
+		}
+		Map<String, Object> f = new java.util.LinkedHashMap<>();
+		f.put("b", b.id);
+		f.put("l", split[0] + "," + split[1]);
+		f.put("u", split[2] + "," + split[3]);
+		f.put("h", hLava + "," + hBars + "," + hCells);
+		f.put("n", n);
+		return f;
+	}
+
+	/**
+	 * (T5Fc, §4.4, F) The removal's settle deadline: the latest {@code t} over its drain's receipts plus the bound, never a stored value. A
+	 * record drained before T5Fc (no receipt index) waits one bound from the first read this session. Cached in {@code until} (memory).
+	 */
+	static long settleDeadline(@Nullable FluidWorld w, Regional st, int bound, long now) {
+		if (st.until >= 0) {
+			return st.until;
+		}
+		long t = -1;
+		if (st.drainReceipts != null && w != null) {
+			for (JsonElement x : st.drainReceipts) {
+				JsonArray a = x.getAsJsonArray();
+				Map<String, String> f = FluidTxns.receiptOf(w, a.get(1).getAsInt(), a.get(2).getAsInt(), a.get(0).getAsString());
+				if (f != null && f.get("t") != null) {
+					t = Math.max(t, Long.parseLong(f.get("t")));
+				}
+			}
+		}
+		st.until = (t >= 0 ? t : now) + bound;
+		return st.until;
+	}
+
 	/** (8cTb) Every chunk a removal's drain may write: the bodies' cells, ice, grates, spill, watch and predicted cells, escaped cells. */
 	static long[] drainChunks(Regional st) {
 		LongOpenHashSet c = new LongOpenHashSet();
@@ -3932,9 +4119,13 @@ public final class RegionFluids {
 			WorldJournal.kill("FL8"); // (8c CR) the sources drained and the flow dying, before the stray pass
 			return false;
 		}
+		if ("drained".equals(st.removal) && !scoopStep(l, st)) {
+			return false; // (T5Fc, §4.6) drain, scoop, settle, stray, solids
+		}
 		if ("drained".equals(st.removal)) {
 			hold(level, st, true);
 			long now = level.getGameTime();
+			settleDeadline(FluidWorld.of(level), st, bound, now);
 			boolean ticking = false;
 			if (now >= st.until) {
 				if (now - st.lastCensus < CENSUS_EVERY) {
@@ -4108,7 +4299,11 @@ public final class RegionFluids {
 				}
 			}
 		}
+		var only = tickOnly;
 		for (long q : tick) {
+			if (only != null && !only.test(q)) {
+				continue; // (T5Fc, I6) that chunk's own drain W ticks it
+			}
 			BlockPos bp = BlockPos.of(q);
 			FluidState f = level.getBlockState(bp).getFluidState();
 			if (!f.isEmpty()) {
@@ -4748,7 +4943,22 @@ public final class RegionFluids {
 		if (st.drainTxn != null) {
 			o.addProperty("drainTxn", st.drainTxn); // (8cTb) the drain txn that wrote drained
 		}
-		o.addProperty("until", st.until);
+		if (st.drainReceipts != null) {
+			o.add("drainReceipts", st.drainReceipts.deepCopy()); // (T5Fc) the scoop and the deadline read it (never a stored until)
+		}
+		if (st.taken != null) {
+			JsonArray tk = new JsonArray();
+			for (int v : st.taken) {
+				tk.add(v);
+			}
+			o.add("taken", tk);
+		}
+		if (st.scooped != null) {
+			o.addProperty("scooped", st.scooped);
+		}
+		if (st.scoopCredited != null) {
+			o.add("scoopCredited", st.scoopCredited.deepCopy());
+		}
 		if (st.removalNote != null) {
 			o.addProperty("removalNote", st.removalNote);
 		}
@@ -4962,7 +5172,13 @@ public final class RegionFluids {
 			st.phase = RegionsImpl.str(o, "phase", "gate");
 			st.forcedAt = o.has("forcedAt") ? o.get("forcedAt").getAsLong() : -1;
 			st.removal = o.get("removal") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsString() : null;
-			st.until = o.has("until") ? o.get("until").getAsLong() : -1;
+			st.until = -1; // (T5Fc, F, §4.4) never read from disk: rebuilt from the drain's receipts (settleDeadline)
+			st.drainReceipts = o.get("drainReceipts") instanceof JsonArray dr ? dr.deepCopy() : null;
+			if (o.get("taken") instanceof JsonArray tk && tk.size() == 3) {
+				st.taken = new int[] {tk.get(0).getAsInt(), tk.get(1).getAsInt(), tk.get(2).getAsInt()};
+			}
+			st.scooped = strOrNull(o, "scooped");
+			st.scoopCredited = o.get("scoopCredited") instanceof JsonObject sc ? sc.deepCopy() : null;
 			st.removalNote = o.get("removalNote") instanceof JsonElement rn && rn.isJsonPrimitive() ? rn.getAsString() : null;
 			st.barrierDone = o.has("barrierDone") && o.get("barrierDone").getAsBoolean();
 			st.drainTxn = strOrNull(o, "drainTxn"); // (8cTb)
