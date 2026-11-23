@@ -31,35 +31,11 @@ Contract: the coordinator's T5F draft (side-session notes, architect-T5F-contrac
 <_work>/architect-mc-T5F-run --run-dirs <_work>/architect-mc-T5F-run,<_work>/architect-mc-T5F-run-s2 --out <_work>/architect-mc-T5F-runs/<name>
 --lock <lock>`. Never the 135-step harness or 8c-ingame/-crash/-survival (the coordinator schedules them).
 
-## T5Fc fix round (the ONLY round; GPT review of 081d5c53..25748ae8 NOT SAFE: 6 P1, 8 P2; findings in
-## _work/coord-tools/reviews/T5Fc-25748ae8.findings.md). Not started at 25748ae8+ (the builder's context ran out); plan for a fresh builder:
+## T5Fc fix round: BUILT (aae02fde seams + red tests, 580f989c fixes; as-built in CONTRACT "Slice T5Fc fix round as built")
 
-Redesign, not patches (the coordinator's brief): entitlements live in the chunk with the removal that creates them, survive retries, and
-the scoop consumes them once and keeps what the ledger actually credited.
-- **P1-1, P1-2, P1-4 (one structure).** Add a third provenance mark, `DRAINED(R)`, set in the same accepted write that removes an R-owned
-  delivered cell (WROTE, `ownDelivered`, holder and player-placement rules applied by the same predicate the drain uses), by every
-  Architect removal of R's fluid: the removal drain, the escape/unsettled/upstream/held and recheck drains, `abortFlowing`, the stray
-  pass. A refused write leaves WROTE (no mark change), so a partly refused W keeps every accepted cell's entitlement durably with its
-  block, and a retry continues. `l` is the count of DRAINED marks of paid bodies (never a pre-write count). The scoop sums DRAINED marks
-  (and the frozen `u`, below) over the record's chunks; a later "taken" is only WROTE-not-delivered.
-- **P1-3.** Freeze the legacy never-delivered allocation once, in the removal drain's intent (the entitled cells per chunk, computed before
-  any mark changes); each W's `u` is that list's cells in its chunk. Never recompute from a world the drain is changing.
-- **Consumption.** After the scoop txn's EFFECTS_DONE, a cleanup W txn per chunk deletes R's DRAINED/WROTE marks (receipted), so a
-  scoop never counts them twice and no mark outlives the record.
-- **P2-10.** Make the credited amount atomic with the ledger key: StockLedger keeps per-key credited items (persisted with the ledger;
-  an older ledger lacks them: the scoop of an old key reports nothing extra). `region.scooped` reads them; drop the "planned" fallback.
-- **P2-11.** `taken` (Σh) computed by the scoop's plan from the final receipts (after the drain's EFFECTS_DONE), not by the drained R.
-- **P1-5.** One chunk-key convention: `RegionFluids.chunkKey` (cx high, cz low). Convert `watchChunks`/`strayChunks` (ChunkPos.pack: x low)
-  at the boundary or switch them; units with asymmetric and negative coordinates (e.g. (100,7), (-3,5)).
-- **P1-6.** The restoring-restart fallback (`drainSourcesAll` when `!redrained`) only for legacy records (`drainReceipts == null`).
-- **P2-7.** `abortFlowing` (and every other writer reached from a W) honours `chunkFilter`; the escape's closure goes into the intent.
-- **P2-8.** Ticks from body geometry, not from local success: each W schedules every tick position that lies in its chunk (the drained or
-  forced cells' face neighbours), as `forceBodyIn` does.
-- **P2-9.** `scoopStep` and the stray loop wait for the txn's EFFECTS_DONE (FluidTxns.after on the open entry, or REPLAYED), never an R
-  marker (`scooped`, empty `strayChunks`); after a restart, find the open txn by its key first.
-- **P2-12.** `Revisions.mergeAwaited` applies the same fluids merge (or the stage snapshot stores the fluids additions).
-- **P2-13.** Freeze rows for revision removals too (the revision's rows into the region record's ext, kept with the UNDONE revision).
-- **P2-14.** FL5/FL9 aliases and `w()`'s step after the receipt is installed; a unit asserts the saved chunk holds receipt and counts.
-- **Tests.** Each fix red first through the real adapters on MemFluidWorld (extend it with holders, player-placed cells and tick
-  destinations), plus a revert check per finding; at least one test drives drain then scoop through a real TxnCore (TxnCoreTest's env).
-- Trailing whitespace: fixed (9 lines).
+- Units: FluidsT5FcFixTest 17/17 red on aae02fde, green on 580f989c; per-finding revert check 16/16 red (mutation script kept outside the
+  repo); mod suite 2005 tests, 0 failed, 1 skipped.
+- In-game (ports 9050-9053, lock gate-run-T5F.lock, out _work/architect-mc-T5F-runs/): red on ffea3bd5 (detached probe worktree
+  _work/architect-mc-T5F-red) as red3; green on the head as green3 (the 8 rows plus t5-drain-tx, t5-scoop-tx). Results: CONTRACT run record.
+- Not done here: the coverage rows (t5-escape-closure, t5-held-future, t5-lot-multi, t5-lot-barrier-crash, t5-rc-strict); flowingWater
+  stays unadvertised; the GPT fix-check (the coordinator's).

@@ -35813,7 +35813,7 @@ regression guards.
 - **§4.6 region.scoop:** its own txn after the drain's EFFECTS_DONE (`scoopStep` in `gateOne` and `gateFlowing`, so a revision undo's
   `drainRevisions` shares it), Σ(l + u) from the receipt index the drained R saved (`drainReceipts`); a missing receipt holds. The L is keyed
   as before (a pre-T5Fc drain's scoop under the same key is never credited again); its R saves what the ledger credited (`scoopCredited`;
-  a crash between the ledger save and the R records the planned amounts, marked `planned`: a known risk, over-reporting lava buckets only
+  a crash between the ledger save and the R records the planned amounts, marked `planned` (rejected under S3; closed in the fix round, P2-10): a known risk, over-reporting lava buckets only
   if the pile held fewer empty buckets than the plan).
 - **§4.4 / F:** the deadline is max(receipt t) + bound (`settleDeadline`); `until` is neither saved nor read. A record drained before T5Fc
   (no index) waits one bound from the first read. Deviation: `drainReceipts` stays until done (the deadline needs it), not deleted by
@@ -35852,3 +35852,69 @@ regression guards.
 - **Old in-flight state:** 8cT drains replay with their own adapters; legacy records are adopted first; nothing converted in place.
 - **One rule:** §3.3 for every count, I1/I3 co-location for every receipt. Known risks as listed above.
 - **Older saved worlds:** fluids.json with `until` (ignored), without `drainReceipts` (one fresh bound), 8cT drain entries.
+
+### Slice T5Fc fix round as built (GPT review of 081d5c53..25748ae8 NOT SAFE: 6 P1, 8 P2; the one round; recorded 2026-11-23)
+
+One structure for P1-1..P1-4: a paid cell's entitlement lives in its chunk, in the same accepted write that removes it, and its count
+lives in the receipt of the apply that deletes it. Units: `FluidsT5FcFixTest` (17) through the real adapters on `MemFluidWorld` and a real
+`TxnCore` (`FluidTxns.testCore`, an in-memory txn.json, a refusable barrier that flushes the chunks, a crash at a named point, a reload).
+Red: 17 of 17 on the seam commit aae02fde; revert check: each fix reverted alone (a mutation per finding), its test red again (16 of 16).
+- **P1-1, P1-2, P1-4 (one rule).** A third mark, `DRAINED(R)` (packed `~cellIndex`: a save before T5Fc has no negative value). Every
+  per-chunk drain W (removal, escape, unsettled, upstream, held, recheck, lot, stray) runs in its chunk's `RegionFluids.DrainCtx`: before the
+  writes it reads R's cells R delivered (WROTE, `ownDelivered`, no `Placed` record), the only own cells any drain takes (I8: a dispensed or
+  player's source stays); after the writes each of them the apply changed becomes DRAINED, before a refused write throws. Every writer
+  (`drain`, `drainSources` now through `FluidWorld`, `abortFlowing`, `sweepBreach`, `strayChunk`) counts a refusal; the W holds after the
+  marks. Tests `p1_1_*` (a player's source, 2 refunded not 3; a flowing drain's refused source holds), `p1_2_*` (partial W, autosave, crash:
+  3 refunded, not 2), `p1_4_*` (a held drain's three sources refunded at the removal, not 0).
+- **The removal drain W** counts after its writes: `l` = DRAINED cells of a paid body (its own takes and any earlier drain's), `u` = the
+  intent's frozen cells still unmarked, `h` = WROTE cells taken (or a player's); then deletes R's marks of the body in the chunk, all with
+  its receipt in one apply (no cleanup txn: no mark outlives the drain). A second removal drain of a counted record freezes nothing and
+  appends to the receipt index.
+- **P1-3.** `RegionFluids.neverDelivered` freezes the never-delivered entitlement in the drain's intent (`u`: packed cells per W) from the
+  marks before any W runs; a main-era cap hands it out net of every delivery (standing, taken, drained). `p1_3_*`: charged 1 = held 1, 0 refunded.
+- **P1-5.** `strayChunks` stays `ChunkPos.pack` (as saved); `stray()` converts each to its W's `[x, z]`. `p1_5_*`: (100,7) and (-3,5).
+- **P1-6.** `restartRedrains`: the raw restart drain only for a record without `drainReceipts`. `p1_6_*`.
+- **P2-7.** An escape's intent holds its closure, each body's mode (abort or drain, strays) and an abort's stray take (judged once at the
+  plan, each W carrying its chunk's cells); a hold's intent holds its pending upstream; the W writes only, the R records. `abortFlowing`
+  through `FluidWorld` honours the chunk filter. `p2_7_*` x2.
+- **P2-8.** `tickBodyIn`: every W ticks the fluid cells in its chunk at the body's cells, spill, watch, predicted and escaped cells and their
+  face neighbours, from geometry. `p2_8_*`.
+- **P2-9.** `scoopStep` is done only when `scooped` is saved and no scoop txn is open under its key (a restart finds the open one); the
+  stray pass waits for no open stray txn before `done`. `p2_9_*`.
+- **P2-10.** `StockLedger.noteCredited`/`creditedAmount` (`creditedItems`, saved with the ledger), booked by `Stockpiles.scoopInto` in the
+  key's own mutation; `region.scooped` reads it; no `planned` fallback (an older ledger reports nothing). `p2_10_*`: 2 credited, not 10.
+- **P2-11.** `taken` = Σh of the final receipts, planned by the scoop (its R saves it) or, creative, by `takenStep` after the drain's
+  EFFECTS_DONE. `p2_11_*`: a replayed chunk's harvest counted (1, not 0).
+- **P2-12.** `Revisions.mergeAwaitedWith` applies `Groups.withFluids` to a stage that finished by itself. `p2_12_*`.
+- **P2-13.** A revision's undo freezes its rows into the region record's ext `architect_mc:fluidsUndone` (`rid -> rows`), which `report()`
+  never rewrites. `p2_13_*`. Steward reads an undone revision's rows there.
+- **P2-14.** FL5, FL9, FL6d and `w()`'s step fire after the receipt (`FluidTxns.AFTER_RECEIPT`). `p2_14_*`.
+- **Integration:** `drainThenScoopThroughTheCore_aCrashAtEachStep_conservation`: drain, then scoop, through TxnCore, crashed at `drain`,
+  `barrier:effects`, `drained`, `effects`, `scoop`, `scooped` and none: charged 3 = refunded 2 + held 1, exactly once, no mark left.
+- **Units:** mod 2005 tests, 0 failed, 1 skipped. In-game: see the run record below.
+
+#### Crash safety and scope (T5Fc fix round)
+
+- **Durable record per fact:** a paid cell's entitlement: its chunk's DRAINED mark, until the removal drain W counts it in the receipt of the
+  apply that deletes it; the never-delivered entitlement: the drain intent's frozen cells; a W applied and its counts: its receipt; what was
+  credited: the ledger's `creditedItems` under the scoop key; taken: Σh of the final receipts (the scoop's R, or `takenStep`); the scoop
+  done: its txn's EFFECTS_DONE (no open txn under its key), never `scooped` alone.
+- **Persisted before each change:** the drain's intent (frozen `u`) before any W; DRAINED in the apply of the accepted write; the receipt
+  with the mark deletion; the scoop's intent (amounts and taken from durable receipts) before the ledger; the ledger (key and amount
+  together) before the scoop's R.
+- **Second crash during recovery:** a partly refused W's DRAINED marks go to disk with their blocks or are lost with them, and the retry
+  counts what the marks say; a redone chunk recounts from its own marks; a crash after the ledger save: the R reads the ledger's amount; a
+  scoop R saved under a refused barrier: the open txn is found by its key and waited on; a restart in the stray pass of a T5Fc record
+  drains nothing raw; a second removal drain freezes nothing and appends to the index.
+- **Keys per operation:** unchanged (drain, scoop, stray, receipts per (txn, effect)); marks per record; the ledger amount per scoop key.
+- **Holds and admission:** a refused cell holds its W after the accepted cells' marks; marks and blocks read from the chunk as loaded.
+- **Refunds priced from what was removed:** Σ(l + u): l = Architect's accepted takes of R's delivered cells of paid bodies, u = frozen
+  never-delivered cells within a main-era cap; a taken or player's cell 0.
+- **Old in-flight state:** 8cT drain entries keep their adapters; escape and hold entries without `closure` keep their old W; no saved list,
+  mark or ledger is converted (DRAINED is a new negative value; a ledger without `creditedItems` reports no amount).
+- **One rule:** every Architect drain of R's delivered cell marks DRAINED in its accepted write; the removal drain counts and deletes marks
+  with its receipt; the scoop sums receipts. **Known risks (narrowed):** a cell another entry holds on top (kept for the undo's hand-down) is
+  neither refunded nor counted taken; a frozen never-delivered cell delivered after the plan is under-refunded (the record's resource is
+  held, so no writer can); an escape's plan reads the flow to freeze an abort's take (flowing regions only; `flowingWater` stays off).
+- **Older saved worlds:** fluids.json without `drainReceipts` (8c's restart fallback kept), with a `taken` saved by an earlier R (read by
+  the result), stray chunks as `ChunkPos.pack`; ledgers without `creditedItems`; escape and hold entries without `closure`.
