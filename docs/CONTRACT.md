@@ -35761,3 +35761,29 @@ green as a regression; the two P2-7 behaviour tests added after are coverage, gr
 - **Units:** mod 1972 tests, 0 failed, 11 skipped (devserver compiles). No in-game run (paused by the coordinator). Owed as listed above.
 - **Not exercised by a unit:** `LegacyV1`'s apply (it needs a level; only its dispatch is tested), and the Infra-tile filter of
   `TileEntries` (the units supply the evidence).
+
+### Slice T5Fb fix round 2 as built (GPT fix-check of 50d2ddaa NOT SAFE: 2 P1, 3 P2; the last round before escalation; recorded 2026-11-22)
+
+`FluidsT5FFix2Test` (9) on `MemFluidWorld`, through the real adapters and the runtime's own predicates and factories. On the code before
+these fixes 7 of 9 were red; `p1a_aNeverDeliveredPaidCellIsStillRefunded` and `p1b_aStandingDeliveredSourceIsStillOurs` were green, as
+regression guards.
+- **P1-a** A legacy record (no `chargedBodies`, an acknowledged main-era charge) now counts as paid only the lava and grate bodies the
+  gate charged: not one its check refused (`uncontained`) or `held` (conservative: a body refused only at a later recheck is under-refunded,
+  never minted). Never-delivered cells are refunded from a budget per kind: the charge less every delivered cell (WROTE, standing or taken;
+  before adoption 8cT's journal rule), handed out in body and cell order, so a drain's per-chunk plans add up to the whole. Red:
+  `p1a_..._lava` (refunded 1 with 1 charged and 1 held), `p1a_theSameForBars`.
+- **P1-b** `ownDelivered`: a fluid cell is R's delivery only as a source; flow refilling a harvested cell is residual. The rollback scope
+  (`scopeOf`, which `provScopeOf` builds) and the tile's skip (`tileSkips`) read it, and the place W counts such a cell as taken. Red:
+  `p1b_aHarvestRefilledByFlow..` (harvest, flow fills, saved crash, rollback through the scope, tile retry, place W: no second source).
+- **P2-c** Each force receipt names its bodies (`b=`); the census's `settleBase` reads, once per session, the latest force `t` of the
+  body's write txn from its force chunks' receipts (durable with their chunks, an APPLIED probe's included), so a second restart still
+  counts from the replayed force. Red: `p2c_theLatestForceTimeIsReadBackFromItsReceipts` (reload: 900, not writtenAt 50).
+- **P2-d** `writeBodyV1` is 8cT's whole writer again: the decor pass and the grate joining pass after the cells. Red:
+  `p2d_theLegacyWriterWritesDecorAndJoinsTheGrate`.
+- **P2-e** A partly refused clear schedules the accepted cells' in-chunk neighbour ticks before it holds. Red:
+  `p2e_aPartlyRefusedClearSchedulesTheAcceptedCellsTicks`.
+- **The adoption journal filter** is one pure predicate (`TileEntries.evidence`: the record's group, ACTIVE, a tile of the record's own
+  fluids stage) read by the journal scan; tested directly (`adoptionEvidenceIsTheGroupsActiveFluidsTileEntriesOnly`, red: not built).
+- **Units:** mod 1981 tests, 0 failed, 11 skipped; devserver compiles. Still no in-game run (paused).
+- **Still not covered by a unit:** `LegacyV1`'s apply on a live level, `Placed.set`'s hook itself (its parts, `scopeOf` and
+  `clearsOnWrite`, are), and `MemFluidWorld` runs no physics (its ticks are recorded, not executed).

@@ -1047,7 +1047,10 @@ public final class FluidTxns {
 		if (st.forcedAt < 0 || !t.live()) {
 			st.forcedAt = w.gameTime(); // (in memory; a replay's forced pass moves it: the settle counts from the ticks it scheduled, §4.4)
 		}
-		return Map.of("n", n);
+		Map<String, Object> f = new java.util.LinkedHashMap<>();
+		f.put("n", n);
+		f.put("b", String.join(",", bodiesOf(e))); // (round 2, P2-c) whose ticks: the census reads the latest force time back from here
+		return f;
 	});
 
 	static final RRun WRITTEN_RUN = new RRun() {
@@ -1346,16 +1349,24 @@ public final class FluidTxns {
 			this.stage = stage;
 		}
 
-		/** Whether a journal entry's site is a region tile of the record's fluids stage (its infra record's {@code architect_mc:tile}). */
-		boolean fluidsTile(String siteId) {
+		/** A journal entry's site's region tile ({@code stage|set|key}, its infra record's {@code architect_mc:tile}), else null. */
+		static @Nullable String tileOf(String siteId) {
 			var in = dev.larattalabs.architect.site.Infras.get(siteId);
 			if (in == null) {
 				in = dev.larattalabs.architect.site.Infras.pending(siteId);
 			}
 			if (in == null || !(in.ext().get(dev.larattalabs.architect.site.RegionItems.EXT_TILE) instanceof JsonElement t) || !t.isJsonPrimitive()) {
-				return false;
+				return null;
 			}
-			return stage.equals(t.getAsString().split("\\|", -1)[0]);
+			return t.getAsString();
+		}
+
+		/**
+		 * (round 2) Whether an entry is adoption evidence: of the record's group ({@code wantGroup}), ACTIVE, and a tile of the record's own
+		 * fluids stage {@code stage} ({@code tile}: its {@code stage|set|key}). Pure.
+		 */
+		static boolean evidence(@Nullable String group, String wantGroup, boolean active, @Nullable String tile, String stage) {
+			return wantGroup.equals(group) && active && tile != null && stage.equals(tile.split("\\|", -1)[0]);
 		}
 
 		net.minecraft.world.level.block.@Nullable Block after(long pos) {
@@ -1367,8 +1378,8 @@ public final class FluidTxns {
 					var store = WorldJournal.store();
 					for (var en : WorldJournal.activeSlices(dim, key)) {
 						var meta = store.meta(en.id());
-						if (meta == null || !group.equals(meta.group()) || en.status() != dev.larattalabs.architect.journal.Journal.Status.ACTIVE || !fluidsTile(meta
-							.site())) {
+						if (meta == null || !evidence(meta.group(), group, en.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE, tileOf(meta
+							.site()), stage)) {
 							continue;
 						}
 						for (var c : en.cells()) {

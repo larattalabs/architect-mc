@@ -517,6 +517,8 @@ public final class RegionFluids {
 		 * the census counts the settle bound from it too ({@link RegionFluids#settleBase}). Not saved: the force receipts are its record.
 		 */
 		long forcedAt = -1;
+		/** (round 2, P2-c) This session read the body's force receipts into {@link #forcedAt} ({@link RegionFluids#settleBase}). */
+		boolean forceScanned;
 		/** (8cTc) The {@code fluid.write} txn that wrote this body (its R effect), else null. Saved. */
 		@Nullable String writeTxn;
 		/** (8cTc) The {@code fluid.drain} txn (escape, unsettled, upstream or lot) whose R effect recorded this body drained, else null. Saved. */
@@ -1947,8 +1949,8 @@ public final class RegionFluids {
 			// with a block entity or a waterlogged block a player placed)
 			boolean open = !now.hasBlockEntity() && (now.isAir() || ours || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
 			FluidProv.Cell c = FluidProv.read(m, open, ours);
-			if (m == FluidProv.Mark.WROTE && !ours) {
-				taken++; // harvested, broken or replaced: never written again (I2, N3), refunded 0
+			if (m == FluidProv.Mark.WROTE && !ownDelivered(b, p, now)) {
+				taken++; // harvested, broken or replaced (flow in a harvested source cell included): never written again (I2, N3), refunded 0
 			}
 			if (c.write() && now != to) {
 				if (!w.set(p, to)) {
@@ -2039,8 +2041,8 @@ public final class RegionFluids {
 
 	/**
 	 * (fix round, P1-3) 8cT's write of one body's cells in chunk {@code (cx, cz)}, for an entry planned before T5F only: every open cell
-	 * (air, the body's own, ice) is written except a charged cell {@code journaled} says the record's tiles wrote; no marks (the record is
-	 * adopted after). Returns the cells written.
+	 * (air, the body's own, ice) is written except a charged cell {@code journaled} says the record's tiles wrote, then 8cT's decor pass and
+	 * grate joining pass; no marks (the record is adopted after). Returns the cells written.
 	 */
 	static int writeBodyV1(FluidWorld w, Body b, int cx, int cz, java.util.function.LongPredicate journaled) {
 		int written = 0;
@@ -2057,6 +2059,32 @@ public final class RegionFluids {
 			boolean open = !now.hasBlockEntity() && (now.isAir() || ownStillOurs(b, p, now) || (now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE)));
 			if (open && now != to && w.set(p, to)) {
 				written++;
+			}
+		}
+		// (round 2, P2-d) 8cT's decor pass: a body cell's decor where it is open (a bed cell's stays as the tiles wrote it)
+		LongOpenHashSet own = b.decor.length > 0 ? b.ownSet() : null;
+		for (long p : b.decor) {
+			if (!own.contains(p) || !inChunk(p, cx, cz)) {
+				continue;
+			}
+			BlockState now = w.get(p);
+			BlockState to = parse(b.decorState.get(p));
+			if (openCell(b, p, now) && now != to) {
+				w.set(p, to);
+			}
+		}
+		// (round 2, P2-d) 8cT's grate joining pass: the bars joined to each other and to the shell, no update sent
+		for (long p : b.grate) {
+			if (!inChunk(p, cx, cz)) {
+				continue;
+			}
+			BlockState now = w.get(p);
+			if (!now.is(Blocks.IRON_BARS)) {
+				continue;
+			}
+			BlockState joined = w.joined(p, now);
+			if (joined != now && joined.is(Blocks.IRON_BARS)) {
+				w.set(p, joined);
 			}
 		}
 		return written;
@@ -2105,9 +2133,6 @@ public final class RegionFluids {
 		if (changed) {
 			w.putMarks(cx, cz, rec, marks);
 		}
-		if (refused > 0) {
-			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + refused + " cell(s) of body " + b.id + " refused the clear (a hold): the clear waits");
-		}
 		LongOpenHashSet done = new LongOpenHashSet();
 		for (int i = 0; i < written.size(); i++) {
 			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
@@ -2120,6 +2145,10 @@ public final class RegionFluids {
 					w.tick(q, f.getType());
 				}
 			}
+		}
+		if (refused > 0) {
+			// (round 2, P2-e) after the accepted cells' neighbour ticks: a retry skips them (CLEARED), so their wakeups are never owed
+			throw new IllegalStateException("chunk " + cx + "," + cz + ": " + refused + " cell(s) of body " + b.id + " refused the clear (a hold): the clear waits");
 		}
 		return n;
 	}
@@ -2178,7 +2207,7 @@ public final class RegionFluids {
 	 * (harvested while the tile was PLACING, then a saved crash and the tile's retry): never written again (I2), refunded 0. Pure.
 	 */
 	static boolean tileSkips(Body b, long p, FluidProv.@Nullable Mark m, BlockState now) {
-		return m == FluidProv.Mark.WROTE && !ownStillOurs(b, p, now);
+		return m == FluidProv.Mark.WROTE && !ownDelivered(b, p, now); // (round 2, P1-b) flow at a WROTE cell is never promoted to a source
 	}
 
 	/**
@@ -2238,9 +2267,14 @@ public final class RegionFluids {
 		if (st == null) {
 			return null;
 		}
-		return new FluidProv.Scope(FluidTxns.recKey(l), (p, prev) -> {
+		return scopeOf(FluidTxns.recKey(l), st);
+	}
+
+	/** (fix round 2) R's rollback scope: whether a cell's state before a rollback write is R's own delivery. */
+	static FluidProv.Scope scopeOf(String rec, Regional st) {
+		return new FluidProv.Scope(rec, (p, prev) -> {
 			Body body = st.bodyAt(p);
-			return body != null && ownStillOurs(body, p, prev);
+			return body != null && ownDelivered(body, p, prev); // (round 2, P1-b) residual flow is not R's delivery: WROTE stays
 		});
 	}
 
@@ -2379,7 +2413,7 @@ public final class RegionFluids {
 			if (c == null) {
 				continue; // ((8c fix round, P2-11) a river's census spans census ticks: judged once a whole sweep is done)
 			}
-			long t0 = settleBase(st, bs);
+			long t0 = settleBase(FluidWorld.of(level), st, b, bs);
 			if (!c.escaped().isEmpty()) {
 				// (8cTc, E) the escape drain is a txn: drained (W), the record saved (R; FLe), the barrier; a start replays it
 				FluidTxns.Step g = FluidTxns.escape(l, st, b, "escaped", "escaped", c.escaped());
@@ -2659,6 +2693,19 @@ public final class RegionFluids {
 			return true;
 		}
 		return liquid;
+	}
+
+	/**
+	 * (slice T5F fix round 2, P1-b) Whether one of a body's own cells holds what R delivered there: {@link #ownStillOurs}, except that a fluid
+	 * cell must hold a source (flow into a harvested cell is residual flow, never the delivery). The rollback scope and the tile's skip read
+	 * it, so a harvested source refilled by flow is neither rolled back as R's nor delivered again. Pure.
+	 */
+	static boolean ownDelivered(Body b, long p, BlockState now) {
+		if (!ownStillOurs(b, p, now)) {
+			return false;
+		}
+		boolean liquid = now.getBlock() instanceof LiquidBlock;
+		return !liquid || now.getFluidState().isSource();
 	}
 
 	/**
@@ -3601,26 +3648,70 @@ public final class RegionFluids {
 	/** {@link #scoopPlan} through a {@link FluidWorld} (slice T5F fix round, P2-7: the units' world). */
 	static int[] scoopPlan(FluidWorld w, RegionsImpl.Live l, Regional st, String group, java.util.function.LongPredicate in) {
 		java.util.Set<String> paid = new java.util.HashSet<>();
-		boolean allPaid = false;
 		int[] cap = null;
 		if (l.rid() == chargedRid(l) && l.rec().survival.get(CHARGED_BODIES) instanceof JsonArray cb) {
 			cb.forEach(x -> paid.add(x.getAsString())); // (fix round, P1-1) the explicit paid set, an empty one included
 		} else if (l.rid() == 0 && FluidProv.mainEraPaid(l.rec().survival)) {
-			// (N2; fix round, P1-1) charged on main, once per region at the gate: every lava and grate body counts as paid, bounded by what the
-			// acknowledged charge took (chargedAt alone is no evidence: a gate whose every body failed charged nothing)
+			// (N2; fix rounds 1-2, P1-1, P1-a) charged on main, once per region at the gate, for the bodies still pending there: a body the gate's
+			// check refused (uncontained) or held paid nothing; any other lava or grate body counts as paid, and never-delivered cells are
+			// refunded only within what the acknowledged charge took net of what was delivered (chargedAt alone is no evidence)
 			cap = acknowledgedCharge(l);
-			allPaid = cap != null;
+			if (cap != null) {
+				for (Body b : st.bodies) {
+					BodyState bs = st.states.get(b.id);
+					if ((b.lava || b.grate.length > 0) && !bs.uncontained && !bs.held) {
+						paid.add(b.id);
+					}
+				}
+			}
 		}
 		String rec = FluidTxns.recKey(l);
 		// (fix round, P1-4) a record not yet adopted (an old drain recovering before fluid.adopt can take the record) keeps 8cT's accounting:
 		// a paid cell the record's tiles' ACTIVE journal entries never wrote, and no write txn wrote, is refunded
 		FluidTxns.AdoptEvidence legacy = st.prov ? null : testLegacyJournal != null ? testLegacyJournal : new FluidTxns.TileEntries(l.rec().dimension, group,
 			stageOf(l))::after;
+		// (round 2, P1-a) a legacy charge's budget for never-delivered cells, per kind: charged less delivered (standing or taken), handed out
+		// to the never-delivered cells in body and cell order, so a drain's per-chunk plans add up to the whole
+		LongOpenHashSet lavaOk = null, barsOk = null;
+		if (cap != null) {
+			lavaOk = new LongOpenHashSet();
+			barsOk = new LongOpenHashSet();
+			int lavaLeft = cap[0], barsLeft = cap[1];
+			List<Long> lavaNd = new ArrayList<>(), barsNd = new ArrayList<>();
+			for (Body b : st.bodies) {
+				if (!paid.contains(b.id)) {
+					continue;
+				}
+				BodyState bs = st.states.get(b.id);
+				if (b.lava) {
+					for (long p : b.cells) {
+						if (delivered(w, p, rec, legacy, bs, Blocks.LAVA)) {
+							lavaLeft--;
+						} else {
+							lavaNd.add(p);
+						}
+					}
+				}
+				for (long p : b.grate) {
+					if (delivered(w, p, rec, legacy, bs, Blocks.IRON_BARS)) {
+						barsLeft--;
+					} else {
+						barsNd.add(p);
+					}
+				}
+			}
+			for (int i = 0; i < lavaNd.size() && i < lavaLeft; i++) {
+				lavaOk.add((long) lavaNd.get(i));
+			}
+			for (int i = 0; i < barsNd.size() && i < barsLeft; i++) {
+				barsOk.add((long) barsNd.get(i));
+			}
+		}
 		int lava = 0, grates = 0;
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			boolean ours = !bs.before.isEmpty();
-			boolean charged = allPaid ? b.lava || b.grate.length > 0 : paid.contains(b.id);
+			boolean charged = paid.contains(b.id);
 			if (!ours && !charged) {
 				continue;
 			}
@@ -3632,7 +3723,7 @@ public final class RegionFluids {
 					FluidState f = w.get(p).getFluidState();
 					if (f.isSource() && f.getType().isSame(Fluids.LAVA)) {
 						lava++;
-					} else if (charged && neverDelivered(w, p, rec, legacy, bs, Blocks.LAVA)) {
+					} else if (charged && !delivered(w, p, rec, legacy, bs, Blocks.LAVA) && (lavaOk == null || lavaOk.contains(p))) {
 						lava++; // (slice T5F, §3.3) paid and never delivered (no mark): refunded; WROTE and taken: 0 (A)
 					}
 				}
@@ -3643,26 +3734,23 @@ public final class RegionFluids {
 				}
 				if (w.get(p).is(Blocks.IRON_BARS)) {
 					grates++;
-				} else if (charged && neverDelivered(w, p, rec, legacy, bs, Blocks.IRON_BARS)) {
+				} else if (charged && !delivered(w, p, rec, legacy, bs, Blocks.IRON_BARS) && (barsOk == null || barsOk.contains(p))) {
 					grates++;
 				}
 			}
 		}
-		if (cap != null) {
-			lava = Math.min(lava, cap[0]);
-			grates = Math.min(grates, cap[1]);
-		}
 		return new int[] {lava, grates};
 	}
 
-	/** (fix round) A paid cell not standing: never delivered by its marks (§3.3), or, before adoption, by 8cT's journal rule. */
-	static boolean neverDelivered(FluidWorld w, long p, String rec, FluidTxns.@Nullable AdoptEvidence legacy, BodyState bs,
+	/** (fix rounds) Whether R delivered a paid cell (standing or taken since): its WROTE mark, or, before adoption, 8cT's journal rule. */
+	static boolean delivered(FluidWorld w, long p, String rec, FluidTxns.@Nullable AdoptEvidence legacy, BodyState bs,
 		net.minecraft.world.level.block.Block block) {
 		if (legacy == null) {
-			return markOf(w, p, rec) != FluidProv.Mark.WROTE;
+			return markOf(w, p, rec) == FluidProv.Mark.WROTE;
 		}
-		return bs.writeTxn == null && legacy.after(p) != block;
+		return bs.writeTxn != null || legacy.after(p) == block;
 	}
+
 
 	/** (fix round, P1-4, TEST) The legacy journal a unit reads; null: the world journal. */
 	static volatile FluidTxns.@Nullable AdoptEvidence testLegacyJournal;
@@ -3702,8 +3790,35 @@ public final class RegionFluids {
 	 * (slice T5F fix round, P2-6) From when a written body's settle bound counts: its write (or the region's forced pass), and no earlier than
 	 * the latest force W that scheduled its ticks this session (a recovery that redid a lost chunk's force W restarts the bound).
 	 */
-	static long settleBase(Regional st, BodyState bs) {
+	static long settleBase(FluidWorld w, Regional st, Body b, BodyState bs) {
+		if (!bs.forceScanned) {
+			// (round 2, P2-c) once per session: the latest force W of the body's write txn, from its receipts (durable with their chunks; an
+			// APPLIED probe's receipt included, so a second restart still counts from the replayed force)
+			bs.forcedAt = Math.max(bs.forcedAt, lastForce(w, b, bs.writeTxn));
+			bs.forceScanned = true;
+		}
 		return Math.max(bs.writtenAt >= 0 ? bs.writtenAt : st.forcedAt, bs.forcedAt);
+	}
+
+	/** (round 2, P2-c) The latest {@code t} of write txn {@code txn}'s force receipts for body {@code b} in its force chunks, else -1. */
+	static long lastForce(FluidWorld w, Body b, @Nullable String txn) {
+		if (txn == null) {
+			return -1;
+		}
+		long t = -1;
+		for (long ck : forceChunks(b)) {
+			for (String r : w.receipts((int) (ck >> 32), (int) ck)) {
+				if (!r.startsWith(txn + "/")) {
+					continue;
+				}
+				int semi = r.indexOf(';');
+				var f = semi < 0 ? null : dev.larattalabs.architect.txn.Receipts.fields(r, r.substring(0, semi));
+				if (f != null && "force".equals(f.get("op")) && b.id.equals(f.get("b")) && f.get("t") != null) {
+					t = Math.max(t, Long.parseLong(f.get("t")));
+				}
+			}
+		}
+		return t;
 	}
 
 	/**

@@ -19,7 +19,7 @@ import net.minecraft.world.level.material.Fluid;
  * ticks are one versioned unit ({@link #save}, {@link #lose}: a chunk whose snapshot is lost comes back as last saved, all four together,
  * I1/I6). Cells in {@link #refuse} refuse every write (a T4 hold). Writes per cell are counted.
  */
-final class MemFluidWorld implements FluidWorld {
+class MemFluidWorld implements FluidWorld {
 	static final class Chunk {
 		Map<Long, BlockState> blocks = new HashMap<>();
 		Map<String, Int2ObjectLinkedOpenHashMap<FluidProv.Mark>> marks = new HashMap<>();
@@ -146,6 +146,11 @@ final class MemFluidWorld implements FluidWorld {
 	@Override
 	public void addReceipt(int cx, int cz, String receipt) {
 		chunk(ck(cx, cz)).receipts.add(receipt);
+	}
+
+	@Override
+	public List<String> receipts(int cx, int cz) {
+		return List.copyOf(chunk(ck(cx, cz)).receipts);
 	}
 
 	Map<String, String> receipt(int cx, int cz, String key) {

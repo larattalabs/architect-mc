@@ -44,6 +44,9 @@ public interface FluidWorld {
 
 	void addReceipt(int cx, int cz, String receipt);
 
+	/** (round 2, P2-c) The chunk's receipts (every txn's). */
+	java.util.List<String> receipts(int cx, int cz);
+
 	default int index(long p) {
 		return FluidProv.cellIndex(minY(), BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p));
 	}
@@ -113,6 +116,11 @@ public interface FluidWorld {
 			@Override
 			public void addReceipt(int cx, int cz, String receipt) {
 				TestMove.addReceiptTo(chunk(cx, cz), receipt);
+			}
+
+			@Override
+			public java.util.List<String> receipts(int cx, int cz) {
+				return TestMove.receiptsOf(chunk(cx, cz));
 			}
 		};
 	}

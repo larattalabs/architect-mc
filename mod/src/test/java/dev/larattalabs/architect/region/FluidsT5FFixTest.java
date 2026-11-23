@@ -143,7 +143,7 @@ class FluidsT5FFixTest {
 	}
 
 	/** A committed write txn (recovered: not live) of these effects. */
-	static TxnEntry entry(String id, String kind, List<JsonObject> effects) {
+	static TxnEntry entry(String id, String kind, List<JsonObject> effects) { // (also fix round 2's)
 		JsonObject o = new JsonObject();
 		o.addProperty("id", id);
 		o.addProperty("kind", kind);
@@ -371,8 +371,8 @@ class FluidsT5FFixTest {
 		TxnEntry t = entry("tx-16", FluidTxns.WRITE, List.of(eff(0, "fluid.force", "W", data(0, 0, "pit"))));
 		Effect e = t.effects().get(0);
 		adapter(FluidTxns.WRITE_KIND, e).apply(t, e);
-		Method m = method(RegionFluids.class, "settleBase", RegionFluids.Regional.class, RegionFluids.BodyState.class);
-		assertEquals(900L, call(m, st, bs), "the census counts the bound from the replayed force W, not the R's older writtenAt");
+		Method m = method(RegionFluids.class, "settleBase", FluidWorld.class, RegionFluids.Regional.class, RegionFluids.Body.class, RegionFluids.BodyState.class);
+		assertEquals(900L, call(m, w, st, st.body("pit"), bs), "the census counts the bound from the replayed force W, not the R's older writtenAt");
 	}
 
 	// ------------------------------------------------------------------ P2-7: the runtime's behaviour, not its classes
