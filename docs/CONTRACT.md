@@ -34716,8 +34716,10 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   rollback); a placement resumed at world start keeps the blind spot (known risk, below).
 - **Tests.** `EntityWaitLR2Test` (LR2F-area, -margin, -hold, -ready, -guard, -live, -stale, -keep; reflection; the first five red on
   the failing-first commit, the fix round's -area, -margin, -ready, -guard and -live red on 03f717a1). In game
-  (`GATE_TCC_PARTS=LR-2s,LR-2p`): dev-start.json `entityHide` keeps every chunk's entities hidden and unloaded for 100 ticks after the
-  start; `entityHideAfterW: 0` ends it right after the first clearing W write. LR-2s: K6+save, restarted under the window: paid exactly
+  (`GATE_TCC_PARTS=LR-2s,LR-2p,LR-2l`): dev-start.json `entityHide` keeps the entities of the chunks in `entityHideBox` hidden and
+  unloaded for that many ticks' worth of wall-clock time after the start (wall clock: vanilla's player spawn blocks the server thread in
+  `waitForEntities`); `entityHideAfterW: 0` ends it right after the first clearing W write. The rows park the player 7 chunks east, so its
+  spawn never waits on the hidden site. LR-2s: K6+save, restarted under the window: paid exactly
   once. LR-2p: the same with a player's 3 diamonds in the box (no pickup, no despawn) and 2 emeralds centred just outside the drop area
   reaching in: all still there after the restart. Both fail when the txn is still open 30 s after the restart, and assert the committed
   removal completed (site gone, nothing standing, refund owed). LR-2l: a paid site removed at once after a restart under `entityHide`
@@ -34737,6 +34739,10 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   count those as the player's): known risk, older queues only.
 - **One rule?** Yes, the rule above, at every restore that clears what it pops and can run with its chunks' entities not loaded.
 - **Older worlds and plans?** Read as before; nothing new is saved.
+- **Red and green runs** (artifacts/gate-runs, ports 9068/9069): red LR-2s (door minted) and LR-2p (the player's diamonds cleared) on
+  75bbc138 (dbc83ddd + the hook and row fixes), 20261123-022617-change; red LR-2l (door minted by a live removal) on a095bf82 (03f717a1 +
+  rows + hook), 20261123-024155-change; LR-2s/LR-2p green on 03f717a1's fix, 20261123-022917-change; LR-2l green on da17d614,
+  20261123-023539-change (20 NOT_LOADED refusals, then removed).
 - **Known risk.** A placement (`PlaceJob`, `InfraJob`) resumed at world start clears its pops with the same blind spot (a terrain block's
   item can stay on the ground). The hide hook proves the start-time window; the "no player near" case is shown by the unit (the ticket),
   not in game (the gate player rejoins at the site).
