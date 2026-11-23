@@ -11,7 +11,11 @@ Contract: the coordinator's T5F draft (side-session notes, architect-T5F-contrac
   Units FluidsT5FcTest. Still to unguard in FluidsT5FRedTest/FluidCrashModelT5FTest: i4, i5 x2, f_, runtime SEEN_AHEAD, AGGREGATE_W,
   L_BEFORE_BARRIER, STORED_UNTIL (green now).
 
-## T5Fc, next (part 2: RemoveResult plumbing via Groups.Removed + ApiEvents + RemovalTxn payload + undoResult, reading fluids.json
+- T5Fc parts 2-3 (ff74d14a, head): RemoveResult fluids plumbing, Q1 freezeRows, fluid.stray txns, escape/held/lot per-chunk Ws.
+  As-built in CONTRACT "Slice T5Fc as built".
+
+## T5Fc, next: hooks and rows (dev.api.removalEvents; coverage rows; matrix steps), red run on ffea3bd5 (T5Fb head = the revert
+## check), green run, then flowingWater advertised in its own last commit. (Earlier plan: part 2: RemoveResult plumbing via Groups.Removed + ApiEvents + RemovalTxn payload + undoResult, reading fluids.json
 ## scoopCredited/taken (fluids.json survives REMOVED: only region.json is deleted); Q1 freezeRows; fluid.stray; escape/held/lot per chunk)
 1. Units red, no runtime change: drain W per (body, chunk) counting l/u/h at its apply; only a lost chunk replayed; region.scoop from receipts
    (an UNKNOWN chunk holds); deadline from receipt t; stray txn; escape/lot per chunk; freezeRows (Q1); fluidsTaken/Cells; no R mark left.

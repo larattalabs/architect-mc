@@ -35800,3 +35800,55 @@ regression guards.
     now read a delivered source (`ownDelivered`, P1-b's rule), so N2 (b) adopts it from the record's own tile entry;
   - t5-write-tx-clear 6/2: the row's census missed the course's natural lake (98 cells "outside"); it now reads it as before, as hy-crash.
 - **Re-run of the two at 7c05870c** (`.../green2/20261123-031709-change`): t5-adopt-tx PASS 24/0, t5-write-tx-clear PASS 8/0.
+
+### Slice T5Fc as built: code and units (8ffeecc6..head; recorded 2026-11-23; in-game rows owed)
+
+- **Must-fixes from T5Fb's last pass:** (a) a legacy body's paid eligibility is the gate's own evidence, its befores (captured for exactly
+  the bodies it charged), so a later recheck or hold never takes it back (red first); (b) a fixture red with the delivered-unit deduction
+  removed (mutant run); (c) the per-chunk allocation test spans chunks 0,0 and 1,0.
+- **§4.3 removal drain:** one W per (body, chunk) over every chunk the body writes or ticks in (`drainChunksOf`), reverse write order; one
+  apply counts `l`/`u`/`h`, drains (writes and ticks in its chunk: `tickOnly`), deletes R's marks of the body's cells in the chunk (closes
+  T5Fb's known risk: no R mark is left after a removal's drain, whatever restore follows), then its receipt `op=drain;t;b;l;u;h;n`. A
+  hold refusing a cell holds the W. holdChunk at its top; FL5 after the head body; `TX:fluid.drain:drain` "(k of n)" over drain Ws (Q3).
+- **§4.6 region.scoop:** its own txn after the drain's EFFECTS_DONE (`scoopStep` in `gateOne` and `gateFlowing`, so a revision undo's
+  `drainRevisions` shares it), Σ(l + u) from the receipt index the drained R saved (`drainReceipts`); a missing receipt holds. The L is keyed
+  as before (a pre-T5Fc drain's scoop under the same key is never credited again); its R saves what the ledger credited (`scoopCredited`;
+  a crash between the ledger save and the R records the planned amounts, marked `planned`: a known risk, over-reporting lava buckets only
+  if the pile held fewer empty buckets than the plan).
+- **§4.4 / F:** the deadline is max(receipt t) + bound (`settleDeadline`); `until` is neither saved nor read. A record drained before T5Fc
+  (no index) waits one bound from the first read. Deviation: `drainReceipts` stays until done (the deadline needs it), not deleted by
+  the scoop's R.
+- **§4.5 stray:** `fluid.stray` txns of at most 8 chunks (W per chunk, the take judged over the whole flow read-only, writes and ticks in the
+  chunk; FL9 alias; the R saves the chunks left). Deviation: `done` stays after the world barrier in `gateFlowing`, not in the last R.
+- **Escape, unsettled, upstream, held, lot:** `record()` plans one W per chunk (same op and data); `chunkFilter` keeps every `drain()` and
+  `drainSources()` write of a single-chunk W in its chunk. Known risk: an irrigation lot's breach sweep inside `escape` is not filtered.
+- **S3/S4/Q2:** `RemoveResult.fluidsTaken`/`fluidsTakenCells` are record components (the 1.72.0 constructor kept; api-compat --baselines
+  all 8 ok). One merge per removal from the records on disk (`removalExtras`): `Groups.withFluids` at the removal's end (future and
+  REMOVAL_FINISHED), `ApiEvents.withFluids` on a txn payload's redelivery, a revision undo's aggregate sums its fluids stages; an undone
+  revision's record is never counted again by the region's removal.
+- **Q1:** `freezeRows` at a region removal's done: bodies read drained ("removed with its region"), the rows go into the record's ext,
+  which the tombstone keeps.
+- **Legacy:** 8cT-era drain entries keep their adapters (aggregate W; pile.scoop with `@seen`, now `LegacySeen`); a new plan has no L.
+- **Units:** FluidsT5FcTest (5) on MemFluidWorld; T5Fa's i4, i5 x2, s45 stray, f_, q1 and the crash model's SEEN_AHEAD, AGGREGATE_W,
+  L_BEFORE_BARRIER, STORED_UNTIL (red since T5Fa) green and unguarded. Mod suite 1988 tests, 0 failed.
+- **Not built yet:** `flowingWater` advertised (after the green run, its own commit); the `dev.api.removalEvents` hook (t5-s3b); the
+  coverage rows t5-escape-closure, t5-held-future, t5-lot-multi, t5-lot-barrier-crash, t5-rc-strict and the drain/stray/scoop/charge
+  matrix steps; the in-game red and green runs (t5-drain-hold, -fl5, -mixed, t5-scoop-barrier, t5-s3a, t5-s3b, t5-taken, t5-tombstone).
+
+#### Crash safety and scope (T5Fc)
+
+- **Durable record per fact:** a chunk's drain W applied: its receipt there, with the counts it took; R's write evidence: its marks,
+  deleted by the same apply; drained, the receipt index, taken: fluids.json (the R); refunded: the ledger's credited key; what it
+  credited: fluids.json `scoopCredited`; the deadline: the receipts' `t`.
+- **Persisted before each change:** the drain's intent before any drain W; the counts are taken in the apply that mutates the chunk; the
+  scoop's intent (its amount from durable receipts) before the ledger; the drain's EFFECTS_DONE (its barrier) before the scoop begins.
+- **Second crash in recovery:** a drain W whose receipt is on disk is never applied again; a lost chunk is redone with its counts, writes
+  and marks together (FluidsT5FcTest: a dispensed source in a receipted chunk stays). The scoop's L is keyed; its R probes `scooped`.
+- **Keys per operation:** drain `fluid-drain:<rec>/<reason>`; scoop `scoop:<scoopKey>` (per record and revision); stray
+  `fluid-stray:<rec>/<first chunk>`; receipts per (txn, effect), one chunk each.
+- **Holds and admission:** every fluid txn of a record holds its resource; adoption first; a W whose cell a hold refuses holds.
+- **Refunds priced from what was removed:** Σ(l + u) of the receipts: standing cells drained, and paid never-delivered cells (marks; a
+  legacy record within its acknowledged charge less its delivered units); a taken WROTE cell is 0 and reported in `fluidsTaken`.
+- **Old in-flight state:** 8cT drains replay with their own adapters; legacy records are adopted first; nothing converted in place.
+- **One rule:** §3.3 for every count, I1/I3 co-location for every receipt. Known risks as listed above.
+- **Older saved worlds:** fluids.json with `until` (ignored), without `drainReceipts` (one fresh bound), 8cT drain entries.
