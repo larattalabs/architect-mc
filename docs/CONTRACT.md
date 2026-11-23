@@ -34742,7 +34742,8 @@ only against direct writes (M1) and the existing block-entity, piston and explos
 - **Red and green runs** (artifacts/gate-runs, ports 9068/9069): red LR-2s (door minted) and LR-2p (the player's diamonds cleared) on
   75bbc138 (dbc83ddd + the hook and row fixes), 20261123-022617-change; red LR-2l (door minted by a live removal) on a095bf82 (03f717a1 +
   rows + hook), 20261123-024155-change; LR-2s/LR-2p green on 03f717a1's fix, 20261123-022917-change; LR-2l green on da17d614,
-  20261123-023539-change (20 NOT_LOADED refusals, then removed).
+  20261123-023539-change (20 NOT_LOADED refusals, then removed). Green on fc22b410, 20261123-024758-change: txn-crash-crate (all parts, 621/0),
+  t4r-, t4rl-, t4rm-, t4rd-, t4-crash and x-resume, all PASS.
 - **Known risk.** A placement (`PlaceJob`, `InfraJob`) resumed at world start clears its pops with the same blind spot (a terrain block's
   item can stay on the ground). The hide hook proves the start-time window; the "no player near" case is shown by the unit (the ticket),
   not in game (the gate player rejoins at the site).
