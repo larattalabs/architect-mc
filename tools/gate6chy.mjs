@@ -14,6 +14,7 @@
 //     crash     (hy-crash)             item 8: FL1, FL4 (between reaches), FL5 (a removal between the head and the tail), FL3
 //     natural   (hy-natural)           HY-b's natural items (S3)
 //     cold      (hy-cold)              item 18 (a) (the freezing probe, recorded) and HY-b's cold items
+//     t5clr, t5clx                     (slice T5Fb) t5-water-bucket's ordered variant and the TX points at TX:fluid.write:clear
 //     look      (6chy-look)            the look (client, recorded not judged; HY-b's and HY-c's cameras)
 //     report                            REPORT.md over the step JSONs
 //
@@ -173,6 +174,9 @@ steps.crash = async () => {
   await ensure();
   return { core: SKIP_CORE ? 'skipped (GATE6CHY_SKIP_CORE)' : await CORE.crash(ctx), halves: await halves('crash') };
 };
+// (slice T5Fb) the ordered course's fluid.clear rows: the bucketed waiting reach (t5clr) and the TX points at TX:fluid.write:clear (t5clx)
+steps.t5clr = async () => { await ensure(); return await (await import('./lib/gate-t5f-hy.mjs')).clearBucket(ctx); };
+steps.t5clx = async () => { await ensure(); return await (await import('./lib/gate-t5f-hy.mjs')).clearTx(ctx); };
 steps.natural = async () => {
   await ensure();
   return { halves: await halves('natural') };

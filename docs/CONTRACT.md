@@ -35685,11 +35685,22 @@ advertised) is not built: `flowingWater` stays unadvertised.
   with no `chargedBodies`, a record charged on main (`chargedAt`) counts every lava and grate body as paid (N2). The drain itself, `@seen`,
   the aggregate W and the scoop in the drain txn are T5Fc's.
 - **Units:** `FluidsT5FbTest` (4), the T5Fb-owned red units unguarded (i1, i2, n2, i3, i6, s1q3, s4q2, s45 adopt; runtime ACTIVE_AS_PROOF,
-  WATER_REFILL, FORCE_IN_R); T5Fc's 10 stay behind `-Dred.T5F`. Full mod suite 1958 tests, 0 failed after the kill-marker fix (the progress
-  variant sets the line's suffix and calls `kill(point)`, so both halts stay in `kill(String)`).
-- **Owed (in-game, paused by the coordinator 2026-11-22 for the v0.91.0 release gate):** the red record on 53dfa712 (t5-tile-k4, -rm,
-  t5-water-bucket, t5-grate-broken, t5-force-lost, t5-kn), which is also the revert check (the rows did not change between it and
-  815a0078); the green run of the same rows plus `t5-write-tx-a`, `t5-write-tx-b`, `t5-adopt-tx`.
+  WATER_REFILL, FORCE_IN_R); T5Fc's 10 stay behind `-Dred.T5F`. The progress variant of `WorldJournal.kill` sets the line's suffix and calls
+  `kill(point)`, so both halts stay in `kill(String)` (T4RDLKillMarkerTest). Full suites at the head: mod 1958 tests, 0 failed, 11 skipped
+  (plus the devserver compile); kit 1738/1738.
+- **Tile marker:** a fluids-stage tile resolves its record's marker before it writes any cell (InfraJob WRITE, after DF's `itemMayWrite`);
+  while the region is not loaded it waits, so no tile cell is ever written without its mark.
+- **Owed (in-game, paused by the coordinator 2026-11-22 for the v0.91.0 release gate):**
+  - the red record on 53dfa712 (t5-tile-k4, t5-tile-k4-rm, t5-water-bucket, t5-grate-broken, t5-force-lost, t5-kn). It is also the revert
+    check: between 53dfa712 and the head the existing rows' drivers only gained code (`git diff 53dfa712 -- tools/gate6ch.mjs
+    tools/lib/gate-t5f-*.mjs`: additions and a widened import);
+  - the green run: the same six rows, the TX matrix (`t5-write-tx-a`, `t5-write-tx-b`, `t5-write-tx-clear`, `t5-adopt-tx`) and the
+    ordered variant `t5-water-bucket-hy`;
+  - the regression harness on the merge (contract §9, T5Fa's gate): the change tier against origin/main selects 135 steps (~6h55m on 2
+    shards; the 8c lane, DF's irr-df/rv-df/rs-df/h-df, 8c-ingame/-crash/-survival among them), a batch-sized run the coordinator schedules.
+- **TX matrix coverage:** h_core_demo (H: place, force, barrier:effects, written; adopt) and hy_core_demo (an ordered course: clear). Not
+  covered: rs03 (lava and grate), irr (lot), river_demo (flowing, unadvertised). `api-compat --baselines`: the two v0.91.0 checks not run
+  (the release's baseline jars are not built yet); every other baseline and Steward's jar pass.
 
 #### Crash safety and scope (AGENTS.md "Recurring review findings")
 
@@ -35710,8 +35721,8 @@ advertised) is not built: `flowingWater` stays unadvertised.
 - **Old in-flight state?** None converted: main has no fluid txns; an 8cT-era `fluid.place` effect naming `bodies` is still applied by
   `bodiesOf`. A legacy record is adopted by its own txn, never rewritten in place.
 - **One provable rule?** Yes: §3.3's table (`FluidProv.read`) for every writer and refund, with I1's co-location. Known risks, narrowed:
-  a tile whose record is not loaded when it writes marks nothing (logged; its cells then read as never written: written or refunded, as a
-  lost write); a removal's restore of a fluids tile (not a rollback) leaves R's marks (the record is retired; T5Fc's drain deletes them);
-  a harvest while a tile is still PLACING (contract §1 "Out").
+  a removal's restore of a fluids tile (not a rollback) leaves R's marks (the record is retired; T5Fc's drain deletes them); a rollback
+  writes clear marks only through `Placed.set` inside RestoreJob's scope; a harvest while a tile is still PLACING (contract §1 "Out");
+  the clear W runs in the first wave's txn, after that wave's emission checks (before T5F the clear ran before them).
 - **Older saved worlds and plans read?** fluids.json without `prov` (main, DF and 8cT eras): adopted (N2); a main-era `chargedAt` charge:
   every lava and grate body paid. Chunks without the attachment read as no marks.

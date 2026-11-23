@@ -576,6 +576,14 @@ final class InfraJob implements Placement.Job {
 					if (!dev.larattalabs.architect.region.RegionFluids.itemMayWrite(batchId, itemKey)) {
 						return false; // (slice DF round 2) a region fluids tile waits while its record is not durable (a resumed write too)
 					}
+					if (tile != null && provMarker == null) {
+						// (slice T5F, §3.2) a fluids-stage tile writes only once its record's marker resolves: a cell written without its mark
+						// would read as never delivered (refunded) while a player may hold it
+						provMarker = dev.larattalabs.architect.region.RegionFluids.tileMarker(tile);
+						if (provMarker == null) {
+							return false;
+						}
+					}
 					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 					int n = 0;
 					// (8a ST) held leaves also when the main entry is a target (a tile all staged terrain): its free pass is gone, its leaves stay
@@ -629,12 +637,8 @@ final class InfraJob implements Placement.Job {
 							}
 						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
-						if (tile != null) {
-							// (slice T5F, §3.2) a fluids-stage tile's body cell: WROTE(R) in the same tick and chunk as the block
-							if (provMarker == null) {
-								provMarker = dev.larattalabs.architect.region.RegionFluids.tileMarker(tile);
-							}
-							provMarker.mark(level, p);
+						if (provMarker != null) {
+							provMarker.mark(level, p); // (slice T5F, §3.2) a fluids-stage tile's body cell: WROTE(R), same tick and chunk
 						}
 						if (rb != null) {
 							wrote.add(p);

@@ -2114,7 +2114,11 @@ public final class RegionFluids {
 	static final TileMarker NO_MARKS = (level, p) -> {
 	};
 
-	public static TileMarker tileMarker(String tile) {
+	/**
+	 * The tile's marker: {@link #NO_MARKS} for a tile of another stage or a record with no bodies; null while the tile's region is not loaded
+	 * (the tile waits: a cell is never written without its mark).
+	 */
+	public static @Nullable TileMarker tileMarker(String tile) {
 		String[] t = tile.split("\\|", -1);
 		if (t.length < 2 || !STAGE.equals(Revisions.plainStage(t[1]))) {
 			return NO_MARKS;
@@ -2122,8 +2126,12 @@ public final class RegionFluids {
 		RegionsImpl.Live l0 = RegionsImpl.live(t[0]);
 		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, t[1]);
 		Regional st = l == null ? null : of(l);
+		if (l0 == null) {
+			return null; // (the region's record not loaded yet: the tile waits; RegionsImpl loads every record at the start)
+		}
 		if (st == null) {
-			Architect.LOGGER.warn("Fluids tile {}: its region's fluids record is not loaded: its cells carry no provenance marks", tile);
+			// (of() loads the record on demand: null means the region (or revision) has no fluid bodies, so no cell to mark; a revision whose
+			// live record is gone has no record to refund either)
 			return NO_MARKS;
 		}
 		String rec = FluidTxns.recKey(l);
