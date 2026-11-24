@@ -48,3 +48,17 @@ Contract: the coordinator's T5F draft (side-session notes, architect-T5F-contrac
 - Red baseline for fl5/mixed: a detached worktree `_work/architect-mc-T5F-red2` at ffea3bd + the driver commit 961f456a cherry-picked
   (d7aa4f64, local only). 829658b8 is no red baseline for them (their red predates T5Fc).
 - In-game: see CONTRACT round 2 record. Next after this: the one GPT check (coordinator's); a P1 parks T5F.
+
+## T5Fc round 2: state at stop (2) (2026-11-24, stopped on Noah's word via the coordinator)
+
+- Done (code, units, revert checks, pushed): finding 2 (54e5bd92), findings 3+4 (049123888), finding 5 (0fe6b4e7), test gaps (e2628288),
+  drivers + hooks (961f456a, 99c174c8, f8ba1e03). Each row red first; every production-call-site revert red again (mutation script and
+  mutations.json in the builder's scratchpad, not kept). Mod suite 2018 / 0 failed / 1 skipped.
+- In-game (2 complete runs + 1 stopped): red4 (ffea3bd + d7aa4f64), green5 (f8ba1e03): 10/10 named PASS; irr-ingame-smoke FAIL item 4
+  (E-flat 25 after removing the bare-pad breach region). base-irr (829658b8, irr-ingame-smoke only) stopped mid-run: no result.
+- Partial: whether irr-ingame-smoke item 4 is a round-2 regression. Suspects if it is: footprint()/esc in an escape of the irrigation body
+  (an escape's Ws now span drainChunksOf incl. the breach box), or saveDone's ordering. Not suspected: the removal drain W (unchanged).
+- Next steps: (1) rerun irr-ingame-smoke on 829658b8 (worktree `_work/architect-mc-T5F-red2`, detached there) as the baseline; (2) if it
+  passes there, bisect 54e5bd92..f8ba1e03 for item 4 (read the server log of green5 s1 for an escape/hold txn on the pad's bodies), fix, unit,
+  rerun only that step; (3) then the coordinator's GPT check. Worktrees to remove after: `_work/architect-mc-T5F-red2`, the run dirs
+  `_work/architect-mc-T5F-run`, `-run-s2`, `-run-src` (gate-run kept them after FAIL).

@@ -35953,10 +35953,16 @@ the revert check reverts the production call site (a mutation script outside the
   stray W runs in units (FL9 after its receipt). A flowing escape's abort work frozen in two chunks with a crash between Ws (the full P2-7
   revert -> red; `abortFlowingIn`'s own filter alone is redundant with the per-chunk work). The integration test arms a second crash in each
   recovery (all reached) and reloads the ledger from its snapshot. A cell held on top: refund 0, taken 0, mark deleted, lava standing.
-- **Drivers.** fl5: the dispenser takes nothing because the removal's held box seals it (`TxnHoldDispenserMixin`, T4b); `dev.dispense`
-  answers `held`; the row asserts the seal, then conservation. mixed: halts at `TX:fluid.drain:lavadone:<cx>.<cz>+save` (dev-armed, after the
+- **Drivers.** fl5: the dispenser takes nothing because the box being removed is sealed (`RemovalSeal`, LC3: `DispenseSealMixin`); red4
+  measured the txn hold false. `dev.dispense` answers `removalSealed` and the seal's refusal count; the row asserts a counted refusal, then
+  conservation. mixed: halts at `TX:fluid.drain:lavadone:<cx>.<cz>+save` (dev-armed, after the
   chunk's last lava W's receipt) and checks pile gain == the REMOVAL_FINISHED credit + the injected bucket left in the dispenser.
-- **Units:** IN-GAME-AND-SUITE-PENDING
+- **Units:** mod 2018 tests, 0 failed, 1 skipped (at 99c174c8). **In-game** (ports 9050-9053, `_work/architect-mc-T5F-runs/`): red baseline
+  `red4/20261124-061135-change` on ffea3bd + the driver commit (d7aa4f64): fl5 FAIL (its seal assertion read the txn hold, false: corrected),
+  mixed PASS (11 = 10 credited + 1 injected bucket kept in the dispenser; the row cannot tell T5Fb from T5Fc in game: the LC3 seal closes its
+  window). Green `green5/20261124-062029-change` on f8ba1e03: all 10 named steps PASS (fl5 4/0: sealed, 1 refusal, 10 == 10; mixed 6/0: halt
+  at lavadone:595.572, credited 10, cargo 1); irr-ingame-smoke FAIL item 4 (bare-pad breach removal, E-flat 25). Its baseline on 829658b8
+  (`base-irr`) was stopped at wrap-up, so whether item 4 predates round 2 is not known (open).
 
 #### Crash safety and scope (T5Fc round 2, what changed)
 
