@@ -806,6 +806,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
   for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
   drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
+- **2026-11-23 (chore RVU, STEWARD-SYNC A3):** `dev.rv.undo`'s answer is `dev.pl.remove`'s shape (`removed`, `blockers`, `restored`,
+  `kept`, `handedDown`, `cascaded`, `refund`, `owed`: the owed keys, `owedParts: [{key, recipient, reason, items}]`) plus `seconds`; v0.91.0
+  answered no `cascaded`, `owed` or `owedParts`. A recovered undo's result still lacks its cargo owed key (CONTRACT, v0.91.0 known risk).
+  Checked in `gr-survival` (a stockpile credit: `owed` and `owedParts` empty).
 
 ## Slice DR (diagnose and repair)
 

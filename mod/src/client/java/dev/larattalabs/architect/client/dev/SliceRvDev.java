@@ -78,25 +78,19 @@ public final class SliceRvDev {
 					});
 			});
 		DevBridge.register("dev.rv.undo", 4 * 3_600_000L, "{region, toPosition, actor?} - (6d RV, §4.4) Regions.undoRevision -> RemoveResult (removed, blockers, restored, kept, "
-			+ "handedDown, refund) + seconds, or {refused}", (req, mc) -> {
+			+ "handedDown, cascaded, refund, owed, owedParts: [{key, recipient, reason, items}]) + seconds, or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
 				int to = req.get("toPosition").getAsInt();
 				String actor = f.optStr("actor", "dev");
 				long t0 = System.nanoTime();
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().undoRevision(region, to, actor)).thenCompose(x -> x).handle((r, e) -> {
-					JsonObject o = new JsonObject();
+					JsonObject o;
 					if (e != null) {
+						o = new JsonObject();
 						o.addProperty("refused", RegionDev.reason(e));
 					} else {
-						o.addProperty("removed", r.removed());
-						o.add("blockers", new com.google.gson.Gson().toJsonTree(r.blockers()));
-						o.addProperty("restored", r.restored());
-						o.addProperty("kept", r.kept());
-						o.add("handedDown", new com.google.gson.Gson().toJsonTree(r.handedDown()));
-						JsonObject rf = new JsonObject();
-						r.refund().forEach((k, v) -> rf.addProperty(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(k).toString(), v));
-						o.add("refund", rf);
+						o = SlicePlDev.removed(r); // (chore RVU, STEWARD-SYNC A3) refund, owed and owedParts, the shape dev.pl.remove answers
 					}
 					o.addProperty("seconds", (System.nanoTime() - t0) / 1e9);
 					return o;

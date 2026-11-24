@@ -243,6 +243,12 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   street (was NO_ROOM). A boundary growth laid from NEXT on carries the same record on its street, and GR never continues another
   district's such growth (b from b_1's). Regions and growths from before read exactly as v0.88.0. No API or feature change. CONTRACT "Slice RTE4".
 
+### New for Steward (NEXT, chore RVU; asked at T4R-PIN)
+- Dev only: `dev.rv.undo`'s answer now has `owed` (the owed keys) and `owedParts` (`[{key, recipient, reason, items}]`) beside `refund`,
+  `cascaded` and the rest, the shape `dev.pl.remove` answers (STEWARD-SYNC A3). Module-measure bar 7b can read `owedParts` across a stage
+  undo instead of the placer's owed store. A recovered undo's result still lacks its cargo owed key (CONTRACT, v0.91.0's known risk); the
+  ledger holds it. No API change.
+
 ### Open asks either way
 - **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
   refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.
@@ -295,4 +301,4 @@ Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCH
   <site>."), what does not fit stays owed; at the next join "Architect owes you N items (from <sites>): /architect collect." Nothing at
   server start; `architect:unclaimed` never auto-collected (`/architect owed nearby` lists it).
 - Dev (A3): `dev.pt.uses`/`dev.pt.uuid` give the fake placer's UUID; `dev.stockpile.owed {recipient}`; `dev.rv.undo` returns `refund`,
-  `owed`, `owedParts`; `dev.removal.owners`.
+  `owed`, `owedParts`; `dev.removal.owners`. (v0.91.0's `dev.rv.undo` answered only `refund`; the owed fields arrive in NEXT, chore RVU.)
