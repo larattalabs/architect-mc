@@ -263,7 +263,7 @@ public final class SliceT5FDev {
 		DevBridge.register("dev.dispense", 30_000, "{at: [x,y,z] (the target cell), item: id (one), fromPlayer?: true} | {read: [x,y,z]} - (T5Fa) TEST: a "
 			+ "real dispenser fire: a dispenser placed above the cell facing down, the item put in (taken from the player's inventory with "
 			+ "fromPlayer, else minted: the answer says so), a redstone block set on top (it fires about 4 ticks later); read: a dispenser's "
-			+ "contents -> {dispenser: [x,y,z], minted, held (the dispenser's cell sealed)} | {items: {item: n}}", (req, mc) -> {
+			+ "contents -> {dispenser: [x,y,z], minted, held (a txn-held box), removalSealed (LC3's seal), refusedBefore} | {items: {item: n}, refused (LC3's dispense refusals)}", (req, mc) -> {
 				if (req.has("read")) {
 					BlockPos d = pos(req.getAsJsonArray("read"));
 					return ServerTasks.callAsPlayer((level, player) -> {
@@ -279,6 +279,7 @@ public final class SliceT5FDev {
 						}
 						JsonObject o = new JsonObject();
 						o.add("items", items);
+						o.addProperty("refused", dev.larattalabs.architect.site.RemovalSeal.REFUSED.getOrDefault("dispense", 0L)); // (round 2) LC3's count
 						return o;
 					});
 				}
@@ -311,11 +312,16 @@ public final class SliceT5FDev {
 					// (T5Fc round 2) whether the dispenser's cell is sealed (TxnHoldDispenserMixin's own test: a held box, a waiting fill): it then
 					// dispenses nothing and keeps its item
 					boolean held = dev.larattalabs.architect.site.Fills.heldBox(level, d);
+					// and DispenseSealMixin's (LC3): a dispenser in a box being removed fires nothing; its refusals are counted (REFUSED "dispense")
+					boolean removalSealed = dev.larattalabs.architect.site.RemovalSeal.any() && dev.larattalabs.architect.site.RemovalSeal.sealed(level, d);
+					long refusedBefore = dev.larattalabs.architect.site.RemovalSeal.REFUSED.getOrDefault("dispense", 0L);
 					level.setBlock(d.above(), Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
 					JsonObject o = new JsonObject();
 					o.add("dispenser", arr(d));
 					o.addProperty("minted", minted);
 					o.addProperty("held", held);
+					o.addProperty("removalSealed", removalSealed);
+					o.addProperty("refusedBefore", refusedBefore);
 					return o;
 				});
 			});
