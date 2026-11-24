@@ -53,7 +53,7 @@ speed-over-coverage cuts SPD finds." Chore SPD3 applied the first and the third;
   `tools/lib/gate-part.mjs` sections): p1 the matrix's odd halts, overflow, road, retagged; p2 the even halts, held, legacy-finish,
   gone-save. Each part builds its own fixture and traces its own adoption. It splits in a run that splits (turbo, `--split`,
   `--only txn-crash-adopt/p1`, or since chore TXS a fixed `--shards N` >= 2, so the release verifiers' `--no-turbo --shards 2`
-  runs split too); one shard (or `--no-split`) runs the step whole. Measured: the two parts took 8m35s and 8m08s (16m43s of step time) in 8m35s of wall: -8.1 min wall, at the cost of the second part's fixture build (~1 min) and a second server. Restore: drop the
+  runs split too: checked on 6c9fd3602, `--no-turbo --shards 2` with no `--split`, 9m09s wall, parts 7m57s and 7m19s, 153/0, run 20261124-052837-change); one shard (or `--no-split`) runs the step whole. Measured: the two parts took 8m35s and 8m08s (16m43s of step time) in 8m35s of wall: -8.1 min wall, at the cost of the second part's fixture build (~1 min) and a second server. Restore: drop the
   `split` key.
 
 - **txn-crash-adopt before and after, all three cuts** (chore TXA): before, 604e109d whole on one server: 24m45s, 205/0, load p50 12.6,
