@@ -35932,3 +35932,47 @@ abortFlowing(FluidWorld..), mergeAwaitedWith, and p1_4's hold path needing a lev
   held, so no writer can); an escape's plan reads the flow to freeze an abort's take (flowing regions only; `flowingWater` stays off).
 - **Older saved worlds:** fluids.json without `drainReceipts` (8c's restart fallback kept), with a `taken` saved by an earlier R (read by
   the result), stray chunks as `ChunkPos.pack`; ledgers without `creditedItems`; escape and hold entries without `closure`.
+
+### Slice T5Fc round 2 as built (GPT fix-check of 829658b8 NOT SAFE: findings 2-5 and the test gaps; Noah's one extra round; recorded 2026-11-23)
+
+Scope: findings 2-5, the fix-check's test-strength list, the fl5/mixed drivers. Out of scope (P3, unreleased dev saves): findings 1, 6, 7;
+the coverage rows; `flowingWater` stays off. Units in `FluidsT5FcFixTest` (`r2_*` and the reworked integration test), each red first;
+the revert check reverts the production call site (a mutation script outside the repo, one mutation per row), red again for every row.
+- **Finding 2.** Every W `record()` plans carries the schema marker `"pc":1`; `w()` takes the DrainCtx path on it alone. An unmarked W
+  (8cT's, even over one chunk) runs as it did; each legacy run checks its own level. Also fixes a one-chunk `LegacyV1.PLACE` (it entered
+  DrainCtx). `r2_f2_*` (a legacy hold recovered before adoption drains its source). Revert: `cs.size()==1` restored -> red.
+- **Findings 3, 4.** `record()` plans over the caller's `footprint()`: drainChunks(st), drainChunksOf each W body, and each frozen cell with
+  its face neighbours' chunks. An escape freezes its census-named cells (`esc`): the escaping body's extra stray candidates in each W, its
+  abort's work when aborted, ticked from geometry. Hold: body + upstream; lot: its bodies. `r2_f3`, `r2_f4`. Reverts (esc feed, tick feed,
+  drainChunks(st) in `record()`) -> red.
+- **Finding 5.** `freezeRows`/`report` return the region record's confirmed save; `saveDone` (done, rows confirmed, then done saved, else
+  rolled back) is the one completion of `gateOne` and `gateFlowing`. `r2_f5` (region.json refused: no done on disk; then rows on disk, done)
+  plus a call-site pin. Reverts (answer ignored; inline done in each gate) -> red.
+- **Test gaps.** Behaviour where a unit reaches the code, call-site pins where it needs a server (`body()` source pins: P1-6 in
+  `gateFlowing`, the stray guard, `saveDone`, the undo driver's `mergeFinishedStage`). `strayChunk` now goes through `FluidWorld`, so the
+  stray W runs in units (FL9 after its receipt). A flowing escape's abort work frozen in two chunks with a crash between Ws (the full P2-7
+  revert -> red; `abortFlowingIn`'s own filter alone is redundant with the per-chunk work). The integration test arms a second crash in each
+  recovery (all reached) and reloads the ledger from its snapshot. A cell held on top: refund 0, taken 0, mark deleted, lava standing.
+- **Drivers.** fl5: the dispenser takes nothing because the removal's held box seals it (`TxnHoldDispenserMixin`, T4b); `dev.dispense`
+  answers `held`; the row asserts the seal, then conservation. mixed: halts at `TX:fluid.drain:lavadone:<cx>.<cz>+save` (dev-armed, after the
+  chunk's last lava W's receipt) and checks pile gain == the REMOVAL_FINISHED credit + the injected bucket left in the dispenser.
+- **Units:** IN-GAME-AND-SUITE-PENDING
+
+#### Crash safety and scope (T5Fc round 2, what changed)
+
+- **Durable record per fact:** which semantics a drain W replays with: its own saved intent (the `pc` marker), never its chunk count; an
+  escape's observed cells: its intent (`esc`); the revision's (and region's) frozen rows: the region record, confirmed before the done that
+  trusts them; done: fluids.json, saved only after the rows.
+- **Persisted before each change:** the escape's `esc` and the full footprint are in the intent before any W writes; the rows' region-record
+  save is confirmed before done is saved (a refused one leaves `drained`/`restoring`, retried).
+- **Second crash during recovery:** an unmarked legacy W replays as 8cT did each time; a lost chunk of an escape replays from its frozen
+  `esc`/work; a crash after the rows and before done redoes saveDone (the rows rewritten, idempotent); the integration test crashes twice.
+- **Keys per operation:** unchanged.
+- **Holds and admission:** unchanged; the footprint only adds Ws (each W's receipt in its own chunk).
+- **Refunds priced from what was removed:** unchanged (the receipts); the held-on-top cell: no refund, no taken, the lava stays in the world.
+- **Old in-flight state:** nothing converted: an unmarked W keeps its old adapter path; fix-round dev intents (closure, no marker) take the
+  legacy path (P3 class, unreleased dev saves only).
+- **One rule:** the saved schema selects the semantics; a W's footprint is every destination chunk of its frozen writes and ticks.
+- **Older saved worlds:** 8cT drain entries (single or multi-chunk) and fix-round dev entries without `pc`/`esc`.
+- **Known risks / leftovers:** Steward's reader still reads `architect_mc:fluids`, not `architect_mc:fluidsUndone` (coordinated consumer
+  work); P1-6, the stray guard, saveDone's two call sites and the undo driver are pinned in source, not exercised (they need a server).
