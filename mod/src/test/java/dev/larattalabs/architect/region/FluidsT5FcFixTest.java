@@ -530,6 +530,64 @@ class FluidsT5FcFixTest {
 		}
 	}
 
+	// ================================================================== round 2 (fix-check of 829658b8: findings 2-5 and the test gaps)
+
+	/** A pool-only record: one water source at x 15 (chunk 0,0), its east neighbour in chunk 1,0, nothing of it planned in 1,0. */
+	static final String IR_POOL = "{\"parts\":[{\"id\":\"pool\",\"stage\":\"fluids\",\"ops\":[{\"op\":\"fluid\",\"id\":\"pool\",\"part\":\"p\",\"fluid\":\"water\","
+		+ "\"level\":60,\"cells\":[[15,9,60,60]],\"shell\":[[14,9,59,60]],\"settleTicks\":35}]}]}";
+
+	// ------------------------------------------------------------------ finding 2: legacy drain behaviour by saved schema, not chunk count
+
+	@Test
+	void r2_f2_aLegacySingleChunkHoldBeforeAdoptionDrainsItsSourcesAsItDid() throws Exception {
+		region(IR_POOL, null);
+		st.prov = false; // a record saved before T5F: no provenance, no marks (its adoption comes later, from the tick)
+		w.put(POOL, WATER);
+		st.states.get("pool").before.put(POOL, "minecraft:air");
+		st.states.get("pool").state = "written";
+		assertTrue(RegionFluids.save(l, st));
+		w.saveAll();
+		// a held drain planned by 8cT (one chunk [0,0]: no schema marker, no closure), its intent durable, a crash before it applied
+		TxnCore.Started s = core.begin(FluidTxns.DRAIN, "fluid-drain:" + rec + "/held:pool", List.of(FluidTxns.resource(l)), null);
+		JsonArray one = new JsonArray();
+		JsonArray xz = new JsonArray();
+		xz.add(0);
+		xz.add(0);
+		one.add(xz);
+		core.plan(s.entry(), Effect.of("fluid.hold", dev.larattalabs.architect.txn.EffectClass.W).data("body", "pool").data("region", "t5fx").data("rid", 0)
+			.data("dim", "minecraft:overworld").data("chunks", one));
+		core.plan(s.entry(), Effect.of("fluid.held", dev.larattalabs.architect.txn.EffectClass.R).data("body", "pool").data("why", "uncontained").data("reason",
+			"TEST legacy").data("at", new JsonArray()).data("region", "t5fx").data("rid", 0));
+		assertEquals(DurableFile.Outcome.OK, core.persist(s.entry()));
+		env.crashAt = "decided"; // decided and durable, a crash before its W applied
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) env::kill);
+		try {
+			core.drive(s.entry());
+		} catch (Crash expected) {
+			// the crash
+		}
+		assertNull(env.crashAt, "the decided point was reached");
+		assertEquals(WATER, w.get(POOL));
+		restart();
+		assertFalse(st.prov, "recovered before its adoption");
+		assertNull(open(FluidTxns.DRAIN), "the legacy hold replayed and retired");
+		assertEquals(AIR, w.get(POOL), "the old operation's semantics: its source drained (red: a DrainCtx with no marks admits nothing, the source stays "
+			+ "while a receipt says drained)");
+		assertEquals("drained", st.states.get("pool").state);
+	}
+
+	@Test
+	void r2_f2_everyPlannedRecordWCarriesTheSchemaMarker() {
+		pit(null);
+		env.okLeft = 1; // the effects barrier refuses: the intent stays open to read
+		FluidTxns.hold(l, st, st.body("pool"), "uncontained", "TEST", List.of());
+		TxnEntry t = open(FluidTxns.DRAIN);
+		assertNotNull(t);
+		for (Effect e : t.effects()) {
+			assertEquals("fluid.hold".equals(e.op()), e.data().has("pc"), e.op() + ": the marker on every W record() plans, never on the R");
+		}
+	}
+
 	// ------------------------------------------------------------------ the core's environment
 
 	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */

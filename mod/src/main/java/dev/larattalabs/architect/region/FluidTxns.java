@@ -1233,8 +1233,9 @@ public final class FluidTxns {
 						level.getChunk((int) c[0], (int) c[1]);
 					}
 				}
-				if (cs.size() == 1) {
-					// (T5Fc, I4) a per-chunk W (T5Fc's plans): its drains write and tick only its own chunk; an 8cT-era W over every chunk as it was
+				if (e.data().has(PER_CHUNK)) {
+					// (T5Fc, I4; round 2, finding 2) a per-chunk W (T5Fc's plans, which carry the schema marker): its drains write and tick only its
+					// own chunk. An unmarked W (8cT's, whatever its chunk count, even one chunk) runs as it was: no provenance context
 					int cx = (int) cs.get(0)[0], cz = (int) cs.get(0)[1];
 					RegionFluids.DrainCtx dc = new RegionFluids.DrainCtx(fw, recKey(l), cx, cz, st.bodies);
 					var wasF = RegionFluids.chunkFilter;
@@ -1258,10 +1259,7 @@ public final class FluidTxns {
 						throw new IllegalStateException("chunk " + cx + "," + cz + ": " + dc.refused + " cell(s) refused the drain (a hold): the drain waits");
 					}
 				} else {
-					if (level == null) {
-						throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
-					}
-					run.run(t, e, level, fw, l, st);
+					run.run(t, e, level, fw, l, st); // (round 2) each legacy run checks its own level (escape, lotdrain, place); a hold writes through fw
 				}
 				String k = e.key(t.id);
 				for (long[] c : cs) {
@@ -1290,6 +1288,12 @@ public final class FluidTxns {
 			}
 		};
 	}
+
+	/**
+	 * (round 2, finding 2) The schema marker every W {@link #record} plans carries ({@code "pc":1}): it alone selects the per-chunk path in
+	 * {@link #w}. An entry saved without it (8cT's) keeps its old semantics whatever its chunk count.
+	 */
+	static final String PER_CHUNK = "pc";
 
 	/** (fix round, P2-8) The bodies a record W drains: an escape's body and its frozen closure, a hold's body and its upstream, a lot's bodies. */
 	static List<RegionFluids.Body> wBodies(Effect e, RegionFluids.Regional st) {
@@ -1407,7 +1411,7 @@ public final class FluidTxns {
 			xz.add((int) (ck >> 32));
 			xz.add((int) ck);
 			one.add(xz);
-			c.plan(t, w.apply(ck).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", one));
+			c.plan(t, w.apply(ck).data("region", l.rec().id).data("rid", l.rid()).data("dim", l.rec().dimension).data("chunks", one).data(PER_CHUNK, 1));
 		}
 		c.plan(t, r.data("region", l.rec().id).data("rid", l.rid()));
 		DurableFile.Outcome p = c.persist(t);
@@ -1921,6 +1925,9 @@ public final class FluidTxns {
 		}
 
 		static final TxnKind.Adapter PLACE = w("place", (t, e, level, fw0, l, st) -> {
+			if (level == null) {
+				throw new IllegalStateException("region " + region(e) + " (rv " + rid(e) + ") is not loaded");
+			}
 			TileEntries jw = new TileEntries(l.rec().dimension, e.data().get("group").getAsString(), RegionFluids.stageOf(l));
 			FluidWorld fw = FluidWorld.of(level);
 			int n = 0;
