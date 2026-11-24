@@ -4431,9 +4431,9 @@ public final class RegionFluids {
 	 * read only; the writes and ticks in this chunk), each cell back to its before state (or the foreign water's own level) where the body's
 	 * flow still stands (I8). Returns the cells written.
 	 */
-	static int strayChunk(ServerLevel level, Regional st, int cx, int cz, java.util.function.LongPredicate held) {
+	static int strayChunk(FluidWorld w, Regional st, int cx, int cz, java.util.function.LongPredicate held) {
 		java.util.function.LongFunction<@Nullable Wet> at = k -> {
-			BlockState bs = level.getBlockState(BlockPos.of(k));
+			BlockState bs = w.get(k);
 			FluidState f = bs.getFluidState();
 			return f.isEmpty() || !f.getType().isSame(Fluids.WATER) ? null : new Wet(f.getAmount(), f.isSource(), bs.getBlock() instanceof LiquidBlock);
 		};
@@ -4445,8 +4445,7 @@ public final class RegionFluids {
 				continue;
 			}
 			Body b = st.order.get((int) c[1]);
-			BlockPos bp = BlockPos.of(p);
-			BlockState now = level.getBlockState(bp);
+			BlockState now = w.get(p);
 			if (held.test(p) || !flowStillOurs(b, now)) {
 				continue;
 			}
@@ -4461,7 +4460,7 @@ public final class RegionFluids {
 				to = was == null ? Blocks.AIR.defaultBlockState() : parse(was);
 			}
 			if (now != to) {
-				if (dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS)) {
+				if (w.set(p, to)) {
 					written.add(p);
 				} else {
 					noteRefused(); // (T5Fc fix round) the stray W holds: no receipt over a refused cell
@@ -4471,7 +4470,7 @@ public final class RegionFluids {
 		var was = tickOnly;
 		tickOnly = q -> inChunk(q, cx, cz);
 		try {
-			tickAround(level, written);
+			tickAround(w, written);
 		} finally {
 			tickOnly = was;
 		}

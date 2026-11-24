@@ -63,6 +63,9 @@ class FluidsT5FcFixTest {
 	Env env;
 	TxnCore core;
 	TxnCore.BeginGuard wasGuard;
+	dev.larattalabs.architect.site.Groups.FluidsExtras wasExtras;
+	/** (round 2) The ledger as its last confirmed save left it (the scoop's L saves it at once; a restart reloads it from here). */
+	JsonObject ledgerDisk;
 	StockLedger ledger;
 
 	@BeforeAll
@@ -85,6 +88,9 @@ class FluidsT5FcFixTest {
 		ledger = new StockLedger();
 		ledger.credit("seed", Map.of(StockLedger.BUCKET, 10), 1000, s -> 64); // ten empty buckets in the pile
 		FluidTxns.testLedger = o -> ledger;
+		ledgerDisk = ledger.toJson();
+		env.onKill = () -> ledgerDisk = ledger.toJson(); // (every kill point follows a durable step; only the L changes the ledger, saving it)
+		wasExtras = dev.larattalabs.architect.site.Groups.FLUIDS_EXTRAS;
 	}
 
 	@AfterEach
@@ -93,6 +99,12 @@ class FluidsT5FcFixTest {
 		FluidTxns.testLedger = null;
 		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", null);
 		FluidTxns.testCore = null;
+		FluidTxns.testHeld = null;
+		RegionFluids.testFlowing = null;
+		RegionFluids.extraStrays = null;
+		RegionStore.failNext = null;
+		RegionStore.failSticky = false;
+		dev.larattalabs.architect.site.Groups.FLUIDS_EXTRAS = wasExtras;
 		TxnCore.BEGIN_GUARD = wasGuard;
 		RegionsImpl.dropLive("t5fx");
 		RegionFluids.forget(null);
@@ -113,6 +125,7 @@ class FluidsT5FcFixTest {
 	void restart() throws Exception {
 		RegionFluids.forget(null);
 		st = RegionFluids.of(l);
+		ledger = StockLedger.fromJson(ledgerDisk.deepCopy()); // (round 2) the ledger read back from its saved snapshot, never the live object
 		newCore(env.disk == null ? null : env.disk.deepCopy());
 	}
 
@@ -258,6 +271,7 @@ class FluidsT5FcFixTest {
 		pit(null);
 		st.removal = "restoring";
 		List<Long> chunks = List.of(ChunkPos.pack(100, 7), ChunkPos.pack(-3, 5));
+		env.okLeft = 1; // (round 2: the stray W runs on the unit's world now) the effects barrier refuses: the intent stays open to read
 		FluidTxns.stray(l, st, "g1", chunks);
 		TxnEntry t = open(FluidTxns.STRAY);
 		assertNotNull(t, "the stray txn (its W needs a level: held in a unit)");
@@ -482,7 +496,17 @@ class FluidsT5FcFixTest {
 	@Test
 	void drainThenScoopThroughTheCore_aCrashAtEachStep_conservation() throws Exception {
 		Path root = world;
-		for (String at : new String[] {"drain", "barrier:effects", "drained", "effects", "scoop", "scooped", null}) {
+		// (round 2) a second crash armed during each recovery, and the ledger reloaded from its saved snapshot at every restart
+		Map<String, String> second = new java.util.LinkedHashMap<>();
+		second.put("drain", "drained");
+		second.put("barrier:effects", "scoop");
+		second.put("drained", "scoop");
+		second.put("effects", "scooped");
+		second.put("scoop", "scooped");
+		second.put("scooped", null);
+		second.put(null, null);
+		for (var pt : second.entrySet()) {
+			String at = pt.getKey(), again = pt.getValue();
 			tearDown();
 			setUp();
 			world = java.nio.file.Files.createDirectories(root.resolve(String.valueOf(at).replace(':', '_'))); // (a fresh world per crash point)
@@ -502,22 +526,19 @@ class FluidsT5FcFixTest {
 			}
 			if (at != null) {
 				assertNull(env.crashAt, at + ": the crash point was reached");
-				for (long ck : RegionFluids.drainChunksOf(st, st.body("pit"))) {
-					w.lose((int) (ck >> 32), (int) ck); // a bare crash: every chunk as the last barrier (or the setup) saved it
+				env.crashAt = again; // the second crash, during the recovery (the core's replay at its start, or the steps after it)
+				try {
+					crashRestart();
+					recoverLoop();
+				} catch (Crash expected) {
+					// crashed again mid-recovery
 				}
-				for (long ck : RegionFluids.drainChunksOf(st, st.body("pool"))) {
-					w.lose((int) (ck >> 32), (int) ck);
+				if (again != null) {
+					assertNull(env.crashAt, at + " then " + again + ": the second crash point was reached during recovery");
+					crashRestart();
 				}
-				restart();
 			}
-			for (int i = 0; i < 4 && (st.drainTxn == null || st.scooped == null || open(FluidTxns.SCOOP) != null); i++) {
-				if (RegionFluids.needsDrain(l, st)) { // (gateOne's order: the drain until it retired, then the scoop)
-					drain();
-				} else {
-					RegionFluids.scoopStep(l, st);
-				}
-				core.open().forEach(core::drive);
-			}
+			recoverLoop();
 			assertTrue(RegionFluids.scoopStep(l, st), at + ": the scoop done");
 			int lava = ledger.stock("minecraft:lava_bucket");
 			assertEquals(2, lava, at + ": refunded exactly once: B and C");
@@ -527,6 +548,29 @@ class FluidsT5FcFixTest {
 				assertNull(markName(p), at + ": no mark of R left after the drain");
 			}
 			assertEquals(2, st.scoopCredited.get("minecraft:lava_bucket").getAsInt(), at + ": what the ledger credited");
+			assertEquals(Map.of("minecraft:lava_bucket", 2), ledger.creditedAmount(FluidTxns.scoopKey(l)), at + ": the credited amount survives the reload");
+		}
+	}
+
+	/** A bare crash: every chunk as the last barrier (or the setup) saved it; then a restart (the record, the core, the ledger from disk). */
+	void crashRestart() throws Exception {
+		for (String id : new String[] {"pit", "pool"}) {
+			for (long ck : RegionFluids.drainChunksOf(st, st.body(id))) {
+				w.lose((int) (ck >> 32), (int) ck);
+			}
+		}
+		restart();
+	}
+
+	/** gateOne's order after a start: the drain until it retired, then the scoop, each driven. */
+	void recoverLoop() {
+		for (int i = 0; i < 6 && (st.drainTxn == null || st.scooped == null || open(FluidTxns.SCOOP) != null); i++) {
+			if (RegionFluids.needsDrain(l, st)) {
+				drain();
+			} else {
+				RegionFluids.scoopStep(l, st);
+			}
+			core.open().forEach(core::drive);
 		}
 	}
 
@@ -681,6 +725,184 @@ class FluidsT5FcFixTest {
 		}
 	}
 
+	// ------------------------------------------------------------------ test gaps (the fix-check's list)
+
+	/** P1-6 at its call site: gateFlowing's raw restart drain runs only under restartRedrains (a record without receipts); the predicate is p1_6's. */
+	@Test
+	void r2_gap_p1_6_pin_gateFlowingRedrainsOnlyUnderTheLegacyPredicate() throws Exception {
+		String b = body("RegionFluids.java", "static boolean gateFlowing(");
+		assertEquals(1, b.split("drainSourcesAll\\(", -1).length - 1, "one raw restart drain in gateFlowing");
+		int g = b.indexOf("if (restartRedrains(st)) {");
+		assertTrue(g >= 0, "the raw drain is guarded by restartRedrains (red: the 8c guard `restoring && !redrained` alone)");
+		String block = b.substring(g, g + body2(b.substring(g)).length());
+		assertTrue(block.contains("drainSourcesAll("), "the raw drain is inside that guard");
+		assertTrue(b.contains("&& !restartRedrains(st)) {\n\t\t\tst.redrained = true;"), "a T5Fc record is marked redrained without draining");
+	}
+
+	static String body2(String s) {
+		int depth = 0;
+		for (int k = s.indexOf('{'); k < s.length(); k++) {
+			char c = s.charAt(k);
+			if (c == '{') {
+				depth++;
+			} else if (c == '}' && --depth == 0) {
+				return s.substring(0, k + 1);
+			}
+		}
+		throw new AssertionError("unbalanced");
+	}
+
+	/** P2-12 through the production merge: the driver's own call (mergeFinishedStage), with the fluids hook the server installs. */
+	@Test
+	void r2_gap_p2_12_theDriversMergeOfAStageFinishedByItselfCarriesItsFluids() throws Exception {
+		JsonObject fx = JsonParser.parseString("{\"refund\":{\"minecraft:lava_bucket\":2},\"taken\":{\"minecraft:lava_bucket\":1},\"takenCells\":1}")
+			.getAsJsonObject();
+		dev.larattalabs.architect.site.Groups.FLUIDS_EXTRAS = (s, g, stage) -> "g1".equals(g) && "fluids:rv2".equals(stage) ? fx : null;
+		JsonObject op = new JsonObject();
+		JsonArray aw = new JsonArray();
+		aw.add("fluids:rv2");
+		op.add("awaited", aw);
+		JsonObject snap = JsonParser.parseString("{\"refund\":{\"minecraft:cobblestone\":3}}").getAsJsonObject();
+		var m = method(Revisions.class, "mergeFinishedStage", net.minecraft.server.MinecraftServer.class, String.class, JsonObject.class, String.class,
+			JsonObject.class);
+		assertTrue((Boolean) call(m, null, "g1", op, "fluids:rv2", snap));
+		JsonObject agg = op.getAsJsonObject("result");
+		assertEquals(2, agg.getAsJsonObject("refund").get("minecraft:lava_bucket").getAsInt(), "the scoop's refund joins the aggregate (red: identity merge)");
+		assertEquals(1, agg.get("fluidsTakenCells").getAsInt());
+		String drv = java.nio.file.Files.readString(Path.of("src/main/java/dev/larattalabs/architect/region/Revisions.java"));
+		assertTrue(drv.contains("if (mergeFinishedStage(s, rec.groupId, op, st,"), "the undo driver merges through it (pin)");
+		assertEquals(1, drv.split("mergeAwaitedWith\\(", -1).length - 3, "no other caller of mergeAwaitedWith (its definition, mergeAwaited's and "
+			+ "mergeFinishedStage's call only)");
+	}
+
+	/** The stray pass's EFFECTS_DONE wait (P2-9's second half): strayOpen while the stray txn's R saved and its barrier did not pass. */
+	@Test
+	void r2_gap_p2_9_theStrayPassWaitsForItsOpenTxn() throws Exception {
+		region(IR_POOL, null);
+		st.states.get("pool").before.put(POOL, "minecraft:air");
+		st.states.get("pool").state = "drained";
+		st.removal = "restoring";
+		st.strayChunks = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(new long[] {ChunkPos.pack(0, 0)});
+		assertTrue(RegionFluids.save(l, st));
+		env.okLeft = 1; // the stray txn's W and R apply (strayChunks saved empty), its effects barrier refuses
+		FluidTxns.stray(l, st, "g1", List.of(ChunkPos.pack(0, 0)));
+		assertTrue(st.strayChunks.isEmpty(), "the R saved the chunks left: none");
+		assertTrue(FluidTxns.strayOpen(l), "its txn is open: no done yet (red: the empty list read as the pass finished)");
+		env.okLeft = Integer.MAX_VALUE;
+		core.open().forEach(core::drive);
+		assertFalse(FluidTxns.strayOpen(l));
+		String b = body("RegionFluids.java", "static boolean gateFlowing(");
+		int guard = b.indexOf("if (FluidTxns.strayOpen(l)) {");
+		assertTrue(guard >= 0 && guard < b.indexOf("saveDone(l, st)"), "gateFlowing waits on it before done (pin)");
+	}
+
+	/** FL9 after the first stray W's receipt (P2-14), on the unit's world (strayChunk reads and writes through FluidWorld now). */
+	@Test
+	void r2_gap_p2_14_fl9FiresAfterTheFirstStrayReceipt() throws Exception {
+		region(IR_POOL, null);
+		st.states.get("pool").before.put(POOL, "minecraft:air");
+		st.states.get("pool").state = "drained";
+		st.removal = "restoring";
+		long west = BlockPos.asLong(14, 60, 9);
+		w.put(west, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 7)); // the dying flow beside the drained source
+		w.put(POOL_EAST, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 7));
+		List<Long> chunks = List.of(ChunkPos.pack(0, 0), ChunkPos.pack(1, 0));
+		st.strayChunks = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(chunks.stream().mapToLong(Long::longValue).toArray());
+		assertTrue(RegionFluids.save(l, st));
+		List<String> seen = new ArrayList<>();
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) p -> {
+			if ("FL9".equals(p)) {
+				TxnEntry t = open(FluidTxns.STRAY);
+				Effect first = t.effects().get(0);
+				seen.add(w.hasReceipt(chunk(first)[0], chunk(first)[1], first.key(t.id)) ? "receipt" : "none");
+			}
+		});
+		assertEquals(FluidTxns.Step.Kind.DONE, FluidTxns.stray(l, st, "g1", chunks).kind());
+		assertEquals(List.of("receipt"), seen, "FL9 (+save) holds the first stray chunk with its receipt (red: before it)");
+		assertEquals(AIR, w.get(west), "the stray flow in chunk 0,0 restored");
+		assertEquals(AIR, w.get(POOL_EAST), "and in chunk 1,0, by its own W");
+	}
+
+	// a river head at x 15 (chunk 0,0), its current predicted west to x 14 and east across the border to x 16, 17 (chunk 1,0)
+	static final String IR_RIVER = "{\"parts\":[{\"id\":\"rv\",\"stage\":\"fluids\",\"ops\":[{\"op\":\"fluid\",\"id\":\"rv\",\"part\":\"r\",\"fluid\":\"water\","
+		+ "\"level\":70,\"cells\":[[15,5,70,70]],\"predicted\":[[14,70,5,1],[16,70,5,1],[17,70,5,2]],\"settleTicks\":60,\"flow\":\"current\"}]}]}";
+
+	/** P2-7's original window: a flowing escape's frozen abort work spans two chunks; each W writes only its own (a crash between them). */
+	@Test
+	void r2_gap_p2_7_aFlowingEscapesFrozenAbortWritesOnlyItsChunk() throws Exception {
+		RegionFluids.testFlowing = true;
+		region(IR_RIVER, null);
+		long head = BlockPos.asLong(15, 70, 5), w14 = BlockPos.asLong(14, 70, 5), e16 = BlockPos.asLong(16, 70, 5), e17 = BlockPos.asLong(17, 70, 5);
+		w.put(head, WATER);
+		mark(head, "WROTE");
+		w.put(w14, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 7));
+		w.put(e16, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 7));
+		w.put(e17, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 6));
+		st.states.get("rv").before.put(head, "minecraft:air");
+		st.states.get("rv").state = "written";
+		assertTrue(st.flowingRegion());
+		assertTrue(RegionFluids.save(l, st));
+		w.saveAll();
+		List<String> afterFirst = new ArrayList<>();
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) p -> {
+			if (p.endsWith("fluid.drain:drain") && afterFirst.isEmpty()) {
+				afterFirst.add(w.get(w14).isAir() + "," + w.get(e16).isAir() + "," + w.get(e17).isAir());
+				env.kill(p);
+			}
+		});
+		env.crashAt = "drain"; // a crash right after the first W (chunk 0,0) and its receipt
+		try {
+			FluidTxns.escape(l, st, st.body("rv"), "escaped", "escaped", List.of(new long[] {17, 70, 5}));
+		} catch (Crash expected) {
+			// the crash
+		}
+		TxnEntry t = core.open().stream().filter(x -> FluidTxns.DRAIN.equals(x.kind)).findFirst().orElse(null);
+		assertNotNull(t, "the escape's intent is open");
+		Map<String, Integer> workPerChunk = new TreeMap<>();
+		for (Effect e : t.effects()) {
+			if ("fluid.escape".equals(e.op())) {
+				assertTrue(e.data().getAsJsonArray("abort").contains(new com.google.gson.JsonPrimitive("rv")), "the river is aborted, not drained");
+				int[] c = chunk(e);
+				for (var x : e.data().getAsJsonArray("work")) {
+					long p = x.getAsJsonArray().get(0).getAsLong();
+					assertTrue(RegionFluids.inChunk(p, c[0], c[1]), "each W carries only its own chunk's frozen work");
+				}
+				workPerChunk.put(c[0] + "," + c[1], e.data().getAsJsonArray("work").size());
+			}
+		}
+		assertTrue(workPerChunk.getOrDefault("0,0", 0) > 0 && workPerChunk.getOrDefault("1,0", 0) > 0, "work frozen in two chunks: " + workPerChunk);
+		assertEquals(List.of("true,false,false"), afterFirst, "chunk 0,0's W took x 14 only; chunk 1,0's flow untouched (red: the unfiltered stray work "
+			+ "wrote both chunks under one chunk's receipt)");
+		w.lose(1, 0); // chunk 1,0 was never saved: the crash loses nothing of it (it was not written)
+		w.save(0, 0);
+		restart();
+		assertNull(open(FluidTxns.DRAIN), "the replay applied chunk 1,0's W from its frozen work and retired");
+		assertEquals(AIR, w.get(head));
+		assertEquals(AIR, w.get(e16));
+		assertEquals(AIR, w.get(e17));
+	}
+
+	/**
+	 * The known risk stated in the fix round: a paid cell another entry holds on top. The drain leaves it standing (the undo hands it down to
+	 * that entry as its before); it is neither refunded nor counted taken; its mark goes with the receipt. Conservation: refunded 2 + the
+	 * standing cell 1 == charged 3: no mint (no refund for it), no loss (the lava stays in the world under the other entry's block).
+	 */
+	@Test
+	void r2_gap_aCellHeldOnTopByAnotherEntryIsNeitherMintedNorLost() {
+		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
+		FluidTxns.testHeld = p -> p == A;
+		assertEquals(FluidTxns.Step.Kind.DONE, drain().kind());
+		assertEquals(LAVA, w.get(A), "the held cell stands: the undo hands it down to the entry on top (its before: this lava)");
+		assertEquals(AIR, w.get(B));
+		assertEquals(AIR, w.get(C));
+		assertNull(markName(A), "no mark of R left after the drain");
+		int[] s = sum();
+		assertEquals(2, s[0], "refunded B and C only: no refund for the cell still in the world (no mint)");
+		int[] tk = FluidTxns.takenSum(st, w);
+		assertEquals(0, tk[0], "not reported taken");
+		assertEquals(3, s[0] + 1, "conserved: 2 refunded + 1 standing == 3 charged");
+	}
+
 	// ------------------------------------------------------------------ the core's environment
 
 	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */
@@ -697,6 +919,9 @@ class FluidsT5FcFixTest {
 		String crashAt;
 		/** What a passed barrier makes durable (the world's chunks). */
 		Runnable onBarrier = () -> {
+		};
+		/** Run at every kill point before any crash (the ledger's confirmed save). */
+		Runnable onKill = () -> {
 		};
 
 		@Override
@@ -739,6 +964,7 @@ class FluidsT5FcFixTest {
 
 		@Override
 		public void kill(String point) {
+			onKill.run();
 			if (crashAt != null && point.endsWith(":" + crashAt)) {
 				crashAt = null;
 				throw new Crash(point);

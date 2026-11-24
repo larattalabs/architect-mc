@@ -71,6 +71,8 @@ public final class FluidTxns {
 	 * that chunk's own (body, chunk) W. {@link #holdChunkBefore} answers the chunks done before the throw. Default null: off.
 	 */
 	public static volatile int @Nullable [] holdChunk;
+	/** (round 2, TEST) The removal drain W's holders in a unit (a cell another entry holds on top); null: none (no level), or the journal's. */
+	static volatile java.util.function.@Nullable LongPredicate testHeld;
 	/** (slice T5Fa) TEST: the chunks ({@code "x,z"}) whose drain evidence was saved before the last {@link #holdChunk} throw, in order. */
 	public static final java.util.List<String> holdChunkBefore = new java.util.concurrent.CopyOnWriteArrayList<>();
 
@@ -816,16 +818,15 @@ public final class FluidTxns {
 	}
 
 	static final TxnKind.Adapter FLUID_STRAY = chunkW("fluid.stray", "stray", (t, e, w, l, st, cx, cz) -> {
-		ServerLevel level = level(e);
-		if (level == null) {
-			throw new IllegalStateException("not loaded");
-		}
+		// (round 2) through the W's fluid world (chunkW refuses an unloaded one); the holders read the journal (a unit's world: none hold)
+		java.util.function.LongPredicate held = FluidTxns.testWorld != null ? RegionFluids.NOT_HELD : new RegionFluids.Holders(l.rec().dimension, e.data().get("group")
+			.getAsString(), st);
 		RegionFluids.DrainCtx dc = new RegionFluids.DrainCtx(w, recKey(l), cx, cz, List.of()); // (fix round) a refused cell holds the W
 		var was = RegionFluids.drainCtx;
 		RegionFluids.drainCtx = dc;
 		int n;
 		try {
-			n = RegionFluids.strayChunk(level, st, cx, cz, new RegionFluids.Holders(l.rec().dimension, e.data().get("group").getAsString(), st));
+			n = RegionFluids.strayChunk(w, st, cx, cz, held);
 		} finally {
 			RegionFluids.drainCtx = was;
 		}
@@ -1078,7 +1079,8 @@ public final class FluidTxns {
 			return Map.of("n", 0);
 		}
 		String group = e.data().get("group").getAsString();
-		java.util.function.LongPredicate held = level == null ? RegionFluids.NOT_HELD : new RegionFluids.Holders(l.rec().dimension, group, st);
+		var th = testHeld;
+		java.util.function.LongPredicate held = th != null ? th : level == null ? RegionFluids.NOT_HELD : new RegionFluids.Holders(l.rec().dimension, group, st);
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet u = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (e.data().get("u") instanceof JsonArray ua) {
 			ua.forEach(x -> u.add(x.getAsLong())); // (fix round, P1-3) the intent's frozen never-delivered cells of this chunk

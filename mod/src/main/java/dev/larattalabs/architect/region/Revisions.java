@@ -1810,8 +1810,8 @@ public final class Revisions {
 				if (state != dev.larattalabs.architect.api.Stage.State.PLACED && state != dev.larattalabs.architect.api.Stage.State.PARTIAL) {
 					// (REL-v0910 fix round, P2-1) a stage this undo started that finished by itself (held(decided), or resumed after a restart:
 					// no future reached this driver): its result joins the aggregate from its durable stage snapshot, once
-					if (mergeAwaitedWith(op, st, state == dev.larattalabs.architect.api.Stage.State.UNDONE ? dev.larattalabs.architect.site.OwnerRemovals.result(
-						"stage", rec.groupId + "/" + st) : null, r -> dev.larattalabs.architect.site.Groups.withFluids(s, rec.groupId, st, r))) {
+					if (mergeFinishedStage(s, rec.groupId, op, st, state == dev.larattalabs.architect.api.Stage.State.UNDONE ? dev.larattalabs.architect.site.OwnerRemovals
+						.result("stage", rec.groupId + "/" + st) : null)) {
 						writeUndo(l, op);
 					}
 					continue; // undone already, or it never placed anything
@@ -2103,6 +2103,15 @@ public final class Revisions {
 	 * (the same merge the stage's future carries: its scoop's refund and taken counts from the records on disk), so a stage finished by
 	 * itself reports what one finished under this driver does.
 	 */
+	/**
+	 * (round 2) The driver's merge of a stage that finished by itself: {@link #mergeAwaitedWith} with the stage's fluids removal from the records
+	 * ({@code Groups.withFluids}, the same merge its future carries). One call from the undo driver, so a unit reaches the production merge.
+	 */
+	static boolean mergeFinishedStage(@org.jspecify.annotations.Nullable MinecraftServer s, String group, JsonObject op, String st,
+		@org.jspecify.annotations.Nullable JsonObject snap) {
+		return mergeAwaitedWith(op, st, snap, r -> dev.larattalabs.architect.site.Groups.withFluids(s, group, st, r));
+	}
+
 	static boolean mergeAwaitedWith(JsonObject op, String st, @org.jspecify.annotations.Nullable JsonObject snap, java.util.function.UnaryOperator<
 		dev.larattalabs.architect.site.Groups.Removed> fluids) {
 		if (!(op.get("awaited") instanceof com.google.gson.JsonArray a) || !a.contains(new com.google.gson.JsonPrimitive(st))) {
