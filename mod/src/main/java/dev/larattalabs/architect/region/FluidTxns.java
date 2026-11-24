@@ -1252,8 +1252,9 @@ public final class FluidTxns {
 						RegionFluids.drainCtx = wasC;
 					}
 					dc.close();
+					String escBody = e.data().has("esc") && e.data().has("body") ? e.data().get("body").getAsString() : null;
 					for (RegionFluids.Body b : wBodies(e, st)) {
-						RegionFluids.tickBodyIn(fw, st, b, cx, cz);
+						RegionFluids.tickBodyIn(fw, st, b, cx, cz, b.id.equals(escBody) ? escOf(e) : new long[0]); // (round 2) and the escape's observed cells
 					}
 					if (dc.refused > 0) {
 						throw new IllegalStateException("chunk " + cx + "," + cz + ": " + dc.refused + " cell(s) refused the drain (a hold): the drain waits");
@@ -1367,19 +1368,43 @@ public final class FluidTxns {
 
 	/** Begins (or finds) one record txn: plans {@code w} then {@code r} over the record's chunks; persists; drives. */
 	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.Supplier<Effect.Builder> w, Effect.Builder r,
-		java.util.function.Consumer<TxnEntry> attached) {
-		return record(kind, key, l, st, ck -> w.get(), r, attached);
+		java.util.function.Consumer<TxnEntry> attached, long[] chunks) {
+		return record(kind, key, l, st, ck -> w.get(), r, attached, chunks);
 	}
 
 	/** (fix round, P2-7) {@link #record} with each chunk's W built for its chunk ({@code ck}: {@link RegionFluids#chunkKey}). */
 	static Step recordPerChunk(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.LongFunction<Effect.Builder> w,
-		Effect.Builder r) {
+		Effect.Builder r, long[] chunks) {
 		return record(kind, key, l, st, w, r, t -> {
-		});
+		}, chunks);
+	}
+
+	/**
+	 * (round 2, findings 3 and 4) A record W's footprint: every chunk the record's writes may touch ({@link RegionFluids#drainChunks}), every
+	 * chunk the W's own bodies write or tick in, their face neighbours included ({@link RegionFluids#drainChunksOf}), and each frozen cell
+	 * ({@code extra}: an escape's observed cells, an abort's work) with its face neighbours' chunks (its destination ticks). Sorted.
+	 */
+	static long[] footprint(RegionFluids.Regional st, java.util.Collection<RegionFluids.Body> bodies, long[] extra) {
+		java.util.TreeSet<Long> c = new java.util.TreeSet<>();
+		for (long ck : RegionFluids.drainChunks(st)) {
+			c.add(ck);
+		}
+		for (RegionFluids.Body b : bodies) {
+			for (long ck : RegionFluids.drainChunksOf(st, b)) {
+				c.add(ck);
+			}
+		}
+		for (long p : extra) {
+			c.add(RegionFluids.chunkKey(p));
+			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+				c.add(RegionFluids.chunkKey(net.minecraft.core.BlockPos.offset(p, d)));
+			}
+		}
+		return c.stream().mapToLong(Long::longValue).toArray();
 	}
 
 	static Step record(String kind, String key, RegionsImpl.Live l, RegionFluids.Regional st, java.util.function.LongFunction<Effect.Builder> w, Effect.Builder r,
-		java.util.function.Consumer<TxnEntry> attached) {
+		java.util.function.Consumer<TxnEntry> attached, long[] chunks) {
 		Step a = adoptFirst(l, st); // (slice T5F, §4.7) a record built before T5F is adopted first
 		if (a != null) {
 			return a;
@@ -1404,8 +1429,9 @@ public final class FluidTxns {
 			}
 		}
 		TxnEntry t = started.entry();
-		// (T5Fc, I4) one W per chunk (the same op and data, its one chunk): a replay redoes only the chunks whose receipt is missing
-		for (long ck : RegionFluids.drainChunks(st)) {
+		// (T5Fc, I4) one W per chunk (the same op and data, its one chunk): a replay redoes only the chunks whose receipt is missing. (round 2,
+		// findings 3 and 4) over the caller's footprint: every destination chunk of the frozen writes and ticks
+		for (long ck : chunks) {
 			JsonArray one = new JsonArray();
 			JsonArray xz = new JsonArray();
 			xz.add((int) (ck >> 32));
@@ -2083,9 +2109,49 @@ public final class FluidTxns {
 				}
 			}
 		}
+		// (round 2, finding 3) the census-named cells of an escape, frozen: the escaping body's extra stray candidates in every W (each W writes
+		// its own chunk's), its abort's work when it is aborted, and the footprint (with their destination ticks)
+		JsonArray esc = new JsonArray();
+		it.unimi.dsi.fastutil.longs.LongArrayList extra = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		if ("escaped".equals(why)) {
+			for (long[] c : at) {
+				long p = net.minecraft.core.BlockPos.asLong((int) c[0], (int) c[1], (int) c[2]);
+				esc.add(p);
+				extra.add(p);
+			}
+		}
+		if (abort.contains(new com.google.gson.JsonPrimitive(b.id))) {
+			int oi = st.order.indexOf(b);
+			java.util.Set<Long> inWork = new java.util.HashSet<>();
+			work.values().forEach(a -> a.forEach(x -> inWork.add(x.getAsJsonArray().get(0).getAsLong())));
+			for (JsonElement x : esc) {
+				long p = x.getAsLong();
+				if (!inWork.contains(p) && !b.ownSet().contains(p)) {
+					JsonArray one = new JsonArray();
+					one.add(p);
+					one.add(oi);
+					one.add(0);
+					work.computeIfAbsent(RegionFluids.chunkKey(p), k -> new JsonArray()).add(one);
+				}
+			}
+		}
+		work.values().forEach(a -> a.forEach(x -> extra.add(x.getAsJsonArray().get(0).getAsLong())));
+		long[] chunks = footprint(st, all, extra.toLongArray());
 		return recordPerChunk(DRAIN, key, l, st, ck -> Effect.of("fluid.escape", EffectClass.W).data("body", b.id).data("why", why).data("typed", typed).data("at",
-			cells).data("closure", closure).data("abort", abort).data("noStrays", noStrays).data("work", work.getOrDefault(ck, new JsonArray())), Effect.of(
-			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells));
+			cells).data("closure", closure).data("abort", abort).data("noStrays", noStrays).data("esc", esc).data("work", work.getOrDefault(ck, new JsonArray())), Effect.of(
+			"fluid.escaped", EffectClass.R).data("body", b.id).data("why", why).data("typed", typed).data("at", cells), chunks);
+	}
+
+	/** (round 2, finding 3) An escape W's frozen observed cells ({@code esc}), or an empty array (any other W, or one planned before). */
+	static long[] escOf(Effect e) {
+		if (!(e.data().get("esc") instanceof JsonArray a)) {
+			return new long[0];
+		}
+		long[] out = new long[a.size()];
+		for (int i = 0; i < out.length; i++) {
+			out[i] = a.get(i).getAsLong();
+		}
+		return out;
 	}
 
 	static final TxnKind.Adapter FLUID_ESCAPE = w("drain", (t, e, level, fw, l, st) -> {
@@ -2129,8 +2195,14 @@ public final class FluidTxns {
 			if (abort.contains(id)) {
 				n += RegionFluids.abortFlowingIn(fw, st, u, us, work.getOrDefault(st.order.indexOf(u), List.of()).toArray(long[][]::new), p -> true);
 			} else {
-				n += RegionFluids.drain(RegionFluids.drainTarget(fw, new int[1]), level, st, u, us, !noStrays.contains(id), st.othersOf(u), RegionFluids.NOT_HELD,
-					false);
+				var wasX = RegionFluids.extraStrays;
+				RegionFluids.extraStrays = u == b ? escOf(e) : null; // (round 2, finding 3) the escaping body's census-named cells, frozen in the intent
+				try {
+					n += RegionFluids.drain(RegionFluids.drainTarget(fw, new int[1]), level, st, u, us, !noStrays.contains(id), st.othersOf(u), RegionFluids.NOT_HELD,
+						false);
+				} finally {
+					RegionFluids.extraStrays = wasX;
+				}
 			}
 		}
 		return n;
@@ -2182,9 +2254,16 @@ public final class FluidTxns {
 	 */
 	static Step lot(RegionsImpl.Live l, RegionFluids.Regional st, String lotId, List<String> bodies) {
 		String key = "fluid-drain:" + recKey(l) + "/lot:" + lotId;
+		List<RegionFluids.Body> bs = new ArrayList<>();
+		bodies.forEach(id -> {
+			RegionFluids.Body b = st.body(id);
+			if (b != null) {
+				bs.add(b);
+			}
+		});
 		return record(DRAIN, key, l, st, () -> Effect.of("fluid.lotdrain", EffectClass.W).data("lot", lotId).data("group", String.valueOf(l.rec().groupId)).data(
 			"bodies", idsJson(bodies)), Effect.of("fluid.lotdrained", EffectClass.R).data("lot", lotId).data("bodies", idsJson(bodies)), t -> {
-			});
+			}, footprint(st, bs, new long[0]));
 	}
 
 	static final TxnKind.Adapter FLUID_LOTDRAIN = w("drain", (t, e, level, fw, l, st) -> {
@@ -2268,9 +2347,11 @@ public final class FluidTxns {
 				closure.add(u.id);
 			}
 		}
+		List<RegionFluids.Body> hb = new ArrayList<>(RegionFluids.upstreamOf(st, b)); // (round 2, finding 4) wBodies' bodies: the body and its upstream
+		hb.add(b);
 		return record(DRAIN, key, l, st, () -> Effect.of("fluid.hold", EffectClass.W).data("body", b.id).data("closure", closure), Effect.of("fluid.held", EffectClass.R).data("body", b.id)
 			.data("why", typed).data("reason", reason).data("at", cells), t -> {
-			});
+			}, footprint(st, hb, new long[0]));
 	}
 
 	static final TxnKind.Adapter FLUID_HOLD = w("drain", (t, e, level, fw, l, st) -> {

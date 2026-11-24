@@ -588,6 +588,40 @@ class FluidsT5FcFixTest {
 		}
 	}
 
+	// ------------------------------------------------------------------ findings 3 and 4: the escape's observed cells and every destination chunk
+
+	static final long AT1 = BlockPos.asLong(20, 60, 5), AT2 = BlockPos.asLong(48, 60, 5), AT2_WEST = BlockPos.asLong(47, 60, 5);
+
+	@Test
+	void r2_f3_anEscapesObservedCellsAreFrozenIntoItsWorkAndFootprint() {
+		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
+		BlockState flow = RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.LAVA, 6);
+		w.put(AT1, flow); // in chunk 1,0 (planned: C is there), outside the pit's cells, spill, watch and predictions
+		w.put(AT2, flow); // in chunk 3,0 (no declared work there)
+		w.put(AT2_WEST, flow); // its neighbour in chunk 2,0
+		assertEquals(FluidTxns.Step.Kind.DONE, FluidTxns.escape(l, st, st.body("pit"), "escaped", "escaped", List.of(new long[] {20, 60, 5}, new long[] {48, 60,
+			5})).kind());
+		assertEquals(AIR, w.get(AT1), "the census-named cell in a planned chunk is the W's work (red: only escapedCells and predictions were candidates)");
+		assertEquals(AIR, w.get(AT2), "the census-named cell in an unplanned chunk gets its own W (red: no W for chunk 3,0)");
+		assertTrue(w.ticksIn(2, 0).contains(AT2_WEST), "the destination tick beside it is chunk 2,0's W (red: no W there)");
+		assertTrue(st.states.get("pit").escapedCells.contains(AT2), "the R records them escaped, as before");
+	}
+
+	@Test
+	void r2_f4_aHeldBodysBorderTickIsPlannedInItsDestinationChunk() {
+		region(IR_POOL, null);
+		w.put(POOL, WATER);
+		mark(POOL, "WROTE");
+		st.states.get("pool").before.put(POOL, "minecraft:air");
+		st.states.get("pool").state = "written";
+		w.put(POOL_EAST, RegionFluids.flowingState(net.minecraft.world.level.material.Fluids.WATER, 7));
+		assertTrue(RegionFluids.save(l, st));
+		w.saveAll();
+		assertEquals(FluidTxns.Step.Kind.DONE, FluidTxns.hold(l, st, st.body("pool"), "uncontained", "TEST", List.of()).kind());
+		assertEquals(AIR, w.get(POOL));
+		assertTrue(w.ticksIn(1, 0).contains(POOL_EAST), "the flow at x 16 is ticked by chunk 1,0's W (red: drainChunks(st) plans chunk 0,0 only)");
+	}
+
 	// ------------------------------------------------------------------ the core's environment
 
 	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */

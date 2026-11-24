@@ -2805,6 +2805,9 @@ public final class RegionFluids {
 
 	static @Nullable DrainCtx drainCtx;
 
+	/** (round 2, finding 3; server thread, an escape W's drain of its escaping body only) Extra stray candidates: its frozen census-named cells. */
+	static long @Nullable [] extraStrays;
+
 	/** (T5Fc fix round) A drain write the world refused (a hold): counted on the W's context, which then holds the W. */
 	static void noteRefused() {
 		DrainCtx dc = drainCtx;
@@ -2838,10 +2841,15 @@ public final class RegionFluids {
 	 * replay of a lost chunk schedules its ticks again with its writes. A tick on still water does nothing. Returns the ticks.
 	 */
 	static int tickBodyIn(FluidWorld w, Regional st, Body b, int cx, int cz) {
+		return tickBodyIn(w, st, b, cx, cz, new long[0]);
+	}
+
+	/** (round 2, finding 3) {@link #tickBodyIn(FluidWorld, Regional, Body, int, int)} with {@code extra}: an escape W's frozen observed cells. */
+	static int tickBodyIn(FluidWorld w, Regional st, Body b, int cx, int cz, long[] extra) {
 		LongOpenHashSet done = new LongOpenHashSet();
 		int n = 0;
 		BodyState bs = st.states.get(b.id);
-		long[][] sets = {b.cells, b.spill, b.watch, b.predicted.keySet().toLongArray(), bs == null ? new long[0] : bs.escapedCells.toLongArray()};
+		long[][] sets = {b.cells, b.spill, b.watch, b.predicted.keySet().toLongArray(), bs == null ? new long[0] : bs.escapedCells.toLongArray(), extra};
 		for (long[] a : sets) {
 			for (long p : a) {
 				for (int d = -1; d < 6; d++) {
@@ -3159,6 +3167,10 @@ public final class RegionFluids {
 	 */
 	static long[] strayCandidates(Body b, BodyState bs) {
 		LongOpenHashSet c = new LongOpenHashSet(bs.escapedCells);
+		long[] x = extraStrays;
+		if (x != null) {
+			c.addAll(it.unimi.dsi.fastutil.longs.LongArrayList.wrap(x)); // (round 2, finding 3) an escape W's frozen census-named cells
+		}
 		c.addAll(b.predicted.keySet());
 		long[] out = c.toLongArray();
 		java.util.Arrays.sort(out);
