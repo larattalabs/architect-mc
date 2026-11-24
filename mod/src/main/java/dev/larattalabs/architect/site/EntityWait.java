@@ -65,20 +65,24 @@ public final class EntityWait {
 		}
 	}
 
-	/** The leases, by {@link #leaseKey}: one per caller key, dimension and footprint (fix-check P2-2). */
-	private static final Map<String, Held> HELD = new HashMap<>();
+	/** The leases, by {@link Lease}: one per caller key, dimension and footprint (fix-check P2-2). */
+	private static final Map<Lease, Held> HELD = new HashMap<>();
 	/** The last server tick seen ({@link #tick} and {@link #ready}): the clock a retirement's delayed release counts from. */
 	private static int clock;
 
 	/**
-	 * (fix-check P2-2) A lease is one caller key over one dimension and one footprint: a removal refused under KEEP and retried as CASCADE
-	 * (more chunks) gets a lease of its own on the larger footprint, never the old one's tickets with the new one's checks.
+	 * (fix-check P2-2; final-check P2) A lease is one caller key over one dimension and one footprint: a removal refused under KEEP and retried
+	 * as CASCADE (more chunks), or a site moved twice in a row to equal-size footprints, gets a lease of its own, never another footprint's
+	 * tickets with its own checks. The footprint is the complete sorted chunk list, compared chunk by chunk (no checksum: two different
+	 * rectangles never share a lease).
 	 */
-	static String leaseKey(String key, String dimension, List<Long> chunks) {
-		long[] cs = chunks.stream().mapToLong(Long::longValue).sorted().toArray();
-		return key + "#" + dimension + "#" + cs.length + ":" + Long.toHexString(java.util.Arrays.hashCode(cs)) + ":" + (cs.length == 0 ? 0 : Long
-			.toHexString(cs[0] ^ cs[cs.length - 1] * 31));
+	record Lease(String key, String dimension, List<Long> chunks) {
 	}
+
+	static Lease leaseKey(String key, String dimension, List<Long> chunks) {
+		return new Lease(key, dimension, chunks.stream().sorted().toList());
+	}
+
 	private EntityWait() {
 	}
 
@@ -118,12 +122,12 @@ public final class EntityWait {
 	static boolean ready(World w, String key, List<Long> chunks, boolean keep) {
 		clock = w.now();
 		Long missing = notReady(w, chunks);
-		String lease = leaseKey(key, w.dimension(), chunks);
+		Lease lease = leaseKey(key, w.dimension(), chunks);
 		Held h = HELD.get(lease);
 		if (h == null) {
 			// the same caller key's waiting leases on another footprint were refused attempts (nothing snapshot, nothing written): they go now; a
 			// lease past its write (its cleanup window, or a job's) stays until its own release
-			for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
+			for (Iterator<Map.Entry<Lease, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
 				Held o = it.next().getValue();
 				if (o.base.equals(key) && !o.keep && o.releaseAt < 0) {
 					it.remove();
@@ -218,7 +222,7 @@ public final class EntityWait {
 
 	/** {@code key}'s leases go now (a job cancelled before it wrote). */
 	public static void release(String key) {
-		for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
+		for (Iterator<Map.Entry<Lease, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
 			Held h = it.next().getValue();
 			if (h.base.equals(key)) {
 				it.remove();
@@ -230,14 +234,14 @@ public final class EntityWait {
 	/** Each server tick: tickets past their release, and waits no one retried for {@link #STALE_TICKS}, let go. */
 	static void tick(int now) {
 		clock = now;
-		for (Iterator<Map.Entry<String, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
-			Map.Entry<String, Held> e = it.next();
+		for (Iterator<Map.Entry<Lease, Held>> it = HELD.entrySet().iterator(); it.hasNext();) {
+			Map.Entry<Lease, Held> e = it.next();
 			Held h = e.getValue();
 			boolean due = h.releaseAt >= 0 && now >= h.releaseAt;
 			boolean stale = !h.keep && h.releaseAt < 0 && now - h.touched > STALE_TICKS;
 			if (due || stale) {
 				if (stale) {
-					Architect.LOGGER.warn("Restore {}: its entity wait was not retried for {} ticks; its ticket goes", e.getKey(), STALE_TICKS);
+					Architect.LOGGER.warn("Restore {}: its entity wait was not retried for {} ticks; its ticket goes", h.base, STALE_TICKS);
 				}
 				it.remove();
 				ChunkTickets.release(h.dimension, h.chunks, h.source);

@@ -34746,6 +34746,10 @@ only against direct writes (M1) and the existing block-entity, piston and explos
   NOT_LOADED to `ArchitectRefused(NOT_LOADED)` (sync and from a future), documented in `api.Sites.remove` (retry; a ticket loads the
   entities). Units LR2F-retire (through `RestoreJob.step`), LR2F-footprint, LR2F-api; revert checks, each red: `RestoreJob.step` without
   its guard, retire back to release, `EntityWait` and `SitesImpl` back to 8449eebd.
+- **Final-check P2 (de153b42).** The lease key is `EntityWait.Lease` (caller key, dimension and the complete sorted chunk list, equal chunk by
+  chunk), no longer two checksums (equal-size rectangles X 30..31/Z -32..-31 and X 32..33/Z -34..-33 shared one); a still-running cleanup
+  lease of an earlier footprint stays separate. Unit LR2F-collide (two moves of one site): red on de153b42 and with only the key reverted, green
+  with the fix; scoped units 1236/0.
 - **State at the stop (2026-11-23, Noah: wrap up for tonight).** All 3 second-round findings are coded in 74405a15, with units and revert
   checks red then green; the scoped units pass (1235/0). Not done: the in-game rerun on the head. Run 20261123-062704-change (LR-2s, LR-2p,
   LR-2l on 74405a15) was stopped by its runner PID before any row ran (aborted); no in-game evidence for the second round yet. Next:

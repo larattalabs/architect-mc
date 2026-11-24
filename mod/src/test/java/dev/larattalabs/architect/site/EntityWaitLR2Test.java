@@ -311,4 +311,40 @@ class EntityWaitLR2Test {
 		assertTrue(f.ticket.isEmpty(), "LR2F-footprint: released after its cleanup: " + f.log);
 		assertEquals(0, call(m("held")));
 	}
+	@Test
+	void twoEqualSizeFootprintsWithTheSameChecksumsEachGetTheirOwnTicket() throws Throwable {
+		System.out.println("ROW LR2F-collide (unit)");
+		// (final-check P2) two rapid moves of one site ("live:move:<id>"): A = chunks X 30..31, Z -32..-31 (ready, passes, its cleanup lease
+		// held 5 ticks); B = X 32..33, Z -34..-33 (not ready). The old two-checksum key gave both "4:d2ae1:3df000003df": B reused A's lease
+		// and was never ticketed. B must be ticketed while A's cleanup lease still holds A.
+		Fake f = new Fake();
+		Method live = m("requireLive", WORLD, String.class, List.class, String.class);
+		List<Long> a = new ArrayList<>(), b = new ArrayList<>();
+		for (int x = 0; x < 2; x++) {
+			for (int z = 0; z < 2; z++) {
+				a.add(net.minecraft.world.level.ChunkPos.pack(30 + x, -32 + z));
+				b.add(net.minecraft.world.level.ChunkPos.pack(32 + x, -34 + z));
+			}
+		}
+		f.ready.addAll(a);
+		call(live, f.world(), "live:move:s", a, "Moving s"); // A passes: its cleanup lease runs 5 ticks
+		f.now++;
+		try {
+			call(live, f.world(), "live:move:s", b, "Moving s");
+			throw new AssertionError("refused");
+		} catch (Sites.SiteException e) {
+			assertEquals(dev.larattalabs.architect.api.Reason.NOT_LOADED, e.reason());
+		}
+		Set<Long> both = new HashSet<>(a);
+		both.addAll(b);
+		assertEquals(both, f.ticket, "LR2F-collide: B is ticketed and A's cleanup lease still holds A: " + f.log);
+		call(m("tick", int.class), f.now + 4); // A's cleanup is past
+		assertEquals(new HashSet<>(b), f.ticket, "LR2F-collide: A released after its cleanup, B still held: " + f.log);
+		f.ready.addAll(b);
+		f.now += 5;
+		call(live, f.world(), "live:move:s", b, "Moving s"); // B passes
+		call(m("tick", int.class), f.now + 5);
+		assertTrue(f.ticket.isEmpty(), "LR2F-collide: released after B's cleanup: " + f.log);
+		assertEquals(0, call(m("held")));
+	}
 }
