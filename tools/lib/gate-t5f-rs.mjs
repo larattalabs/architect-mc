@@ -240,14 +240,16 @@ export async function drainHold(H) {
 }
 
 /**
- * t5-drain-fl5 (P1-2a, the FL5+save path). Placed, saved; removed with FL5+save armed: on 8cT the drain's one apply writes every chunk's
- * seen count first, drains the course's head, then FL5 saves everything while the lava pit (later in the reverse write order) still stands.
- * Restart with the drain held (dev.fluid.hold drain, armed in the new JVM before the world opens); a dispenser takes a lava source;
- * released. Conservation: refunded + the dispenser's 1 == charged (red on 8cT: the saved seen count is kept). Needs rs03 to be an ordered
- * record whose head is not the pit (FL5 fires only on `st.ordered && i > 0`): the precondition says whether it is.
+ * t5-drain-fl5 (P1-2a, the FL5+save path). Placed, saved; removed with FL5+save armed (on 8cT the drain's one apply wrote every chunk's
+ * seen count first, drained the course's head, then FL5 saved everything while the pit still stood). Restart with the drain held; a
+ * dispenser is fired at a standing source. (T5Fc round 2) Why it took nothing on T5Fb and T5Fc alike: the removal's box is held while its
+ * txn is open (TxnServer.boxHeld, T4b), and TxnHoldDispenserMixin cancels a held dispenser's fire: no writer but the removal's own touches
+ * a removing region's cells. dev.dispense now answers `held` (the mixin's own test at the dispenser's cell). So the row asserts what that
+ * means: the dispenser is sealed (it keeps its bucket, the source stands), then conservation: refunded + taken == charged. The 8cT window
+ * (a source taken after its seen count) is not reachable in game while the box is held; FluidsT5FcTest/FixTest cover the count rule.
  */
 export async function drainFl5(H) {
-  const { ctx, L, check, log, json } = H;
+  const { L, check, log, json } = H;
   const out = {};
   const p = await placed(H, 'rs03t5fl5');
   check(p.lava.length === p.charged && p.charged > 0, `FL5: the precondition: placed, ${p.lava.length} lava of ${p.charged} charged`);
@@ -262,12 +264,14 @@ export async function drainFl5(H) {
     const standing = await lavaAt(H, p.lava);
     out.standing = standing.length;
     const cell = standing.length ? top(standing) : null;
-    if (cell) disp = await L.call('dev.dispense', { at: cell, item: 'minecraft:bucket' }, 30_000);
+    if (cell) disp = await L.call('dev.dispense', { at: cell, item: 'minecraft:bucket' }, 30_000).catch((e) => ({ error: String(e.message ?? e) }));
     await H.sleep(2500);
-    const items = disp ? (await L.call('dev.dispense', { read: disp.dispenser }, 10_000)).items : {};
-    out.dispensed = { cell, disp, items };
+    const items = disp?.dispenser ? (await L.call('dev.dispense', { read: disp.dispenser }, 10_000)).items : {};
+    const cellStands = cell ? (await lavaAt(H, [cell])).length === 1 : false;
+    out.dispensed = { cell, disp, items, cellStands };
     const took = items['minecraft:lava_bucket'] ?? 0;
-    check(standing.length > 0 && took === 1, `FL5: the precondition after the restart: ${standing.length} lava still stand (the head drained, the pit not); a dispenser took 1 (${json(items)})`);
+    check(standing.length > 0 && !!disp?.dispenser && typeof disp.held === 'boolean', `FL5: the precondition after the restart: ${standing.length} lava still stand (the head drained, the pit not); a dispenser fired at ${json(cell)}, its seal reported (${json(disp)})`);
+    check(disp?.held === true && took === 0 && (items['minecraft:bucket'] ?? 0) === 1 && cellStands, `FL5: the removal's held box seals the dispenser: held ${disp?.held}, it keeps its bucket (${json(items)}), the source at ${json(cell)} stands (${cellStands})`);
     await L.call('dev.fluid.hold', { drain: false }, 10_000);
     out.final = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
     await L.settle(2000);
@@ -284,41 +288,52 @@ export async function drainFl5(H) {
 // ------------------------------------------------------------------ P1-2b: replay per record, not per chunk
 
 /**
- * t5-drain-mixed (P1-2b). Placed, saved; removed with a water chunk B's writes dropped and TX:fluid.drain:apply:0+save armed: the pit's chunk
- * A on disk drained with its receipt, chunk B at its earlier save (no receipt). Restart with the drain held; a dispenser puts lava into a
- * chunk-A own cell (air now); released. The dispensed lava stays (no mark: never ours; chunk A's receipt present: never re-run) (red on 8cT:
- * the aggregate W's probe is ABSENT (B lacks the receipt), its apply redoes chunk A, and ownStillOurs calls the lava ours).
+ * t5-drain-mixed (P1-2b). Placed, saved; removed with a water chunk B's writes dropped and a halt (+save) right after the pit's last drain W
+ * in its chunk A (T5Fc round 2: `TX:fluid.drain:lavadone:<cx>.<cz>`, dev-armed, after that W's receipt; a build without region.scoop, T5Fb's one aggregate
+ * W, halts at TX:fluid.drain:apply:0 as before). Precondition after the restart (drain held): A's pit drained on disk, B at its earlier
+ * save. A dispenser is fired with a (minted, test-injected) lava bucket at a drained pit cell of A: when it is not sealed and the lava lands,
+ * the replay must leave it (red on 8cT: the aggregate W redoes A); when the removal's held box seals it (T4b), it keeps the bucket. The
+ * injected bucket is then followed across dispenser, cargo and pile: the pile's lava gain == the scoop's credit (charged, from the
+ * REMOVAL_FINISHED refund where the build has dev.api.removalEvents) + the injected bucket still in the dispenser (the removal's extraction
+ * routes a player block's contents into the pile as keyed cargo, Extractions). The fix-check's 11 == 10 was that bucket.
  */
 export async function drainMixed(H) {
   const { L, check, log, json } = H;
   const out = {};
+  const ks = await kinds(H);
+  const t5c = ks.includes('region.scoop');
   const p = await placed(H, 'rs03t5dm');
   const groups = byChunk(p.lava);
   const A = groups[0];
   const others = A ? await waterChunks(H, p.box, A.chunk) : [];
   const B = others[0];
-  out.split = { lava: groups.map((g) => [key(g.chunk), g.cells.length]), dropped: B ? key(B) : null };
-  check(!!A && !!B, `DM: the precondition: the pit in ${json(out.split.lava)}, a water chunk of the record to lose (${out.split.dropped})`);
+  out.split = { lava: groups.map((g) => [key(g.chunk), g.cells.length]), dropped: B ? key(B) : null, t5c };
+  check(!!A && !!B && groups.length === 1, `DM: the precondition: the pit in one chunk ${json(out.split.lava)}, a water chunk of the record to lose (${out.split.dropped})`);
   if (!A || !B) return out;
   const s0 = await lavaStock(H);
+  const point = t5c ? `TX:fluid.drain:lavadone:${A.chunk[0]}.${A.chunk[1]}+save` : 'TX:fluid.drain:apply:0+save';
+  out.point = point;
   try {
     await L.call('dev.chunk.drop', { chunks: [B] }, 10_000);
-    await L.call('dev.journal.killAt', { point: 'TX:fluid.drain:apply:0+save' }, 10_000);
+    await L.call('dev.journal.killAt', { point }, 10_000);
     L.call('dev.region.remove', { region: p.region, requester: H.G.OWNER }, 3_600_000).catch(() => null);
-    out.halted = await H.waitHalt('TX:fluid.drain:apply:0+save');
+    out.halted = await H.waitHalt(point);
     await reopen(H, p.s.world, { holdDrain: true });
     const aStand = (await lavaAt(H, A.cells)).length;
     const bWater = (await H.L.call('dev.fluid.census', { box: [B[0] * 16, -64, B[1] * 16, B[0] * 16 + 15, 320, B[1] * 16 + 15] }, 600_000)).fluids.filter(([, , , st]) => String(st).startsWith('minecraft:water')).length;
     out.restart = { aStand, bWater };
+    check(!!out.halted && aStand === 0 && bWater > 0, `DM: the precondition: halted at ${point} (${out.halted}); the pit's chunk ${key(A.chunk)} drained on disk (${aStand} lava standing), chunk ${key(B)} at its earlier save (${bWater} water cell(s))`);
     const cell = top(A.cells).slice(0, 3);
+    const airBefore = (await lavaAt(H, [cell])).length === 0;
     const disp = await L.call('dev.dispense', { at: cell, item: 'minecraft:lava_bucket' }, 30_000).catch((e) => ({ error: String(e.message ?? e) }));
     await H.sleep(2500);
-    const placedLava = (await lavaAt(H, [cell])).length === 1;
-    out.dispensed = { cell, disp, placedLava };
-    check(aStand === 0 && bWater > 0 && placedLava, `DM: the precondition: chunk ${key(A.chunk)} drained on disk (${aStand} lava standing), chunk ${key(B)} at its earlier save (${bWater} water cell(s)); a dispenser put lava at ${cell.join(',')} (${placedLava})`);
+    const dItems = disp?.dispenser ? (await L.call('dev.dispense', { read: disp.dispenser }, 10_000)).items : {};
+    const placedLava = airBefore && (await lavaAt(H, [cell])).length === 1;
+    const injected = disp?.minted ?? 0;
+    const inDispenser = dItems['minecraft:lava_bucket'] ?? 0;
+    out.dispensed = { cell, airBefore, disp, dItems, placedLava, injected, inDispenser };
+    check(airBefore && !!disp?.dispenser && (placedLava || inDispenser === 1), `DM: the precondition: the cell ${cell.join(',')} air before the fire (${airBefore}); the injected bucket either landed (${placedLava}) or stayed in the dispenser (${json(dItems)}; held ${disp?.held})`);
     await L.call('dev.fluid.hold', { drain: false }, 10_000);
-    // judged when the drain txn has retired (the record drained), before the settle wait and the solids restore (the tile entry's undo
-    // writes its own before-state over the cell afterwards, whatever stands there: not the drain's doing)
     let drained = null;
     for (let i = 0; i < 600 && !drained; i++) {
       const x = await L.call('dev.fluid.state', { region: p.region }, 10_000).catch(() => null);
@@ -328,13 +343,17 @@ export async function drainMixed(H) {
     const stays = (await lavaAt(H, [cell])).length === 1;
     out.final = await waitState(H, p.region, ['REMOVED', 'PARTIAL', 'FAILED']);
     await L.settle(2000);
-    const staysAfterRemoved = (await lavaAt(H, [cell])).length === 1;
     const got = (await lavaStock(H)) - s0;
-    out.after = { drainedSeen: drained ? { removal: drained.removal ?? null } : null, stays, staysAfterRemoved, refunded: got, charged: p.charged };
+    const ev = await L.call('dev.api.removalEvents', { region: p.region }, 10_000).catch(() => null);
+    const credited = ev?.events ? ev.events.reduce((a, e) => a + (e.refund?.['minecraft:lava_bucket'] ?? 0), 0) : null;
+    const cargo = got - (credited ?? p.charged);
+    out.after = { drainedSeen: drained ? { removal: drained.removal ?? null } : null, stays, pileGain: got, credited, cargo, charged: p.charged };
     log(`  DM: ${json(out)}`);
     check(!!drained, `DM: the precondition: the record read drained after the replay (${json(out.after.drainedSeen)})`);
-    check(stays, `DM (P1-2b): the dispensed lava at ${cell.join(',')} stays through the drain's replay, judged as the record reads drained (red on 8cT: the aggregate W re-drains chunk ${key(A.chunk)} and erases it); after REMOVED: ${staysAfterRemoved} (recorded)`);
-    check(got === p.charged, `DM (P1-2b) conservation: refunded ${got} == charged ${p.charged} (the dispensed bucket stands, the dispenser's)`);
+    if (placedLava) check(stays, `DM (P1-2b): the dispensed lava at ${cell.join(',')} stays through the drain's replay (red on 8cT: the aggregate W re-drains chunk ${key(A.chunk)} and erases it)`);
+    else log(`  DM: the dispenser was sealed by the removal's held box (held ${disp?.held}): the P1-2b window is closed in game; the unit covers it`);
+    check(credited === null || credited === p.charged, `DM (P1-2b): the scoop credited ${credited ?? 'n/a (no dev.api.removalEvents)'} == charged ${p.charged}`);
+    check(got === p.charged + inDispenser, `DM (P1-2b) conservation: the pile's lava gain ${got} == charged ${p.charged} + the injected bucket left in the dispenser ${inDispenser} (cargo ${cargo}; injected ${injected}, landed ${placedLava})`);
   } finally {
     await L.call('dev.fluid.hold', { drain: false }, 10_000).catch(() => null);
     await L.call('dev.chunk.drop', { off: true }, 10_000).catch(() => null);
