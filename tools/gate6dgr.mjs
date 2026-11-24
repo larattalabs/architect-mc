@@ -839,6 +839,9 @@ steps.survival = async () => {
   const refundBack = G.minus(G.plus(ps2.stock ?? {}, ps2.ledger?.refundOverflow ?? {}), G.plus(ps1.stock ?? {}, ps1.ledger?.refundOverflow ?? {}));
   check(u.removed === true && d.n === 0, `item 13: undoRevision of the survival growth: the world before it (${d.n} differ)`, d.first);
   check(G.same(u.refund ?? {}, G.plus({}, u.refund ?? {})) && Object.values(u.refund ?? {}).every((n) => n > 0) && G.same(consumed, u.refund ?? {}), `item 13: the refund once per key: what the growth consumed ${json(consumed)} came back as ${json(u.refund)} (the stockpile's stock moved by ${json(refundBack)})`, out.undo);
+  // (chore RVU, STEWARD-SYNC A3) the hook answers owed and owedParts too: a stockpile credit books nothing owed
+  check(Array.isArray(u.owed) && Array.isArray(u.owedParts) && u.owed.length === 0 && u.owedParts.length === 0
+    && json(u.owed) === json([...new Set(u.owedParts.map((p) => p.key))]), `item 13 / A3: dev.rv.undo answers refund, owed and owedParts; a stockpile credit owes nothing (owed ${json(u.owed)}, owedParts ${json(u.owedParts)})`, out.undo);
   const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 60_000);
   check(String(u2.refused ?? '').startsWith('NOT_ALLOWED'), `item 13: a second undo has nothing left to refund (refused: ${u2.refused})`);
   const rm = await G.remove(ctx, region);
