@@ -903,6 +903,23 @@ class FluidsT5FcFixTest {
 		assertEquals(3, s[0] + 1, "conserved: 2 refunded + 1 standing == 3 charged");
 	}
 
+	/** (round 2, t5-drain-mixed's halt) TX:fluid.drain:lavadone:<cx>.<cz> after the chunk's last lava drain W and its receipt. */
+	@Test
+	void r2_mixedHalt_lavadoneFiresAfterTheChunksLastLavaW() {
+		pit("{\"on\":true,\"chargedAt\":5,\"chargedBodies\":[\"pit\"]}");
+		List<String> seen = new ArrayList<>();
+		setStatic(dev.larattalabs.architect.journal.WorldJournal.class, "killProbe", (java.util.function.Consumer<String>) p -> {
+			if (p.startsWith("TX:fluid.drain:lavadone:")) {
+				String[] c = p.substring("TX:fluid.drain:lavadone:".length()).split("\\.");
+				int cx = Integer.parseInt(c[0]);
+				boolean drained = (cx == 0 ? w.get(A).isAir() && w.get(B).isAir() : w.get(C).isAir());
+				seen.add(p + (drained ? ":drained" : ":standing"));
+			}
+		});
+		assertEquals(FluidTxns.Step.Kind.DONE, drain().kind());
+		assertEquals(List.of("TX:fluid.drain:lavadone:0.0:drained", "TX:fluid.drain:lavadone:1.0:drained"), seen.stream().sorted().toList());
+	}
+
 	// ------------------------------------------------------------------ the core's environment
 
 	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */

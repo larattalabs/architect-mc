@@ -1086,6 +1086,20 @@ public final class FluidTxns {
 			ua.forEach(x -> u.add(x.getAsLong())); // (fix round, P1-3) the intent's frozen never-delivered cells of this chunk
 		}
 		Map<String, Object> f = RegionFluids.drainBodyChunk(w, level, l, st, b, cx, cz, group, e.data().get("flowing").getAsInt() == 1, held, u);
+		if (b.lava) {
+			// (round 2, TEST point, dev-armed only) the last lava drain W of this chunk applied: t5-drain-mixed halts here (+save), the pit's chunk
+			// drained with its receipt; after the receipt (P2-14)
+			boolean lastLava = true;
+			for (Effect x : t.effects()) {
+				if (x.i() > e.i() && "fluid.drain".equals(x.op()) && x.data().has("body") && chunksOf(x).get(0)[0] == cx && chunksOf(x).get(0)[1] == cz) {
+					RegionFluids.Body xb = st.body(x.data().get("body").getAsString());
+					lastLava &= xb == null || !xb.lava;
+				}
+			}
+			if (lastLava) {
+				FluidTxns.AFTER_RECEIPT.add("TX:fluid.drain:lavadone:" + cx + "." + cz);
+			}
+		}
 		st.until = -1; // (§4.4) the deadline is rebuilt from the receipts' t (this W's included)
 		st.redrained = true;
 		if (st.ordered) {
