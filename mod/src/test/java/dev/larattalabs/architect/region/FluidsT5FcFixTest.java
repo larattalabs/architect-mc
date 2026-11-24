@@ -622,6 +622,65 @@ class FluidsT5FcFixTest {
 		assertTrue(w.ticksIn(1, 0).contains(POOL_EAST), "the flow at x 16 is ticked by chunk 1,0's W (red: drainChunks(st) plans chunk 0,0 only)");
 	}
 
+	// ------------------------------------------------------------------ finding 5: revision rows durable before completion
+
+	@Test
+	void r2_f5_aRevisionsDoneWaitsForItsRowsOnDisk() throws Exception {
+		pit(null);
+		RegionsImpl.Live x = new RegionsImpl.Live(l.rec(), l.ir(), world, 2, null, null);
+		RegionFluids.Regional xs = new RegionFluids.Regional(st.bodies);
+		xs.states.get("pit").state = "settled";
+		xs.removal = "drained";
+		assertTrue(RegionFluids.save(x, xs));
+		var saveDone = method(RegionFluids.class, "saveDone", RegionsImpl.Live.class, RegionFluids.Regional.class);
+		java.nio.file.Path regionJson = RegionStore.region(world, "t5fx").resolve("region.json");
+		try {
+			RegionStore.failNext = "region.json"; // the region record's ext save refused (sticky); fluids-rv2.json still saves
+			RegionStore.failSticky = true;
+			assertFalse((Boolean) call(saveDone, x, xs), "done waits for the frozen rows on disk (red: the ext save's answer ignored)");
+			assertEquals("drained", xs.removal, "rolled back in memory");
+			RegionFluids.forget(null);
+			assertEquals("drained", RegionFluids.of(x).removal, "done is not on disk while the rows are not (red: a crash at FL3x leaves done without rows)");
+		} finally {
+			RegionStore.failNext = null;
+			RegionStore.failSticky = false;
+		}
+		xs = RegionFluids.of(x);
+		assertTrue((Boolean) call(saveDone, x, xs), "the refusal cleared: the rows, then done");
+		RegionFluids.forget(null);
+		assertEquals("done", RegionFluids.of(x).removal);
+		JsonObject disk = RegionStore.readJson(regionJson);
+		assertTrue(disk.getAsJsonObject("ext").get("architect_mc:fluidsUndone") instanceof JsonObject u && u.get("2") instanceof JsonArray a && !a.isEmpty(),
+			"the revision's rows on disk, before its done: " + disk.get("ext"));
+	}
+
+	/** (round 2) A call-site pin: a method's body in its source file (the call sites below need a live server; the behaviour is the unit's). */
+	static String body(String file, String signature) throws Exception {
+		String s = java.nio.file.Files.readString(Path.of("src/main/java/dev/larattalabs/architect/region/" + file));
+		int i = s.indexOf(signature);
+		assertTrue(i >= 0, "missing " + signature);
+		int depth = 0;
+		for (int k = s.indexOf('{', i); k < s.length(); k++) {
+			char c = s.charAt(k);
+			if (c == '{') {
+				depth++;
+			} else if (c == '}' && --depth == 0) {
+				return s.substring(i, k + 1);
+			}
+		}
+		throw new AssertionError("unbalanced " + signature);
+	}
+
+	@Test
+	void r2_f5_pin_bothRemovalGatesCompleteThroughSaveDone() throws Exception {
+		for (String sig : new String[] {"private static boolean gateOne(", "static boolean gateFlowing("}) {
+			String b = body("RegionFluids.java", sig);
+			assertTrue(b.contains("if (!saveDone(l, st))"), sig + " completes through saveDone (rows confirmed, then done)");
+			assertFalse(b.contains("st.removal = \"done\""), sig + " never sets done itself (red: the inline done with freezeRows' answer ignored)");
+			assertFalse(b.contains("freezeRows("), sig + ": no direct freezeRows");
+		}
+	}
+
 	// ------------------------------------------------------------------ the core's environment
 
 	/** A crash: an Error, so the core's own catch of an effect's refusal never swallows it. */

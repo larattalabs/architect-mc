@@ -3735,12 +3735,9 @@ public final class RegionFluids {
 			return false;
 		}
 		st.barrierTriedAt = 0;
-		st.removal = "done";
-		freezeRows(l, st); // (T5Fc, 8cS Q1) the rows the tombstone keeps: the removal's final truth
-		st.barrierDone = true;
-		if (!save(l, st)) {
-			st.barrierDone = false;
-			st.removal = "drained"; // (slice DF) the solids wait until the record says done on disk
+		// (T5Fc, 8cS Q1; round 2, finding 5) the rows the tombstone keeps, confirmed on disk, then done: (slice DF) the solids wait until the
+		// record says done on disk
+		if (!saveDone(l, st)) {
 			st.owedTriedAt = System.nanoTime();
 			return false;
 		}
@@ -4371,7 +4368,7 @@ public final class RegionFluids {
 	 * placement state stood), and the rows are reported into the record's ext, which the tombstone keeps (removed.json) for as long as it is
 	 * readable. A revision's undo leaves its region's rows to the region.
 	 */
-	static void freezeRows(RegionsImpl.Live l, Regional st) {
+	static boolean freezeRows(RegionsImpl.Live l, Regional st) {
 		if (l.rid() > 0) {
 			// (fix round, P2-13) a revision's undo: its final rows into the region's record under their own key (the report rebuilds the
 			// live rows from the standing records only, so it never drops them), kept with the UNDONE revision
@@ -4387,11 +4384,10 @@ public final class RegionFluids {
 			JsonObject u = l.rec().ext.get(EXT_UNDONE) instanceof JsonObject o ? o : new JsonObject();
 			u.add(String.valueOf(l.rid()), a);
 			l.rec().ext.add(EXT_UNDONE, u);
-			RegionsImpl.save(l);
-			return;
+			return RegionsImpl.save(l); // (round 2, finding 5) the rows' save confirmed, or the caller saves no done
 		}
 		if (l.rec().state != dev.larattalabs.architect.api.RegionState.REMOVING) {
-			return;
+			return true;
 		}
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
@@ -4400,7 +4396,28 @@ public final class RegionFluids {
 				bs.reason = "removed with its region";
 			}
 		}
-		report(l, st);
+		return report(l, st);
+	}
+
+	/**
+	 * (round 2, finding 5) A removal's completion, in one order for {@code gateOne} and {@code gateFlowing}: {@code removal = done}, the frozen
+	 * rows confirmed on disk ({@link #freezeRows}), then {@code done} saved. A refused rows save saves no done: {@code removal} goes back to
+	 * what it was and the caller tries again later, so a durable done always has its rows on disk. True when done is saved.
+	 */
+	static boolean saveDone(RegionsImpl.Live l, Regional st) {
+		String was = st.removal;
+		st.removal = "done";
+		if (!freezeRows(l, st)) {
+			st.removal = was;
+			return false;
+		}
+		st.barrierDone = true;
+		if (!save(l, st)) {
+			st.barrierDone = false;
+			st.removal = was;
+			return false;
+		}
+		return true;
 	}
 
 	/** (T5Fc fix round, P2-13, 8cS Q1) The region record's ext key holding each undone revision's frozen fluids rows ({@code rid -> rows}). */
@@ -4660,12 +4677,7 @@ public final class RegionFluids {
 				Architect.LOGGER.warn("Region {}: the river's drain waits for the world barrier ({}: {})", l.rec().id, br.outcome(), br.reason());
 				return false;
 			}
-			st.removal = "done";
-			freezeRows(l, st); // (T5Fc, 8cS Q1)
-			st.barrierDone = true; // (merge with DF round 3) done saved after the barrier: trusted at a start
-			if (!save(l, st)) {
-				st.removal = "restoring";
-				st.barrierDone = false;
+			if (!saveDone(l, st)) { // (T5Fc, 8cS Q1; round 2, finding 5) the rows on disk, then done after the barrier: trusted at a start
 				return false;
 			}
 			hold(level, st, false);
@@ -5138,7 +5150,7 @@ public final class RegionFluids {
 	// ------------------------------------------------------------------ the report and the record
 
 	/** The report in the region's ext: one entry per body that ended (S-H-6), in plan order. */
-	static void report(RegionsImpl.Live l, Regional st) {
+	static boolean report(RegionsImpl.Live l, Regional st) {
 		JsonArray a = new JsonArray();
 		// (6d RV) the region's rows and each standing revision's (with its rid): one report over the effective IR's bodies
 		RegionsImpl.Live base = RegionsImpl.live(l.rec().id);
@@ -5164,7 +5176,7 @@ public final class RegionFluids {
 		} else {
 			l.rec().ext.add(EXT_WATCH, w);
 		}
-		RegionsImpl.save(l);
+		return RegionsImpl.save(l); // (round 2, finding 5) true only when the region record is on disk
 	}
 
 	static void rows(JsonArray a, int rid, Regional st) {
